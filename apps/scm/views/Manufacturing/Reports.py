@@ -114,7 +114,11 @@ def mrp_report(request):
     on_hand = _on_hand_for(parent_ids)
     safety = _safety_for(parent_ids)
     items = _items_for(parent_ids)
-    manufactured = BillOfMaterials.manufactured_item_ids(tenant)
+    # ONE index for the whole report, shared by every explode() below — two queries total instead
+    # of one per BOM line per level. `manufactured` is derived from the same index so the make/buy
+    # split and the explosion can never disagree about which items have a live recipe.
+    explosion_index = BillOfMaterials.explosion_index(tenant.pk if tenant else None)
+    manufactured = set(explosion_index)
 
     exploded_requirements = {}
     for item_id, quantity in requirements.items():
@@ -129,10 +133,10 @@ def mrp_report(request):
         net_parent = quantity + safety.get(item_id, ZERO) - on_hand.get(item_id, ZERO)
         if net_parent <= ZERO:
             continue
-        bom = BillOfMaterials.active_for(tenant, items.get(item_id))
+        bom = explosion_index.get(item_id)
         if bom is None:
             continue
-        for row in bom.explode(net_parent):
+        for row in bom.explode(net_parent, index=explosion_index):
             child_id = row["item"].pk
             exploded_requirements[child_id] = exploded_requirements.get(child_id, ZERO) + row["quantity"]
             sources.setdefault(child_id, set()).add(f"BOM {bom.number}")
@@ -201,9 +205,11 @@ def production_schedule(request):
               .select_related("item", "work_center")
               .order_by("planned_start", "-id"))
 
+    # One grouped query for the whole board, not one per centre.
+    scheduled_map = WorkCenter.scheduled_hours_map(tenant, start, end)
     rows = []
     for centre in centres:
-        scheduled = centre.scheduled_hours(start, end)
+        scheduled = scheduled_map.get(centre.pk, ZERO)
         capacity = centre.effective_capacity_hours(days)
         rows.append({
             "centre": centre,
