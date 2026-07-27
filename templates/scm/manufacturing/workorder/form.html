@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Work Order{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Work Order</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:workorder_list' %}">Work Orders</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Components</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Seq</th><th>Component</th><th>Required</th><th>UOM</th><th>Lot / Serial</th><th>Issue method</th><th>Unit cost</th><th>Notes</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for sf in formset %}
+              <tr>
+                {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in sf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ sf.sequence }}</td>
+                <td>{{ sf.item }}{% for e in sf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.quantity_required }}{% for e in sf.quantity_required.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.uom }}</td>
+                <td>{{ sf.lot_serial }}</td>
+                <td>{{ sf.issue_method }}</td>
+                <td>{{ sf.unit_cost }}{% for e in sf.unit_cost.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.notes }}</td>
+                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="9"><div class="empty-state"><i data-lucide="box"></i><h3>No component rows yet</h3><p>Name an active BOM above and save — the recipe is exploded onto this run automatically. Come back to this form afterwards to adjust the snapshotted lines.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        These lines are a <span class="fw-600">snapshot</span> — a BOM edited next month cannot rewrite what this run required. The explosion only ever runs when the order has no component rows at all, so a hand-edited set is never silently overwritten. Issued quantity is not on this form: the issue action that posts the consumption movement is its only writer.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:workorder_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
