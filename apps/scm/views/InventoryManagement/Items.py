@@ -74,6 +74,21 @@ def item_delete(request, pk):
         messages.error(request, "This item has demand forecasts and cannot be deleted — archive or "
                                 "delete them first, or deactivate the item instead.")
         return redirect("scm:item_detail", pk=pk)
+    # 4.8 adds three more PROTECT FKs onto Item — BillOfMaterials.item, BOMLine.component and
+    # WorkOrderComponent.item — each of which would raise the same uncaught ProtectedError (a 500)
+    # that the demand-forecast guard above was added for. Same shape, same reason.
+    if obj.boms.exists():
+        messages.error(request, "This item is produced by a bill of materials and cannot be "
+                                "deleted — delete or obsolete the BOM first, or deactivate the item.")
+        return redirect("scm:item_detail", pk=pk)
+    if obj.bom_lines.exists():
+        messages.error(request, "This item is a component on a bill of materials and cannot be "
+                                "deleted — remove it from those BOMs first, or deactivate it.")
+        return redirect("scm:item_detail", pk=pk)
+    if obj.work_orders.exists() or obj.work_order_components.exists():
+        messages.error(request, "This item is used by work orders and cannot be deleted — "
+                                "deactivate it instead.")
+        return redirect("scm:item_detail", pk=pk)
     return crud_delete(request, model=Item, pk=pk, success_url="scm:item_list")
 
 
