@@ -392,10 +392,15 @@ def workorder_report_production(request, pk):
                                  reason=f"Produced by {obj.number}")
             obj.quantity_produced = cumulative_good
             obj.quantity_scrapped = q4((obj.quantity_scrapped or ZERO) + scrapped)
-            obj.produced_unit_cost = unit_cost
             obj.actual_start = obj.actual_start or timezone.now()
-            fields = ["quantity_produced", "quantity_scrapped", "produced_unit_cost",
-                      "actual_start", "updated_at"]
+            fields = ["quantity_produced", "quantity_scrapped", "actual_start", "updated_at"]
+            # Only a report that actually produced something restates the unit cost. A scrap-only
+            # posting computes ZERO (there is no good quantity to divide by), and writing that
+            # would reset a figure the production moves still carry — the single-writer field
+            # disagreeing with its own ledger.
+            if good > ZERO:
+                obj.produced_unit_cost = unit_cost
+                fields.append("produced_unit_cost")
             if obj.status == "released":
                 obj.status = "in_progress"
                 fields.append("status")
