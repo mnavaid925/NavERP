@@ -14,9 +14,9 @@ class WorkOrderForm(TenantUniqueMixin, TenantModelForm):
     (written only by the posting actions — see the model's single-writer rule). Every FK here
     carries its own tenant, so the base class scopes the dropdowns.
 
-    `bom` is narrowed to recipes for the chosen item, but ONLY on edit — on create the item is not
-    known until the form is bound, so the full active list is offered and the model's `clean()` is
-    what actually keeps the pairing honest.
+    `bom` is narrowed to active recipes for the chosen item, but ONLY on edit — on create the item
+    is not known until the form is bound, so the full active list is offered and `WorkOrder.clean()`
+    is what actually refuses a BOM that produces a different item.
     """
 
     class Meta:
@@ -33,11 +33,17 @@ class WorkOrderForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if "bom" in self.fields:
-            queryset = self.fields["bom"].queryset.filter(status="active")
+            base = self.fields["bom"].queryset
             item_id = getattr(self.instance, "item_id", None)
+            scope = Q(status="active")
             if item_id is not None:
-                queryset = queryset.filter(item_id=item_id)
-            self.fields["bom"].queryset = queryset.select_related("item")
+                scope &= Q(item_id=item_id)
+            # Keep the row's own BOM selectable while editing even if it was since marked obsolete —
+            # otherwise the bound form fails validation on a field the user never touched.
+            current_id = getattr(self.instance, "bom_id", None)
+            if current_id is not None:
+                scope |= Q(pk=current_id)
+            self.fields["bom"].queryset = base.filter(scope).select_related("item")
 
 
 class WorkOrderComponentForm(TenantModelForm):
@@ -54,8 +60,11 @@ class WorkOrderComponentForm(TenantModelForm):
                   "unit_cost", "notes"]
 
 
+# extra=3, matching BOMLineFormSet. With extra=0 a component line could never be hand-added or
+# re-added after deletion, which made the "no BOM, hand-entered components" path unreachable — and
+# the release guard's "add or explode at least one component" message impossible to satisfy.
 WorkOrderComponentFormSet = inlineformset_factory(
-    WorkOrder, WorkOrderComponent, form=WorkOrderComponentForm, extra=0, can_delete=True,
+    WorkOrder, WorkOrderComponent, form=WorkOrderComponentForm, extra=3, can_delete=True,
 )
 
 
