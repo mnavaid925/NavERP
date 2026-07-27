@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Work Orders{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Work Orders</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Work Orders</span></div>
+      <p class="text-muted">The production run — what to build, from which recipe, when and where. Components are snapshotted from the BOM at save; a recipe edited later never rewrites what a past run required.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:production_schedule' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Load board</a>
+      <a href="{% url 'scm:workorder_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Work Order</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, item, BOM or sales order…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Priority" class="form-select">
+            <option value="">All priorities</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="order_policy" aria-label="Policy" class="form-select">
+            <option value="">All policies</option>
+            {% for val, label in policy_choices %}
+              <option value="{{ val }}" {% if request.GET.order_policy == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="work_center" aria-label="Work centre" class="form-select">
+            <option value="">All work centres</option>
+            {% for wc in work_centers %}
+              <option value="{{ wc.pk }}" {% if request.GET.work_center == wc.pk|stringformat:"d" %}selected{% endif %}>{{ wc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:workorder_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Item</th><th>Planned</th><th>Produced</th><th>Scrapped</th><th>Remaining</th><th>Priority</th><th>Policy</th><th>Work centre</th><th>Planned window</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:workorder_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a> · {{ obj.item.name }}</td>
+              <td>{{ obj.quantity_planned|floatformat:2 }}</td>
+              <td>{{ obj.quantity_produced|floatformat:2 }}</td>
+              <td>{% if obj.quantity_scrapped > 0 %}<span class="badge badge-red">{{ obj.quantity_scrapped|floatformat:2 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="fw-600">{{ obj.quantity_remaining|floatformat:2 }}</td>
+              <td>
+                <span class="badge badge-{% if obj.priority == 'urgent' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'normal' %}info{% elif obj.priority == 'low' %}muted{% else %}slate{% endif %}">{{ obj.get_priority_display }}</span>
+              </td>
+              <td>{{ obj.get_order_policy_display }}{% if obj.sales_order %}<br><a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="text-muted">{{ obj.sales_order.number }}</a>{% endif %}</td>
+              <td>{% if obj.work_center %}{{ obj.work_center.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.planned_start %}{{ obj.planned_start|date:"M d, H:i" }} → {{ obj.planned_end|date:"M d, H:i" }}{% else %}<span class="text-muted">Unscheduled</span>{% endif %}</td>
+              <td>{{ obj.due_date|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'completed' %}green{% elif obj.status == 'in_progress' %}info{% elif obj.status == 'released' %}amber{% elif obj.status == 'planned' %}info{% elif obj.status == 'draft' %}slate{% elif obj.status == 'closed' %}muted{% elif obj.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:workorder_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:workorder_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:workorder_delete' obj.pk %}" onsubmit="return confirm('Delete this work order and its component lines?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="hammer"></i><h3>No work orders</h3><p>Create a run for a manufactured item — naming an active BOM explodes its components onto the order automatically on save.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    <div class="card-body text-muted">Edit and delete are offered only while a run is <span class="fw-600">draft</span> or <span class="fw-600">planned</span>. Once released it is cancelled or closed instead, so the postings it made keep a document to hang off.</div>
+  </div>
+{% endblock %}
