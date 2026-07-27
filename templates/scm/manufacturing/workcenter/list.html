@@ -68,9 +68,17 @@
                 <div class="table-actions">
                   <a href="{% url 'scm:workcenter_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   <a href="{% url 'scm:workcenter_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'scm:workcenter_delete' obj.pk %}" onsubmit="return confirm('Delete this work centre? A centre with work orders or time logs cannot be deleted — deactivate it instead.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% comment %}
+                    Gated on the annotated counts, matching workcenter_delete's PROTECT guard — the
+                    button otherwise always bounced for any centre that had been used.
+                  {% endcomment %}
+                  {% if obj.wo_count == 0 and obj.log_count == 0 %}
+                    <form method="post" action="{% url 'scm:workcenter_delete' obj.pk %}" onsubmit="return confirm('Delete this work centre?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% else %}
+                    <span class="badge badge-muted" title="Has work orders or time logs — deactivate instead">In use</span>
+                  {% endif %}
                 </div>
               </td>
             </tr>
