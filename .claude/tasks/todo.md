@@ -13778,3 +13778,862 @@ the colour-named theme.css classes (`badge-green/red/amber/info/muted/slate` —
 3. **Compute, then apply — never a silent overwrite.** `ReorderRule.calculate()` writes only `computed_*`;
    `apply_computed()` (tenant-admin gated) is the sole promoter into the live `safety_stock`/`reorder_point` that
    4.3's alerts and 4.1's purchasing read.
+
+---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.8 Manufacturing / Production — plan from research-scm-4.8.md (2026-07-28)
+
+**EXTENDS the existing `apps/scm` app** (4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse + 4.5 OMS +
+4.6 TMS + 4.7 Demand Planning already built) — **no new Django app, no `config/settings.py` change, no
+`config/urls.py` change.** New sub-module package `Manufacturing/` in each of `models/ forms/ views/ urls/`;
+templates under `templates/scm/manufacturing/<entity>/`.
+
+**Spine re-verified before planning (L28 — the grep is the truth, not the research file, not the docs):**
+- `grep -rn "^class " apps/scm/models/` → `Item` (`InventoryManagement/Items.py:56`; `sku`, `name`, `category`,
+  `uom`, `item_type`, `tracking`, `costing_method`, `standard_cost`, `average_cost` (`editable=False`),
+  `reorder_point`, `is_active`; `on_hand(location=None)`, `total_value()`, `apply_receipt(qty, cost)`),
+  `ItemCategory` (`Items.py:17`), `UOM` (`Items.py:34`), `Location` (`Locations.py:10`; `LOCATION_TYPES` =
+  warehouse/zone/bin/staging/transit — **no `wip` type and none is being added**), `StockMove`
+  (`StockMoves.py:13`), `LotSerial` (`LotSerials.py:5`), `ReorderRule` (`ReorderRules.py:26`, **`lead_time_days`
+  confirmed present at line 61** — added by 4.7), `SalesOrder` (`OrderManagement/SalesOrders.py:20`;
+  **`requested_date` DateField(null=True) at line 63**, `order_date` at 62, `status` `editable=False` at 72),
+  `SalesOrderLine` (`SalesOrders.py:185`), `DemandForecast`/`DemandForecastPeriod`
+  (`DemandPlanning/DemandForecasts.py:43/408`), `PurchaseOrder`/`PurchaseOrderLine`
+  (`ProcurementManagement/PurchaseOrders.py:15/172`), `PurchaseRequisition` (`PurchaseRequisitions.py:14`) —
+  **all confirmed live.**
+- `grep -rn "^class " apps/core/models/` → `core.Tenant` (`Tenant.py:5`), `core.Party` (`Party.py:5`),
+  `core.PartyRole` (`PartyRole.py:5`, `ROLE_CHOICES` includes **`employee`**), `core.OrgUnit` (`OrgUnit.py:5`),
+  `core.Document` (`Document.py:5`), `core.AuditLog` (`AuditLog.py:5`) — **all confirmed live.**
+- `grep -rni "workorder|workcenter|billofmaterials|bom|routing|production" apps/` → **nothing.** No `WorkOrder`,
+  `WorkCenter`, `BillOfMaterials`, `Routing` or `ProductionTimeLog` class exists anywhere in the repo. The
+  module-wide `research-scm.md` line *"reuses core `WorkOrder`"* is **STALE and wrong** — 4.8 declares it.
+  Clean build, no merge target, no stand-in needed.
+- `apps/scm/models/_base.py` — `TenantOwned` (tenant FK + created_at/updated_at, `related_name="+"`),
+  `TenantNumbered` (`NUMBER_PREFIX` + `number = CharField(max_length=20, editable=False)` + 5-retry
+  collision guard in `save()`), and the clamped quantizers **`q2()` / `q4()`** (clamp AND quantize — a
+  computed figure must go through them or an over-range value raises `DataError`).
+- `apps/scm/views/_helpers.py` — `_post_stock_move(tenant, *, item, location, quantity, move_type,
+  unit_cost=ZERO, lot_serial=None, reference="", reason="", moved_at=None)` at **line 95**,
+  `_insufficient_stock(item, location, quantity, lot_serial=None)` at **119**, `_shared_items(lines)` at **138**,
+  `_resolve_grn_item(tenant, po_line)` at **241**, `_reverse_grn_receipt` at **297** (the compensating-move
+  reference implementation), `_item_qs`/`_location_qs` at **53/65**.
+- `apps/scm/views/_common.py` — `crud_list/crud_create/crud_edit/crud_detail/crud_delete/paginate`,
+  `_changed`, `tenant_admin_required`, `write_audit_log`, `require_POST`, `transaction`, `Sum/Q/F/Count`,
+  `Decimal`, `ValidationError` all already imported. `crud_list(request, qs, template, *, search_fields=(),
+  filters=(), extra_context=None, per_page=15)` with `filters` = `(get_param, orm_lookup, is_int)` tuples
+  (`apps/core/crud.py:46`).
+- `apps/scm/forms/_common.py` — `TenantModelForm`, `TenantUniqueMixin` (**mix in BEFORE `TenantModelForm` on
+  any form whose model has a `unique_together` containing `tenant`, or a duplicate code becomes an uncaught
+  IntegrityError 500**), `_scope_to_parent`, `_active_currencies`, `_supplier_parties`, `_customer_parties`.
+- `apps/scm/urls/__init__.py` — `app_name = "scm"` set **once** at line 44; entity modules define only
+  `urlpatterns`; 32 `_<sub>_<entity>` imports spread into one master list.
+- **Sub-package `__init__.py` files are ZERO-BYTE** (verified: `apps/scm/models/DemandPlanning/__init__.py` is
+  empty). The re-export blocks live in the **parent** `apps/scm/{models,forms,views,urls}/__init__.py`.
+- Next migration number: **`0012`**, depending on
+  **`('scm', '0011_alter_demandforecastperiod_baseline_quantity_and_more')`** (latest on disk).
+- `apps/core/navigation.py` — last `LIVE_LINKS` key is **`"4.7"` (line 839); there is no `"4.8"`.** Confirmed
+  target. `NavERP.md:782-787` holds the five 4.8 bullets, quoted verbatim in the Wire-up section below.
+- **Auto-number prefixes in use** (`grep -rn 'NUMBER_PREFIX = "'`): PR RFQ QT PO GRN SCR SRA SC CAT TRF ADJ PUT
+  PIK CC YRD SO CAR LD SHP FRT DF DS FA SEA. **`BOM` `WC` `WO` `PRD` are free.** All fit `max_length=20`.
+- **URL first-segment collision check** — every literal already registered across `apps/scm/urls/`: `""`
+  `orders/ receipts/ rfqs/ quotes/ requisitions/ suppliers/ scorecards/ contracts/ catalogs/ risk-assessments/
+  items/ categories/ uoms/ locations/ lot-serials/ transfers/ adjustments/ reorder-rules/ valuation/
+  reorder-alerts/ stock-ledger/ on-hand/ putaway/ picks/ cycle-counts/ yard/ sales-orders/ sales-order-lines/
+  allocations/ carriers/ loads/ shipments/ freight-invoices/ seasonality/ forecasts/ demand-signals/
+  forecast-adjustments/ safety-stock/ forecast-accuracy/`. **This pass uses `boms/`, `work-centers/`,
+  `work-orders/`, `time-logs/`, `mrp/`, `production-schedule/` — none taken, and `work-orders/` is a distinct
+  first segment from 4.1's `orders/`** (Django matches the whole prefix string, not a suffix).
+- Template sub-module folders on disk: `templates/scm/` = `procurement/ srm/ inventory/ warehouse/ orders/
+  transportation/ demandplanning/` + flat `overview.html`. **This pass uses `manufacturing/`.**
+- Badge classes confirmed at `static/css/theme.css:285-290`: **`badge-green` `badge-red` `badge-amber`
+  `badge-info` `badge-muted` `badge-slate` ONLY** — `-success`/`-warning`/`-danger` do **not** exist and render
+  unstyled (L33).
+- **`.claude/skills/scm/SKILL.md` EXISTS** — close-out is an **update**, not a create.
+- **Database is MySQL** (`config/settings.py:89` `django.db.backends.mysql`). A conditional
+  `UniqueConstraint(condition=...)` **silently no-ops** on MySQL/MariaDB (no partial indexes) — the precedent
+  comment is already in `apps/hrm/models/InterviewProcess/Interviewfeedback.py:30`. See §0d.
+
+**Scope guard:** **4 primary models + 2 tenant-less children + 2 computed report pages + a 2-choice ALTER on
+`StockMove.move_type`.** Same envelope as 4.7. Child line models are not counted as entities (the
+`PurchaseOrder`/`PurchaseOrderLine`, `DemandForecast`/`DemandForecastPeriod` precedent). **No routing master, no
+`WorkOrderOperation`, no `BOMOutput`, no WIP table, no `Item.is_manufactured` flag, no `GLAccount` FK, no
+`JournalEntry`** — every one of those is in Later passes / Parked below.
+
+**Trim order if the pass runs long** (cut from the bottom): (1) `scm:production_schedule`'s per-WO material
+availability column (keep the load board itself — it is a NavERP bullet); (2) the advisory open-PO supply column
+on `scm:mrp_report`; (3) `BillOfMaterials.estimated_unit_cost()` roll-up display on the BOM detail.
+
+---
+
+## 0. Four decisions to read BEFORE writing any code
+
+### 0a. `StockMove.MOVE_TYPES` gains two choices — REQUIRED, not optional
+- [ ] `apps/scm/models/InventoryManagement/StockMoves.py` — add to `MOVE_TYPES` (after `issue`):
+  ```python
+  ("consumption", "Consumption"),  # 4.8 — components issued INTO a work order
+  ("production", "Production"),    # 4.8 — finished goods received FROM a work order
+  ```
+  **Why this is mandatory rather than reusing `issue`/`receipt`:** 4.7's `demand_series` /
+  `demand_series_map` filter `move_type="issue"` and read the result as **customer demand**
+  (`apps/scm/models/DemandPlanning/_history.py:155` and `:217`). Posting component consumption as `issue`
+  would silently inflate every forecast built on the `stock_issues` source — an internal transfer of value
+  masquerading as market demand. Symmetrically, a production receipt is not a supplier receipt.
+- [ ] `max_length=12` on the field **already fits** both (`"consumption"` = 11). No column widening needed.
+- [ ] `_item_valuation`'s `costed = [m for m in moves if m.move_type != "transfer"]`
+  (`apps/scm/views/InventoryManagement/Reports.py:33`) **correctly INCLUDES both new types** in the FIFO/LIFO
+  layer walk — a production receipt IS a real cost layer and a consumption IS a real outbound. **Verify this
+  line is untouched; do not add the new types to the exclusion.**
+- [ ] Both ledger templates already have `{% else %}muted` + `get_move_type_display` fallbacks and the
+  `stock_ledger` filter dropdown iterates the choices — but **add explicit badge colours** for the two new
+  types (see Templates below): `templates/scm/inventory/stock_ledger.html:56` and
+  `templates/scm/inventory/item/detail.html:76` → `consumption` → `badge-amber`, `production` → `badge-green`.
+
+### 0b. Extend the `item_delete` PROTECT guard — REQUIRED regression guard
+- [ ] `apps/scm/views/InventoryManagement/Items.py:64-77` already refuses an item with `stock_moves` or
+  `demand_forecasts` (the second guard is commit `405ee0ea`, fixing a real 500). **A new `BOMLine.item` /
+  `WorkOrderComponent.item` PROTECT FK reproduces exactly that bug** — an item with only a recipe against it,
+  no stock and no transactions, would hit an uncaught `ProtectedError` in `crud_delete`.
+- [ ] Per-entity `on_delete` decision, written down so it isn't re-litigated later:
+  - `BOMLine.component` → **PROTECT** + guard (a recipe naming a deleted part is silent data loss).
+  - `WorkOrderComponent.item` → **PROTECT** + guard (it is the requirement record behind posted stock).
+  - `BillOfMaterials.item` (the produced good) → **PROTECT** + guard.
+  - `WorkOrder.item` → **PROTECT** + guard.
+  - `BOMLine.bom`, `WorkOrderComponent.work_order`, `ProductionTimeLog.work_order` → **CASCADE** (pure children).
+  - `WorkCenter.location` / `org_unit` / `supervisor`, `BillOfMaterials.default_work_center`,
+    `WorkOrder.bom` / `sales_order` / `output_lot_serial` / `uom` / `released_by`,
+    `WorkOrderComponent.uom` / `lot_serial`, `ProductionTimeLog.operator` → **SET_NULL** (`null=True, blank=True`).
+  - `WorkOrder.work_center`, `WorkOrder.component_location`, `WorkOrder.output_location`,
+    `ProductionTimeLog.work_center` → **PROTECT** (deleting a work center or location out from under a posted
+    order would orphan the ledger reference) — plus a guard on `workcenter_delete` and a note in the plan for
+    `location_delete`.
+- [ ] Add to `item_delete`, in the SAME shape and tone as the existing two guards (one message per cause, each
+  saying where to look, redirecting to `scm:item_detail`):
+  ```python
+  if obj.bom_lines.exists() or obj.boms.exists():
+      # "used in a bill of materials" / "has a bill of materials"
+  if obj.work_order_components.exists() or obj.work_orders.exists():
+      # "used by a work order"
+  ```
+  (the four `related_name`s above are declared in §1 and must match).
+- [ ] Add the mirror guard to `workcenter_delete` (refuse when `work_orders` or `time_logs` exist) and to
+  `bom_delete` (refuse when a `WorkOrder` references it — `WorkOrder.bom` is SET_NULL so deletion succeeds,
+  but it would strip the traceability from a live order; refuse while any non-cancelled WO points at it).
+
+### 0c. `WorkOrder.quantity_produced` has EXACTLY ONE writer (the 4.7 lesson, commit `7ba189d3`)
+- [ ] `quantity_produced`, `quantity_scrapped`, `produced_unit_cost`, `actual_start`, `actual_end` and
+  `WorkOrderComponent.quantity_issued` are **`editable=False`**, absent from every form, and **`readonly_fields`
+  in the admin**. Their only writers are the POST action views (`workorder_issue_components`,
+  `workorder_report_production`, `workorder_release`, `workorder_close`, `workorder_cancel`).
+- [ ] `ProductionTimeLog.quantity_completed` / `quantity_scrapped` are **shop-floor progress reporting, NOT the
+  stock-moving number.** They do **not** roll into `WorkOrder.quantity_produced` — that would make the time log
+  a second writer of a computed column, which is the exact bug 4.7 shipped and then fixed. The WO detail page
+  shows both side by side with an advisory "reported vs received" delta chip. **Document this in both model
+  docstrings.**
+- [ ] `ProductionTimeLog.duration_minutes` is `editable=False` and derived in `save()` from
+  `started_at`/`ended_at` when BOTH are set; when `ended_at` is blank the field keeps whatever the manual-entry
+  form supplied. **One writer, stated in the docstring**, because a manual entry without a clock must stay
+  possible — so the form exposes an editable `duration_minutes` **only** in the no-`ended_at` case. Simplest
+  honest implementation: the form field is `duration_minutes` on `ProductionTimeLogForm`, and `save()`
+  **overwrites** it from the timestamps whenever both are present (documented precedence: the clock wins).
+
+### 0d. No conditional `UniqueConstraint` — the "one default active BOM per item" rule
+- [ ] MySQL has no partial indexes, so `UniqueConstraint(fields=["tenant","item"],
+  condition=Q(status="active", is_default=True))` would **silently do nothing** (Django `models.W036`). The
+  precedent comment is at `apps/hrm/models/InterviewProcess/Interviewfeedback.py:30`.
+- [ ] Enforce instead with **both**: (a) `BillOfMaterials.clean()` raising `ValidationError` when another
+  `status="active", is_default=True` BOM already exists for the same `(tenant, item)`, and (b) a **save-time
+  demotion** inside the form/view's `transaction.atomic()` — setting this BOM default demotes the sibling
+  (`.exclude(pk=self.pk).update(is_default=False)`). Document that (b) is the intended UX (promote by
+  selecting, not by first un-selecting) and (a) is the belt-and-braces for the admin/shell path.
+
+---
+
+## Models (from research — 4 primary + 2 tenant-less children)
+
+File order in `models/__init__.py` matters for readability only (all FKs are by string): **WorkCenters →
+BillsOfMaterials → WorkOrders → ProductionTimeLogs.**
+
+### 1. `WorkCenter` [`WC-`] — `models/Manufacturing/WorkCenters.py` (`TenantNumbered`)
+
+Realizes bullet 2's capacity half and supplies the rates bullet 5 costs with.
+
+- [ ] `code` `CharField(32)` · `name` `CharField(255)`
+- [ ] `center_type` ∈ `machine / assembly / manual / inspection / outsourced` (**driver:** SAP work-center
+  categories; NetSuite/Odoo work centers) default `machine`
+- [ ] `location` FK **`"scm.Location"`** SET_NULL null blank `related_name="work_centers"` (**driver:** "where
+  its WIP sits" — deliberately NOT a second location table and NOT a new `wip` `location_type`)
+- [ ] `org_unit` FK **`"core.OrgUnit"`** SET_NULL null blank `related_name="scm_work_centers"` (**driver:**
+  owning department; MRPeasy/Epicor resource groups)
+- [ ] `supervisor` FK **`"core.Party"`** SET_NULL null blank `related_name="scm_supervised_work_centers"`
+  (**driver:** MRPeasy worker management — reuses the verified spine + its `employee` `PartyRole`; **never a new
+  employee table**, L29)
+- [ ] `capacity_hours_per_day` `Decimal(6,2)` default `8` (**driver:** Odoo/SAP capacity)
+- [ ] `efficiency_pct` `Decimal(6,2)` default `100`, validators `1..200` (**driver:** Odoo "MRP scheduler based
+  on their OEE and capacity")
+- [ ] `setup_minutes` `PositiveIntegerField` default `0` (**driver:** Epicor setup time + production time in the
+  scheduling computation)
+- [ ] `machine_cost_per_hour` `Decimal(14,4)` default 0 · `labor_cost_per_hour` `Decimal(14,4)` default 0
+  (**driver:** NetSuite cost template; SAP machine time vs labor time)
+- [ ] `is_active` `BooleanField(default=True)` · `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["code"]`, `unique_together = ("tenant", "code")` **and** `("tenant", "number")`,
+  index `(tenant, is_active)` named `scm_wc_tnt_active_idx`
+- [ ] Derived (no stored columns): `cost_per_hour` property (machine + labor), `effective_capacity_hours(days=1)`
+  = `capacity_hours_per_day × efficiency_pct/100 × days` via `q2()`, `scheduled_hours(start, end)` from
+  overlapping `WorkOrder.planned_start/planned_end`, `actual_hours(start, end)` = `Sum(duration_minutes)/60` over
+  `ProductionTimeLog`, `utilization_pct(start, end)`, `oee_chip(start, end)` (runtime vs downtime vs scrapped —
+  the derived OEE figure; deep analytics → 4.11)
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`.
+
+### 2. `BillOfMaterials` [`BOM-`] + `BOMLine` — `models/Manufacturing/BillsOfMaterials.py`
+
+Realizes bullet 1 entirely; feeds bullets 2/3/4.
+
+**`BillOfMaterials` (`TenantNumbered`)**
+- [ ] `item` FK **`"scm.Item"`** PROTECT `related_name="boms"` — the produced good
+- [ ] `name` `CharField(255)` · `version` `CharField(20, default="1")` (**driver:** Acumatica/Epicor BOM revisions)
+- [ ] `bom_type` ∈ `manufacture / kit / phantom` default `manufacture` (**driver:** Odoo Kit type, SAP phantom
+  assembly, NetSuite kit items)
+- [ ] `output_quantity` `Decimal(14,4)` default `1`, `MinValueValidator(Decimal("0.0001"))` (**driver:** SAP base
+  quantity / D365 formula BOMs — component quantities scale by `order_qty / output_quantity`)
+- [ ] `uom` FK `"scm.UOM"` SET_NULL null blank `related_name="boms"`
+- [ ] `lead_time_days` `PositiveIntegerField(default=0, validators=[MaxValueValidator(3650)])` (**driver:** SAP
+  in-house production time; MRP's make-side offset. NOT a duplicate of `ReorderRule.lead_time_days`, which is the
+  *purchasing* lead time — say so in the `help_text`)
+- [ ] `default_work_center` FK `"scm.WorkCenter"` SET_NULL null blank `related_name="boms"` — **the documented
+  stand-in for the deferred routing master** (the 4.1 free-text-line precedent). Say so in the docstring.
+- [ ] `status` ∈ `draft / active / obsolete` default `draft` (**driver:** Acumatica/Epicor revision control).
+  **This one IS a form field** — it is master-data curation, not a stock-moving workflow gate, so no transition
+  actions are added. Call the deviation out in the docstring.
+- [ ] `effective_from` / `effective_to` `DateField(null=True, blank=True)` (**driver:** SAP production-version
+  validity)
+- [ ] `is_default` `BooleanField(default=False)` — see §0d for how uniqueness is enforced
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["item__sku", "version"]`, `unique_together = ("tenant", "number")` **and**
+  `("tenant", "item", "version")`, indexes `(tenant, item, status)` `scm_bom_tnt_item_status_idx`,
+  `(tenant, status)` `scm_bom_tnt_status_idx`
+- [ ] `clean()`: `effective_to >= effective_from`; no second active default per `(tenant, item)` (§0d);
+  **a BOM whose `item` also appears as one of its own `component`s is refused** (direct self-reference)
+- [ ] Derived methods, **no stored roll-up columns**:
+  - `is_effective(on=None)` — status active AND the date falls inside `effective_from/to`
+  - `classmethod active_for(tenant, item, on=None)` — the default-then-first active effective BOM
+  - `classmethod manufactured_item_ids(tenant)` — **ONE** `values_list("item_id", flat=True)` over active BOMs;
+    the batched make-vs-buy test the MRP report uses. **No per-row `EXISTS` (L18).**
+  - `classmethod is_manufactured(tenant, item)` — the single-row convenience wrapper. **This replaces an
+    `Item.is_manufactured` flag entirely** — no second source of truth, no data migration when sourcing changes.
+  - `explode(quantity, depth_cap=5, visited=None)` → flat `[{item, quantity, level, source_bom}]`, recursing
+    into any component that itself has an active BOM (**driver:** Odoo multi-level BoMs, Fishbowl stages), with a
+    **visited-set cycle guard + depth cap** (the `Location.path()` precedent at `Locations.py:55`). Each line's
+    contribution = `q4(quantity × line.quantity_per × (1 + scrap_pct/100) / output_quantity)`.
+  - `estimated_unit_cost()` — Σ over `explode(output_quantity)` of `component.standard_cost or average_cost`,
+    ÷ `output_quantity` (**driver:** NetSuite cost templates, Acumatica estimating) — *trim #3*
+  - `component_count` property
+- **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`. (`status` and `is_default` ARE editable —
+  see above.)
+
+**`BOMLine` (plain `models.Model`, tenant-less child — reached through its parent)**
+- [ ] `bom` FK CASCADE `related_name="lines"` · `sequence` `PositiveIntegerField(default=10)`
+- [ ] `component` FK **`"scm.Item"`** PROTECT `related_name="bom_lines"` ← **the §0b guard target**
+- [ ] `quantity_per` `Decimal(14,4)`, `MinValueValidator(Decimal("0.0001"))`
+- [ ] `uom` FK `"scm.UOM"` SET_NULL null blank `related_name="+"`
+- [ ] `scrap_pct` `Decimal(6,2)` default 0, validators `0..100` (**driver:** SAP component scrap, D365, Acumatica)
+- [ ] `issue_method` ∈ `manual / backflush` default `manual` (**driver:** D365 preflush/forward-flush/back-flush
+  — set here on the recipe, **copied onto the work-order component at explode time**)
+- [ ] `notes` `CharField(255, blank=True)`
+- [ ] `Meta`: `ordering = ["sequence", "id"]`
+- [ ] `effective_quantity_per` property = `q4(quantity_per × (1 + scrap_pct/100))`
+- [ ] **Formset:** `BOMLineFormSet` via `inlineformset_factory` — the `PurchaseOrderLineFormSet` shape;
+  `_scope_to_parent` is NOT needed (both FKs target tenant-owning models, so `TenantModelForm` scopes them).
+
+### 3. `WorkOrder` [`WO-`] + `WorkOrderComponent` — `models/Manufacturing/WorkOrders.py`
+
+Realizes bullet 3 entirely + bullet 2's scheduling fields; the object bullets 4 and 5 point at.
+
+**`WorkOrder` (`TenantNumbered`)**
+- [ ] `item` FK **`"scm.Item"`** PROTECT `related_name="work_orders"` · `uom` FK `"scm.UOM"` SET_NULL null blank
+- [ ] `bom` FK `"scm.BillOfMaterials"` SET_NULL null blank `related_name="work_orders"` — **the numbers live on
+  the snapshotted component lines**, so editing the BOM later cannot rewrite history (**driver:** D365 production
+  BOM lines, SAP order BOM, Epicor job materials)
+- [ ] `quantity_planned` `Decimal(14,4)`, `MinValueValidator(Decimal("0.0001"))`
+- [ ] `order_policy` ∈ `make_to_stock / make_to_order` default `make_to_stock` (**driver:** Katana MTS/MTO, D365
+  manufacturing principles)
+- [ ] `sales_order` FK **`"scm.SalesOrder"`** SET_NULL null blank `related_name="work_orders"` — the MTO peg
+  (**driver:** NetSuite special-order WOs, MRPeasy "convert confirmed customer orders into manufacturing orders")
+- [ ] `work_center` FK `"scm.WorkCenter"` **PROTECT** null blank `related_name="work_orders"`
+- [ ] `priority` ∈ `low / normal / high / urgent` default `normal` (**driver:** Katana priority-based planning,
+  Infor CSI constraint sequencing)
+- [ ] `planned_start` / `planned_end` `DateTimeField(null=True, blank=True)` (**driver:** all ten leaders)
+- [ ] `schedule_direction` ∈ `forward / backward` default `forward` (**driver:** MRPeasy forward AND backward
+  scheduling; D365 operations vs job scheduling). The form offers a **helper** that fills `planned_start =
+  due_date − bom.lead_time_days` (backward) or `planned_end = planned_start + lead_time` (forward) —
+  **arithmetic only, no solver.**
+- [ ] `due_date` `DateField(null=True, blank=True)`
+- [ ] `component_location` FK `"scm.Location"` **PROTECT** null blank `related_name="wo_component_sources"` —
+  where components are drawn from
+- [ ] `output_location` FK `"scm.Location"` **PROTECT** null blank `related_name="wo_output_targets"` — where
+  finished goods land
+- [ ] `output_lot_serial` FK `"scm.LotSerial"` SET_NULL null blank `related_name="work_orders"` (**driver:**
+  lot/serial traceability on the output — Odoo barcode lots, D365 batch attributes)
+- [ ] `status` ∈ `draft / planned / released / in_progress / completed / closed / cancelled` default `draft`,
+  **`editable=False`** (**driver:** the D365 lifecycle *created → estimated → scheduled → released → started →
+  reported as finished → ended*, trimmed to the transitions that actually gate a posting here)
+- [ ] `actual_start` / `actual_end` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `quantity_produced` / `quantity_scrapped` `Decimal(14,4)` default 0 **`editable=False`** (**driver:** D365
+  partial completion + scrap; Odoo backorders) — see §0c
+- [ ] `produced_unit_cost` `Decimal(14,4)` default 0 **`editable=False`**
+- [ ] `released_by` FK `settings.AUTH_USER_MODEL` SET_NULL null blank `editable=False` `related_name="+"`
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["-id"]`, `unique_together = ("tenant", "number")`, indexes `(tenant, status)`
+  `scm_wo_tnt_status_idx`, `(tenant, work_center, planned_start)` `scm_wo_tnt_wc_start_idx`, `(tenant, item)`
+  `scm_wo_tnt_item_idx`
+- [ ] Properties / derived: `is_editable` (`status in ("draft", "planned")`), `is_open`
+  (`released`/`in_progress`), `quantity_remaining`, `material_cost` (Σ over the **`consumption` StockMoves
+  referenced by `self.number`** — the ledger is authoritative, not the line snapshot), `labor_cost` /
+  `machine_cost` (from `ProductionTimeLog` × work-center rates), `wip_value` (`material_cost + labor_cost +
+  machine_cost − value already received`) — **a COMPUTED figure on the detail page; nothing stored, no WIP
+  location, no WIP GL account**, `planned_hours`, `actual_hours`, `duration_variance_hours`
+- [ ] `explode_components()` — writes `WorkOrderComponent` rows from `bom.explode(quantity_planned)`; **only
+  when the order has no components yet**, so a hand-edited component set is never silently overwritten
+- [ ] `material_shortfalls()` — one batched `StockMove` `values(...).annotate(Sum)` map keyed by
+  `(item_id, lot_serial_id)` at `component_location` (the `stocktransfer_detail` precedent at
+  `views/InventoryManagement/StockTransfers.py:72`), **never an aggregate per line (L18)**
+- [ ] `computed_unit_cost(cumulative_good_qty)` — `q4((material_cost + labor_cost + machine_cost) /
+  cumulative_good_qty)`. **Document three choices in the docstring:** (i) `setup`/`labor` time logs cost at
+  `labor_cost_per_hour`, `machine` at `machine_cost_per_hour`, **`downtime` is EXCLUDED** (it is a loss metric,
+  not an absorbed cost); (ii) the pool divides by the **good** quantity, so scrap cost is absorbed by the good
+  units (standard practice); (iii) a partial report re-estimates as more cost lands, but the ledger is
+  append-only — earlier layers keep the cost that was known when they were posted and are **never restated**.
+- **Form excludes:** `tenant`, `number`, `status`, `actual_start`, `actual_end`, `quantity_produced`,
+  `quantity_scrapped`, `produced_unit_cost`, `released_by`, `created_at`, `updated_at`.
+
+**`WorkOrderComponent` (plain `models.Model`, tenant-less child)**
+- [ ] `work_order` FK CASCADE `related_name="components"` · `sequence` `PositiveIntegerField(default=10)`
+- [ ] `item` FK **`"scm.Item"`** PROTECT `related_name="work_order_components"` ← **the §0b guard target**
+- [ ] `quantity_required` `Decimal(14,4)` — from `explode()`, **inclusive of `scrap_pct`**
+- [ ] `quantity_issued` `Decimal(14,4)` default 0 **`editable=False`** — maintained by the posting action alone
+- [ ] `uom` FK `"scm.UOM"` SET_NULL null blank `related_name="+"`
+- [ ] `lot_serial` FK `"scm.LotSerial"` SET_NULL null blank `related_name="work_order_components"`
+- [ ] `issue_method` ∈ `manual / backflush` default `manual` — copied from the BOM line at explode time
+- [ ] `unit_cost` `Decimal(14,4)` default 0 — cost snapshot taken at issue
+- [ ] `notes` `CharField(255, blank=True)`
+- [ ] `Meta`: `ordering = ["sequence", "id"]`
+- [ ] `quantity_outstanding` / `issued_value` properties
+- [ ] **Formset:** `WorkOrderComponentFormSet`, `extra=0`; `quantity_issued` rendered **read-only, not as an
+  input**.
+
+### 4. `ProductionTimeLog` [`PRD-`] — `models/Manufacturing/ProductionTimeLogs.py` (`TenantNumbered`)
+
+Realizes bullet 5 — the machine-time / labor-time / progress record the bullet names explicitly.
+
+- [ ] `work_order` FK CASCADE `related_name="time_logs"`
+- [ ] `work_center` FK `"scm.WorkCenter"` **PROTECT** `related_name="time_logs"`
+- [ ] `operation` `CharField(120, blank=True)` — **the documented stand-in for the deferred routing master**
+  (4.1's free-text-line precedent). A later pass promotes it to a `WorkOrderOperation` child and moves this FK.
+- [ ] `entry_type` ∈ `setup / labor / machine / downtime` default `labor` (**driver:** D365 route-card vs
+  job-card journals; SAP machine time + labor time; Epicor Data Collection)
+- [ ] `operator` FK **`"core.Party"`** SET_NULL null blank `related_name="scm_production_time_logs"`
+  (**driver:** MRPeasy worker management / Epicor attribution — reuses the spine + its `employee` `PartyRole`)
+- [ ] `started_at` `DateTimeField` · `ended_at` `DateTimeField(null=True, blank=True)`
+- [ ] `duration_minutes` `PositiveIntegerField(default=0, editable=False)` — see §0c for the single-writer rule
+- [ ] `quantity_completed` / `quantity_scrapped` `Decimal(14,4)` default 0 (**driver:** D365 "report the
+  production progress by job or resource"; MRPeasy). **Advisory progress only — see §0c.**
+- [ ] `downtime_reason` ∈ `breakdown / changeover / material_shortage / quality_hold / no_operator / other`,
+  `blank=True` (**driver:** Epicor Advanced MES, Odoo OEE) — **one log table, not two**
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["-started_at", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+  `(tenant, work_order)` `scm_prd_tnt_wo_idx`, `(tenant, work_center, started_at)` `scm_prd_tnt_wc_start_idx`
+- [ ] `clean()`: `ended_at > started_at`; `downtime_reason` **required** when `entry_type == "downtime"` and
+  **must be blank otherwise**
+- [ ] `duration_hours`, `labor_cost`, `machine_cost` properties (rates from `work_center`)
+- [ ] **Lifecycle rule (state it in the docstring and enforce in the views):** a log is creatable/editable/
+  deletable only while its work order is `released` or `in_progress`. Once the WO is `closed` or `cancelled` the
+  entries are **frozen** — the audit-trail principle `StockMove` sets, softened just enough to keep the CRUD
+  Completeness rule satisfied while the run is live.
+- **Form excludes:** `tenant`, `number`, `duration_minutes` when `ended_at` is supplied (see §0c),
+  `created_at`, `updated_at`.
+
+### Deliberately NOT added (say no once, here)
+- ~~`Item.is_manufactured` / `Item.item_role`~~ — derived from active-BOM existence (`manufactured_item_ids`).
+- ~~A WIP quantity field / a `wip` `Location.location_type`~~ — a new location type is a shared-model migration
+  AND `is_pickable=True` would leak WIP into 4.5's `_available_to_promise`. WIP value is **computed** on the WO
+  detail. Components are issued out of a stock location; finished goods received into a stock location.
+- ~~A `WorkOrderCostEntry` / any GL table~~ — no second ledger, no `GLAccount` FK, no `JournalEntry` this pass
+  (L29). If a hand-off is ever wanted it follows the 4.6 freight → **draft** `accounting.Bill` pattern. Note it
+  in the `WorkOrder` docstring and move on.
+- ~~A `Routing` / `RoutingOperation` master~~ — `WorkOrder.work_center` + `ProductionTimeLog.operation` are the
+  documented stand-in.
+- ~~An employee/operator table~~ — `core.Party` + `PartyRole` (L29).
+- ~~A `PurchaseOrderLine.item` FK~~ — 4.1's free-text lines are 4.1's migration to make, not 4.8's.
+
+---
+
+## Backend (apps/scm/{models,forms,views,urls}/Manufacturing/)
+
+**Mandatory package shape:** one new `Manufacturing/` folder in EACH of the four packages, one `<Entity>.py`
+per entity, the four layers lining up one-to-one. Every sub-package `__init__.py` is **ZERO-BYTE**; the
+re-export blocks go in the **parent** package `__init__.py`. **Imports are ABSOLUTE.** Entity modules open with
+`from apps.scm.models._base import *` (resp. `apps.scm.forms._common`, `apps.scm.views._common`).
+
+### models
+- [ ] `apps/scm/models/Manufacturing/__init__.py` — **empty file** (still its own commit)
+- [ ] `apps/scm/models/Manufacturing/WorkCenters.py` — `WorkCenter`
+- [ ] `apps/scm/models/Manufacturing/BillsOfMaterials.py` — `BillOfMaterials` + `BOMLine`
+- [ ] `apps/scm/models/Manufacturing/WorkOrders.py` — `WorkOrder` + `WorkOrderComponent`
+- [ ] `apps/scm/models/Manufacturing/ProductionTimeLogs.py` — `ProductionTimeLog`
+- [ ] `apps/scm/models/InventoryManagement/StockMoves.py` — **EDIT**: the two new `MOVE_TYPES` (§0a), with the
+  one-line comment explaining why `issue`/`receipt` must not be reused
+- [ ] `apps/scm/models/__init__.py` — **re-export block** `# 4.8 Manufacturing / Production` after the 4.7 block:
+  `WorkCenter`; `BillOfMaterials, BOMLine`; `WorkOrder, WorkOrderComponent`; `ProductionTimeLog`. **Forgetting
+  this is an ImportError at runtime, not at import time.**
+
+### forms
+- [ ] `apps/scm/forms/Manufacturing/__init__.py` — **empty**
+- [ ] `apps/scm/forms/Manufacturing/WorkCenters.py` — `WorkCenterForm` (**`TenantUniqueMixin` +
+  `TenantModelForm`** — `("tenant","code")` is unique_together, so without the mixin a duplicate code is a 500;
+  scope `location` by tenant automatically, `org_unit`/`supervisor` by tenant, `supervisor` further filtered to
+  `roles__role="employee"` via a small `_employee_parties(tenant)` helper added to `forms/_common.py` alongside
+  `_supplier_parties`/`_customer_parties`/`_carrier_parties`)
+- [ ] `apps/scm/forms/Manufacturing/BillsOfMaterials.py` — `BillOfMaterialsForm` (`TenantUniqueMixin` +
+  `TenantModelForm`; `item`/`uom`/`default_work_center` tenant-scoped), `BOMLineForm`, `BOMLineFormSet`
+- [ ] `apps/scm/forms/Manufacturing/WorkOrders.py` — `WorkOrderForm` (tenant-scopes `item`, `bom` — **further
+  filtered to BOMs for the chosen item where one is chosen**, `work_center`, `component_location`,
+  `output_location`, `output_lot_serial`, `sales_order`, `uom`; `clean()` requires `component_location` +
+  `output_location` before the order can leave draft, and requires `due_date` when
+  `schedule_direction="backward"`), `WorkOrderComponentForm`, `WorkOrderComponentFormSet` (`extra=0`),
+  `WorkOrderReleaseForm` (`forms.Form`: `planned_start`, `planned_end` — optional overrides),
+  `WorkOrderIssueForm` (`forms.Form`: `moved_at`), `WorkOrderReportProductionForm` (`forms.Form`:
+  `quantity_good`, `quantity_scrapped`, `output_lot_serial` scoped to the WO's item, `moved_at`),
+  `WorkOrderCancelForm` (`forms.Form`: `reason`)
+- [ ] `apps/scm/forms/Manufacturing/ProductionTimeLogs.py` — `ProductionTimeLogForm` (tenant-scopes
+  `work_order` to open orders + `work_center`; `operator` via `_employee_parties`; `clean()` mirrors the model's
+  downtime rule so the error lands on the field, not as a 500)
+- [ ] `apps/scm/forms/__init__.py` — **re-export block** `# 4.8 …` for every form + formset above
+
+### views (function-based, `@login_required`, tenant-scoped, full CRUD + filters + pagination)
+- [ ] `apps/scm/views/Manufacturing/__init__.py` — **empty**
+- [ ] `apps/scm/views/Manufacturing/WorkCenters.py` — `workcenter_list/create/detail/edit/delete`.
+  List: `crud_list(..., "scm/manufacturing/workcenter/list.html", search_fields=["number","code","name","notes"],
+  filters=[("center_type","center_type",False), ("location","location_id",True),
+  ("org_unit","org_unit_id",True), ("is_active","is_active",False)], extra_context={"type_choices":
+  WorkCenter.CENTER_TYPES, "locations": _location_qs(request.tenant), "org_units": …})`.
+  Detail: open work orders, today's load vs capacity, the OEE chip, recent time logs.
+  Delete: **the §0b guard** before `crud_delete`.
+- [ ] `apps/scm/views/Manufacturing/BillsOfMaterials.py` — `bom_list/create/detail/edit/delete`. Create/edit are
+  the **hand-written `_bom_form(request, instance)`** so header + `BOMLineFormSet` commit in ONE
+  `transaction.atomic()` (the `_stocktransfer_form` pattern at `views/InventoryManagement/StockTransfers.py:37`);
+  the default-demotion of §0d happens inside that same block; `write_audit_log(request.user, bom,
+  "update"/"create", _changed(form))` **by hand** — `crud_*` is bypassed here so nothing logs automatically.
+  List filters: `q` (number/name/item sku), `status`, `bom_type`, `item`, `default_work_center`.
+  Detail: the exploded multi-level tree (`explode(output_quantity)`) with a level indent, the roll-up cost, the
+  work orders built from it, and the cycle-guard note. Delete: the §0b guard.
+- [ ] `apps/scm/views/Manufacturing/WorkOrders.py` — `workorder_list/create/detail/edit/delete` (hand-written
+  `_workorder_form`, atomic parent+`WorkOrderComponentFormSet`, `explode_components()` called on create when a
+  `bom` is chosen and no components exist) **plus the five posting actions**, each
+  **`@tenant_admin_required` + `@require_POST`, inside `transaction.atomic()`, opening with
+  `select_for_update()` + a status re-read** (the `stocktransfer_complete` double-post guard at
+  `StockTransfers.py:119-135`), each catching `ValidationError` → `messages.error` (never a 500), each ending in
+  `write_audit_log(..., {"action": "<name>"})`:
+  - `workorder_release` — `draft`/`planned` → `released`; explodes components if empty; stamps `released_by`;
+    runs the material availability check and **WARNS (`messages.warning`) rather than refusing** — you can
+    release a job and pick later; the hard `_insufficient_stock` refusal belongs at issue time, where stock
+    actually moves. **State this split in the docstring.**
+  - `workorder_issue_components` — `released`/`in_progress` → `in_progress`; posts one **negative
+    `move_type="consumption"`** `StockMove` per `issue_method="manual"` component with outstanding quantity,
+    at `component_location`, `reference=wo.number`, `unit_cost = item.average_cost`, `lot_serial=line.lot_serial`;
+    **MUST use `_shared_items(lines)`** — a WO with two lines for the same component (a direct line + the same
+    item arriving from a sub-assembly explosion) **will corrupt `average_cost` without it**; guards each line
+    with `_insufficient_stock(item, wo.component_location, qty, lot)`; sets `quantity_issued`, `unit_cost`;
+    stamps `actual_start` if null
+  - `workorder_report_production` — `released`/`in_progress`; validates `quantity_good > 0`; **backflushes**
+    every `issue_method="backflush"` component prorated to the reported quantity (same guards, same
+    `_shared_items`); computes `unit_cost = computed_unit_cost(cumulative_good)`; posts ONE **positive
+    `move_type="production"`** `StockMove` into `output_location` with `output_lot_serial`; accumulates
+    `quantity_produced`/`quantity_scrapped`/`produced_unit_cost`; status → `completed` once
+    `quantity_produced >= quantity_planned` (over-production is permitted with a warning — D365/Odoo behaviour).
+    **Comment at the call site:** `_post_stock_move` rolls `Item.apply_receipt()` FIRST, and
+    `apply_receipt` weights against **ITEM-WIDE** on-hand (`Items.py:137` `prior_qty = self.on_hand()`), not
+    per-location — the produced cost therefore dilutes the item's whole average. That is the existing,
+    documented behaviour; **do not "fix" it here.**
+  - `workorder_close` — `released`/`in_progress`/`completed` → `closed`; stamps `actual_end`; **freezes the
+    time logs** (the ProductionTimeLog views check the parent status)
+  - `workorder_cancel` — allowed from `draft`/`planned`/`released`/`in_progress` (**never from `closed`**);
+    posts **compensating** moves, never edits or deletes a `StockMove` (the `_reverse_grn_receipt` pattern at
+    `_helpers.py:297`): production receipts reversed as negative `production` moves **guarded by
+    `_insufficient_stock` at `output_location`** (finished goods may already have been picked/transferred —
+    refuse with the "some of it has already been moved on" message), consumption issues reversed as positive
+    `consumption` moves back into `component_location`; **skip any move whose sign shows it is already a
+    reversal**; then zero `quantity_issued` / `quantity_produced` / `quantity_scrapped` / `produced_unit_cost`
+    because the counters mirror a ledger that has just been unwound. Status → `cancelled`.
+  - Delete: `is_editable` (draft/planned) only, plus the §0b-style refusal when any `StockMove` references
+    `wo.number`
+  - List filters: `q` (number/notes/item sku), `status`, `priority`, `work_center`, `item`, `order_policy`;
+    `extra_context` carries `status_choices`, `priority_choices`, `policy_choices`, `work_centers`, `items`
+- [ ] `apps/scm/views/Manufacturing/ProductionTimeLogs.py` — `productiontimelog_list/create/detail/edit/delete`
+  with the **parent-open gate** (§4): create/edit/delete refuse with a message when the parent WO is
+  `closed`/`cancelled`. List filters: `q` (number/operation/notes), `entry_type`, `work_center`, `work_order`,
+  `downtime_reason`, plus a `date_from`/`date_to` pair on `started_at`
+- [ ] `apps/scm/views/Manufacturing/Reports.py` — two computed pages, the
+  `views/InventoryManagement/Reports.py` / `views/DemandPlanning/Reports.py` shape (several report views in one
+  module):
+  - **`mrp_report`** (`@login_required`) — bullet 4. GET params `horizon_days` (default 90, **hard-capped at
+    365** — the 4.7 unbounded-horizon security lesson), `bucket` (`week`/`month`, default `week`), `location`,
+    `item`, `q`. Per `(item, location)` and per time bucket:
+    **gross demand** = open `SalesOrderLine` (`.exclude(sales_order__status__in=("draft","cancelled"))`, bucketed
+    by `sales_order__requested_date` falling back to `order_date` — **both verified to exist**) + approved
+    `DemandForecastPeriod.final_quantity` (forecast `status="approved"`) + dependent demand from
+    `WorkOrderComponent.quantity_outstanding` on `planned`/`released`/`in_progress` orders;
+    **supply** = live on-hand (ONE grouped `StockMove` aggregate — the `ReorderRule.on_hand_map` precedent,
+    **never a per-item aggregate, L18**) + open `WorkOrder` output (`quantity_planned − quantity_produced`) +
+    **advisory** open-PO quantity resolved through the existing best-effort `_resolve_grn_item()` bridge
+    (`PurchaseOrderLine` has **no `item` FK** — free text `sku_hint` only) with the column **labelled
+    *advisory*** and an unmatched-line count chip, exactly as `_post_grn_receipt` already surfaces;
+    **less** `ReorderRule.safety_stock`;
+    → shortage rows with a **lead-time-offset suggested release date** (make side:
+    `BillOfMaterials.lead_time_days`; buy side: the verified `ReorderRule.lead_time_days`), a **pegging** list
+    naming the demand documents behind each row, and a **make/buy verdict** from
+    `BillOfMaterials.manufactured_item_ids(tenant)` — **one batched query, no per-row EXISTS**.
+    Multi-level: the same recursive `explode()` walk with the depth cap + visited set.
+  - **`mrp_create_workorder`** (`@login_required`, `@require_POST`) — the *firming* action (D365). Creates ONE
+    **draft** `WorkOrder` for the posted `(item, location, quantity, need_date)` from the item's active BOM, with
+    components exploded, `schedule_direction="backward"`, `due_date = need_date`. **Creates a draft document, so
+    `@login_required` (not `@tenant_admin_required`) is correct** — it moves no stock; `crud_create` uses the
+    same bar. `write_audit_log` + redirect to the new WO's detail.
+    Buy-side rows link to **`scm:requisition_create`** — the honest existing hand-off shape that
+    `templates/scm/inventory/reorder_alerts.html:31` already uses (a link to a blank requisition, not a fake
+    pre-fill). **Nothing fires by itself** — the compute-then-convert doctrine.
+  - **`production_schedule`** (`@login_required`) — bullet 2. GET params `start` (default today), `days`
+    (default 14, **hard-capped at 90**), `work_center`, `status`. Work-center × date-bucket load board:
+    scheduled hours (a WO's planned span spread evenly across the buckets it overlaps, plus
+    `WorkCenter.setup_minutes` once in its start bucket) vs `capacity_hours_per_day × efficiency_pct/100`;
+    overload flagged; each WO shown with its material-availability verdict from ONE batched on-hand map
+    (*trim #1*); a separate **"Not scheduled"** panel for open WOs with no `planned_start` so they are never
+    invisible. **Infinite capacity** — load vs capacity is displayed and overload flagged; nothing is
+    auto-levelled (finite scheduling is deferred).
+- [ ] `apps/scm/views/InventoryManagement/Items.py` — **EDIT**: the §0b `item_delete` guards + a BOM panel /
+  work-order panel in `item_detail`'s context (`boms`, `work_orders`, capped `[:10]`)
+- [ ] `apps/scm/views/__init__.py` — **re-export block** `# 4.8 …` for every new view name (5 + 5 + 10 + 5 + 3)
+
+### urls
+- [ ] `apps/scm/urls/Manufacturing/__init__.py` — **empty**
+- [ ] `apps/scm/urls/Manufacturing/WorkCenters.py` — `work-centers/`, `work-centers/add/`,
+  `work-centers/<int:pk>/`, `…/edit/`, `…/delete/` → `workcenter_list/create/detail/edit/delete`
+- [ ] `apps/scm/urls/Manufacturing/BillsOfMaterials.py` — `boms/`, `boms/add/`, `boms/<int:pk>/`, `…/edit/`,
+  `…/delete/` → `bom_list/create/detail/edit/delete` (**note the deliberate stem asymmetry: url names use the
+  `bom_` stem — that is what `LIVE_LINKS["4.8"]` points at — while the template folder is
+  `manufacturing/billofmaterials/` per the model-name-lowercased rule. Pin both; do not "harmonise" one later.**)
+- [ ] `apps/scm/urls/Manufacturing/WorkOrders.py` — `work-orders/`, **`work-orders/add/` (literal, MUST precede
+  the pk route)**, `work-orders/<int:pk>/`, `…/edit/`, `…/delete/`, `…/release/`, `…/issue-components/`,
+  `…/report-production/`, `…/close/`, `…/cancel/`
+- [ ] `apps/scm/urls/Manufacturing/ProductionTimeLogs.py` — `time-logs/`, `time-logs/add/`,
+  `time-logs/<int:pk>/`, `…/edit/`, `…/delete/`
+- [ ] `apps/scm/urls/Manufacturing/Reports.py` — `mrp/`, **`mrp/create-work-order/` (literal — no pk route
+  exists under `mrp/`, but keep it above anything added later)**, `production-schedule/`
+- [ ] `apps/scm/urls/__init__.py` — append 5 imports
+  (`from .Manufacturing.WorkCenters import urlpatterns as _mf_workcenters`, `…BillsOfMaterials…` `_mf_boms`,
+  `…WorkOrders…` `_mf_workorders`, `…ProductionTimeLogs…` `_mf_timelogs`, `…Reports…` `_mf_reports`) + the 5
+  `*_mf_*` spreads at the end of the concatenated `urlpatterns`, with a comment recording the first-segment
+  collision check above. **`app_name` stays declared once at line 44 — entity modules define only
+  `urlpatterns`.**
+
+### admin
+- [ ] `apps/scm/admin.py` — new banner section `# ============================================================
+  4.8 Manufacturing / Production` + a local `from apps.scm.models import (…)  # noqa: E402` block (the existing
+  4.3/4.4/4.6/4.7 style), registering `WorkCenter`, `BillOfMaterials` (+`BOMLineInline`), `WorkOrder`
+  (+`WorkOrderComponentInline`), `ProductionTimeLog`. **Every computed / action-written field in
+  `readonly_fields`** — `number`, `status`, `actual_start`, `actual_end`, `quantity_produced`,
+  `quantity_scrapped`, `produced_unit_cost`, `released_by` on `WorkOrder`; `quantity_issued` on the inline;
+  `duration_minutes` on `ProductionTimeLog`. **This is the 4.7 lesson (commit `7ba189d3`): the admin was a
+  second writer of a computed column and the next recompute silently overwrote it.**
+
+### migration
+- [ ] `python manage.py makemigrations scm` → **`0012_…`**, `dependencies = [("scm",
+  "0011_alter_demandforecastperiod_baseline_quantity_and_more")]`. It must contain **6 `CreateModel`s**
+  (`WorkCenter`, `BillOfMaterials`, `BOMLine`, `WorkOrder`, `WorkOrderComponent`, `ProductionTimeLog`) **AND one
+  `AlterField` on `scm.stockmove.move_type`** (the 2 new choices — a metadata-only change on MySQL, no data
+  migration, `max_length` unchanged at 12).
+- [ ] `makemigrations --check` must then report **"No changes detected"**.
+
+### cross-cutting rules to encode in every file
+- [ ] **Every model has a `tenant` FK** (via `TenantOwned`/`TenantNumbered`) except the two tenant-less children
+  `BOMLine` and `WorkOrderComponent`, which are reached only through their parent — **and any form dropdown
+  pointing at one MUST be hand-scoped** (`forms/_common.py:99 _scope_to_parent`), or the select leaks other
+  tenants' rows.
+- [ ] **Every view filters by `tenant=request.tenant`** — no `Model.objects.all()` anywhere.
+- [ ] **Every hand-rolled save path and every action view calls `write_audit_log` itself** — only the `crud_*`
+  helpers in `apps/core/crud.py` do it automatically. Use the already-imported `_changed(form)` for edit diffs
+  rather than re-deriving the redaction list.
+- [ ] `@require_POST` on **every** action and **every** delete; `@tenant_admin_required` on the five WorkOrder
+  posting actions (they move stock); `@login_required` everywhere else.
+- [ ] Every computed `Decimal` goes through `q2()`/`q4()` (clamp **and** quantize).
+- [ ] **One file per commit**, PowerShell-safe (`;` never `&&`), no `git push`.
+
+---
+
+## Seed (extend apps/scm/management/commands/seed_scm.py — idempotent, reuses existing rows)
+
+- [ ] New `_seed_manufacturing_tenant(self, tenant)`, called **LAST** in `handle()` after
+  `self._seed_demand_planning_tenant(tenant)` — it depends on 4.3's items/locations/UOMs and 4.5's sales orders.
+  Function-local model imports (the file's convention).
+- [ ] Idempotency guard: `if BillOfMaterials.objects.filter(tenant=tenant).exists(): stdout.write("… already
+  exists — skipping."); return`, **plus** a prerequisite warn-and-return when the 4.3 rows are missing (the
+  `_seed_demand_planning_tenant` shape at line 571): `ws16 = Item…sku="WS-16"`, `mon27 = …"MON-27"`,
+  `dock = …"DOCK-C"`, `main = Location…code="WH-MAIN"` → `if any(x is None …): stdout.write(WARNING …); return`.
+- [ ] Rows to create (**every one through the real service/action code paths**, the 4.7 precedent — not
+  hand-set fields that merely look plausible):
+  - 2 `WorkCenter`s: `WC-ASSY` (assembly, WH-MAIN, 8 h/day, efficiency 90 %, setup 15 min, machine 12.00/h,
+    labor 28.00/h) and `WC-TEST` (inspection, WH-MAIN, 8 h/day, efficiency 95 %) — `supervisor` = a `Party`
+    with the `employee` role via a new `_operator(tenant, name)` helper mirroring `_supplier`/`_customer`;
+    `org_unit` from the existing `self._org_unit(tenant)`
+  - 2 new `Item`s created here via `get_or_create(sku=…)` so 4.3's guard is not disturbed: `SUBA-DM`
+    ("Dual-monitor arm kit", sub-assembly) and `BUNDLE-WS` ("Workstation bundle", finished good) — both
+    `costing_method="weighted_avg"`, in the existing "IT Equipment" category, uom `EA`
+  - `BOM-00002` for `SUBA-DM` v1, `manufacture`, output 1, lead 1 day, **active + default**, work center
+    `WC-ASSY`, one line: `MON-27 × 2`
+  - `BOM-00001` for `BUNDLE-WS` v1, `manufacture`, output 1, lead 3 days, **active + default**, work center
+    `WC-ASSY`, three lines: `WS-16 × 1` (manual), `SUBA-DM × 1` (manual — **this is the sub-assembly that makes
+    `explode()` recurse one level and proves the multi-level path**), `DOCK-C × 1, scrap_pct 5` (**backflush**)
+  - `WO-00001` — `SUBA-DM × 5`, driven all the way to **`closed`** through the real release → issue →
+    report-production → close path: issues `MON-27 × 10` out of WH-MAIN as **`consumption`** moves, receives 5
+    `SUBA-DM` into WH-MAIN as a **`production`** move at the computed cost. (Seeded on-hand covers it: MON-27 is
+    40 + 15 − 5 = 50 at WH-MAIN.)
+  - `WO-00002` — `BUNDLE-WS × 3`, left at **`released`** with components exploded and **not yet issued**
+    (`WS-16 × 3`, `SUBA-DM × 3`, `DOCK-C × 3.15` incl. 5 % scrap) — the shop floor has live work and the
+    availability check has something real to say. `planned_start`/`planned_end` inside the next 14 days so the
+    production-schedule board is populated.
+  - `WO-00003` — `BUNDLE-WS × 2`, **`draft`**, `order_policy="make_to_order"`, `sales_order` = one of 4.5's
+    seeded orders, `schedule_direction="backward"`, `due_date` ≈ +21 days — exercises the MTO peg, gives the
+    list three statuses, makes the Edit/Delete gating visible, and gives the MRP report a real demand row
+  - 4 `ProductionTimeLog`s: on `WO-00001` a `setup` 15 min and a `labor` 180 min on `WC-ASSY` with an
+    `operator`; on `WO-00002` a `machine` 120 min and a **`downtime` 45 min with `downtime_reason=
+    "material_shortage"`** — so the OEE chip, the actual-vs-planned variance and the downtime badge all have data
+- [ ] Prepend the 4.8 teardown to `_flush()` (**newest first**, before the 4.7 block): `ProductionTimeLog` →
+  `WorkOrderComponent` → `WorkOrder` → `BOMLine` → `BillOfMaterials` → `WorkCenter`. Order matters:
+  `ProductionTimeLog.work_center` and `WorkOrder.work_center`/`component_location`/`output_location` are
+  **PROTECT**, and `BOMLine.component` / `WorkOrderComponent.item` **PROTECT** `Item`, so the whole 4.8 tree must
+  clear before the existing 4.3 inventory teardown. The `consumption`/`production` `StockMove` rows are already
+  covered by the existing `StockMove.objects.all().delete()`.
+- [ ] Update the command's `help` string and the final `SUCCESS` line to include "+ 4.8 manufacturing".
+- [ ] **No bare `.create()` on a `TenantNumbered` model** — follow the file's
+  `filter(tenant=…, number=…).first()` / `get_or_create` style so a second run creates **no** duplicate
+  `BOM-`/`WC-`/`WO-`/`PRD-` numbers.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **ONE new `LIVE_LINKS["4.8"]` entry** inserted after `"4.7"` (which ends at
+  line 848), keys matching the `NavERP.md:783-787` bullet text **VERBATIM**:
+  ```python
+  # 4.8 Manufacturing / Production — BillOfMaterials is the recipe spine (multi-level explosion is
+  # DERIVED, no routing master); WorkOrder is the costed production object whose release/issue/report/
+  # close/cancel actions post through the same 4.3 _post_stock_move service (new `consumption` and
+  # `production` move types — NOT `issue`/`receipt`, which 4.7 reads as customer demand); WorkCenter
+  # carries capacity + machine/labor rates; ProductionTimeLog is the shop-floor record. Production
+  # Scheduling and MRP are computed REPORTS (the scm:reorder_alerts / scm:safety_stock_report
+  # precedent — a bullet may be a report, not a CRUD list), and both compute-then-convert: nothing
+  # fires without an explicit click.
+  "4.8": {
+      "Bill of Materials (BOM)": "scm:bom_list",                    # bullet (recipe + multi-level explode)
+      "Production Scheduling": "scm:production_schedule",           # bullet (work-center load board)
+      "Work Order Management": "scm:workorder_list",                # bullet (release/issue/report/close)
+      "Material Resource Planning (MRP)": "scm:mrp_report",         # bullet (netting → make/buy suggestions)
+      "Shop Floor Control": "scm:productiontimelog_list",           # bullet (machine + labor time, progress)
+  },
+  ```
+- [ ] **No `config/settings.py` / `config/urls.py` change** — `apps/scm` is already installed and included
+  (4.1 shipped it). **Confirm, don't re-add.**
+- [ ] All 5 targets are STAFF-facing management/report pages — no login-gated portal view (L32).
+- [ ] `templates/scm/overview.html` — new **Manufacturing** card (the 4.7 card at lines 219-229 is the shape),
+  with buttons: Bills of Materials, Work Orders, Work Centers, Shop Floor (time logs), MRP, Production Schedule.
+
+---
+
+## Templates (templates/scm/manufacturing/)
+
+Two levels: sub-module folder `manufacturing/`, then **one folder per entity named `<Model>` lowercased with no
+separators** — `billofmaterials/`, `workcenter/`, `workorder/`, `productiontimelog/`. Page files are the bare
+`list.html` / `detail.html` / `form.html`. **Never a flat `<entity>_<page>.html`.** The two report pages are
+standalone and sit at the **sub-module root** (the `inventory/valuation_report.html` precedent).
+
+Every list page: filter bar reflecting `request.GET` (string fields `== value`; **FK/pk fields
+`|stringformat:"d"`, NEVER `|slugify`**) + Actions column (view / edit / delete-POST with `confirm()` and
+`{% csrf_token %}`) + pagination guarded by `has_previous`/`has_next` (L9) + an empty-state row. Badges use ONLY
+`badge-green/red/amber/info/muted/slate` (verified `static/css/theme.css:285-290`; `-success`/`-warning`/
+`-danger` do **not** exist, L33) with an `{% else %}{{ obj.get_x_display }}` fallback. `{% extends "base.html" %}`
+and `{% include "partials/…" %}` unchanged.
+
+- [ ] `manufacturing/billofmaterials/list.html` — filters `q`, `status`, `bom_type`, `item`,
+  `default_work_center`; columns number/item/name/version/type/output qty/lead time/lines/default/status;
+  badges `badge-muted` draft, `badge-green` active, `badge-slate` obsolete; a `badge-info` "Default" chip
+- [ ] `manufacturing/billofmaterials/detail.html` — header panel, the **multi-level exploded tree** (indent by
+  `level`, each row showing quantity-per, effective quantity incl. scrap, and whether that component itself has
+  a BOM), the estimated unit-cost roll-up, effectivity window, and the work orders built from it; Actions
+  sidebar: Edit / Delete (POST + confirm) / Back to list
+- [ ] `manufacturing/billofmaterials/form.html` — header fields + the `BOMLineFormSet` grid
+- [ ] `manufacturing/workcenter/list.html` — filters `q`, `center_type`, `location`, `org_unit`, `is_active`;
+  columns number/code/name/type/location/capacity h/efficiency %/rates/active; `badge-green`/`badge-muted` for
+  active/inactive
+- [ ] `manufacturing/workcenter/detail.html` — capacity + rates panel, today's/this-week's load vs capacity, the
+  **OEE chip** (runtime vs downtime vs scrapped), open work orders, recent time logs; Actions sidebar
+- [ ] `manufacturing/workcenter/form.html`
+- [ ] `manufacturing/workorder/list.html` — filters `q`, `status`, `priority`, `work_center`, `item`,
+  `order_policy`; columns number/item/qty planned/produced/status/priority/work center/planned start/due;
+  badges `badge-muted` draft, `badge-info` planned, `badge-amber` released, `badge-info` in_progress,
+  `badge-green` completed, `badge-slate` closed, `badge-red` cancelled; Edit/Delete wrapped in
+  `{% if obj.is_editable %}`
+- [ ] `manufacturing/workorder/detail.html` — the biggest page: header + schedule panel; the **component table**
+  with required / issued / outstanding / on-hand-at-source and a shortfall flag; the **posting Actions sidebar**
+  — Release / Issue Components / Report Production / Close / Cancel, each a **POST form with `{% csrf_token %}`,
+  a `confirm()`, and `{% if %}` gating on `status`** (never a GET link); the **cost panel** (material + labor +
+  machine = WIP value, produced unit cost, actual vs planned hours); the **time-log list** with the "reported vs
+  received" advisory delta (§0c); and the **`StockMove` rows referencing this WO number** (the
+  `stocktransfer_detail` "moves" panel precedent) so the ledger effect is visible on the document
+- [ ] `manufacturing/workorder/form.html` — header + `WorkOrderComponentFormSet`; `quantity_issued` shown
+  **read-only, not as an input**; the forward/backward schedule helper
+- [ ] `manufacturing/productiontimelog/list.html` — filters `q`, `entry_type`, `work_center`, `work_order`,
+  `downtime_reason`, `date_from`/`date_to`; badges `badge-info` setup, `badge-green` labor, `badge-slate`
+  machine, `badge-red` downtime
+- [ ] `manufacturing/productiontimelog/detail.html` — duration + cost breakdown, the parent WO link, the frozen
+  notice when the WO is closed
+- [ ] `manufacturing/productiontimelog/form.html` — the `ended_at` / `duration_minutes` precedence note (§0c)
+  rendered as `help_text`
+- [ ] `manufacturing/mrp_report.html` (flat, sub-module root) — filter bar (`horizon_days`, `bucket`,
+  `location`, `item`, `q`), the time-phased netting table, the **advisory** open-PO column with its unmatched
+  count chip, the pegging expander per row, and per-row **Make** (POST form → `scm:mrp_create_workorder`,
+  csrf + confirm) / **Buy** (link → `scm:requisition_create`) actions; an empty-state that says the horizon is
+  clear rather than showing a blank table
+- [ ] `manufacturing/production_schedule.html` (flat) — filter bar (`start`, `days`, `work_center`, `status`),
+  the work-center × date-bucket grid with load/capacity per cell (`badge-red` over 100 %, `badge-amber` ≥ 80 %,
+  `badge-green` below), the per-WO list with its material-availability verdict, and the **"Not scheduled"**
+  panel
+- [ ] `templates/scm/inventory/stock_ledger.html:56` — **EDIT**: add `consumption` → `amber`, `production` →
+  `green` to the badge chain (the `{% else %}muted` fallback stays)
+- [ ] `templates/scm/inventory/item/detail.html:76` — **EDIT**: the same two badge colours; **plus** a "Bills of
+  Materials" panel and a "Work orders" panel (the reciprocal links the `explorer` agent asks for every pass)
+- [ ] `templates/scm/overview.html` — the Manufacturing card (see Wire-up)
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` → **`0012`** (6 CreateModels + 1 AlterField on
+  `stockmove.move_type`); then `python manage.py makemigrations --check` → **"No changes detected"**
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_scm` **twice** — the second run must print
+  `"<tenant>: manufacturing data already exists — skipping."` for every tenant and create **zero** new rows
+  (count `BillOfMaterials`/`WorkOrder`/`ProductionTimeLog`/`StockMove` before and after)
+- [ ] `python manage.py seed_scm --flush` then `seed_scm` — proves the teardown ordering (the PROTECT chain)
+- [ ] `python manage.py check` → clean (**and no `models.W036`** — that warning would mean a conditional
+  UniqueConstraint slipped in, §0d)
+- [ ] **`temp/smoke_scm_48.py`** — a throwaway script (delete it before the final commit, the 4.7 precedent),
+  logging in as **`admin_acme` / `password`**:
+  - every new `scm:*` route resolves and returns **200** (lists, details, forms, both reports) or **302**
+    (the POST-only actions when hit with GET)
+  - content assertions on every page: **no `{#` and no `{% comment` leaking into the HTML**, the page title
+    renders, and a **seeded record is present** (`BOM-00001`, `WC-ASSY`, `WO-00002`, a `PRD-` number)
+  - the five WorkOrder actions exercised end-to-end on a fresh WO: release → issue → report production →
+    close, asserting the `StockMove` rows are written with `move_type="consumption"` / `"production"`, that
+    `quantity_issued` / `quantity_produced` / `produced_unit_cost` moved, and that a **double POST of the same
+    action does not double-post stock** (the `select_for_update` + status re-read guard)
+  - `workorder_cancel` on an issued order writes **compensating** moves and leaves the original rows intact
+    (assert the `StockMove` count grew, never shrank)
+  - the **backflush** path: a `backflush` component is NOT consumed by `issue_components` and IS consumed by
+    `report_production`
+  - the `_shared_items` guard: a WO with two lines for the same component issues both without corrupting
+    `Item.average_cost`
+  - `_insufficient_stock`: issuing more than on-hand is refused with a message, **not a 500**, and writes no
+    partial moves
+  - **cross-tenant IDOR → 404** on every `<int:pk>` route (detail/edit/delete/all five actions/time-log CRUD)
+    using a second tenant's object id
+  - `item_delete` on an item that is only referenced by a `BOMLine` returns a **message + redirect, not a 500**
+    (the §0b regression)
+  - the two bounded-horizon caps hold: `?horizon_days=99999` and `?days=99999` do not blow up
+- [ ] Sidebar shows **4.8 as Live** with all five bullets, and each link lands on the right page
+- [ ] `pytest apps/scm` still green before handing to `test-writer`
+
+---
+
+## Close-out
+
+- [ ] `code-reviewer` → apply + commit
+- [ ] `explorer` → apply + commit
+- [ ] `frontend-reviewer` → apply + commit (**check `.detail-item` + `<dt>/<dd>`, not `.detail-label`/
+  `.detail-value` — that class pair does not exist in `theme.css` and has now been the finding four times**)
+- [ ] `performance-reviewer` → apply + commit (the MRP + schedule reports are the risk: **measure**, don't
+  estimate — `select_related` on an FK leaves every hop past it lazy, the 4.7 finding)
+- [ ] `qa-smoke-tester` → apply + commit
+- [ ] `security-reviewer` → apply + commit
+- [ ] `test-writer` → apply + commit
+- [ ] **UPDATE `.claude/skills/scm/SKILL.md`** (it already exists — 4.8 models, url names, template paths,
+  seeder additions, the `consumption`/`production` move types, the single-writer rule, the posting-action shape)
+- [ ] `README.md` — 4.8 marked built
+- [ ] Delete `temp/smoke_scm_48.py`
+- [ ] Every step: `git add '<one file>'; git commit -m '<specific message>'` — **one file per commit,
+  PowerShell `;`, never `&&`, never `git push`**
+
+---
+
+## Later passes / deferred (carried over from research-scm-4.8.md)
+
+- **Routings / operation sequencing as a master** (`Routing` + `RoutingOperation`; SAP production versions,
+  NetSuite routing templates, Odoo BOM operations tab) — **the single biggest deferral.** This pass carries one
+  `WorkOrder.work_center` FK + a free-text `ProductionTimeLog.operation` label. A later pass promotes the label
+  to a `WorkOrderOperation` child and moves the time log's FK from `work_center` to the operation.
+- **Finite-capacity / constraint-based scheduling, capable-to-promise, what-if** (Infor CSI APS, Acumatica APS,
+  SAP PP/DS, Epicor) — a real solver. This pass shows load vs capacity and flags overload.
+- **Drag-and-drop Gantt rescheduling** (MRPeasy, NetSuite, Infor, Epicor) — a front-end capability over fields
+  this pass already ships; no data-model change needed later.
+- **MRP exception / action messages on existing orders** ("reschedule in/out", "cancel", "expedite") — layer two
+  of the MRP report.
+- **DRP / multi-site netting + inter-site transfer suggestions** — blocked on the same fulfilment-location rule
+  4.7 documented as missing (`ReorderRule.demand_history` docstring).
+- **Subcontracting / contract manufacturing** (Odoo, Katana, D365 pegged supply, Acumatica) — needs
+  `WorkOrder` ↔ `PurchaseOrder` linkage and collides with 4.1's free-text PO lines.
+- **Co-products / by-products and formula (process) BOMs** (D365 batch orders, SAP, Odoo) — a `BOMOutput` child
+  table plus a cost-apportionment rule; a pass of its own.
+- **Disassembly / unbuild / repair / reverse work-order types** (Fishbowl, Odoo) — inverts the posting
+  direction; do it deliberately, not as a `wo_type` choice bolted on now.
+- **Component scrap posting** (a scrapped *component* posting an `adjustment` move) — the output-scrap half
+  ships this pass (`quantity_scrapped`, never received into stock, no phantom move for goods that never
+  existed); the component-scrap action is a later addition.
+- **Engineering Change Orders with approval workflow** (Acumatica, Epicor, SAP) — `status` + `version` +
+  `effective_from/to` cover revision control this pass; the governed change request is later.
+- **Product configurator / variant BOMs / manufacturing estimates** (Acumatica, Infor CSI, Epicor) — needs an
+  item-variant axis `scm.Item` does not have; that is a **Module 5 Inventory** decision.
+- **Lean / kanban production without work orders** (Epicor Lean, D365 kanbans) — a different execution paradigm.
+- **Master Production Schedule as its own document** (MRPeasy, SAP, D365) — 4.7's approved forecast plus this
+  MRP report cover the planner's need for now.
+- **Barcode / RFID scanning, tablet & kiosk shop-floor UIs, MES terminals** (Odoo, Katana, Acumatica, Epicor,
+  MRPeasy, Fishbowl, D365) — **integration/UI.** The data model already anticipates it: a time log keyed by
+  work order + work center + operator is exactly what a scanner writes.
+- **Machine / IoT signal capture and automated OEE** (Epicor Advanced MES, Plex, Critical Manufacturing) —
+  **integration/later.**
+- **AI/ML supply planning** (SAP PP/DS, Infor, Acumatica) — deterministic `Decimal` arithmetic only, per the
+  explicit 4.7 precedent (no numpy/pandas/scikit dependency).
+- **Work instructions / worksheets at the station** — would reuse the verified `core.Document`; small, and
+  droppable without loss.
+- **Any WIP / variance GL posting** — belongs to `apps.accounting`; even a draft hand-off is out of scope
+  (L29). See the research file's GL section.
+
+### Parked for sibling sub-modules (do NOT pull in)
+
+- **In-process quality checks, control points, non-conformance on a run, CoA for a produced lot** → **4.9 QMS**
+  (Quality Inspection, NCR, CAPA, Audit Management, CoA). 4.8 leaves a clean seam and builds no quality gate.
+- **Preventive/corrective maintenance of machines, equipment master, MTBF** → **4.13 Asset Management.**
+- **Production/OEE dashboards, throughput and COGS analytics, predictive disruption** → **4.11 Supply Chain
+  Analytics.** This pass ships two focused operational pages, not an analytics suite.
+- **Operator labour hours for payroll, shift rosters, plant labour standards** → **4.14 Labor Management** and
+  **HRM 3.x** (Time Tracking / Attendance are already built). `ProductionTimeLog` is a **cost and progress**
+  record against a work order, **not a timesheet** — do not merge the two.
+- **Subcontract POs to a contract manufacturer** → **4.1 Procurement** + a later 4.8 pass; the PO document
+  already exists and must not be re-declared.
+- **Picking components with WMS directed tasks / putting finished goods away** → **4.4 WMS**
+  (`PickTask`/`PutawayTask` exist). 4.8 posts stock directly through `_post_stock_move()`; wiring a work order
+  into a pick wave is a 4.4 extension, not a 4.8 table.
+- **Forecast generation, seasonality, consensus demand** → **4.7** (built). 4.8 *reads* the approved forecast;
+  it never recomputes one, and it never writes `ReorderRule.safety_stock`/`reorder_point` (that is
+  `apply_computed()`'s job, behind a review).
+- **WIP/variance journal entries, standard-cost revaluation, cost accounting close** → **`apps.accounting`**
+  (Module 2 / 2.7 Cost Accounting).
+
+## Review notes
+
+(filled in at the end)
