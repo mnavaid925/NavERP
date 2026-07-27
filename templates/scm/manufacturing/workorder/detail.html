@@ -295,7 +295,12 @@
             </form>
           {% endif %}
         {% endif %}
-        {% if obj.status != 'closed' and obj.status != 'cancelled' %}
+        {% comment %}
+          Matches workorder_cancel's from_statuses exactly (draft/planned/released/in_progress).
+          'completed' must be excluded too — the view refuses it, so offering the button there
+          only ever produces an error message.
+        {% endcomment %}
+        {% if obj.status != 'closed' and obj.status != 'cancelled' and obj.status != 'completed' %}
           {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <form method="post" action="{% url 'scm:workorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel this work order? A run that has already posted stock movements cannot be cancelled.');">
               {% csrf_token %}
