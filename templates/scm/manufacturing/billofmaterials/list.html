@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Bills of Materials{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Bills of Materials</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Bills of Materials</span></div>
+      <p class="text-muted">Versioned recipes with effectivity dates. An item counts as manufactured because an active, effective BOM exists for it — there is no make-or-buy flag to disagree with the recipes.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:mrp_report' %}" class="btn btn-outline"><i data-lucide="network"></i> MRP</a>
+      <a href="{% url 'scm:billofmaterials_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New BOM</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, name, version or item…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="bom_type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.bom_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="default_work_center" aria-label="Work centre" class="form-select">
+            <option value="">All work centres</option>
+            {% for wc in work_centers %}
+              <option value="{{ wc.pk }}" {% if request.GET.default_work_center == wc.pk|stringformat:"d" %}selected{% endif %}>{{ wc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_default" aria-label="Default" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_default == "True" %}selected{% endif %}>Default only</option>
+            <option value="False" {% if request.GET.is_default == "False" %}selected{% endif %}>Non-default</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:billofmaterials_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Item</th><th>Name</th><th>Version</th><th>Type</th><th>Output</th><th>Lines</th><th>Lead time</th><th>Work centre</th><th>Effectivity</th><th>Default</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:billofmaterials_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a></td>
+              <td>{{ obj.name }}</td>
+              <td>v{{ obj.version }}</td>
+              <td>
+                <span class="badge badge-{% if obj.bom_type == 'manufacture' %}info{% elif obj.bom_type == 'kit' %}green{% elif obj.bom_type == 'phantom' %}slate{% else %}slate{% endif %}">{{ obj.get_bom_type_display }}</span>
+              </td>
+              <td>{{ obj.output_quantity|floatformat:4 }}{% if obj.uom %} {{ obj.uom.code }}{% endif %}</td>
+              <td>{{ obj.line_count }}</td>
+              <td>{{ obj.lead_time_days }}d</td>
+              <td>{% if obj.default_work_center %}{{ obj.default_work_center.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.effective_from or obj.effective_to %}
+                  {{ obj.effective_from|date:"M d, Y"|default:"open" }} – {{ obj.effective_to|date:"M d, Y"|default:"open" }}
+                {% else %}
+                  <span class="text-muted">Always</span>
+                {% endif %}
+              </td>
+              <td>{% if obj.is_default %}<span class="badge badge-green">Default</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'active' %}green{% elif obj.status == 'draft' %}slate{% elif obj.status == 'obsolete' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:billofmaterials_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:billofmaterials_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:billofmaterials_delete' obj.pk %}" onsubmit="return confirm('Delete this BOM and its component lines? A BOM used by a work order cannot be deleted — mark it obsolete instead.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="list-tree"></i><h3>No bills of materials</h3><p>A recipe names the produced item, the quantity it yields and the components that go into it. Mark one version default and MRP will use it when a work order names no BOM.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    <div class="card-body text-muted">Only an <span class="fw-600">active</span> BOM inside its effectivity window is picked up by a work order or by MRP — a draft or obsolete recipe is invisible to both.</div>
+  </div>
+{% endblock %}
