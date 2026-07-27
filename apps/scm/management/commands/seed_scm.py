@@ -882,7 +882,7 @@ class Command(BaseCommand):
         # work_center / ProductionTimeLog.work_center are PROTECT against WorkCenter — so the order
         # here is forced: logs and components (children) → orders → BOMs → centres. The WS-KIT item
         # this seeder created is removed with them; 4.3's own items are cleared further down.
-        from apps.scm.models import (BillOfMaterials, BOMLine, Item as _Item, ProductionTimeLog,
+        from apps.scm.models import (BillOfMaterials, BOMLine, ProductionTimeLog,
                                      WorkCenter, WorkOrder, WorkOrderComponent)
         ProductionTimeLog.objects.all().delete()
         WorkOrderComponent.objects.all().delete()
@@ -890,7 +890,10 @@ class Command(BaseCommand):
         BOMLine.objects.all().delete()
         BillOfMaterials.objects.all().delete()
         WorkCenter.objects.all().delete()
-        _Item.objects.filter(sku="WS-KIT").delete()
+        # WS-KIT is NOT deleted here: this seeder posts a `production` StockMove for it, and
+        # StockMove.item is PROTECT — removing the item before the ledger below would raise
+        # ProtectedError on every --flush that follows a 4.8 seed. Item.objects.all().delete()
+        # further down clears it once the moves are gone.
 
         # 4.7 Demand Planning first (newest module). DemandForecast.item is PROTECT, so the whole
         # forecast tree has to clear before 4.3's items below; ForecastAdjustment.forecast and
@@ -989,6 +992,7 @@ class Command(BaseCommand):
                                      ProductionTimeLog, UOM, WorkCenter, WorkOrder)
         from apps.scm.views.Manufacturing.WorkOrders import _issue_components
         from apps.scm.views._helpers import _post_stock_move
+        from apps.scm.models._base import ZERO, q4
         if BillOfMaterials.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"{tenant.name}: manufacturing data already exists — skipping.")
             return
@@ -1075,9 +1079,19 @@ class Command(BaseCommand):
             ended_at=timezone.now() - datetime.timedelta(hours=4, minutes=20),
             notes="Waiting on dock stock.")
 
-        # Report 3 good units at the cost the run has actually absorbed — the same figure
-        # report_production computes, through the same helper.
+        # Report 3 of 5 good — backflushing the DOCK-C line in proportion, exactly as
+        # workorder_report_production does, so the demo run's ledger, its component issue state and
+        # its absorbed unit cost are all what the app would have written rather than hand-set
+        # fields that merely look plausible.
         good = Decimal("3")
+        backflush = [c for c in order.components.select_related("item", "lot_serial").all()
+                     if c.issue_method == "backflush"]
+        planned = order.quantity_planned or Decimal("1")
+        _issue_components(
+            order, backflush,
+            {c.pk: min(q4((c.quantity_required or ZERO) * good / planned), c.quantity_outstanding)
+             for c in backflush},
+            admin)
         unit_cost = order.computed_unit_cost(good)
         _post_stock_move(tenant, item=bundle, location=main, quantity=good,
                          move_type="production", unit_cost=unit_cost, reference=order.number,
