@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'completed' %}green{% elif obj.status == 'in_progress' %}info{% elif obj.status == 'released' %}amber{% elif obj.status == 'planned' %}info{% elif obj.status == 'draft' %}slate{% elif obj.status == 'closed' %}muted{% elif obj.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.priority == 'urgent' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'normal' %}info{% elif obj.priority == 'low' %}muted{% else %}slate{% endif %}">{{ obj.get_priority_display }}</span>
+        {% if shortfalls %}<span class="badge badge-red">Material short</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:workorder_list' %}">Work Orders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.bom %}<a href="{% url 'scm:billofmaterials_detail' obj.bom.pk %}" class="btn btn-outline"><i data-lucide="list-tree"></i> {{ obj.bom.number }}</a>{% endif %}
+      <a href="{% url 'scm:productiontimelog_list' %}?work_order={{ obj.pk }}" class="btn btn-outline"><i data-lucide="timer"></i> Time logs</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="target"></i></div>
+      <div class="stat-value">{{ obj.quantity_planned|floatformat:2 }}</div>
+      <div class="stat-label">Planned quantity</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{{ obj.quantity_produced|floatformat:2 }}</div>
+      <div class="stat-label">Good produced</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trash-2"></i></div>
+      <div class="stat-value">{{ obj.quantity_scrapped|floatformat:2 }}</div>
+      <div class="stat-label">Scrapped</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ obj.quantity_remaining|floatformat:2 }}</div>
+      <div class="stat-label">Remaining to report</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.item.sku }} · {{ obj.item.name }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a> · {{ obj.item.name }}</dd></div>
+        <div class="detail-item"><dt>UOM</dt><dd>{{ obj.uom.code|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Recipe</dt><dd>{% if obj.bom %}<a href="{% url 'scm:billofmaterials_detail' obj.bom.pk %}" class="fw-600">{{ obj.bom.number }}</a> · v{{ obj.bom.version }}{% else %}<span class="text-muted">Hand-entered components</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Order policy</dt><dd>{{ obj.get_order_policy_display }}</dd></div>
+        <div class="detail-item"><dt>Pegged sales order</dt><dd>{% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="fw-600">{{ obj.sales_order.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Work centre</dt><dd>{% if obj.work_center %}<a href="{% url 'scm:workcenter_detail' obj.work_center.pk %}" class="fw-600">{{ obj.work_center.code }}</a> · {{ obj.work_center.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Component source</dt><dd>{% if obj.component_location %}<a href="{% url 'scm:location_detail' obj.component_location.pk %}" class="fw-600">{{ obj.component_location.code }}</a>{% else %}<span class="badge badge-amber">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Output location</dt><dd>{% if obj.output_location %}<a href="{% url 'scm:location_detail' obj.output_location.pk %}" class="fw-600">{{ obj.output_location.code }}</a>{% else %}<span class="badge badge-amber">Not set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Output lot / serial</dt><dd>{% if obj.output_lot_serial %}{{ obj.output_lot_serial.number }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scheduling</dt><dd>{{ obj.get_schedule_direction_display }}</dd></div>
+        <div class="detail-item"><dt>Planned window</dt><dd>{% if obj.planned_start %}{{ obj.planned_start|date:"M d, Y H:i" }} → {{ obj.planned_end|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Unscheduled</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Due date</dt><dd>{{ obj.due_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Actual window</dt><dd>{% if obj.actual_start %}{{ obj.actual_start|date:"M d, Y H:i" }} → {{ obj.actual_end|date:"M d, Y H:i"|default:"in progress" }}{% else %}<span class="text-muted">Not started</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Planned hours</dt><dd>{{ obj.planned_hours|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Actual hours</dt><dd>{{ obj.actual_hours|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Duration variance</dt><dd>{% if obj.duration_variance_hours > 0 %}<span class="badge badge-amber">+{{ obj.duration_variance_hours|floatformat:2 }} h</span>{% else %}<span class="badge badge-green">{{ obj.duration_variance_hours|floatformat:2 }} h</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Released by</dt><dd>{{ obj.released_by|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if shortfalls %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Material shortfalls <span class="badge badge-red">{{ shortfalls|length }}</span></h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Component</th><th>Lot / Serial</th><th>Still required</th><th>Available at source</th><th>Short by</th></tr></thead>
+          <tbody>
+            {% for row in shortfalls %}
+              <tr>
+                <td><a href="{% url 'scm:item_detail' row.component.item.pk %}" class="fw-600">{{ row.component.item.sku }}</a> · {{ row.component.item.name }}</td>
+                <td>{% if row.component.lot_serial %}{{ row.component.lot_serial.number }}{% else %}<span class="text-muted">Any</span>{% endif %}</td>
+                <td>{{ row.required|floatformat:4 }}</td>
+                <td>{{ row.available|floatformat:4 }}</td>
+                <td><span class="badge badge-red">{{ row.short|floatformat:4 }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        {% if obj.component_location %}{{ obj.component_location.code }}{% else %}The component source{% endif %} cannot cover these lines. Issuing components will be refused for a short line rather than posting a negative on-hand — transfer stock in, or reduce the requirement, first.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Components</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Component</th><th>UOM</th><th>Lot / Serial</th><th>Issue</th><th>Required</th><th>Issued</th><th>Outstanding</th><th>Unit cost</th><th>Issued value</th></tr></thead>
+        <tbody>
+          {% for c in components %}
+            <tr>
+              <td>{{ c.sequence }}</td>
+              <td><a href="{% url 'scm:item_detail' c.item.pk %}" class="fw-600">{{ c.item.sku }}</a> · {{ c.item.name }}</td>
+              <td>{% if c.uom %}{{ c.uom.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if c.lot_serial %}{{ c.lot_serial.number }}{% else %}<span class="text-muted">Any</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if c.issue_method == 'backflush' %}info{% elif c.issue_method == 'manual' %}slate{% else %}slate{% endif %}">{{ c.get_issue_method_display }}</span>
+              </td>
+              <td>{{ c.quantity_required|floatformat:4 }}</td>
+              {% comment %}
+                READ-ONLY TEXT, never an input. quantity_issued has exactly one writer — the issue
+                action that also posts the consumption StockMove. An editable cell here would let a
+                planner type a consumption the ledger never saw.
+              {% endcomment %}
+              <td class="fw-600">{{ c.quantity_issued|floatformat:4 }}</td>
+              <td>
+                {% if c.quantity_outstanding > 0 %}
+                  <span class="badge badge-amber">{{ c.quantity_outstanding|floatformat:4 }}</span>
+                {% else %}
+                  <span class="badge badge-green">0.0000</span>
+                {% endif %}
+              </td>
+              <td>{{ c.unit_cost|floatformat:4 }}</td>
+              <td>{{ c.issued_value|floatformat:4 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="box"></i><h3>No components</h3><p>Name an active BOM on the edit form and save — the recipe is exploded onto this run automatically. A run with no components cannot be released.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% if obj.is_open %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:workorder_issue_components' obj.pk %}" onsubmit="return confirm('Issue every outstanding component out of the source location? This posts consumption movements against the stock ledger.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="package-minus"></i> Issue components</button>
+          </form>
+        {% endif %}
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Issued quantity is written only by the issue action, which posts one <span class="fw-600">consumption</span> movement per line — not <span class="fw-600">issue</span>, which demand planning reads as customer demand. The first issue moves a released run to in progress.
+      </p>
+    </div>
+  </div>
+
+  {% if obj.is_editable %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Schedule</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:workorder_schedule' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in schedule_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">Date arithmetic, deliberately not a solver: forward fills the planned end from the start plus the lead time, backward fills the planned start from the due date minus it. Finite-capacity levelling across centres is a later pass.</div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="calendar-clock"></i> Apply schedule</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.is_open %}
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Report Production</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'scm:workorder_report_production' obj.pk %}" onsubmit="return confirm('Post this production? Good units are received into the output location as a production movement.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in report_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">Scrap is recorded on the run but posts no movement — scrapped units never entered stock, so there is nothing to take out. Their cost is absorbed by the units that survived, which is why a scrappy run reports a higher unit cost rather than hiding the loss. Reporting the last remaining unit completes the run.</div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="package-plus"></i> Report production</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Cost</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Material cost</dt><dd class="fw-600">{{ material_cost|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Labour cost</dt><dd>{{ labor_cost|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Machine cost</dt><dd>{{ machine_cost|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>WIP value</dt><dd>{% if wip_value > 0 %}<span class="badge badge-amber">{{ wip_value|floatformat:4 }}</span>{% else %}<span class="badge badge-green">{{ wip_value|floatformat:4 }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Produced unit cost</dt><dd class="fw-600">{{ obj.produced_unit_cost|floatformat:4 }}</dd></div>
+      </dl>
+      <p class="text-muted">
+        Every figure here is derived at read time. Material cost sums the consumption movements carrying this run's number; labour and machine cost come from its time logs at the work centre's two rates, with downtime excluded because idle time is a loss metric, not a cost the good units absorb. WIP is cost put in less the value already taken out as finished goods — computed for this page and stored nowhere, since there is no WIP location and no WIP account.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Posted Stock Movements</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Moved at</th><th>Type</th><th>Item</th><th>Location</th><th>Quantity</th><th>Unit cost</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in moves %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <span class="badge badge-{% if m.move_type == 'production' %}green{% elif m.move_type == 'consumption' %}amber{% elif m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}info{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'adjustment' %}slate{% else %}slate{% endif %}">{{ m.get_move_type_display }}</span>
+              </td>
+              <td><a href="{% url 'scm:item_detail' m.item.pk %}">{{ m.item.sku }}</a></td>
+              <td>{{ m.location.code }}</td>
+              <td class="fw-600">{{ m.quantity|floatformat:4 }}</td>
+              <td>{{ m.unit_cost|floatformat:4 }}</td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="list"></i><h3>Nothing posted yet</h3><p>Issuing components and reporting production write append-only movements carrying this run's number. They are never edited or deleted — a mistake is corrected with a compensating movement.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Production Time Logs</h2>
+      <a href="{% url 'scm:productiontimelog_create' %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Book time</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Work centre</th><th>Operation</th><th>Operator</th><th>Started</th><th>Duration</th><th>Completed</th><th>Scrapped</th><th>Downtime reason</th></tr></thead>
+        <tbody>
+          {% for log in time_logs %}
+            <tr>
+              <td><a href="{% url 'scm:productiontimelog_detail' log.pk %}" class="fw-600">{{ log.number }}</a></td>
+              <td>
+                <span class="badge badge-{% if log.entry_type == 'setup' %}amber{% elif log.entry_type == 'labor' %}info{% elif log.entry_type == 'machine' %}green{% elif log.entry_type == 'downtime' %}red{% else %}slate{% endif %}">{{ log.get_entry_type_display }}</span>
+              </td>
+              <td>{{ log.work_center.code }}</td>
+              <td>{{ log.operation|default:"—" }}</td>
+              <td>{{ log.operator.name|default:"—" }}</td>
+              <td>{{ log.started_at|date:"M d, Y H:i" }}</td>
+              <td>{{ log.duration_hours|floatformat:2 }} h</td>
+              <td>{{ log.quantity_completed|floatformat:2 }}</td>
+              <td>{{ log.quantity_scrapped|floatformat:2 }}</td>
+              <td>{% if log.downtime_reason %}{{ log.get_downtime_reason_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="timer"></i><h3>No time booked</h3><p>Setup, labour, machine and downtime intervals booked against this run appear here. Completed quantity on a log is advisory progress — the run's output comes from reporting production.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:workorder_plan' obj.pk %}" onsubmit="return confirm('Mark this work order planned?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="calendar-check"></i> Plan</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'draft' or obj.status == 'planned' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:workorder_release' obj.pk %}" onsubmit="return confirm('Release this run to the shop floor? The header is frozen against further editing.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status == 'completed' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:workorder_close' obj.pk %}" onsubmit="return confirm('Close this work order? No further time or postings can be booked against it.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Close</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status != 'closed' and obj.status != 'cancelled' %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:workorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel this work order? A run that has already posted stock movements cannot be cancelled.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:workorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:workorder_delete' obj.pk %}" onsubmit="return confirm('Delete this work order and its component lines?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:workorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Releasing needs at least one component and both a component source and an output location — the postings need somewhere to move stock from and to. A run that has posted movements can no longer be cancelled: complete and close it, or reverse the movements first.
+      </p>
+    </div>
+  </div>
+{% endblock %}
