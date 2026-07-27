@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.center_type == 'machine' %}info{% elif obj.center_type == 'assembly' %}green{% elif obj.center_type == 'manual' %}slate{% elif obj.center_type == 'inspection' %}amber{% elif obj.center_type == 'outsourced' %}muted{% else %}slate{% endif %}">{{ obj.get_center_type_display }}</span>
+        {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:workcenter_list' %}">Work Centres</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:production_schedule' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Load board</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{{ capacity_hours|floatformat:2 }}</div>
+      <div class="stat-label">Effective capacity, last {{ window_days }} days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ scheduled_hours|floatformat:2 }}</div>
+      <div class="stat-label">Scheduled hours (planned runs)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="timer"></i></div>
+      <div class="stat-value">{{ actual_hours|floatformat:2 }}</div>
+      <div class="stat-label">Booked hours (time logs)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="activity"></i></div>
+      <div class="stat-value">{{ utilization_pct|floatformat:1 }}%</div>
+      <div class="stat-label">Utilization of effective capacity</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.code }} · {{ obj.name }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_center_type_display }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}" class="fw-600">{{ obj.location.code }}</a> · {{ obj.location.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Department</dt><dd>{{ obj.org_unit.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Supervisor</dt><dd>{{ obj.supervisor.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Capacity per day</dt><dd>{{ obj.capacity_hours_per_day|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Efficiency</dt><dd>{{ obj.efficiency_pct|floatformat:1 }}%</dd></div>
+        <div class="detail-item"><dt>Setup time</dt><dd>{{ obj.setup_minutes }} min</dd></div>
+        <div class="detail-item"><dt>Machine rate</dt><dd>{{ obj.machine_cost_per_hour|floatformat:4 }} / h</dd></div>
+        <div class="detail-item"><dt>Labour rate</dt><dd>{{ obj.labor_cost_per_hour|floatformat:4 }} / h</dd></div>
+        <div class="detail-item"><dt>Fully-loaded rate</dt><dd class="fw-600">{{ obj.cost_per_hour|floatformat:4 }} / h</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Shop-floor health · last {{ window_days }} days</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Run time</dt><dd class="fw-600">{{ oee.run_hours|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Downtime</dt><dd>{% if oee.downtime_hours > 0 %}<span class="badge badge-amber">{{ oee.downtime_hours|floatformat:2 }} h</span>{% else %}<span class="badge badge-green">0.00 h</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Availability</dt><dd>{{ oee.availability_pct|floatformat:1 }}%</dd></div>
+        <div class="detail-item"><dt>Good quantity</dt><dd>{{ oee.quantity_good|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Scrapped quantity</dt><dd>{% if oee.quantity_scrapped > 0 %}<span class="badge badge-red">{{ oee.quantity_scrapped|floatformat:2 }}</span>{% else %}<span class="badge badge-green">0.00</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quality</dt><dd>{{ oee.quality_pct|floatformat:1 }}%</dd></div>
+      </dl>
+      <p class="text-muted">A deliberately small derived chip, not an OEE engine — availability × performance × quality decomposition and its trend belong to Supply Chain Analytics (4.11). Downtime is booked here but absorbs no cost: idle time is a loss metric, not something the good units pay for.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Open Work Orders</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Item</th><th>Planned</th><th>Produced</th><th>Priority</th><th>Planned window</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for wo in open_orders %}
+            <tr>
+              <td><a href="{% url 'scm:workorder_detail' wo.pk %}" class="fw-600">{{ wo.number }}</a></td>
+              <td>{{ wo.item.sku }} · {{ wo.item.name }}</td>
+              <td>{{ wo.quantity_planned|floatformat:2 }}</td>
+              <td>{{ wo.quantity_produced|floatformat:2 }}</td>
+              <td>
+                <span class="badge badge-{% if wo.priority == 'urgent' %}red{% elif wo.priority == 'high' %}amber{% elif wo.priority == 'normal' %}info{% elif wo.priority == 'low' %}muted{% else %}slate{% endif %}">{{ wo.get_priority_display }}</span>
+              </td>
+              <td>{% if wo.planned_start %}{{ wo.planned_start|date:"M d, H:i" }} → {{ wo.planned_end|date:"M d, H:i" }}{% else %}<span class="text-muted">Unscheduled</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if wo.status == 'completed' %}green{% elif wo.status == 'in_progress' %}info{% elif wo.status == 'released' %}amber{% elif wo.status == 'planned' %}info{% elif wo.status == 'draft' %}slate{% elif wo.status == 'closed' %}muted{% elif wo.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ wo.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>Nothing scheduled here</h3><p>Planned, released and in-progress runs pointed at this centre appear here, oldest planned start first.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:workcenter_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:workcenter_delete' obj.pk %}" onsubmit="return confirm('Delete this work centre? A centre with work orders or time logs cannot be deleted — deactivate it instead.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:workcenter_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
