@@ -105,9 +105,17 @@
     <div class="card-body">
       <div class="form-actions">
         <a href="{% url 'scm:workcenter_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
-        <form method="post" action="{% url 'scm:workcenter_delete' obj.pk %}" onsubmit="return confirm('Delete this work centre? A centre with work orders or time logs cannot be deleted — deactivate it instead.');">
-          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
-        </form>
+        {% comment %}
+          Gated on can_delete: workcenter_delete refuses a centre that has work orders or time logs
+          (both FKs are PROTECT), so rendering a live button there only ever produced a bounce.
+        {% endcomment %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'scm:workcenter_delete' obj.pk %}" onsubmit="return confirm('Delete this work centre?');">
+            {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% else %}
+          <span class="badge badge-muted" title="This centre has work orders or time logs — deactivate it instead">Cannot delete — has history</span>
+        {% endif %}
         <a href="{% url 'scm:workcenter_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
       </div>
     </div>
