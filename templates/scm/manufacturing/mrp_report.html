@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Material Requirements Planning{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Material Requirements Planning</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>MRP</span></div>
+      <p class="text-muted">Open demand exploded through active BOMs and netted against on-hand stock. Every row is a suggestion a planner converts — nothing here writes a document by itself.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:billofmaterials_list' %}" class="btn btn-outline"><i data-lucide="list-tree"></i> BOMs</a>
+      <a href="{% url 'scm:workorder_create' %}" class="btn btn-outline"><i data-lucide="hammer"></i> New work order</a>
+      <a href="{% url 'scm:requisition_create' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> New requisition</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-range"></i></div>
+      <div class="stat-value">{{ horizon_days }}</div>
+      <div class="stat-label">Day horizon — demand through {{ until|date:"M d, Y" }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ total_rows }}</div>
+      <div class="stat-label">Items short across the horizon</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="hammer"></i></div>
+      <div class="stat-value">{{ make_count }}</div>
+      <div class="stat-label">Make suggestions (an active BOM exists)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="shopping-cart"></i></div>
+      <div class="stat-value">{{ buy_count }}</div>
+      <div class="stat-label">Buy suggestions (no active BOM)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="mrp-horizon">Horizon (days)</label>
+          <input type="number" id="mrp-horizon" name="horizon" value="{{ horizon_days }}" min="1" max="365" class="form-input" placeholder="90">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="mrp-location">Stock location</label>
+          <select name="location" id="mrp-location" class="form-select">
+            <option value="">All locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Run MRP</button>
+        <a href="{% url 'scm:mrp_report' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Category</th><th>Required</th><th>Safety stock</th><th>On hand</th><th>Shortfall</th><th>Action</th><th>Demand from</th><th class="table-actions">Convert</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> · {{ row.item.name }}</td>
+              <td>{{ row.item.category.name|default:"—" }}</td>
+              <td>{{ row.required|floatformat:4 }}{% if row.item.uom %} {{ row.item.uom.code }}{% endif %}</td>
+              <td>{{ row.safety_stock|floatformat:4 }}</td>
+              <td>{{ row.on_hand|floatformat:4 }}</td>
+              <td><span class="badge badge-red">{{ row.shortfall|floatformat:4 }}</span></td>
+              <td>
+                <span class="badge badge-{% if row.action == 'make' %}info{% elif row.action == 'buy' %}amber{% else %}slate{% endif %}">{% if row.action == 'make' %}Make{% elif row.action == 'buy' %}Buy{% else %}{{ row.action|title }}{% endif %}</span>
+              </td>
+              <td class="text-muted">{{ row.sources|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  {% if row.action == 'make' %}
+                    <a href="{% url 'scm:workorder_create' %}" class="btn btn-outline btn-sm" title="Raise a work order"><i data-lucide="hammer"></i> Work order</a>
+                  {% else %}
+                    <a href="{% url 'scm:requisition_create' %}" class="btn btn-outline btn-sm" title="Raise a purchase requisition"><i data-lucide="clipboard-list"></i> Requisition</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="check-circle-2"></i><h3>No shortfalls in this horizon</h3><p>Every demanded item — direct and exploded through its BOM — is covered by stock on hand plus its safety buffer. Widen the horizon or check that sales orders and released work orders exist.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      {% comment %}
+        Two honesty notes the page must carry, both stated in the view's docstring: MRP emits
+        suggestions rather than documents, and open purchase orders are excluded from supply on
+        purpose. Written out here so a planner reading the numbers knows what they do and don't
+        include, rather than discovering it from the source.
+      {% endcomment %}
+      <p>
+        <span class="fw-600">These rows are suggestions, not orders.</span> A planner converts each one into a work order (make) or a purchase requisition (buy) — MRP never raises a document by itself, the same compute-then-convert contract the reorder alerts and the safety-stock calculator hold to. A silent auto-PO is a business decision nobody made.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">Open purchase orders are not counted as incoming supply.</span> Purchase-order lines carry no item foreign key — procurement uses free-text lines with a SKU hint — so matching them back to an item here would be a guess. The shortfall may therefore be already covered by stock on its way in; check open POs before converting a buy row.
+      </p>
+      <p style="margin-top:.6rem;">
+        Demand is open sales-order lines dated inside the horizon plus the outstanding components of released and in-progress runs. Anything with an active, effective BOM is exploded to its raw materials, so the requirement lands on what actually has to be bought or made. Required is netted against on-hand plus the item's active safety stock; only rows that come out short are listed.
+      </p>
+    </div>
+  </div>
+{% endblock %}
