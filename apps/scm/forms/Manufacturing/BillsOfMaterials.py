@@ -63,7 +63,10 @@ class BaseBOMLineFormSet(forms.BaseInlineFormSet):
                     f"{component} is this BOM's own output — a recipe cannot consume itself.")
 
 
+# max_num with validate_max: without it Django accepts up to absolute_max (2000) lines in ONE post
+# and silently ignores the overflow. A recipe that wide feeds BillOfMaterials.explode(), whose
+# output is the product of the branch factors — see MAX_EXPLODE_ROWS for why that is a DoS bound.
 BOMLineFormSet = inlineformset_factory(
     BillOfMaterials, BOMLine, form=BOMLineForm, formset=BaseBOMLineFormSet, extra=3,
-    can_delete=True,
+    can_delete=True, max_num=200, validate_max=True,
 )
