@@ -275,14 +275,18 @@ class WorkOrder(TenantNumbered):
         ])
         return len(rows)
 
-    def material_shortfalls(self):
+    def material_shortfalls(self, components=None):
         """``[{component, required, available, short}]`` for components the source location can't cover.
 
         ONE grouped aggregate keyed by ``(item_id, lot_serial_id)`` — the ``stocktransfer_detail``
         precedent. An aggregate per line here would be an N+1 on the module's fastest-growing table.
+
+        Pass ``components`` when the caller already has them (the detail page does) to skip the
+        duplicate fetch.
         """
         from apps.scm.models import StockMove
-        components = list(self.components.select_related("item", "lot_serial").all())
+        if components is None:
+            components = list(self.components.select_related("item", "lot_serial").all())
         if not components or self.component_location_id is None:
             return []
         rows = (StockMove.objects
