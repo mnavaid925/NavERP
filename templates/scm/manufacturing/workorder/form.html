@@ -44,8 +44,6 @@
                 <td>{{ sf.notes }}</td>
                 <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
               </tr>
-            {% empty %}
-              <tr><td colspan="9"><div class="empty-state"><i data-lucide="box"></i><h3>No component rows yet</h3><p>Name an active BOM above and save — the recipe is exploded onto this run automatically. Come back to this form afterwards to adjust the snapshotted lines.</p></div></td></tr>
             {% endfor %}
           </tbody>
         </table>
