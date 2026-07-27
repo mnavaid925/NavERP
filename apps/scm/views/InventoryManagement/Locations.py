@@ -1,4 +1,6 @@
 """SCM 4.3 Inventory Management — Location views."""
+from django.db.models import ProtectedError
+
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _need_tenant
 from apps.scm.models import Location, StockMove
@@ -54,4 +56,20 @@ def location_delete(request, pk):
     if obj.stock_moves.exists():
         messages.error(request, "This location has stock movements and cannot be deleted — deactivate it instead.")
         return redirect("scm:location_detail", pk=pk)
-    return crud_delete(request, model=Location, pk=pk, success_url="scm:location_list")
+    # A location is PROTECT-referenced from a growing number of sub-modules — 4.4's putaway/pick/
+    # count tasks, 4.5's allocations, 4.8's work-order component and output locations, and more
+    # with every sub-module that lands. Enumerating them with .exists() guards the way item_delete
+    # does would go stale the next time one is added, and the miss shows up as a 500 (it just did:
+    # WorkOrder.component_location/output_location produced an uncaught ProtectedError). So ask the
+    # database and report what it names. Wrapped in atomic() so the audit row crud_delete writes
+    # before deleting rolls back with the failed delete.
+    try:
+        with transaction.atomic():
+            return crud_delete(request, model=Location, pk=pk, success_url="scm:location_list")
+    except ProtectedError as exc:
+        blockers = sorted({obj._meta.verbose_name for obj in exc.protected_objects})
+        messages.error(
+            request,
+            f"This location is still referenced by {', '.join(blockers)} and cannot be deleted — "
+            "deactivate it instead.")
+        return redirect("scm:location_detail", pk=pk)
