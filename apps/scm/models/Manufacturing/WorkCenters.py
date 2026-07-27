@@ -99,6 +99,28 @@ class WorkCenter(TenantNumbered):
             total += Decimal((planned_end - planned_start).total_seconds()) / Decimal("3600")
         return q2(total)
 
+    @classmethod
+    def scheduled_hours_map(cls, tenant, start, end):
+        """``{work_center_id: hours}`` for EVERY centre in one grouped query.
+
+        The batched form of :meth:`scheduled_hours`, for the load board — calling the per-instance
+        version there is one query per centre. Served by ``scm_wo_tnt_wc_start_idx``.
+        """
+        from apps.scm.models import WorkOrder
+        if tenant is None or not start or not end:
+            return {}
+        rows = (WorkOrder.objects
+                .filter(tenant=tenant, work_center__isnull=False,
+                        planned_start__isnull=False, planned_end__isnull=False,
+                        planned_start__lt=end, planned_end__gt=start)
+                .exclude(status__in=("cancelled", "closed"))
+                .values_list("work_center_id", "planned_start", "planned_end"))
+        totals = {}
+        for centre_id, planned_start, planned_end in rows:
+            hours = Decimal((planned_end - planned_start).total_seconds()) / Decimal("3600")
+            totals[centre_id] = totals.get(centre_id, ZERO) + hours
+        return {centre_id: q2(hours) for centre_id, hours in totals.items()}
+
     def actual_hours(self, start, end):
         """Booked hours from ProductionTimeLog — one Sum, not a row walk."""
         if not start or not end:
@@ -107,14 +129,21 @@ class WorkCenter(TenantNumbered):
             m=Sum("duration_minutes"))["m"] or 0
         return q2(Decimal(minutes) / Decimal("60"))
 
-    def utilization_pct(self, start, end, days=None):
-        """Actual booked hours as a % of effective capacity over the window."""
+    def utilization_pct(self, start, end, days=None, actual=None):
+        """Actual booked hours as a % of effective capacity over the window.
+
+        Pass ``actual`` when the caller already has the figure — the detail page reads it out of
+        ``oee_chip()``, which aggregates the same rows over the same window. Without it this method
+        re-runs an identical ``Sum("duration_minutes")`` scan of the module's fastest-growing table.
+        """
         if days is None:
             days = max((end - start).days, 1) if (start and end) else 1
         capacity = self.effective_capacity_hours(days)
         if capacity <= ZERO:
             return ZERO
-        return q2(self.actual_hours(start, end) / capacity * Decimal("100"))
+        if actual is None:
+            actual = self.actual_hours(start, end)
+        return q2(actual / capacity * Decimal("100"))
 
     def oee_chip(self, start, end):
         """Runtime vs downtime vs scrap for the window — the shop-floor health chip.
@@ -136,6 +165,9 @@ class WorkCenter(TenantNumbered):
         return {
             "run_hours": q2(run / Decimal("60")),
             "downtime_hours": q2(down / Decimal("60")),
+            # Total booked = run + downtime. Exposed so the detail page reads it from here instead
+            # of calling actual_hours(), which is the identical aggregate over the same rows.
+            "booked_hours": q2(booked / Decimal("60")),
             "availability_pct": q2(run / booked * Decimal("100")) if booked > ZERO else ZERO,
             "quantity_good": q4(good),
             "quantity_scrapped": q4(scrap),
