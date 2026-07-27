@@ -62,7 +62,15 @@
               <td>{{ row.scheduled_hours|floatformat:2 }} h</td>
               <td>{{ row.capacity_hours|floatformat:2 }} h</td>
               <td>
-                {% if row.is_overloaded %}
+                {% comment %}
+                  The no-capacity branch comes FIRST. capacity_hours_per_day allows 0, and the view
+                  computes load_pct as 0 and is_overloaded as False when capacity is 0 — so a centre
+                  with 40 scheduled hours against 0 capacity would otherwise fall through to green
+                  "0.0%", painting the worst row on the board as the healthiest.
+                {% endcomment %}
+                {% if row.capacity_hours <= 0 and row.scheduled_hours > 0 %}
+                  <span class="badge badge-red" title="Work scheduled against a centre with no capacity set">No capacity</span>
+                {% elif row.is_overloaded %}
                   <span class="badge badge-red">{{ row.load_pct|floatformat:1 }}% — over</span>
                 {% elif row.load_pct >= 85 %}
                   <span class="badge badge-amber">{{ row.load_pct|floatformat:1 }}%</span>
@@ -124,7 +132,13 @@
           </tbody>
         </table>
       </div>
-      <div class="card-body text-muted">These runs consume no capacity on the board because they carry no planned window. Open one and use its Schedule panel to fill the window from a start or due date.</div>
+      <div class="card-body text-muted">
+        These runs consume no capacity on the board because they carry no planned window. Open one
+        and use its Schedule panel to fill the window from a start or due date.
+        {% if unscheduled_count > 20 %}
+          <strong>Showing the first 20 of {{ unscheduled_count }}</strong> — schedule these, then reload to see the rest.
+        {% endif %}
+      </div>
     </div>
   {% endif %}
 
