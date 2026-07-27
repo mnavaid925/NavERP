@@ -81,13 +81,15 @@ def billofmaterials_detail(request, pk):
     lines = obj.lines.select_related("component", "component__uom", "uom").all()
     # The flattened multi-level view alongside the single-level lines: the recipe as entered vs the
     # raw materials it actually bottoms out in.
+    # Exploded ONCE and handed to estimated_unit_cost — it explodes at the same quantity, so letting
+    # it re-derive doubled the whole cost of rendering this page.
     exploded = obj.explode(obj.output_quantity)
     return render(request, "scm/manufacturing/billofmaterials/detail.html", {
         "obj": obj,
         "lines": lines,
         "exploded": exploded,
         "is_multi_level": any(row["level"] > 1 for row in exploded),
-        "estimated_unit_cost": obj.estimated_unit_cost(),
+        "estimated_unit_cost": obj.estimated_unit_cost(rows=exploded),
         "is_effective_now": obj.is_effective(),
         "work_order_count": obj.work_orders.count(),
     })
