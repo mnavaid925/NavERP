@@ -77,10 +77,19 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'scm:productiontimelog_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'scm:productiontimelog_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'scm:productiontimelog_delete' obj.pk %}" onsubmit="return confirm('Delete this time log? Entries on a completed, closed or cancelled run are frozen.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% comment %}
+                    Gated on the parent run being open, matching the _frozen guard the edit and
+                    delete views apply. The detail page hides them the same way; offering them here
+                    only produced a bounce with an error.
+                  {% endcomment %}
+                  {% if obj.work_order.status == 'released' or obj.work_order.status == 'in_progress' %}
+                    <a href="{% url 'scm:productiontimelog_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:productiontimelog_delete' obj.pk %}" onsubmit="return confirm('Delete this time log?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% else %}
+                    <span class="badge badge-muted" title="Frozen — the run is no longer open">Frozen</span>
+                  {% endif %}
                 </div>
               </td>
             </tr>
