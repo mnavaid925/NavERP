@@ -86,11 +86,12 @@ class BillOfMaterials(TenantNumbered):
         super().clean()
         if self.effective_from and self.effective_to and self.effective_to < self.effective_from:
             raise ValidationError({"effective_to": "Effective-to cannot precede effective-from."})
-        # A recipe that lists its own output as an ingredient is the one cycle cheap enough to catch
-        # at entry. Deeper cycles are caught at explode time by the visited set — they can be built
-        # from two individually-valid BOMs, so there is nothing to reject here.
-        if self.pk and self.item_id and self.lines.filter(component_id=self.item_id).exists():
-            raise ValidationError("A BOM cannot list its own output item as a component.")
+        # Direct self-reference is enforced by BaseBOMLineFormSet, which sees the submitted lines.
+        # It is deliberately NOT re-checked here against the DATABASE: this clean() runs on the
+        # header form, so a query-based check would fail validation before formset.save() could
+        # remove the offending line — making an already-saved bad recipe permanently unrepairable
+        # through the UI. Deeper cycles are caught at explode time by the visited set anyway (they
+        # can be built from two individually-valid BOMs, so no single save can reject them).
         # MySQL has no partial/conditional UniqueConstraint, so "one default active BOM per item"
         # is enforced here plus a save-time demotion — not by a database constraint.
         if self.is_default and self.item_id and self.tenant_id:
