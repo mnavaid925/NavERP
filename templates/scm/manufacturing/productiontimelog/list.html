@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Shop Floor Control{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Shop Floor Control</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Time Logs</span></div>
+      <p class="text-muted">Setup, labour, machine and downtime intervals booked against a live run. Duration is derived from the interval, never typed, so the two can't disagree.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:workcenter_list' %}" class="btn btn-outline"><i data-lucide="factory"></i> Work centres</a>
+      <a href="{% url 'scm:productiontimelog_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Book Time</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, operation, work order or operator…">
+        </div>
+        <div class="form-group">
+          <select name="entry_type" aria-label="Entry type" class="form-select">
+            <option value="">All entry types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.entry_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="downtime_reason" aria-label="Downtime reason" class="form-select">
+            <option value="">All downtime reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.downtime_reason == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="work_order" aria-label="Work order" class="form-select">
+            <option value="">All work orders</option>
+            {% for wo in work_orders %}
+              <option value="{{ wo.pk }}" {% if request.GET.work_order == wo.pk|stringformat:"d" %}selected{% endif %}>{{ wo.number }} · {{ wo.item.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="work_center" aria-label="Work centre" class="form-select">
+            <option value="">All work centres</option>
+            {% for wc in work_centers %}
+              <option value="{{ wc.pk }}" {% if request.GET.work_center == wc.pk|stringformat:"d" %}selected{% endif %}>{{ wc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:productiontimelog_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Work order</th><th>Work centre</th><th>Operation</th><th>Type</th><th>Operator</th><th>Started</th><th>Ended</th><th>Duration</th><th>Completed</th><th>Scrapped</th><th>Downtime reason</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:productiontimelog_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'scm:workorder_detail' obj.work_order.pk %}">{{ obj.work_order.number }}</a> · {{ obj.work_order.item.sku }}</td>
+              <td><a href="{% url 'scm:workcenter_detail' obj.work_center.pk %}">{{ obj.work_center.code }}</a></td>
+              <td>{{ obj.operation|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if obj.entry_type == 'setup' %}amber{% elif obj.entry_type == 'labor' %}info{% elif obj.entry_type == 'machine' %}green{% elif obj.entry_type == 'downtime' %}red{% else %}slate{% endif %}">{{ obj.get_entry_type_display }}</span>
+              </td>
+              <td>{{ obj.operator.name|default:"—" }}</td>
+              <td>{{ obj.started_at|date:"M d, Y H:i" }}</td>
+              <td>{{ obj.ended_at|date:"M d, Y H:i"|default:"—" }}</td>
+              <td class="fw-600">{{ obj.duration_hours|floatformat:2 }} h</td>
+              <td>{{ obj.quantity_completed|floatformat:2 }}</td>
+              <td>{% if obj.quantity_scrapped > 0 %}<span class="badge badge-red">{{ obj.quantity_scrapped|floatformat:2 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.downtime_reason %}{{ obj.get_downtime_reason_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:productiontimelog_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:productiontimelog_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:productiontimelog_delete' obj.pk %}" onsubmit="return confirm('Delete this time log? Entries on a completed, closed or cancelled run are frozen.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="timer"></i><h3>No time booked</h3><p>Book setup, labour, machine or downtime against a released or in-progress run. Downtime is recorded here too — a stoppage is a booked interval at a centre like any other.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    <div class="card-body text-muted">Completed quantity on a log is <span class="fw-600">advisory progress</span>. It never rolls up into the run's produced quantity — that has exactly one writer, the report-production action that also posts the finished-goods movement.</div>
+  </div>
+{% endblock %}
