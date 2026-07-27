@@ -32,6 +32,12 @@ class WorkOrderForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # TenantModelForm scopes these querysets but adds no select_related, and both these models'
+        # __str__ dereferences a SECOND FK (LotSerial → item.sku, SalesOrder → customer.name). One
+        # query per rendered <option> — on a lot-tracked tenant that alone made this page unusable.
+        for name, related in (("sales_order", "customer"), ("output_lot_serial", "item")):
+            if name in self.fields:
+                self.fields[name].queryset = self.fields[name].queryset.select_related(related)
         if "bom" in self.fields:
             base = self.fields["bom"].queryset
             item_id = getattr(self.instance, "item_id", None)
@@ -58,6 +64,14 @@ class WorkOrderComponentForm(TenantModelForm):
         model = WorkOrderComponent
         fields = ["sequence", "item", "quantity_required", "uom", "lot_serial", "issue_method",
                   "unit_cost", "notes"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Formset fields are deep-copied per form, so an unrelated lot_serial queryset re-resolves
+        # every option's __str__ (which reads item.sku) once per row on the page.
+        if "lot_serial" in self.fields:
+            self.fields["lot_serial"].queryset = (
+                self.fields["lot_serial"].queryset.select_related("item"))
 
 
 # extra=3, matching BOMLineFormSet. With extra=0 a component line could never be hand-added or
