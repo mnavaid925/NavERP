@@ -131,3 +131,21 @@ from .DemandPlanning.DemandSignals import (  # noqa: F401
 from .DemandPlanning.ForecastAdjustments import (  # noqa: F401
     ForecastAdjustment,
 )
+
+# 4.8 Manufacturing / Production
+# WorkCenters FIRST — BillOfMaterials.default_work_center and WorkOrder.work_center both point at
+# it. BillsOfMaterials before WorkOrders for the same reason (WorkOrder.bom).
+from .Manufacturing.WorkCenters import (  # noqa: F401
+    WorkCenter,
+)
+from .Manufacturing.BillsOfMaterials import (  # noqa: F401
+    BillOfMaterials,
+    BOMLine,
+)
+from .Manufacturing.WorkOrders import (  # noqa: F401
+    WorkOrder,
+    WorkOrderComponent,
+)
+from .Manufacturing.ProductionTimeLogs import (  # noqa: F401
+    ProductionTimeLog,
+)
