@@ -92,6 +92,12 @@ class ProductionTimeLog(TenantNumbered):
                 (self.ended_at - self.started_at).total_seconds() // 60)
         else:
             self.duration_minutes = 0
+        # A caller passing update_fields=["ended_at"] would otherwise persist the new interval and
+        # leave the stale duration behind — the derived field must ride along with its inputs.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = list(dict.fromkeys(
+                list(update_fields) + ["duration_minutes"]))
         return super().save(*args, **kwargs)
 
     @property
