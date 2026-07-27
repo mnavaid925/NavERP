@@ -15,7 +15,12 @@ _CHIP_DAYS = 30
 @login_required
 def workcenter_list(request):
     qs = (WorkCenter.objects.filter(tenant=request.tenant)
-          .select_related("location", "org_unit", "supervisor"))
+          .select_related("location", "org_unit", "supervisor")
+          # Two EXISTS subqueries per page, not two queries per row — the list gates its Delete
+          # button on the same rule workcenter_delete enforces.
+          .annotate(wo_count=Count("work_orders", distinct=True),
+                    log_count=Count("time_logs", distinct=True))
+          .order_by("code"))
     return crud_list(
         request, qs, "scm/manufacturing/workcenter/list.html",
         search_fields=["number", "code", "name", "notes", "location__code", "supervisor__name"],
@@ -61,6 +66,9 @@ def workcenter_detail(request, pk):
     return render(request, "scm/manufacturing/workcenter/detail.html", {
         "obj": obj,
         "open_orders": open_orders,
+        # workcenter_delete refuses a centre with either kind of history, so the template hides the
+        # button rather than offering an action that always bounces with an error.
+        "can_delete": not (obj.work_orders.exists() or obj.time_logs.exists()),
         "window_days": _CHIP_DAYS,
         "scheduled_hours": obj.scheduled_hours(since, until),
         "actual_hours": obj.actual_hours(since, until),
