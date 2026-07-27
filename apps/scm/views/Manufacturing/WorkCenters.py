@@ -1,9 +1,11 @@
 """SCM 4.8 Manufacturing — WorkCenter views (the capacity + rate master)."""
 from datetime import timedelta
 
+from django.db.models import Exists, OuterRef
+
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _location_qs, _need_tenant
-from apps.scm.models import WorkCenter, WorkOrder
+from apps.scm.models import ProductionTimeLog, WorkCenter, WorkOrder
 from apps.scm.forms import WorkCenterForm
 
 ZERO = Decimal("0")
@@ -16,10 +18,15 @@ _CHIP_DAYS = 30
 def workcenter_list(request):
     qs = (WorkCenter.objects.filter(tenant=request.tenant)
           .select_related("location", "org_unit", "supervisor")
-          # Two EXISTS subqueries per page, not two queries per row — the list gates its Delete
-          # button on the same rule workcenter_delete enforces.
-          .annotate(wo_count=Count("work_orders", distinct=True),
-                    log_count=Count("time_logs", distinct=True))
+          # Exists(), NOT Count(): the template only ever asks "any?", and two Counts over two
+          # reverse relations LEFT JOIN both children into one cartesian product per centre — a
+          # centre with 500 runs and 5,000 logs materialises 2.5M intermediate rows to render 15.
+          # It also forces the paginator's COUNT(*) into a subquery over the grouped result.
+          .annotate(
+              has_work_orders=Exists(
+                  WorkOrder.objects.filter(work_center=OuterRef("pk"))),
+              has_time_logs=Exists(
+                  ProductionTimeLog.objects.filter(work_center=OuterRef("pk"))))
           .order_by("code"))
     return crud_list(
         request, qs, "scm/manufacturing/workcenter/list.html",
@@ -63,6 +70,11 @@ def workcenter_detail(request, pk):
                    # By date only. `-priority` would sort the CharField alphabetically
                    # (urgent, normal, low, high), which reads like a ranking but isn't one.
                    .order_by("planned_start", "-id")[:20])
+    # ONE aggregate over the time logs, reused three ways. actual_hours() and utilization_pct()
+    # each used to re-run the identical Sum("duration_minutes") that oee_chip already computes —
+    # three scans of the module's fastest-growing table to fill three chips off the same rows.
+    oee = obj.oee_chip(since, until)
+    actual_hours = oee["booked_hours"]
     return render(request, "scm/manufacturing/workcenter/detail.html", {
         "obj": obj,
         "open_orders": open_orders,
@@ -71,10 +83,11 @@ def workcenter_detail(request, pk):
         "can_delete": not (obj.work_orders.exists() or obj.time_logs.exists()),
         "window_days": _CHIP_DAYS,
         "scheduled_hours": obj.scheduled_hours(since, until),
-        "actual_hours": obj.actual_hours(since, until),
+        "actual_hours": actual_hours,
         "capacity_hours": obj.effective_capacity_hours(_CHIP_DAYS),
-        "utilization_pct": obj.utilization_pct(since, until, days=_CHIP_DAYS),
-        "oee": obj.oee_chip(since, until),
+        "utilization_pct": obj.utilization_pct(since, until, days=_CHIP_DAYS,
+                                               actual=actual_hours),
+        "oee": oee,
     })
 
 
