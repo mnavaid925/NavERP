@@ -846,6 +846,16 @@ LIVE_LINKS = {
         "Collaborative Planning": "scm:forecastadjustment_list", # bullet (consensus + its review queue)
         "Safety Stock Calculation": "scm:safety_stock_report",   # bullet (computed policy over ReorderRule)
     },
+    "4.8": {
+        "Bill of Materials (BOM)": "scm:billofmaterials_list",      # bullet (versioned recipes + explosion)
+        "Production Scheduling": "scm:production_schedule",         # bullet (infinite-capacity load board)
+        "Work Order Management": "scm:workorder_list",              # bullet (the run lifecycle)
+        "Material Resource Planning (MRP)": "scm:mrp_report",       # bullet (netting → make/buy suggestions)
+        # The time-log list, not the work-centre master: the bullet is about TRACKING machine time,
+        # labour time and progress, and that is what the log records. Work centres are reachable
+        # from it and from the schedule board.
+        "Shop Floor Control": "scm:productiontimelog_list",         # bullet (machine/labour/downtime log)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
