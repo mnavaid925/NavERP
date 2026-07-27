@@ -15,9 +15,15 @@ class StockMove(TenantOwned):
 
     MOVE_TYPES = [
         ("receipt", "Receipt"),        # inbound (GRN, opening balance)
-        ("issue", "Issue"),            # outbound (consumption, shipment)
+        ("issue", "Issue"),            # outbound to a CUSTOMER (shipment, pick)
         ("transfer", "Transfer"),      # between locations (posted as a −/+ pair)
         ("adjustment", "Adjustment"),  # write-off / damage / cycle count / found / revaluation
+        # 4.8 Manufacturing. These are deliberately NOT 'issue'/'receipt': 4.7's demand_series
+        # reads move_type='issue' as CUSTOMER demand, so booking a work order's raw-material draw
+        # as an issue would inflate every forecast built on the stock-issues source. Both new types
+        # still participate correctly in the FIFO/LIFO layer walk, which excludes only 'transfer'.
+        ("consumption", "Consumption"),  # components drawn to a work order (outbound)
+        ("production", "Production"),    # finished goods reported from a work order (inbound)
     ]
 
     item = models.ForeignKey("scm.Item", on_delete=models.PROTECT, related_name="stock_moves")
