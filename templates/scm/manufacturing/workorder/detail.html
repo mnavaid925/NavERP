@@ -214,7 +214,13 @@
           the one state that means something is wrong.
         {% endcomment %}
         <div class="detail-item"><dt>WIP value</dt><dd>{% if wip_value < 0 %}<span class="badge badge-red" title="More value posted out than cost absorbed — check the production postings">{{ wip_value|floatformat:4 }}</span>{% elif wip_value > 0 %}<span class="badge badge-amber">{{ wip_value|floatformat:4 }}</span>{% else %}<span class="badge badge-green">{{ wip_value|floatformat:4 }}</span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Produced unit cost</dt><dd class="fw-600">{{ obj.produced_unit_cost|floatformat:4 }}</dd></div>
+        {% comment %}
+          "Last reported", not "run" — the field is restated by each report that produced good
+          units, so on a partial run it holds the MOST RECENT layer's cost, not an average across
+          them. The per-layer figures live on the production moves in the ledger table below, which
+          is the authoritative record. Labelling it as the run's unit cost would misread a partial.
+        {% endcomment %}
+        <div class="detail-item"><dt>Last reported unit cost</dt><dd class="fw-600">{{ obj.produced_unit_cost|floatformat:4 }}</dd></div>
       </dl>
       <p class="text-muted">
         Every figure here is derived at read time. Material cost sums the consumption movements carrying this run's number; labour and machine cost come from its time logs at the work centre's two rates, with downtime excluded because idle time is a loss metric, not a cost the good units absorb. WIP is cost put in less the value already taken out as finished goods — computed for this page and stored nowhere, since there is no WIP location and no WIP account.
