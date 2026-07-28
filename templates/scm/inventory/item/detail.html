@@ -169,6 +169,66 @@
   {% endif %}
 
   <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Quality inspections</h2>
+      <a href="{% url 'scm:qualityinspection_list' %}?item={{ obj.pk }}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> All inspections</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Lot / Serial</th><th>Plan</th><th>Inspected</th><th>Inspector</th><th>Decision</th><th>Certificate</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for i in quality_inspections %}
+            <tr>
+              <td><a href="{% url 'scm:qualityinspection_detail' i.pk %}" class="fw-600">{{ i.number }}</a></td>
+              <td>{{ i.get_inspection_type_display }}</td>
+              <td>{% if i.lot_serial %}<a href="{% url 'scm:lotserial_detail' i.lot_serial.pk %}">{{ i.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if i.plan %}<a href="{% url 'scm:inspectionplan_detail' i.plan.pk %}">{{ i.plan.code }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ i.inspected_on|date:"M d, Y" }}</td>
+              <td>{{ i.inspector.name|default:"—" }}</td>
+              <td><span class="badge badge-{% if i.usage_decision == 'accept' %}green{% elif i.usage_decision == 'accept_with_deviation' %}amber{% elif i.usage_decision == 'reject' %}red{% elif i.usage_decision == 'pending' %}slate{% else %}slate{% endif %}">{{ i.get_usage_decision_display }}</span></td>
+              <td>{% if i.coa_number %}<a href="{% url 'scm:coa_print' i.pk %}">{{ i.coa_number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge badge-{% if i.status == 'passed' %}green{% elif i.status == 'failed' %}red{% elif i.status == 'in_progress' %}info{% elif i.status == 'on_hold' %}amber{% elif i.status == 'draft' %}slate{% elif i.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ i.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="clipboard-check"></i><p>No quality inspections for this item.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">The ten most recent — a sample panel, not the register.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Non-conformances</h2>
+      <a href="{% url 'scm:nonconformance_list' %}?item={{ obj.pk }}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> All reports</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Lot / Serial</th><th>Severity</th><th>Quantity</th><th>Owner</th><th>Detected</th><th>Disposition</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for n in nonconformances %}
+            <tr>
+              <td><a href="{% url 'scm:nonconformance_detail' n.pk %}" class="fw-600">{{ n.number }}</a></td>
+              <td>{{ n.title }}</td>
+              <td>{% if n.lot_serial %}<a href="{% url 'scm:lotserial_detail' n.lot_serial.pk %}">{{ n.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge badge-{% if n.severity == 'critical' %}red{% elif n.severity == 'major' %}amber{% elif n.severity == 'minor' %}info{% elif n.severity == 'observation' %}muted{% else %}slate{% endif %}">{{ n.get_severity_display }}</span></td>
+              <td>{{ n.quantity_affected|floatformat:2 }}</td>
+              <td>{{ n.owner.name|default:"—" }}</td>
+              <td>{{ n.detected_on|date:"M d, Y" }}</td>
+              <td><span class="badge badge-{% if n.disposition == 'pending' %}slate{% elif n.disposition == 'use_as_is' %}green{% elif n.disposition == 'rework' %}amber{% elif n.disposition == 'repair' %}amber{% elif n.disposition == 'scrap' %}red{% elif n.disposition == 'return_to_vendor' %}info{% elif n.disposition == 'regrade' %}info{% else %}slate{% endif %}">{{ n.get_disposition_display }}</span></td>
+              <td><span class="badge badge-{% if n.status == 'closed' %}green{% elif n.status == 'dispositioned' %}info{% elif n.status == 'investigating' %}amber{% elif n.status == 'open' %}red{% elif n.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ n.get_status_display }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="alert-triangle"></i><p>No non-conformance reports for this item.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">An item with inspections or reports against it cannot be deleted — deactivate it instead, and the quality history keeps something to point at.</div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
       <div class="form-actions">
