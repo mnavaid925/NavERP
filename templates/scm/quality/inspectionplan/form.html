@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Inspection Plan{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Inspection Plan</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:inspectionplan_list' %}">Inspection Plans</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.code }} v{{ obj.version }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-help">
+        Fill in only the sampling figures the chosen method needs — a percentage for percentage sampling, a sample size for a fixed count, both an accept and a reject number for AQL (the reject number must be greater than the accept number). Every plan type except <span class="fw-600">audit checklist</span> must name an item, a category or a supplier, or nothing could ever select it; an audit checklist must name none of the three, because the audit that uses it is its scope.
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Characteristics</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Seq</th><th>Name</th><th>Type</th><th>UOM</th><th>Target</th><th>Lower limit</th><th>Upper limit</th><th>Expected text</th><th>Test method</th><th>Critical</th><th>Mandatory</th><th>On CoA</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for sf in formset %}
+              <tr>
+                {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in sf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ sf.sequence }}{% for e in sf.sequence.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.name }}{% for e in sf.name.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.characteristic_type }}{% for e in sf.characteristic_type.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.uom }}</td>
+                <td>{{ sf.target_value }}{% for e in sf.target_value.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.lower_limit }}{% for e in sf.lower_limit.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.upper_limit }}{% for e in sf.upper_limit.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.expected_text }}{% for e in sf.expected_text.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.test_method }}</td>
+                <td>{{ sf.is_critical }}</td>
+                <td>{{ sf.is_mandatory }}</td>
+                <td>{{ sf.include_on_coa }}{% for e in sf.include_on_coa.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        {% comment %}
+          Every rule stated below is one the formset or the model actually enforces, so the note a
+          quality engineer reads and the validation that refuses their save cannot drift apart.
+        {% endcomment %}
+        A plan needs at least one characteristic and no two may share a sequence number. Only a
+        <span class="fw-600">measurement</span> carries numeric limits — it needs a target, a lower limit or an upper limit, and the upper cannot sit below the lower; put the pass criterion for a pass/fail or visual check in <span class="fw-600">expected text</span> instead. A <span class="fw-600">critical</span> characteristic that fails fails the whole lot whatever the rest say; a <span class="fw-600">mandatory</span> one holds the inspection open until it has a value. Only a measurement or a pass/fail check may be flagged <span class="fw-600">on CoA</span> — an instruction has no result to certify. An audit checklist may only ask pass/fail or visual questions: there is nothing to measure in a process audit.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:inspectionplan_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
