@@ -8605,3 +8605,2391 @@ class TestMRPZeroQuantityDemand:
                                                             item_a, bom_a):
         _mrp_demand(tenant_a, customer_a, item_a, "0")
         assert client_a.get(reverse("scm:mrp_report")).context["total_rows"] == 0
+
+
+# ================================================================================================
+# SCM 4.9 Quality Management
+# ================================================================================================
+
+def _qc_view_payload(item_obj, rows=(), initial=0, **overrides):
+    """Inspection header + the ``results`` formset (BaseInlineFormSet's default prefix, from
+    ``InspectionResult.inspection``'s ``related_name="results"``)."""
+    from django.utils import timezone
+    data = {
+        "plan": "", "inspection_type": "incoming", "goods_receipt": "", "work_order": "",
+        "shipment": "", "item": str(item_obj.pk), "lot_serial": "", "location": "", "supplier": "",
+        "quantity_inspected": "10", "sample_size": "10", "quantity_accepted": "10",
+        "quantity_rejected": "0", "inspector": "", "inspected_on": timezone.localdate().isoformat(),
+        "supplier_coa_reference": "", "notes": "",
+        **formset_data("results", list(rows), initial=initial),
+    }
+    data.update(overrides)
+    return data
+
+
+def _result_row(row, **overrides):
+    data = {"id": str(row.pk), "measured_value": "", "text_value": "", "result": "pending",
+            "notes": ""}
+    data.update(overrides)
+    return data
+
+
+def _ncr_view_payload(item_obj, **overrides):
+    from django.utils import timezone
+    data = {
+        "source": "internal", "inspection": "", "goods_receipt": "", "work_order": "",
+        "shipment": "", "audit": "", "item": str(item_obj.pk), "lot_serial": "", "location": "",
+        "supplier": "", "quantity_affected": "3", "uom": "", "defect_category": "dimensional",
+        "severity": "major", "title": "New finding", "description": "New description.",
+        "detected_by": "", "detected_on": timezone.localdate().isoformat(),
+        "containment_action": "", "cost_of_quality": "0", "owner": "", "due_date": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _capa_view_payload(tasks=(), initial=0, **overrides):
+    data = {
+        "action_type": "corrective", "title": "New action", "source": "internal_improvement",
+        "nonconformance": "", "audit": "", "item": "", "supplier": "",
+        "problem_statement": "New problem.", "containment_action": "", "root_cause_method": "",
+        "root_cause": "", "action_plan": "", "owner": "", "priority": "normal", "due_date": "",
+        "effectiveness_due_date": "", "notes": "",
+        **formset_data("tasks", list(tasks), initial=initial),
+    }
+    data.update(overrides)
+    return data
+
+
+def _qa_view_payload(org_unit, **overrides):
+    from django.utils import timezone
+    data = {
+        "audit_type": "internal", "title": "New audit", "standard": "ISO 9001:2015",
+        "scope": "Goods-in", "auditee_party": "", "auditee_org_unit": str(org_unit.pk),
+        "checklist_plan": "", "lead_auditor": "",
+        "planned_date": timezone.localdate().isoformat(), "risk_level": "medium",
+        "conclusion": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _plan_view_payload(item_obj=None, chars=(), initial=0, **overrides):
+    data = {
+        "code": "NEW-1", "name": "New plan", "plan_type": "incoming_receipt",
+        "item": str(item_obj.pk) if item_obj is not None else "", "item_category": "",
+        "supplier": "", "sampling_method": "all_100", "sample_percentage": "", "sample_size": "",
+        "aql_accept_number": "", "aql_reject_number": "", "frequency": "every",
+        "frequency_value": "", "version": "1", "effective_from": "", "is_active": "on",
+        "notes": "",
+        **formset_data("characteristics", list(chars), initial=initial),
+    }
+    data.update(overrides)
+    return data
+
+
+def _char_row(**overrides):
+    row = {"id": "", "sequence": "10", "name": "New check", "characteristic_type": "pass_fail",
+           "uom": "", "target_value": "", "lower_limit": "", "upper_limit": "",
+           "expected_text": "OK", "test_method": "", "is_mandatory": "on"}
+    row.update(overrides)
+    return row
+
+
+def _task_row(**overrides):
+    row = {"id": "", "sequence": "10", "description": "New task", "owner": "", "due_date": "",
+           "completed_on": "", "status": "open"}
+    row.update(overrides)
+    return row
+
+
+def _quality_moves(document):
+    """The ledger rows a 4.9 document wrote — ``reference`` is the only link StockMove keeps."""
+    from apps.scm.models import StockMove
+    return StockMove.objects.filter(tenant=document.tenant, reference=document.number)
+
+
+def _outgoing(tenant, item, *, lot=None, status="passed", decision="accept", rows=(), coa="",
+              shipment=None):
+    """An outgoing inspection in an EXACT CoA state, with hand-built result rows.
+
+    Built directly rather than through a plan so each of ``coa_blockers()``'s seven rules can be
+    isolated: the row shape (flagged / not flagged, pass / fail / pending) is the whole point.
+    """
+    from django.utils import timezone
+    from apps.scm.models import InspectionResult, QualityInspection
+    obj = QualityInspection.objects.create(
+        tenant=tenant, inspection_type="outgoing", item=item, lot_serial=lot, shipment=shipment,
+        quantity_inspected=Decimal("10"), quantity_accepted=Decimal("10"),
+        inspected_on=timezone.localdate())
+    for index, (include, result) in enumerate(rows, start=1):
+        InspectionResult.objects.create(
+            inspection=obj, sequence=index * 10, characteristic_name=f"C{index}",
+            characteristic_type="pass_fail", include_on_coa=include, result=result,
+            is_mandatory=True)
+    QualityInspection.objects.filter(pk=obj.pk).update(status=status, usage_decision=decision,
+                                                       coa_number=coa)
+    obj.refresh_from_db()
+    return obj
+
+
+def _issue_coa(client, inspection, customer=None, issued_on=""):
+    data = {"coa_issued_to": str(customer.pk) if customer is not None else "",
+            "issued_on": issued_on}
+    return client.post(reverse("scm:coa_issue", args=[inspection.pk]), data, follow=True)
+
+
+def _messages(resp):
+    return [str(m) for m in resp.context["messages"]]
+
+
+# ================================================================ InspectionPlan CRUD
+class TestInspectionPlanCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, inspection_plan_a):
+        resp = client_a.get(reverse("scm:inspectionplan_list"))
+        assert resp.status_code == 200
+        assert inspection_plan_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, inspection_plan_a,
+                                             inspection_plan_b):
+        resp = client_a.get(reverse("scm:inspectionplan_list"))
+        assert inspection_plan_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, inspection_plan_a):
+        resp = client_a.get(reverse("scm:inspectionplan_list"))
+        assert "scm/quality/inspectionplan/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "type_choices", "sampling_choices", "items",
+                    "categories", "suppliers"):
+            assert key in resp.context, key
+
+    def test_the_list_annotation_does_NOT_shadow_the_model_property(self, client_a,
+                                                                    inspection_plan_a):
+        """`characteristic_count` is a read-only @property, and Django cannot set an annotation onto
+        a property when it instantiates each row — the whole page 500s with 'can't set attribute'."""
+        resp = client_a.get(reverse("scm:inspectionplan_list"))
+        assert resp.status_code == 200
+        row = next(r for r in resp.context["object_list"] if r.pk == inspection_plan_a.pk)
+        assert row.characteristic_count_agg == 3
+        assert row.characteristic_count == 3
+
+    def test_list_search_by_code(self, client_a, inspection_plan_a):
+        found = client_a.get(reverse("scm:inspectionplan_list"), {"q": "IQC-W1"})
+        missed = client_a.get(reverse("scm:inspectionplan_list"), {"q": "nothing matches"})
+        assert inspection_plan_a in found.context["object_list"]
+        assert inspection_plan_a not in missed.context["object_list"]
+
+    def test_list_filter_by_plan_type(self, client_a, inspection_plan_a, outgoing_plan_a):
+        resp = client_a.get(reverse("scm:inspectionplan_list"),
+                            {"plan_type": "outgoing_shipment"})
+        rows = list(resp.context["object_list"])
+        assert outgoing_plan_a in rows
+        assert inspection_plan_a not in rows
+
+    def test_list_filter_by_item_and_sampling_method(self, client_a, inspection_plan_a,
+                                                     outgoing_plan_a, item_a):
+        by_item = client_a.get(reverse("scm:inspectionplan_list"), {"item": str(item_a.pk)})
+        assert list(by_item.context["object_list"]) == [inspection_plan_a]
+        by_method = client_a.get(reverse("scm:inspectionplan_list"),
+                                 {"sampling_method": "fixed_count"})
+        assert list(by_method.context["object_list"]) == [outgoing_plan_a]
+
+    def test_create_saves_the_header_and_its_characteristics_in_one_go(self, client_a, tenant_a,
+                                                                      item_a):
+        from apps.scm.models import InspectionPlan
+        resp = client_a.post(reverse("scm:inspectionplan_create"),
+                             _plan_view_payload(item_a, [_char_row(name="Check A"),
+                                                         _char_row(sequence="20",
+                                                                   name="Check B")]))
+        assert resp.status_code == 302
+        plan = InspectionPlan.objects.get(tenant=tenant_a, code="NEW-1")
+        assert plan.characteristics.count() == 2
+
+    def test_create_refuses_a_plan_with_no_characteristics(self, client_a, tenant_a, item_a):
+        from apps.scm.models import InspectionPlan
+        resp = client_a.post(reverse("scm:inspectionplan_create"), _plan_view_payload(item_a))
+        assert resp.status_code == 200
+        assert not InspectionPlan.objects.filter(tenant=tenant_a, code="NEW-1").exists()
+
+    def test_create_applies_the_AUDIT_CHECKLIST_rule_from_the_SUBMITTED_plan_type(self, client_a,
+                                                                                  tenant_a):
+        """formset.instance = form.instance before is_valid() is load-bearing: without it the rule
+        reads the field DEFAULT rather than what was just submitted (the shipped 4.8 BOM bug)."""
+        from apps.scm.models import InspectionPlan
+        resp = client_a.post(reverse("scm:inspectionplan_create"), _plan_view_payload(
+            None, [_char_row(characteristic_type="measurement", target_value="1")],
+            plan_type="audit_checklist"))
+        assert resp.status_code == 200
+        assert not InspectionPlan.objects.filter(tenant=tenant_a, code="NEW-1").exists()
+
+    def test_edit_updates_the_header(self, client_a, inspection_plan_a, item_a):
+        rows = [dict(_char_row(name=c.name, sequence=str(c.sequence),
+                               characteristic_type=c.characteristic_type,
+                               target_value="" if c.target_value is None else str(c.target_value),
+                               lower_limit="" if c.lower_limit is None else str(c.lower_limit),
+                               upper_limit="" if c.upper_limit is None else str(c.upper_limit)),
+                    id=str(c.pk))
+                for c in inspection_plan_a.characteristics.all()]
+        resp = client_a.post(reverse("scm:inspectionplan_edit", args=[inspection_plan_a.pk]),
+                             _plan_view_payload(item_a, rows, initial=len(rows),
+                                                code=inspection_plan_a.code, name="Renamed plan",
+                                                version=inspection_plan_a.version))
+        assert resp.status_code == 302
+        inspection_plan_a.refresh_from_db()
+        assert inspection_plan_a.name == "Renamed plan"
+
+    def test_detail_renders_the_documented_context(self, client_a, inspection_plan_a,
+                                                   quality_inspection_a):
+        resp = client_a.get(reverse("scm:inspectionplan_detail", args=[inspection_plan_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/inspectionplan/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "characteristics", "is_effective_now", "inspections", "audits"):
+            assert key in resp.context, key
+        assert resp.context["is_effective_now"] is True
+        assert quality_inspection_a in resp.context["inspections"]
+
+    def test_delete_is_post_only_and_a_get_never_deletes(self, client_a, audit_checklist_plan_a):
+        from apps.scm.models import InspectionPlan
+        assert client_a.get(reverse("scm:inspectionplan_delete",
+                                    args=[audit_checklist_plan_a.pk])).status_code == 405
+        assert InspectionPlan.objects.filter(pk=audit_checklist_plan_a.pk).exists()
+
+    def test_delete_removes_an_unused_plan(self, client_a, audit_checklist_plan_a):
+        from apps.scm.models import InspectionPlan
+        resp = client_a.post(reverse("scm:inspectionplan_delete",
+                                     args=[audit_checklist_plan_a.pk]))
+        assert resp.status_code == 302
+        assert not InspectionPlan.objects.filter(pk=audit_checklist_plan_a.pk).exists()
+
+    def test_delete_is_refused_for_a_plan_an_inspection_has_used(self, client_a,
+                                                                inspection_plan_a,
+                                                                quality_inspection_a):
+        from apps.scm.models import InspectionPlan
+        resp = client_a.post(reverse("scm:inspectionplan_delete", args=[inspection_plan_a.pk]),
+                             follow=True)
+        assert any("used by inspections" in m for m in _messages(resp))
+        assert InspectionPlan.objects.filter(pk=inspection_plan_a.pk).exists()
+
+    def test_delete_is_refused_for_a_plan_that_is_an_audit_checklist(self, client_a,
+                                                                    audit_checklist_plan_a,
+                                                                    quality_audit_a):
+        from apps.scm.models import InspectionPlan
+        resp = client_a.post(reverse("scm:inspectionplan_delete",
+                                     args=[audit_checklist_plan_a.pk]), follow=True)
+        assert any("checklist for one or more audits" in m for m in _messages(resp))
+        assert InspectionPlan.objects.filter(pk=audit_checklist_plan_a.pk).exists()
+
+
+# ================================================================ QualityInspection CRUD
+class TestQualityInspectionCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, quality_inspection_a):
+        resp = client_a.get(reverse("scm:qualityinspection_list"))
+        assert resp.status_code == 200
+        assert quality_inspection_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, quality_inspection_a,
+                                             quality_inspection_b):
+        resp = client_a.get(reverse("scm:qualityinspection_list"))
+        assert quality_inspection_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, quality_inspection_a):
+        resp = client_a.get(reverse("scm:qualityinspection_list"))
+        assert "scm/quality/qualityinspection/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "type_choices",
+                    "decision_choices", "items", "suppliers", "inspectors", "stats"):
+            assert key in resp.context, key
+
+    def test_the_list_stats_count_the_whole_register(self, client_a, quality_inspection_a,
+                                                     outgoing_inspection_a):
+        stats = client_a.get(reverse("scm:qualityinspection_list")).context["stats"]
+        assert stats["open"] == 1        # the draft one
+        assert stats["passed"] == 1      # the outgoing one
+        assert stats["failed"] == 0
+
+    def test_list_search_by_number_and_certificate(self, client_a, outgoing_inspection_a):
+        from apps.scm.models import QualityInspection
+        QualityInspection.objects.filter(pk=outgoing_inspection_a.pk).update(
+            coa_number="COA-00042")
+        by_number = client_a.get(reverse("scm:qualityinspection_list"),
+                                 {"q": outgoing_inspection_a.number})
+        by_coa = client_a.get(reverse("scm:qualityinspection_list"), {"q": "COA-00042"})
+        assert outgoing_inspection_a in by_number.context["object_list"]
+        assert outgoing_inspection_a in by_coa.context["object_list"]
+
+    def test_list_filter_by_status_type_and_item(self, client_a, quality_inspection_a,
+                                                 outgoing_inspection_a, item_a):
+        by_status = client_a.get(reverse("scm:qualityinspection_list"), {"status": "passed"})
+        assert list(by_status.context["object_list"]) == [outgoing_inspection_a]
+        by_type = client_a.get(reverse("scm:qualityinspection_list"),
+                               {"inspection_type": "incoming"})
+        assert list(by_type.context["object_list"]) == [quality_inspection_a]
+        by_item = client_a.get(reverse("scm:qualityinspection_list"), {"item": str(item_a.pk)})
+        assert list(by_item.context["object_list"]) == [quality_inspection_a]
+
+    def test_list_date_window_narrows_on_inspected_on(self, client_a, quality_inspection_a):
+        from django.utils import timezone
+        tomorrow = (timezone.localdate() + datetime.timedelta(days=1)).isoformat()
+        resp = client_a.get(reverse("scm:qualityinspection_list"), {"date_from": tomorrow})
+        assert quality_inspection_a not in resp.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant_and_SNAPSHOTS_the_plan(self, client_a, tenant_a,
+                                                                        item_a,
+                                                                        inspection_plan_a):
+        from apps.scm.models import QualityInspection
+        resp = client_a.post(reverse("scm:qualityinspection_create"),
+                             _qc_view_payload(item_a, plan=str(inspection_plan_a.pk)),
+                             follow=True)
+        assert resp.status_code == 200
+        obj = QualityInspection.objects.get(tenant=tenant_a, plan=inspection_plan_a)
+        assert obj.number.startswith("QC-")
+        assert obj.results.count() == 3
+        assert any("3 characteristic(s) snapshotted" in m for m in _messages(resp))
+
+    def test_create_without_a_plan_snapshots_nothing(self, client_a, tenant_a, item_a):
+        from apps.scm.models import QualityInspection
+        resp = client_a.post(reverse("scm:qualityinspection_create"), _qc_view_payload(item_a))
+        assert resp.status_code == 302
+        assert QualityInspection.objects.get(tenant=tenant_a).results.count() == 0
+
+    def test_edit_updates_the_header(self, client_a, quality_inspection_a, item_a,
+                                     inspection_plan_a):
+        resp = client_a.post(reverse("scm:qualityinspection_edit", args=[quality_inspection_a.pk]),
+                             _qc_view_payload(item_a, plan=str(inspection_plan_a.pk),
+                                              notes="Re-checked"))
+        assert resp.status_code == 302
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.notes == "Re-checked"
+
+    def test_edit_is_refused_once_the_inspection_has_passed(self, client_a,
+                                                            outgoing_inspection_a):
+        resp = client_a.get(reverse("scm:qualityinspection_edit",
+                                    args=[outgoing_inspection_a.pk]), follow=True)
+        assert any("can no longer be edited" in m for m in _messages(resp))
+
+    def test_detail_renders_every_documented_context_key(self, client_a, outgoing_inspection_a):
+        resp = client_a.get(reverse("scm:qualityinspection_detail",
+                                    args=[outgoing_inspection_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/qualityinspection/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "results", "evaluated_result", "failed_count", "pending_count",
+                    "mandatory_pending_count", "has_critical_failure", "coa_results",
+                    "coa_blockers", "nonconformances", "decision_form"):
+            assert key in resp.context, key
+        assert resp.context["evaluated_result"] == "pass"
+        assert resp.context["coa_blockers"] == []
+
+    def test_delete_is_post_only_and_a_get_never_deletes(self, client_a, quality_inspection_a):
+        from apps.scm.models import QualityInspection
+        assert client_a.get(reverse("scm:qualityinspection_delete",
+                                    args=[quality_inspection_a.pk])).status_code == 405
+        assert QualityInspection.objects.filter(pk=quality_inspection_a.pk).exists()
+
+    def test_delete_removes_a_draft_inspection(self, client_a, quality_inspection_a):
+        from apps.scm.models import QualityInspection
+        resp = client_a.post(reverse("scm:qualityinspection_delete",
+                                     args=[quality_inspection_a.pk]))
+        assert resp.status_code == 302
+        assert not QualityInspection.objects.filter(pk=quality_inspection_a.pk).exists()
+
+    def test_delete_is_refused_once_it_has_passed(self, client_a, outgoing_inspection_a):
+        from apps.scm.models import QualityInspection
+        resp = client_a.post(reverse("scm:qualityinspection_delete",
+                                     args=[outgoing_inspection_a.pk]), follow=True)
+        assert any("cancel it instead" in m for m in _messages(resp))
+        assert QualityInspection.objects.filter(pk=outgoing_inspection_a.pk).exists()
+
+    def test_delete_is_refused_while_an_ncr_hangs_off_it(self, client_a, tenant_a,
+                                                         quality_inspection_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance, QualityInspection
+        NonConformance.objects.create(tenant=tenant_a, source="inspection",
+                                      inspection=quality_inspection_a, item=item_a,
+                                      quantity_affected=Decimal("1"), title="T", description="D",
+                                      detected_on=timezone.localdate())
+        resp = client_a.post(reverse("scm:qualityinspection_delete",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("non-conformance reports" in m for m in _messages(resp))
+        assert QualityInspection.objects.filter(pk=quality_inspection_a.pk).exists()
+
+    def test_delete_is_refused_once_a_certificate_exists(self, client_a, quality_inspection_a):
+        from apps.scm.models import QualityInspection
+        QualityInspection.objects.filter(pk=quality_inspection_a.pk).update(
+            coa_number="COA-00001")
+        resp = client_a.post(reverse("scm:qualityinspection_delete",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("COA-00001" in m for m in _messages(resp))
+        assert QualityInspection.objects.filter(pk=quality_inspection_a.pk).exists()
+
+
+# ================================================================ The SNAPSHOT is immutable
+class TestInspectionResultSnapshotImmutability:
+    """``can_delete=False`` plus the injection guard in ``BaseInspectionResultFormSet.clean()``.
+
+    Both halves matter and both are reachable only by a crafted POST: ``generate_results()``
+    short-circuits on ``results.exists()``, so a deleted row can NEVER be regenerated, and both
+    ``evaluated_result`` and ``coa_blockers()`` only ever count the survivors — deleting the one
+    failing characteristic would silently turn a failed inspection into a certifiable one.
+    """
+
+    def _editable_with_results(self, inspection):
+        inspection.generate_results()
+        return list(inspection.results.order_by("sequence"))
+
+    def test_a_crafted_DELETE_does_not_remove_the_row_and_the_SAME_POST_still_saves_the_edit(
+        self, client_a, quality_inspection_a, item_a, inspection_plan_a,
+    ):
+        rows = self._editable_with_results(quality_inspection_a)
+        payload = _qc_view_payload(
+            item_a, [_result_row(row) for row in rows], initial=len(rows),
+            plan=str(inspection_plan_a.pk))
+        # The non-vacuous half: edit ANOTHER field on the very row being "deleted", so a pass is
+        # proof the row was bound and written rather than proof the POST was ignored wholesale.
+        payload["results-0-DELETE"] = "on"
+        payload["results-0-notes"] = "Re-measured on the bench"
+        resp = client_a.post(reverse("scm:qualityinspection_edit",
+                                     args=[quality_inspection_a.pk]), payload)
+        assert resp.status_code == 302
+        assert quality_inspection_a.results.count() == len(rows)
+        rows[0].refresh_from_db()
+        assert rows[0].notes == "Re-measured on the bench"
+
+    def test_a_crafted_EXTRA_row_is_rejected_and_creates_nothing(self, client_a,
+                                                                 quality_inspection_a, item_a,
+                                                                 inspection_plan_a):
+        from apps.scm.models import InspectionResult
+        rows = self._editable_with_results(quality_inspection_a)
+        before = InspectionResult.objects.count()
+        payload = _qc_view_payload(
+            item_a, [_result_row(row) for row in rows], initial=len(rows),
+            plan=str(inspection_plan_a.pk))
+        # Bump the management form and append a row with a BLANK id — extra=0 cannot stop this,
+        # because initial_form_count() comes from the POSTed management form.
+        payload["results-TOTAL_FORMS"] = str(len(rows) + 1)
+        payload[f"results-{len(rows)}-id"] = ""
+        payload[f"results-{len(rows)}-measured_value"] = "1000"
+        payload[f"results-{len(rows)}-text_value"] = ""
+        payload[f"results-{len(rows)}-result"] = "pass"
+        payload[f"results-{len(rows)}-notes"] = "Injected"
+        resp = client_a.post(reverse("scm:qualityinspection_edit",
+                                     args=[quality_inspection_a.pk]), payload)
+        assert resp.status_code == 200
+        assert "snapshotted from the plan" in resp.content.decode()
+        assert InspectionResult.objects.count() == before
+        assert not InspectionResult.objects.filter(notes="Injected").exists()
+
+    def test_the_rendered_form_offers_no_delete_checkbox_at_all(self, client_a,
+                                                               quality_inspection_a):
+        self._editable_with_results(quality_inspection_a)
+        resp = client_a.get(reverse("scm:qualityinspection_edit",
+                                    args=[quality_inspection_a.pk]))
+        assert resp.status_code == 200
+        assert "results-0-DELETE" not in resp.content.decode()
+        for form in resp.context["formset"].forms:
+            assert "DELETE" not in form.fields
+
+    def test_a_measurement_verdict_with_no_value_is_refused_at_the_view(self, client_a,
+                                                                        quality_inspection_a,
+                                                                        item_a,
+                                                                        inspection_plan_a):
+        rows = self._editable_with_results(quality_inspection_a)
+        payload = _qc_view_payload(item_a, [_result_row(row) for row in rows],
+                                   initial=len(rows), plan=str(inspection_plan_a.pk))
+        payload["results-0-result"] = "pass"      # the measurement row, no measured_value
+        resp = client_a.post(reverse("scm:qualityinspection_edit",
+                                     args=[quality_inspection_a.pk]), payload)
+        assert resp.status_code == 200
+        rows[0].refresh_from_db()
+        assert rows[0].result == "pending"
+
+
+# ================================================================ generate_results action
+class TestQualityInspectionGenerateResultsAction:
+    def test_it_snapshots_the_plan(self, client_a, quality_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_generate_results",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("Snapshotted 3 characteristic(s) from IQC-W1" in m for m in _messages(resp))
+        assert quality_inspection_a.results.count() == 3
+
+    def test_a_second_click_is_INFORMATION_not_an_error(self, client_a, quality_inspection_a):
+        client_a.post(reverse("scm:qualityinspection_generate_results",
+                              args=[quality_inspection_a.pk]))
+        resp = client_a.post(reverse("scm:qualityinspection_generate_results",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("never re-copied from the plan" in m for m in _messages(resp))
+        assert quality_inspection_a.results.count() == 3
+
+    def test_it_refuses_when_the_inspection_names_no_plan(self, client_a, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        obj = QualityInspection.objects.create(tenant=tenant_a, item=item_a,
+                                               inspected_on=timezone.localdate())
+        resp = client_a.post(reverse("scm:qualityinspection_generate_results", args=[obj.pk]),
+                             follow=True)
+        assert any("Pick an inspection plan first" in m for m in _messages(resp))
+        assert obj.results.count() == 0
+
+    def test_a_later_plan_edit_never_reaches_a_generated_row(self, client_a,
+                                                             quality_inspection_a,
+                                                             inspection_plan_a):
+        client_a.post(reverse("scm:qualityinspection_generate_results",
+                              args=[quality_inspection_a.pk]))
+        source = inspection_plan_a.characteristics.get(sequence=10)
+        source.upper_limit = Decimal("100.5")
+        source.save(update_fields=["upper_limit"])
+        row = quality_inspection_a.results.get(sequence=10)
+        assert row.upper_limit == Decimal("105.0000")
+
+
+# ================================================================ Lifecycle (no stock effect)
+class TestQualityInspectionLifecycle:
+    def test_start_moves_a_draft_to_in_progress(self, client_a, quality_inspection_a):
+        assert client_a.post(reverse("scm:qualityinspection_start",
+                                     args=[quality_inspection_a.pk])).status_code == 302
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "in_progress"
+
+    def test_start_is_refused_from_anything_else(self, client_a, outgoing_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_start",
+                                     args=[outgoing_inspection_a.pk]), follow=True)
+        assert any("can't be started from passed" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.status == "passed"
+
+    def test_hold_then_resume_round_trips(self, client_a, quality_inspection_a):
+        client_a.post(reverse("scm:qualityinspection_hold", args=[quality_inspection_a.pk]))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "on_hold"
+        client_a.post(reverse("scm:qualityinspection_resume", args=[quality_inspection_a.pk]))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "in_progress"
+
+    def test_cancel_from_draft(self, client_a, quality_inspection_a):
+        client_a.post(reverse("scm:qualityinspection_cancel", args=[quality_inspection_a.pk]))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "cancelled"
+
+    def test_a_double_submitted_transition_is_idempotent(self, client_a, quality_inspection_a):
+        client_a.post(reverse("scm:qualityinspection_start", args=[quality_inspection_a.pk]))
+        resp = client_a.post(reverse("scm:qualityinspection_start",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("can't be started from in progress" in m for m in _messages(resp))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "in_progress"
+
+    def test_complete_refuses_before_the_inspection_is_started(self, client_a,
+                                                              quality_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_complete",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("Start the inspection" in m for m in _messages(resp))
+
+    def test_complete_refuses_with_no_results_to_judge(self, client_a, quality_inspection_a):
+        client_a.post(reverse("scm:qualityinspection_start", args=[quality_inspection_a.pk]))
+        resp = client_a.post(reverse("scm:qualityinspection_complete",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("no results to judge" in m for m in _messages(resp))
+
+    def test_complete_refuses_while_a_MANDATORY_row_is_unanswered(self, client_a,
+                                                                  quality_inspection_a):
+        quality_inspection_a.generate_results()
+        client_a.post(reverse("scm:qualityinspection_start", args=[quality_inspection_a.pk]))
+        resp = client_a.post(reverse("scm:qualityinspection_complete",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("mandatory characteristic(s) still have no recorded value" in m
+                   for m in _messages(resp))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "in_progress"
+
+    def test_complete_closes_at_the_verdict_the_ROWS_say(self, client_a, quality_inspection_a):
+        quality_inspection_a.generate_results()
+        row = quality_inspection_a.results.get(sequence=10)
+        row.measured_value = Decimal("100")
+        row.save()
+        client_a.post(reverse("scm:qualityinspection_start", args=[quality_inspection_a.pk]))
+        client_a.post(reverse("scm:qualityinspection_complete", args=[quality_inspection_a.pk]))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "passed"
+
+    def test_complete_FAILS_the_lot_when_a_row_is_out_of_spec(self, client_a,
+                                                             quality_inspection_a):
+        quality_inspection_a.generate_results()
+        row = quality_inspection_a.results.get(sequence=10)
+        row.measured_value = Decimal("1")
+        row.save()
+        client_a.post(reverse("scm:qualityinspection_start", args=[quality_inspection_a.pk]))
+        client_a.post(reverse("scm:qualityinspection_complete", args=[quality_inspection_a.pk]))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.status == "failed"
+
+    def test_no_lifecycle_action_ever_posts_a_stock_move(self, client_a, quality_inspection_a):
+        from apps.scm.models import StockMove
+        for name in ("start", "hold", "resume", "cancel", "generate_results"):
+            client_a.post(reverse(f"scm:qualityinspection_{name}",
+                                  args=[quality_inspection_a.pk]))
+        assert StockMove.objects.count() == 0
+
+
+# ================================================================ The usage decision (admin only)
+class TestQualityInspectionDecision:
+    def test_a_decision_is_recorded_and_appended_to_the_notes(self, client_a,
+                                                              outgoing_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_decide",
+                                     args=[outgoing_inspection_a.pk]),
+                             {"usage_decision": "accept_with_deviation",
+                              "notes": "Customer waived the band."}, follow=True)
+        assert resp.status_code == 200
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.usage_decision == "accept_with_deviation"
+        assert "Customer waived the band." in outgoing_inspection_a.notes
+
+    def test_a_decision_is_refused_before_the_inspection_is_complete(self, client_a,
+                                                                    quality_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_decide",
+                                     args=[quality_inspection_a.pk]),
+                             {"usage_decision": "accept"}, follow=True)
+        assert any("Complete the inspection before deciding" in m for m in _messages(resp))
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.usage_decision == "pending"
+
+    def test_a_junk_decision_is_a_message_not_a_500(self, client_a, outgoing_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_decide",
+                                     args=[outgoing_inspection_a.pk]),
+                             {"usage_decision": "definitely-not-a-choice"}, follow=True)
+        assert resp.status_code == 200
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.usage_decision == "accept"
+
+    def test_PENDING_can_never_be_re_selected(self, client_a, outgoing_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_decide",
+                                     args=[outgoing_inspection_a.pk]),
+                             {"usage_decision": "pending"}, follow=True)
+        assert resp.status_code == 200
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.usage_decision == "accept"
+
+
+# ================================================================ Quarantine posts NOTHING
+class TestQualityInspectionQuarantine:
+    def test_quarantine_flips_the_lot_and_posts_NO_stock_move(self, client_a,
+                                                              outgoing_inspection_a, lot_a):
+        from apps.scm.models import StockMove
+        resp = client_a.post(reverse("scm:qualityinspection_quarantine",
+                                     args=[outgoing_inspection_a.pk]), follow=True)
+        assert any("No stock movement was posted" in m for m in _messages(resp))
+        lot_a.refresh_from_db()
+        outgoing_inspection_a.refresh_from_db()
+        assert lot_a.status == "quarantine"
+        assert outgoing_inspection_a.action_taken == "quarantined"
+        assert StockMove.objects.count() == 0
+
+    def test_release_restores_available(self, client_a, outgoing_inspection_a, lot_a):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:qualityinspection_quarantine",
+                              args=[outgoing_inspection_a.pk]))
+        client_a.post(reverse("scm:qualityinspection_release_lot",
+                              args=[outgoing_inspection_a.pk]))
+        lot_a.refresh_from_db()
+        assert lot_a.status == "available"
+        assert StockMove.objects.count() == 0
+
+    def test_a_double_quarantine_is_refused_on_the_lot_status(self, client_a,
+                                                              outgoing_inspection_a, lot_a):
+        client_a.post(reverse("scm:qualityinspection_quarantine",
+                              args=[outgoing_inspection_a.pk]))
+        resp = client_a.post(reverse("scm:qualityinspection_quarantine",
+                                     args=[outgoing_inspection_a.pk]), follow=True)
+        assert any("cannot be quarantined" in m for m in _messages(resp))
+
+    def test_an_inspection_with_no_lot_says_so(self, client_a, quality_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_quarantine",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("names no lot or serial" in m for m in _messages(resp))
+
+    def test_release_is_refused_on_an_available_lot(self, client_a, outgoing_inspection_a):
+        resp = client_a.post(reverse("scm:qualityinspection_release_lot",
+                                     args=[outgoing_inspection_a.pk]), follow=True)
+        assert any("cannot be released" in m for m in _messages(resp))
+
+
+# ================================================================ Compute-then-convert: raise NCR
+class TestQualityInspectionRaiseNcr:
+    def _fail(self, inspection):
+        from apps.scm.models import QualityInspection
+        QualityInspection.objects.filter(pk=inspection.pk).update(
+            status="failed", quantity_accepted=Decimal("8"), quantity_rejected=Decimal("2"))
+        inspection.refresh_from_db()
+        return inspection
+
+    def test_it_refuses_from_a_passing_inspection(self, client_a, quality_inspection_a):
+        from apps.scm.models import NonConformance
+        resp = client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("failed inspection or a rejected usage decision" in m for m in _messages(resp))
+        assert NonConformance.objects.count() == 0
+
+    def test_it_proposes_an_OPEN_ncr_prefilled_from_the_inspection(self, client_a, tenant_a,
+                                                                   quality_inspection_a, item_a):
+        from apps.scm.models import NonConformance
+        self._fail(quality_inspection_a)
+        resp = client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        ncr = NonConformance.objects.get(tenant=tenant_a)
+        assert ncr.source == "inspection"
+        assert ncr.inspection_id == quality_inspection_a.pk
+        assert ncr.item_id == item_a.pk
+        assert ncr.quantity_affected == Decimal("2.0000")
+        assert ncr.status == "open"
+        assert ncr.severity == "major"
+        assert ncr.uom_id == item_a.uom_id
+        assert ncr.detected_on == quality_inspection_a.inspected_on
+        quality_inspection_a.refresh_from_db()
+        assert quality_inspection_a.action_taken == "ncr_raised"
+        assert any(ncr.number in m for m in _messages(resp))
+
+    def test_a_critical_failure_raises_a_CRITICAL_ncr(self, client_a, tenant_a,
+                                                      quality_inspection_a):
+        from apps.scm.models import InspectionResult, NonConformance
+        quality_inspection_a.generate_results()
+        InspectionResult.objects.filter(inspection=quality_inspection_a, sequence=10).update(
+            is_critical=True, result="fail")
+        self._fail(quality_inspection_a)
+        client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                              args=[quality_inspection_a.pk]))
+        assert NonConformance.objects.get(tenant=tenant_a).severity == "critical"
+
+    def test_it_raises_at_most_ONE_ncr(self, client_a, tenant_a, quality_inspection_a):
+        from apps.scm.models import NonConformance
+        self._fail(quality_inspection_a)
+        client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                              args=[quality_inspection_a.pk]))
+        resp = client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                                     args=[quality_inspection_a.pk]), follow=True)
+        assert any("was already raised from this inspection" in m for m in _messages(resp))
+        assert NonConformance.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_a_REJECTED_decision_is_also_enough(self, client_a, tenant_a,
+                                                outgoing_inspection_a):
+        from apps.scm.models import NonConformance, QualityInspection
+        QualityInspection.objects.filter(pk=outgoing_inspection_a.pk).update(
+            usage_decision="reject")
+        client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                              args=[outgoing_inspection_a.pk]))
+        assert NonConformance.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_raising_an_ncr_posts_no_stock(self, client_a, quality_inspection_a):
+        from apps.scm.models import StockMove
+        self._fail(quality_inspection_a)
+        client_a.post(reverse("scm:qualityinspection_raise_ncr",
+                              args=[quality_inspection_a.pk]))
+        assert StockMove.objects.count() == 0
+
+
+# ================================================================ CoA — the seven blockers
+class TestCoaIssue:
+    """Each rule below is broken ALONE on a fixture that is otherwise ready, so the refusal it
+    produces can only have come from that one rule."""
+
+    def _break(self, inspection, **update):
+        from apps.scm.models import QualityInspection
+        QualityInspection.objects.filter(pk=inspection.pk).update(**update)
+        inspection.refresh_from_db()
+
+    def test_rule_1_a_non_outgoing_inspection_is_refused(self, client_a, outgoing_inspection_a,
+                                                         customer_a):
+        self._break(outgoing_inspection_a, inspection_type="incoming")
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("Only an outgoing inspection" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_rule_2_an_unpassed_inspection_is_refused(self, client_a, outgoing_inspection_a,
+                                                      customer_a):
+        self._break(outgoing_inspection_a, status="failed")
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("has not passed" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_rule_3_an_unaccepted_lot_is_refused(self, client_a, outgoing_inspection_a,
+                                                 customer_a):
+        self._break(outgoing_inspection_a, usage_decision="reject")
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("No usage decision has accepted" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_rule_4_an_out_of_spec_included_row_is_refused(self, client_a,
+                                                           outgoing_inspection_a, customer_a):
+        row = outgoing_inspection_a.results.get(sequence=10)
+        row.measured_value = Decimal("1")
+        row.save()
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("out of specification" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_rule_5_an_unrecorded_included_row_is_refused(self, client_a, outgoing_inspection_a,
+                                                          customer_a):
+        row = outgoing_inspection_a.results.get(sequence=20)
+        row.result = "pending"
+        row.save()
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("no recorded value" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_rule_6_a_lot_tracked_item_with_no_batch_is_refused(self, client_a,
+                                                                outgoing_inspection_a,
+                                                                customer_a):
+        self._break(outgoing_inspection_a, lot_serial=None)
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("lot/batch is required" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_rule_7_nothing_flagged_for_the_certificate_is_refused(self, client_a,
+                                                                   outgoing_inspection_a,
+                                                                   customer_a):
+        from apps.scm.models import InspectionResult
+        InspectionResult.objects.filter(inspection=outgoing_inspection_a).update(
+            include_on_coa=False)
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("No characteristics are flagged" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_every_blocker_is_reported_at_once(self, client_a, outgoing_inspection_a,
+                                               customer_a):
+        self._break(outgoing_inspection_a, inspection_type="incoming", status="failed",
+                    usage_decision="reject", lot_serial=None)
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert len([m for m in _messages(resp)]) >= 4
+
+    def test_a_clean_issue_stamps_the_certificate(self, client_a, outgoing_inspection_a,
+                                                 customer_a):
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a, issued_on="2026-03-01")
+        assert resp.status_code == 200
+        assert "scm/quality/coa/print.html" in [t.name for t in resp.templates]
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == "COA-00001"
+        assert outgoing_inspection_a.coa_issued_on is not None
+        assert outgoing_inspection_a.coa_issued_to_id == customer_a.pk
+
+    def test_a_second_POST_is_IDEMPOTENT(self, client_a, outgoing_inspection_a, customer_a):
+        _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        resp = _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert any("has already been issued" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == "COA-00001"
+
+    def test_the_usage_decision_can_no_longer_be_changed_once_issued(self, client_a,
+                                                                     outgoing_inspection_a,
+                                                                     customer_a):
+        """Reversing to `reject` here would leave a live certificate that coa_blockers() now says
+        should never have been issued."""
+        _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        resp = client_a.post(reverse("scm:qualityinspection_decide",
+                                     args=[outgoing_inspection_a.pk]),
+                             {"usage_decision": "reject"}, follow=True)
+        assert any("has already been issued on this decision" in m for m in _messages(resp))
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.usage_decision == "accept"
+
+    def test_a_junk_issue_date_is_a_message_not_a_500(self, client_a, outgoing_inspection_a,
+                                                      customer_a):
+        for junk in ("not-a-date", "9999-99-99", "9999-12-31", "1899-01-01"):
+            resp = _issue_coa(client_a, outgoing_inspection_a, customer_a, issued_on=junk)
+            assert resp.status_code == 200, junk
+            outgoing_inspection_a.refresh_from_db()
+            assert outgoing_inspection_a.coa_number == "", junk
+
+    def test_a_recipient_from_another_tenant_is_refused(self, client_a, outgoing_inspection_a,
+                                                        customer_b):
+        resp = client_a.post(reverse("scm:coa_issue", args=[outgoing_inspection_a.pk]),
+                             {"coa_issued_to": str(customer_b.pk), "issued_on": ""}, follow=True)
+        assert resp.status_code == 200
+        outgoing_inspection_a.refresh_from_db()
+        assert outgoing_inspection_a.coa_number == ""
+
+    def test_issuing_posts_no_stock(self, client_a, outgoing_inspection_a, customer_a):
+        from apps.scm.models import StockMove
+        _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        assert StockMove.objects.count() == 0
+
+
+class TestCoaNumbersAreNeverDuplicated:
+    def test_issuing_OUT_OF_ID_ORDER_never_mints_the_same_number_twice(self, client_a, tenant_a,
+                                                                       item_a, customer_a):
+        """`coa_number` is allocated LONG after the row exists, so the certified rows are not in id
+        order — the ordering bug re-read the highest-id certified row and re-used its number."""
+        from apps.scm.models import QualityInspection
+        ready = [_outgoing(tenant_a, item_a, rows=[(True, "pass")]) for _ in range(3)]
+        for inspection in (ready[2], ready[0], ready[1]):
+            _issue_coa(client_a, inspection, customer_a)
+        numbers = [QualityInspection.objects.get(pk=i.pk).coa_number for i in ready]
+        assert all(numbers), numbers
+        assert len(set(numbers)) == 3, numbers
+        assert sorted(numbers) == ["COA-00001", "COA-00002", "COA-00003"]
+
+    def test_the_certificate_sequence_is_per_tenant(self, client_a, client_b, tenant_a, tenant_b,
+                                                    item_a, item_b, customer_a, customer_b):
+        from apps.scm.models import QualityInspection
+        mine = _outgoing(tenant_a, item_a, rows=[(True, "pass")])
+        theirs = _outgoing(tenant_b, item_b, rows=[(True, "pass")])
+        _issue_coa(client_a, mine, customer_a)
+        _issue_coa(client_b, theirs, customer_b)
+        assert QualityInspection.objects.get(pk=mine.pk).coa_number == "COA-00001"
+        assert QualityInspection.objects.get(pk=theirs.pk).coa_number == "COA-00001"
+
+
+class TestCoaPrint:
+    def test_it_refuses_to_render_an_UNISSUED_certificate(self, client_a, outgoing_inspection_a):
+        """A 'preview' of a certificate looks exactly like the real thing but nobody signed it."""
+        resp = client_a.get(reverse("scm:coa_print", args=[outgoing_inspection_a.pk]),
+                            follow=True)
+        assert any("No certificate has been issued" in m for m in _messages(resp))
+        assert "scm/quality/qualityinspection/detail.html" in [t.name for t in resp.templates]
+
+    def test_it_renders_the_issued_certificate_over_the_flagged_rows(self, client_a,
+                                                                     outgoing_inspection_a,
+                                                                     customer_a):
+        _issue_coa(client_a, outgoing_inspection_a, customer_a)
+        resp = client_a.get(reverse("scm:coa_print", args=[outgoing_inspection_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/coa/print.html" in [t.name for t in resp.templates]
+        for key in ("obj", "results", "customer", "printed_at"):
+            assert key in resp.context, key
+        assert len(resp.context["results"]) == 2
+        assert resp.context["customer"] == customer_a
+
+    def test_the_customer_falls_back_to_the_shipments_sales_order(self, client_a, tenant_a,
+                                                                  item_a, customer_a, carrier_a,
+                                                                  sales_order_a):
+        from apps.scm.models import QualityInspection, Shipment
+        shipment = Shipment.objects.create(tenant=tenant_a, carrier=carrier_a,
+                                           direction="outbound", sales_order=sales_order_a)
+        inspection = _outgoing(tenant_a, item_a, rows=[(True, "pass")], shipment=shipment)
+        _issue_coa(client_a, inspection)      # no explicit recipient
+        resp = client_a.get(reverse("scm:coa_print", args=[inspection.pk]))
+        assert resp.context["customer"] == customer_a
+
+
+# ================================================================ The CoA register's set invariant
+class TestCoaReportStateInvariant:
+    """``?coa_state=ready`` must never list a row the page then badges "Blocked".
+
+    Both branches encode SIX of ``coa_blockers()``'s seven rules (the seventh IS the queryset's own
+    ``inspection_type="outgoing"`` filter). With only four, an inspection missing its lot — or with
+    nothing flagged for the certificate — passed the `ready` filter, was badged Blocked by the
+    row-level check, and dropped out of `blocked` entirely.
+    """
+
+    @pytest.fixture
+    def register(self, tenant_a, item_a, item_lot_a, lot_a):
+        return {
+            "ready": _outgoing(tenant_a, item_a, rows=[(True, "pass")]),
+            "issued": _outgoing(tenant_a, item_a, rows=[(True, "pass")], coa="COA-00099"),
+            # LEAK 1: passed, accepted, every row answered — but nothing is flagged for the CoA.
+            "nothing_flagged": _outgoing(tenant_a, item_a, rows=[(False, "pass")]),
+            # LEAK 2: a lot-tracked item with no batch named.
+            "no_lot": _outgoing(tenant_a, item_lot_a, lot=None, rows=[(True, "pass")]),
+            "no_rows": _outgoing(tenant_a, item_a, rows=[]),
+            "draft": _outgoing(tenant_a, item_a, rows=[(True, "pass")], status="draft"),
+            "undecided": _outgoing(tenant_a, item_a, rows=[(True, "pass")], decision="pending"),
+            "failing": _outgoing(tenant_a, item_a, rows=[(True, "fail")]),
+            "unrecorded": _outgoing(tenant_a, item_a, rows=[(True, "pending")]),
+            "lot_ok": _outgoing(tenant_a, item_lot_a, lot=lot_a, rows=[(True, "pass")]),
+        }
+
+    def _pks(self, client, **params):
+        resp = client.get(reverse("scm:coa_report"), params)
+        assert resp.status_code == 200
+        return {row["obj"].pk for row in resp.context["rows"]}
+
+    def _rows(self, client, **params):
+        return client.get(reverse("scm:coa_report"), params).context["rows"]
+
+    def test_the_report_renders_the_documented_context(self, client_a, register):
+        resp = client_a.get(reverse("scm:coa_report"))
+        assert resp.status_code == 200
+        assert "scm/quality/coa/report.html" in [t.name for t in resp.templates]
+        for key in ("rows", "page_obj", "q", "state_choices", "items", "customers",
+                    "issue_form"):
+            assert key in resp.context, key
+
+    def test_EVERY_ready_row_really_has_no_blockers(self, client_a, register):
+        for row in self._rows(client_a, coa_state="ready"):
+            assert row["blockers"] == [], (row["obj"].number, row["blockers"])
+            assert row["coa_ready"] is True
+
+    def test_EVERY_blocked_row_really_has_a_blocker(self, client_a, register):
+        rows = self._rows(client_a, coa_state="blocked")
+        assert rows
+        for row in rows:
+            assert row["blockers"], row["obj"].number
+            assert row["coa_ready"] is False
+
+    def test_ready_and_blocked_PARTITION_the_un_issued_outgoing_register(self, client_a,
+                                                                         register):
+        ready = self._pks(client_a, coa_state="ready")
+        blocked = self._pks(client_a, coa_state="blocked")
+        un_issued = {obj.pk for key, obj in register.items() if key != "issued"}
+        assert ready & blocked == set()
+        assert ready | blocked == un_issued
+
+    def test_the_two_rows_that_used_to_LEAK_are_blocked_not_ready(self, client_a, register):
+        ready = self._pks(client_a, coa_state="ready")
+        blocked = self._pks(client_a, coa_state="blocked")
+        for key in ("nothing_flagged", "no_lot", "no_rows"):
+            assert register[key].pk not in ready, key
+            assert register[key].pk in blocked, key
+
+    def test_the_genuinely_ready_rows_ARE_ready(self, client_a, register):
+        ready = self._pks(client_a, coa_state="ready")
+        assert register["ready"].pk in ready
+        assert register["lot_ok"].pk in ready
+
+    def test_issued_lists_only_stamped_rows(self, client_a, register):
+        assert self._pks(client_a, coa_state="issued") == {register["issued"].pk}
+
+    def test_the_register_only_ever_shows_OUTGOING_inspections(self, client_a, register,
+                                                               quality_inspection_a):
+        assert quality_inspection_a.pk not in self._pks(client_a)
+
+    def test_the_register_never_leaks_another_tenants_rows(self, client_a, tenant_b, item_b,
+                                                          register):
+        theirs = _outgoing(tenant_b, item_b, rows=[(True, "pass")])
+        assert theirs.pk not in self._pks(client_a)
+
+    def test_search_and_the_two_fk_filters_narrow_the_register(self, client_a, register, item_a,
+                                                               item_lot_a):
+        by_number = self._pks(client_a, q=register["ready"].number)
+        assert by_number == {register["ready"].pk}
+        by_item = self._pks(client_a, item=str(item_lot_a.pk))
+        assert by_item == {register["no_lot"].pk, register["lot_ok"].pk}
+
+    def test_a_junk_item_or_customer_filter_is_ignored_rather_than_500ing(self, client_a,
+                                                                          register):
+        for params in ({"item": "abc"}, {"customer": "-1"}, {"item": "1.5"},
+                       {"coa_state": "nonsense"}, {"date_from": "not-a-date"},
+                       {"date_to": "9999-99-99"}, {"page": "999"}, {"page": "abc"}):
+            assert client_a.get(reverse("scm:coa_report"),
+                                params).status_code == 200, params
+
+    def test_the_register_paginates_past_the_page_size(self, client_a, tenant_a, item_a):
+        for _ in range(20):
+            _outgoing(tenant_a, item_a, rows=[(True, "pass")])
+        resp = client_a.get(reverse("scm:coa_report"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+
+
+# ================================================================ NonConformance CRUD
+class TestNonConformanceCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, nonconformance_a):
+        resp = client_a.get(reverse("scm:nonconformance_list"))
+        assert resp.status_code == 200
+        assert nonconformance_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, nonconformance_a, nonconformance_b):
+        resp = client_a.get(reverse("scm:nonconformance_list"))
+        assert nonconformance_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, nonconformance_a):
+        resp = client_a.get(reverse("scm:nonconformance_list"))
+        assert "scm/quality/nonconformance/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "severity_choices",
+                    "source_choices", "category_choices", "disposition_choices", "items",
+                    "suppliers", "owners", "stats"):
+            assert key in resp.context, key
+
+    def test_the_list_stats_roll_up_the_cost_of_quality(self, client_a, nonconformance_a,
+                                                        nonconformance_lot_a):
+        stats = client_a.get(reverse("scm:nonconformance_list")).context["stats"]
+        assert stats["open"] == 2
+        assert stats["critical_open"] == 1
+        assert stats["cost_of_quality"] == Decimal("40.00")
+
+    def test_list_search_and_filters(self, client_a, nonconformance_a, nonconformance_lot_a):
+        found = client_a.get(reverse("scm:nonconformance_list"), {"q": "out of tolerance"})
+        assert list(found.context["object_list"]) == [nonconformance_a]
+        by_severity = client_a.get(reverse("scm:nonconformance_list"), {"severity": "critical"})
+        assert list(by_severity.context["object_list"]) == [nonconformance_lot_a]
+        by_source = client_a.get(reverse("scm:nonconformance_list"), {"source": "production"})
+        assert list(by_source.context["object_list"]) == [nonconformance_lot_a]
+
+    def test_the_overdue_toggle_only_lists_live_late_reports(self, client_a, nonconformance_a,
+                                                            nonconformance_lot_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        NonConformance.objects.filter(pk=nonconformance_a.pk).update(
+            due_date=timezone.localdate() - datetime.timedelta(days=3))
+        resp = client_a.get(reverse("scm:nonconformance_list"), {"overdue": "yes"})
+        assert list(resp.context["object_list"]) == [nonconformance_a]
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a, item_a):
+        from apps.scm.models import NonConformance
+        resp = client_a.post(reverse("scm:nonconformance_create"), _ncr_view_payload(item_a))
+        assert resp.status_code == 302
+        ncr = NonConformance.objects.get(tenant=tenant_a, title="New finding")
+        assert ncr.number.startswith("NCR-")
+        assert ncr.status == "open"
+        assert ncr.disposition == "pending"
+
+    def test_edit_updates_the_row(self, client_a, nonconformance_a, item_a):
+        resp = client_a.post(reverse("scm:nonconformance_edit", args=[nonconformance_a.pk]),
+                             _ncr_view_payload(item_a, title="Renamed finding",
+                                               quantity_affected="5"))
+        assert resp.status_code == 302
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.title == "Renamed finding"
+
+    def test_edit_is_refused_once_dispositioned(self, client_a, nonconformance_a):
+        from apps.scm.models import NonConformance
+        NonConformance.objects.filter(pk=nonconformance_a.pk).update(status="dispositioned")
+        resp = client_a.get(reverse("scm:nonconformance_edit", args=[nonconformance_a.pk]),
+                            follow=True)
+        assert any("can no longer be edited" in m for m in _messages(resp))
+
+    def test_detail_renders_every_documented_context_key(self, client_a, nonconformance_lot_a):
+        resp = client_a.get(reverse("scm:nonconformance_detail",
+                                    args=[nonconformance_lot_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/nonconformance/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "moves", "lot_history", "capa_actions", "disposition_form"):
+            assert key in resp.context, key
+
+    def test_delete_is_post_only_and_a_get_never_deletes(self, client_a, nonconformance_a):
+        from apps.scm.models import NonConformance
+        assert client_a.get(reverse("scm:nonconformance_delete",
+                                    args=[nonconformance_a.pk])).status_code == 405
+        assert NonConformance.objects.filter(pk=nonconformance_a.pk).exists()
+
+    def test_delete_removes_an_open_report(self, client_a, nonconformance_a):
+        from apps.scm.models import NonConformance
+        assert client_a.post(reverse("scm:nonconformance_delete",
+                                     args=[nonconformance_a.pk])).status_code == 302
+        assert not NonConformance.objects.filter(pk=nonconformance_a.pk).exists()
+
+    def test_delete_is_refused_once_a_disposition_was_recorded(self, client_a, nonconformance_a):
+        from apps.scm.models import NonConformance
+        NonConformance.objects.filter(pk=nonconformance_a.pk).update(disposition="use_as_is")
+        resp = client_a.post(reverse("scm:nonconformance_delete", args=[nonconformance_a.pk]),
+                             follow=True)
+        assert any("stock may have moved" in m for m in _messages(resp))
+        assert NonConformance.objects.filter(pk=nonconformance_a.pk).exists()
+
+    def test_delete_is_refused_while_a_capa_hangs_off_it(self, client_a, tenant_a,
+                                                         nonconformance_a):
+        from apps.scm.models import CapaAction, NonConformance
+        CapaAction.objects.create(tenant=tenant_a, source="nonconformance",
+                                  nonconformance=nonconformance_a, title="T",
+                                  problem_statement="P")
+        resp = client_a.post(reverse("scm:nonconformance_delete", args=[nonconformance_a.pk]),
+                             follow=True)
+        assert any("corrective actions raised from it" in m for m in _messages(resp))
+        assert NonConformance.objects.filter(pk=nonconformance_a.pk).exists()
+
+
+# ================================================================ 4.9's ONLY stock posting
+class TestNonConformanceDispositionStockRulings:
+    def _disposition(self, client, ncr, disposition="scrap", quantity="5", notes=""):
+        return client.post(reverse("scm:nonconformance_disposition", args=[ncr.pk]),
+                           {"disposition": disposition, "disposition_quantity": quantity,
+                            "disposition_notes": notes}, follow=True)
+
+    def test_a_from_stock_scrap_posts_exactly_ONE_negative_adjustment(self, client_a, tenant_a,
+                                                                     nonconformance_a, item_a,
+                                                                     location_a):
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "20", "8.0000")
+        resp = self._disposition(client_a, nonconformance_a)
+        assert resp.status_code == 200
+        moves = list(_quality_moves(nonconformance_a))
+        assert len(moves) == 1
+        move = moves[0]
+        assert move.move_type == "adjustment"
+        assert move.quantity == Decimal("-5.0000")
+        assert move.reference == nonconformance_a.number
+        assert move.location_id == location_a.pk
+        assert move.item_id == item_a.pk
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.disposition == "scrap"
+        assert nonconformance_a.disposition_quantity == Decimal("5.0000")
+        assert nonconformance_a.status == "dispositioned"
+        assert nonconformance_a.disposition_on is not None
+
+    def test_a_DOUBLE_post_posts_nothing_the_second_time(self, client_a, tenant_a,
+                                                         nonconformance_a, item_a, location_a):
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "20", "8.0000")
+        self._disposition(client_a, nonconformance_a)
+        resp = self._disposition(client_a, nonconformance_a)
+        assert any("was already dispositioned" in m for m in _messages(resp))
+        assert _quality_moves(nonconformance_a).count() == 1
+
+    def test_OVER_scrapping_is_refused_with_zero_moves_and_the_ncr_still_open(self, client_a,
+                                                                              tenant_a,
+                                                                              nonconformance_a,
+                                                                              item_a, location_a):
+        """The shortfall raise happens INSIDE the atomic block, so the decision fields must roll
+        back with it — a report left `dispositioned` over an empty ledger is the worse failure."""
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "2", "8.0000")
+        resp = self._disposition(client_a, nonconformance_a, quantity="5")
+        assert any(item_a.sku in m and "cannot move" in m for m in _messages(resp))
+        assert _quality_moves(nonconformance_a).count() == 0
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.status == "open"
+        assert nonconformance_a.disposition == "pending"
+        assert nonconformance_a.disposition_on is None
+
+    def test_dispositioning_MORE_than_the_affected_quantity_is_refused(self, client_a, tenant_a,
+                                                                       nonconformance_a, item_a,
+                                                                       location_a):
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "100", "8.0000")
+        resp = self._disposition(client_a, nonconformance_a, quantity="9")
+        assert any("against only 5.0000 affected" in m for m in _messages(resp))
+        assert _quality_moves(nonconformance_a).count() == 0
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.status == "open"
+
+    def test_a_ZERO_quantity_scrap_is_refused(self, client_a, tenant_a, nonconformance_a, item_a,
+                                              location_a):
+        """Accepting it recorded the disposition, left posts_stock True, and rendered 'posts a scrap
+        movement' above an empty ledger panel."""
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "20", "8.0000")
+        resp = self._disposition(client_a, nonconformance_a, quantity="0")
+        assert any("Enter the quantity being scrapped" in m for m in _messages(resp))
+        assert _quality_moves(nonconformance_a).count() == 0
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.disposition == "pending"
+        assert nonconformance_a.status == "open"
+
+    def test_a_GOODS_RECEIPT_sourced_scrap_posts_nothing(self, client_a, tenant_a, item_a,
+                                                         location_a, goods_receipt_a, uom_each_a):
+        """Those units were refused at the dock and never entered stock, so a negative move would
+        drive the receiving location negative for stock it never held."""
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "20", "8.0000")
+        ncr = NonConformance.objects.create(
+            tenant=tenant_a, source="goods_receipt", goods_receipt=goods_receipt_a, item=item_a,
+            location=location_a, uom=uom_each_a, quantity_affected=Decimal("5"),
+            title="Rejected at the dock", description="D", detected_on=timezone.localdate())
+        resp = self._disposition(client_a, ncr)
+        assert any("never entered stock" in m for m in _messages(resp))
+        assert _quality_moves(ncr).count() == 0
+        ncr.refresh_from_db()
+        assert ncr.disposition == "scrap"
+        assert ncr.status == "dispositioned"
+
+    def test_an_AUDIT_finding_with_no_item_but_a_location_does_not_raise(self, client_a, tenant_a,
+                                                                        location_a,
+                                                                        quality_audit_a):
+        """`posts_stock` tests item_id deliberately: the scrap path would otherwise hand None to
+        _insufficient_stock — an uncaught AttributeError, not a refusal."""
+        from django.utils import timezone
+        from apps.scm.models import NonConformance, StockMove
+        finding = NonConformance.objects.create(
+            tenant=tenant_a, source="audit", audit=quality_audit_a, location=location_a,
+            quantity_affected=Decimal("3"), title="Training records incomplete", description="D",
+            detected_on=timezone.localdate())
+        resp = self._disposition(client_a, finding, quantity="3")
+        assert resp.status_code == 200
+        finding.refresh_from_db()
+        assert finding.disposition == "scrap"
+        assert finding.status == "dispositioned"
+        assert StockMove.objects.count() == 0
+
+    def test_a_scrap_with_no_location_records_the_decision_and_says_why(self, client_a, tenant_a,
+                                                                       item_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance, StockMove
+        ncr = NonConformance.objects.create(
+            tenant=tenant_a, source="internal", item=item_a, quantity_affected=Decimal("5"),
+            title="No location", description="D", detected_on=timezone.localdate())
+        resp = self._disposition(client_a, ncr)
+        assert any("No location is recorded" in m for m in _messages(resp))
+        assert StockMove.objects.count() == 0
+
+    def test_every_NON_scrap_disposition_posts_nothing(self, client_a, tenant_a, item_a,
+                                                       location_a, uom_each_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance, StockMove
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "100", "8.0000")
+        before = StockMove.objects.count()
+        for disposition in ("use_as_is", "rework", "repair", "return_to_vendor", "regrade"):
+            ncr = NonConformance.objects.create(
+                tenant=tenant_a, source="internal", item=item_a, location=location_a,
+                uom=uom_each_a, quantity_affected=Decimal("5"), title=disposition,
+                description="D", detected_on=timezone.localdate())
+            self._disposition(client_a, ncr, disposition=disposition)
+            ncr.refresh_from_db()
+            assert ncr.disposition == disposition
+            assert _quality_moves(ncr).count() == 0, disposition
+        assert StockMove.objects.count() == before
+
+    def test_a_return_to_vendor_says_the_RMA_is_a_410_document(self, client_a, tenant_a,
+                                                               nonconformance_a):
+        resp = self._disposition(client_a, nonconformance_a, disposition="return_to_vendor")
+        assert any("4.10 Returns Management document" in m for m in _messages(resp))
+
+    def test_a_closed_report_is_refused(self, client_a, nonconformance_a):
+        from apps.scm.models import NonConformance
+        NonConformance.objects.filter(pk=nonconformance_a.pk).update(status="closed")
+        resp = self._disposition(client_a, nonconformance_a, disposition="use_as_is")
+        assert any("reopen it first" in m for m in _messages(resp))
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.disposition == "pending"
+
+    def test_a_junk_quantity_is_a_message_not_a_500(self, client_a, tenant_a, nonconformance_a,
+                                                    item_a, location_a):
+        from apps.scm.models import StockMove
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "100", "8.0000")
+        for junk in ("NaN", "Infinity", "-Infinity", "abc", "-1", "9" * 20, ""):
+            resp = self._disposition(client_a, nonconformance_a, quantity=junk)
+            assert resp.status_code == 200, junk
+            nonconformance_a.refresh_from_db()
+            assert nonconformance_a.disposition == "pending", junk
+        assert not _quality_moves(nonconformance_a).exists()
+        assert StockMove.objects.filter(move_type="adjustment").count() == 0
+
+    def test_a_junk_disposition_choice_is_a_message_not_a_500(self, client_a, nonconformance_a):
+        resp = self._disposition(client_a, nonconformance_a, disposition="delete-everything")
+        assert resp.status_code == 200
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.disposition == "pending"
+
+    def test_a_LOT_scrap_draws_against_that_lot_only(self, client_a, tenant_a,
+                                                     nonconformance_lot_a, item_lot_a, lot_a,
+                                                     location_a):
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_lot_a, location_a, "50", "1.0000")   # into NO lot
+        resp = self._disposition(client_a, nonconformance_lot_a, quantity="4")
+        assert any(lot_a.number in m and "cannot move" in m for m in _messages(resp))
+        assert _quality_moves(nonconformance_lot_a).count() == 0
+        move = seed_stock(tenant_a, item_lot_a, location_a, "10", "1.0000")
+        move.lot_serial = lot_a
+        move.save(update_fields=["lot_serial"])
+        self._disposition(client_a, nonconformance_lot_a, quantity="4")
+        posted = _quality_moves(nonconformance_lot_a)
+        assert posted.count() == 1
+        assert posted.first().lot_serial_id == lot_a.pk
+
+
+# ================================================================ NCR quarantine posts NOTHING
+class TestNonConformanceQuarantine:
+    def test_quarantine_flips_the_lot_and_posts_NO_stock_move(self, client_a,
+                                                              nonconformance_lot_a, lot_a):
+        from apps.scm.models import StockMove
+        resp = client_a.post(reverse("scm:nonconformance_quarantine",
+                                     args=[nonconformance_lot_a.pk]), follow=True)
+        assert any("No stock movement was posted" in m for m in _messages(resp))
+        lot_a.refresh_from_db()
+        nonconformance_lot_a.refresh_from_db()
+        assert lot_a.status == "quarantine"
+        assert nonconformance_lot_a.quarantine_applied is True
+        assert StockMove.objects.count() == 0
+
+    def test_release_restores_available_and_clears_the_flag(self, client_a, nonconformance_lot_a,
+                                                            lot_a):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:nonconformance_quarantine", args=[nonconformance_lot_a.pk]))
+        client_a.post(reverse("scm:nonconformance_release_lot", args=[nonconformance_lot_a.pk]))
+        lot_a.refresh_from_db()
+        nonconformance_lot_a.refresh_from_db()
+        assert lot_a.status == "available"
+        assert nonconformance_lot_a.quarantine_applied is False
+        assert StockMove.objects.count() == 0
+
+    def test_a_report_with_no_lot_says_so(self, client_a, nonconformance_a):
+        resp = client_a.post(reverse("scm:nonconformance_quarantine",
+                                     args=[nonconformance_a.pk]), follow=True)
+        assert any("names no lot or serial" in m for m in _messages(resp))
+
+    def test_a_double_quarantine_is_refused(self, client_a, nonconformance_lot_a):
+        client_a.post(reverse("scm:nonconformance_quarantine", args=[nonconformance_lot_a.pk]))
+        resp = client_a.post(reverse("scm:nonconformance_quarantine",
+                                     args=[nonconformance_lot_a.pk]), follow=True)
+        assert any("cannot be quarantined" in m for m in _messages(resp))
+
+
+# ================================================================ NCR lifecycle + raise CAPA
+class TestNonConformanceLifecycle:
+    def test_investigate_then_close_through_a_disposition(self, client_a, nonconformance_a):
+        client_a.post(reverse("scm:nonconformance_investigate", args=[nonconformance_a.pk]))
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.status == "investigating"
+        client_a.post(reverse("scm:nonconformance_disposition", args=[nonconformance_a.pk]),
+                      {"disposition": "use_as_is", "disposition_quantity": "5"})
+        client_a.post(reverse("scm:nonconformance_close", args=[nonconformance_a.pk]))
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.status == "closed"
+        assert nonconformance_a.closed_on is not None
+
+    def test_close_is_refused_straight_from_open(self, client_a, nonconformance_a):
+        resp = client_a.post(reverse("scm:nonconformance_close", args=[nonconformance_a.pk]),
+                             follow=True)
+        assert any("can't be closed from open" in m for m in _messages(resp))
+
+    def test_close_is_refused_while_the_disposition_is_still_pending(self, client_a,
+                                                                    nonconformance_a):
+        from apps.scm.models import NonConformance
+        NonConformance.objects.filter(pk=nonconformance_a.pk).update(status="dispositioned")
+        resp = client_a.post(reverse("scm:nonconformance_close", args=[nonconformance_a.pk]),
+                             follow=True)
+        assert any("Record a disposition before closing" in m for m in _messages(resp))
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.status == "dispositioned"
+
+    def test_cancel_from_open(self, client_a, nonconformance_a):
+        client_a.post(reverse("scm:nonconformance_cancel", args=[nonconformance_a.pk]))
+        nonconformance_a.refresh_from_db()
+        assert nonconformance_a.status == "cancelled"
+
+    def test_raise_capa_proposes_ONE_corrective_action(self, client_a, tenant_a,
+                                                       nonconformance_a):
+        from apps.scm.models import CapaAction
+        resp = client_a.post(reverse("scm:nonconformance_raise_capa",
+                                     args=[nonconformance_a.pk]), follow=True)
+        capa = CapaAction.objects.get(tenant=tenant_a)
+        assert capa.source == "nonconformance"
+        assert capa.nonconformance_id == nonconformance_a.pk
+        assert capa.action_type == "corrective"
+        assert capa.priority == "high"     # severity major
+        assert capa.status == "open"
+        assert any(capa.number in m for m in _messages(resp))
+        again = client_a.post(reverse("scm:nonconformance_raise_capa",
+                                      args=[nonconformance_a.pk]), follow=True)
+        assert any("was already raised from this report" in m for m in _messages(again))
+        assert CapaAction.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_raise_capa_is_refused_from_a_CANCELLED_report(self, client_a, tenant_a,
+                                                           nonconformance_a):
+        from apps.scm.models import CapaAction
+        client_a.post(reverse("scm:nonconformance_cancel", args=[nonconformance_a.pk]))
+        resp = client_a.post(reverse("scm:nonconformance_raise_capa",
+                                     args=[nonconformance_a.pk]), follow=True)
+        assert any("there is nothing to correct" in m for m in _messages(resp))
+        assert CapaAction.objects.filter(tenant=tenant_a).count() == 0
+
+
+# ================================================================ CapaAction CRUD
+class TestCapaActionCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, capa_action_a):
+        resp = client_a.get(reverse("scm:capaaction_list"))
+        assert resp.status_code == 200
+        assert capa_action_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, capa_action_a, capa_action_b):
+        resp = client_a.get(reverse("scm:capaaction_list"))
+        assert capa_action_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, capa_action_a):
+        resp = client_a.get(reverse("scm:capaaction_list"))
+        assert "scm/quality/capaaction/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "type_choices",
+                    "priority_choices", "source_choices", "items", "owners", "suppliers",
+                    "stats"):
+            assert key in resp.context, key
+
+    def test_the_open_task_count_is_ANNOTATED_on_the_list(self, client_a, capa_action_a):
+        resp = client_a.get(reverse("scm:capaaction_list"))
+        row = next(r for r in resp.context["object_list"] if r.pk == capa_action_a.pk)
+        assert row.open_tasks == 1
+
+    def test_list_search_and_filters(self, client_a, capa_action_a, item_a):
+        found = client_a.get(reverse("scm:capaaction_list"), {"q": "length gauge"})
+        assert capa_action_a in found.context["object_list"]
+        by_status = client_a.get(reverse("scm:capaaction_list"), {"status": "closed"})
+        assert capa_action_a not in by_status.context["object_list"]
+        by_item = client_a.get(reverse("scm:capaaction_list"), {"item": str(item_a.pk)})
+        assert capa_action_a in by_item.context["object_list"]
+
+    def test_the_item_filter_actually_narrows(self, client_a, tenant_a, capa_action_a,
+                                             component_bolt_a):
+        """`items` was in extra_context without the filter tuple — the dropdown rendered but
+        selecting an item did nothing, and an empty result looks like real data."""
+        resp = client_a.get(reverse("scm:capaaction_list"),
+                            {"item": str(component_bolt_a.pk)})
+        assert capa_action_a not in resp.context["object_list"]
+
+    def test_create_saves_the_header_and_its_tasks(self, client_a, tenant_a):
+        from apps.scm.models import CapaAction
+        resp = client_a.post(reverse("scm:capaaction_create"),
+                             _capa_view_payload([_task_row(), _task_row(sequence="20",
+                                                                       description="Second")]))
+        assert resp.status_code == 302
+        capa = CapaAction.objects.get(tenant=tenant_a, title="New action")
+        assert capa.number.startswith("CAPA-")
+        assert capa.tasks.count() == 2
+
+    def test_create_validates_a_task_against_the_SUBMITTED_parent_due_date(self, client_a,
+                                                                          tenant_a):
+        """formset.instance = form.instance before is_valid(): on create the formset would otherwise
+        validate against an empty CapaAction() whose due_date is None (the 4.8 BOM-form bug)."""
+        from django.utils import timezone
+        from apps.scm.models import CapaAction
+        due = timezone.localdate() + datetime.timedelta(days=5)
+        late = (due + datetime.timedelta(days=5)).isoformat()
+        resp = client_a.post(reverse("scm:capaaction_create"),
+                             _capa_view_payload([_task_row(due_date=late)],
+                                                due_date=due.isoformat()))
+        assert resp.status_code == 200
+        assert not CapaAction.objects.filter(tenant=tenant_a, title="New action").exists()
+
+    def test_edit_updates_the_header(self, client_a, capa_action_a):
+        resp = client_a.post(reverse("scm:capaaction_edit", args=[capa_action_a.pk]),
+                             _capa_view_payload(title="Renamed action"))
+        assert resp.status_code == 302
+        capa_action_a.refresh_from_db()
+        assert capa_action_a.title == "Renamed action"
+
+    def test_edit_is_refused_once_awaiting_verification(self, client_a, capa_action_a):
+        from apps.scm.models import CapaAction
+        CapaAction.objects.filter(pk=capa_action_a.pk).update(status="pending_verification")
+        resp = client_a.get(reverse("scm:capaaction_edit", args=[capa_action_a.pk]), follow=True)
+        assert any("can no longer be edited" in m for m in _messages(resp))
+
+    def test_detail_renders_every_documented_context_key(self, client_a, capa_action_a):
+        resp = client_a.get(reverse("scm:capaaction_detail", args=[capa_action_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/capaaction/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "tasks", "open_task_count", "verification_form"):
+            assert key in resp.context, key
+        assert resp.context["open_task_count"] == 1
+
+    def test_delete_is_post_only_and_a_get_never_deletes(self, client_a, capa_action_a):
+        from apps.scm.models import CapaAction
+        assert client_a.get(reverse("scm:capaaction_delete",
+                                    args=[capa_action_a.pk])).status_code == 405
+        assert CapaAction.objects.filter(pk=capa_action_a.pk).exists()
+
+    def test_delete_removes_an_open_action(self, client_a, capa_action_a):
+        from apps.scm.models import CapaAction
+        assert client_a.post(reverse("scm:capaaction_delete",
+                                     args=[capa_action_a.pk])).status_code == 302
+        assert not CapaAction.objects.filter(pk=capa_action_a.pk).exists()
+
+    def test_delete_is_refused_once_awaiting_verification(self, client_a, capa_action_a):
+        from apps.scm.models import CapaAction
+        CapaAction.objects.filter(pk=capa_action_a.pk).update(status="pending_verification")
+        resp = client_a.post(reverse("scm:capaaction_delete", args=[capa_action_a.pk]),
+                             follow=True)
+        assert any("cancel it instead" in m for m in _messages(resp))
+        assert CapaAction.objects.filter(pk=capa_action_a.pk).exists()
+
+
+# ================================================================ CAPA ladder + verification
+class TestCapaActionLifecycle:
+    def test_start_then_progress_walks_the_ladder(self, client_a, capa_action_a):
+        client_a.post(reverse("scm:capaaction_start", args=[capa_action_a.pk]))
+        capa_action_a.refresh_from_db()
+        assert capa_action_a.status == "investigating"
+        client_a.post(reverse("scm:capaaction_progress", args=[capa_action_a.pk]))
+        capa_action_a.refresh_from_db()
+        assert capa_action_a.status == "in_progress"
+
+    def test_implement_is_refused_from_the_wrong_status(self, client_a, capa_action_a):
+        resp = client_a.post(reverse("scm:capaaction_implement", args=[capa_action_a.pk]),
+                             follow=True)
+        assert any("can't be implemented from open" in m for m in _messages(resp))
+
+    def test_implement_is_refused_without_a_root_cause(self, client_a, capa_action_a):
+        from apps.scm.models import CapaAction
+        CapaAction.objects.filter(pk=capa_action_a.pk).update(status="in_progress")
+        resp = client_a.post(reverse("scm:capaaction_implement", args=[capa_action_a.pk]),
+                             follow=True)
+        assert any("Record the root cause" in m for m in _messages(resp))
+        capa_action_a.refresh_from_db()
+        assert capa_action_a.status == "in_progress"
+
+    def test_implement_is_refused_without_an_effectiveness_due_date(self, client_a,
+                                                                    capa_in_progress_a):
+        from apps.scm.models import CapaAction
+        CapaAction.objects.filter(pk=capa_in_progress_a.pk).update(effectiveness_due_date=None)
+        resp = client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]),
+                             follow=True)
+        assert any("Set the effectiveness due date" in m for m in _messages(resp))
+
+    def test_implement_is_REFUSED_while_a_task_is_still_open(self, client_a, capa_in_progress_a):
+        resp = client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]),
+                             follow=True)
+        assert any("task(s) on the action plan are still open" in m for m in _messages(resp))
+        capa_in_progress_a.refresh_from_db()
+        assert capa_in_progress_a.status == "in_progress"
+        assert capa_in_progress_a.implemented_on is None
+
+    def test_implement_succeeds_once_every_task_is_done(self, client_a, capa_in_progress_a):
+        from django.utils import timezone
+        capa_in_progress_a.tasks.update(status="done")
+        client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]))
+        capa_in_progress_a.refresh_from_db()
+        assert capa_in_progress_a.status == "pending_verification"
+        assert capa_in_progress_a.implemented_on == timezone.localdate()
+
+    def test_an_EFFECTIVE_verification_closes_the_record(self, client_a, capa_in_progress_a,
+                                                         employee_party_a):
+        from django.utils import timezone
+        capa_in_progress_a.tasks.update(status="done")
+        client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]))
+        client_a.post(reverse("scm:capaaction_verify", args=[capa_in_progress_a.pk]),
+                      {"effectiveness_result": "effective",
+                       "verified_by": str(employee_party_a.pk),
+                       "verified_on": timezone.localdate().isoformat(),
+                       "verification_notes": "No recurrence in 45 days."})
+        capa_in_progress_a.refresh_from_db()
+        assert capa_in_progress_a.status == "closed"
+        assert capa_in_progress_a.effectiveness_result == "effective"
+        assert capa_in_progress_a.verified_by_id == employee_party_a.pk
+        assert capa_in_progress_a.closed_on is not None
+        assert capa_in_progress_a.verification_notes == "No recurrence in 45 days."
+
+    def test_a_NOT_EFFECTIVE_verification_returns_it_to_INVESTIGATING(self, client_a,
+                                                                      capa_in_progress_a):
+        """A fix that did not work is new information about the root cause, not a filing error."""
+        capa_in_progress_a.tasks.update(status="done")
+        client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]))
+        resp = client_a.post(reverse("scm:capaaction_verify", args=[capa_in_progress_a.pk]),
+                             {"effectiveness_result": "not_effective",
+                              "verification_notes": "The drift came back in week 3."},
+                             follow=True)
+        assert any("back at investigating" in m for m in _messages(resp))
+        capa_in_progress_a.refresh_from_db()
+        assert capa_in_progress_a.status == "investigating"
+        assert capa_in_progress_a.effectiveness_result == "not_effective"
+        assert capa_in_progress_a.closed_on is None
+        assert capa_in_progress_a.verification_notes == "The drift came back in week 3."
+
+    def test_verify_is_refused_before_the_action_is_implemented(self, client_a,
+                                                               capa_in_progress_a):
+        resp = client_a.post(reverse("scm:capaaction_verify", args=[capa_in_progress_a.pk]),
+                             {"effectiveness_result": "effective"}, follow=True)
+        assert any("only an action awaiting verification" in m for m in _messages(resp))
+        capa_in_progress_a.refresh_from_db()
+        assert capa_in_progress_a.effectiveness_result == "pending"
+
+    def test_a_junk_verification_payload_is_a_message_not_a_500(self, client_a,
+                                                               capa_in_progress_a):
+        capa_in_progress_a.tasks.update(status="done")
+        client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]))
+        resp = client_a.post(reverse("scm:capaaction_verify", args=[capa_in_progress_a.pk]),
+                             {"effectiveness_result": "sort-of", "verified_on": "9999-99-99"},
+                             follow=True)
+        assert resp.status_code == 200
+        capa_in_progress_a.refresh_from_db()
+        assert capa_in_progress_a.status == "pending_verification"
+
+    def test_cancel_works_from_every_live_status(self, client_a, capa_action_a):
+        client_a.post(reverse("scm:capaaction_cancel", args=[capa_action_a.pk]))
+        capa_action_a.refresh_from_db()
+        assert capa_action_a.status == "cancelled"
+
+    def test_no_capa_action_ever_posts_stock(self, client_a, capa_in_progress_a):
+        from apps.scm.models import StockMove
+        capa_in_progress_a.tasks.update(status="done")
+        client_a.post(reverse("scm:capaaction_implement", args=[capa_in_progress_a.pk]))
+        client_a.post(reverse("scm:capaaction_verify", args=[capa_in_progress_a.pk]),
+                      {"effectiveness_result": "effective"})
+        assert StockMove.objects.count() == 0
+
+
+# ================================================================ QualityAudit CRUD
+class TestQualityAuditCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, quality_audit_a):
+        resp = client_a.get(reverse("scm:qualityaudit_list"))
+        assert resp.status_code == 200
+        assert quality_audit_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, quality_audit_a, quality_audit_b):
+        resp = client_a.get(reverse("scm:qualityaudit_list"))
+        assert quality_audit_b not in resp.context["object_list"]
+
+    def test_the_list_annotations_do_NOT_shadow_the_model_properties(self, client_a, tenant_a,
+                                                                     quality_audit_a):
+        """`major_count`/`minor_count` are read-only @propertys — an annotation of the same name is
+        a hard 'AttributeError: can't set attribute' 500 on every page load."""
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        for severity in ("critical", "minor"):
+            NonConformance.objects.create(tenant=tenant_a, source="audit", audit=quality_audit_a,
+                                          severity=severity, title=severity, description="D",
+                                          detected_on=timezone.localdate())
+        resp = client_a.get(reverse("scm:qualityaudit_list"))
+        assert resp.status_code == 200
+        row = next(r for r in resp.context["object_list"] if r.pk == quality_audit_a.pk)
+        assert (row.major_count_agg, row.minor_count_agg) == (1, 1)
+        assert row.has_open_finding is True
+        assert (row.major_count, row.minor_count) == (1, 1)
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, quality_audit_a):
+        resp = client_a.get(reverse("scm:qualityaudit_list"))
+        assert "scm/quality/qualityaudit/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "type_choices", "status_choices",
+                    "risk_choices", "auditors", "stats"):
+            assert key in resp.context, key
+
+    def test_list_search_and_filters(self, client_a, quality_audit_a):
+        found = client_a.get(reverse("scm:qualityaudit_list"), {"q": "ISO 9001"})
+        assert quality_audit_a in found.context["object_list"]
+        by_type = client_a.get(reverse("scm:qualityaudit_list"), {"audit_type": "supplier"})
+        assert quality_audit_a not in by_type.context["object_list"]
+        by_risk = client_a.get(reverse("scm:qualityaudit_list"), {"risk_level": "medium"})
+        assert quality_audit_a in by_risk.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a, org_unit_a):
+        from apps.scm.models import QualityAudit
+        resp = client_a.post(reverse("scm:qualityaudit_create"), _qa_view_payload(org_unit_a))
+        assert resp.status_code == 302
+        audit = QualityAudit.objects.get(tenant=tenant_a, title="New audit")
+        assert audit.number.startswith("QA-")
+        assert audit.status == "planned"
+
+    def test_an_audit_is_EDITABLE_while_in_progress_so_the_conclusion_can_be_written(
+        self, client_a, quality_audit_a, org_unit_a,
+    ):
+        """Locking the header at `start` made the normal path unreachable — `complete` refuses a
+        blank conclusion and the conclusion is written AFTER the audit has been run."""
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        assert client_a.get(reverse("scm:qualityaudit_edit",
+                                    args=[quality_audit_a.pk])).status_code == 200
+        resp = client_a.post(reverse("scm:qualityaudit_edit", args=[quality_audit_a.pk]),
+                             _qa_view_payload(org_unit_a, title=quality_audit_a.title,
+                                              conclusion="Two minor findings."))
+        assert resp.status_code == 302
+        quality_audit_a.refresh_from_db()
+        assert quality_audit_a.conclusion == "Two minor findings."
+        assert quality_audit_a.status == "in_progress"
+
+    def test_an_in_progress_audit_is_NOT_deletable(self, client_a, quality_audit_a):
+        from apps.scm.models import QualityAudit
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        resp = client_a.post(reverse("scm:qualityaudit_delete", args=[quality_audit_a.pk]),
+                             follow=True)
+        assert any("Only a planned audit can be deleted" in m for m in _messages(resp))
+        assert QualityAudit.objects.filter(pk=quality_audit_a.pk).exists()
+
+    def test_edit_is_refused_once_reported(self, client_a, reported_audit_a):
+        resp = client_a.get(reverse("scm:qualityaudit_edit", args=[reported_audit_a.pk]),
+                            follow=True)
+        assert any("can no longer be edited" in m for m in _messages(resp))
+
+    def test_detail_renders_every_documented_context_key(self, client_a, quality_audit_a):
+        resp = client_a.get(reverse("scm:qualityaudit_detail", args=[quality_audit_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/qualityaudit/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "checklist", "findings", "major_count", "minor_count",
+                    "open_finding_count", "capa_actions", "finding_form"):
+            assert key in resp.context, key
+        assert len(resp.context["checklist"]) == 2
+
+    def test_the_print_page_renders(self, client_a, reported_audit_a):
+        resp = client_a.get(reverse("scm:qualityaudit_print", args=[reported_audit_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/quality/qualityaudit/report.html" in [t.name for t in resp.templates]
+        for key in ("obj", "checklist", "findings", "major_count", "minor_count", "printed_at"):
+            assert key in resp.context, key
+
+    def test_delete_is_post_only_and_removes_a_planned_audit(self, client_a, quality_audit_a):
+        from apps.scm.models import QualityAudit
+        assert client_a.get(reverse("scm:qualityaudit_delete",
+                                    args=[quality_audit_a.pk])).status_code == 405
+        assert client_a.post(reverse("scm:qualityaudit_delete",
+                                     args=[quality_audit_a.pk])).status_code == 302
+        assert not QualityAudit.objects.filter(pk=quality_audit_a.pk).exists()
+
+    def test_delete_is_refused_while_the_audit_has_findings(self, client_a, tenant_a,
+                                                            quality_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance, QualityAudit
+        NonConformance.objects.create(tenant=tenant_a, source="audit", audit=quality_audit_a,
+                                      title="T", description="D",
+                                      detected_on=timezone.localdate())
+        resp = client_a.post(reverse("scm:qualityaudit_delete", args=[quality_audit_a.pk]),
+                             follow=True)
+        assert any("has findings and cannot be deleted" in m for m in _messages(resp))
+        assert QualityAudit.objects.filter(pk=quality_audit_a.pk).exists()
+
+
+# ================================================================ Audit lifecycle + findings
+class TestQualityAuditLifecycle:
+    def test_start_stamps_the_actual_start(self, client_a, quality_audit_a):
+        from django.utils import timezone
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        quality_audit_a.refresh_from_db()
+        assert quality_audit_a.status == "in_progress"
+        assert quality_audit_a.actual_start == timezone.localdate()
+
+    def test_complete_refuses_a_blank_conclusion(self, client_a, quality_audit_a):
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        resp = client_a.post(reverse("scm:qualityaudit_complete", args=[quality_audit_a.pk]),
+                             follow=True)
+        assert any("Write the audit conclusion" in m for m in _messages(resp))
+        quality_audit_a.refresh_from_db()
+        assert quality_audit_a.status == "in_progress"
+
+    def test_complete_reports_the_audit_once_the_conclusion_is_written(self, client_a,
+                                                                      quality_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityAudit
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        QualityAudit.objects.filter(pk=quality_audit_a.pk).update(conclusion="Conforming.")
+        client_a.post(reverse("scm:qualityaudit_complete", args=[quality_audit_a.pk]))
+        quality_audit_a.refresh_from_db()
+        assert quality_audit_a.status == "reported"
+        assert quality_audit_a.actual_end == timezone.localdate()
+
+    def test_close_is_REFUSED_while_a_finding_is_still_open(self, client_a, tenant_a,
+                                                           reported_audit_a):
+        """An audit closed over live findings is a clean report that hides open work."""
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        NonConformance.objects.create(tenant=tenant_a, source="audit", audit=reported_audit_a,
+                                      severity="major", title="Open finding", description="D",
+                                      detected_on=timezone.localdate())
+        resp = client_a.post(reverse("scm:qualityaudit_close", args=[reported_audit_a.pk]),
+                             follow=True)
+        assert any("finding(s) are still open" in m for m in _messages(resp))
+        reported_audit_a.refresh_from_db()
+        assert reported_audit_a.status == "reported"
+
+    def test_close_succeeds_once_every_finding_is_closed(self, client_a, tenant_a,
+                                                         reported_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        finding = NonConformance.objects.create(
+            tenant=tenant_a, source="audit", audit=reported_audit_a, severity="minor",
+            title="Closed finding", description="D", detected_on=timezone.localdate())
+        NonConformance.objects.filter(pk=finding.pk).update(status="closed")
+        client_a.post(reverse("scm:qualityaudit_close", args=[reported_audit_a.pk]))
+        reported_audit_a.refresh_from_db()
+        assert reported_audit_a.status == "closed"
+
+    def test_cancel_from_planned(self, client_a, quality_audit_a):
+        client_a.post(reverse("scm:qualityaudit_cancel", args=[quality_audit_a.pk]))
+        quality_audit_a.refresh_from_db()
+        assert quality_audit_a.status == "cancelled"
+
+    def test_a_finding_IS_a_NonConformance_with_source_audit(self, client_a, tenant_a,
+                                                             quality_audit_a, employee_party_a):
+        """This view is the ONLY creator of source="audit" rows — which is what makes that choice
+        value truthful rather than decorative. There is no QualityAuditFinding table."""
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        resp = client_a.post(reverse("scm:qualityaudit_add_finding", args=[quality_audit_a.pk]),
+                             {"title": "Training records incomplete",
+                              "description": "Three operators have no signed record.",
+                              "severity": "major", "defect_category": "documentation",
+                              "owner": str(employee_party_a.pk), "due_date": ""}, follow=True)
+        finding = NonConformance.objects.get(tenant=tenant_a)
+        assert finding.source == "audit"
+        assert finding.audit_id == quality_audit_a.pk
+        assert finding.item_id is None
+        assert finding.status == "open"
+        assert finding.number.startswith("NCR-")
+        assert finding.detected_by_id == quality_audit_a.lead_auditor_id
+        assert finding.detected_on == timezone.localdate()
+        assert any(finding.number in m for m in _messages(resp))
+
+    def test_a_finding_is_refused_before_the_audit_is_started(self, client_a, tenant_a,
+                                                              quality_audit_a):
+        from apps.scm.models import NonConformance
+        resp = client_a.post(reverse("scm:qualityaudit_add_finding", args=[quality_audit_a.pk]),
+                             {"title": "T", "description": "D", "severity": "minor",
+                              "defect_category": "documentation"}, follow=True)
+        assert any("Start the audit before recording findings" in m for m in _messages(resp))
+        assert NonConformance.objects.count() == 0
+
+    def test_a_junk_finding_payload_is_a_message_not_a_500(self, client_a, tenant_a,
+                                                           quality_audit_a):
+        from apps.scm.models import NonConformance
+        client_a.post(reverse("scm:qualityaudit_start", args=[quality_audit_a.pk]))
+        resp = client_a.post(reverse("scm:qualityaudit_add_finding", args=[quality_audit_a.pk]),
+                             {"title": "", "description": "", "severity": "catastrophic",
+                              "defect_category": "nope", "due_date": "9999-99-99"}, follow=True)
+        assert resp.status_code == 200
+        assert NonConformance.objects.count() == 0
+
+    def test_no_audit_action_ever_posts_stock(self, client_a, quality_audit_a):
+        from apps.scm.models import StockMove
+        for name in ("start", "complete", "close", "cancel"):
+            client_a.post(reverse(f"scm:qualityaudit_{name}", args=[quality_audit_a.pk]))
+        assert StockMove.objects.count() == 0
+
+
+# ================================================================ PROTECT delete guards from 4.9
+class TestInventoryDeleteGuardsProtectedBy49:
+    def test_item_delete_with_a_DRAFT_stock_adjustment_line_refuses_cleanly(self, client_a,
+                                                                            item_a,
+                                                                            stock_adjustment_a):
+        """An item on a DRAFT adjustment line has NO StockMove rows, so it cleared every .exists()
+        guard and produced an uncaught ProtectedError — a 500 on a mainline CRUD path."""
+        from apps.scm.models import Item
+        resp = client_a.post(reverse("scm:item_delete", args=[item_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("still referenced by" in m for m in _messages(resp))
+        assert Item.objects.filter(pk=item_a.pk).exists()
+
+    def test_item_delete_with_a_49_inspection_refuses_cleanly(self, client_a, item_a,
+                                                              quality_inspection_a):
+        from apps.scm.models import Item
+        resp = client_a.post(reverse("scm:item_delete", args=[item_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("quality inspection" in m for m in _messages(resp))
+        assert Item.objects.filter(pk=item_a.pk).exists()
+
+    def test_item_delete_with_a_49_nonconformance_refuses_cleanly(self, client_a, item_a,
+                                                                  nonconformance_a):
+        from apps.scm.models import Item
+        resp = client_a.post(reverse("scm:item_delete", args=[item_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("non conformance" in m.lower() or "nonconformance" in m.lower()
+                   for m in _messages(resp))
+        assert Item.objects.filter(pk=item_a.pk).exists()
+
+    def test_location_delete_with_a_49_inspection_refuses_cleanly(self, client_a, location_a,
+                                                                  quality_inspection_a):
+        from apps.scm.models import Location
+        resp = client_a.post(reverse("scm:location_delete", args=[location_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("still referenced by" in m for m in _messages(resp))
+        assert Location.objects.filter(pk=location_a.pk).exists()
+
+    def test_location_delete_with_a_49_nonconformance_refuses_cleanly(self, client_a, location_a,
+                                                                      nonconformance_a):
+        from apps.scm.models import Location
+        resp = client_a.post(reverse("scm:location_delete", args=[location_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("still referenced by" in m for m in _messages(resp))
+        assert Location.objects.filter(pk=location_a.pk).exists()
+
+    def test_lotserial_delete_with_a_49_inspection_refuses_cleanly(self, client_a, lot_a,
+                                                                   outgoing_inspection_a):
+        from apps.scm.models import LotSerial
+        resp = client_a.post(reverse("scm:lotserial_delete", args=[lot_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("still referenced by" in m for m in _messages(resp))
+        assert LotSerial.objects.filter(pk=lot_a.pk).exists()
+
+    def test_lotserial_delete_with_a_49_nonconformance_refuses_cleanly(self, client_a, lot_a,
+                                                                       nonconformance_lot_a):
+        from apps.scm.models import LotSerial
+        resp = client_a.post(reverse("scm:lotserial_delete", args=[lot_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("still referenced by" in m for m in _messages(resp))
+        assert LotSerial.objects.filter(pk=lot_a.pk).exists()
+
+    def test_an_unreferenced_lot_still_deletes(self, client_a, tenant_a, item_lot_a):
+        from apps.scm.models import LotSerial
+        spare = LotSerial.objects.create(tenant=tenant_a, item=item_lot_a, kind="lot",
+                                         number="LOT-9999")
+        assert client_a.post(reverse("scm:lotserial_delete", args=[spare.pk])).status_code == 302
+        assert not LotSerial.objects.filter(pk=spare.pk).exists()
+
+
+# ================================================================================================
+# Negative-input hardening (L11 junk FK filters / L9 pagination) — 200, never a 500.
+# ================================================================================================
+class TestQualityNegativeInputHardening:
+    LIST_ROUTES = ("scm:inspectionplan_list", "scm:qualityinspection_list",
+                   "scm:nonconformance_list", "scm:capaaction_list", "scm:qualityaudit_list",
+                   "scm:coa_report")
+
+    def test_every_list_survives_a_junk_item_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"item": "abc"}).status_code == 200, name
+
+    def test_every_list_survives_a_junk_status_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"status": "nope"}).status_code == 200, name
+
+    def test_every_list_survives_a_junk_date_window(self, client_a, quality_inspection_a,
+                                                    nonconformance_a, capa_action_a,
+                                                    quality_audit_a):
+        params = {"date_from": "not-a-date", "date_to": "9999-99-99"}
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), params).status_code == 200, name
+
+    def test_every_list_survives_a_page_past_the_end(self, client_a, inspection_plan_a,
+                                                     quality_inspection_a, nonconformance_a,
+                                                     capa_action_a, quality_audit_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"page": "999"}).status_code == 200, name
+
+    def test_every_list_survives_a_non_numeric_page(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"page": "abc"}).status_code == 200, name
+
+    def test_every_list_survives_the_whole_junk_query_string_at_once(self, client_a):
+        params = {"q": "'; DROP TABLE scm_qualityinspection; --", "status": "nope",
+                  "item": "abc", "supplier": "-1", "owner": "NaN", "inspector": "1.5",
+                  "page": "9999", "severity": "junk", "source": "junk", "disposition": "junk",
+                  "defect_category": "junk", "usage_decision": "junk",
+                  "inspection_type": "junk", "plan_type": "junk", "sampling_method": "junk",
+                  "is_active": "abc", "item_category": "abc", "audit_type": "junk",
+                  "risk_level": "junk", "lead_auditor": "abc", "action_type": "junk",
+                  "priority": "junk", "overdue": "maybe", "coa_state": "junk",
+                  "customer": "abc", "date_from": "lastweek", "date_to": "0000-00-00"}
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), params).status_code == 200, name
+
+    def test_each_list_returns_page_2_beyond_the_page_size(self, client_a, tenant_a, item_a,
+                                                          org_unit_a):
+        from django.utils import timezone
+        from apps.scm.models import (CapaAction, InspectionPlan, NonConformance, QualityAudit,
+                                     QualityInspection)
+        today = timezone.localdate()
+        for i in range(20):
+            InspectionPlan.objects.create(tenant=tenant_a, code=f"BULK-{i}", name=f"P{i}",
+                                          item=item_a)
+            QualityInspection.objects.create(tenant=tenant_a, item=item_a, inspected_on=today)
+            NonConformance.objects.create(tenant=tenant_a, item=item_a,
+                                          quantity_affected=Decimal("1"), title=f"N{i}",
+                                          description="D", detected_on=today)
+            CapaAction.objects.create(tenant=tenant_a, title=f"C{i}", problem_statement="P")
+            QualityAudit.objects.create(tenant=tenant_a, title=f"A{i}", planned_date=today,
+                                        auditee_org_unit=org_unit_a)
+        for name in self.LIST_ROUTES[:-1]:
+            resp = client_a.get(reverse(name), {"page": "2"})
+            assert resp.status_code == 200, name
+            assert resp.context["page_obj"].number == 2, name
+            assert len(resp.context["object_list"]) == 5, name
+
+    def test_a_junk_pk_in_the_url_is_a_404_not_a_500(self, client_a):
+        for name in ("scm:inspectionplan_detail", "scm:qualityinspection_detail",
+                     "scm:nonconformance_detail", "scm:capaaction_detail",
+                     "scm:qualityaudit_detail", "scm:qualityaudit_print", "scm:coa_print"):
+            assert client_a.get(reverse(name, args=[999999])).status_code == 404, name
+
+    def test_the_inspection_form_rejects_junk_quantities_without_500ing(self, client_a, tenant_a,
+                                                                        item_a):
+        from apps.scm.models import QualityInspection
+        for junk in ("NaN", "Infinity", "-Infinity", "abc", "-5", "9" * 20):
+            resp = client_a.post(reverse("scm:qualityinspection_create"),
+                                 _qc_view_payload(item_a, quantity_inspected=junk))
+            assert resp.status_code == 200, junk
+        assert not QualityInspection.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_ncr_form_rejects_junk_costs_without_500ing(self, client_a, tenant_a, item_a):
+        from apps.scm.models import NonConformance
+        for junk in ("NaN", "Infinity", "abc", "-1", "9" * 20):
+            resp = client_a.post(reverse("scm:nonconformance_create"),
+                                 _ncr_view_payload(item_a, cost_of_quality=junk))
+            assert resp.status_code == 200, junk
+        assert not NonConformance.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_plan_form_rejects_junk_sampling_numbers_without_500ing(self, client_a, tenant_a,
+                                                                        item_a):
+        from apps.scm.models import InspectionPlan
+        for junk in ("NaN", "Infinity", "abc", "-1", "101", "9" * 20):
+            resp = client_a.post(reverse("scm:inspectionplan_create"),
+                                 _plan_view_payload(item_a, [_char_row()],
+                                                    sampling_method="percentage",
+                                                    sample_percentage=junk))
+            assert resp.status_code == 200, junk
+        assert not InspectionPlan.objects.filter(tenant=tenant_a, code="NEW-1").exists()
+
+    def test_the_result_formset_rejects_a_junk_measured_value(self, client_a,
+                                                             quality_inspection_a, item_a,
+                                                             inspection_plan_a):
+        quality_inspection_a.generate_results()
+        rows = list(quality_inspection_a.results.order_by("sequence"))
+        payload = _qc_view_payload(item_a, [_result_row(row) for row in rows],
+                                   initial=len(rows), plan=str(inspection_plan_a.pk))
+        payload["results-0-measured_value"] = "Infinity"
+        resp = client_a.post(reverse("scm:qualityinspection_edit",
+                                     args=[quality_inspection_a.pk]), payload)
+        assert resp.status_code == 200
+        rows[0].refresh_from_db()
+        assert rows[0].measured_value is None
+
+    def test_a_junk_pk_on_every_mutating_route_is_a_404(self, client_a):
+        for name in ("scm:qualityinspection_start", "scm:qualityinspection_complete",
+                     "scm:qualityinspection_generate_results", "scm:qualityinspection_delete",
+                     "scm:nonconformance_investigate", "scm:nonconformance_close",
+                     "scm:capaaction_start", "scm:capaaction_implement",
+                     "scm:qualityaudit_start", "scm:qualityaudit_close"):
+            assert client_a.post(reverse(name, args=[999999])).status_code == 404, name
+
+
+# ================================================================================================
+# Query-count regression guards — the MEASURED post-fix budgets
+# ================================================================================================
+def _quality_query_count(client, url, params=None):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(url, params or {})
+    assert resp.status_code == 200
+    return len(ctx.captured_queries)
+
+
+def _seed_coa_register(tenant, item, count, *, start=0):
+    """``count`` outgoing inspections, each with two CoA-flagged result rows."""
+    for _ in range(start, start + count):
+        _outgoing(tenant, item, rows=[(True, "pass"), (True, "pass")])
+
+
+class TestQualityQueryCounts:
+    def test_inspectionplan_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, category_a,
+                                                   supplier_a, uom_each_a,
+                                                   django_assert_max_num_queries):
+        from apps.scm.models import InspectionCharacteristic, InspectionPlan
+        for i in range(10):
+            plan = InspectionPlan.objects.create(tenant=tenant_a, code=f"NP-{i}", name=f"P{i}",
+                                                 item=item_a, item_category=category_a,
+                                                 supplier=supplier_a)
+            InspectionCharacteristic.objects.create(plan=plan, name="C",
+                                                    characteristic_type="pass_fail")
+        with django_assert_max_num_queries(14):
+            assert client_a.get(reverse("scm:inspectionplan_list")).status_code == 200
+
+    def test_qualityinspection_list_has_no_n_plus_one(self, client_a, tenant_a, item_lot_a, lot_a,
+                                                      location_a, supplier_a, employee_party_a,
+                                                      outgoing_plan_a,
+                                                      django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        for _ in range(10):
+            QualityInspection.objects.create(
+                tenant=tenant_a, plan=outgoing_plan_a, inspection_type="outgoing",
+                item=item_lot_a, lot_serial=lot_a, location=location_a, supplier=supplier_a,
+                inspector=employee_party_a, inspected_on=timezone.localdate())
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:qualityinspection_list")).status_code == 200
+
+    def test_qualityaudit_list_has_no_n_plus_one(self, client_a, tenant_a, org_unit_a,
+                                                employee_party_a, audit_checklist_plan_a,
+                                                supplier_a, django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance, QualityAudit
+        for i in range(10):
+            audit = QualityAudit.objects.create(
+                tenant=tenant_a, title=f"A{i}", planned_date=timezone.localdate(),
+                auditee_org_unit=org_unit_a, auditee_party=supplier_a,
+                checklist_plan=audit_checklist_plan_a, lead_auditor=employee_party_a)
+            NonConformance.objects.create(tenant=tenant_a, source="audit", audit=audit,
+                                          severity="major", title=f"F{i}", description="D",
+                                          detected_on=timezone.localdate())
+        with django_assert_max_num_queries(13):
+            assert client_a.get(reverse("scm:qualityaudit_list")).status_code == 200
+
+    def test_nonconformance_list_has_no_n_plus_one(self, client_a, tenant_a, item_lot_a, lot_a,
+                                                   location_a, supplier_a, employee_party_a,
+                                                   quality_inspection_a, quality_audit_a,
+                                                   django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        for i in range(10):
+            NonConformance.objects.create(
+                tenant=tenant_a, source="inspection", inspection=quality_inspection_a,
+                audit=quality_audit_a, item=item_lot_a, lot_serial=lot_a, location=location_a,
+                supplier=supplier_a, owner=employee_party_a, quantity_affected=Decimal("1"),
+                title=f"N{i}", description="D", detected_on=timezone.localdate())
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:nonconformance_list")).status_code == 200
+
+    def test_capaaction_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, supplier_a,
+                                               employee_party_a, nonconformance_a,
+                                               quality_audit_a, django_assert_max_num_queries):
+        from apps.scm.models import CapaAction, CapaTask
+        for i in range(10):
+            capa = CapaAction.objects.create(
+                tenant=tenant_a, title=f"C{i}", problem_statement="P", item=item_a,
+                supplier=supplier_a, owner=employee_party_a, nonconformance=nonconformance_a,
+                audit=quality_audit_a)
+            CapaTask.objects.create(capa=capa, description="T", owner=employee_party_a)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:capaaction_list")).status_code == 200
+
+    def test_coa_report_has_no_n_plus_one(self, client_a, tenant_a, item_a,
+                                          django_assert_max_num_queries):
+        _seed_coa_register(tenant_a, item_a, 10)
+        with django_assert_max_num_queries(14):
+            assert client_a.get(reverse("scm:coa_report")).status_code == 200
+
+    def test_coa_report_is_SCALE_INVARIANT(self, client_a, tenant_a, item_a):
+        """The one that matters: coa_blockers() reads every result row, once per page row. Without
+        the Prefetch being CONSUMED by _result_rows(), the register fires one InspectionResult
+        SELECT per listed inspection — the only page in 4.9 whose query count grew with the page."""
+        url = reverse("scm:coa_report")
+        _seed_coa_register(tenant_a, item_a, 5)
+        client_a.get(url)                                  # warm any process-level caches
+        before = _quality_query_count(client_a, url)
+        _seed_coa_register(tenant_a, item_a, 5, start=100)  # double the register
+        after = _quality_query_count(client_a, url)
+        assert after == before, f"{before} -> {after} queries when the register doubled"
+
+    def test_inspectionplan_detail_resolves_its_panels_once(self, client_a, inspection_plan_a,
+                                                            quality_inspection_a,
+                                                            django_assert_max_num_queries):
+        with django_assert_max_num_queries(12):
+            assert client_a.get(reverse("scm:inspectionplan_detail",
+                                        args=[inspection_plan_a.pk])).status_code == 200
+
+    def test_qualityinspection_detail_reads_the_result_rows_ONCE(self, client_a,
+                                                                 outgoing_inspection_a,
+                                                                 django_assert_max_num_queries):
+        """The verdict, the four counters, the CoA list and every one of the seven blockers share
+        ONE query through _result_rows() — eight before it was cached."""
+        with django_assert_max_num_queries(12):
+            assert client_a.get(reverse("scm:qualityinspection_detail",
+                                        args=[outgoing_inspection_a.pk])).status_code == 200
+
+    def test_nonconformance_detail_resolves_its_panels_once(self, client_a, nonconformance_lot_a,
+                                                            django_assert_max_num_queries):
+        with django_assert_max_num_queries(12):
+            assert client_a.get(reverse("scm:nonconformance_detail",
+                                        args=[nonconformance_lot_a.pk])).status_code == 200
+
+    def test_capaaction_detail_counts_its_tasks_in_memory(self, client_a, capa_action_a,
+                                                          django_assert_max_num_queries):
+        with django_assert_max_num_queries(12):
+            assert client_a.get(reverse("scm:capaaction_detail",
+                                        args=[capa_action_a.pk])).status_code == 200
+
+    def test_qualityaudit_detail_counts_its_findings_in_memory(self, client_a, tenant_a,
+                                                               quality_audit_a,
+                                                               django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        for i in range(5):
+            NonConformance.objects.create(tenant=tenant_a, source="audit", audit=quality_audit_a,
+                                          severity="major", title=f"F{i}", description="D",
+                                          detected_on=timezone.localdate())
+        with django_assert_max_num_queries(12):
+            assert client_a.get(reverse("scm:qualityaudit_detail",
+                                        args=[quality_audit_a.pk])).status_code == 200
+
+    def test_qualityaudit_detail_is_scale_invariant_in_its_findings(self, client_a, tenant_a,
+                                                                    quality_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+
+        def _raise(count):
+            for i in range(count):
+                NonConformance.objects.create(tenant=tenant_a, source="audit",
+                                              audit=quality_audit_a, severity="minor",
+                                              title=f"F{i}", description="D",
+                                              detected_on=timezone.localdate())
+
+        url = reverse("scm:qualityaudit_detail", args=[quality_audit_a.pk])
+        _raise(5)
+        client_a.get(url)
+        before = _quality_query_count(client_a, url)
+        _raise(5)
+        assert _quality_query_count(client_a, url) == before
+
+    def test_the_inspection_form_page_does_not_query_per_option(self, client_a, tenant_a, item_a,
+                                                                item_lot_a, lot_a, location_a,
+                                                                supplier_a, employee_party_a,
+                                                                inspection_plan_a, shipment_a,
+                                                                goods_receipt_a, work_order_a,
+                                                                django_assert_max_num_queries):
+        with django_assert_max_num_queries(30):
+            assert client_a.get(reverse("scm:qualityinspection_create")).status_code == 200
+
+
+# ================================================================ Create guarded without a tenant
+class TestQualityCreateWithoutTenantWorkspace:
+    def _orphan_client(self, suffix):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email=f"orphan-qms{suffix}@example.com",
+                                        username=f"orphan_qms{suffix}", password="x", tenant=None)
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def test_inspectionplan_create_redirects(self, db):
+        from apps.scm.models import InspectionPlan
+        assert self._orphan_client("1").get(
+            reverse("scm:inspectionplan_create")).status_code == 302
+        assert InspectionPlan.objects.count() == 0
+
+    def test_qualityinspection_create_redirects(self, db):
+        from apps.scm.models import QualityInspection
+        assert self._orphan_client("2").get(
+            reverse("scm:qualityinspection_create")).status_code == 302
+        assert QualityInspection.objects.count() == 0
+
+    def test_nonconformance_create_redirects(self, db):
+        from apps.scm.models import NonConformance
+        assert self._orphan_client("3").get(
+            reverse("scm:nonconformance_create")).status_code == 302
+        assert NonConformance.objects.count() == 0
+
+    def test_capaaction_create_redirects(self, db):
+        from apps.scm.models import CapaAction
+        assert self._orphan_client("4").get(reverse("scm:capaaction_create")).status_code == 302
+        assert CapaAction.objects.count() == 0
+
+    def test_qualityaudit_create_redirects(self, db):
+        from apps.scm.models import QualityAudit
+        assert self._orphan_client("5").get(reverse("scm:qualityaudit_create")).status_code == 302
+        assert QualityAudit.objects.count() == 0
+
+    def test_the_coa_register_still_renders_empty(self, db):
+        assert self._orphan_client("6").get(reverse("scm:coa_report")).status_code == 200
+
+
+# ================================================================ The form PAGES themselves (GET)
+class TestQualityFormPagesRender:
+    def test_the_plan_form_renders_one_blank_characteristic_row(self, client_a):
+        resp = client_a.get(reverse("scm:inspectionplan_create"))
+        assert resp.status_code == 200
+        assert "scm/quality/inspectionplan/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+        assert resp.context["obj"] is None
+        assert resp.context["formset"].total_form_count() == 1
+
+    def test_the_plan_edit_page_renders_the_saved_characteristics(self, client_a,
+                                                                  inspection_plan_a):
+        resp = client_a.get(reverse("scm:inspectionplan_edit", args=[inspection_plan_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+        assert resp.context["formset"].total_form_count() == 4   # 3 saved + 1 extra
+
+    def test_the_inspection_form_renders_NO_blank_result_row(self, client_a):
+        """extra=0: result rows are snapshotted from the plan, never hand-added."""
+        resp = client_a.get(reverse("scm:qualityinspection_create"))
+        assert resp.status_code == 200
+        assert "scm/quality/qualityinspection/form.html" in [t.name for t in resp.templates]
+        assert resp.context["formset"].total_form_count() == 0
+
+    def test_the_inspection_edit_page_renders_exactly_the_saved_rows(self, client_a,
+                                                                     quality_inspection_a):
+        quality_inspection_a.generate_results()
+        resp = client_a.get(reverse("scm:qualityinspection_edit",
+                                    args=[quality_inspection_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["formset"].total_form_count() == 3
+
+    def test_the_ncr_and_audit_form_pages_render(self, client_a, nonconformance_a,
+                                                 quality_audit_a):
+        for create_name, edit_name, obj, template in (
+            ("scm:nonconformance_create", "scm:nonconformance_edit", nonconformance_a,
+             "scm/quality/nonconformance/form.html"),
+            ("scm:qualityaudit_create", "scm:qualityaudit_edit", quality_audit_a,
+             "scm/quality/qualityaudit/form.html"),
+        ):
+            create = client_a.get(reverse(create_name))
+            assert create.status_code == 200, create_name
+            assert template in [t.name for t in create.templates], template
+            assert create.context["is_edit"] is False
+            edit = client_a.get(reverse(edit_name, args=[obj.pk]))
+            assert edit.status_code == 200, edit_name
+            assert edit.context["obj"] == obj
+
+    def test_the_capa_form_pages_render_with_one_extra_task_row(self, client_a, capa_action_a):
+        create = client_a.get(reverse("scm:capaaction_create"))
+        assert create.status_code == 200
+        assert "scm/quality/capaaction/form.html" in [t.name for t in create.templates]
+        assert create.context["formset"].total_form_count() == 1
+        edit = client_a.get(reverse("scm:capaaction_edit", args=[capa_action_a.pk]))
+        assert edit.context["formset"].total_form_count() == 2   # 1 saved + 1 extra
