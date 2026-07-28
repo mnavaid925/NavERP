@@ -32,7 +32,7 @@
         {{ formset.management_form }}
         {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
         <table class="table">
-          <thead><tr><th>Seq</th><th>Characteristic</th><th>Type</th><th>Specification</th><th>Test method</th><th>Flags</th><th>Measured value</th><th>Observed text</th><th>Verdict</th><th>Notes</th><th>Remove</th></tr></thead>
+          <thead><tr><th>Seq</th><th>Characteristic</th><th>Type</th><th>Specification</th><th>Test method</th><th>Flags</th><th>Measured value</th><th>Observed text</th><th>Verdict</th><th>Notes</th></tr></thead>
           <tbody>
             {% for sf in formset %}
               <tr>
@@ -59,10 +59,9 @@
                 <td>{{ sf.text_value }}{% for e in sf.text_value.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ sf.result }}{% for e in sf.result.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
                 <td>{{ sf.notes }}</td>
-                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="11"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No results yet</h3><p>Result rows are snapshotted from the inspection plan, never hand-added — there is no blank row here on purpose. Name a plan above and save, or use <span class="fw-600">Generate results</span> on the detail page.</p></div></td></tr>
+              <tr><td colspan="10"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No results yet</h3><p>Result rows are snapshotted from the inspection plan, never hand-added — there is no blank row here on purpose. Name a plan above and save, or use <span class="fw-600">Generate results</span> on the detail page.</p></div></td></tr>
             {% endfor %}
           </tbody>
         </table>
