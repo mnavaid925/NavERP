@@ -37,9 +37,15 @@ def next_number(model, tenant, prefix, width=5, field="number"):
     concurrency — acceptable for the seed/admin workloads here; an app-wide hardening
     (select_for_update / sequence table) is tracked as a cross-module follow-up.
     """
+    # Ordered by the NUMBER FIELD, not by -id. Both agree while the field is allocated at row
+    # creation (the `number` case), but a field stamped LATER — SCM 4.9's `coa_number`, issued long
+    # after the inspection row exists — is not in id order, so `-id` reads the highest-id certified
+    # row rather than the highest certificate and re-mints a number already in use. The filter pins
+    # a single prefix and the suffix is zero-padded to a fixed width, so lexicographic ordering on
+    # the field IS numeric ordering here.
     last = (
         model.objects.filter(tenant=tenant, **{f"{field}__startswith": f"{prefix}-"})
-        .order_by("-id")
+        .order_by(f"-{field}")
         .first()
     )
     seq = 1
