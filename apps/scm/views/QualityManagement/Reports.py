@@ -38,6 +38,12 @@ def coa_report(request):
                           "shipment__sales_order__customer", "coa_issued_to", "inspector")
           .annotate(has_failing_result=Exists(included.filter(result="fail")),
                     has_pending_result=Exists(included.filter(result="pending")))
+          # coa_blockers() reads every result row, once per page row. Without this the register
+          # fires one InspectionResult SELECT per listed inspection — the only page in 4.9 whose
+          # query count grew with the page. _result_rows() is prefetch-aware, so this is consumed
+          # rather than discarded.
+          .prefetch_related(Prefetch("results",
+                                     queryset=InspectionResult.objects.select_related("uom")))
           .order_by("-inspected_on", "-id"))
 
     q = request.GET.get("q", "").strip()
@@ -54,17 +60,25 @@ def coa_report(request):
     state = request.GET.get("coa_state", "").strip()
     if state == "issued":
         qs = qs.exclude(coa_number="")
+    # Both branches encode SIX of coa_blockers()'s seven rules — the seventh ("only an outgoing
+    # inspection can certify") is already the queryset's own `inspection_type="outgoing"` filter,
+    # so the SQL and the per-row verdict now agree. They did not before: with only four rules here,
+    # an inspection missing its lot, or with nothing flagged for the certificate, passed the
+    # `ready` filter and was then badged "Blocked" by the row-level check — and dropped out of
+    # `blocked` entirely. On the register whose whole job is a trustworthy answer, that is the
+    # answer being wrong.
     elif state == "blocked":
-        # "Blocked" as SQL can see it: not yet certified and something the database knows about is
-        # wrong. The full seven-rule verdict is per-row (coa_blockers below) — this narrows the
-        # page, it does not replace the rule.
         qs = qs.filter(coa_number="").filter(
             Q(has_failing_result=True) | Q(has_pending_result=True)
-            | ~Q(status="passed") | ~Q(usage_decision__in=QualityInspection.ACCEPTING_DECISIONS))
+            | ~Q(status="passed") | ~Q(usage_decision__in=QualityInspection.ACCEPTING_DECISIONS)
+            | (Q(lot_serial__isnull=True) & ~Q(item__tracking="none"))
+            | ~Exists(included))
     elif state == "ready":
-        qs = qs.filter(coa_number="", status="passed",
-                       usage_decision__in=QualityInspection.ACCEPTING_DECISIONS,
-                       has_failing_result=False, has_pending_result=False)
+        qs = (qs.filter(coa_number="", status="passed",
+                        usage_decision__in=QualityInspection.ACCEPTING_DECISIONS,
+                        has_failing_result=False, has_pending_result=False)
+                .exclude(Q(lot_serial__isnull=True) & ~Q(item__tracking="none"))
+                .filter(Exists(included)))
     qs = _date_window(qs, request.GET, "inspected_on")
 
     page_obj = paginate(request, qs)
@@ -127,12 +141,12 @@ def coa_issue(request, pk):
         # catch a collision. Re-check explicitly instead — a certificate is a customer-facing
         # document and two of them sharing a number is not something to discover later.
         candidate = next_number(QualityInspection, request.tenant, "COA", field="coa_number")
-        taken = set(QualityInspection.objects
-                    .filter(tenant=request.tenant, coa_number__startswith="COA-")
-                    .values_list("coa_number", flat=True))
-        while candidate in taken:
-            sequence = int(candidate.rsplit("-", 1)[1]) + 1
-            candidate = f"COA-{sequence:05d}"
+        # An indexed probe per candidate (scm_qc_tnt_coa_idx), not the whole column pulled into a
+        # set — this runs inside a transaction holding select_for_update, so the cheaper question
+        # matters. Same belt-and-braces answer, asked properly.
+        while QualityInspection.objects.filter(tenant=request.tenant,
+                                               coa_number=candidate).exists():
+            candidate = f"COA-{int(candidate.rsplit('-', 1)[1]) + 1:05d}"
         obj.coa_number = candidate
         # The form bounds `issued_on` to 2000-2100, so combining it into an aware datetime here
         # cannot overflow the way an unbounded 9999-12-31 did in 4.8.
