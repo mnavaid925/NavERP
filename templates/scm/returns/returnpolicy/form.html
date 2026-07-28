@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Return Policy{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Return Policy</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returnpolicy_list' %}">Return Policies</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.name }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      {% comment %}
+        Each paragraph below states a rule the form's own clean() enforces, so the note a configurer
+        reads and the validation that refuses their save cannot drift apart. The grade-ladder
+        paragraph is the one that matters most: it is the only place in the application where a
+        condition grade becomes money.
+      {% endcomment %}
+      <p>
+        <span class="fw-600">The window.</span> The basis decides which date the clock runs from. A delivery basis falls through to the fallback far more often than it looks — the delivery stamp on a sales order is a manual human action, so on most orders it is simply never set and the clock runs from the order date over the fallback window instead. A zero-day window on <span class="fw-600">both</span> the basis and the fallback accepts no return at all, and the save is refused. Turning on <span class="fw-600">delivery confirmation required</span> will refuse a lot of honest returns for exactly the same reason — that stamp is nobody's habit.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">The money.</span> A percentage refund basis needs a percentage above zero, a configured restocking fee needs a value above zero, and a percentage fee cannot exceed 100% — all three are refused on the form. The fee is netted <span class="fw-600">inside</span> the credit note as a negative line, so a fee that meets or exceeds the value of the return would produce a credit note that can never be posted or paid; the settlement action refuses to draft one and asks for the fee to be raised separately in Accounting.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">The grade ladder is the whole reason this table exists.</span> A returned unit is posted back into stock at its grade's percentage of the item's average cost — never at what the customer paid, which would roll the item's weighted average up toward the selling price and overstate inventory value. The ladder should fall as condition falls; a B-grade worth more than an A-grade is flagged on the field, because it would write returns <span class="fw-600">up</span> in value. The figure is seeded once onto the bench row and is human-owned from then on.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">Selection and precedence.</span> A category-specific policy beats a blanket one, the lowest priority number wins among equals, and the default flag is the last resort. <span class="fw-600">Auto-approve never approves anything</span> — it pre-ticks the approval form, and every approval still stamps who pressed it. The <span class="fw-600">return-to address</span> is free text because a warehouse location in this application has no address field; it is what the return slip prints.
+      </p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:returnpolicy_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
