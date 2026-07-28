@@ -173,3 +173,32 @@ from .QualityManagement.CapaActions import (  # noqa: F401
     CapaAction,
     CapaTask,
 )
+
+# 4.10 Returns Management (Reverse Logistics)
+# ReturnReasons FIRST — it owns the shared DISPOSITION_CHOICES vocabulary that ReturnDispositions
+# imports, and ReturnAuthorizations imports CREDIT_BEARING_DISPOSITIONS from it too. The dependency
+# runs one way (ReturnReasons imports none of its siblings), so there is no cycle. ReturnPolicies
+# before ReturnAuthorizations for readability — the RMA snapshots a policy verdict — and
+# WarrantyClaims last because a claim can point at an RMA.
+from .ReturnsManagement.ReturnReasons import (  # noqa: F401
+    ReturnReason,
+    DISPOSITION_CHOICES,
+    DECIDED_DISPOSITION_CHOICES,
+    CREDIT_BEARING_DISPOSITIONS,
+)
+from .ReturnsManagement.ReturnPolicies import (  # noqa: F401
+    ReturnPolicy,
+    select_policy,
+    evaluate_return_eligibility,
+)
+from .ReturnsManagement.ReturnAuthorizations import (  # noqa: F401
+    ReturnAuthorization,
+    ReturnLine,
+)
+from .ReturnsManagement.ReturnDispositions import (  # noqa: F401
+    ReturnDisposition,
+)
+from .ReturnsManagement.WarrantyClaims import (  # noqa: F401
+    WarrantyClaim,
+    WarrantyClaimCost,
+)
