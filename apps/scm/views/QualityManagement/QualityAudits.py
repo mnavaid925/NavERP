@@ -20,10 +20,14 @@ def qualityaudit_list(request):
     qs = (QualityAudit.objects.filter(tenant=request.tenant)
           .select_related("auditee_party", "auditee_org_unit", "checklist_plan", "lead_auditor")
           .annotate(
-              major_count=Count("findings", distinct=True,
-                                filter=Q(findings__severity__in=QualityAudit.MAJOR_SEVERITIES)),
-              minor_count=Count("findings", distinct=True,
-                                filter=~Q(findings__severity__in=QualityAudit.MAJOR_SEVERITIES)),
+              # `_agg` suffixes: `major_count`/`minor_count` are read-only @propertys on the model,
+              # and Django cannot set an annotation onto a property when instantiating each row —
+              # the list page 500s with "AttributeError: can't set attribute". Check the model
+              # before naming any annotation.
+              major_count_agg=Count("findings", distinct=True,
+                                    filter=Q(findings__severity__in=QualityAudit.MAJOR_SEVERITIES)),
+              minor_count_agg=Count("findings", distinct=True,
+                                    filter=~Q(findings__severity__in=QualityAudit.MAJOR_SEVERITIES)),
               # "Any still open?" is a yes/no on the row and the close guard's own test — Exists
               # stops at the first match where a third Count would widen the GROUP BY.
               has_open_finding=Exists(
