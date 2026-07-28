@@ -82,6 +82,11 @@ def item_delete(request, pk):
     # SalesOrderLine.item. That miss was reachable — an item on a DRAFT stock-adjustment line has
     # no StockMove rows, so it cleared every guard above and 500'd. `lotserial_delete`'s comment
     # predicted exactly this staleness; this is the same shape it uses.
+    #
+    # Re-verified when 4.10 Returns Management landed: `ReturnLine.item` and `WarrantyClaim.item`
+    # are two NEW PROTECT references onto this model. Neither needs a line of code here, because
+    # this guard asks the database rather than a list somebody has to remember to extend — which is
+    # exactly the property the enumeration above lacked.
     try:
         with transaction.atomic():
             return crud_delete(request, model=Item, pk=pk, success_url="scm:item_list")
