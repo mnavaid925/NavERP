@@ -59,8 +59,9 @@ REQUISITION_LINES = [
 
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality demo "
-            "data — idempotent (skips a tenant that already has the rows each pass creates).")
+            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
+            "4.10 returns demo data — idempotent (skips a tenant that already has the rows each "
+            "pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -106,11 +107,16 @@ class Command(BaseCommand):
             # shipments and 4.8's work orders, and it scraps real lot-tracked stock through the
             # ledger — so every one of those must already exist.
             self._seed_quality_tenant(tenant)
+            # 4.10 LAST OF ALL: it returns goods against 4.5's sales orders, grades them on a
+            # bench location from 4.3, restocks one through the REAL posting path (the only 4.10
+            # ledger write), drafts a credit note against 4.2's accounting spine and raises a
+            # warranty claim on a 4.1 supplier — so every one of those must already exist.
+            self._seed_returns_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality seed "
-            "complete."))
+            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
+            "4.10 returns seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -883,7 +889,46 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.9 Quality FIRST (newest sub-module). QualityInspection.item/lot_serial/location and
+        # 4.10 Returns FIRST (newest sub-module), and the ORDER inside it is forced by PROTECT:
+        #
+        #   WarrantyClaim.supplier/item are PROTECT onto core.Party and 4.3's Item, and
+        #   WarrantyClaim.return_authorization is SET_NULL onto the RMA — so claims go before both
+        #   the RMAs and the 4.3 masters at the bottom of this method. Costs cascade from the claim
+        #   but are deleted explicitly so the intent reads top-down.
+        #
+        #   ReturnDisposition.location is PROTECT onto Location and ReturnLine.item/reason are
+        #   PROTECT onto Item and ReturnReason — so dispositions go before lines, lines before
+        #   reasons, and the whole tree before 4.3's masters.
+        #
+        #   ReturnAuthorization.customer is PROTECT onto core.Party, .policy is PROTECT onto
+        #   ReturnPolicy and .currency is PROTECT onto accounting.Currency — so RMAs go before
+        #   policies. Currency is a GLOBAL master this seeder never deletes, so nothing more is
+        #   needed there.
+        #
+        # The draft CREDIT NOTES this seeder raised are reachable only through
+        # ReturnAuthorization.credit_note (SET_NULL), so they must go BEFORE the RMAs or every
+        # --flush cycle strands another set of orphans in Accounts Receivable — the same
+        # orphan-avoidance the GRN and freight blocks do. Scoped to invoices actually linked to a
+        # return, so a hand-entered credit note is never touched.
+        #
+        # The `receipt` StockMove a restock posted carries no FK to 4.10 — only the RMA number as
+        # free text — so it is already covered by StockMove.objects.all().delete() further down.
+        from apps.accounting.models import Invoice as _AccInvoice
+        from apps.scm.models import (ReturnAuthorization, ReturnDisposition, ReturnLine,
+                                     ReturnPolicy, ReturnReason, WarrantyClaim, WarrantyClaimCost)
+        return_credit_notes = _AccInvoice.objects.filter(
+            scm_return_authorizations__isnull=False).distinct()
+        return_credit_count = return_credit_notes.count()
+        return_credit_notes.delete()
+        WarrantyClaimCost.objects.all().delete()
+        WarrantyClaim.objects.all().delete()
+        ReturnDisposition.objects.all().delete()
+        ReturnLine.objects.all().delete()
+        ReturnAuthorization.objects.all().delete()
+        ReturnPolicy.objects.all().delete()
+        ReturnReason.objects.all().delete()
+
+        # 4.9 Quality NEXT. QualityInspection.item/lot_serial/location and
         # NonConformance.item/lot_serial/location are PROTECT against the 4.3 masters cleared at
         # the bottom of this method, so the whole 4.9 tree has to go before them. Within the tree:
         # CapaTask/InspectionResult cascade from their parents but are deleted explicitly so the
@@ -1005,8 +1050,9 @@ class Command(BaseCommand):
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
-            f"demand planning + manufacturing + quality rows "
-            f"(+{bill_count + freight_bill_count} linked accounting bill(s))."))
+            f"demand planning + manufacturing + quality + returns rows "
+            f"(+{bill_count + freight_bill_count} linked accounting bill(s), "
+            f"+{return_credit_count} linked credit note(s))."))
 
     def _seed_manufacturing_tenant(self, tenant):
         """4.8 Manufacturing demo: two work centres, a two-level BOM for an assembled bundle, and a
@@ -1497,6 +1543,364 @@ class Command(BaseCommand):
             f"{ncr2.number}/{ncr3.number} ({ncr1.number} scrapped {ncr1.disposition_quantity} "
             f"{ws16.sku} through an adjustment move), CAPAs {capa1.number}/{capa2.number}, "
             f"audits {audit1.number}/{audit2.number}.")
+
+    def _seed_returns_tenant(self, tenant):
+        """4.10 Returns demo: four reason codes, a default policy, three RMAs (one credit-only),
+        a graded bench across three dispositions — one of which posts a REAL written-down restock
+        through the ledger — a drafted credit note and a supplier warranty claim.
+
+        Idempotent via a ``ReturnReason`` guard on the FIRST thing this block writes, NOT on the
+        RMAs: the reasons are plain ``.create()`` calls against a unique ``("tenant", "code")``, so
+        a run that aborted between them and the first RMA would leave a re-run to IntegrityError on
+        a guard that had not yet tripped (the same correction 4.9's seeder already carries).
+
+        Runs LAST — it returns goods against 4.5's sales orders onto 4.3's locations, restocks
+        through 4.3's posting service, drafts against the accounting spine and claims against a
+        4.1 supplier, so every one of those must already exist.
+
+        Everything goes through the SAME code the views run: ``select_policy`` picks the governing
+        policy, ``evaluate_return_eligibility`` produces the verdict that is frozen into
+        ``policy_snapshot``, ``policy.restock_cost_for`` seeds each row's write-down, and the
+        restock posts through ``_post_stock_move`` behind ``_insufficient_stock``. Nothing here
+        hand-sets a field that merely looks plausible.
+        """
+        import json as _json
+
+        from apps.scm.models import (Location, LotSerial, ReturnAuthorization, ReturnDisposition,
+                                     ReturnLine, ReturnPolicy, ReturnReason, SalesOrder,
+                                     SalesOrderLine, WarrantyClaim, WarrantyClaimCost,
+                                     evaluate_return_eligibility, select_policy)
+        from apps.scm.views._helpers import _post_stock_move
+        from apps.scm.models._base import ZERO, q2, q4
+        # Guarded on ReturnReason — the first row this block writes.
+        if ReturnReason.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: returns data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed -------------------------------
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        order = (SalesOrder.objects.filter(tenant=tenant)
+                 .exclude(status="cancelled").order_by("id").first())
+        order_line = (SalesOrderLine.objects.filter(sales_order=order, item__isnull=False)
+                      .select_related("item").order_by("id").first() if order else None)
+        supplier = Party.objects.filter(tenant=tenant,
+                                        name="Northwind Industrial Supply").first()
+        clerk = self._employee(tenant, "Sophia Miller")
+        if any(x is None for x in (main, order, order_line, supplier, clerk)):
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: missing location / sales order with a mapped item / supplier / "
+                "employee party — skipping returns seed."))
+            return
+
+        today = timezone.localdate()
+        item = order_line.item
+        currency = Currency.objects.filter(code="USD").first()
+        category = item.category
+
+        # A dedicated returns bench, so the demo shows the bench being a DIFFERENT place from
+        # sellable stock — which is the whole point of restock_location != location.
+        bench, _ = Location.objects.get_or_create(
+            tenant=tenant, code="WH-RETURNS",
+            defaults={"name": "Returns bench", "location_type": "staging", "parent": main,
+                      "is_active": True, "is_pickable": False})
+
+        # 4.9 flips WS-16 and MON-27 to tracking="lot", and ReturnDisposition.clean() REQUIRES a
+        # lot on a tracked item — returned serialised goods that land in the ledger with no lot are
+        # untraceable and defeat the lot_history panel. So the returned units get their own batch
+        # rather than being folded into 4.9's WS16-2409, which that seeder deliberately leaves
+        # QUARANTINED: restocking into a quarantined lot would silently undo a quality decision.
+        returned_lot = None
+        if item.tracking != "none":
+            returned_lot, _ = LotSerial.objects.get_or_create(
+                tenant=tenant, item=item, number=f"{item.sku}-RET-01",
+                defaults={"kind": "lot", "status": "available",
+                          "notes": "Batch the seeded customer returns came back on."})
+
+        # ---------------------------------------------------------------- 1) the reason master
+        reasons = {}
+        for code, name, fault, kwargs in [
+            ("CHANGED-MIND", "Changed their mind", "customer",
+             {"suggested_disposition": "restock", "allows_repair": False}),
+            ("DAMAGED-TRANSIT", "Arrived damaged", "carrier",
+             {"waives_return_fee": True, "suggested_disposition": "scrap",
+              "requires_photo": False, "raises_nonconformance": True}),
+            ("FAULTY", "Faulty on arrival", "supplier",
+             {"waives_return_fee": True, "allows_repair": True,
+              "suggested_disposition": "return_to_vendor", "raises_nonconformance": True,
+              "follow_up_question": "What happens when you switch it on?"}),
+            ("CONTAMINATED", "Contaminated / unsafe to resell", "unknown",
+             {"waives_return_fee": True, "blocks_restock": True,
+              "suggested_disposition": "scrap", "allows_exchange": False,
+              "raises_nonconformance": True}),
+        ]:
+            reasons[code] = ReturnReason.objects.create(
+                tenant=tenant, code=code, name=name, fault_party=fault,
+                sort_order=10 * (len(reasons) + 1), **kwargs)
+
+        # ---------------------------------------------------------------- 2) the policy
+        policy = ReturnPolicy.objects.create(
+            tenant=tenant, name="Standard 30-day returns", is_active=True, is_default=True,
+            priority=10, item_category=category,
+            window_basis="delivery", window_days=30, fallback_days=45,
+            allow_refund=True, allow_store_credit=True, allow_exchange=True,
+            allow_keep_item=False,
+            refund_basis="full", restocking_fee_type="percent_of_value",
+            restocking_fee_value=Decimal("10.00"), return_shipping_paid_by="by_fault",
+            auto_approve=False,
+            grade_a_cost_pct=Decimal("100"), grade_b_cost_pct=Decimal("75"),
+            grade_c_cost_pct=Decimal("40"), grade_d_cost_pct=ZERO,
+            warranty_window_days=365,
+            return_to_address=("NavERP Returns\nUnit 4, Riverside Industrial Park\n"
+                               "Manchester M17 1WA\nUnited Kingdom"),
+            portal_instructions=("Pack the item in its original box, print the return slip and "
+                                 "attach it to the outside of the parcel. Drop it at any carrier "
+                                 "point within 14 days of your return being approved."))
+        # select_policy is the app's own picker — asking it here means the seed can never produce a
+        # return governed by a policy the app itself would not have chosen.
+        assert select_policy(tenant, item) is not None
+
+        # ------------------------------------- 3) RMA-00001 — the full journey, and the ONE post
+        rma1 = ReturnAuthorization(
+            tenant=tenant, customer=order.customer, sales_order=order, return_type="physical",
+            source="portal", policy=policy, requested_on=today - datetime.timedelta(days=9),
+            resolution="refund", refund_method="original_tender", return_method="mail_prepaid",
+            return_tracking_number="RT-4410-88213", currency=currency,
+            notes="Seeded: customer changed their mind on part of the order.")
+        rma1.save()
+        qty1 = min(Decimal("3"), order_line.quantity_ordered or Decimal("3"))
+        line1 = ReturnLine.objects.create(
+            return_authorization=rma1, sales_order_line=order_line, item=item,
+            description=item.name, quantity_requested=qty1, quantity_approved=qty1,
+            reason=reasons["CHANGED-MIND"], unit_price=order_line.unit_price or ZERO,
+            tax_pct=order_line.tax_pct or ZERO,
+            # What it COST us, never what they paid — restocking at unit_price would roll
+            # Item.average_cost up toward the selling price.
+            unit_cost=q4(item.average_cost or item.standard_cost or ZERO),
+            line_fee=policy.fee_for(q2(qty1 * (order_line.unit_price or ZERO))),
+            lot_serial=returned_lot,
+            condition_reported="Unopened, original packaging.")
+
+        # Approve through the SAME verdict the approve action freezes.
+        verdict = evaluate_return_eligibility(
+            order, item, reasons["CHANGED-MIND"], policy,
+            as_of=rma1.requested_on,
+            line_value=q2(qty1 * (order_line.unit_price or ZERO)))
+        verdict["approved_resolution"] = "refund"
+        # The seeded order carries no delivery stamp (it is a manual human action in 4.5), so the
+        # verdict falls through to the ORDER-DATE fallback window — exactly the case the plan says
+        # will be common, and the demo shows `basis_used` saying so on the detail page.
+        verdict["window_overridden"] = bool(verdict["blockers"])
+        verdict["approved_by_user"] = "seed_scm"
+        verdict["approved_on"] = (today - datetime.timedelta(days=8)).isoformat()
+        rma1.status = "received"
+        rma1.approved_on = today - datetime.timedelta(days=8)
+        rma1.approved_by = clerk
+        rma1.policy_snapshot = _json.dumps(verdict)
+        rma1.customer_shipped_on = today - datetime.timedelta(days=6)
+        rma1.save(update_fields=["status", "approved_on", "approved_by", "policy_snapshot",
+                                 "customer_shipped_on", "updated_at"])
+
+        # Three units back as 2 restock + 1 scrap — the case that justifies the row grain at all.
+        restock_qty = qty1 - Decimal("1") if qty1 > Decimal("1") else qty1
+        scrap_qty = qty1 - restock_qty
+        d_restock = ReturnDisposition.objects.create(
+            tenant=tenant, return_line=line1, quantity=restock_qty,
+            received_on=today - datetime.timedelta(days=3), received_by=clerk, location=bench,
+            lot_serial=returned_lot,
+            condition_grade="b", disposition="restock", restock_location=main,
+            restock_unit_cost=policy.restock_cost_for("b", item.average_cost or ZERO),
+            notes="Light shelf wear; goes back as B-grade at the written-down cost.")
+        # THE ledger write — a POSITIVE `receipt` at the graded cost, carrying the RMA number.
+        # Not `issue` (4.7's demand series negates issues and a positive one would deflate every
+        # forecast) and not `transfer` (the FIFO/LIFO walk excludes transfers, so the write-down
+        # would never become a cost layer).
+        with transaction.atomic():
+            move = _post_stock_move(
+                tenant, item=item, location=main, quantity=restock_qty, move_type="receipt",
+                unit_cost=q4(d_restock.restock_unit_cost), lot_serial=returned_lot,
+                reference=rma1.number, reason="Return restock — grade B",
+                moved_at=timezone.now() - datetime.timedelta(days=3))
+            d_restock.stock_posted = True
+            d_restock.stock_move = move
+            d_restock.decided_on = today - datetime.timedelta(days=3)
+            d_restock.decided_by = clerk
+            d_restock.save(update_fields=["stock_posted", "stock_move", "decided_on", "decided_by",
+                                          "updated_at"])
+        d_scrap = None
+        if scrap_qty > ZERO:
+            # Scrapped STRAIGHT OFF THE BENCH, so it posts NOTHING: the unit never entered stock.
+            # posts_stock is False here for exactly that reason — an executable rule, not a comment.
+            d_scrap = ReturnDisposition.objects.create(
+                tenant=tenant, return_line=line1, quantity=scrap_qty,
+                received_on=today - datetime.timedelta(days=3), received_by=clerk,
+                location=bench, lot_serial=returned_lot,
+                condition_grade="d", disposition="scrap",
+                restock_unit_cost=policy.restock_cost_for("d", item.average_cost or ZERO),
+                decided_on=today - datetime.timedelta(days=3), decided_by=clerk,
+                notes="Crushed corner; unsellable. Posted nothing — it never entered stock.")
+
+        # -------------------------------------- 4) RMA-00002 — the credit-only trap, made visible
+        # This one never gets a bench row, so every queue keyed on "received" would silently drop
+        # it. It exists in the seed so the refund queue's credit_only branch has a live subject.
+        rma2 = ReturnAuthorization(
+            tenant=tenant, customer=order.customer, sales_order=order, return_type="credit_only",
+            source="csr", policy=policy, requested_on=today - datetime.timedelta(days=4),
+            resolution="refund", refund_method="original_tender", return_method="keep_item",
+            currency=currency,
+            notes="Seeded: cheap item, freight costs more than the unit — credit only, no goods "
+                  "coming back.")
+        rma2.save()
+        ReturnLine.objects.create(
+            return_authorization=rma2, sales_order_line=order_line, item=item,
+            description=item.name, quantity_requested=Decimal("1"),
+            quantity_approved=Decimal("1"), reason=reasons["DAMAGED-TRANSIT"],
+            unit_price=order_line.unit_price or ZERO, tax_pct=order_line.tax_pct or ZERO,
+            unit_cost=q4(item.average_cost or ZERO), line_fee=ZERO,
+            lot_serial=returned_lot,
+            condition_reported="Photographed on arrival, box crushed.")
+        rma2.status = "settled"
+        rma2.approved_on = today - datetime.timedelta(days=4)
+        rma2.approved_by = clerk
+        rma2.save(update_fields=["status", "approved_on", "approved_by", "updated_at"])
+
+        # --------------------------------------- 5) the credit note — a DRAFT, and nothing more
+        # Field for field as returnauthorization_draft_credit_note builds it, including the
+        # tax_pct carry-across (without it every refund under-credits the customer by the VAT) and
+        # the NEGATIVE fee line. SCM posts no JournalEntry (L29) and does not issue the note.
+        from apps.accounting.models import Invoice, InvoiceLine
+        subtotal, fee, tax, credit_total = rma1.settlement_figures
+        credit_note = None
+        if credit_total > ZERO and currency is not None:
+            credit_note = Invoice(tenant=tenant, party=rma1.customer, kind="credit_note",
+                                  status="draft", issue_date=today - datetime.timedelta(days=2),
+                                  currency=currency,
+                                  notes=f"Return {rma1.number} · order {order.number}")
+            credit_note.save()
+            for line in rma1.lines.select_related("item"):
+                quantity = line.credit_quantity
+                if quantity <= ZERO:
+                    continue
+                InvoiceLine.objects.create(
+                    invoice=credit_note,
+                    description=f"{line.item.sku} — {line.description} (return {rma1.number})",
+                    quantity=quantity, unit_price=line.unit_price or ZERO,
+                    tax_rate_pct=line.tax_pct or ZERO)
+            if fee > ZERO:
+                InvoiceLine.objects.create(
+                    invoice=credit_note,
+                    description=f"Restocking / handling fee — {rma1.number}",
+                    quantity=Decimal("1"), unit_price=-fee, tax_rate_pct=ZERO)
+            credit_note.recalc_totals()
+            rma1.credit_note = credit_note
+            rma1.refund_subtotal, rma1.fee_total = subtotal, fee
+            rma1.tax_total, rma1.credit_total = tax, credit_total
+            rma1.status = "settled"
+            rma1.save(update_fields=["credit_note", "refund_subtotal", "fee_total", "tax_total",
+                                     "credit_total", "status", "updated_at"])
+
+        # -------------------------- 6) RMA-00003 — still on the bench, so the queue has a subject
+        rma3 = ReturnAuthorization(
+            tenant=tenant, customer=order.customer, sales_order=order, return_type="physical",
+            source="phone", policy=policy, requested_on=today - datetime.timedelta(days=2),
+            resolution="exchange", refund_method="none", return_method="drop_off",
+            dropoff_location=main, currency=currency, advance_refund=True,
+            advance_refund_deadline=today + datetime.timedelta(days=12),
+            notes="Seeded: advance refund given, goods still awaiting disposition.")
+        rma3.save()
+        line3 = ReturnLine.objects.create(
+            return_authorization=rma3, sales_order_line=order_line, item=item,
+            description=item.name, quantity_requested=Decimal("1"),
+            quantity_approved=Decimal("1"), reason=reasons["FAULTY"],
+            unit_price=order_line.unit_price or ZERO, tax_pct=order_line.tax_pct or ZERO,
+            unit_cost=q4(item.average_cost or ZERO), line_fee=ZERO,
+            lot_serial=returned_lot,
+            condition_reported="Will not power on.")
+        rma3.status = "received"
+        rma3.approved_on = today - datetime.timedelta(days=2)
+        rma3.approved_by = clerk
+        rma3.save(update_fields=["status", "approved_on", "approved_by", "updated_at"])
+        d_pending = ReturnDisposition.objects.create(
+            tenant=tenant, return_line=line3, quantity=Decimal("1"),
+            received_on=today - datetime.timedelta(days=1), received_by=clerk, location=bench,
+            lot_serial=returned_lot,
+            condition_grade="c", disposition="received_pending",
+            restock_unit_cost=policy.restock_cost_for("c", item.average_cost or ZERO),
+            notes="On the bench awaiting a decision — deliberately off-ledger until dispositioned.")
+
+        # --------------------------------------------------- 7) the supplier warranty claim
+        # Drafts NOTHING in accounting: accounting.Bill has no `kind` field, so there is no
+        # vendor-credit document to raise. The claim records the amounts and stops.
+        claim = WarrantyClaim(
+            tenant=tenant, supplier=supplier, item=item, quantity_claimed=Decimal("1"),
+            lot_serial=returned_lot, return_authorization=rma3,
+            # Back-dated deliberately rather than taken from the seeded order: 4.5 stamps every
+            # demo order with TODAY's date, so reusing it would put the failure BEFORE the purchase
+            # and make `is_in_warranty` render False on a unit that plainly is in warranty.
+            purchase_date=today - datetime.timedelta(days=120),
+            warranty_start=today - datetime.timedelta(days=120),
+            warranty_end=today + datetime.timedelta(days=245),
+            failure_date=today - datetime.timedelta(days=3),
+            usage_context="Desk use, powered daily.", defect_classification="component",
+            supplier_rma_number="NW-CLM-77120", submission_channel="email",
+            response_due_on=today + datetime.timedelta(days=16),
+            description=(f"Raised from return {rma3.number}. Unit will not power on; customer "
+                         "reports no impact damage."),
+            notes="Seeded warranty claim.")
+        claim.save()
+        for cost_type, description, quantity, unit_amount, approved in [
+            ("part", "Replacement mainboard", Decimal("1"), Decimal("185.00"), Decimal("185.00")),
+            ("labour", "Bench diagnosis and swap (1.5h)", Decimal("1.5"), Decimal("60.00"), ZERO),
+            ("freight", "Return freight to supplier", Decimal("1"), Decimal("24.00"),
+             Decimal("24.00")),
+        ]:
+            WarrantyClaimCost.objects.create(
+                claim=claim, cost_type=cost_type, description=description, quantity=quantity,
+                unit_amount=unit_amount, amount_approved=approved)
+        # The realistic outcome: they accept the part and the freight and refuse the labour. A flat
+        # claim_value column could not express that, which is why the child table exists.
+        claim.status = "partially_approved"
+        claim.submitted_on = today - datetime.timedelta(days=2)
+        claim.responded_on = today - datetime.timedelta(days=1)
+        claim.amount_approved = claim.cost_approved_total
+        claim.supplier_response_notes = (
+            f"[{today - datetime.timedelta(days=1):%Y-%m-%d} Partially approved] Part and freight "
+            "accepted; labour is outside the terms of the supply agreement.")
+        claim.save(update_fields=["status", "submitted_on", "responded_on", "amount_approved",
+                                  "supplier_response_notes", "updated_at"])
+
+        # ---------- 7) RMA-00004 — approved and awaiting the parcel, so the two token pages have a
+        # subject. LABEL_STATUSES is ("approved","awaiting_receipt","partially_received"): without a
+        # seeded RMA in one of them, `returnauthorization_label` — this sub-module's only print page
+        # — 404s for every demo record, and the public status page never offers "I've shipped it".
+        rma4 = ReturnAuthorization(
+            tenant=tenant, customer=order.customer, sales_order=order, return_type="physical",
+            source="portal", policy=policy, requested_on=today - datetime.timedelta(days=1),
+            resolution="refund", refund_method="original_tender", return_method="mail_prepaid",
+            currency=currency,
+            notes="Seeded: approved and awaiting the parcel — the return slip prints for this one.")
+        rma4.save()
+        ReturnLine.objects.create(
+            return_authorization=rma4, sales_order_line=order_line, item=item,
+            description=item.name, quantity_requested=Decimal("1"),
+            quantity_approved=Decimal("1"), reason=reasons["FAULTY"],
+            unit_price=order_line.unit_price or ZERO, tax_pct=order_line.tax_pct or ZERO,
+            unit_cost=q4(item.average_cost or ZERO), line_fee=ZERO,
+            condition_reported="Screen flickers intermittently.")
+        rma4.status = "awaiting_receipt"
+        rma4.approved_on = today - datetime.timedelta(days=1)
+        rma4.approved_by = clerk
+        rma4.save(update_fields=["status", "approved_on", "approved_by", "updated_at"])
+
+        self.stdout.write(
+            f"{tenant.name}: returns — {len(reasons)} reason codes, policy '{policy.name}', "
+            f"RMAs {rma1.number} (restocked {d_restock.quantity} {item.sku} at "
+            f"{d_restock.restock_unit_cost} through a receipt move"
+            + (f", scrapped {d_scrap.quantity} off-ledger" if d_scrap else "")
+            + f"), {rma2.number} [credit-only], {rma3.number} "
+            f"({d_pending.quantity} on the bench awaiting disposition), {rma4.number} "
+            f"[awaiting receipt — its return slip prints], credit note "
+            f"{credit_note.number if credit_note else 'not drafted'}, warranty claim "
+            f"{claim.number} [{claim.get_status_display()}].")
 
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
