@@ -1,7 +1,8 @@
-"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.6.
+"""Seed Supply Chain Management (Module 4) demo data — sub-modules 4.1-4.9.
 
 4.1 Procurement (below), 4.2 Supplier Relationship Management, 4.3 Inventory (the StockMove spine),
-4.4 Warehouse Management, 4.5 Order Management and 4.6 Transportation. The 4.3 pass must run before 4.4 and 4.5, and
+4.4 Warehouse Management, 4.5 Order Management, 4.6 Transportation, 4.7 Demand Planning, 4.8
+Manufacturing and 4.9 Quality Management. The 4.3 pass must run before 4.4 and 4.5, and
 that ordering is load-bearing rather than cosmetic: every putaway/pick/count row and every order
 allocation references the items and locations 4.3 seeds.
 
@@ -58,8 +59,8 @@ REQUISITION_LINES = [
 
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation + 4.7 demand planning demo data — idempotent (skips a tenant that "
-            "already has the rows each pass creates).")
+            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality demo "
+            "data — idempotent (skips a tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -101,10 +102,15 @@ class Command(BaseCommand):
             # 4.8 LAST: it builds a BOM over 4.3's items and CONSUMES their on-hand stock through
             # the real posting path, so every one of those rows must already exist.
             self._seed_manufacturing_tenant(tenant)
+            # 4.9 LAST: it inspects 4.1's goods receipts, 4.3's items/locations/lots, 4.6's
+            # shipments and 4.8's work orders, and it scraps real lot-tracked stock through the
+            # ledger — so every one of those must already exist.
+            self._seed_quality_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
-            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing seed complete."))
+            "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality seed "
+            "complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -877,7 +883,29 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.8 Manufacturing first (newest module). BillOfMaterials.item, BOMLine.component and
+        # 4.9 Quality FIRST (newest sub-module). QualityInspection.item/lot_serial/location and
+        # NonConformance.item/lot_serial/location are PROTECT against the 4.3 masters cleared at
+        # the bottom of this method, so the whole 4.9 tree has to go before them. Within the tree:
+        # CapaTask/InspectionResult cascade from their parents but are deleted explicitly so the
+        # intent reads top-down, CapaAction before NonConformance and NonConformance before
+        # QualityAudit/QualityInspection (those FKs are SET_NULL and would not block, but deleting
+        # children first keeps the order meaningful), and the plans last because the inspections
+        # and audits point at them. The `adjustment` StockMove the NCR scrap posted is already
+        # covered by StockMove.objects.all().delete() further down — it carries no FK to 4.9, only
+        # the NCR number as free text.
+        from apps.scm.models import (CapaAction, CapaTask, InspectionCharacteristic,
+                                     InspectionPlan, InspectionResult, NonConformance,
+                                     QualityAudit, QualityInspection)
+        CapaTask.objects.all().delete()
+        CapaAction.objects.all().delete()
+        NonConformance.objects.all().delete()
+        InspectionResult.objects.all().delete()
+        QualityInspection.objects.all().delete()
+        QualityAudit.objects.all().delete()
+        InspectionCharacteristic.objects.all().delete()
+        InspectionPlan.objects.all().delete()
+
+        # 4.8 Manufacturing next. BillOfMaterials.item, BOMLine.component and
         # WorkOrderComponent.item are all PROTECT against 4.3's items below, and WorkOrder.
         # work_center / ProductionTimeLog.work_center are PROTECT against WorkCenter — so the order
         # here is forced: logs and components (children) → orders → BOMs → centres. The WS-KIT item
@@ -977,7 +1005,7 @@ class Command(BaseCommand):
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
-            f"demand planning + manufacturing rows "
+            f"demand planning + manufacturing + quality rows "
             f"(+{bill_count + freight_bill_count} linked accounting bill(s))."))
 
     def _seed_manufacturing_tenant(self, tenant):
@@ -1103,10 +1131,389 @@ class Command(BaseCommand):
         self.stdout.write(f"{tenant.name}: manufacturing — 2 work centres, BOM {bom.number}, "
                           f"work order {order.number} ({good} of 5 reported).")
 
+    def _seed_quality_tenant(self, tenant):
+        """4.9 Quality demo: three inspection plans, three inspections (one certified), three
+        non-conformances (one posting a real scrap adjustment), two CAPAs and two audits.
+
+        Idempotent via a QualityInspection guard. Runs LAST — it inspects 4.1's goods receipts,
+        4.3's items/locations/lots, 4.6's shipments and 4.8's work orders, so every one of those
+        must already exist.
+
+        Everything goes through the SAME code the views run: ``generate_results()`` snapshots the
+        characteristics, ``InspectionResult.save()`` derives each verdict from the snapshotted
+        limits, ``evaluated_result`` decides pass/fail, ``coa_blockers()`` gates the certificate and
+        ``next_number(..., field="coa_number")`` stamps it, and the scrap posts through
+        ``_post_stock_move`` behind ``_insufficient_stock``. Nothing here hand-sets a field that
+        merely looks plausible.
+        """
+        from apps.scm.models import (CapaAction, CapaTask, GoodsReceiptNote, InspectionPlan,
+                                     InspectionCharacteristic, Item, Location, LotSerial,
+                                     NonConformance, QualityAudit, QualityInspection, Shipment,
+                                     UOM)
+        from apps.scm.views._helpers import _insufficient_stock, _post_stock_move
+        from apps.scm.models._base import ZERO, q2
+        from apps.core.utils import next_number
+        if QualityInspection.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: quality data already exists — skipping.")
+            return
+
+        ws16 = Item.objects.filter(tenant=tenant, sku="WS-16").first()
+        mon27 = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        grn = GoodsReceiptNote.objects.filter(tenant=tenant, status="received").order_by("id").first()
+        shipment = (Shipment.objects.filter(tenant=tenant, direction="outbound")
+                    .order_by("id").first())
+        supplier = Party.objects.filter(tenant=tenant, name="Northwind Industrial Supply").first()
+        inspector = self._employee(tenant, "Emma Williams")
+        auditor = self._employee(tenant, "Olivia Martin")
+        if any(x is None for x in (ws16, mon27, main, grn, shipment, supplier, inspector)):
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: missing items / location / received receipt / outbound shipment / "
+                "supplier / employee party — skipping quality seed."))
+            return
+
+        today = timezone.localdate()
+        each = UOM.objects.filter(tenant=tenant, code="EA").first()
+        # A photometric unit for the CoA's luminance row — the certificate prints the unit next to
+        # the limits, so a demo without one shows a bare number.
+        cdm2, _ = UOM.objects.get_or_create(
+            tenant=tenant, code="CDM2", defaults={"name": "Candela per m²", "factor": 1})
+
+        # 4.3 seeds both items as tracking="none" because nothing needed batches yet. Quality does:
+        # a certificate certifies a BATCH, quarantine is a lot status, and blocker rule 6 ("a
+        # lot-tracked item needs a lot before it can be certified") is inert without this. One
+        # field, on the two items 4.9 demonstrates.
+        Item.objects.filter(pk__in=[ws16.pk, mon27.pk]).update(tracking="lot")
+        ws16.tracking = mon27.tracking = "lot"
+        ws16_lot, _ = LotSerial.objects.get_or_create(
+            tenant=tenant, item=ws16, number="WS16-2409",
+            defaults={"kind": "lot", "expiry_date": None, "status": "available"})
+        mon_lot, _ = LotSerial.objects.get_or_create(
+            tenant=tenant, item=mon27, number="MON27-2409",
+            defaults={"kind": "lot", "expiry_date": None, "status": "available"})
+        # Real lot-level stock so the scrap below has something to draw against — posted through
+        # the same service every other movement in this seeder uses, so the weighted-average roll
+        # follows the app's own path.
+        with transaction.atomic():
+            for item, lot, qty, cost in ((ws16, ws16_lot, Decimal("6"), Decimal("1200")),
+                                         (mon27, mon_lot, Decimal("12"), Decimal("300"))):
+                _post_stock_move(tenant, item=item, location=main, quantity=qty, unit_cost=cost,
+                                 move_type="receipt", lot_serial=lot, reference="OPENING-QC",
+                                 reason="Opening lot-tracked balance",
+                                 moved_at=timezone.now() - datetime.timedelta(days=20))
+
+        # ---------------------------------------------------------------- 1) the criteria masters
+        iqc = InspectionPlan.objects.create(
+            tenant=tenant, code="IQC-WS16", name="Incoming inspection — laptop workstation",
+            plan_type="incoming_receipt", item=ws16, sampling_method="percentage",
+            sample_percentage=Decimal("10"), frequency="every", version="1",
+            effective_from=today - datetime.timedelta(days=60), is_active=True,
+            notes="Sample 10% of every receipt; a wrong port count fails the whole lot.")
+        InspectionCharacteristic.objects.create(
+            plan=iqc, sequence=10, name="Port count", characteristic_type="measurement", uom=each,
+            target_value=Decimal("16"), lower_limit=Decimal("16"), upper_limit=Decimal("16"),
+            test_method="Visual count against the datasheet", is_critical=True, is_mandatory=True,
+            include_on_coa=True)
+        InspectionCharacteristic.objects.create(
+            plan=iqc, sequence=20, name="Enclosure condition", characteristic_type="visual",
+            expected_text="No dents or scratches", is_mandatory=True)
+        InspectionCharacteristic.objects.create(
+            plan=iqc, sequence=30, name="Firmware version recorded",
+            characteristic_type="instruction", is_mandatory=False)
+
+        oqc = InspectionPlan.objects.create(
+            tenant=tenant, code="OQC-MON27", name="Outgoing inspection — 27-inch monitor",
+            plan_type="outgoing_shipment", item=mon27, sampling_method="fixed_count",
+            sample_size=5, frequency="every", version="1",
+            effective_from=today - datetime.timedelta(days=60), is_active=True,
+            notes="Two characteristics are certified — they print on the Certificate of Analysis.")
+        InspectionCharacteristic.objects.create(
+            plan=oqc, sequence=10, name="Luminance", characteristic_type="measurement", uom=cdm2,
+            target_value=Decimal("300"), lower_limit=Decimal("280"), upper_limit=Decimal("320"),
+            test_method="Photometer, centre of panel", is_critical=True, is_mandatory=True,
+            include_on_coa=True)
+        InspectionCharacteristic.objects.create(
+            plan=oqc, sequence=20, name="Dead pixels", characteristic_type="measurement", uom=each,
+            upper_limit=Decimal("0"), test_method="Full-screen colour sweep", is_mandatory=True,
+            include_on_coa=True)
+        InspectionCharacteristic.objects.create(
+            plan=oqc, sequence=30, name="Packaging intact", characteristic_type="visual",
+            expected_text="Sealed, undamaged carton", is_mandatory=True)
+        InspectionCharacteristic.objects.create(
+            plan=oqc, sequence=40, name="Serial label legible", characteristic_type="pass_fail",
+            expected_text="Label scans first time", is_mandatory=True)
+
+        checklist = InspectionPlan.objects.create(
+            tenant=tenant, code="AUD-ISO9001", name="ISO 9001:2015 internal audit checklist",
+            plan_type="audit_checklist", sampling_method="all_100", frequency="periodic",
+            version="1", effective_from=today - datetime.timedelta(days=120), is_active=True,
+            notes="Reused as the question set on an internal audit — the same table, no second "
+                  "checklist model.")
+        for index, question in enumerate([
+            "Document control procedure is followed",
+            "Training records are current for every operator",
+            "Measuring equipment is within its calibration date",
+            "Previous corrective actions were closed and verified",
+            "The internal audit programme is on schedule",
+        ], start=1):
+            InspectionCharacteristic.objects.create(
+                plan=checklist, sequence=index * 10, name=question,
+                characteristic_type="pass_fail", expected_text="Conforms", is_mandatory=True)
+
+        # ------------------------------------------------- 2) QC-00001 — incoming, passes cleanly
+        qc1 = QualityInspection.objects.create(
+            tenant=tenant, plan=iqc, inspection_type="incoming", goods_receipt=grn, item=ws16,
+            lot_serial=ws16_lot, location=main, supplier=supplier,
+            quantity_inspected=Decimal("5"), sample_size=Decimal("1"),
+            quantity_accepted=Decimal("5"), quantity_rejected=ZERO, inspector=inspector,
+            inspected_on=today - datetime.timedelta(days=10),
+            notes="Routine incoming check against the receipt.")
+        qc1.generate_results()
+        qc1.status = "in_progress"
+        qc1.save(update_fields=["status", "updated_at"])
+        for row in qc1.results.all():
+            if row.characteristic_type == "measurement":
+                row.measured_value = Decimal("16")
+            elif row.characteristic_type in ("pass_fail", "visual"):
+                row.text_value = "As specified"
+                row.result = "pass"
+            row.save()   # save() is the single writer of `result` — see _evaluate
+        qc1 = QualityInspection.objects.get(pk=qc1.pk)
+        qc1.status = "passed" if qc1.evaluated_result == "pass" else "failed"
+        qc1.usage_decision = "accept"
+        qc1.save(update_fields=["status", "usage_decision", "updated_at"])
+
+        # ------------------------------- 3) QC-00002 — the critical measurement fails, NCR follows
+        qc2 = QualityInspection.objects.create(
+            tenant=tenant, plan=iqc, inspection_type="incoming", goods_receipt=grn, item=ws16,
+            lot_serial=ws16_lot, location=main, supplier=supplier,
+            quantity_inspected=Decimal("4"), sample_size=Decimal("1"),
+            quantity_accepted=Decimal("2"), quantity_rejected=Decimal("2"), inspector=inspector,
+            inspected_on=today - datetime.timedelta(days=6),
+            notes="Second receipt from the same supplier — port count short.")
+        qc2.generate_results()
+        qc2.status = "in_progress"
+        qc2.save(update_fields=["status", "updated_at"])
+        for row in qc2.results.all():
+            if row.characteristic_type == "measurement":
+                # 15 against a 16-16 band — out of spec, and the characteristic is CRITICAL, so
+                # evaluated_result fails the lot however the rest read.
+                row.measured_value = Decimal("15")
+                row.notes = "Two ports missing on the sampled unit."
+            elif row.characteristic_type in ("pass_fail", "visual"):
+                row.text_value = "As specified"
+                row.result = "pass"
+            row.save()
+        qc2 = QualityInspection.objects.get(pk=qc2.pk)
+        qc2.status = "passed" if qc2.evaluated_result == "pass" else "failed"
+        qc2.usage_decision = "reject"
+        qc2.save(update_fields=["status", "usage_decision", "updated_at"])
+
+        # The raise-NCR conversion, field for field as qualityinspection_raise_ncr builds it.
+        ncr1 = NonConformance.objects.create(
+            tenant=tenant, source="inspection", inspection=qc2, goods_receipt=grn, item=ws16,
+            lot_serial=ws16_lot, location=main, supplier=supplier,
+            quantity_affected=qc2.quantity_rejected, uom=ws16.uom,
+            defect_category="functional",
+            severity="critical" if qc2.has_critical_failure else "major",
+            title=f"Failed inspection {qc2.number} — {ws16.sku}",
+            description=(f"Raised from quality inspection {qc2.number}. Port count measured 15 "
+                         "against a specification of 16."),
+            detected_by=inspector, detected_on=qc2.inspected_on,
+            containment_action="Affected units moved to the quality bench and the lot quarantined.",
+            cost_of_quality=q2((qc2.quantity_rejected or ZERO) * (ws16.average_cost or ZERO)),
+            owner=inspector, due_date=today + datetime.timedelta(days=7))
+        qc2.action_taken = "ncr_raised"
+        qc2.save(update_fields=["action_taken", "updated_at"])
+
+        # Quarantine flips the LOT's status and posts NOTHING (ruling (b)) — then the scrap posts
+        # ONE negative `adjustment` move carrying the NCR number (ruling (a)).
+        with transaction.atomic():
+            ws16_lot.status = "quarantine"
+            ws16_lot.save(update_fields=["status", "updated_at"])
+            ncr1.quarantine_applied = True
+            scrap_qty = ncr1.quantity_affected
+            ncr1.disposition = "scrap"
+            ncr1.disposition_quantity = scrap_qty
+            ncr1.disposition_by = inspector
+            ncr1.disposition_on = timezone.now()
+            ncr1.disposition_notes = "Material review board: units are unrepairable — write off."
+            ncr1.status = "dispositioned"
+            if ncr1.posts_stock and not _insufficient_stock(ws16, main, scrap_qty, ws16_lot):
+                _post_stock_move(
+                    tenant, item=ws16, location=main, quantity=-scrap_qty,
+                    move_type="adjustment", unit_cost=ws16.average_cost or ZERO,
+                    lot_serial=ws16_lot, reference=ncr1.number,
+                    reason=f"NCR scrap — {ncr1.get_defect_category_display()}")
+            ncr1.save()
+
+        # --------------------- 4) NCR-00002 — dock rejection: dispositioned, but posts NOTHING
+        ncr2 = NonConformance.objects.create(
+            tenant=tenant, source="goods_receipt", goods_receipt=grn, item=mon27, supplier=supplier,
+            location=None, quantity_affected=Decimal("1"), uom=mon27.uom,
+            defect_category="packaging", severity="minor",
+            title=f"Damaged carton refused at the dock — {grn.number}",
+            description="One monitor carton crushed in transit; refused on arrival and never "
+                        "booked into stock.",
+            detected_by=inspector, detected_on=today - datetime.timedelta(days=8),
+            containment_action="Refused at goods-in; the carrier signed the delivery note.",
+            cost_of_quality=Decimal("0"), owner=inspector)
+        ncr2.disposition = "return_to_vendor"
+        ncr2.disposition_quantity = Decimal("1")
+        ncr2.disposition_by = inspector
+        ncr2.disposition_on = timezone.now()
+        # posts_stock is False here BECAUSE source == "goods_receipt" — the rule is executable, not
+        # a comment somebody has to remember. The return authorisation itself is 4.10's document.
+        ncr2.disposition_notes = ("Returned to the supplier. Units rejected at the dock never "
+                                  "entered stock, so this has no ledger effect.")
+        ncr2.status = "dispositioned"
+        ncr2.save()
+
+        # ------------------------------------------------------------------------ 5) the audits
+        audit1 = QualityAudit.objects.create(
+            tenant=tenant, audit_type="internal", title="Annual internal quality-system audit",
+            standard="ISO 9001:2015",
+            scope="Goods-in inspection, calibration control and the corrective-action process.",
+            auditee_org_unit=self._org_unit(tenant), checklist_plan=checklist,
+            lead_auditor=auditor, planned_date=today - datetime.timedelta(days=7),
+            risk_level="medium",
+            conclusion="The system conforms overall. One minor finding on training records; the "
+                       "calibration register is current.")
+        audit1.actual_start = today - datetime.timedelta(days=7)
+        audit1.actual_end = today - datetime.timedelta(days=6)
+        audit1.status = "reported"
+        audit1.save(update_fields=["actual_start", "actual_end", "status", "updated_at"])
+
+        audit2 = QualityAudit.objects.create(
+            tenant=tenant, audit_type="supplier",
+            title=f"Supplier surveillance audit — {supplier.name}", standard="ISO 9001:2015",
+            scope="Incoming quality performance and corrective-action responsiveness.",
+            auditee_party=supplier, lead_auditor=auditor,
+            planned_date=today + datetime.timedelta(days=21), risk_level="high",
+            notes="Triggered by the port-count non-conformance.")
+
+        # A finding IS a NonConformance(source="audit") — there is no second findings table, and
+        # this is the only shape that creates one.
+        ncr3 = NonConformance.objects.create(
+            tenant=tenant, source="audit", audit=audit1, item=None, quantity_affected=ZERO,
+            defect_category="documentation", severity="minor",
+            title="Training records incomplete for two goods-in inspectors",
+            description="Two of five goods-in inspectors have no recorded refresher training for "
+                        "the current year.",
+            detected_by=auditor, detected_on=audit1.actual_end, owner=inspector,
+            due_date=today + datetime.timedelta(days=30),
+            containment_action="Refresher session booked for both inspectors.")
+
+        # ------------------------------------------------------------------------ 6) the CAPAs
+        capa1 = CapaAction.objects.create(
+            tenant=tenant, action_type="corrective", source="nonconformance", nonconformance=ncr1,
+            item=ws16, supplier=supplier, title=ncr1.title, problem_statement=ncr1.description,
+            containment_action=ncr1.containment_action, root_cause_method="five_why",
+            root_cause="The supplier changed its board revision without notifying us, and our "
+                       "incoming spec was never re-issued against the new part number.",
+            action_plan="Re-issue the incoming specification against the new part number, add a "
+                        "change-notification clause to the supply contract and re-train goods-in.",
+            owner=inspector, priority="high", due_date=today + datetime.timedelta(days=14),
+            effectiveness_due_date=today + datetime.timedelta(days=45))
+        CapaTask.objects.create(capa=capa1, sequence=10,
+                                description="Re-issue IQC-WS16 against the new part number",
+                                owner=inspector, due_date=today + datetime.timedelta(days=5),
+                                completed_on=today - datetime.timedelta(days=1), status="done")
+        CapaTask.objects.create(capa=capa1, sequence=20,
+                                description="Add a change-notification clause to the supply contract",
+                                owner=auditor, due_date=today + datetime.timedelta(days=10),
+                                status="open")
+        CapaTask.objects.create(capa=capa1, sequence=30,
+                                description="Re-train the goods-in team on the revised spec",
+                                owner=inspector, due_date=today + datetime.timedelta(days=12),
+                                status="open")
+        capa1.status = "in_progress"
+        capa1.save(update_fields=["status", "updated_at"])
+
+        # The SCAR: a supplier-sourced preventive action, driven to the state capaaction_verify
+        # actually accepts, so the verification button has a live target on first load.
+        capa2 = CapaAction.objects.create(
+            tenant=tenant, action_type="preventive", source="supplier", supplier=supplier,
+            title=f"Supplier corrective-action request — {supplier.name}",
+            problem_statement="Two quality escapes in one quarter from the same supplier.",
+            root_cause_method="pareto",
+            root_cause="Both escapes trace to unannounced component substitutions.",
+            action_plan="Supplier to implement a change-control notification and a first-article "
+                        "submission for every revision.",
+            owner=auditor, priority="normal", due_date=today - datetime.timedelta(days=2),
+            effectiveness_due_date=today + datetime.timedelta(days=30))
+        CapaTask.objects.create(capa=capa2, sequence=10,
+                                description="Supplier change-control procedure received and reviewed",
+                                owner=auditor, due_date=today - datetime.timedelta(days=5),
+                                completed_on=today - datetime.timedelta(days=4), status="done")
+        capa2.status = "pending_verification"
+        capa2.implemented_on = today - datetime.timedelta(days=3)
+        capa2.save(update_fields=["status", "implemented_on", "updated_at"])
+
+        # -------------------------- 7) QC-00003 — outgoing, passes, and IS certified (COA-00001)
+        qc3 = QualityInspection.objects.create(
+            tenant=tenant, plan=oqc, inspection_type="outgoing", shipment=shipment, item=mon27,
+            lot_serial=mon_lot, location=main, quantity_inspected=Decimal("10"),
+            sample_size=Decimal("5"), quantity_accepted=Decimal("10"), quantity_rejected=ZERO,
+            inspector=inspector, inspected_on=today - datetime.timedelta(days=2),
+            notes="Pre-shipment inspection — the batch this certificate covers.")
+        qc3.generate_results()
+        qc3.status = "in_progress"
+        qc3.save(update_fields=["status", "updated_at"])
+        measurements = {"Luminance": Decimal("302"), "Dead pixels": ZERO}
+        for row in qc3.results.all():
+            if row.characteristic_type == "measurement":
+                row.measured_value = measurements.get(row.characteristic_name, ZERO)
+            else:
+                row.text_value = "As specified"
+                row.result = "pass"
+            row.save()
+        qc3 = QualityInspection.objects.get(pk=qc3.pk)
+        qc3.status = "passed" if qc3.evaluated_result == "pass" else "failed"
+        qc3.usage_decision = "accept"
+        qc3.save(update_fields=["status", "usage_decision", "updated_at"])
+
+        # coa_blockers() is the gate the Issue action uses; asking it here means the seed can never
+        # produce a certificate the app itself would have refused.
+        customer = (shipment.sales_order.customer
+                    if shipment.sales_order_id else None)
+        blockers = qc3.coa_blockers()
+        if blockers:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: {qc3.number} is not certifiable ({blockers[0]}) — no CoA issued."))
+        else:
+            qc3.coa_number = next_number(QualityInspection, tenant, "COA", field="coa_number")
+            qc3.coa_issued_on = timezone.now()
+            qc3.coa_issued_to = customer
+            qc3.save(update_fields=["coa_number", "coa_issued_on", "coa_issued_to", "updated_at"])
+
+        self.stdout.write(
+            f"{tenant.name}: quality — 3 inspection plans, inspections {qc1.number}/{qc2.number}/"
+            f"{qc3.number} (CoA {qc3.coa_number or 'not issued'}), NCRs {ncr1.number}/"
+            f"{ncr2.number}/{ncr3.number} ({ncr1.number} scrapped {ncr1.disposition_quantity} "
+            f"{ws16.sku} through an adjustment move), CAPAs {capa1.number}/{capa2.number}, "
+            f"audits {audit1.number}/{audit2.number}.")
+
     # ------------------------------------------------------------------ spine reuse helpers
     def _admin(self, tenant):
         return (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
                 or User.objects.filter(tenant=tenant).first())
+
+    def _employee(self, tenant, name=None):
+        """LOOK UP an employee Party — never create one.
+
+        `seed_core` already creates four (Olivia Martin, Liam Johnson, Emma Williams, Sophia
+        Miller), and 4.9 reuses `core.Party` + `PartyRole("employee")` for every inspector,
+        auditor, owner and verifier rather than adding a person table (L29). Unlike `_supplier` /
+        `_customer` this deliberately does NOT get-or-create: an inspector invented by a seeder
+        would be a person nobody hired.
+        """
+        qs = Party.objects.filter(tenant=tenant, roles__role="employee").distinct()
+        if name:
+            match = qs.filter(name=name).first()
+            if match is not None:
+                return match
+        return qs.order_by("id").first()
 
     def _supplier(self, tenant, name, kind):
         """Get-or-create a supplier Party by NAME (never duplicate the spine).
