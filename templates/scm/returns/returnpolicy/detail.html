@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+        {% if obj.is_default %}<span class="badge badge-info">Default</span>{% endif %}
+        <span class="badge badge-{% if obj.window_basis == 'delivery' %}info{% elif obj.window_basis == 'fulfilment' %}amber{% elif obj.window_basis == 'order_date' %}slate{% else %}slate{% endif %}">{{ obj.get_window_basis_display }}</span>
+        {% if obj.auto_approve %}<span class="badge badge-amber">Approval pre-ticked</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returnpolicy_list' %}">Return Policies</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="package-open"></i> Returns</a>
+      <a href="{% url 'scm:return_portal' %}" class="btn btn-outline"><i data-lucide="globe"></i> Return portal</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ obj.window_days }}</div>
+      <div class="stat-label">Days from {{ obj.get_window_basis_display|lower }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="calendar-x"></i></div>
+      <div class="stat-value">{{ obj.fallback_days }}</div>
+      <div class="stat-label">Fallback days from the order date</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-check"></i></div>
+      <div class="stat-value">{{ obj.warranty_window_days }}</div>
+      <div class="stat-label">Warranty window (days)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-open"></i></div>
+      <div class="stat-value">{{ return_authorizations|length }}</div>
+      <div class="stat-label">Recent returns shown (latest 25)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ allowed_resolutions|length }}</div>
+      <div class="stat-label">Outcomes this policy permits</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The promise</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Scope</dt><dd>{% if obj.item_category %}<span class="fw-600">{{ obj.item_category.name }}</span>{% else %}<span class="text-muted">Every item</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }} <span class="text-muted">— lowest wins among equally specific policies</span></dd></div>
+        <div class="detail-item"><dt>Window basis</dt><dd>{{ obj.get_window_basis_display }}</dd></div>
+        <div class="detail-item"><dt>Window</dt><dd class="fw-600">{{ obj.window_days }} days</dd></div>
+        <div class="detail-item"><dt>Fallback window</dt><dd>{{ obj.fallback_days }} days from the order date</dd></div>
+        <div class="detail-item"><dt>Delivery confirmation</dt><dd>{% if obj.require_delivery_confirmation %}<span class="badge badge-amber">Required</span>{% else %}<span class="badge badge-muted">Not required</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Outcomes offered</dt><dd>
+          {% for res in allowed_resolutions %}
+            <span class="badge badge-{% if res == 'refund' %}green{% elif res == 'store_credit' %}info{% elif res == 'exchange' %}info{% elif res == 'keep_item' %}amber{% else %}slate{% endif %}">{% if res == 'refund' %}Refund{% elif res == 'store_credit' %}Store credit{% elif res == 'exchange' %}Exchange{% elif res == 'keep_item' %}Keep the item{% else %}{{ res }}{% endif %}</span>
+          {% empty %}
+            <span class="badge badge-red">None — this policy allows no outcome at all</span>
+          {% endfor %}
+        </dd></div>
+        <div class="detail-item"><dt>Refund basis</dt><dd>
+          <span class="badge badge-{% if obj.refund_basis == 'full' %}green{% elif obj.refund_basis == 'percentage' %}amber{% elif obj.refund_basis == 'none' %}red{% else %}slate{% endif %}">{{ obj.get_refund_basis_display }}</span>
+          {% if obj.refund_basis == 'percentage' %} <span class="fw-600">{{ obj.refund_pct|floatformat:2 }}%</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Restocking fee</dt><dd>
+          <span class="badge badge-{% if obj.restocking_fee_type == 'none' %}muted{% elif obj.restocking_fee_type == 'flat' %}amber{% elif obj.restocking_fee_type == 'percent_of_value' %}amber{% else %}slate{% endif %}">{{ obj.get_restocking_fee_type_display }}</span>
+          {% if obj.restocking_fee_type != 'none' %} <span class="fw-600">{{ obj.restocking_fee_value|floatformat:2 }}{% if obj.restocking_fee_type == 'percent_of_value' %}%{% endif %}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Return freight paid by</dt><dd>{{ obj.get_return_shipping_paid_by_display }}</dd></div>
+        <div class="detail-item"><dt>Auto-approve</dt><dd>{% if obj.auto_approve %}<span class="badge badge-amber">Pre-ticks the approval form</span>{% else %}<span class="badge badge-muted">Manual approval</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Return-to address</dt><dd>{{ obj.return_to_address|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Portal instructions</dt><dd>{{ obj.portal_instructions|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% comment %}
+          The delivery-basis caveat is the one a CSR needs on the page rather than in a docstring:
+          the delivery stamp is a manual human action in Order Management, so on most orders it is
+          simply null and the clock quietly runs from the order date over the longer fallback
+          window. The return authorisation shows which date actually applied.
+        {% endcomment %}
+        <span class="fw-600">A delivery basis falls through to the fallback more often than it looks.</span> The delivery stamp on a sales order is a manual human action, so on most orders it is never set — the clock then runs from the order date over the fallback window instead. Every return shows the date its verdict actually used, so nobody has to guess which window refused them.
+      </p>
+      <p class="text-muted" style="margin-top:.6rem;">
+        The <span class="fw-600">return-to address is free text on purpose</span>: a warehouse location in this application carries a code, a type and a pick sequence, and no address at all. There is nowhere else the return slip could get one from.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Grade ladder — what a returned unit is worth back in stock</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Grade</th><th>Condition</th><th>Percentage of average cost</th></tr></thead>
+        <tbody>
+          {% for row in grade_ladder %}
+            <tr>
+              <td>
+                <span class="badge badge-{% if row.grade == 'A' %}green{% elif row.grade == 'B' %}info{% elif row.grade == 'C' %}amber{% elif row.grade == 'D' %}red{% else %}slate{% endif %}">{{ row.grade }}</span>
+              </td>
+              <td>{{ row.label }}</td>
+              <td class="fw-600">{{ row.pct|floatformat:2 }}%</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No ladder</h3><p>The four grade percentages are part of the policy — edit it to set them.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      This ladder is what turns a condition grade from a dropdown nobody reads into money: a B-grade unit comes back into stock at its percentage of the item's average cost, so the valuation report and the weighted-average roll reflect what the thing is actually worth now. The figure is <span class="fw-600">seeded once onto the bench row and then human-owned</span> — a refurbisher who spent real money on parts knows the unit's worth better than a percentage table does, and nothing recomputes their number afterwards. A grade the ladder does not recognise is written down to <span class="fw-600">zero</span>, deliberately: restocking an ungraded unit at full cost is the expensive direction to be wrong in.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Returns approved under this policy</h2>
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All returns</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>RMA</th><th>Customer</th><th>Type</th><th>Requested</th><th>Resolution</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in return_authorizations %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.customer.name }}</td>
+              <td>
+                <span class="badge badge-{% if r.return_type == 'physical' %}info{% elif r.return_type == 'credit_only' %}amber{% else %}slate{% endif %}">{{ r.get_return_type_display }}</span>
+              </td>
+              <td>{{ r.requested_on|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge badge-{% if r.resolution == 'refund' %}green{% elif r.resolution == 'store_credit' %}info{% elif r.resolution == 'exchange' %}info{% elif r.resolution == 'repair' %}amber{% elif r.resolution == 'keep_item' %}amber{% elif r.resolution == 'none' %}muted{% else %}slate{% endif %}">{{ r.get_resolution_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if r.status == 'settled' %}green{% elif r.status == 'closed' %}green{% elif r.status == 'received' %}info{% elif r.status == 'partially_received' %}info{% elif r.status == 'approved' %}amber{% elif r.status == 'awaiting_receipt' %}amber{% elif r.status == 'requested' %}slate{% elif r.status == 'draft' %}slate{% elif r.status == 'rejected' %}red{% elif r.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ r.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="package-open"></i><h3>Not used yet</h3><p>No return names this policy. The twenty-five most recent would appear here — this panel is a sample, not the register.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:returnpolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:returnpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy? A policy any return was approved under cannot be deleted — deactivate it instead so past decisions keep the rules they were made under.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:returnpolicy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Deleting is refused while any return points here, and deliberately so: a policy that could be deleted out from under a frozen verdict would leave a decision nobody can trace back to its rules. Deactivate it instead — the returns that were approved under it keep the snapshot they were judged against either way.
+      </p>
+    </div>
+  </div>
+{% endblock %}
