@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Corrective &amp; Preventive Actions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Corrective &amp; Preventive Actions</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>CAPA</span></div>
+      <p class="text-muted">Problem, root cause, plan, tasks and an effectiveness check. Corrective and preventive are an attribute rather than two registers — the workflow is identical. A stand-alone action is first class: a trend spotted across inspections needs no parent document, and a supplier corrective-action request is simply an action with a supplier on it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Non-conformances</a>
+      <a href="{% url 'scm:capaaction_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Action</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.open|default:"0" }}</div>
+      <div class="stat-label">Open, investigating or in progress</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.overdue|default:"0" }}</div>
+      <div class="stat-label">Past their due date</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clipboard-check"></i></div>
+      <div class="stat-value">{{ stats.pending_verification|default:"0" }}</div>
+      <div class="stat-label">Awaiting an effectiveness check</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="rotate-ccw"></i></div>
+      <div class="stat-value">{{ stats.not_effective|default:"0" }}</div>
+      <div class="stat-label">Verified not effective</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, problem, root cause or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="action_type" aria-label="Action type" class="form-select">
+            <option value="">All action types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.action_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Priority" class="form-select">
+            <option value="">All priorities</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">All owners</option>
+            {% for p in owners %}
+              <option value="{{ p.pk }}" {% if request.GET.owner == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="overdue" aria-label="Overdue only" class="form-select">
+            <option value="">Due date — any</option>
+            <option value="yes" {% if request.GET.overdue == "yes" %}selected{% endif %}>Overdue only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="capa-date-from">Due from</label>
+          <input type="date" id="capa-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="capa-date-to">Due to</label>
+          <input type="date" id="capa-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Source</th><th>Item</th><th>Supplier</th><th>Owner</th><th>Priority</th><th>Due</th><th>Open tasks</th><th>Effectiveness</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:capaaction_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}</td>
+              <td>
+                <span class="badge badge-{% if obj.action_type == 'corrective' %}amber{% elif obj.action_type == 'preventive' %}info{% else %}slate{% endif %}">{{ obj.get_action_type_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.source == 'nonconformance' %}red{% elif obj.source == 'audit_finding' %}amber{% elif obj.source == 'inspection_trend' %}info{% elif obj.source == 'supplier' %}amber{% elif obj.source == 'complaint' %}red{% elif obj.source == 'internal_improvement' %}muted{% else %}slate{% endif %}">{{ obj.get_source_display }}</span>
+                {% if obj.nonconformance %}<br><a href="{% url 'scm:nonconformance_detail' obj.nonconformance.pk %}" class="text-muted">{{ obj.nonconformance.number }}</a>{% elif obj.audit %}<br><a href="{% url 'scm:qualityaudit_detail' obj.audit.pk %}" class="text-muted">{{ obj.audit.number }}</a>{% endif %}
+              </td>
+              <td>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.supplier.name|default:"—" }}</td>
+              <td>{{ obj.owner.name|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if obj.priority == 'critical' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'normal' %}info{% elif obj.priority == 'low' %}muted{% else %}slate{% endif %}">{{ obj.get_priority_display }}</span>
+              </td>
+              <td>{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.due_date|date:"M d, Y" }}</span>{% else %}{{ obj.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              {% comment %}
+                `open_tasks` is ANNOTATED by the list view. The model's open_task_count property is
+                the DETAIL page's reader — using it here would be one COUNT query per rendered row.
+              {% endcomment %}
+              <td>{% if obj.open_tasks %}<span class="badge badge-amber">{{ obj.open_tasks }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if obj.effectiveness_result == 'effective' %}green{% elif obj.effectiveness_result == 'not_effective' %}red{% elif obj.effectiveness_result == 'pending' %}slate{% else %}slate{% endif %}">{{ obj.get_effectiveness_result_display }}</span>
+                {% if obj.verification_overdue %}<span class="badge badge-red">Check overdue</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'closed' %}green{% elif obj.status == 'pending_verification' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'investigating' %}amber{% elif obj.status == 'open' %}slate{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:capaaction_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:capaaction_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:capaaction_delete' obj.pk %}" onsubmit="return confirm('Delete this action and its task list? Once it is awaiting verification or closed it can only be cancelled.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="wrench"></i><h3>No corrective or preventive actions</h3><p>Raise one from a non-conformance or an audit finding, or create a stand-alone action for a trend nobody has a document for yet. Correcting the batch is containment; stopping it recurring is the action.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      The ladder is fixed: open → investigating → in progress → pending verification → closed, with a <span class="fw-600">not effective</span> verdict sending the action back to investigating rather than closing it with a caveat — a fix that did not work is new information about the root cause. Edit and delete are offered only on the first three rungs; after that it is cancelled instead.
+    </div>
+  </div>
+{% endblock %}
