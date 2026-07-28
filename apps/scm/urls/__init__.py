@@ -44,6 +44,12 @@ from .Manufacturing.BillsOfMaterials import urlpatterns as _mf_boms
 from .Manufacturing.WorkOrders import urlpatterns as _mf_workorders
 from .Manufacturing.ProductionTimeLogs import urlpatterns as _mf_timelogs
 from .Manufacturing.Reports import urlpatterns as _mf_reports
+from .QualityManagement.InspectionPlans import urlpatterns as _qm_inspectionplans
+from .QualityManagement.QualityInspections import urlpatterns as _qm_inspections
+from .QualityManagement.QualityAudits import urlpatterns as _qm_audits
+from .QualityManagement.NonConformances import urlpatterns as _qm_ncrs
+from .QualityManagement.CapaActions import urlpatterns as _qm_capa
+from .QualityManagement.Reports import urlpatterns as _qm_reports
 
 
 app_name = "scm"
@@ -99,4 +105,16 @@ urlpatterns = [
     *_mf_workorders,                     # Manufacturing/WorkOrders
     *_mf_timelogs,                       # Manufacturing/ProductionTimeLogs
     *_mf_reports,                        # Manufacturing/Reports (MRP + production schedule)
+    # 4.9 prefixes (inspection-plans/ inspections/ quality-audits/ nonconformances/ capa/ coa/)
+    # are all first-segment-unique against everything above — checked against the full list, not
+    # just this block. In particular `inspections/` is a separate segment from 4.1's `receipts/`
+    # and from 4.9's own `inspection-plans/`, `capa/` from 4.2's `catalogs/` and 4.1's
+    # `categories/`, and `quality-audits/` avoids the bare `audits/` a Module-0 audit-log page
+    # would want. Every 4.9 verb route sits under its own `<int:pk>/`, so none can be swallowed.
+    *_qm_inspectionplans,                # QualityManagement/InspectionPlans (criteria master)
+    *_qm_inspections,                    # QualityManagement/QualityInspections
+    *_qm_audits,                         # QualityManagement/QualityAudits
+    *_qm_ncrs,                           # QualityManagement/NonConformances
+    *_qm_capa,                           # QualityManagement/CapaActions
+    *_qm_reports,                        # QualityManagement/Reports (Certificate of Analysis)
 ]
