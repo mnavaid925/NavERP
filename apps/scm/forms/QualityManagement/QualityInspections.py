@@ -150,6 +150,17 @@ class BaseInspectionResultFormSet(forms.BaseInlineFormSet):
 
     def clean(self):
         super().clean()
+        # The snapshot is the record a certificate rests on, so it may not be hand-extended.
+        # `extra=0` does NOT prevent this: on a bound formset `initial_form_count()` comes from the
+        # POSTed management form, so a crafted post can declare extra rows. An injected row would
+        # take defaults for the whole snapshot block (it is editable=False, so construct_instance
+        # skips it) — a blank name, no limits — and `_evaluate` returns "pass" for a measurement
+        # with a value and no limits. There is no legitimate flow that submits an unsaved row.
+        for form in self.forms:
+            if form.instance.pk is None and form.has_changed():
+                raise ValidationError(
+                    "Result rows are snapshotted from the plan by Generate results — they cannot "
+                    "be added here.")
         for form in self.forms:
             if not getattr(form, "cleaned_data", None) or form.cleaned_data.get("DELETE"):
                 continue
@@ -164,9 +175,15 @@ class BaseInspectionResultFormSet(forms.BaseInlineFormSet):
 
 # extra=0: result rows are SNAPSHOTTED from the plan by generate_results(), never hand-added — an
 # extra blank row would have no characteristic name, no limits and nothing to evaluate against.
+#
+# can_delete=False for the same reason, and it is the stronger half: `generate_results()`
+# short-circuits on `self.results.exists()`, so a removed row can NEVER be regenerated, and both
+# `evaluated_result` and `coa_blockers()` only ever count the survivors. Deleting the one failing
+# characteristic would silently turn a failed inspection into a certifiable one, with nothing left
+# in the record to show a row had been there.
 InspectionResultFormSet = inlineformset_factory(
     QualityInspection, InspectionResult, form=InspectionResultForm,
-    formset=BaseInspectionResultFormSet, extra=0, can_delete=True, max_num=200, validate_max=True,
+    formset=BaseInspectionResultFormSet, extra=0, can_delete=False, max_num=200, validate_max=True,
 )
 
 
