@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit bench row{% else %}Receive a return line{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit bench row{% else %}Receive a return line{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returndisposition_list' %}">Receiving Bench</a><span class="sep">›</span><span>{% if is_edit %}Edit row{% else %}Receive{% endif %}</span></div>
+  </div></div>
+
+  {% if line %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The line being received</h2>
+        <a href="{% url 'scm:returnauthorization_detail' line.return_authorization.pk %}" class="btn btn-outline btn-sm"><i data-lucide="package-open"></i> {{ line.return_authorization.number }}</a>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Return</dt><dd><a href="{% url 'scm:returnauthorization_detail' line.return_authorization.pk %}" class="fw-600">{{ line.return_authorization.number }}</a> · {{ line.return_authorization.customer.name }}</dd></div>
+          <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' line.item.pk %}" class="fw-600">{{ line.item.sku }}</a> · {{ line.item.name }}</dd></div>
+          <div class="detail-item"><dt>Tracking</dt><dd>
+            {% if line.item.tracking == 'none' %}<span class="badge badge-muted">Untracked</span>
+            {% else %}<span class="badge badge-amber">{{ line.item.get_tracking_display }} — a lot or serial is required</span>{% endif %}
+          </dd></div>
+          <div class="detail-item"><dt>Quantity requested</dt><dd>{{ line.quantity_requested|floatformat:4 }}</dd></div>
+          <div class="detail-item"><dt>Quantity approved</dt><dd class="fw-600">{{ line.quantity_approved|floatformat:4 }}</dd></div>
+          <div class="detail-item"><dt>Reason</dt><dd>
+            {% if line.reason %}
+              <span class="fw-600">{{ line.reason.code }}</span> · {{ line.reason.name }}
+              {% if line.reason.blocks_restock %}<span class="badge badge-red">Blocks restocking</span>{% endif %}
+              {% if line.reason.raises_nonconformance %}<span class="badge badge-amber">Raises an NCR</span>{% endif %}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </dd></div>
+          <div class="detail-item"><dt>Item average cost</dt><dd class="fw-600">{{ line.item.average_cost|floatformat:4 }}</dd></div>
+          <div class="detail-item"><dt>Condition reported</dt><dd>{{ line.condition_reported|default:"—" }}</dd></div>
+        </dl>
+        {% comment %}
+          The average cost is shown here for one reason: the restock unit cost on each row below is
+          seeded from the policy's grade write-down and then human-owned — nothing recomputes it. A
+          figure wildly above the item's average cost rolls the item's weighted average up toward
+          the selling price the moment the row is posted, through an append-only ledger that cannot
+          be corrected in place. Seeing both numbers on one page is what makes an outlier visible.
+        {% endcomment %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          The restock unit cost below is seeded from the policy's grade write-down against this item's average cost, and is yours from then on — nothing recomputes it. Keep an eye on the two figures together: a returned unit posted back in above what it cost us writes the item's weighted average <span class="fw-600">up</span>, and the stock ledger is append-only.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if is_edit %}
+      {% comment %}
+        The edit shape: ONE bench row. The view refuses the edit outright once the row has posted to
+        the ledger and redirects back to the detail page, and the form additionally disables the
+        quantity and disposition controls on such a row — the gate lives in both places, so a
+        crafted POST that reached the form still cannot rewrite what the ledger recorded.
+      {% endcomment %}
+      <div class="card"><div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-help">
+          This item's average cost is <span class="fw-600">{{ form.item_average_cost|floatformat:4 }}</span> — compare it with the restock unit cost above before saving.
+        </div>
+      </div></div>
+    {% else %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Which line came back</h2></div>
+        <div class="card-body">
+          {% for e in picker.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <div class="form-grid">
+            {% for field in picker %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">
+            Only lines on an <span class="fw-600">approved, live, physical</span> return can be received. A credit-only return is deliberately absent: there is no unit coming back, which is the entire point of that type — it is settled from the refund queue instead.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Rows received</h2></div>
+        <div class="table-wrap">
+          {{ formset.management_form }}
+          {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <table class="table">
+            <thead><tr><th>Quantity</th><th>Bench location</th><th>Lot / Serial</th><th>Grade</th><th>Disposition</th><th>Restock into</th><th>Restock unit cost</th><th>Recovery value</th><th>Notes</th></tr></thead>
+            <tbody>
+              {% for sf in formset %}
+                <tr>
+                  {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                  <td>{% for e in sf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ sf.quantity }}{% for e in sf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.location }}{% for e in sf.location.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.lot_serial }}{% for e in sf.lot_serial.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.condition_grade }}{% for e in sf.condition_grade.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.disposition }}{% for e in sf.disposition.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.restock_location }}{% for e in sf.restock_location.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.restock_unit_cost }}{% for e in sf.restock_unit_cost.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.recovery_value }}{% for e in sf.recovery_value.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ sf.notes }}{% for e in sf.notes.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body text-muted">
+          {% comment %}
+            Every rule stated below is one the formset or the model actually enforces, so the note a
+            receiving clerk reads and the validation that refuses their save cannot drift apart:
+            the parent-reading cap, the tracked-item lot rule, the lot/item cross-check, the two
+            restock-location rules and the blocks-restock refusal.
+          {% endcomment %}
+          <p>
+            The rows together may not exceed what was <span class="fw-600">approved</span> on the line — receive less and approve more on the return if more came back than was authorised. Leave a row at <span class="fw-600">received — awaiting decision</span> unless the decision is already obvious; grading and deciding are separate acts, and the decision can be corrected right up until the moment the ledger sees it.
+          </p>
+          <p style="margin-top:.6rem;">
+            A <span class="fw-600">lot or serial is required</span> on a tracked item and must belong to the item on this line — returned serialised goods that land in the ledger with no lot are untraceable, and pairing one item with another's lot corrupts a ledger that cannot be corrected in place. A <span class="fw-600">restock</span> needs somewhere to go and it may not be the bench it is standing on, an expired lot may not be restocked at all, and a reason that blocks restocking refuses it outright — on this form and again inside the transaction that would write the ledger row.
+          </p>
+          <p style="margin-top:.6rem;">
+            Rows cannot be removed here. Once a row has posted to the ledger it is the only evidence of a movement that really happened; removing an unposted row is a delete on the row itself, from the bench.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card"><div class="card-body text-muted">
+      <span class="fw-600">Nothing on this page posts to the stock ledger.</span> Receiving records quantity, grade, date and bench location as data only — goods on the bench are deliberately off-ledger, because there is no blocked-stock location type and on-hand is the sum of the ledger across every location, so anything posted at intake would inflate on-hand, inventory value and the reorder inputs tenant-wide. The decision that follows is what moves stock, if anything does.
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save{% else %}Receive{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'scm:returndisposition_detail' obj.pk %}{% else %}{% url 'scm:returndisposition_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
