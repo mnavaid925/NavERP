@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Certificates of Analysis{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Certificates of Analysis</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Certificates of Analysis</span></div>
+      <p class="text-muted">Every outgoing inspection and where it stands on certification. There is no certificate table — a certificate <span class="fw-600">is</span> an outgoing inspection stamped with a number, an issue date and a recipient, printed over the result rows flagged for the CoA.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:qualityinspection_list' %}?inspection_type=outgoing" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Outgoing inspections</a>
+      <a href="{% url 'scm:qualityinspection_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inspection</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search inspection number, certificate number, item or lot…">
+        </div>
+        <div class="form-group">
+          <select name="coa_state" aria-label="Certificate state" class="form-select">
+            <option value="">All states</option>
+            {% for val, label in state_choices %}
+              <option value="{{ val }}" {% if request.GET.coa_state == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="customer" aria-label="Customer" class="form-select">
+            <option value="">All customers</option>
+            {% for c in customers %}
+              <option value="{{ c.pk }}" {% if request.GET.customer == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="coa-date-from">Inspected from</label>
+          <input type="date" id="coa-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="coa-date-to">Inspected to</label>
+          <input type="date" id="coa-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:coa_report' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Inspection</th><th>Item</th><th>Lot / Serial</th><th>Shipment / customer</th><th>Inspected</th><th>Status</th><th>Decision</th><th>Certificate</th><th>State</th><th>Blocker</th><th class="table-actions">Issue</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:qualityinspection_detail' row.obj.pk %}" class="fw-600">{{ row.obj.number }}</a></td>
+              <td><a href="{% url 'scm:item_detail' row.obj.item.pk %}">{{ row.obj.item.sku }}</a> · {{ row.obj.item.name }}</td>
+              <td>{% if row.obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' row.obj.lot_serial.pk %}">{{ row.obj.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.obj.shipment %}<a href="{% url 'scm:shipment_detail' row.obj.shipment.pk %}">{{ row.obj.shipment.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if row.obj.shipment.sales_order.customer %}<br><span class="text-muted">{{ row.obj.shipment.sales_order.customer.name }}</span>{% endif %}
+              </td>
+              <td>{{ row.obj.inspected_on|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge badge-{% if row.obj.status == 'passed' %}green{% elif row.obj.status == 'failed' %}red{% elif row.obj.status == 'in_progress' %}info{% elif row.obj.status == 'on_hold' %}amber{% elif row.obj.status == 'draft' %}slate{% elif row.obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ row.obj.get_status_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if row.obj.usage_decision == 'accept' %}green{% elif row.obj.usage_decision == 'accept_with_deviation' %}amber{% elif row.obj.usage_decision == 'reject' %}red{% elif row.obj.usage_decision == 'pending' %}slate{% else %}slate{% endif %}">{{ row.obj.get_usage_decision_display }}</span>
+              </td>
+              <td>{% if row.obj.coa_number %}<a href="{% url 'scm:coa_print' row.obj.pk %}" class="fw-600">{{ row.obj.coa_number }}</a><br><span class="text-muted">{{ row.obj.coa_issued_on|date:"M d, Y" }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.obj.coa_number %}
+                  <span class="badge badge-green">Issued</span>
+                {% elif row.coa_ready %}
+                  <span class="badge badge-info">Ready to issue</span>
+                {% else %}
+                  <span class="badge badge-red">Blocked</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                ONE reason, not seven. `first_blocker` is what the view picked off
+                QualityInspection.coa_blockers(); a column of every independent reason is unreadable,
+                and the issue action lists them all when somebody actually tries. The same method
+                answers for this column, that action and the inspection detail panel, so the three
+                can never disagree about what a valid certificate is.
+              {% endcomment %}
+              <td>{% if row.first_blocker %}<span class="text-muted">{{ row.first_blocker }}</span>{% if row.blockers|length > 1 %} <span class="badge badge-muted">+{{ row.blockers|length|add:"-1" }} more</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.obj.coa_number %}
+                  <a href="{% url 'scm:coa_print' row.obj.pk %}" class="btn btn-outline btn-sm"><i data-lucide="printer"></i> Print</a>
+                {% elif row.coa_ready %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% comment %}
+                      The two inputs are hand-rolled rather than {{ issue_form.<field> }} for one
+                      reason: this form is repeated once per ready row, and rendering the bound
+                      widget would emit the same DOM id on every one of them and re-evaluate its
+                      ModelChoiceField queryset per row. The names below are exactly what the
+                      unprefixed QualityInspectionCoAIssueForm reads, and the option list is the
+                      `customers` queryset the view supplies — the same _customer_parties(tenant)
+                      the form's own field is scoped to, already fetched by the filter bar above.
+                    {% endcomment %}
+                    <form method="post" action="{% url 'scm:coa_issue' row.obj.pk %}" onsubmit="return confirm('Issue a certificate of analysis for this inspection? The number is burned once and the document goes to a customer.');">
+                      {% csrf_token %}
+                      <select name="coa_issued_to" class="form-select" aria-label="{{ issue_form.coa_issued_to.label }}">
+                        <option value="">{{ issue_form.coa_issued_to.label }}…</option>
+                        {% for c in customers %}
+                          <option value="{{ c.pk }}">{{ c.name }}</option>
+                        {% endfor %}
+                      </select>
+                      <input type="date" name="issued_on" class="form-input" aria-label="{{ issue_form.issued_on.label }}">
+                      <button class="btn btn-primary btn-sm" type="submit"><i data-lucide="award"></i> Issue</button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">Workspace administrator only</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="award"></i><h3>No outgoing inspections</h3><p>Only an outgoing inspection can certify a shipped batch, so only those appear here. Create one against a shipment, flag the characteristics that belong on the certificate, and it shows up as ready once it has passed and been accepted.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <p>
+        <span class="fw-600">A certificate is never issued over an out-of-specification value.</span> Seven independent rules decide it: the inspection must be outgoing, it must have passed, a usage decision must have accepted the lot, no included characteristic may have failed or be left unrecorded, a lot-tracked item must name its batch, and at least one characteristic must be flagged for the certificate. The column above shows the first that applies; issuing lists every one that still does.
+      </p>
+      <p style="margin-top:.6rem;">
+        {{ issue_form.coa_issued_to.help_text }} {{ issue_form.issued_on.help_text }} Issuing is a workspace-administrator action — it sends a signed document to a customer — and the number is stamped once: a second submission finds the certificate already there and takes you to it rather than burning another number.
+      </p>
+    </div>
+  </div>
+{% endblock %}
