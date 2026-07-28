@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Non-Conformance Reports{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Non-Conformance Reports</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Non-Conformance Reports</span></div>
+      <p class="text-muted">The one finding register. Every detection source writes here — a failed inspection, units refused at the dock, a production defect, a supplier complaint, an audit finding, or somebody walking past a pallet. An audit finding is a row on this list with its source set to audit; there is deliberately no second findings table.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> CAPA</a>
+      <a href="{% url 'scm:nonconformance_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Report</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.open|default:"0" }}</div>
+      <div class="stat-label">Open or investigating</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.overdue|default:"0" }}</div>
+      <div class="stat-label">Past their due date</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ stats.critical_open|default:"0" }}</div>
+      <div class="stat-label">Critical and still live</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="gavel"></i></div>
+      <div class="stat-value">{{ stats.dispositioned|default:"0" }}</div>
+      <div class="stat-label">Dispositioned, awaiting close</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ stats.cost_of_quality|default:"0"|floatformat:2 }}</div>
+      <div class="stat-label">Recorded cost of quality</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, description, item or lot…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">All severities</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="defect_category" aria-label="Defect category" class="form-select">
+            <option value="">All categories</option>
+            {% for val, label in category_choices %}
+              <option value="{{ val }}" {% if request.GET.defect_category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="disposition" aria-label="Disposition" class="form-select">
+            <option value="">All dispositions</option>
+            {% for val, label in disposition_choices %}
+              <option value="{{ val }}" {% if request.GET.disposition == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">All owners</option>
+            {% for p in owners %}
+              <option value="{{ p.pk }}" {% if request.GET.owner == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="overdue" aria-label="Overdue only" class="form-select">
+            <option value="">Due date — any</option>
+            <option value="yes" {% if request.GET.overdue == "yes" %}selected{% endif %}>Overdue only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ncr-date-from">Detected from</label>
+          <input type="date" id="ncr-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ncr-date-to">Detected to</label>
+          <input type="date" id="ncr-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Source</th><th>Item</th><th>Lot / Serial</th><th>Quantity</th><th>Category</th><th>Severity</th><th>Detected</th><th>Owner</th><th>Due</th><th>Cost</th><th>Disposition</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:nonconformance_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}</td>
+              <td>
+                <span class="badge badge-{% if obj.source == 'inspection' %}info{% elif obj.source == 'goods_receipt' %}amber{% elif obj.source == 'production' %}amber{% elif obj.source == 'supplier' %}red{% elif obj.source == 'audit' %}slate{% elif obj.source == 'internal' %}muted{% else %}slate{% endif %}">{{ obj.get_source_display }}</span>
+                {% if obj.inspection %}<br><a href="{% url 'scm:qualityinspection_detail' obj.inspection.pk %}" class="text-muted">{{ obj.inspection.number }}</a>{% elif obj.audit %}<br><a href="{% url 'scm:qualityaudit_detail' obj.audit.pk %}" class="text-muted">{{ obj.audit.number }}</a>{% endif %}
+              </td>
+              <td>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>{% else %}<span class="text-muted">No item</span>{% endif %}</td>
+              <td>{% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}">{{ obj.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.quantity_affected|floatformat:4 }}</td>
+              <td>{{ obj.get_defect_category_display }}</td>
+              <td>
+                <span class="badge badge-{% if obj.severity == 'critical' %}red{% elif obj.severity == 'major' %}amber{% elif obj.severity == 'minor' %}info{% elif obj.severity == 'observation' %}muted{% else %}slate{% endif %}">{{ obj.get_severity_display }}</span>
+              </td>
+              <td>{{ obj.detected_on|date:"M d, Y" }}</td>
+              <td>{{ obj.owner.name|default:"—" }}</td>
+              <td>{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.due_date|date:"M d, Y" }}</span>{% else %}{{ obj.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>{{ obj.cost_of_quality|floatformat:2 }}</td>
+              <td>
+                <span class="badge badge-{% if obj.disposition == 'pending' %}slate{% elif obj.disposition == 'use_as_is' %}green{% elif obj.disposition == 'rework' %}amber{% elif obj.disposition == 'repair' %}amber{% elif obj.disposition == 'scrap' %}red{% elif obj.disposition == 'return_to_vendor' %}info{% elif obj.disposition == 'regrade' %}info{% else %}slate{% endif %}">{{ obj.get_disposition_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'closed' %}green{% elif obj.status == 'dispositioned' %}info{% elif obj.status == 'investigating' %}amber{% elif obj.status == 'open' %}red{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:nonconformance_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:nonconformance_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:nonconformance_delete' obj.pk %}" onsubmit="return confirm('Delete this report? A report with a recorded disposition or a corrective action against it cannot be deleted — cancel it instead.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="15"><div class="empty-state"><i data-lucide="alert-triangle"></i><h3>No non-conformance reports</h3><p>Record what went wrong, how many units it affects and what it cost. A failed inspection can propose one for you, and an audit finding lands here automatically with its source set to audit.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Edit and delete are offered only while a report is <span class="fw-600">open</span> or <span class="fw-600">investigating</span>, and delete is refused outright once a disposition has been recorded — stock may have moved against it. The disposition block, the quarantine flag and the status are never typed; the actions on the detail page are their only writers.
+    </div>
+  </div>
+{% endblock %}
