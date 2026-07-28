@@ -494,3 +494,92 @@ class ProductionTimeLogAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "entry_type", "downtime_reason", "work_center")
     search_fields = ("number", "operation", "work_order__number", "operator__name")
     readonly_fields = ("duration_minutes",)
+
+
+# ============================================================ 4.9 Quality Management System (QMS)
+from apps.scm.models import (  # noqa: E402
+    InspectionPlan, InspectionCharacteristic, QualityInspection, InspectionResult, QualityAudit,
+    NonConformance, CapaAction, CapaTask,
+)
+
+
+class InspectionCharacteristicInline(admin.TabularInline):
+    model = InspectionCharacteristic
+    extra = 0
+
+
+@admin.register(InspectionPlan)
+class InspectionPlanAdmin(admin.ModelAdmin):
+    list_display = ("code", "version", "name", "tenant", "plan_type", "item", "supplier",
+                    "sampling_method", "is_active")
+    list_filter = ("tenant", "plan_type", "sampling_method", "is_active")
+    search_fields = ("code", "name", "version", "item__sku", "item__name", "supplier__name")
+    inlines = [InspectionCharacteristicInline]
+
+
+class InspectionResultInline(admin.TabularInline):
+    model = InspectionResult
+    extra = 0
+    # The whole snapshot block is written once by generate_results() and must never be edited: a
+    # certificate already issued would otherwise start printing limits nobody measured against.
+    # `result` is derived by InspectionResult.save() for a measurement, so it is shown but the
+    # admin cannot make it disagree with the limits.
+    readonly_fields = ("characteristic", "characteristic_name", "characteristic_type", "uom",
+                       "target_value", "lower_limit", "upper_limit", "test_method",
+                       "include_on_coa", "is_critical", "is_mandatory")
+
+
+@admin.register(QualityInspection)
+class QualityInspectionAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "inspection_type", "item", "lot_serial", "inspected_on",
+                    "status", "usage_decision", "coa_number")
+    list_filter = ("tenant", "status", "inspection_type", "usage_decision", "action_taken")
+    search_fields = ("number", "coa_number", "item__sku", "item__name", "lot_serial__number",
+                     "supplier_coa_reference")
+    # Every field below is written by a lifecycle, decision or issue action. Leaving any of them
+    # editable would make the admin a second writer — the exact bug 4.7 shipped and then fixed.
+    readonly_fields = ("number", "status", "usage_decision", "action_taken", "coa_number",
+                       "coa_issued_on", "coa_issued_to")
+    inlines = [InspectionResultInline]
+
+
+@admin.register(QualityAudit)
+class QualityAuditAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "audit_type", "title", "auditee_party",
+                    "auditee_org_unit", "planned_date", "risk_level", "status")
+    list_filter = ("tenant", "audit_type", "status", "risk_level")
+    search_fields = ("number", "title", "standard", "scope", "lead_auditor__name")
+    # findings_major / findings_minor are deliberately NOT columns — they are properties and list
+    # annotations. Do not add them here or anywhere else.
+    readonly_fields = ("number", "status", "actual_start", "actual_end")
+
+
+@admin.register(NonConformance)
+class NonConformanceAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "source", "item", "severity", "defect_category",
+                    "quantity_affected", "status", "disposition", "detected_on")
+    list_filter = ("tenant", "status", "severity", "source", "defect_category", "disposition")
+    search_fields = ("number", "title", "description", "item__sku", "lot_serial__number")
+    # The MRB decision block plus the quarantine mirror — all written by their actions inside the
+    # same transaction that posts (or deliberately does not post) the StockMove.
+    readonly_fields = ("number", "status", "quarantine_applied", "disposition",
+                       "disposition_quantity", "disposition_by", "disposition_on",
+                       "disposition_notes", "closed_on")
+
+
+class CapaTaskInline(admin.TabularInline):
+    model = CapaTask
+    extra = 0
+
+
+@admin.register(CapaAction)
+class CapaActionAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "action_type", "title", "source", "owner", "priority",
+                    "due_date", "status", "effectiveness_result")
+    list_filter = ("tenant", "status", "action_type", "priority", "source", "effectiveness_result")
+    search_fields = ("number", "title", "problem_statement", "root_cause", "owner__name")
+    # effectiveness_due_date is NOT here: it is an ordinary editable field whose single writer is
+    # the form (capaaction_implement refuses while it is blank rather than filling it).
+    readonly_fields = ("number", "status", "implemented_on", "effectiveness_result", "verified_by",
+                       "verified_on", "verification_notes", "closed_on")
+    inlines = [CapaTaskInline]
