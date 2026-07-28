@@ -1115,3 +1115,275 @@ def time_log_b(db, tenant_b, work_order_b, work_center_b):
         tenant=tenant_b, work_order=work_order_b, work_center=work_center_b,
         entry_type="labor", started_at=started, ended_at=started + datetime.timedelta(hours=1),
     )
+
+
+# ------------------------------------------------------------------ SCM 4.9 Quality Management
+# Every reference date below is derived from ``timezone.localdate()`` — the SAME basis
+# ``qualityaudit_start``, ``capaaction_implement``, ``NonConformance.is_overdue`` and
+# ``InspectionPlan.is_effective`` use (lesson L16). A literal ``datetime.date.today()`` here would
+# flake for the hours around local midnight on a USE_TZ=True project.
+#
+# The two plans are deliberately different shapes because the CoA rules need both:
+#
+#   inspection_plan_a  incoming_receipt / item_a (untracked)  3 characteristics, NONE on the CoA
+#                      -> measurement + visual + instruction, i.e. one row of each verdict rule
+#   outgoing_plan_a    outgoing_shipment / item_lot_a (LOT-tracked)  2 characteristics, BOTH on
+#                      the CoA -> the only shape that can ever reach `coa_ready`
+@pytest.fixture
+def inspection_plan_a(db, tenant_a, item_a, uom_each_a):
+    """An active incoming-receipt plan for item_a with one characteristic of each judged type.
+
+    The ``instruction`` row is load-bearing: ``generate_results()`` must stamp it
+    ``not_applicable`` at creation, or a plan full of instructions would block ``complete`` on rows
+    nobody can ever answer.
+    """
+    from apps.scm.models import InspectionCharacteristic, InspectionPlan
+    plan = InspectionPlan.objects.create(
+        tenant=tenant_a, code="IQC-W1", name="Widget incoming check", version="1",
+        plan_type="incoming_receipt", item=item_a, sampling_method="all_100", frequency="every",
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=10, name="Length", characteristic_type="measurement", uom=uom_each_a,
+        target_value=Decimal("100"), lower_limit=Decimal("95"), upper_limit=Decimal("105"),
+        test_method="Vernier caliper", is_mandatory=True,
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=20, name="Visual check", characteristic_type="visual",
+        expected_text="No scratches", is_mandatory=False,
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=30, name="Photograph the label", characteristic_type="instruction",
+        is_mandatory=True,
+    )
+    return plan
+
+
+@pytest.fixture
+def outgoing_plan_a(db, tenant_a, item_lot_a, uom_each_a):
+    """An active outgoing-shipment plan for the LOT-tracked item — both rows print on the CoA."""
+    from apps.scm.models import InspectionCharacteristic, InspectionPlan
+    plan = InspectionPlan.objects.create(
+        tenant=tenant_a, code="OQC-L1", name="Lotted widget release", version="1",
+        plan_type="outgoing_shipment", item=item_lot_a, sampling_method="fixed_count",
+        sample_size=2, frequency="every",
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=10, name="Purity", characteristic_type="measurement", uom=uom_each_a,
+        target_value=Decimal("99.5"), lower_limit=Decimal("99.0"), upper_limit=Decimal("100.0"),
+        test_method="HPLC", is_critical=True, is_mandatory=True, include_on_coa=True,
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=20, name="Appearance", characteristic_type="pass_fail",
+        expected_text="Clear, colourless", is_mandatory=True, include_on_coa=True,
+    )
+    return plan
+
+
+@pytest.fixture
+def audit_checklist_plan_a(db, tenant_a):
+    """An UNSCOPED audit checklist — the only plan_type a QualityAudit may point at."""
+    from apps.scm.models import InspectionCharacteristic, InspectionPlan
+    plan = InspectionPlan.objects.create(
+        tenant=tenant_a, code="AUD-ISO9K", name="ISO 9001 process audit", version="1",
+        plan_type="audit_checklist",
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=10, name="Are training records current?",
+        characteristic_type="pass_fail", is_mandatory=True)
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=20, name="Is the calibration log complete?",
+        characteristic_type="visual", is_mandatory=True)
+    return plan
+
+
+@pytest.fixture
+def inspection_plan_b(db, tenant_b, item_b):
+    from apps.scm.models import InspectionCharacteristic, InspectionPlan
+    plan = InspectionPlan.objects.create(
+        tenant=tenant_b, code="IQC-W1", name="Globex incoming check", version="1",
+        plan_type="incoming_receipt", item=item_b,
+    )
+    InspectionCharacteristic.objects.create(
+        plan=plan, sequence=10, name="Globex length", characteristic_type="measurement",
+        target_value=Decimal("10"))
+    return plan
+
+
+@pytest.fixture
+def quality_inspection_a(db, tenant_a, item_a, location_a, supplier_a, employee_party_a,
+                        inspection_plan_a):
+    """A DRAFT incoming inspection with NO result rows yet — the generate_results() fixture."""
+    from django.utils import timezone
+    from apps.scm.models import QualityInspection
+    return QualityInspection.objects.create(
+        tenant=tenant_a, plan=inspection_plan_a, inspection_type="incoming", item=item_a,
+        location=location_a, supplier=supplier_a, inspector=employee_party_a,
+        quantity_inspected=Decimal("10"), sample_size=Decimal("10"),
+        quantity_accepted=Decimal("10"), inspected_on=timezone.localdate(),
+    )
+
+
+@pytest.fixture
+def quality_inspection_b(db, tenant_b, item_b, location_b, inspection_plan_b):
+    from django.utils import timezone
+    from apps.scm.models import QualityInspection
+    return QualityInspection.objects.create(
+        tenant=tenant_b, plan=inspection_plan_b, inspection_type="incoming", item=item_b,
+        location=location_b, quantity_inspected=Decimal("5"), inspected_on=timezone.localdate(),
+    )
+
+
+def _fill_results(inspection, *, measurement="99.6", verdict="pass"):
+    """Answer every generated result row so the lot reaches a real verdict.
+
+    ``InspectionResult.save()`` is the ONE writer of ``result`` — a measurement is re-derived from
+    the snapshotted limits whatever is posted, a pass/fail keeps the inspector's verdict.
+    """
+    for row in inspection.results.all():
+        if row.characteristic_type == "measurement":
+            row.measured_value = Decimal(measurement)
+        else:
+            row.text_value = "Clear, colourless"
+            row.result = verdict
+        row.save()
+    inspection.__dict__.pop("_result_cache", None)
+
+
+@pytest.fixture
+def outgoing_inspection_a(db, tenant_a, item_lot_a, lot_a, location_a, shipment_a,
+                          employee_party_a, outgoing_plan_a):
+    """A CoA-READY outgoing inspection: passed, accepted, both CoA rows answered, lot named.
+
+    This is the ONE fixture every ``coa_blockers()`` test starts from — each test breaks exactly
+    one of the seven rules on it and proves that rule alone refuses the certificate.
+    """
+    from django.utils import timezone
+    from apps.scm.models import QualityInspection
+    inspection = QualityInspection.objects.create(
+        tenant=tenant_a, plan=outgoing_plan_a, inspection_type="outgoing", item=item_lot_a,
+        lot_serial=lot_a, location=location_a, shipment=shipment_a, inspector=employee_party_a,
+        quantity_inspected=Decimal("10"), sample_size=Decimal("2"),
+        quantity_accepted=Decimal("10"), inspected_on=timezone.localdate(),
+    )
+    inspection.generate_results()
+    _fill_results(inspection)
+    inspection.status = "passed"
+    inspection.usage_decision = "accept"
+    inspection.save(update_fields=["status", "usage_decision", "updated_at"])
+    inspection.__dict__.pop("_result_cache", None)
+    return inspection
+
+
+@pytest.fixture
+def nonconformance_a(db, tenant_a, item_a, location_a, supplier_a, employee_party_a, uom_each_a):
+    """An OPEN report against 5 units of the untracked item, sitting at location_a.
+
+    No stock is seeded — the scrap tests call ``seed_stock`` themselves so the shortfall guard and
+    the happy path are both reachable from the same fixture.
+    """
+    from django.utils import timezone
+    from apps.scm.models import NonConformance
+    return NonConformance.objects.create(
+        tenant=tenant_a, source="internal", item=item_a, location=location_a, uom=uom_each_a,
+        supplier=supplier_a, quantity_affected=Decimal("5"), defect_category="dimensional",
+        severity="major", title="Widgets out of tolerance",
+        description="Five units measured outside the length band.",
+        detected_by=employee_party_a, detected_on=timezone.localdate(),
+        cost_of_quality=Decimal("40.00"),
+    )
+
+
+@pytest.fixture
+def nonconformance_lot_a(db, tenant_a, item_lot_a, lot_a, location_a, employee_party_a):
+    """An OPEN report against a LOT — the quarantine / release fixture (posts NO StockMove)."""
+    from django.utils import timezone
+    from apps.scm.models import NonConformance
+    return NonConformance.objects.create(
+        tenant=tenant_a, source="production", item=item_lot_a, lot_serial=lot_a,
+        location=location_a, quantity_affected=Decimal("4"), defect_category="contamination",
+        severity="critical", title="Batch contamination suspected",
+        description="Visible particulate in the batch.", detected_by=employee_party_a,
+        detected_on=timezone.localdate(),
+    )
+
+
+@pytest.fixture
+def nonconformance_b(db, tenant_b, item_b, location_b):
+    from django.utils import timezone
+    from apps.scm.models import NonConformance
+    return NonConformance.objects.create(
+        tenant=tenant_b, source="internal", item=item_b, location=location_b,
+        quantity_affected=Decimal("2"), title="Globex defect",
+        description="Globex description.", detected_on=timezone.localdate(),
+    )
+
+
+@pytest.fixture
+def capa_action_a(db, tenant_a, item_a, employee_party_a):
+    """An OPEN corrective action with one OPEN task — the implement-guard fixture."""
+    from django.utils import timezone
+    from apps.scm.models import CapaAction, CapaTask
+    capa = CapaAction.objects.create(
+        tenant=tenant_a, action_type="corrective", source="internal_improvement",
+        title="Tighten the length gauge procedure", item=item_a,
+        problem_statement="Length drifts out of band on the second shift.",
+        owner=employee_party_a, priority="high",
+        due_date=timezone.localdate() + datetime.timedelta(days=14),
+        effectiveness_due_date=timezone.localdate() + datetime.timedelta(days=45),
+    )
+    CapaTask.objects.create(capa=capa, sequence=10, description="Re-calibrate the gauge",
+                            owner=employee_party_a,
+                            due_date=timezone.localdate() + datetime.timedelta(days=7))
+    return capa
+
+
+@pytest.fixture
+def capa_in_progress_a(db, capa_action_a):
+    """capa_action_a moved to IN PROGRESS with a root cause recorded — one open task remains."""
+    capa_action_a.status = "in_progress"
+    capa_action_a.root_cause = "The gauge was never re-zeroed after the shift change."
+    capa_action_a.save(update_fields=["status", "root_cause", "updated_at"])
+    return capa_action_a
+
+
+@pytest.fixture
+def capa_action_b(db, tenant_b):
+    from apps.scm.models import CapaAction
+    return CapaAction.objects.create(
+        tenant=tenant_b, title="Globex corrective action",
+        problem_statement="Globex problem statement.")
+
+
+@pytest.fixture
+def quality_audit_a(db, tenant_a, org_unit_a, employee_party_a, audit_checklist_plan_a):
+    """A PLANNED internal audit against the checklist plan."""
+    from django.utils import timezone
+    from apps.scm.models import QualityAudit
+    return QualityAudit.objects.create(
+        tenant=tenant_a, audit_type="internal", title="Q1 internal process audit",
+        standard="ISO 9001:2015", scope="Goods-in and inspection",
+        auditee_org_unit=org_unit_a, checklist_plan=audit_checklist_plan_a,
+        lead_auditor=employee_party_a, planned_date=timezone.localdate(), risk_level="medium",
+    )
+
+
+@pytest.fixture
+def reported_audit_a(db, quality_audit_a):
+    """quality_audit_a run and REPORTED — the close-guard fixture (add a finding to block it)."""
+    from django.utils import timezone
+    quality_audit_a.status = "reported"
+    quality_audit_a.actual_start = timezone.localdate() - datetime.timedelta(days=1)
+    quality_audit_a.actual_end = timezone.localdate()
+    quality_audit_a.conclusion = "Two minor findings; the process is otherwise conforming."
+    quality_audit_a.save(update_fields=["status", "actual_start", "actual_end", "conclusion",
+                                        "updated_at"])
+    return quality_audit_a
+
+
+@pytest.fixture
+def quality_audit_b(db, tenant_b):
+    from django.utils import timezone
+    from apps.scm.models import QualityAudit
+    return QualityAudit.objects.create(
+        tenant=tenant_b, audit_type="internal", title="Globex audit",
+        planned_date=timezone.localdate())
