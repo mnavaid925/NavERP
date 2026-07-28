@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Warranty Claims{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Warranty Claims</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Warranty Claims</span></div>
+      <p class="text-muted">The supplier-recovery side of a return. A claim is a two-party negotiation — claimed, then approved, then credited — against a named supplier, with their own deadline for answering. Nothing here posts stock and nothing here drafts an accounting document: <span class="fw-600">accounting.Bill has no kind field</span>, so there is no vendor credit note to raise. The amounts are recorded and the recovery rate is computed from them.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="package-x"></i> Returns</a>
+      <a href="{% url 'scm:warrantyclaim_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Claim</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ stats.open|default:"0" }}</div>
+      <div class="stat-label">Open claims</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="mail-question"></i></div>
+      <div class="stat-value">{{ stats.awaiting_response|default:"0" }}</div>
+      <div class="stat-label">With the supplier, unanswered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.overdue|default:"0" }}</div>
+      <div class="stat-label">Past their response deadline</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="handshake"></i></div>
+      <div class="stat-value">{{ stats.approved_value|default:"0"|floatformat:2 }}</div>
+      <div class="stat-label">Approved by suppliers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ stats.credited_value|default:"0"|floatformat:2 }}</div>
+      <div class="stat-label">Actually credited back</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search claim number, their reference, serial, supplier, item or lot…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="defect_classification" aria-label="Defect classification" class="form-select">
+            <option value="">All defect types</option>
+            {% for val, label in defect_choices %}
+              <option value="{{ val }}" {% if request.GET.defect_classification == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="submission_channel" aria-label="Submission channel" class="form-select">
+            <option value="">All channels</option>
+            {% for val, label in channel_choices %}
+              <option value="{{ val }}" {% if request.GET.submission_channel == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="overdue" aria-label="Overdue only" class="form-select">
+            <option value="">Deadline — any</option>
+            <option value="yes" {% if request.GET.overdue == "yes" %}selected{% endif %}>Overdue only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wty-date-from">Submitted from</label>
+          <input type="date" id="wty-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wty-date-to">Submitted to</label>
+          <input type="date" id="wty-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:warrantyclaim_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Item</th><th>Quantity</th><th>Lot / Serial</th><th>Defect</th><th>Channel</th><th>Claimed</th><th>Approved</th><th>Credited</th><th>Submitted</th><th>Response due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:warrantyclaim_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a>
+                {% if obj.supplier_rma_number %}<br><span class="text-muted">their ref {{ obj.supplier_rma_number }}</span>{% endif %}
+              </td>
+              <td>{{ obj.supplier.name }}</td>
+              <td><a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a> · {{ obj.item.name }}</td>
+              <td>{{ obj.quantity_claimed|floatformat:4 }}{% if obj.item.uom %} {{ obj.item.uom.code }}{% endif %}</td>
+              <td>
+                {% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}">{{ obj.lot_serial.number }}</a>
+                {% elif obj.serial_reference %}<span class="text-muted">{{ obj.serial_reference }}</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.defect_classification == 'manufacturing' %}red{% elif obj.defect_classification == 'material' %}red{% elif obj.defect_classification == 'component' %}amber{% elif obj.defect_classification == 'assembly' %}amber{% elif obj.defect_classification == 'workmanship' %}amber{% elif obj.defect_classification == 'transit_damage' %}info{% elif obj.defect_classification == 'misuse_excluded' %}muted{% elif obj.defect_classification == 'unknown' %}slate{% else %}slate{% endif %}">{{ obj.get_defect_classification_display }}</span>
+              </td>
+              <td>{{ obj.get_submission_channel_display }}</td>
+              {% comment %}
+                `amount_claimed_agg` and `cost_line_count_agg` are the view's annotations and they
+                carry the `_agg` suffix precisely because `amount_claimed_total` is a model PROPERTY
+                that runs its own aggregate query. Reading the property here would fire one query per
+                row; reading the annotation is free and cannot shadow the property either way.
+              {% endcomment %}
+              <td class="fw-600">{{ obj.amount_claimed_agg|default:"0"|floatformat:2 }}<br><span class="text-muted">{{ obj.cost_line_count_agg|default:"0" }} cost line{{ obj.cost_line_count_agg|pluralize }}</span></td>
+              <td>{{ obj.amount_approved|floatformat:2 }}</td>
+              <td>{{ obj.amount_credited|floatformat:2 }}</td>
+              <td>{{ obj.submitted_on|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                {% if obj.is_overdue %}<span class="badge badge-red">{{ obj.response_due_on|date:"M d, Y" }}</span>
+                {% else %}{{ obj.response_due_on|date:"M d, Y"|default:"—" }}{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'submitted' %}info{% elif obj.status == 'acknowledged' %}info{% elif obj.status == 'approved' %}green{% elif obj.status == 'partially_approved' %}amber{% elif obj.status == 'rejected' %}red{% elif obj.status == 'expired' %}muted{% elif obj.status == 'credited' %}green{% elif obj.status == 'closed' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:warrantyclaim_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and delete are both offered on exactly `is_editable` — the condition
+                    warrantyclaim_edit and warrantyclaim_delete each enforce. A submitted claim's
+                    cost lines are what the supplier was shown, so neither view will touch them.
+                  {% endcomment %}
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:warrantyclaim_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:warrantyclaim_delete' obj.pk %}" onsubmit="return confirm('Delete this claim? Only a draft can be deleted — once it has been submitted it is the record of what the supplier was asked for.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="14"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No warranty claims</h3><p>When a returned unit failed because of how it was made rather than how it was used, the money goes back up the chain rather than out of your pocket. Raise a claim against the supplier, list the part, the labour and the freight separately, and record what they actually credit — a partial approval that accepts the part and refuses the labour is the normal outcome.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <p><span class="fw-600">Claimed</span> is the sum of the typed cost lines — what the supplier is being asked for. <span class="fw-600">Approved</span> is what they came back with, and <span class="fw-600">credited</span> is what actually arrived; the three are separate columns because they routinely differ, and a recovery rate computed from a single flat figure would be a lie.</p>
+      <p style="margin-top:.6rem;">Submitting a claim, recording the supplier's response and recording their credit are workspace-administrator actions — they speak to a counterparty and they move the recovery figures. Drafting and editing a claim is ordinary work, and only a draft may be edited or deleted.</p>
+    </div>
+  </div>
+{% endblock %}
