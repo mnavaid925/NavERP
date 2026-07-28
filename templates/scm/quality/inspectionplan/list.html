@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Inspection Plans{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Inspection Plans</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Inspection Plans</span></div>
+      <p class="text-muted">The criteria master — what to check, how much of the lot to check, and against which limits. A plan is versioned master data keyed by code plus version, not a numbered document. Its characteristics are <span class="fw-600">snapshotted</span> onto an inspection when one runs, so editing a plan next month never rewrites the limits a certificate was measured against.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:qualityinspection_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Inspections</a>
+      <a href="{% url 'scm:inspectionplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inspection Plan</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, name, version, item or notes…">
+        </div>
+        <div class="form-group">
+          <select name="plan_type" aria-label="Plan type" class="form-select">
+            <option value="">All plan types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.plan_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="sampling_method" aria-label="Sampling method" class="form-select">
+            <option value="">All sampling methods</option>
+            {% for val, label in sampling_choices %}
+              <option value="{{ val }}" {% if request.GET.sampling_method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item_category" aria-label="Item category" class="form-select">
+            <option value="">All categories</option>
+            {% for c in categories %}
+              <option value="{{ c.pk }}" {% if request.GET.item_category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="supplier" aria-label="Supplier" class="form-select">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}
+              <option value="{{ s.pk }}" {% if request.GET.supplier == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:inspectionplan_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Version</th><th>Name</th><th>Plan type</th><th>Scope</th><th>Sampling</th><th>Frequency</th><th>Characteristics</th><th>Effective from</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:inspectionplan_detail' obj.pk %}" class="fw-600">{{ obj.code }}</a></td>
+              <td>v{{ obj.version }}</td>
+              <td>{{ obj.name }}</td>
+              <td>
+                <span class="badge badge-{% if obj.plan_type == 'incoming_receipt' %}info{% elif obj.plan_type == 'in_process' %}amber{% elif obj.plan_type == 'outgoing_shipment' %}green{% elif obj.plan_type == 'periodic_stock' %}slate{% elif obj.plan_type == 'audit_checklist' %}muted{% else %}slate{% endif %}">{{ obj.get_plan_type_display }}</span>
+              </td>
+              <td>
+                {% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>
+                {% elif obj.item_category %}{{ obj.item_category.name }}
+                {% elif obj.supplier %}{{ obj.supplier.name }}
+                {% else %}<span class="text-muted">Unscoped</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.sampling_method == 'all_100' %}green{% elif obj.sampling_method == 'percentage' %}info{% elif obj.sampling_method == 'fixed_count' %}slate{% elif obj.sampling_method == 'aql' %}amber{% else %}slate{% endif %}">{{ obj.get_sampling_method_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.frequency == 'every' %}green{% elif obj.frequency == 'random_percent' %}amber{% elif obj.frequency == 'periodic' %}info{% else %}slate{% endif %}">{{ obj.get_frequency_display }}</span>
+              </td>
+              {% comment %}
+                `characteristic_count_agg` is the list view's ANNOTATION. It is deliberately NOT named
+                `characteristic_count` — that is a read-only @property on the model, and Django cannot
+                set an annotation onto a property (the page 500s). Reading the property here instead
+                would be a COUNT query per rendered row.
+                of the same name — do NOT swap this for obj.characteristics.count, which would fire
+                one COUNT query per rendered row.
+              {% endcomment %}
+              <td class="fw-600">{{ obj.characteristic_count_agg }}</td>
+              <td>{{ obj.effective_from|date:"M d, Y"|default:"Open-ended" }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:inspectionplan_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:inspectionplan_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:inspectionplan_delete' obj.pk %}" onsubmit="return confirm('Delete this inspection plan and its characteristics? A plan already used by an inspection or an audit cannot be deleted — deactivate it instead.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No inspection plans</h3><p>Create the criteria an incoming receipt, a production run, a shipment or a stock check is judged against. An audit checklist is a plan too — its characteristics are the questions the auditor asks.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      A plan is identified by <span class="fw-600">code plus version</span>, unique per workspace — re-issue it as a new version rather than editing the limits under a certificate that has already been printed. Deleting is refused once any inspection or audit has used the plan; deactivate it instead and the historical documents keep their provenance.
+    </div>
+  </div>
+{% endblock %}
