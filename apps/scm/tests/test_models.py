@@ -5688,3 +5688,989 @@ class TestManufacturingResidualBranches:
         assert len(shortfalls) == 1
         assert shortfalls[0]["available"] == Decimal("0")   # LOT-0001 holds none of it
         assert shortfalls[0]["short"] == Decimal("10.0000")
+
+
+# ================================================================================================
+# SCM 4.9 Quality Management
+# ================================================================================================
+
+# ================================================================ Auto-numbering + uniqueness
+class TestQualityAutoNumbering:
+    def test_inspection_numbers_are_sequential_per_tenant(self, tenant_a, tenant_b, item_a,
+                                                          item_b):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        today = timezone.localdate()
+        a1 = QualityInspection.objects.create(tenant=tenant_a, item=item_a, inspected_on=today)
+        a2 = QualityInspection.objects.create(tenant=tenant_a, item=item_a, inspected_on=today)
+        b1 = QualityInspection.objects.create(tenant=tenant_b, item=item_b, inspected_on=today)
+        assert (a1.number, a2.number) == ("QC-00001", "QC-00002")
+        assert b1.number == "QC-00001"
+
+    def test_nonconformance_numbers_are_prefixed_ncr(self, nonconformance_a):
+        assert nonconformance_a.number == "NCR-00001"
+
+    def test_capa_numbers_are_prefixed_capa(self, capa_action_a):
+        assert capa_action_a.number == "CAPA-00001"
+
+    def test_audit_numbers_are_prefixed_qa(self, quality_audit_a):
+        assert quality_audit_a.number == "QA-00001"
+
+    def test_inspection_number_is_unique_per_tenant(self, tenant_a, quality_inspection_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        with pytest.raises(IntegrityError):
+            QualityInspection.objects.create(tenant=tenant_a, item=item_a,
+                                             inspected_on=timezone.localdate(),
+                                             number=quality_inspection_a.number)
+
+    def test_nonconformance_number_is_unique_per_tenant(self, tenant_a, nonconformance_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        with pytest.raises(IntegrityError):
+            NonConformance.objects.create(tenant=tenant_a, item=item_a, title="Clash",
+                                          description="Clash", detected_on=timezone.localdate(),
+                                          number=nonconformance_a.number)
+
+    def test_capa_number_is_unique_per_tenant(self, tenant_a, capa_action_a):
+        from apps.scm.models import CapaAction
+        with pytest.raises(IntegrityError):
+            CapaAction.objects.create(tenant=tenant_a, title="Clash", problem_statement="Clash",
+                                      number=capa_action_a.number)
+
+    def test_audit_number_is_unique_per_tenant(self, tenant_a, quality_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityAudit
+        with pytest.raises(IntegrityError):
+            QualityAudit.objects.create(tenant=tenant_a, title="Clash",
+                                        planned_date=timezone.localdate(),
+                                        number=quality_audit_a.number)
+
+    def test_a_plan_is_deliberately_NOT_numbered(self):
+        """A plan is master data keyed by code+version — it must never grow a NUMBER_PREFIX."""
+        from apps.scm.models import InspectionPlan
+        assert "number" not in {f.name for f in InspectionPlan._meta.get_fields()}
+        assert not hasattr(InspectionPlan, "NUMBER_PREFIX")
+
+    def test_plan_code_and_version_are_unique_per_tenant(self, tenant_a, inspection_plan_a,
+                                                         item_a):
+        from apps.scm.models import InspectionPlan
+        with pytest.raises(IntegrityError):
+            InspectionPlan.objects.create(tenant=tenant_a, code=inspection_plan_a.code,
+                                          version=inspection_plan_a.version, name="Clash",
+                                          item=item_a)
+
+    def test_the_same_plan_code_is_free_in_another_tenant(self, tenant_b, inspection_plan_a,
+                                                          item_b):
+        from apps.scm.models import InspectionPlan
+        twin = InspectionPlan.objects.create(tenant=tenant_b, code=inspection_plan_a.code,
+                                             version="1", name="Twin", item=item_b)
+        assert twin.pk != inspection_plan_a.pk
+
+
+# ================================================================ next_number on a LATE field
+class TestCoaNumberAllocationOrder:
+    """``coa_number`` is stamped long after the inspection row exists, so its rows are NOT in id
+    order. ``next_number`` must order by the NUMBER FIELD — ordering by ``-id`` re-reads the
+    highest-id certified row and mints a number already in use."""
+
+    def _inspection(self, tenant, item):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        return QualityInspection.objects.create(tenant=tenant, item=item,
+                                                inspection_type="outgoing",
+                                                inspected_on=timezone.localdate())
+
+    def test_next_coa_number_is_derived_from_the_highest_CERTIFICATE_not_the_highest_id(
+        self, tenant_a, item_a,
+    ):
+        from apps.core.utils import next_number
+        from apps.scm.models import QualityInspection
+        first, second, third = (self._inspection(tenant_a, item_a) for _ in range(3))
+        assert first.pk < second.pk < third.pk
+        # Issued OUT of id order: the newest row got the FIRST certificate.
+        QualityInspection.objects.filter(pk=third.pk).update(coa_number="COA-00001")
+        QualityInspection.objects.filter(pk=first.pk).update(coa_number="COA-00002")
+        assert next_number(QualityInspection, tenant_a, "COA",
+                           field="coa_number") == "COA-00003"
+
+    def test_the_coa_sequence_is_per_tenant(self, tenant_a, tenant_b, item_a, item_b):
+        from apps.core.utils import next_number
+        from apps.scm.models import QualityInspection
+        mine = self._inspection(tenant_a, item_a)
+        QualityInspection.objects.filter(pk=mine.pk).update(coa_number="COA-00007")
+        assert next_number(QualityInspection, tenant_b, "COA", field="coa_number") == "COA-00001"
+
+    def test_the_running_number_and_the_certificate_number_share_no_sequence(self, tenant_a,
+                                                                             item_a):
+        from apps.core.utils import next_number
+        from apps.scm.models import QualityInspection
+        for _ in range(3):
+            self._inspection(tenant_a, item_a)
+        assert next_number(QualityInspection, tenant_a, "QC") == "QC-00004"
+        assert next_number(QualityInspection, tenant_a, "COA", field="coa_number") == "COA-00001"
+
+
+# ================================================================ __str__ + defaults + CHOICES
+class TestQualityStrAndDefaults:
+    def test_plan_str(self, inspection_plan_a):
+        assert str(inspection_plan_a) == "IQC-W1 v1 · Widget incoming check"
+
+    def test_characteristic_str(self, inspection_plan_a):
+        assert str(inspection_plan_a.characteristics.first()) == "Length"
+
+    def test_inspection_str(self, quality_inspection_a, item_a):
+        assert str(quality_inspection_a) == f"{quality_inspection_a.number} · {item_a.sku}"
+
+    def test_inspection_result_str(self, outgoing_inspection_a):
+        row = outgoing_inspection_a.results.first()
+        assert str(row) == f"{row.characteristic_name} — {row.get_result_display()}"
+
+    def test_nonconformance_str(self, nonconformance_a):
+        assert str(nonconformance_a) == f"{nonconformance_a.number} · Widgets out of tolerance"
+
+    def test_capa_str(self, capa_action_a):
+        assert str(capa_action_a) == f"{capa_action_a.number} · {capa_action_a.title}"
+
+    def test_capa_task_str(self, capa_action_a):
+        assert str(capa_action_a.tasks.first()) == "Re-calibrate the gauge"
+
+    def test_audit_str(self, quality_audit_a):
+        assert str(quality_audit_a) == f"{quality_audit_a.number} · Q1 internal process audit"
+
+    def test_a_new_inspection_defaults_to_draft_pending_none(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        obj = QualityInspection.objects.create(tenant=tenant_a, item=item_a,
+                                               inspected_on=timezone.localdate())
+        assert (obj.status, obj.usage_decision, obj.action_taken) == ("draft", "pending", "none")
+        assert obj.inspection_type == "incoming"
+        assert obj.coa_number == ""
+        assert obj.coa_issued_on is None
+        assert obj.coa_issued_to_id is None
+        assert obj.quantity_inspected == Decimal("0")
+
+    def test_a_new_nonconformance_defaults_to_open_pending(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        obj = NonConformance.objects.create(tenant=tenant_a, item=item_a, title="T",
+                                            description="D",
+                                            detected_on=timezone.localdate())
+        assert (obj.status, obj.disposition, obj.source) == ("open", "pending", "internal")
+        assert obj.severity == "minor"
+        assert obj.defect_category == "other"
+        assert obj.quarantine_applied is False
+        assert obj.closed_on is None
+        assert obj.cost_of_quality == Decimal("0")
+
+    def test_a_new_capa_defaults_to_open_corrective_normal(self, tenant_a):
+        from apps.scm.models import CapaAction
+        obj = CapaAction.objects.create(tenant=tenant_a, title="T", problem_statement="P")
+        assert (obj.status, obj.action_type, obj.priority) == ("open", "corrective", "normal")
+        assert obj.source == "internal_improvement"
+        assert obj.effectiveness_result == "pending"
+        assert obj.implemented_on is None
+        assert obj.verified_by_id is None
+
+    def test_a_new_audit_defaults_to_planned_internal_medium(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityAudit
+        obj = QualityAudit.objects.create(tenant=tenant_a, title="T",
+                                          planned_date=timezone.localdate())
+        assert (obj.status, obj.audit_type, obj.risk_level) == ("planned", "internal", "medium")
+        assert obj.actual_start is None
+        assert obj.actual_end is None
+
+    def test_a_new_plan_defaults_to_an_active_100pct_every_event_incoming_plan(self, tenant_a,
+                                                                               item_a):
+        from apps.scm.models import InspectionPlan
+        plan = InspectionPlan.objects.create(tenant=tenant_a, code="D1", name="Defaults",
+                                             item=item_a)
+        assert (plan.plan_type, plan.sampling_method, plan.frequency) == (
+            "incoming_receipt", "all_100", "every")
+        assert plan.version == "1"
+        assert plan.is_active is True
+
+    def test_every_choice_set_is_the_documented_one(self):
+        from apps.scm.models import (CapaAction, CapaTask, InspectionCharacteristic,
+                                     InspectionPlan, InspectionResult, NonConformance,
+                                     QualityAudit, QualityInspection)
+        assert [v for v, _ in QualityInspection.STATUS_CHOICES] == [
+            "draft", "in_progress", "passed", "failed", "on_hold", "cancelled"]
+        assert [v for v, _ in QualityInspection.INSPECTION_TYPE_CHOICES] == [
+            "incoming", "in_process", "outgoing", "periodic_stock"]
+        assert [v for v, _ in QualityInspection.USAGE_DECISION_CHOICES] == [
+            "pending", "accept", "accept_with_deviation", "reject"]
+        assert [v for v, _ in QualityInspection.ACTION_TAKEN_CHOICES] == [
+            "none", "quarantined", "ncr_raised", "returned_to_vendor"]
+        assert QualityInspection.EDITABLE_STATUSES == ("draft", "in_progress")
+        assert QualityInspection.ACCEPTING_DECISIONS == ("accept", "accept_with_deviation")
+        assert [v for v, _ in InspectionResult.RESULT_CHOICES] == [
+            "pending", "pass", "fail", "not_applicable"]
+        assert [v for v, _ in InspectionPlan.PLAN_TYPE_CHOICES] == [
+            "incoming_receipt", "in_process", "outgoing_shipment", "periodic_stock",
+            "audit_checklist"]
+        assert [v for v, _ in InspectionCharacteristic.CHARACTERISTIC_TYPE_CHOICES] == [
+            "measurement", "pass_fail", "visual", "instruction"]
+        assert [v for v, _ in NonConformance.STATUS_CHOICES] == [
+            "open", "investigating", "dispositioned", "closed", "cancelled"]
+        assert [v for v, _ in NonConformance.DISPOSITION_CHOICES] == [
+            "pending", "use_as_is", "rework", "repair", "scrap", "return_to_vendor", "regrade"]
+        assert NonConformance.OPEN_STATUSES == ("open", "investigating", "dispositioned")
+        assert [v for v, _ in CapaAction.STATUS_CHOICES] == [
+            "open", "investigating", "in_progress", "pending_verification", "closed", "cancelled"]
+        assert [v for v, _ in CapaTask.STATUS_CHOICES] == [
+            "open", "in_progress", "done", "cancelled"]
+        assert [v for v, _ in QualityAudit.STATUS_CHOICES] == [
+            "planned", "in_progress", "reported", "closed", "cancelled"]
+        assert QualityAudit.MAJOR_SEVERITIES == ("critical", "major")
+        assert QualityAudit.OPEN_FINDING_STATUSES == ("open", "investigating", "dispositioned")
+        assert QualityAudit.EDITABLE_STATUSES == ("planned", "in_progress")
+
+    def test_a_customer_complaint_is_deliberately_NOT_an_ncr_source(self):
+        """A complaint is a CRM Case — duplicating it here would give one customer two owners."""
+        from apps.scm.models import NonConformance
+        assert "customer_complaint" not in [v for v, _ in NonConformance.SOURCE_CHOICES]
+
+
+# ================================================================ generate_results() — the SNAPSHOT
+class TestGenerateResultsSnapshot:
+    def test_it_copies_every_characteristic_onto_a_result_row(self, quality_inspection_a,
+                                                              inspection_plan_a):
+        created = quality_inspection_a.generate_results()
+        assert created == 3
+        assert quality_inspection_a.results.count() == 3
+        rows = list(quality_inspection_a.results.order_by("sequence"))
+        assert [r.sequence for r in rows] == [10, 20, 30]
+        assert [r.characteristic_name for r in rows] == [
+            "Length", "Visual check", "Photograph the label"]
+
+    def test_the_whole_snapshot_block_is_copied_not_referenced(self, quality_inspection_a,
+                                                               inspection_plan_a, uom_each_a):
+        quality_inspection_a.generate_results()
+        row = quality_inspection_a.results.get(sequence=10)
+        source = inspection_plan_a.characteristics.get(sequence=10)
+        assert row.characteristic_type == "measurement"
+        assert row.uom_id == uom_each_a.pk
+        assert (row.target_value, row.lower_limit, row.upper_limit) == (
+            Decimal("100.0000"), Decimal("95.0000"), Decimal("105.0000"))
+        assert row.test_method == "Vernier caliper"
+        assert row.is_mandatory is True
+        assert row.is_critical is False
+        assert row.include_on_coa is False
+        assert row.characteristic_id == source.pk    # traceability only
+
+    def test_an_instruction_row_is_stamped_not_applicable_at_creation(self, quality_inspection_a):
+        quality_inspection_a.generate_results()
+        assert quality_inspection_a.results.get(sequence=30).result == "not_applicable"
+        assert quality_inspection_a.results.get(sequence=10).result == "pending"
+
+    def test_a_second_call_is_a_no_op(self, quality_inspection_a):
+        assert quality_inspection_a.generate_results() == 3
+        assert quality_inspection_a.generate_results() == 0
+        assert quality_inspection_a.results.count() == 3
+
+    def test_a_second_call_never_overwrites_a_hand_corrected_row(self, quality_inspection_a):
+        quality_inspection_a.generate_results()
+        row = quality_inspection_a.results.get(sequence=10)
+        row.measured_value = Decimal("99")
+        row.notes = "Measured twice"
+        row.save()
+        quality_inspection_a.generate_results()
+        row.refresh_from_db()
+        assert row.measured_value == Decimal("99.0000")
+        assert row.notes == "Measured twice"
+        assert quality_inspection_a.results.count() == 3
+
+    def test_a_LATER_PLAN_EDIT_does_not_change_an_existing_result_row(self, quality_inspection_a,
+                                                                      inspection_plan_a):
+        """The whole reason the snapshot exists: a plan re-issued with tighter limits next quarter
+        must not retro-actively rewrite what last quarter's certificate was measured against."""
+        quality_inspection_a.generate_results()
+        source = inspection_plan_a.characteristics.get(sequence=10)
+        source.name = "Length (revised)"
+        source.lower_limit = Decimal("99")
+        source.upper_limit = Decimal("101")
+        source.test_method = "Laser micrometer"
+        source.include_on_coa = True
+        source.save()
+        row = quality_inspection_a.results.get(sequence=10)
+        row.refresh_from_db()
+        assert row.characteristic_name == "Length"
+        assert (row.lower_limit, row.upper_limit) == (Decimal("95.0000"), Decimal("105.0000"))
+        assert row.test_method == "Vernier caliper"
+        assert row.include_on_coa is False
+
+    def test_an_inspection_with_no_plan_generates_nothing(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import QualityInspection
+        obj = QualityInspection.objects.create(tenant=tenant_a, item=item_a,
+                                               inspected_on=timezone.localdate())
+        assert obj.generate_results() == 0
+        assert obj.results.count() == 0
+
+    def test_generating_invalidates_the_instance_result_cache(self, quality_inspection_a):
+        assert quality_inspection_a.evaluated_result == "pending"   # warms _result_cache on []
+        quality_inspection_a.generate_results()
+        assert len(quality_inspection_a._result_rows()) == 3
+
+    def test_generating_invalidates_a_PREFETCHED_result_cache(self, tenant_a,
+                                                              quality_inspection_a):
+        from apps.scm.models import QualityInspection
+        prefetched = QualityInspection.objects.filter(
+            pk=quality_inspection_a.pk).prefetch_related("results").first()
+        assert prefetched._result_rows() == []
+        prefetched.generate_results()
+        assert len(prefetched._result_rows()) == 3
+
+
+# ================================================================ _evaluate() precedence
+class TestInspectionResultEvaluation:
+    def _row(self, inspection, **kwargs):
+        from apps.scm.models import InspectionResult
+        data = {"inspection": inspection, "characteristic_name": "X",
+                "characteristic_type": "measurement"}
+        data.update(kwargs)
+        return InspectionResult.objects.create(**data)
+
+    def test_an_instruction_is_always_not_applicable(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, characteristic_type="instruction", result="pass")
+        assert row.result == "not_applicable"
+
+    def test_a_measurement_inside_the_band_passes(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, lower_limit=Decimal("95"),
+                        upper_limit=Decimal("105"), measured_value=Decimal("100"))
+        assert row.result == "pass"
+
+    def test_a_measurement_below_the_lower_limit_fails(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, lower_limit=Decimal("95"),
+                        upper_limit=Decimal("105"), measured_value=Decimal("94.9999"))
+        assert row.result == "fail"
+
+    def test_a_measurement_above_the_upper_limit_fails(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, lower_limit=Decimal("95"),
+                        upper_limit=Decimal("105"), measured_value=Decimal("105.0001"))
+        assert row.result == "fail"
+
+    def test_a_measurement_with_no_value_is_pending(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, lower_limit=Decimal("95"))
+        assert row.result == "pending"
+
+    def test_a_target_only_measurement_must_hit_it_exactly(self, quality_inspection_a):
+        hit = self._row(quality_inspection_a, target_value=Decimal("16"),
+                        measured_value=Decimal("16"))
+        miss = self._row(quality_inspection_a, target_value=Decimal("16"),
+                         measured_value=Decimal("16.0001"))
+        assert (hit.result, miss.result) == ("pass", "fail")
+
+    def test_a_measurement_OVERWRITES_a_posted_verdict(self, quality_inspection_a):
+        """DERIVED from the snapshotted limits — an inspector cannot type 'pass' over a fail."""
+        row = self._row(quality_inspection_a, lower_limit=Decimal("95"),
+                        upper_limit=Decimal("105"), measured_value=Decimal("1"), result="pass")
+        assert row.result == "fail"
+
+    def test_a_pass_fail_row_keeps_the_inspectors_verdict(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, characteristic_type="pass_fail", result="fail",
+                        text_value="Scratched")
+        assert row.result == "fail"
+
+    def test_a_pass_fail_row_with_no_verdict_stays_pending(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, characteristic_type="visual")
+        assert row.result == "pending"
+
+    def test_spec_text_renders_from_the_snapshot_alone(self, quality_inspection_a, uom_each_a):
+        # Re-read: a page renders rows fetched from the DB, so the limits carry the column's own
+        # 4dp shape rather than whatever Decimal literal the caller happened to hand in.
+        def stored(**kwargs):
+            row = self._row(quality_inspection_a, **kwargs)
+            row.refresh_from_db()
+            return row
+
+        band = stored(lower_limit=Decimal("280"), upper_limit=Decimal("320"), uom=uom_each_a)
+        upper = stored(upper_limit=Decimal("0.5"))
+        lower = stored(lower_limit=Decimal("16"))
+        target = stored(target_value=Decimal("16"))
+        blank = stored()
+        text = stored(characteristic_type="visual", text_value="No scratches")
+        assert band.spec_text == "280.0000 – 320.0000 EA"
+        assert upper.spec_text == "≤ 0.5000"
+        assert lower.spec_text == "≥ 16.0000"
+        assert target.spec_text == "= 16.0000"
+        assert blank.spec_text == "—"
+        assert text.spec_text == "No scratches"
+
+    def test_is_out_of_spec_mirrors_the_verdict(self, quality_inspection_a):
+        row = self._row(quality_inspection_a, upper_limit=Decimal("1"),
+                        measured_value=Decimal("5"))
+        assert row.is_out_of_spec is True
+
+
+# ================================================================ evaluated_result + the counters
+class TestInspectionDerivedVerdict:
+    def _row(self, inspection, **kwargs):
+        from apps.scm.models import InspectionResult
+        data = {"inspection": inspection, "characteristic_name": "X",
+                "characteristic_type": "pass_fail"}
+        data.update(kwargs)
+        row = InspectionResult.objects.create(**data)
+        inspection.__dict__.pop("_result_cache", None)
+        return row
+
+    def test_no_rows_is_pending(self, quality_inspection_a):
+        assert quality_inspection_a.evaluated_result == "pending"
+
+    def test_all_pass_is_a_pass(self, quality_inspection_a):
+        self._row(quality_inspection_a, result="pass")
+        self._row(quality_inspection_a, result="pass")
+        assert quality_inspection_a.evaluated_result == "pass"
+
+    def test_a_failed_CRITICAL_row_fails_the_lot_whatever_the_rest_say(self,
+                                                                       quality_inspection_a):
+        self._row(quality_inspection_a, result="pass")
+        self._row(quality_inspection_a, result="fail", is_critical=True, is_mandatory=False)
+        assert quality_inspection_a.evaluated_result == "fail"
+        assert quality_inspection_a.has_critical_failure is True
+
+    def test_a_failed_MANDATORY_row_fails_the_lot_even_with_a_pending_mandatory_row(
+        self, quality_inspection_a,
+    ):
+        self._row(quality_inspection_a, result="fail", is_mandatory=True)
+        self._row(quality_inspection_a, result="pending", is_mandatory=True)
+        assert quality_inspection_a.evaluated_result == "fail"
+
+    def test_a_pending_mandatory_row_holds_the_verdict_open(self, quality_inspection_a):
+        self._row(quality_inspection_a, result="pass")
+        self._row(quality_inspection_a, result="pending", is_mandatory=True)
+        assert quality_inspection_a.evaluated_result == "pending"
+
+    def test_an_OPTIONAL_failure_still_fails_the_lot_once_the_mandatories_are_answered(
+        self, quality_inspection_a,
+    ):
+        self._row(quality_inspection_a, result="pass", is_mandatory=True)
+        self._row(quality_inspection_a, result="fail", is_mandatory=False)
+        assert quality_inspection_a.evaluated_result == "fail"
+
+    def test_an_optional_failure_cannot_pre_empt_an_unanswered_mandatory_row(self,
+                                                                             quality_inspection_a):
+        self._row(quality_inspection_a, result="pending", is_mandatory=True)
+        self._row(quality_inspection_a, result="fail", is_mandatory=False)
+        assert quality_inspection_a.evaluated_result == "pending"
+
+    def test_the_three_counters_read_the_same_rows(self, quality_inspection_a):
+        self._row(quality_inspection_a, result="fail", is_mandatory=True)
+        self._row(quality_inspection_a, result="pending", is_mandatory=True)
+        self._row(quality_inspection_a, result="pending", is_mandatory=False)
+        assert quality_inspection_a.failed_count == 1
+        assert quality_inspection_a.pending_count == 2
+        assert quality_inspection_a.mandatory_pending_count == 1
+
+    def test_result_rows_are_fetched_ONCE_per_instance(self, django_assert_max_num_queries,
+                                                       outgoing_inspection_a):
+        from apps.scm.models import QualityInspection
+        obj = QualityInspection.objects.get(pk=outgoing_inspection_a.pk)
+        with django_assert_max_num_queries(1):
+            _ = (obj.evaluated_result, obj.failed_count, obj.pending_count,
+                 obj.mandatory_pending_count, obj.has_critical_failure, obj.coa_results,
+                 obj.coa_blockers())
+
+    def test_a_supplied_prefetch_is_CONSUMED_rather_than_re_queried(self,
+                                                                    django_assert_max_num_queries,
+                                                                    outgoing_inspection_a):
+        from apps.scm.models import QualityInspection
+        obj = QualityInspection.objects.filter(
+            pk=outgoing_inspection_a.pk).prefetch_related("results").first()
+        with django_assert_max_num_queries(0):
+            assert len(obj._result_rows()) == 2
+
+
+# ================================================================ coa_blockers() — the seven rules
+class TestCoaBlockers:
+    def test_a_ready_inspection_has_no_blockers(self, outgoing_inspection_a):
+        assert outgoing_inspection_a.coa_blockers() == []
+        assert outgoing_inspection_a.coa_ready is True
+
+    def test_rule_1_only_an_outgoing_inspection_may_certify(self, outgoing_inspection_a):
+        outgoing_inspection_a.inspection_type = "incoming"
+        assert any("Only an outgoing inspection" in b
+                   for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_2_the_inspection_must_have_passed(self, outgoing_inspection_a):
+        outgoing_inspection_a.status = "failed"
+        assert any("has not passed" in b for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_3_a_usage_decision_must_have_accepted_the_lot(self, outgoing_inspection_a):
+        outgoing_inspection_a.usage_decision = "reject"
+        assert any("No usage decision has accepted" in b
+                   for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_3_accept_with_deviation_also_certifies(self, outgoing_inspection_a):
+        outgoing_inspection_a.usage_decision = "accept_with_deviation"
+        assert outgoing_inspection_a.coa_blockers() == []
+
+    def test_rule_4_an_out_of_spec_included_row_blocks_it(self, outgoing_inspection_a):
+        row = outgoing_inspection_a.results.get(sequence=10)
+        row.measured_value = Decimal("1")     # far outside 99.0 - 100.0
+        row.save()
+        outgoing_inspection_a.__dict__.pop("_result_cache", None)
+        assert any("out of specification" in b for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_5_an_unrecorded_included_row_blocks_it(self, outgoing_inspection_a):
+        row = outgoing_inspection_a.results.get(sequence=20)
+        row.result = "pending"
+        row.save()
+        outgoing_inspection_a.__dict__.pop("_result_cache", None)
+        assert any("no recorded value" in b for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_6_a_lot_tracked_item_must_name_its_batch(self, outgoing_inspection_a):
+        outgoing_inspection_a.lot_serial = None
+        assert any("lot/batch is required" in b for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_6_does_not_apply_to_an_untracked_item(self, outgoing_inspection_a, item_a):
+        outgoing_inspection_a.lot_serial = None
+        outgoing_inspection_a.item = item_a          # tracking="none"
+        assert not any("lot/batch is required" in b
+                       for b in outgoing_inspection_a.coa_blockers())
+
+    def test_rule_7_nothing_flagged_for_the_certificate_blocks_it(self, outgoing_inspection_a):
+        from apps.scm.models import InspectionResult
+        InspectionResult.objects.filter(inspection=outgoing_inspection_a).update(
+            include_on_coa=False)
+        outgoing_inspection_a.__dict__.pop("_result_cache", None)
+        assert outgoing_inspection_a.coa_results == []
+        assert any("No characteristics are flagged" in b
+                   for b in outgoing_inspection_a.coa_blockers())
+
+    def test_coa_results_are_only_the_flagged_rows_in_sequence(self, outgoing_inspection_a):
+        from apps.scm.models import InspectionResult
+        InspectionResult.objects.filter(inspection=outgoing_inspection_a,
+                                        sequence=20).update(include_on_coa=False)
+        outgoing_inspection_a.__dict__.pop("_result_cache", None)
+        assert [r.sequence for r in outgoing_inspection_a.coa_results] == [10]
+
+    def test_is_coa_issued_reads_the_stamp(self, outgoing_inspection_a):
+        assert outgoing_inspection_a.is_coa_issued is False
+        outgoing_inspection_a.coa_number = "COA-00001"
+        assert outgoing_inspection_a.is_coa_issued is True
+
+
+# ================================================================ Model-level clean() guards
+class TestQualityInspectionClean:
+    def test_accepted_plus_rejected_may_not_exceed_the_inspected_quantity(self,
+                                                                          quality_inspection_a):
+        quality_inspection_a.quantity_accepted = Decimal("8")
+        quality_inspection_a.quantity_rejected = Decimal("5")
+        with pytest.raises(ValidationError) as exc:
+            quality_inspection_a.full_clean()
+        assert "quantity_accepted" in exc.value.error_dict
+
+    def test_the_sample_may_not_be_larger_than_the_lot_inspected(self, quality_inspection_a):
+        quality_inspection_a.sample_size = Decimal("99")
+        with pytest.raises(ValidationError) as exc:
+            quality_inspection_a.full_clean()
+        assert "sample_size" in exc.value.error_dict
+
+    def test_a_lot_belonging_to_another_item_is_refused(self, tenant_a, quality_inspection_a,
+                                                        lot_a):
+        """A crafted POST pairing item A with item B's lot would certify A's measurements under
+        B's batch number."""
+        quality_inspection_a.lot_serial = lot_a      # lot_a belongs to item_lot_a, not item_a
+        with pytest.raises(ValidationError) as exc:
+            quality_inspection_a.full_clean()
+        assert "lot_serial" in exc.value.error_dict
+
+    def test_the_matching_lot_is_accepted(self, outgoing_inspection_a):
+        outgoing_inspection_a.full_clean()
+
+
+class TestNonConformanceClean:
+    def test_every_non_audit_source_must_name_an_item(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        obj = NonConformance(tenant=tenant_a, source="production", title="T", description="D",
+                             detected_on=timezone.localdate())
+        with pytest.raises(ValidationError) as exc:
+            obj.full_clean()
+        assert "item" in exc.value.error_dict
+
+    def test_an_AUDIT_finding_may_have_no_item(self, tenant_a, quality_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        obj = NonConformance(tenant=tenant_a, source="audit", audit=quality_audit_a,
+                             title="Training records incomplete", description="D",
+                             detected_on=timezone.localdate())
+        obj.full_clean()
+
+    def test_an_item_without_a_quantity_is_refused(self, nonconformance_a):
+        nonconformance_a.quantity_affected = Decimal("0")
+        with pytest.raises(ValidationError) as exc:
+            nonconformance_a.full_clean()
+        assert "quantity_affected" in exc.value.error_dict
+
+    def test_a_due_date_before_the_detection_date_is_refused(self, nonconformance_a):
+        nonconformance_a.due_date = nonconformance_a.detected_on - datetime.timedelta(days=1)
+        with pytest.raises(ValidationError) as exc:
+            nonconformance_a.full_clean()
+        assert "due_date" in exc.value.error_dict
+
+    def test_a_lot_belonging_to_another_item_is_refused(self, nonconformance_a, lot_a):
+        nonconformance_a.lot_serial = lot_a
+        with pytest.raises(ValidationError) as exc:
+            nonconformance_a.full_clean()
+        assert "lot_serial" in exc.value.error_dict
+
+    def test_posts_stock_is_true_only_for_a_from_stock_scrap(self, nonconformance_a):
+        assert nonconformance_a.posts_stock is False        # disposition still pending
+        nonconformance_a.disposition = "scrap"
+        assert nonconformance_a.posts_stock is True
+        nonconformance_a.source = "goods_receipt"
+        assert nonconformance_a.posts_stock is False        # refused at the dock, never in stock
+        nonconformance_a.source = "internal"
+        nonconformance_a.location = None
+        assert nonconformance_a.posts_stock is False
+        nonconformance_a.location_id = 1
+        nonconformance_a.item = None
+        assert nonconformance_a.posts_stock is False        # an audit finding has no item
+        nonconformance_a.item_id = 1
+        nonconformance_a.disposition = "rework"
+        assert nonconformance_a.posts_stock is False
+
+    def test_is_overdue_uses_the_localdate_basis(self, nonconformance_a):
+        from django.utils import timezone
+        assert nonconformance_a.is_overdue is False
+        nonconformance_a.due_date = timezone.localdate() - datetime.timedelta(days=1)
+        assert nonconformance_a.is_overdue is True
+        nonconformance_a.status = "closed"
+        assert nonconformance_a.is_overdue is False
+
+    def test_days_open_counts_to_today_then_freezes_at_closure(self, nonconformance_a):
+        from django.utils import timezone
+        nonconformance_a.detected_on = timezone.localdate() - datetime.timedelta(days=4)
+        assert nonconformance_a.days_open == 4
+        nonconformance_a.closed_on = timezone.now() - datetime.timedelta(days=2)
+        assert nonconformance_a.days_open == 2
+
+    def test_lot_history_is_empty_without_a_lot(self, nonconformance_a):
+        assert list(nonconformance_a.lot_history()) == []
+
+    def test_lot_history_returns_EVERY_move_for_the_batch(self, tenant_a, nonconformance_lot_a,
+                                                          item_lot_a, location_a, lot_a):
+        from apps.scm.tests._helpers import seed_stock
+        move = seed_stock(tenant_a, item_lot_a, location_a, "20", "1.0000")
+        move.lot_serial = lot_a
+        move.save(update_fields=["lot_serial"])
+        assert list(nonconformance_lot_a.lot_history()) == [move]
+
+
+class TestCapaActionClean:
+    def test_effectiveness_is_checked_after_the_action_is_due(self, capa_action_a):
+        capa_action_a.effectiveness_due_date = capa_action_a.due_date - datetime.timedelta(days=1)
+        with pytest.raises(ValidationError) as exc:
+            capa_action_a.full_clean()
+        assert "effectiveness_due_date" in exc.value.error_dict
+
+    def test_a_nonconformance_sourced_capa_must_name_one(self, capa_action_a):
+        capa_action_a.source = "nonconformance"
+        with pytest.raises(ValidationError) as exc:
+            capa_action_a.full_clean()
+        assert "nonconformance" in exc.value.error_dict
+
+    def test_an_audit_sourced_capa_must_name_the_audit(self, capa_action_a):
+        capa_action_a.source = "audit_finding"
+        with pytest.raises(ValidationError) as exc:
+            capa_action_a.full_clean()
+        assert "audit" in exc.value.error_dict
+
+    def test_a_SCAR_must_name_the_supplier(self, capa_action_a):
+        capa_action_a.source = "supplier"
+        with pytest.raises(ValidationError) as exc:
+            capa_action_a.full_clean()
+        assert "supplier" in exc.value.error_dict
+
+    def test_open_task_count_is_DERIVED_not_stored(self, capa_action_a):
+        from apps.scm.models import CapaTask
+        assert capa_action_a.open_task_count == 1
+        CapaTask.objects.create(capa=capa_action_a, sequence=20, description="Second",
+                                status="done")
+        assert capa_action_a.open_task_count == 1
+        capa_action_a.tasks.update(status="done")
+        assert capa_action_a.open_task_count == 0
+        assert "open_task_count" not in {f.name for f in capa_action_a._meta.get_fields()}
+
+    def test_verification_overdue_only_bites_while_awaiting_verification(self, capa_action_a):
+        from django.utils import timezone
+        capa_action_a.effectiveness_due_date = timezone.localdate() - datetime.timedelta(days=1)
+        assert capa_action_a.verification_overdue is False      # still open
+        capa_action_a.status = "pending_verification"
+        assert capa_action_a.verification_overdue is True
+        capa_action_a.effectiveness_result = "effective"
+        assert capa_action_a.verification_overdue is False
+
+    def test_a_task_is_overdue_only_while_it_is_live(self, capa_action_a):
+        from django.utils import timezone
+        task = capa_action_a.tasks.first()
+        task.due_date = timezone.localdate() - datetime.timedelta(days=1)
+        assert task.is_overdue is True
+        task.status = "done"
+        assert task.is_overdue is False
+
+
+class TestQualityAuditClean:
+    def test_an_audit_cannot_end_before_it_starts(self, reported_audit_a):
+        reported_audit_a.actual_end = reported_audit_a.actual_start - datetime.timedelta(days=1)
+        with pytest.raises(ValidationError) as exc:
+            reported_audit_a.full_clean()
+        assert "actual_end" in exc.value.error_dict
+
+    def test_a_supplier_audit_must_name_the_party(self, quality_audit_a):
+        quality_audit_a.audit_type = "supplier"
+        with pytest.raises(ValidationError) as exc:
+            quality_audit_a.full_clean()
+        assert "auditee_party" in exc.value.error_dict
+
+    def test_an_internal_audit_must_name_the_department(self, quality_audit_a):
+        quality_audit_a.auditee_org_unit = None
+        with pytest.raises(ValidationError) as exc:
+            quality_audit_a.full_clean()
+        assert "auditee_org_unit" in exc.value.error_dict
+
+    def test_only_an_audit_checklist_plan_may_be_the_checklist(self, quality_audit_a,
+                                                               inspection_plan_a):
+        quality_audit_a.checklist_plan = inspection_plan_a
+        with pytest.raises(ValidationError) as exc:
+            quality_audit_a.full_clean()
+        assert "checklist_plan" in exc.value.error_dict
+
+    def test_the_finding_roll_ups_are_DERIVED_not_columns(self, tenant_a, quality_audit_a):
+        """4.7 shipped a stored counter, regretted it and fixed it — these must stay properties."""
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        for severity in ("critical", "major", "minor", "observation"):
+            NonConformance.objects.create(tenant=tenant_a, source="audit", audit=quality_audit_a,
+                                          severity=severity, title=severity, description="D",
+                                          detected_on=timezone.localdate())
+        assert quality_audit_a.finding_count == 4
+        assert quality_audit_a.major_count == 2
+        assert quality_audit_a.minor_count == 2
+        assert quality_audit_a.open_finding_count == 4
+        stored = {f.name for f in quality_audit_a._meta.get_fields()}
+        for derived in ("finding_count", "major_count", "minor_count", "open_finding_count",
+                        "duration_days"):
+            assert derived not in stored, derived
+
+    def test_editing_a_findings_severity_moves_the_roll_up_immediately(self, tenant_a,
+                                                                       quality_audit_a):
+        from django.utils import timezone
+        from apps.scm.models import NonConformance
+        finding = NonConformance.objects.create(tenant=tenant_a, source="audit",
+                                                audit=quality_audit_a, severity="minor",
+                                                title="T", description="D",
+                                                detected_on=timezone.localdate())
+        assert quality_audit_a.major_count == 0
+        finding.severity = "critical"
+        finding.save(update_fields=["severity"])
+        assert quality_audit_a.major_count == 1
+
+    def test_duration_days_is_inclusive_and_none_while_unfinished(self, reported_audit_a):
+        assert reported_audit_a.duration_days == 2
+        reported_audit_a.actual_end = None
+        assert reported_audit_a.duration_days is None
+
+    def test_an_audit_stays_editable_while_in_progress(self, quality_audit_a):
+        """`complete` refuses a blank conclusion, and the conclusion is written AFTER the audit has
+        been run — locking the header at `start` made the normal path unreachable."""
+        quality_audit_a.status = "in_progress"
+        assert quality_audit_a.is_editable is True
+        quality_audit_a.status = "reported"
+        assert quality_audit_a.is_editable is False
+
+
+# ================================================================ InspectionPlan sampling + scope
+class TestInspectionPlanRules:
+    def test_percentage_sampling_needs_a_percentage(self, inspection_plan_a):
+        inspection_plan_a.sampling_method = "percentage"
+        with pytest.raises(ValidationError) as exc:
+            inspection_plan_a.full_clean()
+        assert "sample_percentage" in exc.value.error_dict
+
+    def test_fixed_count_sampling_needs_a_size(self, inspection_plan_a):
+        inspection_plan_a.sampling_method = "fixed_count"
+        with pytest.raises(ValidationError) as exc:
+            inspection_plan_a.full_clean()
+        assert "sample_size" in exc.value.error_dict
+
+    def test_aql_needs_both_numbers(self, inspection_plan_a):
+        inspection_plan_a.sampling_method = "aql"
+        with pytest.raises(ValidationError) as exc:
+            inspection_plan_a.full_clean()
+        assert "aql_accept_number" in exc.value.error_dict
+
+    def test_the_aql_band_may_not_be_undefined(self, inspection_plan_a):
+        inspection_plan_a.sampling_method = "aql"
+        inspection_plan_a.aql_accept_number = 5
+        inspection_plan_a.aql_reject_number = 5
+        with pytest.raises(ValidationError) as exc:
+            inspection_plan_a.full_clean()
+        assert "aql_reject_number" in exc.value.error_dict
+
+    def test_random_frequency_needs_a_percentage(self, inspection_plan_a):
+        inspection_plan_a.frequency = "random_percent"
+        with pytest.raises(ValidationError) as exc:
+            inspection_plan_a.full_clean()
+        assert "frequency_value" in exc.value.error_dict
+
+    def test_a_scoped_plan_type_must_name_something(self, inspection_plan_a):
+        inspection_plan_a.item = None
+        with pytest.raises(ValidationError) as exc:
+            inspection_plan_a.full_clean()
+        assert "item" in exc.value.error_dict
+
+    def test_an_audit_checklist_must_NOT_be_scoped(self, audit_checklist_plan_a, item_a):
+        audit_checklist_plan_a.item = item_a
+        with pytest.raises(ValidationError) as exc:
+            audit_checklist_plan_a.full_clean()
+        assert "plan_type" in exc.value.error_dict
+
+    def test_sample_quantity_by_method(self, inspection_plan_a):
+        inspection_plan_a.sampling_method = "all_100"
+        assert inspection_plan_a.sample_quantity(Decimal("40")) == Decimal("40.0000")
+        inspection_plan_a.sampling_method = "percentage"
+        inspection_plan_a.sample_percentage = Decimal("25")
+        assert inspection_plan_a.sample_quantity(Decimal("40")) == Decimal("10.0000")
+        inspection_plan_a.sampling_method = "fixed_count"
+        inspection_plan_a.sample_size = 100
+        assert inspection_plan_a.sample_quantity(Decimal("40")) == Decimal("40.0000")  # capped
+        inspection_plan_a.sample_size = 5
+        assert inspection_plan_a.sample_quantity(Decimal("40")) == Decimal("5.0000")
+        inspection_plan_a.sampling_method = "aql"
+        inspection_plan_a.sample_size = None
+        assert inspection_plan_a.sample_quantity(Decimal("40")) == Decimal("40.0000")
+        inspection_plan_a.sample_size = 8
+        assert inspection_plan_a.sample_quantity(Decimal("40")) == Decimal("8.0000")
+
+    def test_sample_quantity_of_an_empty_lot_is_zero(self, inspection_plan_a):
+        assert inspection_plan_a.sample_quantity(Decimal("0")) == Decimal("0")
+        assert inspection_plan_a.sample_quantity(Decimal("-5")) == Decimal("0")
+
+    def test_is_effective_needs_active_and_the_date(self, inspection_plan_a):
+        from django.utils import timezone
+        today = timezone.localdate()
+        assert inspection_plan_a.is_effective(today) is True
+        inspection_plan_a.effective_from = today + datetime.timedelta(days=1)
+        assert inspection_plan_a.is_effective(today) is False
+        inspection_plan_a.effective_from = today
+        assert inspection_plan_a.is_effective(today) is True
+        inspection_plan_a.is_active = False
+        assert inspection_plan_a.is_effective(today) is False
+
+    def test_characteristic_count_is_derived(self, inspection_plan_a):
+        assert inspection_plan_a.characteristic_count == 3
+        inspection_plan_a.characteristics.filter(sequence=30).delete()
+        assert inspection_plan_a.characteristic_count == 2
+
+    def test_for_trigger_prefers_the_item_over_its_category(self, tenant_a, item_a,
+                                                            inspection_plan_a, category_a):
+        from apps.scm.models import InspectionPlan
+        InspectionPlan.objects.create(tenant=tenant_a, code="CAT", name="Category-wide",
+                                      plan_type="incoming_receipt", item_category=category_a)
+        assert InspectionPlan.for_trigger(tenant_a, plan_type="incoming_receipt",
+                                          item=item_a) == inspection_plan_a
+
+    def test_for_trigger_falls_back_to_the_category_then_the_supplier(self, tenant_a, item_a,
+                                                                      category_a, supplier_a):
+        from apps.scm.models import InspectionPlan
+        by_category = InspectionPlan.objects.create(
+            tenant=tenant_a, code="CAT", name="Category-wide", plan_type="incoming_receipt",
+            item_category=category_a)
+        by_supplier = InspectionPlan.objects.create(
+            tenant=tenant_a, code="SUP", name="Supplier-wide", plan_type="incoming_receipt",
+            supplier=supplier_a)
+        assert InspectionPlan.for_trigger(tenant_a, plan_type="incoming_receipt", item=item_a,
+                                          supplier=supplier_a) == by_category
+        by_category.is_active = False
+        by_category.save(update_fields=["is_active"])
+        assert InspectionPlan.for_trigger(tenant_a, plan_type="incoming_receipt", item=item_a,
+                                          supplier=supplier_a) == by_supplier
+
+    def test_for_trigger_returns_none_without_a_tenant(self, item_a):
+        from apps.scm.models import InspectionPlan
+        assert InspectionPlan.for_trigger(None, plan_type="incoming_receipt", item=item_a) is None
+
+    def test_for_trigger_skips_a_plan_that_is_not_yet_effective(self, tenant_a, item_a,
+                                                                inspection_plan_a):
+        from django.utils import timezone
+        from apps.scm.models import InspectionPlan
+        inspection_plan_a.effective_from = timezone.localdate() + datetime.timedelta(days=30)
+        inspection_plan_a.save(update_fields=["effective_from"])
+        assert InspectionPlan.for_trigger(tenant_a, plan_type="incoming_receipt",
+                                          item=item_a) is None
+
+    def test_a_later_version_supersedes_an_earlier_one_on_a_tie(self, tenant_a, item_a,
+                                                               inspection_plan_a):
+        from apps.scm.models import InspectionPlan
+        newer = InspectionPlan.objects.create(tenant=tenant_a, code="IQC-W1", name="Revised",
+                                              version="2", plan_type="incoming_receipt",
+                                              item=item_a)
+        assert InspectionPlan.for_trigger(tenant_a, plan_type="incoming_receipt",
+                                          item=item_a) == newer
+
+
+class TestInspectionCharacteristicClean:
+    def test_a_measurement_needs_at_least_one_figure(self, inspection_plan_a):
+        from apps.scm.models import InspectionCharacteristic
+        row = InspectionCharacteristic(plan=inspection_plan_a, name="X",
+                                       characteristic_type="measurement")
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean()
+        assert "target_value" in exc.value.error_dict
+
+    def test_an_inverted_band_is_refused(self, inspection_plan_a):
+        from apps.scm.models import InspectionCharacteristic
+        row = InspectionCharacteristic(plan=inspection_plan_a, name="X",
+                                       characteristic_type="measurement",
+                                       lower_limit=Decimal("10"), upper_limit=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean()
+        assert "upper_limit" in exc.value.error_dict
+
+    def test_limits_parked_on_a_NON_measurement_are_refused(self, inspection_plan_a):
+        """The snapshot copies these columns, so a limit on a pass/fail row would be printed on a
+        certificate as a specification nothing was ever measured against."""
+        from apps.scm.models import InspectionCharacteristic
+        row = InspectionCharacteristic(plan=inspection_plan_a, name="X",
+                                       characteristic_type="pass_fail",
+                                       upper_limit=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean()
+        assert "target_value" in exc.value.error_dict
+
+    def test_only_a_measurement_or_pass_fail_may_be_certified(self, inspection_plan_a):
+        from apps.scm.models import InspectionCharacteristic
+        row = InspectionCharacteristic(plan=inspection_plan_a, name="X",
+                                       characteristic_type="instruction", include_on_coa=True)
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean()
+        assert "include_on_coa" in exc.value.error_dict
+
+
+# ================================================================ Editability windows
+class TestQualityEditableStatuses:
+    def test_an_inspection_is_editable_only_while_draft_or_in_progress(self,
+                                                                       quality_inspection_a):
+        for status, editable in (("draft", True), ("in_progress", True), ("passed", False),
+                                 ("failed", False), ("on_hold", False), ("cancelled", False)):
+            quality_inspection_a.status = status
+            assert quality_inspection_a.is_editable is editable, status
+
+    def test_a_report_is_editable_only_while_open_or_investigating(self, nonconformance_a):
+        for status, editable in (("open", True), ("investigating", True),
+                                 ("dispositioned", False), ("closed", False),
+                                 ("cancelled", False)):
+            nonconformance_a.status = status
+            assert nonconformance_a.is_editable is editable, status
+
+    def test_a_capa_is_editable_up_to_pending_verification(self, capa_action_a):
+        for status, editable in (("open", True), ("investigating", True), ("in_progress", True),
+                                 ("pending_verification", False), ("closed", False),
+                                 ("cancelled", False)):
+            capa_action_a.status = status
+            assert capa_action_a.is_editable is editable, status
