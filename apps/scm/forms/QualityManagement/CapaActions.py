@@ -97,6 +97,22 @@ class BaseCapaTaskFormSet(forms.BaseInlineFormSet):
                                f"This task is due after the CAPA itself ({parent_due:%d %b %Y}) — "
                                "the plan could never be complete on time.")
 
+    def add_fields(self, form, index):
+        """Build the owner option list ONCE for the whole formset.
+
+        ``TenantModelForm`` re-assigns a fresh, uncached queryset per form, and
+        ``ModelChoiceField.__deepcopy__`` does ``queryset.all()`` which discards any cache anyway —
+        so every rendered row re-ran the identical SELECT. Assigning ``.choices`` short-circuits
+        that; ``clean()``/``to_python()`` still go through ``self.queryset``, so POST validation and
+        tenant scoping are untouched.
+        """
+        super().add_fields(form, index)
+        if "owner" not in form.fields:
+            return
+        if not hasattr(self, "_owner_choices"):
+            self._owner_choices = list(form.fields["owner"].choices)
+        form.fields["owner"].choices = self._owner_choices
+
 
 CapaTaskFormSet = inlineformset_factory(
     CapaAction, CapaTask, form=CapaTaskForm, formset=BaseCapaTaskFormSet, extra=1,
