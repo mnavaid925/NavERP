@@ -6847,3 +6847,1761 @@ class TestSafetyStockReportFkFilters:
                                    reorder_rule_service_level_a):
         resp = client_a.get(reverse("scm:safety_stock_report"), {"location": str(location_a.pk)})
         assert [row["rule"] for row in resp.context["rows"]] == [reorder_rule_a]
+
+
+# ================================================================================================
+# SCM 4.8 Manufacturing
+# ================================================================================================
+
+def _wo_view_payload(item, **overrides):
+    data = {
+        "item": str(item.pk), "uom": "", "bom": "", "quantity_planned": "5",
+        "order_policy": "make_to_stock", "sales_order": "", "work_center": "",
+        "priority": "normal", "planned_start": "", "planned_end": "",
+        "schedule_direction": "forward", "due_date": "", "component_location": "",
+        "output_location": "", "output_lot_serial": "", "notes": "",
+        **formset_data("components", []),
+    }
+    data.update(overrides)
+    return data
+
+
+def _bom_view_payload(item, lines=(), **overrides):
+    data = {
+        "item": str(item.pk), "name": "New recipe", "version": "1", "bom_type": "manufacture",
+        "output_quantity": "1", "uom": "", "lead_time_days": "0", "default_work_center": "",
+        "status": "draft", "effective_from": "", "effective_to": "", "notes": "",
+        **formset_data("lines", list(lines)),
+    }
+    data.update(overrides)
+    return data
+
+
+def _bom_line_row(component, **overrides):
+    row = {"id": "", "sequence": "10", "component": str(component.pk), "quantity_per": "1",
+           "uom": "", "scrap_pct": "0", "issue_method": "manual", "notes": ""}
+    row.update(overrides)
+    return row
+
+
+def _wc_view_payload(**overrides):
+    data = {
+        "code": "WC-NEW", "name": "New Cell", "center_type": "machine", "location": "",
+        "org_unit": "", "supervisor": "", "capacity_hours_per_day": "8", "efficiency_pct": "100",
+        "setup_minutes": "0", "machine_cost_per_hour": "10", "labor_cost_per_hour": "20",
+        "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _log_view_payload(work_order, work_center, **overrides):
+    from django.utils import timezone
+    started = timezone.now() - datetime.timedelta(hours=3)
+    data = {
+        "work_order": str(work_order.pk), "work_center": str(work_center.pk),
+        "operation": "Mill", "entry_type": "labor", "operator": "",
+        "started_at": started.strftime("%Y-%m-%dT%H:%M"),
+        "ended_at": (started + datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
+        "quantity_completed": "0", "quantity_scrapped": "0", "downtime_reason": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _release(client, order):
+    """Drive the real release route, so its three guards are exercised every time."""
+    return client.post(reverse("scm:workorder_release", args=[order.pk]))
+
+
+def _issue(client, order):
+    return client.post(reverse("scm:workorder_issue_components", args=[order.pk]))
+
+
+def _report(client, order, good="0", scrapped="0", backflush=True):
+    data = {"quantity_good": good, "quantity_scrapped": scrapped}
+    if backflush:
+        data["backflush"] = "on"
+    return client.post(reverse("scm:workorder_report_production", args=[order.pk]), data)
+
+
+def _book_hours(order, work_center, entry_type, hours, minutes_ago=0):
+    from django.utils import timezone
+    from apps.scm.models import ProductionTimeLog
+    started = timezone.now() - datetime.timedelta(minutes=minutes_ago or 0) \
+        - datetime.timedelta(hours=hours)
+    return ProductionTimeLog.objects.create(
+        tenant=order.tenant, work_order=order, work_center=work_center, entry_type=entry_type,
+        started_at=started, ended_at=started + datetime.timedelta(hours=hours))
+
+
+def _moves(order, move_type=None):
+    from apps.scm.models import StockMove
+    qs = StockMove.objects.filter(tenant=order.tenant, reference=order.number)
+    return qs.filter(move_type=move_type) if move_type else qs
+
+
+# ================================================================ WorkCenter CRUD
+class TestWorkCenterCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, work_center_a):
+        resp = client_a.get(reverse("scm:workcenter_list"))
+        assert resp.status_code == 200
+        assert work_center_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, work_center_a, work_center_b):
+        resp = client_a.get(reverse("scm:workcenter_list"))
+        assert work_center_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, work_center_a):
+        resp = client_a.get(reverse("scm:workcenter_list"))
+        assert "scm/manufacturing/workcenter/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "type_choices", "locations"):
+            assert key in resp.context, key
+
+    def test_list_search_by_code(self, client_a, work_center_a):
+        found = client_a.get(reverse("scm:workcenter_list"), {"q": "WC-CNC"})
+        missed = client_a.get(reverse("scm:workcenter_list"), {"q": "no such centre"})
+        assert work_center_a in found.context["object_list"]
+        assert work_center_a not in missed.context["object_list"]
+
+    def test_list_filter_by_centre_type(self, client_a, work_center_a, work_center_a2):
+        resp = client_a.get(reverse("scm:workcenter_list"), {"center_type": "assembly"})
+        rows = list(resp.context["object_list"])
+        assert work_center_a2 in rows
+        assert work_center_a not in rows
+
+    def test_list_filter_by_location(self, client_a, work_center_a, work_center_a2, location_a):
+        resp = client_a.get(reverse("scm:workcenter_list"), {"location": str(location_a.pk)})
+        rows = list(resp.context["object_list"])
+        assert work_center_a in rows
+        assert work_center_a2 not in rows
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import WorkCenter
+        resp = client_a.post(reverse("scm:workcenter_create"), _wc_view_payload())
+        assert resp.status_code == 302
+        centre = WorkCenter.objects.get(tenant=tenant_a, code="WC-NEW")
+        assert centre.number.startswith("WC-")
+        assert centre.machine_cost_per_hour == Decimal("10.0000")
+
+    def test_edit_updates_the_row(self, client_a, work_center_a):
+        resp = client_a.post(reverse("scm:workcenter_edit", args=[work_center_a.pk]),
+                             _wc_view_payload(code=work_center_a.code, name="Renamed Cell"))
+        assert resp.status_code == 302
+        work_center_a.refresh_from_db()
+        assert work_center_a.name == "Renamed Cell"
+
+    def test_detail_renders_the_load_and_oee_chips(self, client_a, work_center_a, time_log_a):
+        resp = client_a.get(reverse("scm:workcenter_detail", args=[work_center_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/workcenter/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "open_orders", "can_delete", "window_days", "scheduled_hours",
+                    "actual_hours", "capacity_hours", "utilization_pct", "oee"):
+            assert key in resp.context, key
+        assert resp.context["actual_hours"] == Decimal("1.00")
+        assert resp.context["can_delete"] is False  # it has both a run and a log
+
+    def test_delete_is_post_only_and_a_get_never_deletes(self, client_a, work_center_a2):
+        from apps.scm.models import WorkCenter
+        assert client_a.get(reverse("scm:workcenter_delete",
+                                    args=[work_center_a2.pk])).status_code == 405
+        assert WorkCenter.objects.filter(pk=work_center_a2.pk).exists()
+
+    def test_delete_removes_an_unused_centre(self, client_a, work_center_a2):
+        from apps.scm.models import WorkCenter
+        resp = client_a.post(reverse("scm:workcenter_delete", args=[work_center_a2.pk]))
+        assert resp.status_code == 302
+        assert not WorkCenter.objects.filter(pk=work_center_a2.pk).exists()
+
+    def test_delete_is_refused_for_a_centre_with_work_orders(self, client_a, work_center_a,
+                                                             work_order_a):
+        from apps.scm.models import WorkCenter
+        resp = client_a.post(reverse("scm:workcenter_delete", args=[work_center_a.pk]),
+                             follow=True)
+        assert resp.status_code == 200
+        assert any("has work orders" in str(m) for m in resp.context["messages"])
+        assert WorkCenter.objects.filter(pk=work_center_a.pk).exists()
+
+    def test_delete_is_refused_for_a_centre_with_time_logs(self, client_a, tenant_a,
+                                                           work_center_a2, released_work_order_a):
+        from apps.scm.models import ProductionTimeLog, WorkCenter
+        from django.utils import timezone
+        ProductionTimeLog.objects.create(tenant=tenant_a, work_order=released_work_order_a,
+                                         work_center=work_center_a2, started_at=timezone.now())
+        resp = client_a.post(reverse("scm:workcenter_delete", args=[work_center_a2.pk]),
+                             follow=True)
+        assert any("production time logs" in str(m) for m in resp.context["messages"])
+        assert WorkCenter.objects.filter(pk=work_center_a2.pk).exists()
+
+
+# ================================================================ BillOfMaterials CRUD
+class TestBillOfMaterialsCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, bom_a):
+        resp = client_a.get(reverse("scm:billofmaterials_list"))
+        assert resp.status_code == 200
+        assert bom_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, bom_a, bom_b):
+        resp = client_a.get(reverse("scm:billofmaterials_list"))
+        assert bom_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, bom_a):
+        resp = client_a.get(reverse("scm:billofmaterials_list"))
+        assert "scm/manufacturing/billofmaterials/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "type_choices", "items",
+                    "work_centers"):
+            assert key in resp.context, key
+
+    def test_list_annotates_the_line_count_without_a_per_row_query(self, client_a, bom_a):
+        resp = client_a.get(reverse("scm:billofmaterials_list"))
+        row = next(r for r in resp.context["object_list"] if r.pk == bom_a.pk)
+        assert row.line_count == 2
+
+    def test_list_search_and_status_filter(self, client_a, bom_a, bom_draft_a):
+        found = client_a.get(reverse("scm:billofmaterials_list"), {"q": "Widget recipe"})
+        assert bom_a in found.context["object_list"]
+        active = client_a.get(reverse("scm:billofmaterials_list"), {"status": "active"})
+        rows = list(active.context["object_list"])
+        assert bom_a in rows and bom_draft_a not in rows
+
+    def test_create_saves_the_header_and_its_lines_in_one_go(self, client_a, tenant_a, item_a,
+                                                             component_bolt_a):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_create"),
+                             _bom_view_payload(item_a, [_bom_line_row(component_bolt_a,
+                                                                      quantity_per="3")],
+                                               version="7"))
+        assert resp.status_code == 302
+        bom = BillOfMaterials.objects.get(tenant=tenant_a, version="7")
+        assert bom.number.startswith("BOM-")
+        assert [line.quantity_per for line in bom.lines.all()] == [Decimal("3.0000")]
+
+    def test_edit_updates_the_header(self, client_a, bom_draft_a, item_lot_a, component_bolt_a):
+        line = bom_draft_a.lines.first()
+        resp = client_a.post(
+            reverse("scm:billofmaterials_edit", args=[bom_draft_a.pk]),
+            _bom_view_payload(item_lot_a, [
+                dict(_bom_line_row(component_bolt_a), id=str(line.pk), quantity_per="9"),
+            ], name="Renamed recipe", status="active", **{"lines-INITIAL_FORMS": "1"}))
+        assert resp.status_code == 302
+        bom_draft_a.refresh_from_db()
+        assert bom_draft_a.name == "Renamed recipe"
+        assert bom_draft_a.lines.first().quantity_per == Decimal("9.0000")
+
+    def test_detail_renders_the_flattened_explosion(self, client_a, bom_a):
+        resp = client_a.get(reverse("scm:billofmaterials_detail", args=[bom_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/billofmaterials/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "lines", "exploded", "is_multi_level", "estimated_unit_cost",
+                    "is_effective_now", "work_order_count"):
+            assert key in resp.context, key
+        assert resp.context["estimated_unit_cost"] == Decimal("9.0000")
+        assert resp.context["is_multi_level"] is False
+        assert resp.context["is_effective_now"] is True
+
+    def test_detail_flags_a_multi_level_recipe(self, client_a, tenant_a, bom_a, component_bolt_a,
+                                                component_plate_a):
+        from apps.scm.models import BillOfMaterials, BOMLine
+        sub = BillOfMaterials.objects.create(tenant=tenant_a, item=component_bolt_a,
+                                             name="Bolt recipe", version="1", status="active")
+        BOMLine.objects.create(bom=sub, component=component_plate_a, quantity_per=Decimal("1"))
+        resp = client_a.get(reverse("scm:billofmaterials_detail", args=[bom_a.pk]))
+        assert resp.context["is_multi_level"] is True
+
+    def test_delete_is_post_only(self, client_a, bom_draft_a):
+        from apps.scm.models import BillOfMaterials
+        assert client_a.get(reverse("scm:billofmaterials_delete",
+                                    args=[bom_draft_a.pk])).status_code == 405
+        assert BillOfMaterials.objects.filter(pk=bom_draft_a.pk).exists()
+
+    def test_delete_removes_an_unused_recipe(self, client_a, bom_draft_a):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_delete", args=[bom_draft_a.pk]))
+        assert resp.status_code == 302
+        assert not BillOfMaterials.objects.filter(pk=bom_draft_a.pk).exists()
+
+    def test_delete_is_refused_once_a_work_order_has_used_it(self, client_a, bom_a, work_order_a):
+        """WorkOrder.bom is SET_NULL, so deleting would silently orphan the link on historical
+        runs rather than error — the run's provenance is worth more than the tidy-up."""
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_delete", args=[bom_a.pk]), follow=True)
+        assert any("mark it obsolete instead" in str(m) for m in resp.context["messages"])
+        assert BillOfMaterials.objects.filter(pk=bom_a.pk).exists()
+
+
+# ================================================================ The self-reference create bug
+class TestBillOfMaterialsCreateSelfReference:
+    """The formset guard compares each line's component against the PARENT's item. On create the
+    view passed instance=None, so BaseInlineFormSet substituted an empty BillOfMaterials() whose
+    item_id was None — and the guard silently no-opped on exactly the path it exists for."""
+
+    def test_a_recipe_that_consumes_its_own_output_is_refused_on_CREATE(self, client_a, tenant_a,
+                                                                        item_a):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_create"),
+                             _bom_view_payload(item_a, [_bom_line_row(item_a)], version="9"))
+        assert resp.status_code == 200  # re-rendered, not saved
+        assert "cannot consume itself" in resp.content.decode()
+        assert not BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+    def test_the_same_guard_holds_on_EDIT(self, client_a, bom_draft_a, item_lot_a):
+        resp = client_a.post(reverse("scm:billofmaterials_edit", args=[bom_draft_a.pk]),
+                             _bom_view_payload(item_lot_a, [_bom_line_row(item_lot_a)]))
+        assert resp.status_code == 200
+        assert "cannot consume itself" in resp.content.decode()
+
+    def test_a_legitimate_component_still_saves_on_create(self, client_a, tenant_a, item_a,
+                                                          component_plate_a):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_create"),
+                             _bom_view_payload(item_a, [_bom_line_row(component_plate_a)],
+                                               version="9"))
+        assert resp.status_code == 302
+        assert BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+
+# ================================================================ WorkOrder CRUD
+class TestWorkOrderCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, work_order_a):
+        resp = client_a.get(reverse("scm:workorder_list"))
+        assert resp.status_code == 200
+        assert work_order_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, work_order_a, work_order_b):
+        resp = client_a.get(reverse("scm:workorder_list"))
+        assert work_order_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, work_order_a):
+        resp = client_a.get(reverse("scm:workorder_list"))
+        assert "scm/manufacturing/workorder/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "status_choices", "priority_choices",
+                    "policy_choices", "items", "work_centers"):
+            assert key in resp.context, key
+
+    def test_list_search_by_number(self, client_a, work_order_a):
+        found = client_a.get(reverse("scm:workorder_list"), {"q": work_order_a.number})
+        missed = client_a.get(reverse("scm:workorder_list"), {"q": "WO-99999"})
+        assert work_order_a in found.context["object_list"]
+        assert work_order_a not in missed.context["object_list"]
+
+    def test_list_filter_by_status_and_item(self, client_a, work_order_a, item_a):
+        by_status = client_a.get(reverse("scm:workorder_list"), {"status": "draft"})
+        assert work_order_a in by_status.context["object_list"]
+        by_other = client_a.get(reverse("scm:workorder_list"), {"status": "closed"})
+        assert work_order_a not in by_other.context["object_list"]
+        by_item = client_a.get(reverse("scm:workorder_list"), {"item": str(item_a.pk)})
+        assert work_order_a in by_item.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant_and_explodes_the_bom(self, client_a, tenant_a,
+                                                                        item_a, bom_a,
+                                                                        component_bolt_a):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_create"),
+                             _wo_view_payload(item_a, bom=str(bom_a.pk), quantity_planned="4"))
+        assert resp.status_code == 302
+        order = WorkOrder.objects.get(tenant=tenant_a, quantity_planned=Decimal("4"))
+        assert order.number.startswith("WO-")
+        assert order.status == "draft"
+        assert order.components.count() == 2
+        bolt = order.components.get(item=component_bolt_a)
+        assert bolt.quantity_required == Decimal("8.0000")
+
+    def test_create_with_hand_entered_components_and_no_bom(self, client_a, tenant_a, item_a,
+                                                            component_plate_a):
+        from apps.scm.models import WorkOrder
+        data = _wo_view_payload(item_a, quantity_planned="2")
+        data.update(formset_data("components", [
+            {"id": "", "sequence": "10", "item": str(component_plate_a.pk),
+             "quantity_required": "6", "uom": "", "lot_serial": "", "issue_method": "manual",
+             "unit_cost": "5", "notes": ""},
+        ]))
+        resp = client_a.post(reverse("scm:workorder_create"), data)
+        assert resp.status_code == 302
+        order = WorkOrder.objects.get(tenant=tenant_a, quantity_planned=Decimal("2"))
+        assert [c.quantity_required for c in order.components.all()] == [Decimal("6.0000")]
+
+    def test_a_mis_picked_bom_is_refused_at_the_view(self, client_a, tenant_a, bom_a,
+                                                     item_lot_a):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_create"),
+                             _wo_view_payload(item_lot_a, bom=str(bom_a.pk)))
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a, item=item_lot_a).exists()
+
+    def test_edit_updates_a_draft_run(self, client_a, work_order_a, item_a):
+        resp = client_a.post(reverse("scm:workorder_edit", args=[work_order_a.pk]),
+                             _wo_view_payload(item_a, quantity_planned="7", priority="urgent"))
+        assert resp.status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.quantity_planned == Decimal("7.0000")
+        assert work_order_a.priority == "urgent"
+
+    def test_edit_is_refused_once_the_run_is_released(self, client_a, released_work_order_a):
+        resp = client_a.get(reverse("scm:workorder_edit", args=[released_work_order_a.pk]),
+                            follow=True)
+        assert any("can no longer be edited" in str(m) for m in resp.context["messages"])
+
+    def test_detail_resolves_every_cost_pool_once(self, client_a, released_work_order_a,
+                                                   time_log_a):
+        resp = client_a.get(reverse("scm:workorder_detail", args=[released_work_order_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/workorder/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "components", "shortfalls", "time_logs", "moves", "material_cost",
+                    "labor_cost", "machine_cost", "wip_value", "actual_hours",
+                    "duration_variance_hours", "schedule_form", "report_form"):
+            assert key in resp.context, key
+        assert resp.context["machine_cost"] == Decimal("10.0000")
+        assert resp.context["wip_value"] == Decimal("10.0000")
+
+    def test_delete_is_post_only_and_a_get_never_deletes(self, client_a, work_order_a):
+        from apps.scm.models import WorkOrder
+        assert client_a.get(reverse("scm:workorder_delete",
+                                    args=[work_order_a.pk])).status_code == 405
+        assert WorkOrder.objects.filter(pk=work_order_a.pk).exists()
+
+    def test_delete_removes_a_draft_run(self, client_a, work_order_a):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_delete", args=[work_order_a.pk]))
+        assert resp.status_code == 302
+        assert not WorkOrder.objects.filter(pk=work_order_a.pk).exists()
+
+    def test_delete_is_refused_once_the_run_is_live(self, client_a, released_work_order_a):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_delete", args=[released_work_order_a.pk]),
+                             follow=True)
+        assert any("cancel it instead" in str(m) for m in resp.context["messages"])
+        assert WorkOrder.objects.filter(pk=released_work_order_a.pk).exists()
+
+
+# ================================================================ Lifecycle (no stock effect)
+class TestWorkOrderLifecycle:
+    def test_plan_moves_a_draft_run_forward(self, client_a, work_order_a):
+        assert client_a.post(reverse("scm:workorder_plan",
+                                     args=[work_order_a.pk])).status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.status == "planned"
+
+    def test_plan_is_refused_from_any_other_status(self, client_a, released_work_order_a):
+        resp = client_a.post(reverse("scm:workorder_plan", args=[released_work_order_a.pk]),
+                             follow=True)
+        assert any("can't be planned" in str(m) for m in resp.context["messages"])
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "released"
+
+    def test_release_stamps_the_releasing_user(self, client_a, admin_user, stocked_work_order_a):
+        assert _release(client_a, stocked_work_order_a).status_code == 302
+        stocked_work_order_a.refresh_from_db()
+        assert stocked_work_order_a.status == "released"
+        assert stocked_work_order_a.released_by_id == admin_user.pk
+
+    def test_release_is_refused_without_components(self, client_a, work_order_a):
+        resp = _release(client_a, work_order_a)
+        assert resp.status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.status == "draft"
+
+    def test_release_is_refused_without_both_locations(self, client_a, stocked_work_order_a):
+        stocked_work_order_a.output_location = None
+        stocked_work_order_a.save(update_fields=["output_location"])
+        resp = _release(client_a, stocked_work_order_a)
+        assert resp.status_code == 302
+        stocked_work_order_a.refresh_from_db()
+        assert stocked_work_order_a.status == "draft"
+
+    def test_release_is_refused_from_a_completed_run(self, client_a, stocked_work_order_a):
+        from apps.scm.models import WorkOrder
+        WorkOrder.objects.filter(pk=stocked_work_order_a.pk).update(status="completed")
+        resp = _release(client_a, stocked_work_order_a)
+        assert resp.status_code == 302
+        stocked_work_order_a.refresh_from_db()
+        assert stocked_work_order_a.status == "completed"
+
+    def test_close_is_only_legal_from_completed(self, client_a, released_work_order_a):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_close", args=[released_work_order_a.pk]),
+                             follow=True)
+        assert any("can't be closed" in str(m) for m in resp.context["messages"])
+        WorkOrder.objects.filter(pk=released_work_order_a.pk).update(status="completed")
+        assert client_a.post(reverse("scm:workorder_close",
+                                     args=[released_work_order_a.pk])).status_code == 302
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "closed"
+
+    def test_cancel_works_on_a_run_that_moved_no_stock(self, client_a, released_work_order_a):
+        assert client_a.post(reverse("scm:workorder_cancel",
+                                     args=[released_work_order_a.pk])).status_code == 302
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "cancelled"
+
+    def test_cancel_is_refused_once_stock_has_moved(self, client_a, released_work_order_a):
+        """The components are gone from stock — cancelling would leave that cost attached to a
+        document claiming nothing happened."""
+        _issue(client_a, released_work_order_a)
+        resp = client_a.post(reverse("scm:workorder_cancel", args=[released_work_order_a.pk]),
+                             follow=True)
+        assert any("posted stock movements" in str(m) for m in resp.context["messages"])
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "in_progress"
+
+    def test_cancelling_twice_is_a_friendly_no_op(self, client_a, released_work_order_a):
+        client_a.post(reverse("scm:workorder_cancel", args=[released_work_order_a.pk]))
+        resp = client_a.post(reverse("scm:workorder_cancel", args=[released_work_order_a.pk]),
+                             follow=True)
+        assert any("already closed or cancelled" in str(m) for m in resp.context["messages"])
+
+
+# ================================================================ Scheduling (date arithmetic)
+class TestWorkOrderSchedule:
+    def test_scheduling_forward_fills_the_window_from_the_start(self, client_a, work_order_a):
+        resp = client_a.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                             {"direction": "forward", "anchor_date": "2026-05-01",
+                              "lead_time_days": "4"})
+        assert resp.status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.planned_start.date() == datetime.date(2026, 5, 1)
+        assert work_order_a.planned_end.date() == datetime.date(2026, 5, 5)
+        assert work_order_a.schedule_direction == "forward"
+
+    def test_scheduling_backward_fills_the_window_from_the_due_date(self, client_a,
+                                                                    work_order_a):
+        resp = client_a.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                             {"direction": "backward", "anchor_date": "2026-05-10",
+                              "lead_time_days": "3"})
+        assert resp.status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.planned_start.date() == datetime.date(2026, 5, 7)
+        assert work_order_a.planned_end.date() == datetime.date(2026, 5, 10)
+
+    def test_a_blank_lead_time_falls_back_to_the_boms(self, client_a, work_order_a, bom_a):
+        resp = client_a.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                             {"direction": "forward", "anchor_date": "2026-05-01",
+                              "lead_time_days": ""})
+        assert resp.status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.planned_end.date() == datetime.date(2026, 5, 4)  # bom lead time 3
+
+    def test_a_year_9999_anchor_does_not_500(self, client_a, work_order_a):
+        resp = client_a.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                             {"direction": "forward", "anchor_date": "9999-12-31",
+                              "lead_time_days": "10"}, follow=True)
+        assert resp.status_code == 200
+        work_order_a.refresh_from_db()
+        assert work_order_a.planned_start is None
+
+    def test_a_junk_anchor_does_not_500(self, client_a, work_order_a):
+        for junk in ("not-a-date", "0001-01-01", "2026-13-45", ""):
+            resp = client_a.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                                 {"direction": "forward", "anchor_date": junk}, follow=True)
+            assert resp.status_code == 200, junk
+        work_order_a.refresh_from_db()
+        assert work_order_a.planned_start is None
+
+    def test_scheduling_a_released_run_is_refused(self, client_a, released_work_order_a):
+        resp = client_a.post(reverse("scm:workorder_schedule",
+                                     args=[released_work_order_a.pk]),
+                             {"direction": "forward", "anchor_date": "2026-05-01"}, follow=True)
+        assert any("can be rescheduled" in str(m) for m in resp.context["messages"])
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.planned_start is None
+
+
+# ================================================================ Component issue (posts stock)
+class TestWorkOrderIssueComponents:
+    def test_issuing_draws_one_consumption_move_per_component(self, client_a,
+                                                              released_work_order_a,
+                                                              component_bolt_a,
+                                                              component_plate_a):
+        assert _issue(client_a, released_work_order_a).status_code == 302
+        moves = {m.item_id: m for m in _moves(released_work_order_a, "consumption")}
+        assert set(moves) == {component_bolt_a.pk, component_plate_a.pk}
+        assert moves[component_bolt_a.pk].quantity == Decimal("-10.0000")
+        assert moves[component_plate_a.pk].quantity == Decimal("-5.0000")
+        assert all(m.reference == released_work_order_a.number for m in moves.values())
+
+    def test_issuing_moves_a_released_run_into_progress(self, client_a, released_work_order_a):
+        _issue(client_a, released_work_order_a)
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "in_progress"
+        assert released_work_order_a.actual_start is not None
+
+    def test_a_SECOND_issue_post_posts_nothing_more(self, client_a, released_work_order_a):
+        """The double-click / retry / replay guard: the status is re-read inside the transaction
+        behind a row lock, and every line is already fully issued."""
+        _issue(client_a, released_work_order_a)
+        resp = _issue(client_a, released_work_order_a)
+        assert resp.status_code == 302
+        assert _moves(released_work_order_a, "consumption").count() == 2
+        for component in released_work_order_a.components.all():
+            assert component.quantity_issued == component.quantity_required
+
+    def test_the_second_post_says_why_nothing_happened(self, client_a, released_work_order_a):
+        _issue(client_a, released_work_order_a)
+        resp = client_a.post(
+            reverse("scm:workorder_issue_components", args=[released_work_order_a.pk]),
+            follow=True)
+        assert any("already fully issued" in str(m) for m in resp.context["messages"])
+
+    def test_issuing_before_release_is_refused(self, client_a, stocked_work_order_a):
+        resp = _issue(client_a, stocked_work_order_a)
+        assert resp.status_code == 302
+        assert _moves(stocked_work_order_a).count() == 0
+
+    def test_issuing_without_a_component_location_is_refused(self, client_a,
+                                                             released_work_order_a):
+        from apps.scm.models import WorkOrder
+        WorkOrder.objects.filter(pk=released_work_order_a.pk).update(component_location=None)
+        resp = _issue(client_a, released_work_order_a)
+        assert resp.status_code == 302
+        assert _moves(released_work_order_a).count() == 0
+
+    def test_insufficient_stock_is_a_message_not_a_500_and_rolls_the_whole_draw_back(
+        self, client_a, released_work_order_a, component_plate_a,
+    ):
+        component = released_work_order_a.components.get(item=component_plate_a)
+        component.quantity_required = Decimal("500")
+        component.save(update_fields=["quantity_required"])
+        resp = _issue(client_a, released_work_order_a)
+        assert resp.status_code == 302
+        assert _moves(released_work_order_a).count() == 0   # the bolt line rolled back too
+        for row in released_work_order_a.components.all():
+            assert row.quantity_issued == Decimal("0")
+
+    def test_the_snapshot_cost_rolls_as_a_weighted_average_across_partial_issues(
+        self, client_a, released_work_order_a, component_bolt_a, location_a,
+    ):
+        """Overwriting it would re-value the earlier issue at today's rate, so issued_value would
+        disagree with the ledger rows it summarises."""
+        from apps.scm.tests._helpers import seed_stock
+        component = released_work_order_a.components.get(item=component_bolt_a)
+        component.quantity_required = Decimal("4")
+        component.save(update_fields=["quantity_required"])
+        _issue(client_a, released_work_order_a)          # 4 @ 2.0000
+        seed_stock(released_work_order_a.tenant, component_bolt_a, location_a, "100", "6.0000")
+        component.refresh_from_db()
+        component.quantity_required = Decimal("8")
+        component.save(update_fields=["quantity_required"])
+        _issue(client_a, released_work_order_a)          # 4 more, at the NEW average
+        component.refresh_from_db()
+        assert component.quantity_issued == Decimal("8.0000")
+        assert Decimal("2.0000") < component.unit_cost < Decimal("6.0000")
+
+
+# ================================================================ Report production (posts stock)
+class TestWorkOrderReportProduction:
+    def test_reporting_posts_one_positive_production_move(self, client_a, released_work_order_a,
+                                                          item_a):
+        _issue(client_a, released_work_order_a)
+        assert _report(client_a, released_work_order_a, good="3").status_code == 302
+        moves = list(_moves(released_work_order_a, "production"))
+        assert len(moves) == 1
+        assert moves[0].item_id == item_a.pk
+        assert moves[0].quantity == Decimal("3.0000")
+        assert moves[0].reference == released_work_order_a.number
+        assert moves[0].location_id == released_work_order_a.output_location_id
+
+    def test_the_run_completes_when_nothing_remains(self, client_a, released_work_order_a):
+        _issue(client_a, released_work_order_a)
+        _report(client_a, released_work_order_a, good="5")
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("5.0000")
+        assert released_work_order_a.status == "completed"
+        assert released_work_order_a.actual_end is not None
+
+    def test_scrap_is_recorded_but_posts_NO_move(self, client_a, released_work_order_a):
+        """Scrapped units never entered stock, so there is nothing to take out."""
+        _issue(client_a, released_work_order_a)
+        _report(client_a, released_work_order_a, good="0", scrapped="2")
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_scrapped == Decimal("2.0000")
+        assert _moves(released_work_order_a, "production").count() == 0
+        assert released_work_order_a.produced_unit_cost == Decimal("0")
+
+    def test_reporting_beyond_the_remaining_quantity_is_REFUSED(self, client_a,
+                                                                released_work_order_a):
+        _issue(client_a, released_work_order_a)
+        resp = _report(client_a, released_work_order_a, good="99", scrapped="0")
+        assert resp.status_code == 302
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("0")
+        assert _moves(released_work_order_a, "production").count() == 0
+
+    def test_the_over_report_message_names_the_remaining_quantity(self, client_a,
+                                                                  released_work_order_a):
+        resp = client_a.post(
+            reverse("scm:workorder_report_production", args=[released_work_order_a.pk]),
+            {"quantity_good": "9", "quantity_scrapped": "0"}, follow=True)
+        assert any("remaining on" in str(m) for m in resp.context["messages"])
+
+    def test_an_over_report_leaves_NO_partial_backflush_consumption(self, client_a,
+                                                                    released_work_order_a):
+        """The remaining-quantity guard runs BEFORE the backflush draw, so an over-report cannot
+        consume material against output it was never allowed to book."""
+        released_work_order_a.components.update(issue_method="backflush")
+        resp = _report(client_a, released_work_order_a, good="99")
+        assert resp.status_code == 302
+        assert _moves(released_work_order_a).count() == 0
+        for row in released_work_order_a.components.all():
+            assert row.quantity_issued == Decimal("0")
+
+    def test_a_failing_backflush_rolls_the_WHOLE_report_back(self, client_a,
+                                                             released_work_order_a,
+                                                             component_plate_a):
+        """The first component posts, the second finds no stock and raises — the atomic block must
+        take the first one back with it rather than leaving a half-consumed run."""
+        released_work_order_a.components.update(issue_method="backflush")
+        plate = released_work_order_a.components.get(item=component_plate_a)
+        plate.quantity_required = Decimal("500")
+        plate.save(update_fields=["quantity_required"])
+        resp = _report(client_a, released_work_order_a, good="2")
+        assert resp.status_code == 302
+        assert _moves(released_work_order_a).count() == 0
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("0")
+        for row in released_work_order_a.components.all():
+            assert row.quantity_issued == Decimal("0")
+
+    def test_reporting_before_release_is_refused(self, client_a, stocked_work_order_a):
+        resp = _report(client_a, stocked_work_order_a, good="1")
+        assert resp.status_code == 302
+        assert _moves(stocked_work_order_a).count() == 0
+
+    def test_reporting_without_an_output_location_is_refused(self, client_a,
+                                                             released_work_order_a):
+        from apps.scm.models import WorkOrder
+        WorkOrder.objects.filter(pk=released_work_order_a.pk).update(output_location=None)
+        resp = _report(client_a, released_work_order_a, good="1")
+        assert resp.status_code == 302
+        assert _moves(released_work_order_a, "production").count() == 0
+
+    def test_an_empty_report_is_refused_by_the_form(self, client_a, released_work_order_a):
+        resp = client_a.post(
+            reverse("scm:workorder_report_production", args=[released_work_order_a.pk]),
+            {"quantity_good": "0", "quantity_scrapped": "0"}, follow=True)
+        assert any("Report a good quantity" in str(m) for m in resp.context["messages"])
+        assert _moves(released_work_order_a).count() == 0
+
+    def test_junk_report_quantities_never_500(self, client_a, released_work_order_a):
+        for junk in ("NaN", "Infinity", "-Infinity", "abc", "-4", "1e400", "9" * 20):
+            resp = client_a.post(
+                reverse("scm:workorder_report_production", args=[released_work_order_a.pk]),
+                {"quantity_good": junk, "quantity_scrapped": "0"}, follow=True)
+            assert resp.status_code == 200, junk
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("0")
+        assert _moves(released_work_order_a).count() == 0
+
+
+# ================================================================ Backflush vs manual issue
+class TestWorkOrderBackflush:
+    def test_a_backflush_line_is_NOT_drawn_by_the_issue_action(self, client_a,
+                                                               released_work_order_a,
+                                                               component_bolt_a,
+                                                               component_plate_a):
+        """Issuing it here would pre-consume it and make the issue-method distinction inert."""
+        plate = released_work_order_a.components.get(item=component_plate_a)
+        plate.issue_method = "backflush"
+        plate.save(update_fields=["issue_method"])
+        _issue(client_a, released_work_order_a)
+        assert _moves(released_work_order_a, "consumption").count() == 1
+        plate.refresh_from_db()
+        assert plate.quantity_issued == Decimal("0")
+        bolt = released_work_order_a.components.get(item=component_bolt_a)
+        assert bolt.quantity_issued == Decimal("10.0000")
+
+    def test_a_backflush_line_IS_consumed_in_proportion_to_the_output(self, client_a,
+                                                                      released_work_order_a,
+                                                                      component_plate_a):
+        plate = released_work_order_a.components.get(item=component_plate_a)
+        plate.issue_method = "backflush"
+        plate.save(update_fields=["issue_method"])
+        _issue(client_a, released_work_order_a)
+        _report(client_a, released_work_order_a, good="2")   # 2 of 5 planned -> 2 of 5 plates
+        plate.refresh_from_db()
+        assert plate.quantity_issued == Decimal("2.0000")
+        drawn = _moves(released_work_order_a, "consumption").filter(item=component_plate_a)
+        assert [m.quantity for m in drawn] == [Decimal("-2.0000")]
+
+    def test_scrap_pulls_backflush_material_too(self, client_a, released_work_order_a,
+                                                component_plate_a):
+        plate = released_work_order_a.components.get(item=component_plate_a)
+        plate.issue_method = "backflush"
+        plate.save(update_fields=["issue_method"])
+        _report(client_a, released_work_order_a, good="1", scrapped="1")
+        plate.refresh_from_db()
+        assert plate.quantity_issued == Decimal("2.0000")  # (1 good + 1 scrapped) of 5 planned
+
+    def test_turning_backflush_OFF_on_the_report_leaves_the_line_alone(self, client_a,
+                                                                       released_work_order_a,
+                                                                       component_plate_a):
+        plate = released_work_order_a.components.get(item=component_plate_a)
+        plate.issue_method = "backflush"
+        plate.save(update_fields=["issue_method"])
+        _report(client_a, released_work_order_a, good="2", backflush=False)
+        plate.refresh_from_db()
+        assert plate.quantity_issued == Decimal("0")
+
+    def test_a_backflush_draw_never_exceeds_what_is_outstanding(self, client_a,
+                                                                released_work_order_a,
+                                                                component_plate_a):
+        plate = released_work_order_a.components.get(item=component_plate_a)
+        plate.issue_method = "backflush"
+        plate.save(update_fields=["issue_method"])
+        _report(client_a, released_work_order_a, good="5")
+        plate.refresh_from_db()
+        assert plate.quantity_issued == plate.quantity_required
+
+
+# ================================================================ Costing end to end (the big one)
+class TestWorkOrderCostingEndToEnd:
+    """Release 5, issue, report 3 then 2 — the layered posting the old formula got wrong.
+
+    Pool: 45.0000 material + 20.0000 machine (2 h) + 20.0000 labour (1 h) = 85.0000.
+    The replaced formula divided the WHOLE pool by the CUMULATIVE good quantity, banking
+    3 x (85/3) + 2 x (85/5) = 119.00 of stock value against 85.00 of real cost — 140 %, and a
+    wip_value driven negative, which is the proof the two disagreed. The ledger is append-only, so
+    an over-valued layer can never be corrected in place.
+    """
+
+    def _run(self, client, order, work_center):
+        _issue(client, order)
+        _book_hours(order, work_center, "machine", 2)
+        _book_hours(order, work_center, "labor", 1)
+        _report(client, order, good="3")
+        _report(client, order, good="2")
+        order.refresh_from_db()
+        return order
+
+    def _produced_value(self, order):
+        return sum((m.quantity * m.unit_cost for m in _moves(order, "production")), Decimal("0"))
+
+    def test_the_posted_stock_value_never_exceeds_the_cost_actually_incurred(
+        self, client_a, released_work_order_a, work_center_a,
+    ):
+        order = self._run(client_a, released_work_order_a, work_center_a)
+        labor, machine = order._time_costs()
+        incurred = order.material_cost + labor + machine
+        assert incurred == Decimal("85.0000")
+        produced = self._produced_value(order)
+        assert produced <= incurred
+        # One 0.0001 quantum per unit posted is the irreducible rounding residual.
+        assert incurred - produced <= Decimal("0.0005")
+
+    def test_wip_lands_at_zero_once_the_run_is_complete(self, client_a, released_work_order_a,
+                                                        work_center_a):
+        order = self._run(client_a, released_work_order_a, work_center_a)
+        assert abs(order.wip_value) <= Decimal("0.0005")
+        assert order.wip_value >= Decimal("0")  # never NEGATIVE — that was the tell
+
+    def test_the_run_finishes_with_everything_produced(self, client_a, released_work_order_a,
+                                                       work_center_a):
+        order = self._run(client_a, released_work_order_a, work_center_a)
+        assert order.quantity_produced == Decimal("5.0000")
+        assert order.quantity_remaining == Decimal("0.0000")
+        assert order.status == "completed"
+
+    def test_the_first_layer_carries_the_whole_pool_and_the_second_almost_nothing(
+        self, client_a, released_work_order_a, work_center_a,
+    ):
+        _issue(client_a, released_work_order_a)
+        _book_hours(released_work_order_a, work_center_a, "machine", 2)
+        _book_hours(released_work_order_a, work_center_a, "labor", 1)
+        _report(client_a, released_work_order_a, good="3")
+        first = _moves(released_work_order_a, "production").order_by("id").first()
+        assert first.unit_cost == Decimal("28.3333")        # 85 / 3, NOT 85 / 5
+        _report(client_a, released_work_order_a, good="2")
+        second = _moves(released_work_order_a, "production").order_by("id").last()
+        assert second.unit_cost == Decimal("0.0000")        # the pool was already absorbed
+
+    def test_cost_booked_BETWEEN_two_layers_lands_on_the_second_only(self, client_a,
+                                                                     released_work_order_a,
+                                                                     work_center_a):
+        _issue(client_a, released_work_order_a)
+        _book_hours(released_work_order_a, work_center_a, "machine", 2)
+        _book_hours(released_work_order_a, work_center_a, "labor", 1)
+        _report(client_a, released_work_order_a, good="3")
+        _book_hours(released_work_order_a, work_center_a, "labor", 1)   # +20.00 after layer 1
+        _report(client_a, released_work_order_a, good="2")
+        second = _moves(released_work_order_a, "production").order_by("id").last()
+        assert second.unit_cost == Decimal("10.0000")       # 20.0001 / 2
+        released_work_order_a.refresh_from_db()
+        labor, machine = released_work_order_a._time_costs()
+        incurred = released_work_order_a.material_cost + labor + machine
+        assert self._produced_value(released_work_order_a) <= incurred
+
+    def test_a_scrappy_run_reports_a_higher_unit_cost_rather_than_hiding_the_loss(
+        self, client_a, released_work_order_a,
+    ):
+        _issue(client_a, released_work_order_a)
+        _report(client_a, released_work_order_a, good="4", scrapped="1")
+        released_work_order_a.refresh_from_db()
+        # 45.00 of material absorbed by the 4 units that survived, not by all 5.
+        assert released_work_order_a.produced_unit_cost == Decimal("11.2500")
+
+
+# ================================================================ Move types vs 4.7 demand planning
+class TestManufacturingMoveTypesAreNotCustomerDemand:
+    """Reusing ``issue`` for a component draw would inflate every forecast built on the
+    stock-issues source — the entire reason the two 4.8 move types exist."""
+
+    def _window(self):
+        from django.utils import timezone
+        from apps.scm.tests._helpers import add_months, month_start
+        today = timezone.localdate()
+        return add_months(month_start(today), -1), today
+
+    def test_component_draws_post_as_consumption_never_as_issue(self, client_a,
+                                                                released_work_order_a):
+        from apps.scm.models import StockMove
+        _issue(client_a, released_work_order_a)
+        assert _moves(released_work_order_a, "consumption").count() == 2
+        assert not StockMove.objects.filter(tenant=released_work_order_a.tenant,
+                                            reference=released_work_order_a.number,
+                                            move_type="issue").exists()
+
+    def test_output_posts_as_production_never_as_receipt(self, client_a,
+                                                         released_work_order_a):
+        from apps.scm.models import StockMove
+        _issue(client_a, released_work_order_a)
+        _report(client_a, released_work_order_a, good="2")
+        assert _moves(released_work_order_a, "production").count() == 1
+        assert not StockMove.objects.filter(tenant=released_work_order_a.tenant,
+                                            reference=released_work_order_a.number,
+                                            move_type="receipt").exists()
+
+    def test_a_work_order_draw_is_NOT_counted_as_customer_demand(self, client_a, tenant_a,
+                                                                 released_work_order_a,
+                                                                 component_bolt_a):
+        from apps.scm.models.DemandPlanning._history import demand_series
+        _issue(client_a, released_work_order_a)
+        start, end = self._window()
+        rows = demand_series(tenant_a.pk, item=component_bolt_a, source="stock_issues",
+                             start=start, end=end, bucket="month")
+        assert sum(qty for _, qty in rows) == Decimal("0")
+
+    def test_a_REAL_customer_issue_of_the_same_item_still_counts(self, client_a, tenant_a,
+                                                                 released_work_order_a,
+                                                                 component_bolt_a, location_a):
+        """The control: proves the assertion above is measuring the move TYPE, not an empty query."""
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        from apps.scm.models.DemandPlanning._history import demand_series
+        _issue(client_a, released_work_order_a)
+        StockMove.objects.create(tenant=tenant_a, item=component_bolt_a, location=location_a,
+                                 quantity=Decimal("-7"), move_type="issue",
+                                 moved_at=timezone.now())
+        start, end = self._window()
+        rows = demand_series(tenant_a.pk, item=component_bolt_a, source="stock_issues",
+                             start=start, end=end, bucket="month")
+        assert sum(qty for _, qty in rows) == Decimal("7")
+
+    def test_finished_output_is_not_read_as_demand_either(self, client_a, tenant_a,
+                                                          released_work_order_a, item_a):
+        from apps.scm.models.DemandPlanning._history import demand_series
+        _issue(client_a, released_work_order_a)
+        _report(client_a, released_work_order_a, good="3")
+        start, end = self._window()
+        rows = demand_series(tenant_a.pk, item=item_a, source="stock_issues", start=start,
+                             end=end, bucket="month")
+        assert sum(qty for _, qty in rows) == Decimal("0")
+
+
+# ================================================================ ProductionTimeLog CRUD
+class TestProductionTimeLogCRUD:
+    def test_list_returns_200_with_its_own_rows(self, client_a, time_log_a):
+        resp = client_a.get(reverse("scm:productiontimelog_list"))
+        assert resp.status_code == 200
+        assert time_log_a in resp.context["object_list"]
+
+    def test_list_excludes_other_tenant_rows(self, client_a, time_log_a, time_log_b):
+        resp = client_a.get(reverse("scm:productiontimelog_list"))
+        assert time_log_b not in resp.context["object_list"]
+
+    def test_list_uses_the_documented_template_and_context(self, client_a, time_log_a):
+        resp = client_a.get(reverse("scm:productiontimelog_list"))
+        assert "scm/manufacturing/productiontimelog/list.html" in [t.name for t in resp.templates]
+        for key in ("object_list", "page_obj", "q", "type_choices", "reason_choices",
+                    "work_centers", "work_orders"):
+            assert key in resp.context, key
+
+    def test_the_filter_dropdown_offers_CLOSED_runs_too(self, client_a, time_log_a,
+                                                        released_work_order_a):
+        """A closed run's logs are exactly the rows this page is careful to still show — an
+        open-only list made the deep link from a finished run silently reset to 'All'."""
+        released_work_order_a.status = "closed"
+        released_work_order_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:productiontimelog_list"))
+        assert released_work_order_a in set(resp.context["work_orders"])
+
+    def test_list_filter_by_entry_type_and_work_order(self, client_a, time_log_a,
+                                                      released_work_order_a):
+        by_type = client_a.get(reverse("scm:productiontimelog_list"), {"entry_type": "machine"})
+        assert time_log_a in by_type.context["object_list"]
+        by_other = client_a.get(reverse("scm:productiontimelog_list"), {"entry_type": "setup"})
+        assert time_log_a not in by_other.context["object_list"]
+        by_run = client_a.get(reverse("scm:productiontimelog_list"),
+                              {"work_order": str(released_work_order_a.pk)})
+        assert time_log_a in by_run.context["object_list"]
+
+    def test_create_saves_with_the_request_tenant(self, client_a, tenant_a,
+                                                  released_work_order_a, work_center_a):
+        from apps.scm.models import ProductionTimeLog
+        resp = client_a.post(reverse("scm:productiontimelog_create"),
+                             _log_view_payload(released_work_order_a, work_center_a,
+                                               operation="Deburr"))
+        assert resp.status_code == 302
+        log = ProductionTimeLog.objects.get(tenant=tenant_a, operation="Deburr")
+        assert log.number.startswith("PRD-")
+        assert log.duration_minutes == 60
+
+    def test_edit_updates_a_live_runs_log(self, client_a, time_log_a, released_work_order_a,
+                                          work_center_a):
+        resp = client_a.post(reverse("scm:productiontimelog_edit", args=[time_log_a.pk]),
+                             _log_view_payload(released_work_order_a, work_center_a,
+                                               operation="Re-milled"))
+        assert resp.status_code == 302
+        time_log_a.refresh_from_db()
+        assert time_log_a.operation == "Re-milled"
+
+    def test_detail_renders_with_the_frozen_flag(self, client_a, time_log_a):
+        resp = client_a.get(reverse("scm:productiontimelog_detail", args=[time_log_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/productiontimelog/detail.html" in [t.name for t in resp.templates]
+        assert resp.context["is_frozen"] is False
+
+    def test_delete_is_post_only(self, client_a, time_log_a):
+        from apps.scm.models import ProductionTimeLog
+        assert client_a.get(reverse("scm:productiontimelog_delete",
+                                    args=[time_log_a.pk])).status_code == 405
+        assert ProductionTimeLog.objects.filter(pk=time_log_a.pk).exists()
+
+    def test_delete_removes_a_live_runs_log(self, client_a, time_log_a):
+        from apps.scm.models import ProductionTimeLog
+        resp = client_a.post(reverse("scm:productiontimelog_delete", args=[time_log_a.pk]))
+        assert resp.status_code == 302
+        assert not ProductionTimeLog.objects.filter(pk=time_log_a.pk).exists()
+
+    def test_an_over_long_interval_is_refused_through_the_view(self, client_a, tenant_a,
+                                                               released_work_order_a,
+                                                               work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        resp = client_a.post(reverse("scm:productiontimelog_create"), _log_view_payload(
+            released_work_order_a, work_center_a, operation="Geological era",
+            started_at=started.strftime("%Y-%m-%dT%H:%M"),
+            ended_at=(started + datetime.timedelta(days=40)).strftime("%Y-%m-%dT%H:%M")))
+        assert resp.status_code == 200
+        assert not ProductionTimeLog.objects.filter(tenant=tenant_a,
+                                                    operation="Geological era").exists()
+
+
+# ================================================================ Frozen logs
+class TestProductionTimeLogFreeze:
+    def test_editing_a_closed_runs_log_is_refused(self, client_a, time_log_a,
+                                                  released_work_order_a):
+        released_work_order_a.status = "closed"
+        released_work_order_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:productiontimelog_edit", args=[time_log_a.pk]),
+                            follow=True)
+        assert any("log is frozen" in str(m) for m in resp.context["messages"])
+
+    def test_a_closed_runs_log_cannot_be_edited_by_POST_either(self, client_a, time_log_a,
+                                                               released_work_order_a,
+                                                               work_center_a):
+        released_work_order_a.status = "closed"
+        released_work_order_a.save(update_fields=["status"])
+        client_a.post(reverse("scm:productiontimelog_edit", args=[time_log_a.pk]),
+                      _log_view_payload(released_work_order_a, work_center_a,
+                                        operation="Snuck in"))
+        time_log_a.refresh_from_db()
+        assert time_log_a.operation == "Mill"
+
+    def test_deleting_a_closed_runs_log_is_refused(self, client_a, time_log_a,
+                                                   released_work_order_a):
+        from apps.scm.models import ProductionTimeLog
+        released_work_order_a.status = "closed"
+        released_work_order_a.save(update_fields=["status"])
+        resp = client_a.post(reverse("scm:productiontimelog_delete", args=[time_log_a.pk]),
+                             follow=True)
+        assert any("log is frozen" in str(m) for m in resp.context["messages"])
+        assert ProductionTimeLog.objects.filter(pk=time_log_a.pk).exists()
+
+    def test_a_cancelled_run_freezes_its_logs_too(self, client_a, time_log_a,
+                                                  released_work_order_a):
+        from apps.scm.models import ProductionTimeLog
+        released_work_order_a.status = "cancelled"
+        released_work_order_a.save(update_fields=["status"])
+        assert client_a.get(reverse("scm:productiontimelog_edit",
+                                    args=[time_log_a.pk])).status_code == 302
+        client_a.post(reverse("scm:productiontimelog_delete", args=[time_log_a.pk]))
+        assert ProductionTimeLog.objects.filter(pk=time_log_a.pk).exists()
+
+    def test_a_completed_run_freezes_its_logs(self, client_a, time_log_a,
+                                              released_work_order_a):
+        released_work_order_a.status = "completed"
+        released_work_order_a.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:productiontimelog_detail", args=[time_log_a.pk]))
+        assert resp.context["is_frozen"] is True
+
+
+# ================================================================ MRP (compute, never write)
+def _mrp_demand(tenant, customer, item, quantity="10", status="submitted"):
+    from django.utils import timezone
+    from apps.scm.models import SalesOrder, SalesOrderLine
+    order = SalesOrder.objects.create(tenant=tenant, customer=customer,
+                                      order_date=timezone.localdate(), status=status)
+    SalesOrderLine.objects.create(sales_order=order, item=item,
+                                  quantity_ordered=Decimal(quantity), unit_price=Decimal("20"))
+    return order
+
+
+def _mrp_rows(resp):
+    return {row["item"].pk: row for row in resp.context["rows"]}
+
+
+class TestMRPReport:
+    def test_it_renders_with_the_documented_template_and_context(self, client_a):
+        resp = client_a.get(reverse("scm:mrp_report"))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/mrp_report.html" in [t.name for t in resp.templates]
+        for key in ("rows", "page_obj", "horizon_days", "until", "locations", "make_count",
+                    "buy_count", "total_rows"):
+            assert key in resp.context, key
+        assert resp.context["horizon_days"] == 90
+
+    def test_open_demand_for_a_manufactured_item_explodes_to_its_raw_components(
+        self, client_a, tenant_a, customer_a, item_a, bom_a, component_bolt_a,
+        component_plate_a,
+    ):
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        rows = _mrp_rows(client_a.get(reverse("scm:mrp_report")))
+        assert rows[item_a.pk]["action"] == "make"
+        assert rows[item_a.pk]["shortfall"] == Decimal("10.0000")
+        assert rows[component_bolt_a.pk]["action"] == "buy"
+        assert rows[component_bolt_a.pk]["shortfall"] == Decimal("20.0000")
+        assert rows[component_plate_a.pk]["shortfall"] == Decimal("10.0000")
+
+    def test_the_make_buy_split_is_counted(self, client_a, tenant_a, customer_a, item_a, bom_a):
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        resp = client_a.get(reverse("scm:mrp_report"))
+        assert resp.context["make_count"] == 1
+        assert resp.context["buy_count"] == 2
+        assert resp.context["total_rows"] == 3
+
+    def test_the_sources_column_names_where_each_requirement_came_from(self, client_a, tenant_a,
+                                                                       customer_a, item_a, bom_a,
+                                                                       component_bolt_a):
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        rows = _mrp_rows(client_a.get(reverse("scm:mrp_report")))
+        assert rows[item_a.pk]["sources"] == "Sales orders"
+        assert rows[component_bolt_a.pk]["sources"] == f"BOM {bom_a.number}"
+
+    def test_on_hand_nets_the_shortfall_away(self, client_a, tenant_a, customer_a, item_a, bom_a,
+                                             location_a):
+        """A parent with stock needs nothing built, so pushing raw material down its BOM would
+        invent a component shortage that does not exist."""
+        from apps.scm.tests._helpers import seed_stock
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        seed_stock(tenant_a, item_a, location_a, "10", "9.0000")
+        resp = client_a.get(reverse("scm:mrp_report"))
+        assert resp.context["total_rows"] == 0
+
+    def test_safety_stock_raises_the_requirement(self, client_a, tenant_a, customer_a, item_a,
+                                                 bom_a, location_a, reorder_rule_a):
+        from apps.scm.tests._helpers import seed_stock
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        seed_stock(tenant_a, item_a, location_a, "10", "9.0000")
+        rows = _mrp_rows(client_a.get(reverse("scm:mrp_report")))
+        assert rows[item_a.pk]["safety_stock"] == Decimal("5.0000")
+        assert rows[item_a.pk]["shortfall"] == Decimal("5.0000")
+
+    def test_draft_and_cancelled_orders_are_not_demand(self, client_a, tenant_a, customer_a,
+                                                       item_a, bom_a):
+        for status in ("draft", "cancelled", "closed", "fulfilled", "invoiced"):
+            _mrp_demand(tenant_a, customer_a, item_a, "10", status=status)
+        assert client_a.get(reverse("scm:mrp_report")).context["total_rows"] == 0
+
+    def test_a_live_runs_outstanding_components_are_dependent_demand(self, client_a, tenant_a,
+                                                                     released_work_order_a,
+                                                                     component_bolt_a):
+        rows = _mrp_rows(client_a.get(reverse("scm:mrp_report")))
+        # 10 bolts required, 100 on hand -> covered; the requirement is still SEEN.
+        assert component_bolt_a.pk not in rows
+        released_work_order_a.components.filter(item=component_bolt_a).update(
+            quantity_required=Decimal("500"))
+        rows = _mrp_rows(client_a.get(reverse("scm:mrp_report")))
+        assert rows[component_bolt_a.pk]["sources"] == "Work orders"
+        assert rows[component_bolt_a.pk]["shortfall"] == Decimal("400.0000")
+
+    def test_another_tenants_demand_never_appears(self, client_a, tenant_b, customer_b, item_b,
+                                                  bom_b):
+        _mrp_demand(tenant_b, customer_b, item_b, "10")
+        assert client_a.get(reverse("scm:mrp_report")).context["total_rows"] == 0
+
+    def test_the_horizon_is_clamped_and_junk_falls_back_to_90(self, client_a):
+        for value, expected in (("30", 30), ("0", 1), ("9999", 365), ("abc", 90), ("", 90),
+                                ("-5", 1), ("NaN", 90), ("Infinity", 90)):
+            resp = client_a.get(reverse("scm:mrp_report"), {"horizon": value})
+            assert resp.status_code == 200, value
+            assert resp.context["horizon_days"] == expected, value
+
+    def test_the_location_filter_narrows_on_hand(self, client_a, tenant_a, customer_a, item_a,
+                                                 bom_a, location_a, location_a2):
+        from apps.scm.tests._helpers import seed_stock
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        seed_stock(tenant_a, item_a, location_a, "10", "9.0000")
+        everywhere = client_a.get(reverse("scm:mrp_report"))
+        elsewhere = client_a.get(reverse("scm:mrp_report"), {"location": str(location_a2.pk)})
+        assert everywhere.context["total_rows"] == 0
+        assert elsewhere.context["total_rows"] == 3   # WH2 holds none of it
+
+    def test_a_junk_location_filter_is_ignored_rather_than_500ing(self, client_a):
+        for junk in ("abc", "-1", "NaN", "1.5"):
+            assert client_a.get(reverse("scm:mrp_report"),
+                                {"location": junk}).status_code == 200, junk
+
+    def test_it_writes_nothing(self, client_a, tenant_a, customer_a, item_a, bom_a):
+        """Compute-then-convert: a silent auto-PO is a business decision the planner never made."""
+        from apps.scm.models import PurchaseRequisition, WorkOrder
+        _mrp_demand(tenant_a, customer_a, item_a, "10")
+        before = (WorkOrder.objects.count(), PurchaseRequisition.objects.count())
+        client_a.get(reverse("scm:mrp_report"))
+        assert (WorkOrder.objects.count(), PurchaseRequisition.objects.count()) == before
+
+
+# ================================================================ Production schedule (load board)
+class TestProductionSchedule:
+    def test_it_renders_with_the_documented_template_and_context(self, client_a, work_center_a):
+        resp = client_a.get(reverse("scm:production_schedule"))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/production_schedule.html" in [t.name for t in resp.templates]
+        for key in ("rows", "orders", "unscheduled", "unscheduled_count", "days", "start", "end",
+                    "overloaded_count"):
+            assert key in resp.context, key
+        assert resp.context["days"] == 14
+
+    def test_every_active_centre_gets_a_row(self, client_a, work_center_a, work_center_a2):
+        rows = client_a.get(reverse("scm:production_schedule")).context["rows"]
+        assert {row["centre"].pk for row in rows} == {work_center_a.pk, work_center_a2.pk}
+
+    def test_an_inactive_centre_is_off_the_board(self, client_a, work_center_a, work_center_a2):
+        work_center_a2.is_active = False
+        work_center_a2.save(update_fields=["is_active"])
+        rows = client_a.get(reverse("scm:production_schedule")).context["rows"]
+        assert {row["centre"].pk for row in rows} == {work_center_a.pk}
+
+    def test_a_run_longer_than_the_window_marks_the_centre_overloaded(self, client_a, tenant_a,
+                                                                       item_a, work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import WorkOrder
+        now = timezone.now()
+        order = WorkOrder.objects.create(
+            tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+            work_center=work_center_a, planned_start=now,
+            planned_end=now + datetime.timedelta(days=10))
+        WorkOrder.objects.filter(pk=order.pk).update(status="planned")
+        resp = client_a.get(reverse("scm:production_schedule"))
+        row = next(r for r in resp.context["rows"] if r["centre"].pk == work_center_a.pk)
+        assert row["scheduled_hours"] == Decimal("240.00")
+        assert row["capacity_hours"] == Decimal("112.00")   # 8 h x 100 % x 14 days
+        assert row["is_overloaded"] is True
+        assert resp.context["overloaded_count"] == 1
+
+    def test_a_run_with_no_planned_window_lands_in_the_unscheduled_list(self, client_a,
+                                                                        work_order_a):
+        from apps.scm.models import WorkOrder
+        WorkOrder.objects.filter(pk=work_order_a.pk).update(status="planned")
+        resp = client_a.get(reverse("scm:production_schedule"))
+        assert work_order_a in list(resp.context["unscheduled"])
+        assert resp.context["unscheduled_count"] == 1
+
+    def test_a_draft_run_is_not_on_the_board_at_all(self, client_a, work_order_a):
+        resp = client_a.get(reverse("scm:production_schedule"))
+        assert work_order_a not in list(resp.context["orders"])
+        assert resp.context["unscheduled_count"] == 0
+
+    def test_another_tenants_centres_never_appear(self, client_a, work_center_a, work_center_b):
+        rows = client_a.get(reverse("scm:production_schedule")).context["rows"]
+        assert work_center_b.pk not in {row["centre"].pk for row in rows}
+
+    def test_the_days_window_is_clamped_and_junk_falls_back_to_14(self, client_a):
+        for value, expected in (("7", 7), ("0", 1), ("999", 90), ("notanumber", 14), ("", 14),
+                                ("-3", 1), ("NaN", 14)):
+            resp = client_a.get(reverse("scm:production_schedule"), {"days": value})
+            assert resp.status_code == 200, value
+            assert resp.context["days"] == expected, value
+
+    def test_a_zero_capacity_centre_does_not_divide_by_zero(self, client_a, tenant_a, item_a,
+                                                            work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import WorkOrder
+        work_center_a.capacity_hours_per_day = Decimal("0")
+        work_center_a.save(update_fields=["capacity_hours_per_day"])
+        now = timezone.now()
+        order = WorkOrder.objects.create(
+            tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+            work_center=work_center_a, planned_start=now,
+            planned_end=now + datetime.timedelta(hours=4))
+        WorkOrder.objects.filter(pk=order.pk).update(status="planned")
+        resp = client_a.get(reverse("scm:production_schedule"))
+        row = next(r for r in resp.context["rows"] if r["centre"].pk == work_center_a.pk)
+        assert resp.status_code == 200
+        assert row["load_pct"] == Decimal("0")
+        assert row["is_overloaded"] is False
+
+
+# ================================================================ location_delete PROTECT guard
+class TestLocationDeleteWithAWorkOrderReference:
+    def test_a_location_a_work_order_points_at_cannot_be_deleted_and_does_not_500(
+        self, client_a, work_order_a, location_a2,
+    ):
+        """WorkOrder.component_location / output_location are PROTECT — the miss showed up as an
+        uncaught ProtectedError, i.e. a 500 on an ordinary delete."""
+        from apps.scm.models import Location
+        resp = client_a.post(reverse("scm:location_delete", args=[location_a2.pk]), follow=True)
+        assert resp.status_code == 200
+        assert any("cannot be deleted" in str(m) for m in resp.context["messages"])
+        assert Location.objects.filter(pk=location_a2.pk).exists()
+
+    def test_the_message_names_the_blocking_model(self, client_a, work_order_a, location_a2):
+        resp = client_a.post(reverse("scm:location_delete", args=[location_a2.pk]), follow=True)
+        assert any("work order" in str(m).lower() for m in resp.context["messages"])
+
+    def test_a_location_a_work_CENTRE_points_at_is_SET_NULL_and_still_deletes(self, client_a,
+                                                                              work_center_a,
+                                                                              location_a):
+        from apps.scm.models import Location
+        resp = client_a.post(reverse("scm:location_delete", args=[location_a.pk]))
+        assert resp.status_code == 302
+        assert not Location.objects.filter(pk=location_a.pk).exists()
+        work_center_a.refresh_from_db()
+        assert work_center_a.location_id is None
+
+    def test_an_unreferenced_location_still_deletes(self, client_a, location_a2):
+        from apps.scm.models import Location
+        client_a.post(reverse("scm:location_delete", args=[location_a2.pk]))
+        assert not Location.objects.filter(pk=location_a2.pk).exists()
+
+
+# ================================================================================================
+# Negative-input hardening (L11 junk FK filters / L9 pagination) — 200, never a 500.
+# ================================================================================================
+class TestManufacturingNegativeInputHardening:
+    LIST_ROUTES = ("scm:workcenter_list", "scm:billofmaterials_list", "scm:workorder_list",
+                   "scm:productiontimelog_list")
+    REPORT_ROUTES = ("scm:mrp_report", "scm:production_schedule")
+
+    def test_every_list_survives_a_junk_item_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"item": "abc"}).status_code == 200, name
+
+    def test_every_list_survives_a_junk_status_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"status": "nope"}).status_code == 200, name
+
+    def test_every_list_survives_a_junk_work_centre_filter(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name),
+                                {"work_center": "not-a-pk"}).status_code == 200, name
+
+    def test_every_list_survives_a_page_past_the_end(self, client_a, work_center_a, bom_a,
+                                                     work_order_a, time_log_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"page": "9999"}).status_code == 200, name
+
+    def test_every_list_survives_a_non_numeric_page(self, client_a):
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), {"page": "abc"}).status_code == 200, name
+
+    def test_every_list_survives_the_whole_junk_query_string_at_once(self, client_a):
+        params = {"status": "nope", "item": "abc", "page": "9999", "work_center": "-1",
+                  "location": "NaN", "is_active": "abc", "entry_type": "junk",
+                  "downtime_reason": "junk", "bom_type": "junk", "is_default": "abc",
+                  "center_type": "junk", "priority": "junk", "order_policy": "junk",
+                  "work_order": "abc", "default_work_center": "1.5", "q": "'; DROP TABLE --"}
+        for name in self.LIST_ROUTES:
+            assert client_a.get(reverse(name), params).status_code == 200, name
+
+    def test_both_reports_survive_the_junk_query_string(self, client_a):
+        params = {"horizon": "abc", "days": "notanumber", "location": "-1", "page": "9999"}
+        for name in self.REPORT_ROUTES:
+            assert client_a.get(reverse(name), params).status_code == 200, name
+
+    def test_the_workcenter_list_page_2_returns_200_beyond_the_page_size(self, client_a,
+                                                                         tenant_a):
+        from apps.scm.models import WorkCenter
+        for i in range(20):
+            WorkCenter.objects.create(tenant=tenant_a, code=f"BULK-{i}", name=f"Bulk {i}")
+        resp = client_a.get(reverse("scm:workcenter_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+        assert len(resp.context["object_list"]) == 5
+
+    def test_the_bom_list_page_2_returns_200_beyond_the_page_size(self, client_a, tenant_a,
+                                                                  item_a):
+        from apps.scm.models import BillOfMaterials
+        for i in range(20):
+            BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name=f"Bulk {i}",
+                                           version=f"v{i}")
+        resp = client_a.get(reverse("scm:billofmaterials_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+
+    def test_the_workorder_list_page_2_returns_200_beyond_the_page_size(self, client_a, tenant_a,
+                                                                        item_a):
+        from apps.scm.models import WorkOrder
+        for _ in range(20):
+            WorkOrder.objects.create(tenant=tenant_a, item=item_a,
+                                     quantity_planned=Decimal("1"))
+        resp = client_a.get(reverse("scm:workorder_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert len(resp.context["object_list"]) == 5
+
+    def test_the_time_log_list_page_2_returns_200_beyond_the_page_size(self, client_a, tenant_a,
+                                                                       released_work_order_a,
+                                                                       work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        for _ in range(20):
+            ProductionTimeLog.objects.create(tenant=tenant_a, work_order=released_work_order_a,
+                                             work_center=work_center_a,
+                                             started_at=timezone.now())
+        resp = client_a.get(reverse("scm:productiontimelog_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+
+    def test_the_mrp_report_page_2_returns_200_beyond_the_page_size(self, client_a, tenant_a,
+                                                                     customer_a):
+        from apps.scm.models import Item
+        for i in range(35):
+            item = Item.objects.create(tenant=tenant_a, sku=f"MRPP-{i}", name=f"Mrp {i}")
+            _mrp_demand(tenant_a, customer_a, item, "5")
+        resp = client_a.get(reverse("scm:mrp_report"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+
+    def test_the_workcenter_form_rejects_junk_rates_without_500ing(self, client_a, tenant_a):
+        from apps.scm.models import WorkCenter
+        for junk in ("NaN", "Infinity", "-Infinity", "abc", "-1", "100001", "9" * 20):
+            resp = client_a.post(reverse("scm:workcenter_create"),
+                                 _wc_view_payload(machine_cost_per_hour=junk))
+            assert resp.status_code == 200, junk
+        assert not WorkCenter.objects.filter(tenant=tenant_a, code="WC-NEW").exists()
+
+    def test_the_workorder_form_rejects_junk_quantities_without_500ing(self, client_a, tenant_a,
+                                                                        item_a):
+        from apps.scm.models import WorkOrder
+        for junk in ("NaN", "Infinity", "abc", "0", "-5", "9" * 20):
+            resp = client_a.post(reverse("scm:workorder_create"),
+                                 _wo_view_payload(item_a, quantity_planned=junk))
+            assert resp.status_code == 200, junk
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_bom_form_rejects_a_junk_output_quantity(self, client_a, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        for junk in ("NaN", "Infinity", "abc", "0", "-1", "9" * 20):
+            resp = client_a.post(reverse("scm:billofmaterials_create"),
+                                 _bom_view_payload(item_a, version="9", output_quantity=junk))
+            assert resp.status_code == 200, junk
+        assert not BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+    def test_the_bom_line_formset_rejects_a_junk_quantity(self, client_a, tenant_a, item_a,
+                                                          component_bolt_a):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_create"), _bom_view_payload(
+            item_a, [_bom_line_row(component_bolt_a, quantity_per="NaN")], version="9"))
+        assert resp.status_code == 200
+        assert not BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+    def test_the_component_formset_rejects_a_junk_quantity(self, client_a, tenant_a, item_a,
+                                                           component_bolt_a):
+        from apps.scm.models import WorkOrder
+        data = _wo_view_payload(item_a)
+        data.update(formset_data("components", [
+            {"id": "", "sequence": "10", "item": str(component_bolt_a.pk),
+             "quantity_required": "Infinity", "uom": "", "lot_serial": "",
+             "issue_method": "manual", "unit_cost": "2", "notes": ""},
+        ]))
+        resp = client_a.post(reverse("scm:workorder_create"), data)
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_junk_pk_in_the_url_is_a_404_not_a_500(self, client_a):
+        for name in ("scm:workorder_detail", "scm:billofmaterials_detail",
+                     "scm:workcenter_detail", "scm:productiontimelog_detail"):
+            assert client_a.get(reverse(name, args=[999999])).status_code == 404, name
+
+
+# ================================================================================================
+# Query-count regression guards (locks in the batching the performance review added)
+# ================================================================================================
+def _query_count(client, url, params=None):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(url, params or {})
+    assert resp.status_code == 200
+    return len(ctx.captured_queries)
+
+
+def _seed_mrp_fixture(tenant, customer, start, count):
+    """``count`` demanded parents, each with its own 1-line active BOM. Explodes to 2x rows."""
+    from apps.scm.models import BillOfMaterials, BOMLine, Item
+    for i in range(start, start + count):
+        parent = Item.objects.create(tenant=tenant, sku=f"MRPX-P-{i}", name=f"Parent {i}",
+                                     standard_cost=Decimal("10"))
+        child = Item.objects.create(tenant=tenant, sku=f"MRPX-C-{i}", name=f"Child {i}",
+                                    standard_cost=Decimal("2"))
+        bom = BillOfMaterials.objects.create(tenant=tenant, item=parent, name=f"Recipe {i}",
+                                             version="1", status="active")
+        BOMLine.objects.create(bom=bom, component=child, quantity_per=Decimal("2"))
+        _mrp_demand(tenant, customer, parent, "10")
+
+
+def _seed_schedule_fixture(tenant, item, start, count):
+    from django.utils import timezone
+    from apps.scm.models import WorkCenter, WorkOrder
+    now = timezone.now()
+    for i in range(start, start + count):
+        centre = WorkCenter.objects.create(tenant=tenant, code=f"SCHX-{i}", name=f"Cell {i}")
+        order = WorkOrder.objects.create(
+            tenant=tenant, item=item, quantity_planned=Decimal("1"), work_center=centre,
+            planned_start=now, planned_end=now + datetime.timedelta(hours=6))
+        WorkOrder.objects.filter(pk=order.pk).update(status="planned")
+
+
+class TestManufacturingQueryCounts:
+    def test_workcenter_list_has_no_n_plus_one(self, client_a, tenant_a, location_a,
+                                               employee_party_a, org_unit_a,
+                                               django_assert_max_num_queries):
+        from apps.scm.models import WorkCenter
+        for i in range(10):
+            WorkCenter.objects.create(tenant=tenant_a, code=f"NP-{i}", name=f"Cell {i}",
+                                      location=location_a, org_unit=org_unit_a,
+                                      supervisor=employee_party_a)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:workcenter_list")).status_code == 200
+
+    def test_billofmaterials_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, uom_each_a,
+                                                    work_center_a, component_bolt_a,
+                                                    django_assert_max_num_queries):
+        from apps.scm.models import BillOfMaterials, BOMLine
+        for i in range(10):
+            bom = BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name=f"R{i}",
+                                                 version=f"v{i}", uom=uom_each_a,
+                                                 default_work_center=work_center_a)
+            BOMLine.objects.create(bom=bom, component=component_bolt_a,
+                                   quantity_per=Decimal("1"))
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:billofmaterials_list")).status_code == 200
+
+    def test_workorder_list_has_no_n_plus_one(self, client_a, tenant_a, item_a, bom_a,
+                                              work_center_a, location_a, location_a2,
+                                              sales_order_a, django_assert_max_num_queries):
+        from apps.scm.models import WorkOrder
+        for _ in range(10):
+            WorkOrder.objects.create(tenant=tenant_a, item=item_a, bom=bom_a,
+                                     quantity_planned=Decimal("1"), work_center=work_center_a,
+                                     sales_order=sales_order_a, component_location=location_a,
+                                     output_location=location_a2)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:workorder_list")).status_code == 200
+
+    def test_productiontimelog_list_has_no_n_plus_one(self, client_a, tenant_a,
+                                                      released_work_order_a, work_center_a,
+                                                      employee_party_a,
+                                                      django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        for _ in range(10):
+            ProductionTimeLog.objects.create(tenant=tenant_a, work_order=released_work_order_a,
+                                             work_center=work_center_a,
+                                             operator=employee_party_a,
+                                             started_at=timezone.now())
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:productiontimelog_list")).status_code == 200
+
+    def test_workorder_detail_resolves_each_pool_once(self, client_a, released_work_order_a,
+                                                      time_log_a, django_assert_max_num_queries):
+        _issue(client_a, released_work_order_a)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:workorder_detail",
+                                        args=[released_work_order_a.pk])).status_code == 200
+
+    def test_workcenter_detail_aggregates_the_time_logs_once(self, client_a, work_center_a,
+                                                             time_log_a,
+                                                             django_assert_max_num_queries):
+        with django_assert_max_num_queries(12):
+            assert client_a.get(reverse("scm:workcenter_detail",
+                                        args=[work_center_a.pk])).status_code == 200
+
+    def test_billofmaterials_detail_explodes_once(self, client_a, tenant_a, bom_a,
+                                                  component_bolt_a, component_plate_a,
+                                                  django_assert_max_num_queries):
+        from apps.scm.models import BillOfMaterials, BOMLine
+        sub = BillOfMaterials.objects.create(tenant=tenant_a, item=component_bolt_a,
+                                             name="Bolt recipe", version="1", status="active")
+        BOMLine.objects.create(bom=sub, component=component_plate_a, quantity_per=Decimal("1"))
+        with django_assert_max_num_queries(18):
+            assert client_a.get(reverse("scm:billofmaterials_detail",
+                                        args=[bom_a.pk])).status_code == 200
+
+    def test_workorder_create_page_does_not_query_per_option(self, client_a, tenant_a, item_a,
+                                                             bom_a, work_center_a, location_a,
+                                                             lot_a, sales_order_a,
+                                                             django_assert_max_num_queries):
+        with django_assert_max_num_queries(30):
+            assert client_a.get(reverse("scm:workorder_create")).status_code == 200
+
+    def test_mrp_report_stays_flat_as_demand_grows(self, client_a, tenant_a, customer_a,
+                                                   django_assert_max_num_queries):
+        _seed_mrp_fixture(tenant_a, customer_a, 0, 10)
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:mrp_report")).status_code == 200
+
+    def test_production_schedule_stays_flat_as_the_board_grows(self, client_a, tenant_a, item_a,
+                                                               django_assert_max_num_queries):
+        _seed_schedule_fixture(tenant_a, item_a, 0, 10)
+        with django_assert_max_num_queries(14):
+            assert client_a.get(reverse("scm:production_schedule")).status_code == 200
+
+    def test_mrp_report_is_SCALE_INVARIANT(self, client_a, tenant_a, customer_a):
+        """The one that matters: the explosion shares ONE index across every item it explodes.
+        Before that, MRP asked active_for() per BOM line per level — ~2,300 queries for one page.
+        """
+        url = reverse("scm:mrp_report")
+        _seed_mrp_fixture(tenant_a, customer_a, 0, 5)
+        client_a.get(url)                      # warm any process-level caches
+        before = _query_count(client_a, url)
+        _seed_mrp_fixture(tenant_a, customer_a, 100, 5)   # double the fixture
+        after = _query_count(client_a, url)
+        assert after == before, f"{before} -> {after} queries when the fixture doubled"
+
+    def test_production_schedule_is_SCALE_INVARIANT(self, client_a, tenant_a, item_a):
+        """One grouped scheduled_hours_map for the whole board, not one aggregate per centre."""
+        url = reverse("scm:production_schedule")
+        _seed_schedule_fixture(tenant_a, item_a, 0, 5)
+        client_a.get(url)
+        before = _query_count(client_a, url)
+        _seed_schedule_fixture(tenant_a, item_a, 100, 5)
+        after = _query_count(client_a, url)
+        assert after == before, f"{before} -> {after} queries when the fixture doubled"
+
+    def test_workcenter_detail_is_scale_invariant_in_its_time_logs(self, client_a, tenant_a,
+                                                                    released_work_order_a,
+                                                                    work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+
+        def _book(n):
+            for _ in range(n):
+                ProductionTimeLog.objects.create(
+                    tenant=tenant_a, work_order=released_work_order_a,
+                    work_center=work_center_a, started_at=timezone.now(),
+                    ended_at=timezone.now() + datetime.timedelta(minutes=30))
+
+        url = reverse("scm:workcenter_detail", args=[work_center_a.pk])
+        _book(5)
+        client_a.get(url)
+        before = _query_count(client_a, url)
+        _book(5)
+        assert _query_count(client_a, url) == before
+
+
+# ================================================================ Create guarded without a tenant
+class TestManufacturingCreateWithoutTenantWorkspace:
+    def _orphan_client(self, suffix):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email=f"orphan-mfg{suffix}@example.com",
+                                        username=f"orphan_mfg{suffix}", password="x", tenant=None)
+        client = Client()
+        client.force_login(user)
+        return client
+
+    def test_workorder_create_redirects(self, db):
+        from apps.scm.models import WorkOrder
+        assert self._orphan_client("1").get(
+            reverse("scm:workorder_create")).status_code == 302
+        assert WorkOrder.objects.count() == 0
+
+    def test_billofmaterials_create_redirects(self, db):
+        from apps.scm.models import BillOfMaterials
+        assert self._orphan_client("2").get(
+            reverse("scm:billofmaterials_create")).status_code == 302
+        assert BillOfMaterials.objects.count() == 0
+
+    def test_workcenter_create_redirects(self, db):
+        from apps.scm.models import WorkCenter
+        assert self._orphan_client("3").get(
+            reverse("scm:workcenter_create")).status_code == 302
+        assert WorkCenter.objects.count() == 0
+
+    def test_productiontimelog_create_redirects(self, db):
+        from apps.scm.models import ProductionTimeLog
+        assert self._orphan_client("4").get(
+            reverse("scm:productiontimelog_create")).status_code == 302
+        assert ProductionTimeLog.objects.count() == 0
+
+    def test_the_reports_still_render_empty_for_a_tenant_less_user(self, db):
+        client = self._orphan_client("5")
+        for name in ("scm:mrp_report", "scm:production_schedule"):
+            resp = client.get(reverse(name))
+            assert resp.status_code == 200, name
+
+
+# ================================================================ The form PAGES themselves (GET)
+class TestManufacturingFormPagesRender:
+    def test_workorder_create_page_renders_three_blank_component_rows(self, client_a):
+        resp = client_a.get(reverse("scm:workorder_create"))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/workorder/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+        assert resp.context["obj"] is None
+        assert resp.context["formset"].total_form_count() == 3
+
+    def test_workorder_edit_page_renders_the_saved_components(self, client_a,
+                                                              stocked_work_order_a):
+        resp = client_a.get(reverse("scm:workorder_edit", args=[stocked_work_order_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+        assert resp.context["obj"] == stocked_work_order_a
+        assert resp.context["formset"].total_form_count() == 5   # 2 saved + 3 extra
+
+    def test_billofmaterials_create_page_renders(self, client_a):
+        resp = client_a.get(reverse("scm:billofmaterials_create"))
+        assert resp.status_code == 200
+        assert "scm/manufacturing/billofmaterials/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+        assert resp.context["formset"].total_form_count() == 3
+
+    def test_billofmaterials_edit_page_renders_the_saved_lines(self, client_a, bom_a):
+        resp = client_a.get(reverse("scm:billofmaterials_edit", args=[bom_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["is_edit"] is True
+        assert resp.context["formset"].total_form_count() == 5   # 2 saved + 3 extra
+
+    def test_workcenter_create_and_edit_pages_render(self, client_a, work_center_a):
+        create = client_a.get(reverse("scm:workcenter_create"))
+        assert create.status_code == 200
+        assert "scm/manufacturing/workcenter/form.html" in [t.name for t in create.templates]
+        assert create.context["is_edit"] is False
+        edit = client_a.get(reverse("scm:workcenter_edit", args=[work_center_a.pk]))
+        assert edit.context["is_edit"] is True
+        assert edit.context["obj"] == work_center_a
+
+    def test_productiontimelog_create_and_edit_pages_render(self, client_a, time_log_a):
+        create = client_a.get(reverse("scm:productiontimelog_create"))
+        assert create.status_code == 200
+        assert "scm/manufacturing/productiontimelog/form.html" in [
+            t.name for t in create.templates]
+        edit = client_a.get(reverse("scm:productiontimelog_edit", args=[time_log_a.pk]))
+        assert edit.status_code == 200
+        assert edit.context["obj"] == time_log_a
+
+
+class TestMRPZeroQuantityDemand:
+    def test_a_zero_quantity_order_line_adds_no_requirement(self, client_a, tenant_a, customer_a,
+                                                            item_a, bom_a):
+        _mrp_demand(tenant_a, customer_a, item_a, "0")
+        assert client_a.get(reverse("scm:mrp_report")).context["total_rows"] == 0
