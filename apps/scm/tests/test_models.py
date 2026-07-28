@@ -4786,3 +4786,905 @@ class TestDemandSeriesLocationScope:
                                       source="stock_issues", start=start, end=end, bucket="month"))
         assert network[when] == Decimal("50")
         assert one_site[when] == Decimal("10")
+
+
+# ================================================================================================
+# SCM 4.8 Manufacturing
+# ================================================================================================
+
+# ================================================================ Auto-numbering + uniqueness
+class TestManufacturingAutoNumbering:
+    def test_work_center_numbers_are_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import WorkCenter
+        a1 = WorkCenter.objects.create(tenant=tenant_a, code="C1", name="One")
+        a2 = WorkCenter.objects.create(tenant=tenant_a, code="C2", name="Two")
+        b1 = WorkCenter.objects.create(tenant=tenant_b, code="C1", name="Globex one")
+        assert (a1.number, a2.number) == ("WC-00001", "WC-00002")
+        assert b1.number == "WC-00001"  # separate per-tenant sequence
+
+    def test_bom_numbers_are_prefixed_bom(self, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        bom = BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name="R", version="9")
+        assert bom.number == "BOM-00001"
+
+    def test_work_order_numbers_are_prefixed_wo(self, tenant_a, item_a):
+        from apps.scm.models import WorkOrder
+        order = WorkOrder.objects.create(tenant=tenant_a, item=item_a,
+                                         quantity_planned=Decimal("1"))
+        assert order.number == "WO-00001"
+
+    def test_time_log_numbers_are_prefixed_prd(self, tenant_a, work_order_a, work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        log = ProductionTimeLog.objects.create(tenant=tenant_a, work_order=work_order_a,
+                                               work_center=work_center_a,
+                                               started_at=timezone.now())
+        assert log.number == "PRD-00001"
+
+    def test_work_centre_code_is_unique_per_tenant(self, tenant_a, work_center_a):
+        from apps.scm.models import WorkCenter
+        with pytest.raises(IntegrityError):
+            WorkCenter.objects.create(tenant=tenant_a, code=work_center_a.code, name="Clash")
+
+    def test_the_same_work_centre_code_is_free_in_another_tenant(self, tenant_b, work_center_a):
+        from apps.scm.models import WorkCenter
+        twin = WorkCenter.objects.create(tenant=tenant_b, code=work_center_a.code, name="Twin")
+        assert twin.pk != work_center_a.pk
+
+    def test_bom_item_version_is_unique_per_tenant(self, tenant_a, bom_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        with pytest.raises(IntegrityError):
+            BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name="Clash",
+                                           version=bom_a.version)
+
+    def test_work_order_number_is_unique_per_tenant(self, tenant_a, work_order_a, item_a):
+        from apps.scm.models import WorkOrder
+        with pytest.raises(IntegrityError):
+            WorkOrder.objects.create(tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+                                     number=work_order_a.number)
+
+    def test_time_log_number_is_unique_per_tenant(self, tenant_a, time_log_a,
+                                                  released_work_order_a, work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        with pytest.raises(IntegrityError):
+            ProductionTimeLog.objects.create(tenant=tenant_a, work_order=released_work_order_a,
+                                             work_center=work_center_a, started_at=timezone.now(),
+                                             number=time_log_a.number)
+
+
+# ================================================================ __str__ + defaults
+class TestManufacturingStrAndDefaults:
+    def test_work_centre_str(self, work_center_a):
+        assert str(work_center_a) == "WC-CNC · CNC Cell"
+
+    def test_bom_str(self, bom_a):
+        assert str(bom_a) == f"{bom_a.number} · Widget recipe v1"
+
+    def test_bom_line_str(self, bom_a, component_bolt_a):
+        line = bom_a.lines.first()
+        assert str(line) == f"{component_bolt_a} × 2.0000"
+
+    def test_work_order_str(self, work_order_a, item_a):
+        work_order_a.refresh_from_db()
+        assert str(work_order_a) == f"{work_order_a.number} · {item_a} × 5.0000"
+
+    def test_work_order_component_str(self, stocked_work_order_a):
+        component = stocked_work_order_a.components.first()
+        assert str(component) == f"{component.item} × {component.quantity_required}"
+
+    def test_time_log_str(self, time_log_a):
+        assert str(time_log_a) == f"{time_log_a.number} · Machine 60m"
+
+    def test_a_new_work_order_defaults_to_draft_make_to_stock_normal_forward(self, tenant_a,
+                                                                             item_a):
+        from apps.scm.models import WorkOrder
+        order = WorkOrder.objects.create(tenant=tenant_a, item=item_a,
+                                         quantity_planned=Decimal("1"))
+        assert order.status == "draft"
+        assert order.order_policy == "make_to_stock"
+        assert order.priority == "normal"
+        assert order.schedule_direction == "forward"
+        assert order.quantity_produced == Decimal("0")
+        assert order.quantity_scrapped == Decimal("0")
+        assert order.produced_unit_cost == Decimal("0")
+        assert order.released_by_id is None
+
+    def test_a_new_bom_defaults_to_draft_manufacture_one_output(self, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        bom = BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name="Defaults")
+        assert (bom.status, bom.bom_type, bom.version) == ("draft", "manufacture", "1")
+        assert bom.output_quantity == Decimal("1")
+        assert bom.is_default is False
+        assert bom.lead_time_days == 0
+
+    def test_a_new_work_centre_defaults_to_an_active_8_hour_machine(self, tenant_a):
+        from apps.scm.models import WorkCenter
+        centre = WorkCenter.objects.create(tenant=tenant_a, code="D1", name="Defaults")
+        assert centre.center_type == "machine"
+        assert centre.capacity_hours_per_day == Decimal("8")
+        assert centre.efficiency_pct == Decimal("100")
+        assert centre.setup_minutes == 0
+        assert centre.is_active is True
+
+    def test_every_status_choice_is_reachable_on_a_work_order(self):
+        from apps.scm.models import WorkOrder
+        assert [value for value, _ in WorkOrder.STATUS_CHOICES] == [
+            "draft", "planned", "released", "in_progress", "completed", "closed", "cancelled"]
+        assert WorkOrder.EDITABLE_STATUSES == ("draft", "planned")
+        assert WorkOrder.OPEN_STATUSES == ("released", "in_progress")
+
+    def test_bom_and_time_log_choice_sets(self):
+        from apps.scm.models import BillOfMaterials, BOMLine, ProductionTimeLog, WorkOrderComponent
+        assert [v for v, _ in BillOfMaterials.STATUS_CHOICES] == ["draft", "active", "obsolete"]
+        assert [v for v, _ in BillOfMaterials.BOM_TYPE_CHOICES] == ["manufacture", "kit", "phantom"]
+        assert [v for v, _ in BOMLine.ISSUE_METHOD_CHOICES] == ["manual", "backflush"]
+        assert [v for v, _ in WorkOrderComponent.ISSUE_METHOD_CHOICES] == ["manual", "backflush"]
+        assert [v for v, _ in ProductionTimeLog.ENTRY_TYPE_CHOICES] == [
+            "setup", "labor", "machine", "downtime"]
+
+
+# ================================================================ WorkOrder.clean()
+class TestWorkOrderClean:
+    def test_a_bom_for_a_different_item_is_refused(self, tenant_a, bom_a, item_lot_a):
+        """The create form offers every active BOM (the item isn't known until the form binds), so
+        this clean() is the only thing standing between a mis-picked recipe and a run that
+        consumes the wrong components."""
+        from apps.scm.models import WorkOrder
+        order = WorkOrder(tenant=tenant_a, item=item_lot_a, bom=bom_a,
+                          quantity_planned=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            order.full_clean()
+        assert "bom" in exc.value.error_dict
+        assert "pick a BOM for the item being built" in str(exc.value)
+
+    def test_the_matching_bom_passes(self, tenant_a, bom_a, item_a):
+        from apps.scm.models import WorkOrder
+        WorkOrder(tenant=tenant_a, item=item_a, bom=bom_a,
+                  quantity_planned=Decimal("1")).full_clean()
+
+    def test_a_planned_end_before_the_start_is_refused(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.models import WorkOrder
+        now = timezone.now()
+        order = WorkOrder(tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+                          planned_start=now, planned_end=now - datetime.timedelta(hours=1))
+        with pytest.raises(ValidationError) as exc:
+            order.full_clean()
+        assert "planned_end" in exc.value.error_dict
+
+    def test_a_make_to_order_run_without_its_peg_is_refused(self, tenant_a, item_a):
+        from apps.scm.models import WorkOrder
+        order = WorkOrder(tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+                          order_policy="make_to_order")
+        with pytest.raises(ValidationError) as exc:
+            order.full_clean()
+        assert "sales_order" in exc.value.error_dict
+
+    def test_a_zero_planned_quantity_is_refused(self, tenant_a, item_a):
+        from apps.scm.models import WorkOrder
+        with pytest.raises(ValidationError):
+            WorkOrder(tenant=tenant_a, item=item_a, quantity_planned=Decimal("0")).full_clean()
+
+
+# ================================================================ WorkOrder derived state
+class TestWorkOrderDerivedState:
+    def test_is_editable_only_in_draft_and_planned(self, work_order_a):
+        for status, editable in (("draft", True), ("planned", True), ("released", False),
+                                 ("in_progress", False), ("completed", False), ("closed", False),
+                                 ("cancelled", False)):
+            work_order_a.status = status
+            assert work_order_a.is_editable is editable, status
+
+    def test_is_open_only_while_released_or_in_progress(self, work_order_a):
+        for status, live in (("draft", False), ("planned", False), ("released", True),
+                             ("in_progress", True), ("completed", False), ("closed", False)):
+            work_order_a.status = status
+            assert work_order_a.is_open is live, status
+
+    def test_quantity_remaining_nets_produced_and_scrapped(self, work_order_a):
+        work_order_a.quantity_produced = Decimal("3")
+        work_order_a.quantity_scrapped = Decimal("1")
+        assert work_order_a.quantity_remaining == Decimal("1.0000")
+
+    def test_quantity_remaining_never_goes_negative(self, work_order_a):
+        work_order_a.quantity_produced = Decimal("9")
+        assert work_order_a.quantity_remaining == Decimal("0.0000")
+
+    def test_planned_hours_is_derived_from_the_window(self, work_order_a):
+        from django.utils import timezone
+        start = timezone.now()
+        work_order_a.planned_start = start
+        work_order_a.planned_end = start + datetime.timedelta(hours=7, minutes=30)
+        assert work_order_a.planned_hours == Decimal("7.50")
+
+    def test_planned_hours_is_zero_without_a_window(self, work_order_a):
+        assert work_order_a.planned_hours == Decimal("0")
+
+    def test_actual_hours_sums_the_time_logs(self, released_work_order_a, time_log_a):
+        assert released_work_order_a.actual_hours == Decimal("1.00")
+
+    def test_duration_variance_compares_actual_against_planned(self, released_work_order_a,
+                                                               time_log_a):
+        from django.utils import timezone
+        start = timezone.now()
+        released_work_order_a.planned_start = start
+        released_work_order_a.planned_end = start + datetime.timedelta(hours=3)
+        assert released_work_order_a.duration_variance_hours == Decimal("-2.00")
+
+
+# ================================================================ Component snapshot
+class TestWorkOrderComponentSnapshot:
+    def test_explode_components_snapshots_the_recipe(self, work_order_a, component_bolt_a,
+                                                     component_plate_a):
+        assert work_order_a.explode_components() == 2
+        rows = list(work_order_a.components.order_by("sequence"))
+        assert [row.item_id for row in rows] == [component_bolt_a.pk, component_plate_a.pk]
+        assert [row.quantity_required for row in rows] == [Decimal("10.0000"), Decimal("5.0000")]
+        assert [row.sequence for row in rows] == [10, 20]
+        assert [row.unit_cost for row in rows] == [Decimal("2.0000"), Decimal("5.0000")]
+
+    def test_explode_components_is_a_no_op_once_lines_exist(self, stocked_work_order_a):
+        """A hand-edited component set is never silently overwritten by a re-explode."""
+        assert stocked_work_order_a.explode_components() == 0
+        assert stocked_work_order_a.components.count() == 2
+
+    def test_explode_components_does_nothing_without_a_bom(self, tenant_a, item_a):
+        from apps.scm.models import WorkOrder
+        order = WorkOrder.objects.create(tenant=tenant_a, item=item_a,
+                                         quantity_planned=Decimal("4"))
+        assert order.explode_components() == 0
+
+    def test_the_snapshot_survives_a_later_recipe_edit(self, stocked_work_order_a, bom_a):
+        """Components are a SNAPSHOT — a BOM edited next month cannot rewrite what a run three
+        weeks ago actually required."""
+        bom_a.lines.update(quantity_per=Decimal("99"))
+        rows = list(stocked_work_order_a.components.order_by("sequence"))
+        assert [row.quantity_required for row in rows] == [Decimal("10.0000"), Decimal("5.0000")]
+
+    def test_quantity_outstanding_and_issued_value(self, stocked_work_order_a):
+        component = stocked_work_order_a.components.order_by("sequence").first()
+        assert component.quantity_outstanding == Decimal("10.0000")
+        component.quantity_issued = Decimal("4")
+        assert component.quantity_outstanding == Decimal("6.0000")
+        assert component.issued_value == Decimal("8.0000")
+
+    def test_quantity_outstanding_never_goes_negative(self, stocked_work_order_a):
+        component = stocked_work_order_a.components.first()
+        component.quantity_issued = Decimal("999")
+        assert component.quantity_outstanding == Decimal("0.0000")
+
+
+# ================================================================ material_shortfalls
+class TestWorkOrderMaterialShortfalls:
+    def test_a_short_component_is_reported_with_its_gap(self, work_order_a, component_bolt_a,
+                                                        component_plate_a, location_a):
+        from apps.scm.tests._helpers import seed_stock
+        work_order_a.explode_components()
+        seed_stock(work_order_a.tenant, component_bolt_a, location_a, "4", "2.0000")
+        seed_stock(work_order_a.tenant, component_plate_a, location_a, "100", "5.0000")
+        shortfalls = work_order_a.material_shortfalls()
+        assert len(shortfalls) == 1
+        row = shortfalls[0]
+        assert row["component"].item_id == component_bolt_a.pk
+        assert (row["required"], row["available"], row["short"]) == (
+            Decimal("10.0000"), Decimal("4"), Decimal("6.0000"))
+
+    def test_a_fully_covered_run_reports_nothing(self, stocked_work_order_a):
+        assert stocked_work_order_a.material_shortfalls() == []
+
+    def test_no_component_location_means_no_shortfall_report(self, stocked_work_order_a):
+        stocked_work_order_a.component_location = None
+        assert stocked_work_order_a.material_shortfalls() == []
+
+
+# ================================================================ Derived costs (ledger + logs)
+def _issue_everything(order, user):
+    """Draw every outstanding component through the real posting helper."""
+    from apps.scm.views.Manufacturing.WorkOrders import _issue_components
+    components = list(order.components.select_related("item", "lot_serial"))
+    return _issue_components(order, components,
+                             {c.pk: c.quantity_outstanding for c in components}, user)
+
+
+class TestWorkOrderDerivedCosts:
+    def test_material_cost_is_summed_from_the_ledger_not_the_snapshot(self, released_work_order_a,
+                                                                      admin_user):
+        assert released_work_order_a.material_cost == Decimal("0.0000")  # nothing drawn yet
+        _issue_everything(released_work_order_a, admin_user)
+        assert released_work_order_a.material_cost == Decimal("45.0000")
+
+    def test_labour_and_machine_cost_come_from_the_time_logs(self, released_work_order_a,
+                                                             work_center_a, time_log_a, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            entry_type="labor", started_at=started,
+            ended_at=started + datetime.timedelta(hours=2))
+        assert released_work_order_a.machine_cost == Decimal("10.0000")   # 1 h x 10.00
+        assert released_work_order_a.labor_cost == Decimal("40.0000")     # 2 h x 20.00
+
+    def test_downtime_is_excluded_from_the_cost_pool(self, released_work_order_a, work_center_a,
+                                                     tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            entry_type="downtime", downtime_reason="breakdown", started_at=started,
+            ended_at=started + datetime.timedelta(hours=5))
+        assert released_work_order_a.labor_cost == Decimal("0.0000")
+        assert released_work_order_a.machine_cost == Decimal("0.0000")
+
+    def test_setup_time_absorbs_at_the_labour_rate(self, released_work_order_a, work_center_a,
+                                                   tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            entry_type="setup", started_at=started,
+            ended_at=started + datetime.timedelta(minutes=30))
+        assert released_work_order_a.labor_cost == Decimal("10.0000")  # 0.5 h x 20.00
+
+    def test_nothing_about_the_cost_pool_is_a_stored_column(self):
+        from apps.scm.models import WorkOrder
+        stored = {field.name for field in WorkOrder._meta.fields}
+        for derived in ("material_cost", "labor_cost", "machine_cost", "wip_value"):
+            assert derived not in stored, derived
+
+    def test_wip_value_is_cost_in_less_value_taken_out(self, released_work_order_a, admin_user,
+                                                       time_log_a):
+        _issue_everything(released_work_order_a, admin_user)
+        # 45.00 material + 10.00 machine (1 h) - nothing produced yet.
+        assert released_work_order_a.wip_value == Decimal("55.0000")
+
+
+# ================================================================ computed_unit_cost (the big one)
+class TestWorkOrderComputedUnitCost:
+    def test_it_divides_the_UNABSORBED_pool_by_this_layer_only(self, released_work_order_a,
+                                                               admin_user, time_log_a):
+        """The regression lock. Pool = 45 material + 10 machine = 55.
+
+        Layer 1 of 3 units absorbs 55/3; layer 2 of 2 units must then see an EMPTY pool, not
+        55/5 again — the formula this replaced banked 3x(55/3) + 2x(55/5) = 77.00 against 55.00
+        of real cost, and drove wip_value negative.
+        """
+        from apps.scm.views._helpers import _post_stock_move
+        _issue_everything(released_work_order_a, admin_user)
+        first = released_work_order_a.computed_unit_cost(Decimal("3"))
+        assert first == Decimal("18.3333")  # 55 / 3
+        _post_stock_move(released_work_order_a.tenant, item=released_work_order_a.item,
+                         location=released_work_order_a.output_location, quantity=Decimal("3"),
+                         move_type="production", unit_cost=first,
+                         reference=released_work_order_a.number)
+        # 55 - (3 x 18.3333) = 0.0001 unabsorbed; spread over 2 more units that is sub-quantum.
+        assert released_work_order_a.computed_unit_cost(Decimal("2")) == Decimal("0.0000")
+
+    def test_a_zero_or_negative_good_quantity_costs_nothing(self, released_work_order_a):
+        assert released_work_order_a.computed_unit_cost(Decimal("0")) == Decimal("0")
+        assert released_work_order_a.computed_unit_cost(Decimal("-5")) == Decimal("0")
+        assert released_work_order_a.computed_unit_cost(None) == Decimal("0")
+
+    def test_an_already_absorbed_pool_costs_nothing(self, released_work_order_a):
+        assert released_work_order_a.computed_unit_cost(Decimal("5")) == Decimal("0")
+
+    def test_scrap_is_absorbed_by_the_units_that_survived(self, released_work_order_a, admin_user):
+        """The pool divides by the GOOD quantity, so a scrappy run reports a HIGHER unit cost
+        rather than hiding the loss."""
+        _issue_everything(released_work_order_a, admin_user)
+        assert released_work_order_a.computed_unit_cost(Decimal("5")) == Decimal("9.0000")
+        assert released_work_order_a.computed_unit_cost(Decimal("4")) == Decimal("11.2500")
+
+
+# ================================================================ BillOfMaterials effectivity
+class TestBillOfMaterialsEffectivity:
+    def test_a_draft_recipe_is_never_effective(self, bom_draft_a):
+        assert bom_draft_a.is_effective() is False
+
+    def test_an_active_open_ended_recipe_is_effective_today(self, bom_a):
+        from django.utils import timezone
+        assert bom_a.is_effective(timezone.localdate()) is True
+
+    def test_a_window_that_has_not_opened_is_not_effective(self, bom_a):
+        from django.utils import timezone
+        today = timezone.localdate()
+        bom_a.effective_from = today + datetime.timedelta(days=5)
+        assert bom_a.is_effective(today) is False
+
+    def test_a_window_that_has_closed_is_not_effective(self, bom_a):
+        from django.utils import timezone
+        today = timezone.localdate()
+        bom_a.effective_to = today - datetime.timedelta(days=1)
+        assert bom_a.is_effective(today) is False
+
+    def test_active_for_prefers_the_default_recipe(self, tenant_a, item_a, bom_a):
+        from apps.scm.models import BillOfMaterials
+        BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name="Alt", version="2",
+                                       status="active")
+        assert BillOfMaterials.active_for(tenant_a, item_a) == bom_a
+
+    def test_active_for_returns_none_without_a_tenant_or_item(self, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        assert BillOfMaterials.active_for(None, item_a) is None
+        assert BillOfMaterials.active_for(tenant_a, None) is None
+
+    def test_make_vs_buy_is_derived_not_a_flag(self, tenant_a, item_a, bom_a, component_bolt_a):
+        from apps.scm.models import BillOfMaterials, Item
+        assert BillOfMaterials.is_manufactured(tenant_a, item_a) is True
+        assert BillOfMaterials.is_manufactured(tenant_a, component_bolt_a) is False
+        assert "is_manufactured" not in {f.name for f in Item._meta.fields}
+
+    def test_manufactured_item_ids_answers_the_whole_tenant_at_once(self, tenant_a, item_a, bom_a,
+                                                                    bom_draft_a,
+                                                                    django_assert_max_num_queries):
+        from apps.scm.models import BillOfMaterials
+        with django_assert_max_num_queries(1):
+            ids = BillOfMaterials.manufactured_item_ids(tenant_a)
+        assert ids == {item_a.pk}  # bom_draft_a is draft, so its item is still bought
+
+    def test_manufactured_item_ids_is_empty_without_a_tenant(self):
+        from apps.scm.models import BillOfMaterials
+        assert BillOfMaterials.manufactured_item_ids(None) == set()
+
+    def test_explosion_index_agrees_with_active_for(self, tenant_a, item_a, bom_a):
+        from apps.scm.models import BillOfMaterials
+        index = BillOfMaterials.explosion_index(tenant_a.pk)
+        assert index[item_a.pk] == BillOfMaterials.active_for(tenant_a, item_a)
+
+    def test_explosion_index_is_empty_without_a_tenant(self):
+        from apps.scm.models import BillOfMaterials
+        assert BillOfMaterials.explosion_index(None) == {}
+
+
+# ================================================================ BillOfMaterials.clean() / save()
+class TestBillOfMaterialsValidation:
+    def test_effective_to_before_from_is_refused(self, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        bom = BillOfMaterials(tenant=tenant_a, item=item_a, name="Bad window", version="7",
+                              effective_from=datetime.date(2026, 6, 1),
+                              effective_to=datetime.date(2026, 5, 1))
+        with pytest.raises(ValidationError) as exc:
+            bom.full_clean()
+        assert "effective_to" in exc.value.error_dict
+
+    def test_a_second_default_recipe_is_refused_on_a_validated_form(self, tenant_a, item_a, bom_a):
+        from apps.scm.models import BillOfMaterials
+        clash = BillOfMaterials(tenant=tenant_a, item=item_a, name="Second default", version="2",
+                                is_default=True)
+        with pytest.raises(ValidationError) as exc:
+            clash.full_clean()
+        assert "is_default" in exc.value.error_dict
+
+    def test_save_demotes_a_sibling_default_for_programmatic_writers(self, tenant_a, item_a,
+                                                                     bom_a):
+        from apps.scm.models import BillOfMaterials
+        BillOfMaterials.objects.create(tenant=tenant_a, item=item_a, name="Seeded default",
+                                       version="3", is_default=True)
+        bom_a.refresh_from_db()
+        assert bom_a.is_default is False
+
+    def test_an_output_quantity_of_zero_is_refused(self, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        with pytest.raises(ValidationError):
+            BillOfMaterials(tenant=tenant_a, item=item_a, name="Zero", version="8",
+                            output_quantity=Decimal("0")).full_clean()
+
+    def test_a_lead_time_beyond_ten_years_is_refused(self, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        with pytest.raises(ValidationError):
+            BillOfMaterials(tenant=tenant_a, item=item_a, name="Slow", version="9",
+                            lead_time_days=3651).full_clean()
+
+    def test_scrap_pct_is_bounded_to_100(self, bom_a, component_bolt_a):
+        from apps.scm.models import BOMLine
+        with pytest.raises(ValidationError):
+            BOMLine(bom=bom_a, component=component_bolt_a, quantity_per=Decimal("1"),
+                    scrap_pct=Decimal("101")).full_clean()
+
+
+# ================================================================ BillOfMaterials.explode()
+class TestBillOfMaterialsExplode:
+    def _item(self, tenant, sku, cost="1.0000"):
+        from apps.scm.models import Item
+        return Item.objects.create(tenant=tenant, sku=sku, name=sku, standard_cost=Decimal(cost))
+
+    def _bom(self, tenant, item, components, version="1"):
+        from apps.scm.models import BillOfMaterials, BOMLine
+        bom = BillOfMaterials.objects.create(tenant=tenant, item=item, name=f"{item.sku} recipe",
+                                             version=version, status="active")
+        for index, (component, per) in enumerate(components):
+            BOMLine.objects.create(bom=bom, sequence=(index + 1) * 10, component=component,
+                                   quantity_per=Decimal(per))
+        return bom
+
+    def test_a_single_level_recipe_scales_by_the_order_quantity(self, bom_a, component_bolt_a,
+                                                                component_plate_a):
+        rows = bom_a.explode(Decimal("5"))
+        assert [(row["item"].pk, row["quantity"], row["level"]) for row in rows] == [
+            (component_bolt_a.pk, Decimal("10.0000"), 1),
+            (component_plate_a.pk, Decimal("5.0000"), 1)]
+
+    def test_scrap_grosses_the_requirement_up(self, bom_a):
+        line = bom_a.lines.order_by("sequence").first()
+        line.scrap_pct = Decimal("10")
+        line.save(update_fields=["scrap_pct"])
+        assert line.effective_quantity_per == Decimal("2.2000")
+        assert bom_a.explode(Decimal("5"))[0]["quantity"] == Decimal("11.0000")
+
+    def test_output_quantity_divides_the_requirement(self, bom_a):
+        bom_a.output_quantity = Decimal("10")
+        bom_a.save(update_fields=["output_quantity"])
+        assert bom_a.explode(Decimal("5"))[0]["quantity"] == Decimal("1.0000")
+
+    def test_a_component_with_its_own_recipe_recurses(self, tenant_a):
+        top = self._item(tenant_a, "TOP-1")
+        mid = self._item(tenant_a, "MID-1")
+        raw = self._item(tenant_a, "RAW-1")
+        self._bom(tenant_a, top, [(mid, "2")])
+        self._bom(tenant_a, mid, [(raw, "3")])
+        rows = top.boms.first().explode(Decimal("1"))
+        assert [(row["item"].pk, row["quantity"], row["level"]) for row in rows] == [
+            (raw.pk, Decimal("6.0000"), 2)]
+
+    def test_a_cycle_terminates_and_emits_the_revisited_item_as_a_leaf(self, tenant_a):
+        """A -> B -> A across two individually-valid BOMs. Silently losing the requirement would
+        UNDERSTATE the shortage, which is the more dangerous failure — so it is emitted, not
+        dropped."""
+        alpha = self._item(tenant_a, "CYC-A")
+        beta = self._item(tenant_a, "CYC-B")
+        bom_alpha = self._bom(tenant_a, alpha, [(beta, "2")])
+        self._bom(tenant_a, beta, [(alpha, "3")])
+        rows = bom_alpha.explode(Decimal("1"))
+        assert len(rows) == 1
+        assert rows[0]["item"].pk == alpha.pk       # the revisited ancestor, emitted as a LEAF
+        assert rows[0]["quantity"] == Decimal("6.0000")
+        assert rows[0]["level"] == 2
+
+    def test_the_depth_cap_stops_a_legal_but_absurd_nesting(self, tenant_a):
+        chain = [self._item(tenant_a, f"CHN-{i}") for i in range(4)]
+        for parent, child in zip(chain, chain[1:]):
+            self._bom(tenant_a, parent, [(child, "1")])
+        top_bom = chain[0].boms.first()
+        assert [row["item"].pk for row in top_bom.explode(Decimal("1"))] == [chain[3].pk]
+        capped = top_bom.explode(Decimal("1"), depth_cap=2)
+        assert [row["item"].pk for row in capped] == [chain[2].pk]
+        assert capped[0]["level"] == 2
+
+    def test_the_documented_caps(self):
+        from apps.scm.models import BillOfMaterials
+        assert BillOfMaterials.MAX_EXPLODE_DEPTH == 5
+        assert BillOfMaterials.MAX_EXPLODE_ROWS == 5000
+
+    def test_max_explode_rows_truncates_a_wide_graph_rather_than_running_away(self, tenant_a,
+                                                                              monkeypatch):
+        """Depth alone does NOT bound the output — the result is the PRODUCT of the branch
+        factors, so the row budget is a denial-of-service bound, not a tidiness one."""
+        from apps.scm.models import BillOfMaterials
+        monkeypatch.setattr(BillOfMaterials, "MAX_EXPLODE_ROWS", 3)
+        wide = self._item(tenant_a, "WIDE-1")
+        leaves = [self._item(tenant_a, f"LEAF-{i}") for i in range(8)]
+        bom = self._bom(tenant_a, wide, [(leaf, "1") for leaf in leaves])
+        rows = bom.explode(Decimal("1"))
+        assert len(rows) == 3
+        assert bom.explode_was_truncated(rows) is True
+
+    def test_the_budget_is_shared_across_every_frame_of_the_recursion(self, tenant_a,
+                                                                      monkeypatch):
+        """A per-frame budget would let a nested recipe emit MAX_EXPLODE_ROWS per level."""
+        from apps.scm.models import BillOfMaterials
+        monkeypatch.setattr(BillOfMaterials, "MAX_EXPLODE_ROWS", 4)
+        top = self._item(tenant_a, "BDG-TOP")
+        mids = [self._item(tenant_a, f"BDG-MID-{i}") for i in range(3)]
+        self._bom(tenant_a, top, [(mid, "1") for mid in mids])
+        for i, mid in enumerate(mids):
+            leaves = [self._item(tenant_a, f"BDG-LEAF-{i}-{j}") for j in range(3)]
+            self._bom(tenant_a, mid, [(leaf, "1") for leaf in leaves])
+        rows = top.boms.first().explode(Decimal("1"))
+        assert len(rows) == 4  # not 3 x 3 = 9, and not 4 per branch either
+
+    def test_an_untruncated_explosion_reports_so(self, bom_a):
+        rows = bom_a.explode(Decimal("1"))
+        assert bom_a.explode_was_truncated(rows) is False
+
+    def test_estimated_unit_cost_rolls_up_the_exploded_leaves(self, bom_a):
+        # 2 bolts @ 2.00 + 1 plate @ 5.00, per 1 output unit.
+        assert bom_a.estimated_unit_cost() == Decimal("9.0000")
+
+    def test_estimated_unit_cost_reuses_supplied_rows(self, bom_a, django_assert_max_num_queries):
+        rows = bom_a.explode(bom_a.output_quantity)
+        with django_assert_max_num_queries(0):
+            assert bom_a.estimated_unit_cost(rows=rows) == Decimal("9.0000")
+
+    def test_component_count_counts_the_single_level_lines(self, bom_a):
+        assert bom_a.component_count == 2
+
+
+# ================================================================ WorkCenter capacity + OEE
+class TestWorkCenterCapacityAndOEE:
+    def test_cost_per_hour_is_machine_plus_labour(self, work_center_a):
+        assert work_center_a.cost_per_hour == Decimal("30.0000")
+
+    def test_effective_capacity_scales_by_efficiency(self, work_center_a):
+        work_center_a.efficiency_pct = Decimal("75")
+        assert work_center_a.effective_capacity_hours(10) == Decimal("60.00")
+
+    def test_scheduled_hours_counts_a_run_that_STRADDLES_the_window_edge(self, tenant_a, item_a,
+                                                                         work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import WorkOrder
+        now = timezone.now()
+        WorkOrder.objects.create(
+            tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+            work_center=work_center_a, planned_start=now - datetime.timedelta(days=1),
+            planned_end=now + datetime.timedelta(days=1))
+        assert work_center_a.scheduled_hours(
+            now, now + datetime.timedelta(days=7)) == Decimal("48.00")
+
+    def test_scheduled_hours_excludes_cancelled_and_closed_runs(self, tenant_a, item_a,
+                                                                work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import WorkOrder
+        now = timezone.now()
+        for status in ("cancelled", "closed"):
+            order = WorkOrder.objects.create(
+                tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"),
+                work_center=work_center_a, planned_start=now,
+                planned_end=now + datetime.timedelta(hours=4))
+            WorkOrder.objects.filter(pk=order.pk).update(status=status)
+        assert work_center_a.scheduled_hours(now, now + datetime.timedelta(days=7)) == Decimal("0")
+
+    def test_scheduled_hours_is_zero_without_a_window(self, work_center_a):
+        assert work_center_a.scheduled_hours(None, None) == Decimal("0")
+
+    def test_the_batched_map_agrees_with_the_per_instance_figure(self, tenant_a, item_a,
+                                                                 work_center_a, work_center_a2,
+                                                                 django_assert_max_num_queries):
+        from django.utils import timezone
+        from apps.scm.models import WorkCenter, WorkOrder
+        now = timezone.now()
+        for centre, hours in ((work_center_a, 4), (work_center_a2, 6)):
+            WorkOrder.objects.create(
+                tenant=tenant_a, item=item_a, quantity_planned=Decimal("1"), work_center=centre,
+                planned_start=now, planned_end=now + datetime.timedelta(hours=hours))
+        end = now + datetime.timedelta(days=7)
+        with django_assert_max_num_queries(1):
+            mapped = WorkCenter.scheduled_hours_map(tenant_a, now, end)
+        assert mapped == {work_center_a.pk: Decimal("4.00"), work_center_a2.pk: Decimal("6.00")}
+        assert mapped[work_center_a.pk] == work_center_a.scheduled_hours(now, end)
+
+    def test_the_batched_map_is_empty_without_a_tenant_or_window(self, tenant_a):
+        from django.utils import timezone
+        from apps.scm.models import WorkCenter
+        assert WorkCenter.scheduled_hours_map(None, timezone.now(), timezone.now()) == {}
+        assert WorkCenter.scheduled_hours_map(tenant_a, None, None) == {}
+
+    def test_actual_hours_sums_the_booked_minutes(self, work_center_a, time_log_a):
+        from django.utils import timezone
+        now = timezone.now()
+        assert work_center_a.actual_hours(now - datetime.timedelta(days=1), now) == Decimal("1.00")
+
+    def test_utilization_reads_the_supplied_actual_without_re_aggregating(
+        self, work_center_a, time_log_a, django_assert_max_num_queries,
+    ):
+        from django.utils import timezone
+        now = timezone.now()
+        with django_assert_max_num_queries(0):
+            pct = work_center_a.utilization_pct(now - datetime.timedelta(days=30), now, days=30,
+                                                actual=Decimal("120.00"))
+        assert pct == Decimal("50.00")  # 120 booked / 240 capacity
+
+    def test_utilization_is_zero_when_the_centre_has_no_capacity(self, work_center_a):
+        from django.utils import timezone
+        work_center_a.capacity_hours_per_day = Decimal("0")
+        now = timezone.now()
+        assert work_center_a.utilization_pct(now - datetime.timedelta(days=1), now) == Decimal("0")
+
+    def test_the_oee_chip_splits_runtime_from_downtime_and_scrap(self, tenant_a,
+                                                                 released_work_order_a,
+                                                                 work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        now = timezone.now()
+        ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            entry_type="machine", started_at=now - datetime.timedelta(hours=3),
+            ended_at=now - datetime.timedelta(hours=2), quantity_completed=Decimal("8"),
+            quantity_scrapped=Decimal("2"))
+        ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            entry_type="downtime", downtime_reason="breakdown",
+            started_at=now - datetime.timedelta(hours=2),
+            ended_at=now - datetime.timedelta(minutes=90))
+        chip = work_center_a.oee_chip(now - datetime.timedelta(days=1), now)
+        assert chip["run_hours"] == Decimal("1.00")
+        assert chip["downtime_hours"] == Decimal("0.50")
+        assert chip["booked_hours"] == Decimal("1.50")
+        assert chip["availability_pct"] == Decimal("66.67")
+        assert chip["quantity_good"] == Decimal("8.0000")
+        assert chip["quantity_scrapped"] == Decimal("2.0000")
+        assert chip["quality_pct"] == Decimal("80.00")
+
+    def test_an_empty_window_yields_a_zeroed_chip(self, work_center_a):
+        from django.utils import timezone
+        now = timezone.now()
+        chip = work_center_a.oee_chip(now - datetime.timedelta(days=1), now)
+        assert chip["availability_pct"] == Decimal("0")
+        assert chip["quality_pct"] == Decimal("0")
+        assert chip["booked_hours"] == Decimal("0.00")
+
+    def test_nothing_about_load_is_a_stored_column(self):
+        from apps.scm.models import WorkCenter
+        stored = {field.name for field in WorkCenter._meta.fields}
+        for derived in ("scheduled_hours", "actual_hours", "utilization_pct", "load_pct"):
+            assert derived not in stored, derived
+
+
+# ================================================================ ProductionTimeLog
+class TestProductionTimeLog:
+    def test_duration_is_derived_from_the_interval_never_typed(self, tenant_a,
+                                                               released_work_order_a,
+                                                               work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        log = ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            started_at=started, ended_at=started + datetime.timedelta(minutes=95),
+            duration_minutes=99999)
+        assert log.duration_minutes == 95   # the typed figure never survives save()
+        assert log.duration_hours == Decimal("1.58")
+
+    def test_an_open_ended_entry_books_zero_minutes(self, tenant_a, released_work_order_a,
+                                                    work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        log = ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            started_at=timezone.now())
+        assert log.duration_minutes == 0
+
+    def test_the_derived_duration_rides_along_with_a_narrow_update_fields(self, time_log_a):
+        """A caller passing update_fields=['ended_at'] must not persist a new interval and leave
+        the stale duration behind."""
+        time_log_a.ended_at = time_log_a.started_at + datetime.timedelta(hours=3)
+        time_log_a.save(update_fields=["ended_at"])
+        time_log_a.refresh_from_db()
+        assert time_log_a.duration_minutes == 180
+
+    def test_an_end_before_the_start_is_refused(self, tenant_a, released_work_order_a,
+                                                work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        log = ProductionTimeLog(tenant=tenant_a, work_order=released_work_order_a,
+                                work_center=work_center_a, started_at=started,
+                                ended_at=started - datetime.timedelta(minutes=1))
+        with pytest.raises(ValidationError) as exc:
+            log.full_clean()
+        assert "ended_at" in exc.value.error_dict
+
+    def test_an_interval_longer_than_31_days_is_refused(self, tenant_a, released_work_order_a,
+                                                        work_center_a):
+        """duration_minutes is editable=False so it never sees form validation, and a
+        1000-01-01 -> 9999-12-31 interval derives past what the column holds — a 500, not a
+        rejection."""
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        log = ProductionTimeLog(tenant=tenant_a, work_order=released_work_order_a,
+                                work_center=work_center_a, started_at=started,
+                                ended_at=started + datetime.timedelta(days=32))
+        with pytest.raises(ValidationError) as exc:
+            log.full_clean()
+        assert "ended_at" in exc.value.error_dict
+        assert "31 days" in str(exc.value)
+
+    def test_exactly_31_days_is_still_accepted(self, tenant_a, released_work_order_a,
+                                               work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        ProductionTimeLog(tenant=tenant_a, work_order=released_work_order_a,
+                          work_center=work_center_a, started_at=started,
+                          ended_at=started + datetime.timedelta(days=31)).full_clean()
+
+    def test_a_downtime_entry_needs_a_reason(self, tenant_a, released_work_order_a,
+                                             work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        log = ProductionTimeLog(tenant=tenant_a, work_order=released_work_order_a,
+                                work_center=work_center_a, entry_type="downtime",
+                                started_at=timezone.now())
+        with pytest.raises(ValidationError) as exc:
+            log.full_clean()
+        assert "downtime_reason" in exc.value.error_dict
+
+    def test_only_a_downtime_entry_carries_a_reason(self, tenant_a, released_work_order_a,
+                                                    work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        log = ProductionTimeLog(tenant=tenant_a, work_order=released_work_order_a,
+                                work_center=work_center_a, entry_type="labor",
+                                downtime_reason="breakdown", started_at=timezone.now())
+        with pytest.raises(ValidationError) as exc:
+            log.full_clean()
+        assert "downtime_reason" in exc.value.error_dict
+
+    def test_per_entry_costs_route_to_the_right_rate(self, tenant_a, released_work_order_a,
+                                                     work_center_a):
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        started = timezone.now()
+        rows = {}
+        for entry_type in ("setup", "labor", "machine", "downtime"):
+            rows[entry_type] = ProductionTimeLog.objects.create(
+                tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+                entry_type=entry_type,
+                downtime_reason="breakdown" if entry_type == "downtime" else "",
+                started_at=started, ended_at=started + datetime.timedelta(hours=1))
+        assert rows["setup"].labor_cost == Decimal("20.0000")
+        assert rows["labor"].labor_cost == Decimal("20.0000")
+        assert rows["labor"].machine_cost == Decimal("0")
+        assert rows["machine"].machine_cost == Decimal("10.0000")
+        assert rows["machine"].labor_cost == Decimal("0")
+        assert rows["downtime"].labor_cost == Decimal("0")
+        assert rows["downtime"].machine_cost == Decimal("0")
+
+    def test_quantity_completed_never_rolls_up_into_the_run(self, released_work_order_a, tenant_a,
+                                                            work_center_a):
+        """Advisory progress. quantity_produced has exactly ONE writer — the report action that
+        also posts the finished-goods StockMove."""
+        from django.utils import timezone
+        from apps.scm.models import ProductionTimeLog
+        ProductionTimeLog.objects.create(
+            tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+            started_at=timezone.now(), quantity_completed=Decimal("40"))
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("0")
+
+
+# ================================================================ 4.8 residual branches
+class TestManufacturingResidualBranches:
+    def test_re_saving_the_EXISTING_default_recipe_is_not_a_clash_with_itself(self, bom_a):
+        """clean() excludes the row's own pk — otherwise the one default per item rule would make
+        an already-default BOM permanently un-editable."""
+        bom_a.notes = "Touched"
+        bom_a.full_clean()
+        bom_a.save()
+        bom_a.refresh_from_db()
+        assert bom_a.is_default is True
+        assert bom_a.notes == "Touched"
+
+    def test_work_centre_actual_hours_is_zero_without_a_window(self, work_center_a, time_log_a):
+        assert work_center_a.actual_hours(None, None) == Decimal("0")
+
+    def test_utilization_re_aggregates_when_no_actual_is_supplied(self, work_center_a,
+                                                                  time_log_a):
+        from django.utils import timezone
+        now = timezone.now()
+        # 1 booked hour against 8 h/day x 100 % over 1 day.
+        assert work_center_a.utilization_pct(now - datetime.timedelta(days=1), now,
+                                             days=1) == Decimal("12.50")
+
+    def test_a_lot_tracked_component_is_measured_against_ITS_OWN_lot(self, tenant_a, work_order_a,
+                                                                     item_lot_a, lot_a,
+                                                                     location_a):
+        """Checking the item's tenant-wide total instead would hide a shortage in the very lot the
+        line names."""
+        from apps.scm.models import LotSerial, WorkOrderComponent
+        from apps.scm.tests._helpers import seed_stock
+        other_lot = LotSerial.objects.create(tenant=tenant_a, item=item_lot_a, kind="lot",
+                                             number="LOT-0002")
+        WorkOrderComponent.objects.create(work_order=work_order_a, sequence=10, item=item_lot_a,
+                                          quantity_required=Decimal("10"), lot_serial=lot_a)
+        seed_stock(tenant_a, item_lot_a, location_a, "3", "1.0000")          # into no lot at all
+        move = seed_stock(tenant_a, item_lot_a, location_a, "50", "1.0000")  # into the WRONG lot
+        move.lot_serial = other_lot
+        move.save(update_fields=["lot_serial"])
+        shortfalls = work_order_a.material_shortfalls()
+        assert len(shortfalls) == 1
+        assert shortfalls[0]["available"] == Decimal("0")   # LOT-0001 holds none of it
+        assert shortfalls[0]["short"] == Decimal("10.0000")
