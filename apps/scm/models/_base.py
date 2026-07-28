@@ -7,7 +7,14 @@ One sub-package per NavERP sub-module (4.1-4.19), one module per entity. Every e
 
 The bases are a local copy of the proven apps/crm + apps/accounting pattern — peer apps
 deliberately don't import each other's internals.
+
+``secrets`` is re-exported through the star import for the same reason ``apps/crm/models/_base.py``
+carries it: 4.10's ``ReturnAuthorization.public_token`` is minted once in ``save()`` with
+``secrets.token_urlsafe(32)``, exactly as ``crm.Case.public_token`` is. An unguessable bearer token
+is the whole security model of a login-free customer status page, so it comes from the CSPRNG and
+never from ``random`` or a uuid4 hex.
 """
+import secrets
 from decimal import Decimal
 
 from django.conf import settings
