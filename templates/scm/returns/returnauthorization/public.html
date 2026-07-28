@@ -1,0 +1,111 @@
+{% extends "base_auth.html" %}
+{% comment %}
+  THE PUBLIC RETURN-STATUS PAGE. No login, no session, no tenant on the request — the unguessable
+  token in the URL is the only credential, and the view refuses a draft or cancelled return in the
+  lookup itself so one of those 404s rather than leaking that it exists.
+
+  It extends base_auth.html rather than base.html — a visitor gets no sidebar, no navigation and no
+  workspace chrome, exactly as the public case and knowledge-base pages do. (The extends tag has to
+  come first in the file, which is why this note sits under it rather than above it.)
+
+  Three rules govern what may go on this page and none of them is negotiable:
+
+  1. NO PRICES, NO COSTS, NO SUPPLIER DATA. The view hands over a purpose-built list of line
+     dictionaries — description, quantity, reason, follow-up question — precisely so that a future
+     edit here cannot reach through the return object and render a cost by accident.
+  2. EVERYTHING IS ESCAPED. Tenant and customer text is rendered through Django's autoescaping and
+     the safe filter appears nowhere on this page. The policy's portal instructions are typed by a
+     workspace user and land in front of a stranger's browser.
+  3. BOTH FORMS CARRY A CSRF TOKEN. CSRF is enforced globally in this project — the only exemption
+     anywhere is a payment webhook — and nothing here is exempt from it.
+{% endcomment %}
+{% block title %}Return {{ obj.number }}{% endblock %}
+{% block content %}
+  <h2>Return {{ obj.number }}</h2>
+  <p style="color:var(--text-muted);">{{ obj.customer.name }}</p>
+
+  <dl class="detail-grid" style="margin:1rem 0;">
+    <div class="detail-item"><dt>Status</dt><dd>
+      <span class="badge badge-{% if obj.status == 'requested' %}info{% elif obj.status == 'approved' %}green{% elif obj.status == 'awaiting_receipt' %}amber{% elif obj.status == 'partially_received' %}amber{% elif obj.status == 'received' %}info{% elif obj.status == 'settled' %}green{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+    </dd></div>
+    <div class="detail-item"><dt>Requested</dt><dd>{{ obj.requested_on|date:"M d, Y" }}</dd></div>
+    <div class="detail-item"><dt>How to send it back</dt><dd>{{ obj.get_return_method_display }}</dd></div>
+    {% if obj.customer_shipped_on %}
+      <div class="detail-item"><dt>You told us it shipped</dt><dd>{{ obj.customer_shipped_on|date:"M d, Y" }}</dd></div>
+    {% endif %}
+    {% if obj.return_tracking_number %}
+      <div class="detail-item"><dt>Tracking number</dt><dd>{{ obj.return_tracking_number }}</dd></div>
+    {% endif %}
+  </dl>
+
+  <h3 style="margin-top:1.5rem;">What you are sending back</h3>
+  {% comment %}
+    `lines` is NOT the return's line objects. It is the flattened, price-free list the view built —
+    description, quantity, reason and the reason's follow-up question, and nothing else.
+  {% endcomment %}
+  {% for line in lines %}
+    <div style="margin-bottom:.5rem; padding:.6rem .8rem; border:1px solid var(--border); border-radius:var(--radius-sm);">
+      <div style="font-weight:600;">{{ line.description|default:"Item" }} × {{ line.quantity|floatformat:2 }}</div>
+      {% if line.reason %}<div style="font-size:.85rem; color:var(--text-muted);">Reason: {{ line.reason }}</div>{% endif %}
+      {% if line.follow_up_question %}<div style="font-size:.85rem; color:var(--text-muted);">{{ line.follow_up_question }}</div>{% endif %}
+    </div>
+  {% empty %}
+    <p style="color:var(--text-muted);">Nothing has been listed on this return yet.</p>
+  {% endfor %}
+
+  {% if policy and policy.portal_instructions %}
+    <h3 style="margin-top:1.5rem;">What to do next</h3>
+    <p style="color:var(--text-muted);">{{ policy.portal_instructions|linebreaksbr }}</p>
+  {% endif %}
+
+  {% comment %}
+    The print button is offered on exactly the statuses returnauthorization_label accepts —
+    approved, awaiting receipt and partially received — because a slip for a return nobody has
+    approved yet is a document that looks real and is not. `can_print_label` is the view's own
+    verdict on that, so the button and the page it opens can never disagree.
+  {% endcomment %}
+  {% if can_print_label %}
+    <p style="margin-top:1rem;">
+      <a class="btn btn-outline" href="{% url 'scm:returnauthorization_label' obj.public_token %}">Print your return slip</a>
+    </p>
+  {% endif %}
+
+  {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+
+  {% if can_confirm_shipment %}
+    <h3 style="margin-top:1.5rem;">Have you sent it?</h3>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="shipped">
+      <div class="form-group">
+        <label class="form-label" for="{{ form.return_tracking_number.id_for_label }}">{{ form.return_tracking_number.label }}</label>
+        {{ form.return_tracking_number }}
+        {% for e in form.return_tracking_number.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit">I've shipped it</button>
+    </form>
+  {% elif obj.customer_shipped_on %}
+    <div style="margin-top:1.5rem; padding:1rem; border-radius:var(--radius-sm); background:var(--ok-bg); color:var(--ok);">
+      <strong>Thanks — we know it's on its way.</strong> We'll update this page once it reaches us.
+    </div>
+  {% endif %}
+
+  <h3 style="margin-top:1.5rem;">Add a note</h3>
+  {% if obj.portal_note %}
+    <p style="color:var(--text-muted);">Your last note: {{ obj.portal_note }}</p>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="note">
+    <div class="form-group">
+      <label class="form-label" for="{{ form.portal_note.id_for_label }}">{{ form.portal_note.label }}</label>
+      {{ form.portal_note }}
+      {% for e in form.portal_note.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+    </div>
+    <button class="btn btn-primary" type="submit">Send note</button>
+  </form>
+
+  <p style="margin-top:1.5rem; font-size:.8rem; color:var(--text-muted);">
+    This page is reached through a private link. Anyone who has the link can see it, so please don't forward it.
+  </p>
+{% endblock %}
