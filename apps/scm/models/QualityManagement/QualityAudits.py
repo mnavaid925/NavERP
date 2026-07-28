@@ -115,9 +115,15 @@ class QualityAudit(TenantNumbered):
                                                      "plan, not an audit checklist."})
 
     # --- derived (nothing below is stored — see the module docstring) ----------------------------
+    #: Statuses whose header the auditor may still edit. `in_progress` is included deliberately:
+    #: `qualityaudit_complete` refuses a blank `conclusion`, and the conclusion is written AFTER
+    #: the audit has been run — locking the header at `start` made the normal path unreachable and
+    #: left Cancel as the only remaining action.
+    EDITABLE_STATUSES = ("planned", "in_progress")
+
     @property
     def is_editable(self):
-        return self.status == "planned"
+        return self.status in self.EDITABLE_STATUSES
 
     @property
     def finding_count(self):
