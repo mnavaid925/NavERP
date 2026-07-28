@@ -1,0 +1,148 @@
+{% comment %}
+  The printable audit report. A standalone document rather than a base.html page, exactly like the
+  other print pages in the application (crm quote, hrm letters, payment receipt): the whole point is
+  that what comes out of the printer carries no navigation, no sidebar and no action buttons. The
+  toolbar is the one piece of chrome, and it is hidden by the print stylesheet.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audit Report {{ obj.number }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2937; margin: 0; padding: 2rem; }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1f3a8a; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+    h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; color: #1f3a8a; margin: 1.75rem 0 .5rem; }
+    .muted { color: #6b7280; font-size: .9rem; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem 1.5rem; margin: 1rem 0; font-size: .9rem; }
+    .meta div { border-bottom: 1px solid #f3f4f6; padding: .35rem 0; }
+    .meta dt { display: inline; font-weight: 600; color: #374151; }
+    .meta dd { display: inline; margin: 0 0 0 .35rem; }
+    table { width: 100%; border-collapse: collapse; margin: .75rem 0; }
+    th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #e5e7eb; font-size: .85rem; vertical-align: top; }
+    th { background: #f3f4f6; }
+    .tally { display: flex; gap: 1.5rem; margin: 1rem 0; font-size: .9rem; }
+    .tally span { border: 1px solid #e5e7eb; border-radius: .4rem; padding: .5rem .9rem; }
+    .tally strong { font-size: 1.25rem; display: block; }
+    .narrative { white-space: pre-wrap; font-size: .9rem; line-height: 1.6; border-left: 3px solid #1f3a8a; padding-left: .9rem; margin: .5rem 0 0; }
+    .sign { display: flex; justify-content: space-between; margin-top: 3rem; font-size: .85rem; }
+    .sign div { width: 45%; border-top: 1px solid #9ca3af; padding-top: .4rem; }
+    .foot { margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: .75rem; font-size: .8rem; color: #6b7280; }
+    .toolbar { max-width: 860px; margin: 0 auto 1rem; }
+    .btn { display: inline-block; padding: .5rem .9rem; background: #1f3a8a; color: #fff; border: none; border-radius: .4rem; text-decoration: none; cursor: pointer; font-size: .9rem; }
+    .btn.secondary { background: #e5e7eb; color: #1f2937; margin-left: .5rem; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">Print / Save PDF</button>
+    <a class="btn secondary" href="{% url 'scm:qualityaudit_detail' obj.pk %}">Back to audit</a>
+  </div>
+
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1>Audit Report {{ obj.number }}</h1>
+        <div class="muted">{{ obj.title }}</div>
+      </div>
+      <div class="muted" style="text-align:right;">
+        <div><strong>{{ request.tenant.name|default:"Quality Audit" }}</strong></div>
+        <div>{{ obj.get_audit_type_display }}</div>
+        <div>Status: {{ obj.get_status_display }}</div>
+        {% if obj.standard %}<div>{{ obj.standard }}</div>{% endif %}
+      </div>
+    </div>
+
+    <h2>Audit particulars</h2>
+    <dl class="meta">
+      <div><dt>Audit number</dt><dd>{{ obj.number }}</dd></div>
+      <div><dt>Audit type</dt><dd>{{ obj.get_audit_type_display }}</dd></div>
+      <div><dt>Standard</dt><dd>{{ obj.standard|default:"—" }}</dd></div>
+      <div><dt>Auditee</dt><dd>{% if obj.auditee_party %}{{ obj.auditee_party.name }}{% elif obj.auditee_org_unit %}{{ obj.auditee_org_unit.name }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Lead auditor</dt><dd>{{ obj.lead_auditor.name|default:"—" }}</dd></div>
+      <div><dt>Checklist</dt><dd>{% if obj.checklist_plan %}{{ obj.checklist_plan.code }} v{{ obj.checklist_plan.version }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Planned date</dt><dd>{{ obj.planned_date|date:"M d, Y" }}</dd></div>
+      <div><dt>Actual window</dt><dd>{% if obj.actual_start %}{{ obj.actual_start|date:"M d, Y" }} → {{ obj.actual_end|date:"M d, Y"|default:"in progress" }}{% else %}Not started{% endif %}</dd></div>
+      <div><dt>Duration</dt><dd>{% if obj.duration_days %}{{ obj.duration_days }} day(s){% else %}—{% endif %}</dd></div>
+      <div><dt>Risk level</dt><dd>{{ obj.get_risk_level_display }}</dd></div>
+    </dl>
+
+    {% if obj.scope %}
+      <h2>Scope</h2>
+      <p class="narrative">{{ obj.scope }}</p>
+    {% endif %}
+
+    <h2>Findings summary</h2>
+    <div class="tally">
+      <span><strong>{{ findings|length }}</strong> Total findings</span>
+      <span><strong>{{ major_count }}</strong> Major (critical and major)</span>
+      <span><strong>{{ minor_count }}</strong> Minor and observations</span>
+    </div>
+
+    <h2>Checklist</h2>
+    <table>
+      <thead><tr><th>Seq</th><th>Question</th><th>Type</th><th>Expected</th><th>Method</th><th>Critical</th></tr></thead>
+      <tbody>
+        {% for c in checklist %}
+          <tr>
+            <td>{{ c.sequence }}</td>
+            <td>{{ c.name }}</td>
+            <td>{{ c.get_characteristic_type_display }}</td>
+            <td>{{ c.expected_text|default:"—" }}</td>
+            <td>{{ c.test_method|default:"—" }}</td>
+            <td>{% if c.is_critical %}Yes{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="muted">No checklist plan was named on this audit.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Findings</h2>
+    <table>
+      <thead><tr><th>Number</th><th>Title</th><th>Severity</th><th>Category</th><th>Item</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for f in findings %}
+          <tr>
+            <td>{{ f.number }}</td>
+            <td>{{ f.title }}<div class="muted">{{ f.description|truncatechars:180 }}</div></td>
+            <td>{{ f.get_severity_display }}</td>
+            <td>{{ f.get_defect_category_display }}</td>
+            <td>{% if f.item %}{{ f.item.sku }}{% else %}—{% endif %}</td>
+            <td>{{ f.owner.name|default:"—" }}</td>
+            <td>{{ f.due_date|date:"M d, Y"|default:"—" }}</td>
+            <td>{{ f.get_status_display }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="muted">No findings were raised against this audit.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Conclusion</h2>
+    {% if obj.conclusion %}
+      <p class="narrative">{{ obj.conclusion }}</p>
+    {% else %}
+      <p class="muted">No conclusion has been written yet. An audit cannot be reported until it has one.</p>
+    {% endif %}
+
+    {% if obj.notes %}
+      <h2>Notes</h2>
+      <p class="narrative">{{ obj.notes }}</p>
+    {% endif %}
+
+    <div class="sign">
+      <div>Lead auditor — {{ obj.lead_auditor.name|default:"" }}</div>
+      <div>Auditee representative</div>
+    </div>
+
+    <div class="foot">
+      Printed {{ printed_at|date:"M d, Y H:i" }}. Findings on this report are non-conformance records with their own owners, due dates and dispositions — the counts above are derived from them at print time and are never stored, so this page always reflects the register as it stands.
+    </div>
+  </div>
+</body>
+</html>
