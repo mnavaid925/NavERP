@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Return Authorizations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Return Authorizations</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Return Authorizations</span></div>
+      <p class="text-muted">The customer's authorisation to send goods back. An RMA is a <span class="fw-600">non-posting document</span>: it moves no stock and posts no journal entry. Goods reach the ledger only when a bench row is dispositioned, and money only when a draft credit note is issued from Accounts Receivable.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:refund_queue' %}" class="btn btn-outline"><i data-lucide="wallet"></i> Refund queue</a>
+      <a href="{% url 'scm:returns_awaiting_disposition' %}" class="btn btn-outline"><i data-lucide="package-open"></i> Returns bench</a>
+      <a href="{% url 'scm:return_portal' %}" class="btn btn-outline"><i data-lucide="monitor"></i> Return portal</a>
+      <a href="{% url 'scm:returnauthorization_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Return</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="rotate-ccw"></i></div>
+      <div class="stat-value">{{ stats.open|default:"0" }}</div>
+      <div class="stat-label">Open returns</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.awaiting_approval|default:"0" }}</div>
+      <div class="stat-label">Awaiting approval</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{{ stats.awaiting_receipt|default:"0" }}</div>
+      <div class="stat-label">Awaiting the goods</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-minus"></i></div>
+      <div class="stat-value">{{ stats.credit_only|default:"0" }}</div>
+      <div class="stat-label">Credit only — nothing coming back</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.advance_refunds|default:"0" }}</div>
+      <div class="stat-label">Refunded before receipt</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ stats.credited|default:"0" }}</div>
+      <div class="stat-label">Credit note drafted</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, customer, order, tracking, SKU or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="return_type" aria-label="Return type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.return_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="resolution" aria-label="Resolution" class="form-select">
+            <option value="">All resolutions</option>
+            {% for val, label in resolution_choices %}
+              <option value="{{ val }}" {% if request.GET.resolution == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="return_method" aria-label="Return method" class="form-select">
+            <option value="">All return methods</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.return_method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            FK filters compare against the pk through `stringformat:"d"` — `slugify` would turn 10
+            into "10" only by accident and mismatches as soon as a pk repeats a digit pattern, and
+            crud_list receives these two as int filters (`customer_id`, `policy_id`).
+          {% endcomment %}
+          <select name="customer" aria-label="Customer" class="form-select">
+            <option value="">All customers</option>
+            {% for c in customers %}
+              <option value="{{ c.pk }}" {% if request.GET.customer == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="policy" aria-label="Return policy" class="form-select">
+            <option value="">All policies</option>
+            {% for p in policies %}
+              <option value="{{ p.pk }}" {% if request.GET.policy == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="overdue" aria-label="Overdue only" class="form-select">
+            <option value="">Shipment: any</option>
+            <option value="yes" {% if request.GET.overdue == "yes" %}selected{% endif %}>Nothing shipped after 30 days</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rma-date-from">Requested from</label>
+          <input type="date" id="rma-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rma-date-to">Requested to</label>
+          <input type="date" id="rma-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Customer</th><th>Order</th><th>Type</th><th>Source</th><th>Requested</th><th>Lines</th><th>Qty requested</th><th>Resolution</th><th>Return method</th><th>Policy</th><th>Credit note</th><th>Flags</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td><a href="{% url 'core:party_detail' obj.customer.pk %}">{{ obj.customer.name }}</a></td>
+              <td>{% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}">{{ obj.sales_order.number }}</a>{% else %}<span class="text-muted">Blind return</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if obj.return_type == 'physical' %}info{% elif obj.return_type == 'credit_only' %}amber{% else %}slate{% endif %}">{{ obj.get_return_type_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.source == 'portal' %}info{% elif obj.source == 'csr' %}slate{% elif obj.source == 'email' %}muted{% elif obj.source == 'phone' %}muted{% elif obj.source == 'marketplace' %}amber{% else %}slate{% endif %}">{{ obj.get_source_display }}</span>
+              </td>
+              <td>{{ obj.requested_on|date:"M d, Y" }}</td>
+              {% comment %}
+                Both figures are `_agg`-suffixed annotations. `quantity_requested_total` and
+                `line_count` style names are MODEL PROPERTIES on ReturnAuthorization — an annotation
+                named after one wins silently on the row and makes this column disagree with the
+                detail page, which is exactly why the suffix exists.
+              {% endcomment %}
+              <td>{{ obj.line_count_agg|default:"0" }}</td>
+              <td>{{ obj.quantity_requested_agg|floatformat:4|default:"0" }}</td>
+              <td>
+                <span class="badge badge-{% if obj.resolution == 'refund' %}green{% elif obj.resolution == 'store_credit' %}info{% elif obj.resolution == 'exchange' %}amber{% elif obj.resolution == 'repair' %}info{% elif obj.resolution == 'keep_item' %}muted{% elif obj.resolution == 'none' %}slate{% else %}slate{% endif %}">{{ obj.get_resolution_display }}</span>
+              </td>
+              <td>{{ obj.get_return_method_display }}</td>
+              <td>{% if obj.policy %}{{ obj.policy.name }}{% if obj.policy.item_category %} <span class="text-muted">· {{ obj.policy.item_category.name }}</span>{% endif %}{% else %}<span class="badge badge-amber">No policy</span>{% endif %}</td>
+              <td>{% if obj.credit_note %}<a href="{% url 'accounting:invoice_detail' obj.credit_note.pk %}" class="fw-600">{{ obj.credit_note.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.advance_refund %}<span class="badge badge-amber">Advance refund</span>{% endif %}
+                {% if obj.is_overdue_shipment %}<span class="badge badge-red">Nothing shipped</span>{% endif %}
+                {% if obj.has_warranty_claim_agg %}<span class="badge badge-info">Warranty claim</span>{% endif %}
+                {% if obj.replacement_order %}<span class="badge badge-green">Exchange raised</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'requested' %}amber{% elif obj.status == 'approved' %}info{% elif obj.status == 'rejected' %}red{% elif obj.status == 'awaiting_receipt' %}info{% elif obj.status == 'partially_received' %}amber{% elif obj.status == 'received' %}green{% elif obj.status == 'settled' %}green{% elif obj.status == 'closed' %}muted{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returnauthorization_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and delete are offered on EXACTLY the states their views accept —
+                    `is_editable` is draft or requested — and delete additionally bounces once a
+                    credit note has been drafted, so that condition is mirrored here too.
+                  {% endcomment %}
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:returnauthorization_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    {% if not obj.credit_note_id %}
+                      <form method="post" action="{% url 'scm:returnauthorization_delete' obj.pk %}" onsubmit="return confirm('Delete this return and its lines? Once goods have been received or a credit note drafted it is cancelled instead, so its history survives.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="15"><div class="empty-state"><i data-lucide="rotate-ccw"></i><h3>No returns</h3><p>Raise one for a customer sending goods back, or let the customer file it themselves from the return portal. A credit-only return asks for nothing back — it goes straight to the refund queue once approved.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Status, the approval stamp, the rejection reason, the frozen policy verdict, the customer's own shipment date, the credit note and the four settlement figures are never typed — the actions on the detail page are their only writers. The <span class="fw-600">Nothing shipped</span> filter uses a flat 30 days so it casts the wider net; the badge on each row is the precise verdict, measured against that return's own policy window.
+    </div>
+  </div>
+{% endblock %}
