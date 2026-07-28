@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Quality Inspection{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Quality Inspection</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:qualityinspection_list' %}">Quality Inspections</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-help">
+        Status, usage decision, action taken and the certificate stamp are deliberately not on this form — the lifecycle actions on the detail page own them, and a second writer would let somebody type a verdict the result rows never supported. The four quantities <span class="fw-600">are</span> typed: they are the inspector's own observations. Accepted plus rejected cannot exceed the quantity inspected, the sample cannot be larger than it, and a lot must belong to the item named above.
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Results</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Seq</th><th>Characteristic</th><th>Type</th><th>Specification</th><th>Test method</th><th>Flags</th><th>Measured value</th><th>Observed text</th><th>Verdict</th><th>Notes</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for sf in formset %}
+              <tr>
+                {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                {% comment %}
+                  The first six cells are the SNAPSHOT and are read-only text, never inputs. Every
+                  one of them is editable=False on InspectionResult: they were copied off the plan
+                  once, and a certificate printed from them must say what was actually measured
+                  against, not what somebody retyped afterwards.
+                {% endcomment %}
+                <td>{% for e in sf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ sf.instance.sequence }}</td>
+                <td class="fw-600">{{ sf.instance.characteristic_name }}</td>
+                <td>
+                  <span class="badge badge-{% if sf.instance.characteristic_type == 'measurement' %}info{% elif sf.instance.characteristic_type == 'pass_fail' %}green{% elif sf.instance.characteristic_type == 'visual' %}amber{% elif sf.instance.characteristic_type == 'instruction' %}muted{% else %}slate{% endif %}">{{ sf.instance.get_characteristic_type_display }}</span>
+                </td>
+                <td>{{ sf.instance.spec_text }}</td>
+                <td>{{ sf.instance.test_method|default:"—" }}</td>
+                <td>
+                  {% if sf.instance.is_critical %}<span class="badge badge-red">Critical</span>{% endif %}
+                  {% if sf.instance.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}
+                  {% if sf.instance.include_on_coa %}<span class="badge badge-green">On CoA</span>{% endif %}
+                </td>
+                <td>{{ sf.measured_value }}{% for e in sf.measured_value.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.text_value }}{% for e in sf.text_value.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.result }}{% for e in sf.result.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.notes }}</td>
+                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="11"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No results yet</h3><p>Result rows are snapshotted from the inspection plan, never hand-added — there is no blank row here on purpose. Name a plan above and save, or use <span class="fw-600">Generate results</span> on the detail page.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        The verdict on a <span class="fw-600">measurement</span> is derived from the snapshotted limits and overwrites whatever is selected here — record the measured value and the row judges itself. On a <span class="fw-600">pass / fail</span> or <span class="fw-600">visual</span> check the inspector's verdict stands, because a human read it and decided; an <span class="fw-600">instruction</span> has nothing to judge and is always not applicable. A half-filled sheet saves fine: "every mandatory row must carry a value" is enforced when the inspection is completed, not while the clipboard is still in someone's hand.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:qualityinspection_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
