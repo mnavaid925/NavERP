@@ -57,6 +57,12 @@ def item_detail(request, pk):
         # 4.7 Demand Planning reads back into the item: the forecasts planned against it, so the
         # item page answers "what do we expect to sell" next to "what do we hold".
         "demand_forecasts": obj.demand_forecasts.select_related("location")[:10],
+        # 4.9 Quality reads back into the item the same way: what has been inspected and what went
+        # wrong, next to what we hold and what we expect to sell. Capped — this is a sample panel,
+        # not the register.
+        "quality_inspections": (obj.quality_inspections
+                                .select_related("lot_serial", "inspector", "plan")[:10]),
+        "nonconformances": obj.nonconformances.select_related("lot_serial", "owner")[:10],
     })
 
 
@@ -88,6 +94,13 @@ def item_delete(request, pk):
     if obj.work_orders.exists() or obj.work_order_components.exists():
         messages.error(request, "This item is used by work orders and cannot be deleted — "
                                 "deactivate it instead.")
+        return redirect("scm:item_detail", pk=pk)
+    # 4.9 adds two more PROTECT FKs onto Item — QualityInspection.item and NonConformance.item —
+    # each of which would raise the same uncaught ProtectedError (a 500) the guards above exist
+    # for. CapaAction.item is deliberately SET_NULL and needs no guard here.
+    if obj.quality_inspections.exists() or obj.nonconformances.exists():
+        messages.error(request, "This item has quality inspections or non-conformance reports and "
+                                "cannot be deleted — deactivate it instead.")
         return redirect("scm:item_detail", pk=pk)
     return crud_delete(request, model=Item, pk=pk, success_url="scm:item_list")
 
