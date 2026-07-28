@@ -231,6 +231,12 @@ def capaaction_verify(request, pk):
     notes recorded: a fix that did not work is new information about the root cause, not a filing
     error, so the register keeps the action alive rather than closing it with a caveat.
     """
+    # Resolve the object — and therefore the TENANT — before touching the form. With the form
+    # first, a POST carrying a foreign pk and an invalid payload short-circuited to a redirect
+    # without the tenant check ever running: it disclosed nothing and changed nothing, but the
+    # tenant boundary should not be reachable-past on any path. Cheap: this action is a
+    # human-rate admin sign-off, and the authoritative read is still the locked one below.
+    get_object_or_404(CapaAction.objects.only("pk"), pk=pk, tenant=request.tenant)
     form = CapaVerificationForm(request.POST, tenant=request.tenant)
     if not form.is_valid():
         messages.error(request, "; ".join(
