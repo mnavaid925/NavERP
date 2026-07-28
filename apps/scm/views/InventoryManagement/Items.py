@@ -1,4 +1,6 @@
 """SCM 4.3 Inventory Management — Item master views (+ ItemCategory / UOM masters)."""
+from django.db.models import ProtectedError
+
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _need_tenant
 from apps.scm.models import Item, ItemCategory, UOM, Location, StockMove
@@ -73,36 +75,23 @@ def item_delete(request, pk):
     if obj.stock_moves.exists():
         messages.error(request, "This item has stock movements and cannot be deleted — deactivate it instead.")
         return redirect("scm:item_detail", pk=pk)
-    # 4.7's DemandForecast.item is PROTECT, so an item with only a PLAN against it — no stock, no
-    # transactions — now hits a ProtectedError that crud_delete does not catch (a 500). Refuse it
-    # with a message that says where to look, the same way the stock-movement guard does.
-    if obj.demand_forecasts.exists():
-        messages.error(request, "This item has demand forecasts and cannot be deleted — archive or "
-                                "delete them first, or deactivate the item instead.")
+    # Everything else PROTECT-referencing an Item is caught generically below rather than
+    # enumerated. The enumeration this replaces had grown a guard per sub-module (4.7 forecasts,
+    # 4.8 BOMs/work orders, 4.9 inspections/NCRs) and STILL missed six: StockAdjustmentLine.item,
+    # StockTransferLine.item, PutawayTask.item, PickTaskLine.item, CycleCountTaskLine.item and
+    # SalesOrderLine.item. That miss was reachable — an item on a DRAFT stock-adjustment line has
+    # no StockMove rows, so it cleared every guard above and 500'd. `lotserial_delete`'s comment
+    # predicted exactly this staleness; this is the same shape it uses.
+    try:
+        with transaction.atomic():
+            return crud_delete(request, model=Item, pk=pk, success_url="scm:item_list")
+    except ProtectedError as exc:
+        blockers = sorted({protected._meta.verbose_name for protected in exc.protected_objects})
+        messages.error(
+            request,
+            f"This item is still referenced by {', '.join(blockers)} and cannot be deleted — "
+            "deactivate it instead.")
         return redirect("scm:item_detail", pk=pk)
-    # 4.8 adds three more PROTECT FKs onto Item — BillOfMaterials.item, BOMLine.component and
-    # WorkOrderComponent.item — each of which would raise the same uncaught ProtectedError (a 500)
-    # that the demand-forecast guard above was added for. Same shape, same reason.
-    if obj.boms.exists():
-        messages.error(request, "This item is produced by a bill of materials and cannot be "
-                                "deleted — delete or obsolete the BOM first, or deactivate the item.")
-        return redirect("scm:item_detail", pk=pk)
-    if obj.bom_lines.exists():
-        messages.error(request, "This item is a component on a bill of materials and cannot be "
-                                "deleted — remove it from those BOMs first, or deactivate it.")
-        return redirect("scm:item_detail", pk=pk)
-    if obj.work_orders.exists() or obj.work_order_components.exists():
-        messages.error(request, "This item is used by work orders and cannot be deleted — "
-                                "deactivate it instead.")
-        return redirect("scm:item_detail", pk=pk)
-    # 4.9 adds two more PROTECT FKs onto Item — QualityInspection.item and NonConformance.item —
-    # each of which would raise the same uncaught ProtectedError (a 500) the guards above exist
-    # for. CapaAction.item is deliberately SET_NULL and needs no guard here.
-    if obj.quality_inspections.exists() or obj.nonconformances.exists():
-        messages.error(request, "This item has quality inspections or non-conformance reports and "
-                                "cannot be deleted — deactivate it instead.")
-        return redirect("scm:item_detail", pk=pk)
-    return crud_delete(request, model=Item, pk=pk, success_url="scm:item_list")
 
 
 # =============================================================================== ItemCategory
