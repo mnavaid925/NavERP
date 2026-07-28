@@ -143,6 +143,14 @@
     </div>
   </div>
 
+  {% comment %}
+    The whole certificate block only applies to an OUTGOING inspection. coa_blockers()
+    unconditionally reports "only an outgoing inspection can certify a shipped batch", so without
+    this an entirely healthy incoming, in-process or periodic inspection — three of the four types,
+    none of which can ever be certified by design — rendered a red "cannot be issued" panel under
+    an alarming heading.
+  {% endcomment %}
+  {% if obj.coa_number or obj.inspection_type == 'outgoing' %}
   {% if obj.coa_number %}
     <div class="card">
       <div class="card-header">
@@ -216,8 +224,17 @@
       </div>
     </div>
   {% endif %}
+  {% endif %}
 
   {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    {% comment %}
+      NESTED, not `and not obj.coa_number` inline: written inline alongside the existing
+      `passed or failed` test, Django would parse it as `(not coa and passed) or failed` and
+      still render on a certified row. qualityinspection_decide refuses once a certificate is
+      issued — reversing the decision would leave a live certificate that coa_blockers() says
+      should never have existed.
+    {% endcomment %}
+    {% if not obj.coa_number %}
     {% if obj.status == 'passed' or obj.status == 'failed' %}
       <div class="card">
         <div class="card-header"><h2 class="card-title">Usage Decision</h2></div>
@@ -238,6 +255,15 @@
               <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Record decision</button>
             </div>
           </form>
+        </div>
+      </div>
+    {% endif %}
+    {% else %}
+      <div class="card">
+        <div class="card-body text-muted">
+          <i data-lucide="lock"></i>
+          Certificate <span class="fw-600">{{ obj.coa_number }}</span> has been issued on this
+          decision — it can no longer be changed.
         </div>
       </div>
     {% endif %}
