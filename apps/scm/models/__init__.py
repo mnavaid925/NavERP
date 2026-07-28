@@ -149,3 +149,27 @@ from .Manufacturing.WorkOrders import (  # noqa: F401
 from .Manufacturing.ProductionTimeLogs import (  # noqa: F401
     ProductionTimeLog,
 )
+
+# 4.9 Quality Management System (QMS)
+# InspectionPlans FIRST — QualityInspection.plan and QualityAudit.checklist_plan both point at it,
+# and InspectionResult reuses InspectionCharacteristic's choice tuple for its snapshot column.
+# QualityAudits before NonConformances because an audit FINDING *is* a NonConformance row
+# (source="audit"), and NonConformances before CapaActions for the same reason one level down.
+from .QualityManagement.InspectionPlans import (  # noqa: F401
+    InspectionPlan,
+    InspectionCharacteristic,
+)
+from .QualityManagement.QualityInspections import (  # noqa: F401
+    QualityInspection,
+    InspectionResult,
+)
+from .QualityManagement.QualityAudits import (  # noqa: F401
+    QualityAudit,
+)
+from .QualityManagement.NonConformances import (  # noqa: F401
+    NonConformance,
+)
+from .QualityManagement.CapaActions import (  # noqa: F401
+    CapaAction,
+    CapaTask,
+)
