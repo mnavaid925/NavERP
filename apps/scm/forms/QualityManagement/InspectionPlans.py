@@ -72,6 +72,22 @@ class BaseInspectionCharacteristicFormSet(forms.BaseInlineFormSet):
                                "An audit checklist asks pass/fail or visual questions — there is "
                                "nothing to measure in a process audit.")
 
+    def add_fields(self, form, index):
+        """Build the uom option list ONCE for the whole formset.
+
+        ``TenantModelForm`` re-assigns a fresh, uncached queryset per form, and
+        ``ModelChoiceField.__deepcopy__`` does ``queryset.all()`` which discards any cache anyway —
+        so every rendered row re-ran the identical SELECT. Assigning ``.choices`` short-circuits
+        that; ``clean()``/``to_python()`` still go through ``self.queryset``, so POST validation and
+        tenant scoping are untouched.
+        """
+        super().add_fields(form, index)
+        if "uom" not in form.fields:
+            return
+        if not hasattr(self, "_uom_choices"):
+            self._uom_choices = list(form.fields["uom"].choices)
+        form.fields["uom"].choices = self._uom_choices
+
 
 # max_num with validate_max: without it Django silently accepts up to absolute_max (2000) rows in
 # ONE post and ignores the overflow. Every characteristic becomes an InspectionResult row on every
