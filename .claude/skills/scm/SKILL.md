@@ -551,9 +551,24 @@ nothing to flip and the scrap has nothing to draw against.
    `major_count_agg`, `minor_count_agg`. Two of the five list views shipped broken on exactly this.
 9. **`formset.instance = form.instance` before `formset.is_valid()`** on every formset whose `clean()` reads a
    parent field — on create the parent is an empty instance and the guard silently no-ops (a live 4.8 bug).
-10. **New PROTECT FKs need delete guards.** `Item` uses explicit `.exists()` guards; `Location` and `LotSerial`
-    now catch `ProtectedError` inside `atomic()` — the generic shape, because enumeration goes stale with every
-    sub-module that adds an FK.
+10. **New PROTECT FKs need delete guards — use the GENERIC shape.** `Item`, `Location` and `LotSerial` all now
+    catch `ProtectedError` inside `atomic()` and name the blocking relations. The `.exists()` enumeration
+    `item_delete` used to carry had grown a guard per sub-module and still missed six FKs; an item on a *draft*
+    adjustment line has no stock moves, so it cleared every guard and 500'd. Enumeration goes stale with every
+    sub-module that adds an FK — don't start a new one.
+11. **The result snapshot is immutable in SHAPE, not just in content.** `InspectionResultFormSet` is
+    `can_delete=False` with an injection guard in `clean()`. `extra=0` does **not** prevent injection —
+    `initial_form_count()` on a bound formset comes from the POSTed management form. Deletion is permanent
+    (`generate_results()` short-circuits on `results.exists()`), so removing the one failing characteristic
+    silently turns a failed inspection into a certifiable one.
+12. **A gate lives in TWO places.** Guarding the view and forgetting the button is the recurring failure mode in
+    this module — it shipped four times across 4.8/4.9 (audit Delete, Raise-CAPA, the usage-decision panel, a
+    filter wired with no control). Every action button must be gated on the same condition its view enforces,
+    *and* the SQL of a state filter must agree with the per-row verdict the page then renders (`?coa_state=ready`
+    listed rows the page badged "Blocked" because it encoded four of seven rules).
+13. **Prefetch + `_result_rows()` together.** Chaining `.select_related()` off a related manager CLEARS a
+    prefetch and re-queries, so a `Prefetch` alone provably changes nothing — `_result_rows()` is prefetch-aware
+    and `generate_results()` invalidates both caches. `coa_report` is asserted scale-invariant in the tests.
 
 ## Conventions & gotchas
 
@@ -581,7 +596,7 @@ nothing to flip and the scrap has nothing to draw against.
   `(param, lookup, is_int)` tuple to `filters=`; in the template reflect `request.GET` (pk filters use
   `|stringformat:"d"`).
 - **Extend the seeder**: add rows inside the per-tenant guard in `seed_scm.py`, reusing existing Party/OrgUnit rows.
-- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (2,274 tests). Ad-hoc smoke scripts live in `temp/`.
+- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (2,761 tests). Ad-hoc smoke scripts live in `temp/`.
 
 ## Sidebar wiring  (`apps/core/navigation.py`)
 
