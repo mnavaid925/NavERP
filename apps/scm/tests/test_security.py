@@ -2129,3 +2129,510 @@ class TestDemandPlanningCSRFEnforcement:
         c.force_login(admin_user)
         assert c.post(reverse("scm:demandsignal_detect")).status_code == 403
         assert not DemandSignal.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================================================
+# SCM 4.8 Manufacturing
+# ================================================================================================
+
+def _mfg_wo_payload(item, **overrides):
+    data = {
+        "item": str(item.pk), "uom": "", "bom": "", "quantity_planned": "5",
+        "order_policy": "make_to_stock", "sales_order": "", "work_center": "",
+        "priority": "normal", "planned_start": "", "planned_end": "",
+        "schedule_direction": "forward", "due_date": "", "component_location": "",
+        "output_location": "", "output_lot_serial": "", "notes": "",
+        **formset_data("components", []),
+    }
+    data.update(overrides)
+    return data
+
+
+def _mfg_bom_payload(item, lines=(), **overrides):
+    data = {
+        "item": str(item.pk), "name": "Crafted recipe", "version": "9",
+        "bom_type": "manufacture", "output_quantity": "1", "uom": "", "lead_time_days": "0",
+        "default_work_center": "", "status": "draft", "effective_from": "", "effective_to": "",
+        "notes": "", **formset_data("lines", list(lines)),
+    }
+    data.update(overrides)
+    return data
+
+
+def _mfg_wc_payload(**overrides):
+    data = {
+        "code": "WC-SEC", "name": "Sec Cell", "center_type": "machine", "location": "",
+        "org_unit": "", "supervisor": "", "capacity_hours_per_day": "8", "efficiency_pct": "100",
+        "setup_minutes": "0", "machine_cost_per_hour": "1", "labor_cost_per_hour": "1",
+        "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _mfg_log_payload(work_order, work_center, **overrides):
+    from django.utils import timezone
+    started = timezone.now() - datetime.timedelta(hours=3)
+    data = {
+        "work_order": str(work_order.pk), "work_center": str(work_center.pk),
+        "operation": "Crafted", "entry_type": "labor", "operator": "",
+        "started_at": started.strftime("%Y-%m-%dT%H:%M"),
+        "ended_at": (started + datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
+        "quantity_completed": "0", "quantity_scrapped": "0", "downtime_reason": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _mfg_moves(order):
+    from apps.scm.models import StockMove
+    return StockMove.objects.filter(tenant=order.tenant, reference=order.number)
+
+
+# ================================================================ Anonymous -> login redirect
+class TestManufacturingAnonymousRedirect:
+    ROUTES = ("scm:workcenter_list", "scm:workcenter_create",
+              "scm:billofmaterials_list", "scm:billofmaterials_create",
+              "scm:workorder_list", "scm:workorder_create",
+              "scm:productiontimelog_list", "scm:productiontimelog_create",
+              "scm:mrp_report", "scm:production_schedule")
+
+    def test_every_landing_route_redirects_to_login(self):
+        c = Client()
+        for name in self.ROUTES:
+            resp = c.get(reverse(name))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+    def test_detail_routes_redirect_to_login(self, work_center_a, bom_a, work_order_a,
+                                             time_log_a):
+        c = Client()
+        for name, obj in (("scm:workcenter_detail", work_center_a),
+                          ("scm:billofmaterials_detail", bom_a),
+                          ("scm:workorder_detail", work_order_a),
+                          ("scm:productiontimelog_detail", time_log_a)):
+            resp = c.get(reverse(name, args=[obj.pk]))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+    def test_every_post_action_redirects_to_login_and_posts_nothing(self, released_work_order_a,
+                                                                     work_center_a, bom_a,
+                                                                     time_log_a):
+        c = Client()
+        for name in ("workorder_plan", "workorder_release", "workorder_close",
+                     "workorder_cancel", "workorder_schedule", "workorder_issue_components",
+                     "workorder_report_production", "workorder_delete"):
+            resp = c.post(reverse(f"scm:{name}", args=[released_work_order_a.pk]))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+        for name, obj in (("scm:workcenter_delete", work_center_a),
+                          ("scm:billofmaterials_delete", bom_a),
+                          ("scm:productiontimelog_delete", time_log_a)):
+            resp = c.post(reverse(name, args=[obj.pk]))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+        assert _mfg_moves(released_work_order_a).count() == 0
+
+
+# ================================================================ @tenant_admin_required gates
+class TestManufacturingAdminRequiredGates:
+    def test_release_is_admin_only(self, member_client, stocked_work_order_a):
+        assert member_client.post(reverse("scm:workorder_release",
+                                          args=[stocked_work_order_a.pk])).status_code == 403
+        stocked_work_order_a.refresh_from_db()
+        assert stocked_work_order_a.status == "draft"
+
+    def test_issue_components_is_admin_only(self, member_client, released_work_order_a):
+        assert member_client.post(
+            reverse("scm:workorder_issue_components",
+                    args=[released_work_order_a.pk])).status_code == 403
+        assert _mfg_moves(released_work_order_a).count() == 0
+        for row in released_work_order_a.components.all():
+            assert row.quantity_issued == Decimal("0")
+
+    def test_report_production_is_admin_only(self, member_client, released_work_order_a):
+        assert member_client.post(
+            reverse("scm:workorder_report_production", args=[released_work_order_a.pk]),
+            {"quantity_good": "2"}).status_code == 403
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("0")
+        assert _mfg_moves(released_work_order_a).count() == 0
+
+    def test_close_is_admin_only(self, member_client, released_work_order_a):
+        from apps.scm.models import WorkOrder
+        WorkOrder.objects.filter(pk=released_work_order_a.pk).update(status="completed")
+        assert member_client.post(reverse("scm:workorder_close",
+                                          args=[released_work_order_a.pk])).status_code == 403
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "completed"
+
+    def test_cancel_is_admin_only(self, member_client, released_work_order_a):
+        assert member_client.post(reverse("scm:workorder_cancel",
+                                          args=[released_work_order_a.pk])).status_code == 403
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "released"
+
+    def test_an_admin_may_do_all_five(self, client_a, stocked_work_order_a):
+        assert client_a.post(reverse("scm:workorder_release",
+                                     args=[stocked_work_order_a.pk])).status_code == 302
+        assert client_a.post(reverse("scm:workorder_issue_components",
+                                     args=[stocked_work_order_a.pk])).status_code == 302
+        assert client_a.post(
+            reverse("scm:workorder_report_production", args=[stocked_work_order_a.pk]),
+            {"quantity_good": "5"}).status_code == 302
+        assert client_a.post(reverse("scm:workorder_close",
+                                     args=[stocked_work_order_a.pk])).status_code == 302
+        stocked_work_order_a.refresh_from_db()
+        assert stocked_work_order_a.status == "closed"
+
+
+# ================================================================ Plain @login_required actions
+class TestManufacturingOrdinaryActionsAllowNonAdmin:
+    def test_a_member_may_plan_a_draft_run(self, member_client, work_order_a):
+        assert member_client.post(reverse("scm:workorder_plan",
+                                          args=[work_order_a.pk])).status_code != 403
+        work_order_a.refresh_from_db()
+        assert work_order_a.status == "planned"
+
+    def test_a_member_may_schedule_a_draft_run(self, member_client, work_order_a):
+        resp = member_client.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                                  {"direction": "forward", "anchor_date": "2026-05-01",
+                                   "lead_time_days": "2"})
+        assert resp.status_code != 403
+        work_order_a.refresh_from_db()
+        assert work_order_a.planned_start is not None
+
+    def test_a_member_may_create_a_work_centre(self, member_client, tenant_a):
+        from apps.scm.models import WorkCenter
+        assert member_client.post(reverse("scm:workcenter_create"),
+                                  _mfg_wc_payload()).status_code == 302
+        assert WorkCenter.objects.filter(tenant=tenant_a, code="WC-SEC").exists()
+
+    def test_a_member_may_author_a_recipe(self, member_client, tenant_a, item_a):
+        from apps.scm.models import BillOfMaterials
+        assert member_client.post(reverse("scm:billofmaterials_create"),
+                                  _mfg_bom_payload(item_a)).status_code == 302
+        assert BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+    def test_a_member_may_book_a_time_log(self, member_client, tenant_a, released_work_order_a,
+                                          work_center_a):
+        from apps.scm.models import ProductionTimeLog
+        assert member_client.post(
+            reverse("scm:productiontimelog_create"),
+            _mfg_log_payload(released_work_order_a, work_center_a)).status_code == 302
+        assert ProductionTimeLog.objects.filter(tenant=tenant_a, operation="Crafted").exists()
+
+    def test_a_member_may_read_both_reports(self, member_client):
+        for name in ("scm:mrp_report", "scm:production_schedule"):
+            assert member_client.get(reverse(name)).status_code == 200, name
+
+    def test_a_member_cannot_type_the_single_writer_columns_on_the_form(self, member_client,
+                                                                        work_order_a, item_a):
+        """The release/issue/report admin gates would be decoration if this page were open."""
+        resp = member_client.post(
+            reverse("scm:workorder_edit", args=[work_order_a.pk]),
+            _mfg_wo_payload(item_a, status="completed", quantity_produced="99",
+                            produced_unit_cost="0.0001"))
+        assert resp.status_code == 302
+        work_order_a.refresh_from_db()
+        assert work_order_a.status == "draft"
+        assert work_order_a.quantity_produced == Decimal("0")
+        assert work_order_a.produced_unit_cost == Decimal("0")
+
+
+# ================================================================ Cross-tenant IDOR -> 404
+class TestManufacturingCrossTenantIDOR:
+    def test_workcenter_detail_edit_delete_cross_tenant_404(self, client_a, work_center_b):
+        assert client_a.get(reverse("scm:workcenter_detail",
+                                    args=[work_center_b.pk])).status_code == 404
+        assert client_a.get(reverse("scm:workcenter_edit",
+                                    args=[work_center_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:workcenter_delete",
+                                     args=[work_center_b.pk])).status_code == 404
+
+    def test_billofmaterials_detail_edit_delete_cross_tenant_404(self, client_a, bom_b):
+        assert client_a.get(reverse("scm:billofmaterials_detail",
+                                    args=[bom_b.pk])).status_code == 404
+        assert client_a.get(reverse("scm:billofmaterials_edit",
+                                    args=[bom_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:billofmaterials_delete",
+                                     args=[bom_b.pk])).status_code == 404
+
+    def test_workorder_detail_edit_delete_cross_tenant_404(self, client_a, work_order_b):
+        assert client_a.get(reverse("scm:workorder_detail",
+                                    args=[work_order_b.pk])).status_code == 404
+        assert client_a.get(reverse("scm:workorder_edit",
+                                    args=[work_order_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:workorder_delete",
+                                     args=[work_order_b.pk])).status_code == 404
+
+    def test_productiontimelog_detail_edit_delete_cross_tenant_404(self, client_a, time_log_b):
+        assert client_a.get(reverse("scm:productiontimelog_detail",
+                                    args=[time_log_b.pk])).status_code == 404
+        assert client_a.get(reverse("scm:productiontimelog_edit",
+                                    args=[time_log_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:productiontimelog_delete",
+                                     args=[time_log_b.pk])).status_code == 404
+
+    def test_every_work_order_POST_ACTION_is_404_across_tenants(self, client_a, work_order_b):
+        for name in ("workorder_plan", "workorder_release", "workorder_close",
+                     "workorder_cancel", "workorder_issue_components"):
+            assert client_a.post(reverse(f"scm:{name}",
+                                         args=[work_order_b.pk])).status_code == 404, name
+        assert client_a.post(reverse("scm:workorder_schedule", args=[work_order_b.pk]),
+                             {"direction": "forward",
+                              "anchor_date": "2026-05-01"}).status_code == 404
+        assert client_a.post(reverse("scm:workorder_report_production", args=[work_order_b.pk]),
+                             {"quantity_good": "1"}).status_code == 404
+
+    def test_a_cross_tenant_action_posts_no_stock_and_moves_no_status(self, client_a,
+                                                                      work_order_b):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:workorder_release", args=[work_order_b.pk]))
+        client_a.post(reverse("scm:workorder_issue_components", args=[work_order_b.pk]))
+        work_order_b.refresh_from_db()
+        assert work_order_b.status == "draft"
+        assert not StockMove.objects.filter(reference=work_order_b.number).exists()
+
+    def test_a_tenant_b_admin_is_equally_locked_out_of_tenant_a(self, client_b, work_order_a,
+                                                                bom_a, work_center_a,
+                                                                time_log_a):
+        for name, obj in (("scm:workorder_detail", work_order_a),
+                          ("scm:billofmaterials_detail", bom_a),
+                          ("scm:workcenter_detail", work_center_a),
+                          ("scm:productiontimelog_detail", time_log_a)):
+            assert client_b.get(reverse(name, args=[obj.pk])).status_code == 404, name
+
+
+# ================================================================ Cross-tenant list + form binding
+class TestManufacturingCrossTenantFormScoping:
+    def test_no_list_ever_contains_the_other_tenants_rows(self, client_a, work_center_a,
+                                                          work_center_b, bom_a, bom_b,
+                                                          work_order_a, work_order_b, time_log_a,
+                                                          time_log_b):
+        for name, mine, theirs in (
+            ("scm:workcenter_list", work_center_a, work_center_b),
+            ("scm:billofmaterials_list", bom_a, bom_b),
+            ("scm:workorder_list", work_order_a, work_order_b),
+            ("scm:productiontimelog_list", time_log_a, time_log_b),
+        ):
+            rows = list(client_a.get(reverse(name)).context["object_list"])
+            assert mine in rows, name
+            assert theirs not in rows, name
+
+    def test_a_crafted_work_order_post_with_another_tenants_item_is_rejected(self, client_a,
+                                                                             tenant_a, item_b):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_create"), _mfg_wo_payload(item_b))
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_work_order_post_with_another_tenants_bom_is_rejected(self, client_a,
+                                                                            tenant_a, item_a,
+                                                                            bom_b):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_create"),
+                             _mfg_wo_payload(item_a, bom=str(bom_b.pk)))
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_work_order_post_with_another_tenants_work_centre_is_rejected(
+        self, client_a, tenant_a, item_a, work_center_b,
+    ):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_create"),
+                             _mfg_wo_payload(item_a, work_center=str(work_center_b.pk)))
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_work_order_post_with_another_tenants_location_is_rejected(self, client_a,
+                                                                                  tenant_a,
+                                                                                  item_a,
+                                                                                  location_b):
+        from apps.scm.models import WorkOrder
+        resp = client_a.post(reverse("scm:workorder_create"),
+                             _mfg_wo_payload(item_a, output_location=str(location_b.pk)))
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_component_line_with_another_tenants_item_is_rejected(self, client_a,
+                                                                            tenant_a, item_a,
+                                                                            item_b):
+        from apps.scm.models import WorkOrder
+        data = _mfg_wo_payload(item_a)
+        data.update(formset_data("components", [
+            {"id": "", "sequence": "10", "item": str(item_b.pk), "quantity_required": "1",
+             "uom": "", "lot_serial": "", "issue_method": "manual", "unit_cost": "1",
+             "notes": ""},
+        ]))
+        resp = client_a.post(reverse("scm:workorder_create"), data)
+        assert resp.status_code == 200
+        assert not WorkOrder.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_bom_post_with_another_tenants_item_is_rejected(self, client_a, tenant_a,
+                                                                      item_b):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_create"), _mfg_bom_payload(item_b))
+        assert resp.status_code == 200
+        assert not BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+    def test_a_crafted_bom_line_with_another_tenants_component_is_rejected(self, client_a,
+                                                                           tenant_a, item_a,
+                                                                           item_b):
+        from apps.scm.models import BillOfMaterials
+        resp = client_a.post(reverse("scm:billofmaterials_create"), _mfg_bom_payload(item_a, [
+            {"id": "", "sequence": "10", "component": str(item_b.pk), "quantity_per": "1",
+             "uom": "", "scrap_pct": "0", "issue_method": "manual", "notes": ""},
+        ]))
+        assert resp.status_code == 200
+        assert not BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+
+    def test_a_crafted_time_log_post_with_another_tenants_run_is_rejected(self, client_a,
+                                                                          tenant_a, work_order_b,
+                                                                          work_center_a):
+        from apps.scm.models import ProductionTimeLog
+        resp = client_a.post(reverse("scm:productiontimelog_create"),
+                             _mfg_log_payload(work_order_b, work_center_a))
+        assert resp.status_code == 200
+        assert not ProductionTimeLog.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_work_centre_post_with_another_tenants_location_is_rejected(self, client_a,
+                                                                                   tenant_a,
+                                                                                   location_b):
+        from apps.scm.models import WorkCenter
+        resp = client_a.post(reverse("scm:workcenter_create"),
+                             _mfg_wc_payload(location=str(location_b.pk)))
+        assert resp.status_code == 200
+        assert not WorkCenter.objects.filter(tenant=tenant_a, code="WC-SEC").exists()
+
+    def test_neither_report_leaks_the_other_tenants_rows(self, client_a, tenant_b, customer_b,
+                                                         item_b, bom_b, work_center_b):
+        from django.utils import timezone
+        from apps.scm.models import SalesOrder, SalesOrderLine
+        order = SalesOrder.objects.create(tenant=tenant_b, customer=customer_b,
+                                          order_date=timezone.localdate(), status="submitted")
+        SalesOrderLine.objects.create(sales_order=order, item=item_b,
+                                      quantity_ordered=Decimal("50"), unit_price=Decimal("1"))
+        assert client_a.get(reverse("scm:mrp_report")).context["total_rows"] == 0
+        rows = client_a.get(reverse("scm:production_schedule")).context["rows"]
+        assert work_center_b.pk not in {row["centre"].pk for row in rows}
+
+
+# ================================================================ POST-only action views: GET -> 405
+class TestManufacturingPostOnlyActions:
+    def test_get_on_every_work_order_action_returns_405(self, client_a, work_order_a):
+        for name in ("workorder_delete", "workorder_plan", "workorder_release",
+                     "workorder_close", "workorder_cancel", "workorder_schedule",
+                     "workorder_issue_components", "workorder_report_production"):
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[work_order_a.pk])).status_code == 405, name
+
+    def test_get_on_every_delete_route_returns_405(self, client_a, work_center_a, bom_a,
+                                                   time_log_a):
+        for name, obj in (("scm:workcenter_delete", work_center_a),
+                          ("scm:billofmaterials_delete", bom_a),
+                          ("scm:productiontimelog_delete", time_log_a)):
+            assert client_a.get(reverse(name, args=[obj.pk])).status_code == 405, name
+
+    def test_a_get_never_deletes_and_never_posts_stock(self, client_a, released_work_order_a,
+                                                       work_center_a, bom_a, time_log_a):
+        from apps.scm.models import (BillOfMaterials, ProductionTimeLog, WorkCenter, WorkOrder)
+        for name in ("workorder_delete", "workorder_release", "workorder_issue_components",
+                     "workorder_report_production", "workorder_cancel"):
+            client_a.get(reverse(f"scm:{name}", args=[released_work_order_a.pk]))
+        client_a.get(reverse("scm:workcenter_delete", args=[work_center_a.pk]))
+        client_a.get(reverse("scm:billofmaterials_delete", args=[bom_a.pk]))
+        client_a.get(reverse("scm:productiontimelog_delete", args=[time_log_a.pk]))
+        assert WorkOrder.objects.filter(pk=released_work_order_a.pk).exists()
+        assert WorkCenter.objects.filter(pk=work_center_a.pk).exists()
+        assert BillOfMaterials.objects.filter(pk=bom_a.pk).exists()
+        assert ProductionTimeLog.objects.filter(pk=time_log_a.pk).exists()
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "released"
+        assert _mfg_moves(released_work_order_a).count() == 0
+
+
+# ================================================================ CSRF enforcement
+class TestManufacturingCSRFEnforcement:
+    def _client(self, user):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(user)
+        return c
+
+    def test_post_without_csrf_is_rejected_on_release(self, admin_user, stocked_work_order_a):
+        assert self._client(admin_user).post(
+            reverse("scm:workorder_release",
+                    args=[stocked_work_order_a.pk])).status_code == 403
+        stocked_work_order_a.refresh_from_db()
+        assert stocked_work_order_a.status == "draft"
+
+    def test_post_without_csrf_is_rejected_on_issue_components(self, admin_user,
+                                                               released_work_order_a):
+        assert self._client(admin_user).post(
+            reverse("scm:workorder_issue_components",
+                    args=[released_work_order_a.pk])).status_code == 403
+        assert _mfg_moves(released_work_order_a).count() == 0
+
+    def test_post_without_csrf_is_rejected_on_report_production(self, admin_user,
+                                                                released_work_order_a):
+        assert self._client(admin_user).post(
+            reverse("scm:workorder_report_production", args=[released_work_order_a.pk]),
+            {"quantity_good": "2"}).status_code == 403
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.quantity_produced == Decimal("0")
+
+    def test_post_without_csrf_is_rejected_on_cancel_and_close(self, admin_user,
+                                                               released_work_order_a):
+        client = self._client(admin_user)
+        assert client.post(reverse("scm:workorder_cancel",
+                                   args=[released_work_order_a.pk])).status_code == 403
+        assert client.post(reverse("scm:workorder_close",
+                                   args=[released_work_order_a.pk])).status_code == 403
+        released_work_order_a.refresh_from_db()
+        assert released_work_order_a.status == "released"
+
+    def test_post_without_csrf_is_rejected_on_plan_and_schedule(self, admin_user, work_order_a):
+        client = self._client(admin_user)
+        assert client.post(reverse("scm:workorder_plan",
+                                   args=[work_order_a.pk])).status_code == 403
+        assert client.post(reverse("scm:workorder_schedule", args=[work_order_a.pk]),
+                           {"direction": "forward",
+                            "anchor_date": "2026-05-01"}).status_code == 403
+        work_order_a.refresh_from_db()
+        assert work_order_a.status == "draft"
+        assert work_order_a.planned_start is None
+
+    def test_post_without_csrf_is_rejected_on_every_delete(self, admin_user, work_order_a,
+                                                           work_center_a, bom_a, time_log_a):
+        from apps.scm.models import (BillOfMaterials, ProductionTimeLog, WorkCenter, WorkOrder)
+        client = self._client(admin_user)
+        for name, obj in (("scm:workorder_delete", work_order_a),
+                          ("scm:workcenter_delete", work_center_a),
+                          ("scm:billofmaterials_delete", bom_a),
+                          ("scm:productiontimelog_delete", time_log_a)):
+            assert client.post(reverse(name, args=[obj.pk])).status_code == 403, name
+        assert WorkOrder.objects.filter(pk=work_order_a.pk).exists()
+        assert WorkCenter.objects.filter(pk=work_center_a.pk).exists()
+        assert BillOfMaterials.objects.filter(pk=bom_a.pk).exists()
+        assert ProductionTimeLog.objects.filter(pk=time_log_a.pk).exists()
+
+    def test_post_without_csrf_is_rejected_on_every_create(self, admin_user, tenant_a, item_a,
+                                                           released_work_order_a,
+                                                           work_center_a):
+        from apps.scm.models import BillOfMaterials, ProductionTimeLog, WorkCenter, WorkOrder
+        client = self._client(admin_user)
+        before = WorkOrder.objects.count()
+        assert client.post(reverse("scm:workorder_create"),
+                           _mfg_wo_payload(item_a)).status_code == 403
+        assert client.post(reverse("scm:billofmaterials_create"),
+                           _mfg_bom_payload(item_a)).status_code == 403
+        assert client.post(reverse("scm:workcenter_create"),
+                           _mfg_wc_payload()).status_code == 403
+        assert client.post(reverse("scm:productiontimelog_create"),
+                           _mfg_log_payload(released_work_order_a,
+                                            work_center_a)).status_code == 403
+        assert WorkOrder.objects.count() == before
+        assert not BillOfMaterials.objects.filter(tenant=tenant_a, version="9").exists()
+        assert not WorkCenter.objects.filter(tenant=tenant_a, code="WC-SEC").exists()
+        assert not ProductionTimeLog.objects.filter(tenant=tenant_a,
+                                                    operation="Crafted").exists()
