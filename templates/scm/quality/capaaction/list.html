@@ -75,6 +75,14 @@
           </select>
         </div>
         <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <select name="owner" aria-label="Owner" class="form-select">
             <option value="">All owners</option>
             {% for p in owners %}
@@ -135,7 +143,7 @@
                 `open_tasks` is ANNOTATED by the list view. The model's open_task_count property is
                 the DETAIL page's reader — using it here would be one COUNT query per rendered row.
               {% endcomment %}
-              <td>{% if obj.open_tasks %}<span class="badge badge-amber">{{ obj.open_tasks }}</span>{% else %}<span class="badge badge-green">0</span>{% endif %}</td>
+              <td>{% if obj.open_tasks %}<span class="badge badge-amber">{{ obj.open_tasks }}</span>{% else %}<span class="badge badge-muted">0</span>{% endif %}</td>
               <td>
                 <span class="badge badge-{% if obj.effectiveness_result == 'effective' %}green{% elif obj.effectiveness_result == 'not_effective' %}red{% elif obj.effectiveness_result == 'pending' %}slate{% else %}slate{% endif %}">{{ obj.get_effectiveness_result_display }}</span>
                 {% if obj.verification_overdue %}<span class="badge badge-red">Check overdue</span>{% endif %}
