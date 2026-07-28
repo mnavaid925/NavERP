@@ -15915,3 +15915,57 @@ row. Badges use ONLY `badge-green/red/amber/info/muted/slate` (`static/css/theme
 (filled in at the end)
 
 ---
+
+## Review notes — 4.9 Quality Management delivered (2026-07-29)
+
+**Shipped:** `InspectionPlan`+`InspectionCharacteristic`, `QualityInspection`+`InspectionResult` [QC-/COA-],
+`QualityAudit` [QA-], `NonConformance` [NCR-], `CapaAction`+`CapaTask` [CAPA-], plus the CoA register and print
+pages. 18 templates, migrations `0014` (models) and `0015` (two document-date indexes), `LIVE_LINKS["4.9"]`,
+seeder `_seed_quality_tenant`, and 487 new tests (SCM suite 2,274 → **2,761**).
+
+**Verified:** `manage.py check` clean; `makemigrations --check` → no changes; seed idempotent across a full
+flush cycle; 44-check smoke green; a 222-assertion end-to-end QA harness green with **zero 500s**; `coa_report`
+measured **scale-invariant** (delta 0 at 9× the rows).
+
+### The review workflow
+
+Four read-only lenses ran **in parallel against a frozen tree** (so none could be biased by another's fixes),
+every finding was then handed to an **adversarial verifier** instructed to refute it, and the survivors were
+deduped and ranked. **35 raw findings → 27 survived → 19 distinct defects.** The refutation step earned its
+keep: it killed 8 findings outright and corrected the severity on several more, and the synthesis explicitly
+flagged one finding the verifier had let through as *not* worth a change (a "disabled twin" button whose inline
+hint already told the user what to do — converting it would have removed the affordance).
+
+### What it caught
+
+| Severity | Finding | Why it mattered |
+|---|---|---|
+| Record integrity | Result rows were **deletable and injectable** through the formset | The factory comment said results are snapshotted and never hand-added — but shipped `can_delete=True`, and `extra=0` does not stop injection (`initial_form_count()` on a bound formset comes from the POSTed management form). Deleting the one failing characteristic silently turned a failed inspection into a certifiable one, permanently: `generate_results()` short-circuits on `results.exists()`. |
+| 500 | `item_delete` missed **six** PROTECT FKs | The `.exists()` chain had grown a guard per sub-module and still missed `StockAdjustmentLine`, `StockTransferLine`, `PutawayTask`, `PickTaskLine`, `CycleCountTaskLine`, `SalesOrderLine`. Reachable: an item on a *draft* adjustment line has no stock moves, so it cleared every guard. |
+| Wrong answer | `?coa_state=ready` listed rows the page then badged **"Blocked"** | The SQL encoded four of `coa_blockers()`'s seven rules. On the register whose entire job is a trustworthy answer, the answer was wrong — and the mirror gap dropped those rows out of `blocked` too. |
+| Security | Three actions validated the **form before the tenant check** | A cross-tenant pk with an invalid payload returned 302 where every other POST returns 404. Disclosed nothing, but the tenant boundary should not be reachable-past on any path. Found by the new IDOR sweep, not by any lens. |
+| Perf | `coa_report` fired one query **per listed row** | `coa_blockers()` → `_result_rows()` per row. Fixed with a `Prefetch` **plus** making `_result_rows()` prefetch-aware — the prefetch alone provably changes nothing, because chaining `.select_related()` off the related manager clears it and re-queries. |
+| Regression **I** introduced | Four template gates left behind by my own view fixes | Audit Delete (widening `is_editable` for the conclusion dragged Delete along), Raise-CAPA, the usage-decision panel, and a CAPA item filter I wired in the view with no control on the page. Guarding the view and forgetting the button is my recurring failure mode in this module. |
+| Regression **I** introduced | `next_number` traded one bug for another, twice | `-id` re-minted `coa_number` (allocated late, out of id order) → fixed to field ordering; then my `Length()` width fix made the ORDER BY unsatisfiable by the index, putting a **filesort on every numbered INSERT across all eight apps**. Final answer: index-friendly field ordering with the width limit documented, since the reviewed alternative was an O(n) scan on that same hot path. |
+
+### Judgement calls worth remembering
+
+- **No new move type for a quality scrap.** 4.8 earned `consumption`/`production` because 4.7 reads `issue` as
+  *customer demand*; that justification does not transfer to a write-off, and `adjustment` already means exactly
+  this. Reusing it kept 4.7's demand series and the FIFO/LIFO/WAC walk correct for free.
+- **Quarantine posts nothing.** A hold is not a movement, and a stored "blocked quantity" would be a second
+  source of truth against a ledger whose whole point is that on-hand is derived.
+- **Audit findings ARE non-conformances.** One register, one owner, one SLA — no second findings table to drift.
+- **Five models, not four.** The research offered a 4-model scope that left "Audit Management" without a page;
+  every other 4.x sub-module lights all its bullets, and `QualityAudit` has near-zero spine coupling.
+- **A `disabled` twin is not always the right gate.** Where a button's preconditions are the things the user is
+  on that page to complete, an inline hint naming the missing one beats disabling the affordance.
+
+**Deferred, named:** standalone CoA register + templates + emailing, AQL Z1.4 tables, dynamic skip-lot, SPC/Cp-Cpk,
+structured 8D/5-Why step records, defect-code masters, MRB as an entity, supplier-CoA extraction, e-signatures /
+21 CFR Part 11, training linkage, document control, recall execution. **Parked to siblings:** RMA → 4.10, quality
+dashboards → 4.11, supplier scoring → 4.2, ISO registers → 4.12, calibration → 4.13, cold chain → 4.15, customer
+portal → 4.16, complaints → CRM. **Module 12 EXTENDS these tables by FK** rather than re-declaring them (L36) —
+an ERD reconciliation across both modules is the open follow-up.
+
+---
