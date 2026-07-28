@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'closed' %}green{% elif obj.status == 'reported' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'planned' %}slate{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.audit_type == 'internal' %}info{% elif obj.audit_type == 'supplier' %}amber{% elif obj.audit_type == 'customer' %}green{% elif obj.audit_type == 'certification' %}slate{% else %}slate{% endif %}">{{ obj.get_audit_type_display }}</span>
+        <span class="badge badge-{% if obj.risk_level == 'high' %}red{% elif obj.risk_level == 'medium' %}amber{% elif obj.risk_level == 'low' %}green{% else %}slate{% endif %}">{{ obj.get_risk_level_display }} risk</span>
+        {% if open_finding_count %}<span class="badge badge-red">{{ open_finding_count }} open finding(s)</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:qualityaudit_list' %}">Quality Audits</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.checklist_plan %}<a href="{% url 'scm:inspectionplan_detail' obj.checklist_plan.pk %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> {{ obj.checklist_plan.code }} v{{ obj.checklist_plan.version }}</a>{% endif %}
+      <a href="{% url 'scm:qualityaudit_print' obj.pk %}" class="btn btn-outline"><i data-lucide="printer"></i> Print report</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ findings|length }}</div>
+      <div class="stat-label">Findings raised</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-octagon"></i></div>
+      <div class="stat-value">{{ major_count }}</div>
+      <div class="stat-label">Major (critical and major)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ minor_count }}</div>
+      <div class="stat-label">Minor and observations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ open_finding_count }}</div>
+      <div class="stat-label">Still outstanding — blocks closure</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.title }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Audit type</dt><dd>{{ obj.get_audit_type_display }}</dd></div>
+        <div class="detail-item"><dt>Standard</dt><dd>{{ obj.standard|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Auditee (party)</dt><dd>{{ obj.auditee_party.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Auditee (department)</dt><dd>{{ obj.auditee_org_unit.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Checklist plan</dt><dd>{% if obj.checklist_plan %}<a href="{% url 'scm:inspectionplan_detail' obj.checklist_plan.pk %}" class="fw-600">{{ obj.checklist_plan.code }}</a> · v{{ obj.checklist_plan.version }}{% else %}<span class="text-muted">None named</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lead auditor</dt><dd>{{ obj.lead_auditor.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Planned date</dt><dd>{{ obj.planned_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Actual window</dt><dd>{% if obj.actual_start %}{{ obj.actual_start|date:"M d, Y" }} → {{ obj.actual_end|date:"M d, Y"|default:"in progress" }}{% else %}<span class="text-muted">Not started</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Duration</dt><dd>{% if obj.duration_days %}{{ obj.duration_days }} day(s){% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Risk level</dt><dd>{{ obj.get_risk_level_display }}</dd></div>
+        <div class="detail-item"><dt>Scope</dt><dd>{{ obj.scope|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Conclusion</dt><dd>{% if obj.conclusion %}{{ obj.conclusion|linebreaksbr }}{% else %}<span class="badge badge-amber">Not written yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Checklist</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Question</th><th>Type</th><th>Expected</th><th>Method</th><th>Critical</th><th>Mandatory</th></tr></thead>
+        <tbody>
+          {% for c in checklist %}
+            <tr>
+              <td>{{ c.sequence }}</td>
+              <td class="fw-600">{{ c.name }}</td>
+              <td>
+                <span class="badge badge-{% if c.characteristic_type == 'measurement' %}info{% elif c.characteristic_type == 'pass_fail' %}green{% elif c.characteristic_type == 'visual' %}amber{% elif c.characteristic_type == 'instruction' %}muted{% else %}slate{% endif %}">{{ c.get_characteristic_type_display }}</span>
+              </td>
+              <td>{{ c.expected_text|default:"—" }}</td>
+              <td>{{ c.test_method|default:"—" }}</td>
+              <td>{% if c.is_critical %}<span class="badge badge-red">Critical</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if c.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No checklist</h3><p>Name an audit-checklist inspection plan on the edit form and its characteristics appear here as the questions to work through. An audit runs without one — the checklist guides the auditor, it is not a record of answers.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The checklist is read-only here. Answers are not stored against an audit — what an auditor <span class="fw-600">found</span> is recorded as a finding below, which is a real non-conformance report with an owner, a due date and a disposition workflow of its own.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Findings <span class="badge badge-slate">{{ findings|length }}</span></h2>
+      <a href="{% url 'scm:nonconformance_list' %}?source=audit" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All audit findings</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Severity</th><th>Category</th><th>Item</th><th>Owner</th><th>Detected</th><th>Due</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for f in findings %}
+            <tr>
+              <td><a href="{% url 'scm:nonconformance_detail' f.pk %}" class="fw-600">{{ f.number }}</a></td>
+              <td>{{ f.title }}</td>
+              <td>
+                <span class="badge badge-{% if f.severity == 'critical' %}red{% elif f.severity == 'major' %}amber{% elif f.severity == 'minor' %}info{% elif f.severity == 'observation' %}muted{% else %}slate{% endif %}">{{ f.get_severity_display }}</span>
+              </td>
+              <td>{{ f.get_defect_category_display }}</td>
+              <td>{% if f.item %}<a href="{% url 'scm:item_detail' f.item.pk %}">{{ f.item.sku }}</a>{% else %}<span class="text-muted">No item</span>{% endif %}</td>
+              <td>{{ f.owner.name|default:"—" }}</td>
+              <td>{{ f.detected_on|date:"M d, Y" }}</td>
+              <td>{% if f.is_overdue %}<span class="badge badge-red">{{ f.due_date|date:"M d, Y" }}</span>{% else %}{{ f.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if f.status == 'closed' %}green{% elif f.status == 'dispositioned' %}info{% elif f.status == 'investigating' %}amber{% elif f.status == 'open' %}red{% elif f.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ f.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:nonconformance_detail' f.pk %}" class="btn-icon" title="View finding"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="10"><div class="empty-state"><i data-lucide="alert-triangle"></i><h3>No findings</h3><p>A clean audit is a legitimate outcome. Anything the auditor did find is recorded below and becomes a non-conformance report — same register, same workflow, same CAPA route as a failed inspection.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        qualityaudit_add_finding accepts in_progress and reported only — an auditor cannot record
+        what they saw before starting, and a closed or cancelled audit takes no more findings.
+      {% endcomment %}
+      {% if obj.status == 'in_progress' or obj.status == 'reported' %}
+        <form method="post" action="{% url 'scm:qualityaudit_add_finding' obj.pk %}" onsubmit="return confirm('Record this finding? It is created as a non-conformance report against this audit, open for someone to own.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in finding_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">The finding is stamped with this audit, the lead auditor as its detector and today's date — none of those are typed. This is the only place in the application that creates a report whose source is <span class="fw-600">audit</span>, which is what makes that value honest rather than decorative.</div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Record finding</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="text-muted">Findings can be recorded only while the audit is <span class="fw-600">in progress</span> or <span class="fw-600">reported</span> — start the audit first, and a closed or cancelled one takes no more.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Corrective and preventive actions</h2>
+      <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All actions</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Priority</th><th>Owner</th><th>Supplier</th><th>Due</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for c in capa_actions %}
+            <tr>
+              <td><a href="{% url 'scm:capaaction_detail' c.pk %}" class="fw-600">{{ c.number }}</a></td>
+              <td>{{ c.title }}</td>
+              <td>
+                <span class="badge badge-{% if c.action_type == 'corrective' %}amber{% elif c.action_type == 'preventive' %}info{% else %}slate{% endif %}">{{ c.get_action_type_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if c.priority == 'critical' %}red{% elif c.priority == 'high' %}amber{% elif c.priority == 'normal' %}info{% elif c.priority == 'low' %}muted{% else %}slate{% endif %}">{{ c.get_priority_display }}</span>
+              </td>
+              <td>{{ c.owner.name|default:"—" }}</td>
+              <td>{{ c.supplier.name|default:"—" }}</td>
+              <td>{% if c.is_overdue %}<span class="badge badge-red">{{ c.due_date|date:"M d, Y" }}</span>{% else %}{{ c.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if c.status == 'closed' %}green{% elif c.status == 'pending_verification' %}info{% elif c.status == 'in_progress' %}amber{% elif c.status == 'investigating' %}amber{% elif c.status == 'open' %}slate{% elif c.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ c.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="wrench"></i><h3>No corrective actions</h3><p>Raise one from a finding, or create an action whose source is <span class="fw-600">audit finding</span> and name this audit on it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Each button matches the from_statuses tuple of the view it posts to. Every one of these
+          views is @login_required — an audit changes no stock and signs nothing off, so the CLOSE
+          GUARD, not a permission gate, is what protects the register.
+        {% endcomment %}
+        {% if obj.status == 'planned' %}
+          <form method="post" action="{% url 'scm:qualityaudit_start' obj.pk %}" onsubmit="return confirm('Start this audit? Today is stamped as its actual start date and the header is frozen against editing.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'in_progress' %}
+          <form method="post" action="{% url 'scm:qualityaudit_complete' obj.pk %}" onsubmit="return confirm('Report this audit? Today is stamped as its actual end date.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="file-text"></i> Report</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'reported' %}
+          {% comment %}
+            qualityaudit_close REFUSES while any finding is open, so the live button is offered only
+            when there are none. The disabled twin below keeps the step visible and says why it is
+            not available, rather than a button that always bounces.
+          {% endcomment %}
+          {% if open_finding_count %}
+            <button class="btn btn-outline" type="button" disabled title="Close every outstanding finding first"><i data-lucide="lock"></i> Close — {{ open_finding_count }} finding(s) still open</button>
+          {% else %}
+            <form method="post" action="{% url 'scm:qualityaudit_close' obj.pk %}" onsubmit="return confirm('Close this audit? Every finding against it is already closed or cancelled.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Close</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.status == 'planned' or obj.status == 'in_progress' %}
+          <form method="post" action="{% url 'scm:qualityaudit_cancel' obj.pk %}" onsubmit="return confirm('Cancel this audit? Its history survives — it is not deleted.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:qualityaudit_print' obj.pk %}" class="btn btn-outline"><i data-lucide="printer"></i> Print report</a>
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:qualityaudit_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:qualityaudit_delete' obj.pk %}" onsubmit="return confirm('Delete this audit? An audit with findings against it cannot be deleted — cancel it instead.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:qualityaudit_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if obj.status == 'in_progress' and not obj.conclusion %}
+          <span class="fw-600">Write the conclusion before reporting.</span> The narrative <em>is</em> the report, so the action refuses while it is blank rather than writing one — <a href="{% url 'scm:qualityaudit_edit' obj.pk %}">edit the audit</a> and fill it in.
+        {% endif %}
+        Closing is refused while any finding is still open, investigating or dispositioned: an audit closed over live findings is a clean report that hides outstanding work. Close the findings themselves first — each one is a non-conformance report with its own disposition and close actions.
+      </p>
+    </div>
+  </div>
+{% endblock %}
