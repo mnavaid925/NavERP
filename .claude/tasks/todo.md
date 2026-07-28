@@ -15969,3 +15969,553 @@ portal → 4.16, complaints → CRM. **Module 12 EXTENDS these tables by FK** ra
 an ERD reconciliation across both modules is the open follow-up.
 
 ---
+
+====================================================================================================
+
+# SCM 4.10 Returns Management (Reverse Logistics) — BUILD PLAN
+
+Decided by a 13-agent workflow (3 research + 3 codebase explorers -> 3 independent design
+proposals -> 2 judges -> completeness critic -> synthesis). Research dossier:
+`.claude/tasks/research-scm-4.10.md`.
+
+# FINAL BUILD PLAN — SCM 4.10 Returns Management (Reverse Logistics)
+
+**App:** `apps/scm` · **Templates:** `templates/scm/returns/…` · **Sub-module:** 4.10 · **Branch discipline:** one file per commit, never `git push`.
+
+**Winner and why.** Judge 1 picked Proposal 3 (customer-journey), Judge 2 picked Proposal 1 (receipt document). **Build Proposal 3**, because Proposal 1's core mechanic does not survive the code: `_post_transfer` / `_post_putaway` both pass `item.average_cost` *specifically* so a transfer is value-neutral (`apps/scm/views/_helpers.py:186-231`), and `_item_valuation` excludes `"transfer"` from the FIFO/LIFO layer walk (`apps/scm/views/InventoryManagement/Reports.py:33`) — so a restock posted as a transfer pair can never carry a grade write-down, and posting it at the line's own cost would additionally roll `average_cost` a *second* time (`_post_stock_move` calls `item.apply_receipt()` for **any** positive quantity regardless of move_type, `_helpers.py:144-145`). Proposal 3's restock-as-positive-`receipt`-at-a-decided-cost is the only shape in which `condition_grade` means anything. All of Judge 1's grafts and the compatible half of Judge 2's are folded in below, and every critic finding is fixed.
+
+---
+
+## 0. Ownership declaration (L36) — write this down before anything else
+
+Two unbuilt NavERP sections nominally cover this ground:
+
+- **`### 5.10 Returns Management (RMA)`** — *Return Merchandise Authorization · Return Inspection · Disposition Routing · Credit/Refund Processing.*
+- **`### 9.5 Order Management System (OMS)` → "Returns & Exchanges (RMA)"** — *self-service return initiation, label generation, refund routing, restocking logic.*
+
+**SCM ships first, so SCM OWNS these tables. 5.10 and 9.5 extend by FK; neither builds a second RMA, disposition or warranty table.** This ruling must appear verbatim in the `ReturnAuthorization` and `ReturnDisposition` model docstrings and in `.claude/tasks/research-scm-4.10.md`, and the reverse-accessor namespace `scm_return_*` / `scm_warranty_*` is reserved on `core.Party` and `scm.Item` so a later module cannot collide.
+
+`### 5.10 Return Inspection` is **partially pre-empted** here by `ReturnDisposition.condition_grade` (grading is inseparable from the disposition decision). Deep inspection criteria remain 4.9's `InspectionPlan`; 5.10 may extend the disposition row, not replace it.
+
+---
+
+## 1. The decided scope — 5 primary models
+
+Shared conventions for every model below: `TenantOwned` / `TenantNumbered` from `apps/scm/models/_base.py`; money `DecimalField(14,2)` through `q2()`, quantity `DecimalField(14,4)` through `q4()`; every `editable=False` field is **absent from `Meta.fields`** and listed in `readonly_fields` in `apps/scm/admin.py`.
+
+**Backend package layout** (CLAUDE.md Backend rule): `apps/scm/{models,forms,views,urls}/ReturnsManagement/{ReturnReasons,ReturnPolicies,ReturnAuthorizations,ReturnDispositions,WarrantyClaims}.py`, each re-exported from the package `__init__.py`. Absolute imports only.
+
+---
+
+### 1.1 `ReturnReason` — master, **no NUMBER_PREFIX**
+
+*Serves:* Return Merchandise Authorization (per-line reason), Return Portal (what the shopper is offered), Disposition Management (seeds the bench dropdown).
+
+Why a reason is policy and not a label: fault decides who pays return freight and whether the unit may go back into sellable stock (D365 keeps reason codes and disposition codes as two separate sets for exactly this).
+
+| Field | Type / choices |
+|---|---|
+| `code` | `CharField(32)`, `unique_together=("tenant","code")` |
+| `name` | `CharField(120)` |
+| `fault_party` | `CharField(10)` — `customer` \| `merchant` \| `carrier` \| `supplier` \| `unknown` |
+| `allows_refund` / `allows_store_credit` / `allows_exchange` / `allows_repair` | `BooleanField(default=True/…)` — four booleans, not an M2M: filterable and migration-free |
+| `waives_return_fee` | `BooleanField(default=False)` |
+| `blocks_restock` | `BooleanField(default=False)` — **executable in two places** (form refuses `restock`, posting view re-checks inside `atomic()`) |
+| `suggested_disposition` | `CharField(16, blank=True)`, same choice set as `ReturnDisposition.disposition` — pre-selects only |
+| `requires_photo` | `BooleanField(default=False)` — satisfiable, see `ReturnLine.photo` |
+| `raises_nonconformance` | `BooleanField(default=False)` — data-driven "Raise NCR" button |
+| `follow_up_question` | `CharField(255, blank=True)` |
+| `sort_order` | `PositiveIntegerField(default=100)` |
+| `is_active` | `BooleanField(default=True)` |
+
+Children: none. **No sidebar key** (the `InspectionPlan` / `WorkCenter` / `ReorderRule` precedent) — reached from `return_portal` and the `ReturnLine` form.
+
+---
+
+### 1.2 `ReturnPolicy` — master, **no NUMBER_PREFIX**
+
+*Serves:* Return Portal (the published promise), RMA (eligibility), Refund Processing (basis/pct/fee), Warranty Claims (`warranty_window_days`).
+
+This table earns its slot on three things nothing else can hold: the **grade→cost write-down** (Judge 1 graft 1 — without it `condition_grade` is decorative), the **return-to address** (critic finding: `scm.Location` has **no address FK** — verified: code/name/location_type/parent/is_active/capacity/pick_sequence/abc_class/is_pickable), and the window basis.
+
+| Field | Type / choices |
+|---|---|
+| `name` | `CharField(120)` |
+| `is_active` | `BooleanField(default=True)` |
+| `is_default` | `BooleanField(default=False)` |
+| `priority` | `PositiveIntegerField(default=100)` — lowest wins, first match snapshotted |
+| `item_category` | FK `scm.ItemCategory` `SET_NULL null blank related_name="scm_return_policies"` (null = applies to everything) |
+| `window_basis` | `CharField(10)` — `delivery` \| `fulfilment` \| `order_date` |
+| `window_days` | `PositiveIntegerField(default=30)` |
+| `require_delivery_confirmation` | `BooleanField(default=False)` |
+| `fallback_days` | `PositiveIntegerField(default=45)` — Loop's documented answer to unreliable delivery events |
+| `allow_refund` / `allow_store_credit` / `allow_exchange` / `allow_keep_item` | `BooleanField` |
+| `refund_basis` | `CharField(10)` — `full` \| `percentage` \| `none` |
+| `refund_pct` | `DecimalField(5,2, default=100)` — `clean()`: only meaningful when `refund_basis="percentage"` |
+| `restocking_fee_type` | `CharField(18)` — `none` \| `flat` \| `percent_of_value` |
+| `restocking_fee_value` | `DecimalField(14,2, default=0)` |
+| `return_shipping_paid_by` | `CharField(10)` — `customer` \| `merchant` \| `by_fault` |
+| `auto_approve` | `BooleanField(default=False)` — **pre-fills the approve form only, never auto-acts** |
+| `grade_a_cost_pct` / `grade_b_cost_pct` / `grade_c_cost_pct` / `grade_d_cost_pct` | `DecimalField(5,2)`, defaults `100 / 75 / 40 / 0` — seeds `ReturnDisposition.restock_unit_cost` |
+| `warranty_window_days` | `PositiveIntegerField(default=365)` |
+| `return_to_address` | `TextField(blank=True)` — **the label's return-to block.** There is no path from a `Location` to a printable address; this is it. |
+| `portal_instructions` | `TextField(blank=True)` — rendered on the public page |
+
+Children: none. **No sidebar key.**
+
+---
+
+### 1.3 `ReturnAuthorization` — **`NUMBER_PREFIX = "RMA"`** (`RMA-00001`) + child `ReturnLine`
+
+*Serves:* **Return Merchandise Authorization (RMA)** (primary), **Return Portal** (token page + label), **Refund Processing** (credit note FK + the settlement figures).
+
+A **non-posting** document in NetSuite's exact sense: it authorises, and owns no stock and no money. Portal submissions are *this* record at `status="requested"` — a status is not a document, so there is no separate intake table.
+
+**Header**
+
+| Field | Type / choices |
+|---|---|
+| `number` | from `TenantNumbered`, `editable=False` |
+| `customer` | FK `core.Party` `PROTECT related_name="scm_return_authorizations"`; form filters `roles__role="customer"` |
+| `sales_order` | FK `scm.SalesOrder` `SET_NULL null blank related_name="scm_return_authorizations"` |
+| `return_type` | `CharField(12)` — `physical` \| `credit_only` (D365's second first-class process; **gates whether a receipt is required at all**) |
+| `source` | `CharField(12)` — `portal` \| `csr` \| `email` \| `phone` \| `marketplace` |
+| `status` | `CharField(20, editable=False)` — `draft` \| `requested` \| `approved` \| `rejected` \| `awaiting_receipt` \| `partially_received` \| `received` \| `settled` \| `closed` \| `cancelled` |
+| `policy` | FK `ReturnPolicy` `PROTECT null blank related_name="return_authorizations"` |
+| `policy_snapshot` | `TextField(editable=False)` — the evaluated verdict dict frozen at approval (the 4.9 `InspectionResult` snapshot precedent) |
+| `requested_on` | `DateField` |
+| `approved_on` / `approved_by` | `DateField(null, editable=False)` / FK `core.Party` `SET_NULL null editable=False related_name="scm_return_approvals"` |
+| `rejected_reason` | `CharField(255, blank=True, editable=False)` |
+| `resolution` | `CharField(14)` — `refund` \| `store_credit` \| `exchange` \| `repair` \| `keep_item` \| `none` |
+| `refund_method` | `CharField(16)` — `original_tender` \| `bank_transfer` \| `store_credit` \| `none`. **A recorded intent only** — see §4 |
+| `return_method` | `CharField(18)` — `mail_prepaid` \| `mail_shopper_paid` \| `drop_off` \| `in_store` \| `pickup` \| `keep_item` |
+| `dropoff_location` | FK `scm.Location` `SET_NULL null blank related_name="scm_return_dropoffs"` |
+| `return_carrier` | FK `scm.Carrier` `SET_NULL null blank related_name="scm_return_authorizations"` (4.6 master, **not** free text) |
+| `return_tracking_number` | `CharField(64, blank=True)` |
+| `return_label_url` | `URLField(blank=True)` · `label_cost` `DecimalField(14,2, default=0)` — human-pasted, the 4.6 `Shipment.carrier_tracking_number` posture |
+| `customer_shipped_on` | `DateField(null, blank, editable=False)` — written by the **public** page via a conditional UPDATE |
+| `public_token` | `CharField(64, unique=True, editable=False, null=True, blank=True)` — minted once in `save()` with `secrets.token_urlsafe(32)` |
+| `portal_note` | `CharField(500, blank=True, editable=False)` — customer free text, truncated on write |
+| `counterparty_rma_number` | `CharField(64, blank=True)` |
+| `currency` | FK `accounting.Currency` `PROTECT null blank related_name="scm_return_authorizations"` — see §4 currency fallback |
+| `advance_refund` | `BooleanField(default=False)` · `advance_refund_deadline` `DateField(null, blank)` |
+| `credit_note` | FK `accounting.Invoice` `SET_NULL null blank editable=False related_name="scm_return_authorizations"` |
+| `replacement_order` | FK `scm.SalesOrder` `SET_NULL null blank editable=False related_name="scm_replacement_for_returns"` |
+| `refund_subtotal` / `fee_total` / `tax_total` / `credit_total` | `DecimalField(14,2, default=0, editable=False)` — **one writer: the settlement action** |
+| `notes` | `TextField(blank=True)` |
+
+**Properties (never annotation names — see §7.3):** `quantity_requested_total`, `quantity_received_total`, `is_fully_received`, `is_overdue_shipment`, `days_open`.
+
+**Child `ReturnLine`** (`related_name="lines"`, `CASCADE`)
+
+| Field | Type |
+|---|---|
+| `sales_order_line` | FK `scm.SalesOrderLine` `SET_NULL null blank related_name="scm_return_lines"` |
+| `item` | FK `scm.Item` `PROTECT related_name="scm_return_lines"` |
+| `description` | `CharField(255, blank=True)` |
+| `quantity_requested` / `quantity_approved` | `DecimalField(14,4)` |
+| `reason` | FK `ReturnReason` `PROTECT related_name="return_lines"` |
+| `unit_price` | `DecimalField(14,2)` — **what they PAID** |
+| `tax_pct` | `DecimalField(5,2, default=0)` — snapshot of `SalesOrderLine.tax_pct`; **without this every refund silently under-credits the VAT** |
+| `unit_cost` | `DecimalField(14,4)` — **what it COST us**; a deliberately separate field so nobody restocks at the sale price |
+| `line_fee` | `DecimalField(14,2, default=0)` |
+| `condition_reported` | `CharField(120, blank=True)` |
+| `lot_serial` | FK `scm.LotSerial` `SET_NULL null blank related_name="scm_return_lines"` |
+| `photo` | FK `core.Document` `SET_NULL null blank related_name="scm_return_lines"` — CSR-attached; makes `requires_photo` satisfiable |
+
+Properties: `quantity_received` (sum over dispositions, **including `received_pending`**), `quantity_outstanding`, `line_credit`.
+
+---
+
+### 1.4 `ReturnDisposition` — **no NUMBER_PREFIX** (the `SalesOrderAllocation` precedent)
+
+*Serves:* **Disposition Management** (primary), **Refund Processing** (the credit is computed from these rows, never from `quantity_approved`).
+
+One row per *(line, decision, quantity)* — three units back can be 2 restock + 1 scrap. Receiving and deciding are **two separately stamped acts on the same row**: intake writes quantity + grade at `disposition="received_pending"`; the decision follows. **This is the only ledger writer in 4.10.**
+
+| Field | Type / choices |
+|---|---|
+| `return_line` | FK `ReturnLine` `CASCADE related_name="dispositions"` |
+| `quantity` | `DecimalField(14,4)`, `MinValueValidator(0.0001)` |
+| `received_on` / `received_by` | `DateField(editable=False)` / FK `core.Party` `SET_NULL null editable=False related_name="scm_returns_received"` |
+| `location` | FK `scm.Location` `PROTECT null blank related_name="scm_return_dispositions"` — the returns bench |
+| `lot_serial` | FK `scm.LotSerial` `SET_NULL null blank related_name="scm_return_dispositions"` |
+| `condition_grade` | `CharField(1)` — `a` \| `b` \| `c` \| `d` (the industry ladder: A≈60-70% straight back, B≈15-20% refurbish, C≈10-15% secondary, D≈5-10% dispose). **The INPUT.** |
+| `disposition` | `CharField(16)` — `received_pending` \| `restock` \| `refurbish` \| `repair_return` \| `scrap` \| `return_to_vendor` \| `liquidate` \| `donate` \| `recycle` \| `quarantine` \| `credit_only`. **The OUTPUT — never collapsed into the grade.** |
+| `restock_location` | FK `scm.Location` `SET_NULL null blank related_name="scm_return_restocks"` |
+| `restock_unit_cost` | `DecimalField(14,4, default=0)`, `MinValueValidator(0)` — seeded `policy.grade_X_cost_pct × item.average_cost`, then **human-owned and never recomputed** (the `NonConformance.cost_of_quality` posture) |
+| `recovery_value` | `DecimalField(14,2, default=0)` — management figure for liquidate/donate, **no GL effect** (L29) |
+| `refurbished_on` | `DateField(null, blank, editable=False)` |
+| `stock_posted` | `BooleanField(default=False, editable=False)` — the idempotency latch |
+| `stock_move` | FK `scm.StockMove` `SET_NULL null editable=False related_name="+"` |
+| `decided_on` / `decided_by` | `DateField(null, editable=False)` / FK `core.Party` `SET_NULL null editable=False related_name="scm_return_decisions"` |
+| `nonconformance` | FK `scm.NonConformance` `SET_NULL null blank related_name="scm_return_dispositions"` |
+| `notes` | `CharField(255, blank=True)` |
+
+`posts_stock` is an **executable `@property`** in the shape of `NonConformance.posts_stock` (`NonConformances.py:203-217`), not a comment.
+
+`clean()` must enforce: `lot_serial` **required** when `item.tracking != "none"` (otherwise returned serialised goods land in the ledger untraceable and defeat the `lot_history` panel); the lot belongs to this line's item (the `NonConformance.clean()` cross-check — a crafted POST pairing item A with item B's lot corrupts an append-only ledger that cannot be corrected in place); `restock_location` required and `!= location` on `restock`.
+
+---
+
+### 1.5 `WarrantyClaim` — **`NUMBER_PREFIX = "WTY"`** + child `WarrantyClaimCost`
+
+*Serves:* **Warranty Claims** (primary).
+
+Deliberately **not** an extension of `scm.NonConformance`: an NCR is an internal finding register with one counterparty-less `cost_of_quality` figure and a state machine *we* advance; a claim is a two-party negotiation with claimed→approved→credited amounts against a named `core.Party`, a contractual response deadline, and a state machine *they* advance.
+
+| Field | Type / choices |
+|---|---|
+| `number` | `TenantNumbered`, `editable=False` |
+| `supplier` | FK `core.Party` `PROTECT related_name="scm_warranty_claims"`; form filters `roles__role="supplier"` |
+| `item` | FK `scm.Item` `PROTECT related_name="scm_warranty_claims"` |
+| `quantity_claimed` | `DecimalField(14,4)` |
+| `lot_serial` | FK `scm.LotSerial` `SET_NULL null blank related_name="scm_warranty_claims"` · `serial_reference` `CharField(64, blank=True)` (a customer-supplied serial we never stocked) |
+| `return_authorization` | FK `ReturnAuthorization` `SET_NULL null blank related_name="warranty_claims"` |
+| `nonconformance` | FK `scm.NonConformance` `SET_NULL null blank related_name="scm_warranty_claims"` |
+| `goods_receipt` | FK `scm.GoodsReceiptNote` `SET_NULL null blank related_name="scm_warranty_claims"` |
+| `purchase_date` / `warranty_start` / `warranty_end` / `failure_date` | `DateField(null, blank)` |
+| `usage_context` | `CharField(255, blank=True)` |
+| `defect_classification` | `CharField(18)` — `manufacturing` \| `material` \| `component` \| `assembly` \| `workmanship` \| `transit_damage` \| `misuse_excluded` \| `unknown` |
+| `supplier_rma_number` | `CharField(64, blank=True)` — **their** number, tracked separately from ours |
+| `status` | `CharField(20, editable=False)` — `draft` \| `submitted` \| `acknowledged` \| `approved` \| `partially_approved` \| `rejected` \| `expired` \| `credited` \| `closed` |
+| `submitted_on` / `submission_channel` | `DateField(null, editable=False)` / `CharField(10)` — `email` \| `portal` \| `edi` \| `phone` \| `post` |
+| `response_due_on` / `responded_on` | `DateField(null, blank)` / `DateField(null, blank, editable=False)` |
+| `supplier_response_notes` | `TextField(blank=True, editable=False)` |
+| `amount_approved` | `DecimalField(14,2, default=0, editable=False)` |
+| `amount_credited` / `credit_reference` / `credit_received_on` | `DecimalField(14,2, default=0, editable=False)` / `CharField(64, blank=True, editable=False)` / `DateField(null, editable=False)` |
+
+Properties: `amount_claimed_total`, `recovery_variance`, `recovery_rate_pct`, `is_in_warranty`, `is_overdue`, `days_open`, `is_possible_duplicate` (same supplier + same `supplier_rma_number` — the `FreightInvoice._has_duplicate()` precedent; duplicate claims are the classic warranty fraud).
+
+**Child `WarrantyClaimCost`** (`CASCADE related_name="costs"`): `cost_type` `CharField(18)` — `part` \| `labour` \| `freight` \| `external_service` \| `admin` \| `other` (SAP's typed claim items MAT/SUBL/FR); `description` `CharField(255)`; `quantity` `DecimalField(14,4, default=1)`; `unit_amount` `DecimalField(14,2)`; `amount_claimed` `DecimalField(14,2, editable=False)` **computed in `save()`** = `quantity × unit_amount`; `amount_approved` `DecimalField(14,2, default=0)`. It exists because the normal real outcome is a *partial* approval that accepts the part and refuses the labour — a flat `claim_value` cannot express that.
+
+Detail page carries the read-only `lot_history()` StockMove panel copied in shape from `NonConformance.lot_history()` (`select_related("item","location")`, capped at 50 rows).
+
+---
+
+## 2. `LIVE_LINKS["4.10"]` — bullet names VERBATIM
+
+```python
+    # 4.10 Returns Management (Reverse Logistics) — ReturnReason and ReturnPolicy are masters with no
+    # sidebar key (the InspectionPlan / WorkCenter / ReorderRule precedent), reached from the return
+    # portal console. ReturnDisposition is the receiving bench and the ONLY thing in 4.10 that touches
+    # the ledger: restock posts a POSITIVE `receipt` at a graded, written-down cost; everything else
+    # posts nothing off the bench. Refund Processing points at a computed settlement QUEUE that drafts
+    # an accounting.Invoice(kind="credit_note", status="draft") and stops — SCM posts no JournalEntry
+    # (L29). "Return Portal" points at the STAFF console, not the token page: L32 bars a staff sidebar
+    # bullet from pointing at a customer-facing page (this app already applied that at 4.1's
+    # "Vendor Portal").
+    "4.10": {
+        "Return Merchandise Authorization (RMA)": "scm:returnauthorization_list",  # bullet (authorise + approve)
+        "Refund Processing": "scm:refund_queue",                                   # bullet (computed settlement queue)
+        "Disposition Management": "scm:returndisposition_list",                    # bullet (the receiving bench)
+        "Return Portal": "scm:return_portal",                                      # bullet (STAFF console — L32)
+        "Warranty Claims": "scm:warrantyclaim_list",                               # bullet (supplier recovery)
+    },
+```
+
+Extras (not bullets): `scm:returnpolicy_list`, `scm:returnreason_list`, `scm:returns_awaiting_disposition`, `scm:advance_refund_exposure`.
+
+---
+
+## 3. Stock effects
+
+**Only `ReturnDisposition` writes to the ledger, and only through `_post_stock_move()` inside `transaction.atomic()`.** `ReturnReason`, `ReturnPolicy`, `ReturnAuthorization`, `ReturnLine`, `WarrantyClaim` and `WarrantyClaimCost` post **NOTHING, ever**.
+
+### 3.1 Intake posts NOTHING
+
+A row created at `disposition="received_pending"` records quantity, grade, date, bench location — **as data only**. This is deliberate and it is also the answer to the missing blocked-stock concept: `Location.LOCATION_TYPES` is warehouse/zone/bin/staging/transit with no "blocked" type, and `Item.on_hand()` is `Sum(quantity)` across *all* locations, so anything posted at intake would inflate on-hand, `total_value()`, the valuation report and 4.7's reorder inputs — tenant-wide and indistinguishable from sellable. Keeping the bench off-ledger **is** the blocked-stock stand-in, and it keeps exactly one ledger write per row so `stock_posted` is trustworthy.
+
+Cost of that choice, stated honestly: goods physically on the bench are absent from inventory value until dispositioned. Mitigated by the `scm:returns_awaiting_disposition` report (§5), **not** by a ledger row.
+
+### 3.2 Per-disposition effect
+
+| Disposition | Move | Sign | Location | `unit_cost` |
+|---|---|---|---|---|
+| `received_pending` | **none** | — | — | — |
+| `restock` | `receipt` | **+** | `restock_location` | `restock_unit_cost` |
+| `refurbish` | **none at decision**; stamps `refurbished_on`, which unlocks the *same* restock action on that row | + (later) | `restock_location` | `restock_unit_cost` (may be revised upward by refurb cost) |
+| `scrap` / `donate` / `recycle` / `liquidate` | `adjustment` **IFF `stock_posted` is already True on that row** (i.e. it was restocked and is being re-decided); otherwise **none** | − | `restock_location` | `restock_unit_cost` |
+| `return_to_vendor` | **none** — our stock never re-entered; the value chased is a `WarrantyClaim` | — | — | — |
+| `repair_return` | **none** — it was never our stock (D365 lists this branch explicitly) | — | — | — |
+| `quarantine` | **none** — flips `LotSerial.status="quarantine"` | — | — | — |
+| `credit_only` | **none** — there is no physical unit | — | — | — |
+
+`reference` on every move is the **RMA number**; `reason` is `"Return restock"` / `"Return write-off"`. The `(tenant, reference)` index (`StockMoves.py:51`) already serves the lookup.
+
+### 3.3 Why `receipt`, and why no new move_type
+
+Checked against **all five** `move_type` consumers:
+
+1. `demand_series` / `demand_series_map` (`models/DemandPlanning/_history.py:155,217`) filter `move_type="issue"` **only** and **negate** the signed sum. A positive `issue` would *subtract* from a historical demand bucket and silently deflate every 4.7 forecast — so `issue` is categorically banned for an inbound return. `receipt` is invisible to it. **Documented consequence: demand history stays GROSS.** Netting returns out of demand is a 4.11 change to `_history.py`, and this must be said on the forecast page rather than discovered.
+2. `_item_valuation` (`views/InventoryManagement/Reports.py:33`) excludes only `"transfer"`, so a restock correctly becomes a real inbound FIFO/LIFO cost layer at `restock_unit_cost`.
+3. `_reverse_grn_receipt` (`views/_helpers.py:351-352`) is keyed on `move_type="receipt"` **and** `reference=grn.number`; our reference is `RMA-…`, so a return can never be swept up by a GRN reversal.
+4. `WorkOrder._move_totals` (`models/Manufacturing/WorkOrders.py:160-166`) filters `consumption`/`production` **and** `reference=self.number`. Unreachable.
+5. UI: `Reports.py:105` passes `StockMove.MOVE_TYPES` to the ledger filter and every badge chain ends in an `{% else %}` fallback — nothing to change.
+
+`adjustment` rather than a new type follows 4.9's stated ruling verbatim. Note `move_type` is `CharField(max_length=12)`, so `customer_return` (15) would need a column widen anyway.
+
+### 3.4 The cost rulings (this is where the module gets silently corrupted)
+
+- `_post_stock_move` calls `item.apply_receipt(quantity, unit_cost)` for **any** positive quantity (`_helpers.py:144-145`), and `apply_receipt` rolls the cached weighted average against **pre-move** on-hand (`Items.py:137-143`). `ReturnLine.unit_price` is the **sale** price — restocking at it would roll `average_cost` up toward the selling price and overstate `Item.total_value()` and the `weighted_avg` branch of the valuation report. Hence the separate `ReturnLine.unit_cost` snapshot and `ReturnDisposition.restock_unit_cost`, both through `q4()` with `MinValueValidator(0)`.
+- **Multi-row same-item receipts MUST go through `_shared_items()`** (`_helpers.py:173-184`) or the second row's roll is computed from pre-first-row state.
+- **FIFO/LIFO divergence — document and test.** `_item_valuation` walks layers and ignores `average_cost`, but `Item.total_value()` multiplies `on_hand × average_cost`. After any written-down restock the two figures **disagree** for a `fifo`/`lifo` item. Pre-existing dual-figure design; 4.10 is the first module to make it diverge routinely. Put it in the `ReturnDisposition` docstring and pin it with a test asserting the divergence is expected, so the next reviewer does not "fix" it.
+- The form shows `item.average_cost` next to `restock_unit_cost` so an outlier is visible; `returndisposition_list` shows both columns.
+
+### 3.5 `LotSerial.status` has a writer
+
+- `restock` → flip `status` to `"available"` (a sold serial is `consumed`; without this the ledger says on-hand and the status says gone).
+- `quarantine` → flip to `"quarantine"`.
+- `scrap` / `donate` / `recycle` / `liquidate` → flip to `"consumed"`.
+- A lot arriving at `status="expired"` **refuses** `restock`; the form offers scrap/quarantine only.
+
+---
+
+## 4. Accounting hand-off
+
+**Confirmed: SCM posts NO JournalEntry.** Nothing in 4.10 imports `JournalEntry`, `JournalLine` or `_post_journal_entry` — the only mentions of them anywhere in `apps/scm` remain docstring prose asserting the rule, and that stays true.
+
+### 4.1 The one action — `returnauthorization_draft_credit_note`
+
+A verbatim clone of `freightinvoice_handoff` (`views/TransportationManagement/FreightInvoices.py:180-212`) and `crm.dealinvoice_from_quote`:
+
+`@tenant_admin_required` + `@require_POST` → `get_object_or_404(..., tenant=request.tenant)` **before any payload validation** → gate: refuse unless `return_type="credit_only"` **or** the RMA has ≥1 credit-bearing non-pending disposition row → idempotence: short-circuit with an info message if `credit_note_id is not None` → **guard `credit_total > ZERO`** (see 4.2) → **local** `from apps.accounting.models import Invoice, InvoiceLine` inside the function body → inside `transaction.atomic()`:
+
+```
+Invoice(tenant=request.tenant, party=rma.customer, kind="credit_note",
+        status="draft", issue_date=localdate(), currency=<see 4.3>,
+        notes=f"Return {rma.number}")
+  one InvoiceLine per credited ReturnLine:
+      quantity   = credited qty FROM THE DISPOSITION ROWS (never quantity_approved)
+      unit_price = line.unit_price
+      tax_rate_pct = line.tax_pct          # ← without this every refund under-credits the tax
+  one NEGATIVE InvoiceLine for the restocking/handling fee
+invoice.recalc_totals()
+rma.credit_note = invoice; rma.save(update_fields=[...narrow...])
+write_audit_log(request.user, rma, "update", {"action": "credit_note", "invoice": invoice.number})
+message: "Draft credit note {number} created. Issue it from Accounts Receivable."
+```
+
+The FK is `editable=False` and absent from `Meta.fields`, so no user can re-point an RMA at an arbitrary invoice. `Invoice.recalc_totals()` computes tax as `line_total × tax_rate_pct / 100` (verified `Invoices.py:49-55`), so carrying `tax_pct` across is all that is required.
+
+### 4.2 The negative-fee guard (critic finding)
+
+The fee is netted **inside** the credit as a negative `InvoiceLine` — legal, `InvoiceLine` has no `MinValueValidator` and `line_total = quantity × unit_price`. But `invoice_post` guards `if ar and income and inv.total > ZERO` and `recompute_payment_status` only reaches `paid` when `total > ZERO`. **A credit note whose fees meet or exceed its value is a permanently unpostable, unpayable document.** So: compute `credit_total` first, and if it is `<= 0`, **refuse to draft**, with a message telling the user to raise the fee as a separate charge in Accounting.
+
+### 4.3 Currency fallback (critic finding)
+
+`currency` is taken from `sales_order.currency` at RMA creation and stored on the header. A blind return with no `sales_order` falls back to the tenant's default `accounting.Currency` (`is_base=True`), and the RMA form exposes `currency` so a CSR can correct it. The draft action reads `rma.currency` and refuses if it is null.
+
+### 4.4 What SCM must NOT do
+
+- **No JournalEntry, ever** (L29).
+- **Not issue/post** the credit note — it stays `status="draft"`; `invoice_post` is Accounting's.
+- **Not create `accounting.Payment(direction="out")`** — `payment_confirm` posts an outbound payment Dr AP-liability(2000) / Cr Bank, which is the wrong account for a customer refund, and `Payment.bank_account` is a non-null `PROTECT` FK SCM has no business choosing. `refund_method` is recorded intent; AR disburses.
+- **Not draft anything for a warranty recovery** — `accounting.Bill` has **no `kind` field** (unlike `Invoice.kind`), so there is no vendor-credit document to draft. `WarrantyClaim` records `amount_approved` / `amount_credited` / `credit_reference` / `credit_received_on` and drafts nothing. Flag `Bill.kind` in the docstring as the future Module 2/6 change.
+
+### 4.5 Three stand-ins, documented in the model docstrings
+
+1. **Store credit** — no `StoreCredit` / `GiftCard` / `CreditBalance` model exists anywhere. `resolution="store_credit"` drafts the *same* credit note and it stays unapplied until AR consumes it via `PaymentAllocation`. The credit note **is** the store credit. Do not invent a credit-balance table in SCM.
+2. **The credit-note direction gap** — `invoice_post` does not branch on `kind`, so an *issued* credit note posts Dr AR / Cr Income (backwards), and while `sent` it **adds** to the open-exposure sum read by SCM's own `_evaluate_hold`, so a returning customer's credit position temporarily worsens. This is Module 2's bug. **4.10 must not compensate by touching the ledger** — flag it and note it on the refund queue page.
+3. **Advance/instant refund** — no payment gateway, no card hold. Ships as `advance_refund` + `advance_refund_deadline` + the `scm:advance_refund_exposure` report; the claw-back is a manual credit-note reversal in Accounting.
+
+Accepted limitation: **one `credit_note` FK per RMA** (Epicor supports several against one RMA). A second credit is a manual job in Accounting; documented, not silently broken.
+
+---
+
+## 5. The Return Portal — three surfaces, stated plainly
+
+**The bullet asks for "request returns and print labels". Anonymous *request* is not buildable and will not be built.** Nothing lets a stranger prove they own a `SalesOrder`; `core.Address` has kind/line1/city/country and **no postal-code field**, so Loop's order-number + ZIP lookup would require a Module 0 change; and the two anonymous-CREATE precedents in the repo (`careers_apply`, `landing_public`) both create a *new* record and never look one up.
+
+### (a) Logged-in customer request — `portal_return_create` **[this is what makes the bullet honest]**
+
+`@login_required`, reusing the CRM binding that already exists: `crm.CustomerPortalAccess.objects.filter(portal_user=request.user, tenant=request.tenant, is_active=True).select_related("customer_party").first()` — bounce to `dashboard:home` when it is `None`, and **force `customer=access.customer_party` and `source="portal"` server-side**, exactly as `portal_case_create` does. Sales-order and line dropdowns are filtered to that party. This is the `portal_case_create` shape applied to returns; no new auth mechanism.
+
+### (b) Public token status page — `returnauthorization_public(request, token)`
+
+- **No decorator at all** (there is no `LoginRequiredMiddleware`; a bare view is genuinely public) — the `case_public` mechanism.
+- `public_token = CharField(64, unique=True, editable=False, null=True, blank=True)`, minted once in `save()` with `secrets.token_urlsafe(32)`. **`import secrets` must be ADDED to `apps/scm/models/_base.py`** — verified absent (it imports only `Decimal`, `settings`, `ValidationError`, validators, db/transaction, `F/Q/Sum`, `timezone`, `next_number`).
+- Resolution: `get_object_or_404(ReturnAuthorization.objects.select_related("tenant","customer","policy"), public_token=token, status__in=[...open states...])` — **the state guard lives in the lookup** so draft/cancelled rows 404 rather than leak (the `kb_public` pattern).
+- **Tenant resolution:** taken **off the object** (`obj.tenant`), never `request.tenant` — `TenantMiddleware` is not bypassed for public routes and sets `request.tenant = None` for anonymous users. `select_related("tenant")` so that costs no query. **Additionally refuse when `obj.tenant.is_active` is False** (the `careers_list` precedent) — otherwise a churned tenant keeps serving customer data forever from a token that never expires.
+- **CSRF:** enforced globally (`CsrfViewMiddleware`; the repo's only exemption is the Stripe webhook). `{% csrf_token %}` in the form.
+- **What a visitor can do:** see status, line descriptions, next steps and `policy.portal_instructions`. Two POSTs discriminated by a hidden `action` field: *"I've shipped it"* (stamps `customer_shipped_on` + stores a pasted `return_tracking_number`) and *"add a note"* (`portal_note`, truncated). The write is a **TOCTOU-safe conditional UPDATE** — `ReturnAuthorization.objects.filter(pk=..., customer_shipped_on__isnull=True).update(...)` — the shape `case_public` uses for CSAT, not read-then-save.
+- **No prices, no costs, no supplier data on this page.** Template extends `base_auth.html`; all tenant/customer text rendered **escaped**, never `|safe`.
+- Carry the house comment: `# WARNING: unauthenticated POST — add per-IP rate-limiting (django-ratelimit) or a WAF throttle in production.` There is no rate limiting anywhere in this repo and none is being invented. `write_audit_log(None, obj, "update", {"via": "return_portal"})` for the anonymous actor (the `careers_apply` precedent).
+- **Stated residual risk:** the token never expires, cannot be rotated and cannot be revoked — no token in this codebase can. A forwarded link is permanent read access to one RMA.
+
+### (c) Label / return slip — `returnauthorization_label`
+
+Token-gated (same token, same 404 guards) **and** linked from the staff detail page. Follows the `coa_print` convention exactly: **not** a `base.html` child — a standalone `<!DOCTYPE html>` with an inline `<style>`, a `.toolbar` div holding `<button onclick="window.print()">Print / Save PDF</button>` plus a Back link, and `@media print { .toolbar { display: none; } body { padding: 0; } }`. A **state refusal** before rendering: refuse unless the RMA is `approved` / `awaiting_receipt`, in the spirit of `coa_print` refusing an unissued certificate.
+
+**Contents, and what that means for the token:** RMA number (as text), `policy.return_to_address`, the lines with reason codes, and the customer's name. Because the label necessarily carries a warehouse address, **the token grants more than the status page does** — this is stated in the view docstring so nobody later assumes the two are equivalent. **STAND-IN:** this is a *return slip*, not a carrier label. There is no barcode, QR or PDF library and no carrier API in the repo; `return_label_url`, `label_cost` and `return_tracking_number` are pasted by a human after buying the label elsewhere (the 4.6 posture). This is SCM's first print page and first unauthenticated view.
+
+### (d) The sidebar bullet — `scm:return_portal`, a **staff** console
+
+Per L32 and SCM's own prior application of it (4.1's "Vendor Portal" → `scm:purchaseorder_list?status=sent`, `navigation.py:774-777`). Zero writes. Shows: the `source="portal"` inbox at `status="requested"` awaiting approval; the copyable public URL per open RMA, built as `{{ request.scheme }}://{{ request.get_host }}{% url 'scm:returnauthorization_public' obj.public_token %}` (the landing-page detail pattern); the active `ReturnPolicy` list with the window each promises and the outcomes it allows; the `ReturnReason` list with what each offers and whether it demands a photo.
+
+---
+
+## 6. URL prefixes
+
+Checked against the taken first segments (`adjustments allocations boms capa carriers catalogs categories coa contracts cycle-counts demand-signals forecast-accuracy forecast-adjustments forecasts freight-invoices inspection-plans inspections items loads locations lot-serials mrp nonconformances on-hand orders picks production-schedule putaway quality-audits quotes receipts reorder-alerts reorder-rules requisitions rfqs risk-assessments safety-stock sales-order-lines sales-orders scorecards seasonality shipments stock-ledger suppliers time-logs transfers uoms valuation work-centers work-orders yard`) — **all nine below are free**:
+
+| Segment | Routes |
+|---|---|
+| `returns/` | `returnauthorization_{list,add,detail,edit,delete}`, `_approve`, `_reject`, `_cancel`, `_receive_all`, `_draft_credit_note`, `_draft_replacement`, `_raise_warranty_claim` |
+| `return-reasons/` | `returnreason_{list,add,detail,edit,delete}` |
+| `return-policies/` | `returnpolicy_{list,add,detail,edit,delete}` |
+| `return-dispositions/` | `returndisposition_{list,add,detail,edit,delete}`, `_decide`, `_post`, `_split`, `_mark_refurbished` |
+| `warranty-claims/` | `warrantyclaim_{list,add,detail,edit,delete}`, `_submit`, `_record_response`, `_record_credit` |
+| `refund-queue/` | `refund_queue` |
+| `return-portal/` | `return_portal`, `portal_return_create` |
+| `returns-bench/` | `returns_awaiting_disposition`, `advance_refund_exposure` |
+| `return-tracking/` | `returnauthorization_public` (`<str:token>/`), `returnauthorization_label` (`<str:token>/label/`) |
+
+**Deliberately `return-dispositions/` not `dispositions/`** — the generic segment is one Module 5 will want. **Deliberately `return-tracking/<str:token>/` on its own first segment** rather than `returns/track/<str:token>/`, which removes the greedy-token ordering hazard entirely. Even so, per CLAUDE.md urls rule 6: literal routes go before `<int:pk>` ones within each module, and every new first segment is checked against the **whole concatenated** `apps/scm/urls/__init__.py` list, not just its own block.
+
+---
+
+## 7. Design these out — the eight lessons, mapped to where each recurs here
+
+**7.1 — Formset `clean()` comparing a child to a PARENT field needs `formset.instance = form.instance` after `form.is_valid()` and BEFORE `formset.is_valid()`.**
+Two places. (a) The `ReturnLine` formset on the RMA create form validates `quantity_approved <= quantity_requested` and the over-return cap against the header's `sales_order`. (b) The `ReturnDisposition` formset validates `sum(quantity) <= return_line.quantity_approved` against the parent line. On **create** both guards silently no-op without the assignment.
+
+**7.2 — `extra=0` does NOT stop row injection; snapshot/audit rows need `can_delete=False` plus an explicit injection guard.**
+`ReturnDisposition` rows are audit rows once `stock_posted` is True: `can_delete=False`, and an explicit guard comparing the POSTed management form's `initial_form_count` against the server-side queryset count. Same for `WarrantyClaimCost` once `status != "draft"`.
+
+**7.3 — Never name an annotation after a model `@property`.**
+Banned annotation names: `quantity_received`, `quantity_requested_total`, `quantity_received_total`, `line_credit`, `is_fully_received`, `days_open`, `amount_claimed_total`, `recovery_variance`, `recovery_rate_pct`, `is_in_warranty`, `is_overdue`, `is_possible_duplicate`, `posts_stock`. Every list-page annotation carries an `_agg` suffix (`quantity_received_agg`, `amount_claimed_agg`).
+
+**7.4 — Every new PROTECT FK needs a delete guard; use the GENERIC `except ProtectedError` inside `atomic()`, never an `.exists()` enumeration.**
+Five delete views to touch: `returnreason_delete`, `returnpolicy_delete` (new), and `item_delete`, `location_delete`, `party_delete` (existing — new PROTECT targets arrive on them). Use the `apps/scm/views/InventoryManagement/Items.py:85-94` shape: `try: with transaction.atomic(): crud_delete(...) except ProtectedError as exc: blockers = sorted({p._meta.verbose_name for p in exc.protected_objects})`. **Three of these live outside 4.10's own folder — do not skip them.**
+
+**7.5 — A gate lives in TWO places (view AND button), and a state filter's SQL must agree with the per-row verdict.**
+Gates: Approve, Reject, Receive-all, Decide, Post, Split, Draft credit note, Draft replacement, Submit claim, Record response, Print label. Each gated in the view **and** hidden/disabled in the template. `ReturnReason.blocks_restock` is re-checked in `returndisposition_post` inside `atomic()`, not only in the form. `refund_queue`'s filter SQL must compute the same "credit-bearing and unsettled" verdict the row renders — one test per chip asserting the filtered set equals the badged set.
+
+**7.6 — A dropdown whose target's `__str__` walks a second FK needs `select_related`.**
+Verified: `SalesOrderLine.__str__` reads `self.item.sku` (`SalesOrders.py:249-251`) and `LotSerial.__str__` reads `self.item.sku` (`LotSerials.py:32`). So **every** `ModelChoiceField` queryset for `sales_order_line` (RMA line form) and `lot_serial` (disposition form, warranty claim form) must be `.select_related("item")`, plus `Carrier`/`Location`/`ReturnReason` querysets on the RMA form. This applies to the **form querysets**, not just the detail-page panels.
+
+**7.7 — Every computed field has exactly ONE writer: `editable=False` + absent from `Meta.fields` + admin `readonly_fields`.**
+The full list: `ReturnAuthorization.{status, policy_snapshot, approved_on, approved_by, rejected_reason, customer_shipped_on, public_token, portal_note, credit_note, replacement_order, refund_subtotal, fee_total, tax_total, credit_total}`; `ReturnDisposition.{received_on, received_by, restock_unit_cost is user-owned but seeded once, refurbished_on, stock_posted, stock_move, decided_on, decided_by}`; `WarrantyClaim.{status, submitted_on, responded_on, supplier_response_notes, amount_approved, amount_credited, credit_reference, credit_received_on}`; `WarrantyClaimCost.amount_claimed` (**computed in `save()`** — do not ship `quantity`, `unit_amount` *and* `amount_claimed` as three inputs). **`apps/scm/admin.py` (585 lines) must be edited in the same pass.**
+
+**7.8 — Validate the TENANT before validating the form in an action view.**
+Every one of the twelve POST actions does `get_object_or_404(Model.objects.only("pk"), pk=pk, tenant=request.tenant)` **first**, then the form — otherwise a cross-tenant pk with a bad payload returns 302 instead of 404.
+
+### 7.9 The posting-action recipe (verbatim from `nonconformance_disposition`, `views/QualityManagement/NonConformances.py:241-336`)
+
+Every stock-touching action in 4.10 follows this order, no exceptions:
+
+1. `@tenant_admin_required` + `@require_POST`
+2. tenant-scoped `get_object_or_404` **before the form is touched**
+3. form validation
+4. `transaction.atomic()` with `select_for_update()` re-read
+5. terminal-state guard
+6. **idempotency re-read of `stock_posted` INSIDE the lock** (not before it)
+7. `_insufficient_stock()` → `_post_stock_move()` (catch `ValidationError`)
+8. narrow `save(update_fields=[...])`
+9. `write_audit_log(...)` **after** the writes
+10. branch-specific `messages`
+
+### 7.10 Two required actions, promoted from mitigation to scope
+
+- **`returnauthorization_receive_all`** — one click on the RMA detail creates a `received_pending` disposition row per approved line, pre-filled from `quantity_approved`, `unit_cost` and the default bench location. Without it the flow is unpleasant enough to sink the demo.
+- **`returndisposition_split`** — POST-only, permitted **only** while `disposition="received_pending"` **and** `stock_posted is False`; reduces the row and creates a sibling. This is the only thing that makes disposition-as-a-row survive the real receive-then-grade sequence (the 2-restock/1-scrap case that justifies the row grain at all).
+
+### 7.11 The credit-only trap — **needs its own test**
+
+A `return_type="credit_only"` RMA never gets a disposition row, so its derived `quantity_received` is permanently 0 and every queue keyed on "received" silently drops it — perfectly valid work that looks abandoned. `refund_queue`, `returndisposition_list` and `returns_awaiting_disposition` must each branch on `return_type`, with an explicit test asserting a credit-only RMA reaches the refund queue.
+
+### 7.12 Other traps
+
+- `quantity_received` = the sum of **all** disposition rows **including `received_pending`**. Anyone who later "optimises" it to filter on a decided disposition under-reports what came back. Docstring + a test that receives, leaves pending, and asserts the sum.
+- The over-return cap is **weak by construction**: `SalesOrderLine` has no shipped or delivered quantity anywhere in the codebase (Shipment has no lines and no Item FK; PickTask has no FK to SalesOrder), so the cap is only against `quantity_ordered`. One aggregate query, not a per-row query, and no lock — concurrent RMAs against the same sold line can each pass. Over-return is caught at receipt, not at authorisation.
+- `window_basis="delivery"` will fall through to `fallback_days` far more often than the policy UI implies (`SalesOrder.delivered_notification_at` is a manual human stamp; `salesorder_fulfill`'s own docstring says it "records a human's statement"). The eligibility verdict must **display `basis_date_used`** on the RMA detail so the CSR knows which date actually applied.
+- Eligibility is a **pure function** `evaluate_return_eligibility(sales_order, item, reason, policy, as_of) -> dict(within_window, basis_date_used, allowed_resolutions, proposed_fee, proposed_credit, blockers)`. It **proposes**; a human presses Approve. The dict is snapshotted into `policy_snapshot` at approval so editing a policy next month cannot rewrite last month's decision.
+- Two `core.Party` FKs on one model with no `related_name` is a hard `SystemCheckError` — every `related_name` is specified in §1 and is namespaced `scm_return_*` / `scm_warranty_*`.
+
+### 7.13 Files outside `apps/scm/{models,forms,views,urls}` that MUST be touched
+
+`apps/core/navigation.py` (LIVE_LINKS 4.10) · `apps/scm/admin.py` (registrations + `readonly_fields`) · `apps/scm/models/_base.py` (`import secrets`) · `apps/scm/management/commands/seed_scm.py` (idempotent 4.10 demo data — reasons, a default policy, 2–3 RMAs incl. one credit-only, disposition rows across grades, one warranty claim) · `.claude/skills/scm/SKILL.md` (4.10 section) · `apps/scm/tests/{test_models,test_views,test_forms,test_security}.py`.
+
+---
+
+## 8. Deferred, named — and parked to which sibling
+
+**Deferred with a stand-in in this pass**
+
+| Deferred | Stand-in shipped |
+|---|---|
+| Carrier label + QR generation via carrier API (AfterShip, 20+ carriers) | HTML return slip; `return_label_url` / `label_cost` / `return_tracking_number` pasted by a human |
+| Barcode / QR images of any kind | No library in the repo — the RMA number prints as text |
+| Anonymous order lookup ("find my order by number + email/ZIP") | `core.Address` has no postal-code field and no unrate-limited disclosure endpoint will ship; logged-in `portal_return_create` is the honest path |
+| Emailing the token / status notifications | House pattern is to stamp a `*_sent_at` and defer transport |
+| Anonymous photo/video upload | `ReturnLine.photo` FK exists; **CSR-attached only** |
+| Instant / advance refunds with a card hold and auto-clawback | `advance_refund` + `advance_refund_deadline` + `scm:advance_refund_exposure`; clawback is a manual reversal |
+| Redeemable store-credit / gift-card wallet | An **unapplied credit note** is the store credit |
+| Customer cash refund (`accounting.Payment(direction="out")`) | `refund_method` recorded; AR disburses |
+| Vendor credit document for warranty recovery | `accounting.Bill` has no `kind`; claim records amounts only. **Flag `Bill.kind` to Module 2/6** |
+| Multi-round claim negotiation history (SAP's version stack) | Latest state only; a `WarrantyClaimVersion` child later, **not** a retrofit onto `status` |
+| `WarrantyRegistration` master | Entitlement derived from `purchase_date` + policy window + serial |
+| Supplier self-service claim portal / EDI / IDoc | `submitted_on` + `submission_channel` as the data hooks |
+| AI disposition optimisation (Optoro SmartDisposition) and AI claim-fraud scoring (Tavant, ServicePower) | Deterministic reason+grade-driven `suggested_disposition` pre-selecting the dropdown (compute-then-convert) |
+| Recommerce / liquidation channel APIs | The disposition values ship; `recovery_value` is hand-entered |
+| Multiple credit notes per RMA (Epicor) | One `credit_note` FK; documented |
+| **Adding `customer_return` to `NonConformance.SOURCE_CHOICES`** | **Priced, not hand-waved:** `source` is `CharField(max_length=14)` (`NonConformances.py:84`) and `customer_return` is **15 characters**, so this is a *column widen* **plus** a choices change **plus** a reversal of 4.9's documented reasoning at `NonConformances.py:41-42`. **4.10 must not carry a migration against a 4.9 model.** This pass uses `source="inspection"` with the RMA number in the description, plus the `ReturnDisposition.nonconformance` FK for the hard link. |
+| Widening `scm.Shipment.DIRECTION_CHOICES` for the inbound return leg | `DIRECTION_CHOICES` is literally outbound-to-customer / inbound-from-supplier with a `purchase_order` FK — a 4.6 change. Carrier + tracking live on the RMA |
+| `redeploy` disposition | Reachable today as `restock` + an ordinary 4.3 transfer; not a distinct posting path |
+| Blocked / non-sellable stock as a `Location` type | Keeping the bench off-ledger is the stand-in (§3.1); a `LOCATION_TYPES` value is a 4.3 change |
+
+**Parked to siblings**
+
+- Netting returns out of the demand series (`_history.py`) → **4.7 / 4.11**
+- Return-rate, days-to-disposition and value-recovered trend dashboards → **4.11** (this pass ships summary strips on the two computed queues, not a dashboard)
+- Repair execution of a `refurbish`/`repair` unit → **4.8 `WorkOrder`**
+- Claim impact on supplier scorecards → **4.2**
+- Put-away of restocked units into bins → **4.4**
+- Deep return inspection criteria → **4.9 `InspectionPlan`**; complaints / CSAT → **CRM `Case`**
+- Logged-in customer self-service hub (beyond the single create view) → **4.16**
+- 3PL-operated returns processing → **4.17**
+- Store-credit balances and card refunds → **accounting / Module 9**
+- Self-service initiation and carrier label generation → **9.5 OMS**, extending these tables by FK (§0)
+
+---
+
+## Completeness critic (what all three proposals missed)
+
+## COMPLETENESS CRITIQUE — SCM 4.10, what all three proposals miss
+
+### 1. A NavERP bullet nobody serves honestly
+**"Return Portal — Customer-facing interface to *request* returns and print labels."** All three ship *track + print* and explicitly refuse *request*. That is defensible, but all three then point the bullet at a staff console (L32) and call it done. Nobody proposes the one honest middle path that already exists in-repo: **reuse `crm.CustomerPortalAccess`** (`portal_user` OneToOne + `customer_party` FK, `apps/crm/views/CustomerService/CustomerPortal.py`) for a `@login_required` `portal_return_create` that FORCES `customer=access.customer_party` server-side — exactly `portal_case_create`. P3 mentions it in one clause and defers it to 4.16. That leaves the bullet at ~40% served with no build item.
+
+### 2. Spine entities assumed that do not exist
+- **A return-to address.** P1 says the label prints "the return-to address from `scm.Location`/`core.Address`". `apps/scm/models/InventoryManagement/Locations.py` has **no address FK** (code, name, location_type, parent, is_active, capacity, pick_sequence, abc_class, is_pickable). There is no path from a warehouse to a printable address. The label's core content is unbuildable as specified — it needs a free-text `return_to_address` on the policy or an explicit `core.Address` FK.
+- **A non-sellable / blocked stock location.** `Location.LOCATION_TYPES` = warehouse/zone/bin/staging/transit, plus `is_pickable` (a 4.4 pick-walk flag, not an availability flag). `Item.on_hand()` is `Sum(quantity)` across **all** locations. So SAP's "blocked returns stock" cannot be represented: the moment P1 or P3 posts a receipt into a returns bin, that damaged stock inflates `Item.on_hand()`, `Item.total_value()`, the valuation report, and 4.7's reorder/safety-stock inputs — tenant-wide, indistinguishable from sellable. P2 dodges this by posting nothing at intake but then owns the opposite error. **No proposal names this.**
+- **`related_name` on the new `core.Party` FKs.** P1's `ReturnAuthorization.customer` + `ReturnReceipt.received_by`, P3's `customer` + `WarrantyClaim.supplier`. Two FKs from one model to Party with no `related_name` is a hard `SystemCheckError`, and Party already carries `sales_orders` / `accounting_invoices` / `crm_customer_portal_accesses`. Nobody specifies the namespace.
+
+### 3. Stock effects that would be wrong
+- **P1's restock transfer pair double-applies the write-down.** `_post_stock_move` calls `item.apply_receipt(qty, unit_cost)` for **any** positive quantity regardless of move_type — including `transfer`. Every existing transfer caller passes `item.average_cost` precisely to stay value-neutral. P1 posts the pair "both at the line's unit_cost", so the positive leg rolls the weighted average a second time on top of the intake receipt. The pair must pass `item.average_cost`.
+- **`LotSerial.status` has no writer on restock.** STATUS_CHOICES = available|quarantine|expired|consumed. A serialized unit sold and shipped is `consumed`; a restock posts a positive move against it and leaves `status='consumed'` — ledger says on-hand, status says gone. All three describe the *quarantine* flip; **none** describes flipping back to `available`, nor what happens when a customer returns a lot at `status='expired'`.
+- **`Item.tracking` is never enforced.** `tracking` (none|lot|serial) exists on Item; no proposal requires `lot_serial` on a disposition/receipt row when `item.tracking != "none"`. Returned serialized goods will land in the ledger untraceable, which quietly defeats the `lot_history()` panel P3 and P2 both copy.
+
+### 4. Money effect that would be wrong
+- **Tax is missing from every refund.** `SalesOrderLine` carries `tax_pct`; `accounting.InvoiceLine` carries `tax_rate_pct`. All three draft credit lines as `quantity × unit_price` and never carry the rate across. Every refund under-credits the customer by the VAT/GST, silently.
+- **A credit note whose fees exceed its value becomes a permanently stuck document.** All three net the restocking fee as a **negative** `InvoiceLine`. `invoice_post` guards `if ar and income and inv.total > ZERO` and `recompute_payment_status` only reaches `paid` when `total > ZERO`. A total ≤ 0 (full fee on a keep-item, or a return-to-customer disposition that credits nothing but charges) creates an invoice that can never be posted and never be paid. Nobody guards `credit_total > 0` before drafting.
+- **Currency on a blind return.** The credit note needs the *sales order's* currency; on a return with no `sales_order` (all three allow it) there is no source. Nobody says what happens.
+
+### 5. A lesson from 4.8/4.9 that none designed out
+**Lesson 6 — the dropdown whose target's `__str__` walks a second FK.** Verified: `SalesOrderLine.__str__` reads `self.item.sku`, and `LotSerial.__str__` reads `self.item.sku`. Every proposal puts a `sales_order_line` ModelChoiceField on the RMA line form and a `lot_serial` ModelChoiceField on the disposition/claim form. Rendering either is one query per option. P1/P2/P3 all mention `select_related` — but only for the public view and the `lot_history` panel, never for the form querysets. This is the exact regression the lesson names and none of the three carries it into their own design.
+
+*(Secondary: none of the three names `apps/scm/admin.py` (585 lines) as a file to touch, though all three invoke the "editable=False + out of Meta.fields + admin readonly_fields" rule; and none mentions extending `apps/scm/management/commands/seed_scm.py` or `.claude/skills/scm/SKILL.md`, both mandatory per CLAUDE.md.)*
+
+### 6. Public / security surface nobody addressed
+- **No `tenant.is_active` check on the public page.** HRM's `careers_list` filters `Tenant.objects.filter(slug=slug, is_active=True)`. All three resolve the RMA by token and read `obj.tenant` with no active check — a churned or suspended tenant keeps serving customer names, order references and line detail forever, from a token that also never expires.
+- **The token-gated *label* is the wider leak, not the status page.** P1 and P3 offer a token variant of the label. The label is the one page that necessarily prints a *warehouse* address and (P3) the customer's own address. All three carefully strip prices from the status page and then hand the label out on the same bearer credential without re-stating what it may contain.
+- **The unauthenticated write has no idempotency shape in P1 or P2.** Only P3 specifies the TOCTOU-safe conditional `UPDATE` (`filter(pk=…, customer_shipped_on__isnull=True).update(...)`) that `case_public` uses for CSAT. P1 and P2 describe the write as a plain save.
+
+### 7. Ownership collision with Modules 5 and 9 — the biggest omission
+Nobody read the two colliding NavERP sections. They are not vague overlap; they are near-duplicates:
+
+- **`### 5.10 Returns Management (RMA)`** — *Return Merchandise Authorization · **Return Inspection** · Disposition Routing · Credit/Refund Processing.* Four bullets, three of which 4.10 is about to build. The fourth, **Return Inspection**, is the one 4.10 is *also* pre-empting via `condition_grade` / grading-at-receipt — and 4.10 additionally reaches into 4.9's `NonConformance` for it (P1/P2 propose amending `SOURCE_CHOICES`; note `source` is `max_length=14` and `customer_return` is 15 chars, so that is a column widen, not "a one-line migration" as P1 states).
+- **`### 9.5 Order Management System (OMS)` → "Returns & Exchanges (RMA) — self-service return initiation, label generation, refund routing, and restocking logic."** Module 9 nominally owns precisely the self-service initiation and label generation all three proposals defer.
+
+Under L36, SCM shipping first means **SCM owns these tables and 5.10 / 9.5 extend by FK** — but that ruling has to be *written down in the model docstrings and the research file*, with the reverse-accessor namespace reserved, or 5.10 will build a second RMA table. All three proposals mention Module 5/9 only in passing (P2: "3PL-run returns → 4.17"; P3: "logged-in hub → 4.16"); **none names 5.10 or 9.5, none quotes their bullets, and none declares the ownership.** That is the single largest gap in the set.
