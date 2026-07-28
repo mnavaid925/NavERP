@@ -174,3 +174,34 @@ from .Manufacturing.WorkOrders import (  # noqa: F401
 from .Manufacturing.ProductionTimeLogs import (  # noqa: F401
     ProductionTimeLogForm,
 )
+
+# 4.9 Quality Management System (QMS)
+from .QualityManagement.InspectionPlans import (  # noqa: F401
+    InspectionPlanForm,
+    InspectionCharacteristicForm,
+    BaseInspectionCharacteristicFormSet,
+    InspectionCharacteristicFormSet,
+)
+from .QualityManagement.QualityInspections import (  # noqa: F401
+    QualityInspectionForm,
+    InspectionResultForm,
+    BaseInspectionResultFormSet,
+    InspectionResultFormSet,
+    QualityInspectionDecisionForm,
+    QualityInspectionCoAIssueForm,
+)
+from .QualityManagement.QualityAudits import (  # noqa: F401
+    QualityAuditForm,
+    QualityAuditFindingForm,
+)
+from .QualityManagement.NonConformances import (  # noqa: F401
+    NonConformanceForm,
+    NonConformanceDispositionForm,
+)
+from .QualityManagement.CapaActions import (  # noqa: F401
+    CapaActionForm,
+    CapaTaskForm,
+    BaseCapaTaskFormSet,
+    CapaTaskFormSet,
+    CapaVerificationForm,
+)
