@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), and 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.9+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.10+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,9 +9,9 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production.** 4.9–4.19 are
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management.** 4.10–4.19 are
 roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry —
-**4.9 Quality Management System (QMS)** is next) — see the reference apps
+**4.10 Returns Management (Reverse Logistics)** is next) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -482,6 +482,78 @@ finished good with an active default BOM over the existing items, and `WO-00001`
 10. **New PROTECT FKs need delete guards.** 4.8 added three onto `Item` (extended `item_delete`) and two onto
     `Location` — `location_delete` now catches `ProtectedError` inside `atomic()` rather than enumerating guards
     that go stale. `workcenter_delete` guards its own two. Forgetting this is a 500, not a message (cf. `405ee0ea`).
+
+---
+
+## 4.9 Quality Management System (QMS)  (`apps/scm/*/QualityManagement/`, templates `templates/scm/quality/`)
+
+The **conformance** layer over everything 4.1/4.6/4.8 already move. **SCM owns these tables** — Module 12 (unbuilt,
+20 sub-modules) will EXTEND them by FK rather than re-declare them, the same L36 call procurement made in 4.1.
+
+**Models** (`models/QualityManagement/`, load order InspectionPlans → QualityInspections → QualityAudits →
+NonConformances → CapaActions; an audit *finding* is an NCR, and a CAPA hangs off an NCR, so the chain runs that way):
+
+- **`InspectionPlan`** + **`InspectionCharacteristic`** (`InspectionPlans.py`) — the reusable spec. Keyed to a
+  trigger (`incoming_receipt / in_process / outgoing_shipment / periodic_stock / audit_checklist`) and scoped by
+  item, category or supplier; `all_100 / percentage / fixed_count / aql` sampling; versioned with
+  `effective_from`. **No `NUMBER_PREFIX`** — `("tenant", "code", "version")` is the key, which keeps a prefix free.
+  Characteristics carry `target_value` + `lower_limit`/`upper_limit`, `uom`, `test_method`, `is_critical`,
+  `is_mandatory` and **`include_on_coa`** — the one boolean that makes a certificate generatable.
+  `for_trigger()` resolves item → category → supplier → unscoped in ONE query.
+- **`QualityInspection`** [`QC-`] + **`InspectionResult`** (`QualityInspections.py`) — hangs off whichever of
+  4.1's `GoodsReceiptNote`, 4.8's `WorkOrder` or 4.6's `Shipment` triggered it (all nullable). `status`
+  (`draft/in_progress/passed/failed/on_hold/cancelled`) is **separate from** `usage_decision`
+  (`pending/accept/accept_with_deviation/reject`) — an out-of-spec lot can still be accepted with deviation, and
+  that decision is what an auditor cares about. Carries the CoA stamp trio (`coa_number`, `coa_issued_on`,
+  `coa_issued_to`).
+- **`QualityAudit`** [`QA-`] (`QualityAudits.py`) — `internal/supplier/customer/certification`, reusing an
+  `InspectionPlan` as its checklist. Findings are `NonConformance(source="audit")` rows via `related_name="findings"`.
+- **`NonConformance`** [`NCR-`] (`NonConformances.py`) — one register for every source, with the full MRB
+  disposition set (`use_as_is/rework/repair/scrap/return_to_vendor/regrade`), containment, `cost_of_quality`,
+  owner/due tracking.
+- **`CapaAction`** [`CAPA-`] + **`CapaTask`** (`CapaActions.py`) — corrective and preventive as one attribute
+  (ISO 9001 §10.2), standalone or linked to an NCR or audit finding, named RCA method, effectiveness verification.
+
+**Routes** (`urls/QualityManagement/`): `inspection-plans/`, `inspections/`, `nonconformances/`, `capa/`,
+`quality-audits/` (five CRUD names each) plus `coa/` → `scm:coa_report`, `scm:coa_issue`, `scm:coa_print`.
+Verb routes all sit under `<int:pk>/`. **`@tenant_admin_required`** (so their buttons need the role check too):
+`qualityinspection_decide`, `qualityinspection_quarantine`, `qualityinspection_release_lot`,
+`nonconformance_quarantine`, `nonconformance_release_lot`, `nonconformance_disposition`, `capaaction_verify`,
+`coa_issue`. Everything else is `@login_required`; every action and delete is `@require_POST`.
+
+**Seeder**: `_seed_quality_tenant` runs LAST, guarded on **`InspectionPlan`** (the first thing it writes — guarding
+on the inspection left an aborted run to `IntegrityError` on the plans' unique key). It flips two 4.3 items to
+`tracking="lot"` and opens two lots, because without lot-tracked stock a certificate has no batch, quarantine has
+nothing to flip and the scrap has nothing to draw against.
+
+### Non-negotiables for 4.9
+
+1. **A quality scrap posts `move_type="adjustment"`** with `reference="NCR-…"`. There is deliberately **no new
+   move type** — 4.8 earned `consumption`/`production` because 4.7 reads `issue` as *customer demand*, and that
+   justification does not transfer to a write-off.
+2. **Quarantine flips `LotSerial.status` and posts NOTHING.** A hold is not a movement. Release is only reachable
+   from a lot that was quarantined, so restoring `available` is correct rather than a guess.
+3. **GRN-rejected units never entered stock**, so their NCR posts nothing — expressed as the executable
+   `posts_stock` property, which also requires an `item` (an audit finding legitimately has none, and the scrap
+   path would otherwise hand `None` to `_insufficient_stock`).
+4. **Results are SNAPSHOTTED** from the plan's characteristics, so editing a plan cannot rewrite a certificate
+   already issued. `_evaluate()` is the sole writer of `result`.
+5. **A certificate is refused, not just discouraged.** `coa_blockers()` enumerates every reason; `coa_issue`
+   refuses when any is present, and once issued the usage decision is frozen — otherwise reversing to `reject`
+   would leave a live certificate that `coa_blockers()` says should never have existed.
+6. **`coa_number` is allocated LATE**, out of id order. `apps/core/utils.next_number` therefore orders by the
+   number **field**, not by `-id` — the `-id` form re-minted certificate numbers already in use, and MySQL cannot
+   carry a partial unique index on a mostly-blank column to catch it. The issue site re-checks the issued set too.
+7. **An audit cannot close over an open finding**, and stays editable while `in_progress` so its conclusion can
+   actually be written (locking at `start` made its own happy path unreachable).
+8. **Never name an annotation after a model `@property`.** Django cannot set it when instantiating rows and the
+   whole list page 500s with `AttributeError: can't set attribute` — hence `characteristic_count_agg`,
+   `major_count_agg`, `minor_count_agg`. Two of the five list views shipped broken on exactly this.
+9. **`formset.instance = form.instance` before `formset.is_valid()`** on every formset whose `clean()` reads a
+   parent field — on create the parent is an empty instance and the guard silently no-ops (a live 4.8 bug).
+10. **New PROTECT FKs need delete guards.** `Item` uses explicit `.exists()` guards; `Location` and `LotSerial`
+    now catch `ProtectedError` inside `atomic()` — the generic shape, because enumeration goes stale with every
+    sub-module that adds an FK.
 
 ## Conventions & gotchas
 
