@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Refund Processing{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Refund Processing</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Refund Processing</span></div>
+      <p class="text-muted">Every return with money owed on it and no credit note against it yet. There is no refund table — a settlement is <span class="fw-600">computed</span> from the return's own lines and the decisions taken on the bench, so this queue and the figures on each return can never drift apart. Drafting a credit note is where SCM stops: Accounts Receivable issues it and pays it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="package-x"></i> All returns</a>
+      <a href="{% url 'scm:returns_awaiting_disposition' %}" class="btn btn-outline"><i data-lucide="package-search"></i> Returns bench</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list"></i></div>
+      <div class="stat-value">{{ page_obj.paginator.count|default:"0" }}</div>
+      <div class="stat-label">Returns awaiting a credit note</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ total_owed|floatformat:2 }}</div>
+      <div class="stat-label">Owed on this page</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search RMA number, customer, sales order or their reference…">
+        </div>
+        <div class="form-group">
+          <select name="customer" aria-label="Customer" class="form-select">
+            <option value="">All customers</option>
+            {% for c in customers %}
+              <option value="{{ c.pk }}" {% if request.GET.customer == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="policy" aria-label="Return policy" class="form-select">
+            <option value="">All policies</option>
+            {% for p in policies %}
+              <option value="{{ p.pk }}" {% if request.GET.policy == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="resolution" aria-label="Resolution" class="form-select">
+            <option value="">All resolutions</option>
+            {% for val, label in resolution_choices %}
+              <option value="{{ val }}" {% if request.GET.resolution == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="return_type" aria-label="Return type" class="form-select">
+            <option value="">All return types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.return_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="refund-date-from">Requested from</label>
+          <input type="date" id="refund-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="refund-date-to">Requested to</label>
+          <input type="date" id="refund-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:refund_queue' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Return</th><th>Customer</th><th>Sales order</th><th>Type</th><th>Resolution</th><th>Refund method</th><th>Requested</th><th>Subtotal</th><th>Fee</th><th>Tax</th><th>Credit due</th><th>Status</th><th class="table-actions">Draft credit note</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:returnauthorization_detail' row.obj.pk %}" class="fw-600">{{ row.obj.number }}</a>
+                {% if row.obj.counterparty_rma_number %}<br><span class="text-muted">their ref {{ row.obj.counterparty_rma_number }}</span>{% endif %}
+              </td>
+              <td>{{ row.obj.customer.name }}</td>
+              <td>{% if row.obj.sales_order %}<a href="{% url 'scm:salesorder_detail' row.obj.sales_order.pk %}">{{ row.obj.sales_order.number }}</a>{% else %}<span class="text-muted">No order</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if row.obj.return_type == 'physical' %}info{% elif row.obj.return_type == 'credit_only' %}amber{% else %}slate{% endif %}">{{ row.obj.get_return_type_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if row.obj.resolution == 'refund' %}green{% elif row.obj.resolution == 'store_credit' %}info{% elif row.obj.resolution == 'exchange' %}info{% elif row.obj.resolution == 'repair' %}amber{% elif row.obj.resolution == 'keep_item' %}amber{% elif row.obj.resolution == 'none' %}slate{% else %}slate{% endif %}">{{ row.obj.get_resolution_display }}</span>
+                {% if row.advance_refund %}<br><span class="badge badge-red">Advance refund</span>{% endif %}
+              </td>
+              <td>{{ row.obj.get_refund_method_display }}</td>
+              <td>{{ row.obj.requested_on|date:"M d, Y" }}</td>
+              <td>{{ row.subtotal|floatformat:2 }}</td>
+              <td>{{ row.fee|floatformat:2 }}</td>
+              <td>{{ row.tax|floatformat:2 }}</td>
+              <td class="fw-600">
+                {{ row.credit|floatformat:2 }} {% if row.obj.currency %}{{ row.obj.currency.code }}{% endif %}
+                {% if row.unpostable %}<br><span class="badge badge-red">Would total zero or less</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if row.obj.status == 'draft' %}slate{% elif row.obj.status == 'requested' %}info{% elif row.obj.status == 'approved' %}green{% elif row.obj.status == 'rejected' %}red{% elif row.obj.status == 'awaiting_receipt' %}amber{% elif row.obj.status == 'partially_received' %}amber{% elif row.obj.status == 'received' %}info{% elif row.obj.status == 'settled' %}green{% elif row.obj.status == 'closed' %}muted{% elif row.obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ row.obj.get_status_display }}</span>
+                {% if row.credit_only %}<br><span class="badge badge-amber">No goods coming back</span>{% endif %}
+              </td>
+              {% comment %}
+                returnauthorization_draft_credit_note is @tenant_admin_required and enforces four
+                more things. Three of them are already true of every row on this page, because the
+                queue's own SQL is the same verdict: the credit note is still null, the status is not
+                draft/requested/rejected/cancelled, and the return is settleable. The two that are
+                NOT guaranteed are gated here so the button cannot bounce — a return with no currency
+                (the action refuses outright) and a settlement that would total zero or less, which
+                could never be posted or paid because invoice_post guards `total > 0`.
+              {% endcomment %}
+              <td>
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                  {% if not row.obj.currency %}
+                    <span class="text-muted">No currency on this return</span>
+                  {% elif row.unpostable %}
+                    <span class="text-muted">Fees meet or exceed the value</span>
+                  {% else %}
+                    <form method="post" action="{% url 'scm:returnauthorization_draft_credit_note' row.obj.pk %}" onsubmit="return confirm('Draft a credit note for {{ row.credit|floatformat:2 }}? It is raised as a DRAFT in Accounts Receivable and nothing is posted to the ledger — issuing it is their decision. Only one credit note can be drafted per return.');">
+                      {% csrf_token %}
+                      <button class="btn btn-primary btn-sm" type="submit"><i data-lucide="file-text"></i> Draft</button>
+                    </form>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">Workspace administrator only</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="banknote"></i><h3>Nothing owed</h3><p>A return reaches this queue once it is past the request stage and either has goods dispositioned into a credit-bearing outcome or is a credit-only return with an approved quantity. Approve a return and disposition what comes back, and the settlement appears here computed from the lines.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <p>The <span class="fw-600">credit due</span> is the line value plus its tax, less the restocking fee — the tax rate is carried across from the sold line, because a refund that quietly drops the VAT under-credits the customer and nobody notices until they count the money. The figure is computed live; the return only stores it when a credit note is actually drafted, so nothing on the record claims a credit was issued while this page is only proposing one.</p>
+      <p style="margin-top:.6rem;"><span class="fw-600">A credit-only return has no goods coming back</span> and therefore never gets a disposition row. A queue keyed on "what has been received" would drop it silently — perfectly valid work that looks abandoned — so this page branches on the return type instead, and those returns are settled from their approved quantities.</p>
+      {% if accounting_caveat %}<p style="margin-top:.6rem;"><span class="fw-600">Known Accounting defect:</span> {{ accounting_caveat }}</p>{% endif %}
+    </div>
+  </div>
+{% endblock %}
