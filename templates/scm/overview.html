@@ -229,4 +229,18 @@
       </div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Manufacturing</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:workorder_list' %}" class="btn btn-outline"><i data-lucide="hammer"></i> Work Orders</a>
+        <a href="{% url 'scm:billofmaterials_list' %}" class="btn btn-outline"><i data-lucide="list-tree"></i> Bills of Materials</a>
+        <a href="{% url 'scm:workcenter_list' %}" class="btn btn-outline"><i data-lucide="factory"></i> Work Centres</a>
+        <a href="{% url 'scm:productiontimelog_list' %}" class="btn btn-outline"><i data-lucide="timer"></i> Shop Floor Log</a>
+        <a href="{% url 'scm:mrp_report' %}" class="btn btn-outline"><i data-lucide="calculator"></i> MRP</a>
+        <a href="{% url 'scm:production_schedule' %}" class="btn btn-outline"><i data-lucide="gantt-chart"></i> Production Schedule</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
