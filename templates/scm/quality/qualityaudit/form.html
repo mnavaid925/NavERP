@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Quality Audit{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Quality Audit</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:qualityaudit_list' %}">Quality Audits</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      {% comment %}
+        Both rules below are enforced by QualityAudit.clean(), and the checklist dropdown is already
+        narrowed by the form — stating them here means an auditor reads them before the save is
+        refused rather than after.
+      {% endcomment %}
+      <p>
+        A <span class="fw-600">supplier</span> or <span class="fw-600">customer</span> audit must name the party being audited; an <span class="fw-600">internal</span> audit must name the department instead. The checklist dropdown offers only active plans whose type is <span class="fw-600">audit checklist</span> — its characteristics become the questions the auditor works through, and a plan scoped to an item or a supplier is not one of them.
+      </p>
+      <p style="margin-top:.6rem;">
+        The <span class="fw-600">conclusion</span> is on this form on purpose: it is the auditor's narrative and it <em>is</em> the report. Reporting the audit is refused while it is blank rather than the action writing one. Status and the two actual dates are not on the form at all — the start and complete actions are their only writers, and findings are recorded from the detail page, not here.
+      </p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:qualityaudit_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
