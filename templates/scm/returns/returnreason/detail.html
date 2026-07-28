@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.code }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} <span class="text-muted">{{ obj.name }}</span>
+        <span class="badge badge-{% if obj.fault_party == 'customer' %}slate{% elif obj.fault_party == 'merchant' %}red{% elif obj.fault_party == 'carrier' %}info{% elif obj.fault_party == 'supplier' %}amber{% elif obj.fault_party == 'unknown' %}muted{% else %}slate{% endif %}">{{ obj.get_fault_party_display }}</span>
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+        {% if obj.blocks_restock %}<span class="badge badge-red">Blocks restocking</span>{% endif %}
+        {% if obj.requires_photo %}<span class="badge badge-amber">Photo required</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returnreason_list' %}">Return Reasons</a><span class="sep">›</span><span>{{ obj.code }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="package-open"></i> Returns</a>
+      <a href="{% url 'scm:return_portal' %}" class="btn btn-outline"><i data-lucide="globe"></i> Return portal</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ allowed_resolutions|length }}</div>
+      <div class="stat-label">Outcomes this reason permits</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="list"></i></div>
+      <div class="stat-value">{{ return_lines|length }}</div>
+      <div class="stat-label">Recent return lines shown (latest 25)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ban"></i></div>
+      <div class="stat-value">{% if obj.blocks_restock %}Blocked{% else %}Allowed{% endif %}</div>
+      <div class="stat-label">Restocking on this reason</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="arrow-down-up"></i></div>
+      <div class="stat-value">{{ obj.sort_order }}</div>
+      <div class="stat-label">Portal sort order</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Code</dt><dd class="fw-600">{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Fault party</dt><dd>{{ obj.get_fault_party_display }}</dd></div>
+        <div class="detail-item"><dt>Outcomes offered</dt><dd>
+          {% for res in allowed_resolutions %}
+            <span class="badge badge-{% if res == 'refund' %}green{% elif res == 'store_credit' %}info{% elif res == 'exchange' %}info{% elif res == 'repair' %}amber{% else %}slate{% endif %}">{% if res == 'refund' %}Refund{% elif res == 'store_credit' %}Store credit{% elif res == 'exchange' %}Exchange{% elif res == 'repair' %}Repair{% else %}{{ res }}{% endif %}</span>
+          {% empty %}
+            <span class="badge badge-red">None — this reason cannot be acted on</span>
+          {% endfor %}
+        </dd></div>
+        <div class="detail-item"><dt>Return fee</dt><dd>{% if obj.waives_return_fee %}<span class="badge badge-green">Waived — our fault, our cost</span>{% else %}<span class="badge badge-muted">The policy's restocking fee applies</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Restocking</dt><dd>{% if obj.blocks_restock %}<span class="badge badge-red">Blocked</span>{% else %}<span class="badge badge-muted">Allowed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Suggested disposition</dt><dd>
+          {% if obj.suggested_disposition %}
+            <span class="badge badge-{% if obj.suggested_disposition == 'restock' %}green{% elif obj.suggested_disposition == 'refurbish' %}amber{% elif obj.suggested_disposition == 'repair_return' %}info{% elif obj.suggested_disposition == 'scrap' %}red{% elif obj.suggested_disposition == 'return_to_vendor' %}info{% elif obj.suggested_disposition == 'liquidate' %}amber{% elif obj.suggested_disposition == 'donate' %}muted{% elif obj.suggested_disposition == 'recycle' %}muted{% elif obj.suggested_disposition == 'quarantine' %}amber{% elif obj.suggested_disposition == 'credit_only' %}slate{% elif obj.suggested_disposition == 'received_pending' %}slate{% else %}slate{% endif %}">{{ obj.get_suggested_disposition_display }}</span>
+          {% else %}<span class="text-muted">None — the grader decides from scratch</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Photo required</dt><dd>{% if obj.requires_photo %}<span class="badge badge-amber">Yes — before approval</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raises a non-conformance</dt><dd>{% if obj.raises_nonconformance %}<span class="badge badge-red">Yes — the bench offers the NCR button</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Follow-up question</dt><dd>{{ obj.follow_up_question|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Sort order</dt><dd>{{ obj.sort_order }}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% comment %}
+          Both halves of this note describe rules the code actually runs, not intentions: the
+          narrowing is done by evaluate_return_eligibility, and the restock block is enforced by the
+          decide form AND re-checked inside the posting transaction.
+        {% endcomment %}
+        A reason may only ever <span class="fw-600">narrow</span> what the policy offers, never widen it — "changed my mind" cannot unlock a repair the policy does not sell. And a reason that blocks restocking blocks it everywhere: the bench dropdown drops restock and refurbish, and the ledger write refuses a second time inside its own transaction.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Return lines raised on this reason</h2>
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All returns</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>RMA</th><th>Customer</th><th>Item</th><th>Requested</th><th>Approved</th><th>Unit price</th><th>Condition reported</th></tr></thead>
+        <tbody>
+          {% for l in return_lines %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' l.return_authorization.pk %}" class="fw-600">{{ l.return_authorization.number }}</a></td>
+              <td>{{ l.return_authorization.customer.name }}</td>
+              <td><a href="{% url 'scm:item_detail' l.item.pk %}">{{ l.item.sku }}</a> · {{ l.item.name }}</td>
+              <td>{{ l.quantity_requested|floatformat:4 }}</td>
+              <td>{{ l.quantity_approved|floatformat:4 }}</td>
+              <td>{{ l.unit_price|floatformat:2 }}</td>
+              <td>{{ l.condition_reported|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="package-open"></i><h3>Not used yet</h3><p>No return line has been raised on this reason. The twenty-five most recent would appear here — this panel is a sample, not the register.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:returnreason_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:returnreason_delete' obj.pk %}" onsubmit="return confirm('Delete this reason? A reason already raised on a return line cannot be deleted — deactivate it instead so past returns keep their reason.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:returnreason_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Deleting is refused while any return line still points here — the reason is what a past decision was made on, and losing it would leave a refund nobody can explain. Deactivate it instead: an inactive reason disappears from the portal and stays on every return that already carries it.
+      </p>
+    </div>
+  </div>
+{% endblock %}
