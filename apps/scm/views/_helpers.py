@@ -70,6 +70,41 @@ def _location_qs(tenant):
     return Location.objects.filter(tenant=tenant)
 
 
+def _acting_party(request):
+    """The ``core.Party`` the logged-in user IS, or ``None``.
+
+    ``accounts.User.party`` is the app's only User↔Party link, so it is the only honest way to
+    stamp a "who decided this" Party FK from a request. Re-checked against the request's tenant
+    rather than trusted: a login re-pointed at another workspace's party would otherwise write a
+    cross-tenant reference into an immutable decision record. Returns None when there is no link —
+    the AuditLog row always records the real ``request.user`` either way.
+    """
+    party = getattr(request.user, "party", None)
+    if party is not None and request.tenant is not None and party.tenant_id == request.tenant.pk:
+        return party
+    return None
+
+
+def _date_window(qs, data, field, *, param_from="date_from", param_to="date_to"):
+    """Apply an optional ``?date_from=&date_to=`` window to ``qs`` on ``field``.
+
+    ``crud_list``'s ``filters`` spec only does equality, so the four 4.9 list pages that offer a
+    date range pre-filter through here before handing the queryset over. Junk input is SKIPPED, not
+    500'd — the same posture as ``crud_list``'s int-FK guard (L11): a hand-edited
+    ``?date_from=lastweek`` must narrow nothing rather than raise ValidationError out of
+    ``.filter()``.
+    """
+    for param, lookup in ((param_from, f"{field}__gte"), (param_to, f"{field}__lte")):
+        value = (data.get(param) or "").strip()
+        if not value:
+            continue
+        try:
+            qs = qs.filter(**{lookup: value})
+        except (ValueError, ValidationError):
+            continue
+    return qs
+
+
 def _tms_carrier_qs(tenant):
     """4.6 TMS carrier master, scoped to the tenant — the queryset the Load / Shipment / FreightInvoice
     list filters share for their carrier dropdown. Defined once here rather than in each of the three
