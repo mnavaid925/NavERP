@@ -583,3 +583,106 @@ class CapaActionAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "status", "implemented_on", "effectiveness_result", "verified_by",
                        "verified_on", "verification_notes", "closed_on")
     inlines = [CapaTaskInline]
+
+
+# ============================================================ 4.10 Returns Management (Reverse Logistics)
+from apps.scm.models import (  # noqa: E402
+    ReturnReason, ReturnPolicy, ReturnAuthorization, ReturnLine, ReturnDisposition,
+    WarrantyClaim, WarrantyClaimCost,
+)
+
+
+@admin.register(ReturnReason)
+class ReturnReasonAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "tenant", "fault_party", "blocks_restock",
+                    "suggested_disposition", "requires_photo", "raises_nonconformance",
+                    "sort_order", "is_active")
+    list_filter = ("tenant", "fault_party", "is_active", "blocks_restock", "requires_photo",
+                   "raises_nonconformance")
+    search_fields = ("code", "name", "follow_up_question")
+    # Nothing here is computed — a reason is pure configuration, so there is no readonly block.
+
+
+@admin.register(ReturnPolicy)
+class ReturnPolicyAdmin(admin.ModelAdmin):
+    list_display = ("name", "tenant", "item_category", "priority", "window_basis", "window_days",
+                    "refund_basis", "restocking_fee_type", "auto_approve", "is_default",
+                    "is_active")
+    list_filter = ("tenant", "is_active", "is_default", "window_basis", "refund_basis",
+                   "restocking_fee_type", "return_shipping_paid_by", "auto_approve")
+    search_fields = ("name", "return_to_address", "portal_instructions")
+    # Every field is user-owned; the grade ladder is a policy, not a derived figure.
+
+
+class ReturnLineInline(admin.TabularInline):
+    model = ReturnLine
+    extra = 0
+
+
+class ReturnDispositionInline(admin.TabularInline):
+    model = ReturnDisposition
+    extra = 0
+    # received_on/received_by are stamped at intake, decided_on/decided_by at the decision, and
+    # stock_posted/stock_move by the ONE action that writes the append-only ledger. An admin edit
+    # of any of them would claim a movement the ledger never recorded — the exact bug 4.7 shipped.
+    # restock_unit_cost is deliberately NOT here: it is user-owned (seeded once from the grade
+    # write-down, then whoever refurbished the unit knows what it is worth).
+    readonly_fields = ("received_on", "received_by", "refurbished_on", "stock_posted",
+                       "stock_move", "decided_on", "decided_by")
+
+
+@admin.register(ReturnAuthorization)
+class ReturnAuthorizationAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "customer", "return_type", "status", "resolution",
+                    "requested_on", "approved_on", "credit_total", "credit_note")
+    list_filter = ("tenant", "status", "return_type", "source", "resolution", "refund_method",
+                   "return_method", "advance_refund")
+    search_fields = ("number", "notes", "return_tracking_number", "counterparty_rma_number",
+                     "customer__name", "sales_order__number")
+    # Every field below has exactly ONE writer and it is never a form (plan section 7.7).
+    # public_token in particular: it is the bearer credential for the public status page, so it is
+    # minted once in save() and must never be typed, re-typed or copied between rows.
+    readonly_fields = ("number", "status", "policy_snapshot", "approved_on", "approved_by",
+                       "rejected_reason", "customer_shipped_on", "public_token", "portal_note",
+                       "credit_note", "replacement_order", "refund_subtotal", "fee_total",
+                       "tax_total", "credit_total")
+    inlines = [ReturnLineInline]
+
+
+@admin.register(ReturnDisposition)
+class ReturnDispositionAdmin(admin.ModelAdmin):
+    list_display = ("id", "tenant", "return_line", "quantity", "condition_grade", "disposition",
+                    "location", "restock_location", "restock_unit_cost", "stock_posted",
+                    "received_on")
+    list_filter = ("tenant", "disposition", "condition_grade", "stock_posted", "location")
+    search_fields = ("notes", "return_line__item__sku",
+                     "return_line__return_authorization__number", "lot_serial__number")
+    # Same reasoning as the inline above — the stamped block is the ledger's own evidence.
+    readonly_fields = ("received_on", "received_by", "refurbished_on", "stock_posted",
+                       "stock_move", "decided_on", "decided_by")
+
+
+class WarrantyClaimCostInline(admin.TabularInline):
+    model = WarrantyClaimCost
+    extra = 0
+    # amount_claimed is computed in WarrantyClaimCost.save() from quantity x unit_amount. Shipping
+    # all three as inputs is how a row ends up claiming a figure its own arithmetic contradicts.
+    readonly_fields = ("amount_claimed",)
+
+
+@admin.register(WarrantyClaim)
+class WarrantyClaimAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "supplier", "item", "quantity_claimed", "status",
+                    "defect_classification", "submitted_on", "response_due_on", "amount_approved",
+                    "amount_credited")
+    list_filter = ("tenant", "status", "defect_classification", "submission_channel", "supplier")
+    search_fields = ("number", "supplier_rma_number", "serial_reference", "description",
+                     "supplier__name", "item__sku", "item__name", "lot_serial__number")
+    # The whole negotiation block: the supplier's side of a two-party exchange, written only by
+    # warrantyclaim_submit / _record_response / _record_credit. amount_claimed_total,
+    # recovery_variance and recovery_rate_pct are PROPERTIES and are deliberately not columns here
+    # or anywhere else (plan section 7.3).
+    readonly_fields = ("number", "status", "submitted_on", "responded_on",
+                       "supplier_response_notes", "amount_approved", "amount_credited",
+                       "credit_reference", "credit_received_on")
+    inlines = [WarrantyClaimCostInline]
