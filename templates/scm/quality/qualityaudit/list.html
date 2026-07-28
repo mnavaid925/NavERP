@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Quality Audits{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Quality Audits</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Quality Audits</span></div>
+      <p class="text-muted">Schedule an audit, run it against a checklist, raise findings, conclude and close. Findings are ordinary non-conformance reports with their source set to audit — one finding register fed by inspections, receipts, production, suppliers and audits alike.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:nonconformance_list' %}?source=audit" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Audit findings</a>
+      <a href="{% url 'scm:qualityaudit_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Audit</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-check"></i></div>
+      <div class="stat-value">{{ stats.planned|default:"0" }}</div>
+      <div class="stat-label">Planned</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="play-circle"></i></div>
+      <div class="stat-value">{{ stats.in_progress|default:"0" }}</div>
+      <div class="stat-label">In progress</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ stats.reported|default:"0" }}</div>
+      <div class="stat-label">Reported, awaiting close</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="lock"></i></div>
+      <div class="stat-value">{{ stats.closed|default:"0" }}</div>
+      <div class="stat-label">Closed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ stats.high_risk|default:"0" }}</div>
+      <div class="stat-label">High risk and still live</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title, standard, scope or notes…">
+        </div>
+        <div class="form-group">
+          <select name="audit_type" aria-label="Audit type" class="form-select">
+            <option value="">All audit types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.audit_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="risk_level" aria-label="Risk level" class="form-select">
+            <option value="">All risk levels</option>
+            {% for val, label in risk_choices %}
+              <option value="{{ val }}" {% if request.GET.risk_level == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="lead_auditor" aria-label="Lead auditor" class="form-select">
+            <option value="">All lead auditors</option>
+            {% for p in auditors %}
+              <option value="{{ p.pk }}" {% if request.GET.lead_auditor == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="qa-date-from">Planned from</label>
+          <input type="date" id="qa-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="qa-date-to">Planned to</label>
+          <input type="date" id="qa-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:qualityaudit_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Auditee</th><th>Standard</th><th>Checklist</th><th>Lead auditor</th><th>Planned</th><th>Actual window</th><th>Risk</th><th>Major</th><th>Minor</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:qualityaudit_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.title }}</td>
+              <td>
+                <span class="badge badge-{% if obj.audit_type == 'internal' %}info{% elif obj.audit_type == 'supplier' %}amber{% elif obj.audit_type == 'customer' %}green{% elif obj.audit_type == 'certification' %}slate{% else %}slate{% endif %}">{{ obj.get_audit_type_display }}</span>
+              </td>
+              <td>{% if obj.auditee_party %}{{ obj.auditee_party.name }}{% elif obj.auditee_org_unit %}{{ obj.auditee_org_unit.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.standard|default:"—" }}</td>
+              <td>{% if obj.checklist_plan %}<a href="{% url 'scm:inspectionplan_detail' obj.checklist_plan.pk %}">{{ obj.checklist_plan.code }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.lead_auditor.name|default:"—" }}</td>
+              <td>{{ obj.planned_date|date:"M d, Y" }}</td>
+              <td>{% if obj.actual_start %}{{ obj.actual_start|date:"M d" }} → {{ obj.actual_end|date:"M d, Y"|default:"in progress" }}{% else %}<span class="text-muted">Not started</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if obj.risk_level == 'high' %}red{% elif obj.risk_level == 'medium' %}amber{% elif obj.risk_level == 'low' %}green{% else %}slate{% endif %}">{{ obj.get_risk_level_display }}</span>
+              </td>
+              {% comment %}
+                `major_count_agg`, `minor_count_agg` and `has_open_finding` are ANNOTATIONS from the list
+                view and shadow the model properties of the same name — do NOT swap them for
+                obj.findings.filter(...), which would fire a query per rendered row. They are
+                derived on every read for exactly this reason: a stored count goes stale the moment
+                a finding's severity is edited.
+              {% endcomment %}
+              <td>{% if obj.major_count_agg %}<span class="badge badge-red">{{ obj.major_count_agg }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+              <td>{% if obj.minor_count_agg %}<span class="badge badge-amber">{{ obj.minor_count_agg }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'closed' %}green{% elif obj.status == 'reported' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'planned' %}slate{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+                {% if obj.has_open_finding %}<span class="badge badge-red">Open findings</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:qualityaudit_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:qualityaudit_print' obj.pk %}" class="btn-icon" title="Print report"><i data-lucide="printer"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:qualityaudit_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:qualityaudit_delete' obj.pk %}" onsubmit="return confirm('Delete this audit? An audit with findings against it cannot be deleted — cancel it instead.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="14"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No audits</h3><p>Schedule an internal, supplier, customer or certification audit. Naming an audit-checklist inspection plan gives the auditor the questions to work through.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Edit and delete are offered only while an audit is <span class="fw-600">planned</span>; after that it is cancelled instead so its findings keep an audit to trace back to. Major counts critical and major findings together, minor everything else — both are derived on every read, never stored.
+    </div>
+  </div>
+{% endblock %}
