@@ -947,3 +947,171 @@ def reorder_rule_service_level_a(db, tenant_a, item_a, location_a2):
         safety_stock_method="service_level", service_level_pct=Decimal("95"),
         lead_time_days=10, lead_time_variability_days=Decimal("2"),
     )
+
+
+# ------------------------------------------------------------------ SCM 4.8 Manufacturing
+# The costing fixtures below are deliberately EXACT so the unabsorbed-pool arithmetic can be
+# asserted to the last quantum:
+#
+#   BOM-A  makes 1 x item_a from  2 x BOLT-1 (@ 2.0000)  +  1 x PLATE-1 (@ 5.0000)
+#   WO     plans 5 x item_a  ->  10 x BOLT (20.00)  +  5 x PLATE (25.00)   = 45.0000 material
+#   logs   2 machine hours @ 10.0000  +  1 labour hour @ 20.0000           = 40.0000 conversion
+#                                                                    pool  = 85.0000
+#
+# A 3-then-2 split therefore posts 3 x 28.3333 = 84.9999 and then 2 x 0.0000, i.e. never more than
+# the 85.0000 actually incurred. The formula this replaced banked 3 x (85/3) + 2 x (85/5) = 119.00,
+# 140 % of real cost — see WorkOrder.computed_unit_cost's docstring.
+@pytest.fixture
+def employee_party_a(db, tenant_a):
+    """A tenant_a Party holding the 'employee' role — the only kind a work-centre supervisor or a
+    time-log operator may be (``_employee_parties``)."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Dana Operator", kind="person")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="employee")
+    return party
+
+
+@pytest.fixture
+def work_center_a(db, tenant_a, location_a):
+    """An active machining cell, tenant_a — 8 h/day at 100 %, 10.00 machine + 20.00 labour."""
+    from apps.scm.models import WorkCenter
+    return WorkCenter.objects.create(
+        tenant=tenant_a, code="WC-CNC", name="CNC Cell", center_type="machine",
+        location=location_a, capacity_hours_per_day=Decimal("8"), efficiency_pct=Decimal("100"),
+        machine_cost_per_hour=Decimal("10.0000"), labor_cost_per_hour=Decimal("20.0000"),
+    )
+
+
+@pytest.fixture
+def work_center_a2(db, tenant_a):
+    """A SECOND tenant_a centre — proves the load board and the list filters separate them."""
+    from apps.scm.models import WorkCenter
+    return WorkCenter.objects.create(
+        tenant=tenant_a, code="WC-ASM", name="Assembly Bench", center_type="assembly",
+        capacity_hours_per_day=Decimal("8"), efficiency_pct=Decimal("100"),
+    )
+
+
+@pytest.fixture
+def work_center_b(db, tenant_b):
+    from apps.scm.models import WorkCenter
+    return WorkCenter.objects.create(tenant=tenant_b, code="WC-GBX", name="Globex Cell")
+
+
+@pytest.fixture
+def component_bolt_a(db, tenant_a, uom_each_a):
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="BOLT-1", name="Bolt", uom=uom_each_a,
+                               standard_cost=Decimal("2.0000"))
+
+
+@pytest.fixture
+def component_plate_a(db, tenant_a, uom_each_a):
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_a, sku="PLATE-1", name="Steel Plate", uom=uom_each_a,
+                               standard_cost=Decimal("5.0000"))
+
+
+@pytest.fixture
+def bom_a(db, tenant_a, item_a, component_bolt_a, component_plate_a, work_center_a, uom_each_a):
+    """The ACTIVE default recipe for item_a: 2 bolts + 1 plate per unit, both manually issued."""
+    from apps.scm.models import BillOfMaterials, BOMLine
+    bom = BillOfMaterials.objects.create(
+        tenant=tenant_a, item=item_a, name="Widget recipe", version="1", bom_type="manufacture",
+        output_quantity=Decimal("1"), uom=uom_each_a, lead_time_days=3,
+        default_work_center=work_center_a, status="active", is_default=True,
+    )
+    BOMLine.objects.create(bom=bom, sequence=10, component=component_bolt_a,
+                           quantity_per=Decimal("2"), uom=uom_each_a)
+    BOMLine.objects.create(bom=bom, sequence=20, component=component_plate_a,
+                           quantity_per=Decimal("1"), uom=uom_each_a)
+    return bom
+
+
+@pytest.fixture
+def bom_draft_a(db, tenant_a, item_lot_a, component_bolt_a):
+    """A DRAFT single-line recipe on a different item — the editable/deletable one."""
+    from apps.scm.models import BillOfMaterials, BOMLine
+    bom = BillOfMaterials.objects.create(
+        tenant=tenant_a, item=item_lot_a, name="Lotted widget recipe", version="1",
+        output_quantity=Decimal("1"), status="draft",
+    )
+    BOMLine.objects.create(bom=bom, component=component_bolt_a, quantity_per=Decimal("1"))
+    return bom
+
+
+@pytest.fixture
+def bom_b(db, tenant_b, item_b):
+    from apps.scm.models import BillOfMaterials, BOMLine
+    bom = BillOfMaterials.objects.create(
+        tenant=tenant_b, item=item_b, name="Globex recipe", version="1", status="active",
+    )
+    BOMLine.objects.create(bom=bom, component=item_b, quantity_per=Decimal("1"))
+    return bom
+
+
+@pytest.fixture
+def work_order_a(db, tenant_a, item_a, bom_a, work_center_a, location_a, location_a2, uom_each_a):
+    """A DRAFT run for 5 x item_a with no components exploded yet — the create/edit fixture."""
+    from apps.scm.models import WorkOrder
+    return WorkOrder.objects.create(
+        tenant=tenant_a, item=item_a, uom=uom_each_a, bom=bom_a,
+        quantity_planned=Decimal("5"), work_center=work_center_a,
+        component_location=location_a, output_location=location_a2, priority="normal",
+    )
+
+
+@pytest.fixture
+def work_order_b(db, tenant_b, item_b, work_center_b, location_b):
+    from apps.scm.models import WorkOrder
+    return WorkOrder.objects.create(
+        tenant=tenant_b, item=item_b, quantity_planned=Decimal("5"),
+        work_center=work_center_b, component_location=location_b, output_location=location_b,
+    )
+
+
+@pytest.fixture
+def stocked_work_order_a(db, work_order_a, component_bolt_a, component_plate_a, location_a):
+    """work_order_a with its BOM exploded onto components AND the material physically on hand.
+
+    Still DRAFT — the tests drive release / issue / report through the real POST routes so the
+    guards and the ``select_for_update`` re-read are exercised, not bypassed.
+    """
+    from apps.scm.tests._helpers import seed_stock
+    work_order_a.explode_components()
+    seed_stock(work_order_a.tenant, component_bolt_a, location_a, "100", "2.0000")
+    seed_stock(work_order_a.tenant, component_plate_a, location_a, "100", "5.0000")
+    return work_order_a
+
+
+@pytest.fixture
+def released_work_order_a(db, stocked_work_order_a, admin_user):
+    """stocked_work_order_a moved to RELEASED — the state the postings legally act from."""
+    stocked_work_order_a.status = "released"
+    stocked_work_order_a.released_by = admin_user
+    stocked_work_order_a.save(update_fields=["status", "released_by", "updated_at"])
+    return stocked_work_order_a
+
+
+@pytest.fixture
+def time_log_a(db, tenant_a, released_work_order_a, work_center_a, employee_party_a):
+    """One booked MACHINE hour against the live run (60 minutes, derived — never typed)."""
+    from django.utils import timezone
+    from apps.scm.models import ProductionTimeLog
+    started = timezone.now() - datetime.timedelta(hours=2)
+    return ProductionTimeLog.objects.create(
+        tenant=tenant_a, work_order=released_work_order_a, work_center=work_center_a,
+        entry_type="machine", operator=employee_party_a, operation="Mill",
+        started_at=started, ended_at=started + datetime.timedelta(hours=1),
+    )
+
+
+@pytest.fixture
+def time_log_b(db, tenant_b, work_order_b, work_center_b):
+    from django.utils import timezone
+    from apps.scm.models import ProductionTimeLog
+    started = timezone.now() - datetime.timedelta(hours=2)
+    return ProductionTimeLog.objects.create(
+        tenant=tenant_b, work_order=work_order_b, work_center=work_center_b,
+        entry_type="labor", started_at=started, ended_at=started + datetime.timedelta(hours=1),
+    )
