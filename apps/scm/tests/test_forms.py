@@ -2085,3 +2085,583 @@ class TestReorderRuleFormAdminGate:
         form = ReorderRuleForm(self._payload(reorder_rule_a.item, reorder_rule_a.location),
                                tenant=tenant_a, is_tenant_admin=True)
         assert not form.is_valid()  # TenantUniqueMixin catches the unique_together
+
+
+# ================================================================================================
+# SCM 4.8 Manufacturing
+# ================================================================================================
+
+def _wo_payload(item, **overrides):
+    data = {
+        "item": str(item.pk), "uom": "", "bom": "", "quantity_planned": "5",
+        "order_policy": "make_to_stock", "sales_order": "", "work_center": "",
+        "priority": "normal", "planned_start": "", "planned_end": "",
+        "schedule_direction": "forward", "due_date": "", "component_location": "",
+        "output_location": "", "output_lot_serial": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _component_payload(item, **overrides):
+    data = {
+        "sequence": "10", "item": str(item.pk), "quantity_required": "4", "uom": "",
+        "lot_serial": "", "issue_method": "manual", "unit_cost": "2.0000", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _work_centre_payload(**overrides):
+    data = {
+        "code": "WC-NEW", "name": "New Cell", "center_type": "machine", "location": "",
+        "org_unit": "", "supervisor": "", "capacity_hours_per_day": "8", "efficiency_pct": "100",
+        "setup_minutes": "0", "machine_cost_per_hour": "10", "labor_cost_per_hour": "20",
+        "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _time_log_payload(work_order, work_center, **overrides):
+    from django.utils import timezone
+    started = timezone.now() - datetime.timedelta(hours=2)
+    data = {
+        "work_order": str(work_order.pk), "work_center": str(work_center.pk),
+        "operation": "Mill", "entry_type": "labor", "operator": "",
+        "started_at": started.strftime("%Y-%m-%dT%H:%M"),
+        "ended_at": (started + datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
+        "quantity_completed": "0", "quantity_scrapped": "0", "downtime_reason": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+# ================================================================ Mass-assignment exclusions
+class TestManufacturingMassAssignmentExclusions:
+    def test_workorder_form_excludes_every_single_writer_field(self):
+        """status / quantity_produced / quantity_scrapped / produced_unit_cost / released_by are
+        written ONLY by the lifecycle + posting actions. A form input for any of them would let a
+        planner type a consumption or an output the stock ledger never saw."""
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(tenant=None)
+        for field in ("number", "status", "actual_start", "actual_end", "quantity_produced",
+                      "quantity_scrapped", "produced_unit_cost", "released_by", "tenant",
+                      "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_workorder_form_still_offers_the_planning_inputs(self):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(tenant=None)
+        for field in ("item", "bom", "quantity_planned", "order_policy", "sales_order",
+                      "work_center", "priority", "planned_start", "planned_end", "due_date",
+                      "component_location", "output_location", "output_lot_serial"):
+            assert field in form.fields, field
+
+    def test_workordercomponent_form_excludes_the_issued_quantity(self):
+        from apps.scm.forms import WorkOrderComponentForm
+        form = WorkOrderComponentForm(tenant=None)
+        assert "quantity_issued" not in form.fields
+        assert "work_order" not in form.fields
+
+    def test_productiontimelog_form_excludes_the_derived_duration(self):
+        from apps.scm.forms import ProductionTimeLogForm
+        form = ProductionTimeLogForm(tenant=None)
+        for field in ("number", "duration_minutes", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_workcenter_form_excludes_the_auto_number(self):
+        from apps.scm.forms import WorkCenterForm
+        form = WorkCenterForm(tenant=None)
+        for field in ("number", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_billofmaterials_form_excludes_the_auto_number_but_KEEPS_status(self):
+        """A BOM's draft/active/obsolete progression is master-data curation, not a workflow that
+        gates a stock posting — unlike WorkOrder.status it needs no transition actions."""
+        from apps.scm.forms import BillOfMaterialsForm
+        form = BillOfMaterialsForm(tenant=None)
+        for field in ("number", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+        assert "status" in form.fields
+        assert "is_default" in form.fields
+
+    def test_bomline_form_never_exposes_its_parent(self):
+        from apps.scm.forms import BOMLineForm
+        form = BOMLineForm(tenant=None)
+        assert "bom" not in form.fields
+
+    def test_a_crafted_status_in_the_post_body_cannot_move_a_run(self, tenant_a, work_order_a):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(work_order_a.item, status="completed",
+                                         quantity_produced="99", produced_unit_cost="0.0001",
+                                         released_by="1"),
+                             instance=work_order_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.status == "draft"
+        assert saved.quantity_produced == Decimal("0")
+        assert saved.produced_unit_cost == Decimal("0")
+        assert saved.released_by_id is None
+
+    def test_a_crafted_quantity_issued_cannot_fake_a_consumption(self, tenant_a,
+                                                                 stocked_work_order_a):
+        from apps.scm.forms import WorkOrderComponentForm
+        component = stocked_work_order_a.components.first()
+        form = WorkOrderComponentForm(
+            _component_payload(component.item, quantity_required="10", quantity_issued="10"),
+            instance=component, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert form.save().quantity_issued == Decimal("0")
+
+    def test_a_crafted_duration_cannot_inflate_the_booked_time(self, tenant_a, time_log_a,
+                                                              released_work_order_a,
+                                                              work_center_a):
+        from apps.scm.forms import ProductionTimeLogForm
+        form = ProductionTimeLogForm(
+            _time_log_payload(released_work_order_a, work_center_a, duration_minutes="100000"),
+            instance=time_log_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert form.save().duration_minutes == 60  # derived from the interval, not the POST
+
+
+# ================================================================ Lot / item consistency
+class TestManufacturingLotConsistency:
+    def test_the_header_refuses_an_output_lot_belonging_to_another_item(self, tenant_a, item_a,
+                                                                        lot_a, item_lot_a):
+        """A crafted POST could pair item A with item B's lot, and report_production would write
+        that into an APPEND-ONLY production move — permanently reporting A's units under B's lot."""
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_a, output_lot_serial=str(lot_a.pk)),
+                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "output_lot_serial" in form.errors
+        assert lot_a.number in str(form.errors["output_lot_serial"])
+
+    def test_the_header_accepts_the_lot_that_belongs_to_its_own_item(self, tenant_a, item_lot_a,
+                                                                     lot_a):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_lot_a, output_lot_serial=str(lot_a.pk)),
+                             tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_a_component_line_refuses_a_lot_belonging_to_another_item(self, tenant_a,
+                                                                      component_bolt_a, lot_a):
+        from apps.scm.forms import WorkOrderComponentForm
+        form = WorkOrderComponentForm(
+            _component_payload(component_bolt_a, lot_serial=str(lot_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    def test_a_component_line_accepts_its_own_items_lot(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.forms import WorkOrderComponentForm
+        form = WorkOrderComponentForm(
+            _component_payload(item_lot_a, lot_serial=str(lot_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+
+# ================================================================ WorkOrderForm dropdown scoping
+class TestWorkOrderFormScoping:
+    def test_the_bom_dropdown_is_narrowed_to_the_rows_own_item_on_edit(self, tenant_a,
+                                                                       work_order_a, bom_a,
+                                                                       bom_draft_a):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(instance=work_order_a, tenant=tenant_a)
+        offered = set(form.fields["bom"].queryset)
+        assert bom_a in offered
+        assert bom_draft_a not in offered  # a different item's recipe
+
+    def test_an_obsolete_bom_stays_selectable_on_the_row_that_already_uses_it(self, tenant_a,
+                                                                              work_order_a,
+                                                                              bom_a):
+        """Otherwise the bound form fails validation on a field the user never touched."""
+        from apps.scm.forms import WorkOrderForm
+        bom_a.status = "obsolete"
+        bom_a.save(update_fields=["status"])
+        form = WorkOrderForm(instance=work_order_a, tenant=tenant_a)
+        assert bom_a in set(form.fields["bom"].queryset)
+
+    def test_the_create_form_offers_every_active_recipe(self, tenant_a, bom_a, bom_draft_a):
+        """On create the item isn't known until the form binds, so WorkOrder.clean() is what
+        actually refuses a BOM that produces a different item."""
+        from apps.scm.forms import WorkOrderForm
+        offered = set(WorkOrderForm(tenant=tenant_a).fields["bom"].queryset)
+        assert bom_a in offered
+        assert bom_draft_a not in offered  # draft, not active
+
+    def test_the_clean_refuses_a_bom_that_makes_a_different_item(self, tenant_a, bom_a,
+                                                                 item_lot_a):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_lot_a, bom=str(bom_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "bom" in form.errors
+
+    def test_a_make_to_order_run_needs_its_sales_order(self, tenant_a, item_a):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_a, order_policy="make_to_order"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "sales_order" in form.errors
+
+
+# ================================================================ WorkCenterForm
+class TestWorkCenterFormValidation:
+    def test_the_supervisor_dropdown_is_narrowed_to_employees(self, tenant_a, employee_party_a,
+                                                              customer_a, supplier_a):
+        from apps.scm.forms import WorkCenterForm
+        offered = set(WorkCenterForm(tenant=tenant_a).fields["supervisor"].queryset)
+        assert offered == {employee_party_a}
+
+    def test_an_hourly_rate_over_the_ceiling_is_refused(self, tenant_a):
+        """These rates flow into the unit_cost of a production StockMove, which rolls into the
+        finished good's tenant-wide average_cost — an unbounded rate is a valuation-integrity
+        hole, not a typo risk."""
+        from apps.scm.forms import WorkCenterForm
+        for field in ("machine_cost_per_hour", "labor_cost_per_hour"):
+            form = WorkCenterForm(_work_centre_payload(**{field: "100001"}), tenant=tenant_a)
+            assert not form.is_valid(), field
+            assert field in form.errors, field
+
+    def test_exactly_the_ceiling_is_accepted(self, tenant_a):
+        from apps.scm.forms import WorkCenterForm
+        form = WorkCenterForm(_work_centre_payload(machine_cost_per_hour="100000"),
+                              tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_a_negative_rate_is_refused(self, tenant_a):
+        from apps.scm.forms import WorkCenterForm
+        form = WorkCenterForm(_work_centre_payload(labor_cost_per_hour="-1"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "labor_cost_per_hour" in form.errors
+
+    def test_capacity_beyond_24_hours_a_day_is_refused(self, tenant_a):
+        from apps.scm.forms import WorkCenterForm
+        form = WorkCenterForm(_work_centre_payload(capacity_hours_per_day="25"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "capacity_hours_per_day" in form.errors
+
+    def test_junk_and_over_max_digit_rates_are_rejected_not_500(self, tenant_a):
+        from apps.scm.forms import WorkCenterForm
+        for junk in ("NaN", "Infinity", "-Infinity", "not-a-number", "1e400", "9" * 20):
+            form = WorkCenterForm(_work_centre_payload(machine_cost_per_hour=junk),
+                                  tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "machine_cost_per_hour" in form.errors, junk
+
+    def test_a_duplicate_code_is_caught_on_the_form_not_as_an_integrityerror(self, tenant_a,
+                                                                             work_center_a):
+        from apps.scm.forms import WorkCenterForm
+        form = WorkCenterForm(_work_centre_payload(code=work_center_a.code), tenant=tenant_a)
+        assert not form.is_valid()
+
+
+# ================================================================ ProductionTimeLogForm
+class TestProductionTimeLogFormValidation:
+    def test_the_work_order_dropdown_offers_only_open_runs(self, tenant_a, item_a,
+                                                           released_work_order_a):
+        """A log against a draft run has nothing to record, and one against a closed run is the
+        freeze the model docstring describes."""
+        from apps.scm.forms import ProductionTimeLogForm
+        from apps.scm.models import WorkOrder
+        draft = WorkOrder.objects.create(tenant=tenant_a, item=item_a,
+                                         quantity_planned=Decimal("1"))
+        closed = WorkOrder.objects.create(tenant=tenant_a, item=item_a,
+                                          quantity_planned=Decimal("1"))
+        WorkOrder.objects.filter(pk=closed.pk).update(status="closed")
+        offered = set(ProductionTimeLogForm(tenant=tenant_a).fields["work_order"].queryset)
+        assert released_work_order_a in offered
+        assert draft not in offered
+        assert closed not in offered
+
+    def test_a_closed_runs_own_log_keeps_it_selectable_on_edit(self, tenant_a, time_log_a,
+                                                               released_work_order_a):
+        from apps.scm.forms import ProductionTimeLogForm
+        released_work_order_a.status = "closed"
+        released_work_order_a.save(update_fields=["status"])
+        form = ProductionTimeLogForm(instance=time_log_a, tenant=tenant_a)
+        assert released_work_order_a in set(form.fields["work_order"].queryset)
+
+    def test_the_operator_dropdown_is_narrowed_to_employees(self, tenant_a, employee_party_a,
+                                                            customer_a):
+        from apps.scm.forms import ProductionTimeLogForm
+        offered = set(ProductionTimeLogForm(tenant=tenant_a).fields["operator"].queryset)
+        assert offered == {employee_party_a}
+
+    def test_an_interval_over_31_days_is_refused_through_the_form(self, tenant_a,
+                                                                  released_work_order_a,
+                                                                  work_center_a):
+        from django.utils import timezone
+        from apps.scm.forms import ProductionTimeLogForm
+        started = timezone.now()
+        form = ProductionTimeLogForm(
+            _time_log_payload(released_work_order_a, work_center_a,
+                              started_at=started.strftime("%Y-%m-%dT%H:%M"),
+                              ended_at=(started + datetime.timedelta(days=40)).strftime(
+                                  "%Y-%m-%dT%H:%M")),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "ended_at" in form.errors
+
+    def test_an_end_before_the_start_is_refused_through_the_form(self, tenant_a,
+                                                                 released_work_order_a,
+                                                                 work_center_a):
+        from django.utils import timezone
+        from apps.scm.forms import ProductionTimeLogForm
+        started = timezone.now()
+        form = ProductionTimeLogForm(
+            _time_log_payload(released_work_order_a, work_center_a,
+                              started_at=started.strftime("%Y-%m-%dT%H:%M"),
+                              ended_at=(started - datetime.timedelta(hours=1)).strftime(
+                                  "%Y-%m-%dT%H:%M")),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "ended_at" in form.errors
+
+    def test_a_downtime_entry_without_a_reason_is_refused(self, tenant_a, released_work_order_a,
+                                                          work_center_a):
+        from apps.scm.forms import ProductionTimeLogForm
+        form = ProductionTimeLogForm(
+            _time_log_payload(released_work_order_a, work_center_a, entry_type="downtime"),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "downtime_reason" in form.errors
+
+    def test_a_negative_completed_quantity_is_refused(self, tenant_a, released_work_order_a,
+                                                      work_center_a):
+        from apps.scm.forms import ProductionTimeLogForm
+        form = ProductionTimeLogForm(
+            _time_log_payload(released_work_order_a, work_center_a, quantity_completed="-5"),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "quantity_completed" in form.errors
+
+
+# ================================================================ WorkOrderScheduleForm bounds
+class TestWorkOrderScheduleFormBounds:
+    def test_a_year_9999_anchor_is_refused_rather_than_overflowing(self):
+        """The view adds/subtracts a lead time from this — an unbounded 9999-12-31 raises an
+        uncaught OverflowError, an ordinary POST turning into a 500."""
+        from apps.scm.forms import WorkOrderScheduleForm
+        form = WorkOrderScheduleForm({"direction": "forward", "anchor_date": "9999-12-31",
+                                      "lead_time_days": "10"})
+        assert not form.is_valid()
+        assert "anchor_date" in form.errors
+
+    def test_a_year_0001_anchor_is_refused_when_scheduling_backward(self):
+        from apps.scm.forms import WorkOrderScheduleForm
+        form = WorkOrderScheduleForm({"direction": "backward", "anchor_date": "0001-01-01",
+                                      "lead_time_days": "10"})
+        assert not form.is_valid()
+        assert "anchor_date" in form.errors
+
+    def test_an_in_range_anchor_is_accepted(self):
+        from apps.scm.forms import WorkOrderScheduleForm
+        form = WorkOrderScheduleForm({"direction": "forward", "anchor_date": "2026-05-01",
+                                      "lead_time_days": "10"})
+        assert form.is_valid(), form.errors
+
+    def test_a_lead_time_beyond_ten_years_is_refused(self):
+        from apps.scm.forms import WorkOrderScheduleForm
+        form = WorkOrderScheduleForm({"direction": "forward", "anchor_date": "2026-05-01",
+                                      "lead_time_days": "3651"})
+        assert not form.is_valid()
+        assert "lead_time_days" in form.errors
+
+    def test_a_negative_lead_time_is_refused(self):
+        from apps.scm.forms import WorkOrderScheduleForm
+        form = WorkOrderScheduleForm({"direction": "forward", "anchor_date": "2026-05-01",
+                                      "lead_time_days": "-1"})
+        assert not form.is_valid()
+
+    def test_a_junk_direction_is_refused(self):
+        from apps.scm.forms import WorkOrderScheduleForm
+        form = WorkOrderScheduleForm({"direction": "sideways", "anchor_date": "2026-05-01"})
+        assert not form.is_valid()
+        assert "direction" in form.errors
+
+
+# ================================================================ WorkOrderReportForm
+class TestWorkOrderReportFormValidation:
+    def test_reporting_nothing_at_all_is_refused(self):
+        from apps.scm.forms import WorkOrderReportForm
+        form = WorkOrderReportForm({"quantity_good": "0", "quantity_scrapped": "0"})
+        assert not form.is_valid()
+        assert "Report a good quantity" in str(form.errors)
+
+    def test_an_empty_post_is_refused(self):
+        from apps.scm.forms import WorkOrderReportForm
+        assert not WorkOrderReportForm({}).is_valid()
+
+    def test_a_pure_scrap_report_is_allowed(self):
+        from apps.scm.forms import WorkOrderReportForm
+        form = WorkOrderReportForm({"quantity_good": "0", "quantity_scrapped": "2"})
+        assert form.is_valid(), form.errors
+
+    def test_negative_quantities_are_refused(self):
+        from apps.scm.forms import WorkOrderReportForm
+        form = WorkOrderReportForm({"quantity_good": "-3", "quantity_scrapped": "0"})
+        assert not form.is_valid()
+        assert "quantity_good" in form.errors
+
+    def test_junk_and_over_max_digit_quantities_are_refused(self):
+        from apps.scm.forms import WorkOrderReportForm
+        for junk in ("NaN", "Infinity", "-Infinity", "abc", "1e400", "9" * 20):
+            form = WorkOrderReportForm({"quantity_good": junk, "quantity_scrapped": "0"})
+            assert not form.is_valid(), junk
+            assert "quantity_good" in form.errors, junk
+
+    def test_backflush_defaults_on_but_can_be_turned_off(self):
+        from apps.scm.forms import WorkOrderReportForm
+        assert WorkOrderReportForm().fields["backflush"].initial is True
+        form = WorkOrderReportForm({"quantity_good": "1"})
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["backflush"] is False  # an unchecked box posts nothing
+
+
+# ================================================================ BOM line formset guards
+class TestBOMLineFormSetGuards:
+    def _formset(self, tenant, instance, rows, initial=0):
+        from apps.scm.forms import BOMLineFormSet
+        return BOMLineFormSet(formset_data("lines", rows, initial=initial), instance=instance,
+                              form_kwargs={"tenant": tenant})
+
+    def test_a_recipe_that_consumes_its_own_output_is_refused(self, tenant_a, bom_draft_a,
+                                                              item_lot_a):
+        formset = self._formset(tenant_a, bom_draft_a, [
+            {"id": "", "sequence": "10", "component": str(item_lot_a.pk), "quantity_per": "1",
+             "uom": "", "scrap_pct": "0", "issue_method": "manual", "notes": ""},
+        ])
+        assert not formset.is_valid()
+        assert "cannot consume itself" in str(formset.non_form_errors())
+
+    def test_an_ordinary_component_line_is_accepted(self, tenant_a, bom_draft_a,
+                                                    component_plate_a):
+        formset = self._formset(tenant_a, bom_draft_a, [
+            {"id": "", "sequence": "10", "component": str(component_plate_a.pk),
+             "quantity_per": "1", "uom": "", "scrap_pct": "0", "issue_method": "manual",
+             "notes": ""},
+        ])
+        assert formset.is_valid(), formset.errors
+
+    def test_a_deleted_self_reference_is_not_re_flagged(self, tenant_a, bom_draft_a, item_lot_a):
+        line = bom_draft_a.lines.first()
+        formset = self._formset(tenant_a, bom_draft_a, [
+            {"id": str(line.pk), "sequence": "10", "component": str(item_lot_a.pk),
+             "quantity_per": "1", "uom": "", "scrap_pct": "0", "issue_method": "manual",
+             "notes": "", "DELETE": "on"},
+        ], initial=1)
+        assert formset.is_valid(), formset.errors
+
+    def test_more_than_200_lines_in_one_post_is_refused(self, tenant_a, bom_draft_a,
+                                                        component_plate_a):
+        """Without validate_max Django silently accepts up to absolute_max and ignores the
+        overflow — and a recipe that wide feeds explode(), whose output is the PRODUCT of the
+        branch factors."""
+        from apps.scm.forms import BOMLineFormSet
+        data = formset_data("lines", [
+            {"id": "", "sequence": "10", "component": str(component_plate_a.pk),
+             "quantity_per": "1", "uom": "", "scrap_pct": "0", "issue_method": "manual",
+             "notes": ""},
+        ])
+        data["lines-TOTAL_FORMS"] = "201"
+        formset = BOMLineFormSet(data, instance=bom_draft_a, form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "at most 200" in str(formset.non_form_errors())
+
+    def test_the_guard_no_ops_when_the_parent_has_no_item_yet(self, tenant_a, component_plate_a):
+        """instance=None means item_id is None — the create VIEW is what has to attach the cleaned
+        header before validating (see TestBillOfMaterialsCreateSelfReference in test_views)."""
+        from apps.scm.forms import BOMLineFormSet
+        formset = BOMLineFormSet(formset_data("lines", [
+            {"id": "", "sequence": "10", "component": str(component_plate_a.pk),
+             "quantity_per": "1", "uom": "", "scrap_pct": "0", "issue_method": "manual",
+             "notes": ""},
+        ]), form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+
+# ================================================================ Cross-tenant FORM binding
+class TestManufacturingCrossTenantFormScoping:
+    def test_the_work_order_form_refuses_another_tenants_item(self, tenant_a, item_b):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_b), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_the_work_order_form_refuses_another_tenants_bom(self, tenant_a, item_a, bom_b):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_a, bom=str(bom_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "bom" in form.errors
+
+    def test_the_work_order_form_refuses_another_tenants_work_centre(self, tenant_a, item_a,
+                                                                     work_center_b):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_a, work_center=str(work_center_b.pk)),
+                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "work_center" in form.errors
+
+    def test_the_work_order_form_refuses_another_tenants_location(self, tenant_a, item_a,
+                                                                  location_b):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_a, component_location=str(location_b.pk)),
+                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "component_location" in form.errors
+
+    def test_the_work_order_form_refuses_another_tenants_lot(self, tenant_a, item_a, lot_b):
+        from apps.scm.forms import WorkOrderForm
+        form = WorkOrderForm(_wo_payload(item_a, output_lot_serial=str(lot_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "output_lot_serial" in form.errors
+
+    def test_the_component_form_refuses_another_tenants_item(self, tenant_a, item_b):
+        from apps.scm.forms import WorkOrderComponentForm
+        form = WorkOrderComponentForm(_component_payload(item_b), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_the_bom_form_refuses_another_tenants_item(self, tenant_a, item_b):
+        from apps.scm.forms import BillOfMaterialsForm
+        form = BillOfMaterialsForm({"item": str(item_b.pk), "name": "Crafted", "version": "1",
+                                    "bom_type": "manufacture", "output_quantity": "1", "uom": "",
+                                    "lead_time_days": "0", "default_work_center": "",
+                                    "status": "draft", "effective_from": "", "effective_to": "",
+                                    "notes": ""}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_the_bom_form_refuses_another_tenants_work_centre(self, tenant_a, item_a,
+                                                              work_center_b):
+        from apps.scm.forms import BillOfMaterialsForm
+        form = BillOfMaterialsForm({"item": str(item_a.pk), "name": "Crafted", "version": "5",
+                                    "bom_type": "manufacture", "output_quantity": "1", "uom": "",
+                                    "lead_time_days": "0",
+                                    "default_work_center": str(work_center_b.pk),
+                                    "status": "draft", "effective_from": "", "effective_to": "",
+                                    "notes": ""}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "default_work_center" in form.errors
+
+    def test_the_time_log_form_refuses_another_tenants_run(self, tenant_a, work_order_b,
+                                                           work_center_a):
+        from apps.scm.forms import ProductionTimeLogForm
+        form = ProductionTimeLogForm(_time_log_payload(work_order_b, work_center_a),
+                                     tenant=tenant_a)
+        assert not form.is_valid()
+        assert "work_order" in form.errors
+
+    def test_the_time_log_form_refuses_another_tenants_work_centre(self, tenant_a,
+                                                                   released_work_order_a,
+                                                                   work_center_b):
+        from apps.scm.forms import ProductionTimeLogForm
+        form = ProductionTimeLogForm(_time_log_payload(released_work_order_a, work_center_b),
+                                     tenant=tenant_a)
+        assert not form.is_valid()
+        assert "work_center" in form.errors
+
+    def test_the_work_centre_form_refuses_another_tenants_location(self, tenant_a, location_b):
+        from apps.scm.forms import WorkCenterForm
+        form = WorkCenterForm(_work_centre_payload(location=str(location_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "location" in form.errors
