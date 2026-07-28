@@ -165,6 +165,12 @@ class QualityInspection(TenantNumbered):
             models.Index(fields=["tenant", "item"], name="scm_qc_tnt_item_idx"),
             models.Index(fields=["tenant", "lot_serial"], name="scm_qc_tnt_lot_idx"),
             models.Index(fields=["tenant", "coa_number"], name="scm_qc_tnt_coa_idx"),
+            # Meta.ordering is ["-inspected_on", "-id"] and BOTH the list page and the CoA
+            # register range-filter on inspected_on via _date_window — so the page sorted
+            # and filtered on an unindexed column. Matches the app-wide document-date
+            # pattern (StockMove(tenant, moved_at), SalesOrder, GoodsReceiptNote, and 4.9's
+            # own QualityAudit(tenant, planned_date)).
+            models.Index(fields=["tenant", "inspected_on"], name="scm_qc_tnt_insp_date_idx"),
         ]
 
     def __str__(self):
@@ -196,7 +202,13 @@ class QualityInspection(TenantNumbered):
         invalidated by :meth:`generate_results`, the only writer that adds rows.
         """
         if not hasattr(self, "_result_cache"):
-            self._result_cache = list(self.results.select_related("uom").all())
+            # Reuse a Prefetch when the caller supplied one. Chaining `.select_related("uom")` off
+            # the related manager CLEARS the prefetch cache and re-queries, so a caller that
+            # prefetched would otherwise pay for it twice and still get one query per row — which
+            # is exactly what coa_report does over a whole page.
+            prefetched = getattr(self, "_prefetched_objects_cache", {}).get("results")
+            self._result_cache = (list(prefetched) if prefetched is not None
+                                  else list(self.results.select_related("uom").all()))
         return self._result_cache
 
     def generate_results(self):
@@ -227,6 +239,9 @@ class QualityInspection(TenantNumbered):
             for characteristic in characteristics
         ])
         self.__dict__.pop("_result_cache", None)
+        # The prefetch cache too, not just the instance cache: a prefetched instance that then
+        # generates rows would keep returning the stale empty list it was prefetched with.
+        getattr(self, "_prefetched_objects_cache", {}).pop("results", None)
         return len(characteristics)
 
     # --- derived state (nothing below is stored) -------------------------------------------------
