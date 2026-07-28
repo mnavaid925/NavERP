@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'closed' %}green{% elif obj.status == 'dispositioned' %}info{% elif obj.status == 'investigating' %}amber{% elif obj.status == 'open' %}red{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.severity == 'critical' %}red{% elif obj.severity == 'major' %}amber{% elif obj.severity == 'minor' %}info{% elif obj.severity == 'observation' %}muted{% else %}slate{% endif %}">{{ obj.get_severity_display }}</span>
+        <span class="badge badge-{% if obj.source == 'inspection' %}info{% elif obj.source == 'goods_receipt' %}amber{% elif obj.source == 'production' %}amber{% elif obj.source == 'supplier' %}red{% elif obj.source == 'audit' %}slate{% elif obj.source == 'internal' %}muted{% else %}slate{% endif %}">{{ obj.get_source_display }}</span>
+        <span class="badge badge-{% if obj.disposition == 'pending' %}slate{% elif obj.disposition == 'use_as_is' %}green{% elif obj.disposition == 'rework' %}amber{% elif obj.disposition == 'repair' %}amber{% elif obj.disposition == 'scrap' %}red{% elif obj.disposition == 'return_to_vendor' %}info{% elif obj.disposition == 'regrade' %}info{% else %}slate{% endif %}">{{ obj.get_disposition_display }}</span>
+        {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+        {% if obj.quarantine_applied %}<span class="badge badge-amber">Lot quarantined</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:nonconformance_list' %}">Non-Conformance Reports</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.inspection %}<a href="{% url 'scm:qualityinspection_detail' obj.inspection.pk %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> {{ obj.inspection.number }}</a>{% endif %}
+      {% if obj.audit %}<a href="{% url 'scm:qualityaudit_detail' obj.audit.pk %}" class="btn btn-outline"><i data-lucide="shield-check"></i> {{ obj.audit.number }}</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package-x"></i></div>
+      <div class="stat-value">{{ obj.quantity_affected|floatformat:4 }}</div>
+      <div class="stat-label">Units affected{% if obj.uom %} ({{ obj.uom.code }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="gavel"></i></div>
+      <div class="stat-value">{{ obj.disposition_quantity|floatformat:4 }}</div>
+      <div class="stat-label">Units the disposition covers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ obj.cost_of_quality|floatformat:2 }}</div>
+      <div class="stat-label">Recorded cost of quality</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ obj.days_open }}</div>
+      <div class="stat-label">Days open</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.title }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a> · {{ obj.item.name }}{% else %}<span class="text-muted">No item — audit finding</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}" class="fw-600">{{ obj.lot_serial.number }}</a> <span class="badge badge-{% if obj.lot_serial.status == 'available' %}green{% elif obj.lot_serial.status == 'quarantine' %}amber{% elif obj.lot_serial.status == 'expired' %}red{% elif obj.lot_serial.status == 'consumed' %}muted{% else %}slate{% endif %}">{{ obj.lot_serial.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}" class="fw-600">{{ obj.location.code }}</a>{% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.supplier.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Defect category</dt><dd>{{ obj.get_defect_category_display }}</dd></div>
+        <div class="detail-item"><dt>Severity</dt><dd>{{ obj.get_severity_display }}</dd></div>
+        <div class="detail-item"><dt>Source document</dt><dd>
+          {% if obj.inspection %}<a href="{% url 'scm:qualityinspection_detail' obj.inspection.pk %}" class="fw-600">{{ obj.inspection.number }}</a>
+          {% elif obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="fw-600">{{ obj.goods_receipt.number }}</a>
+          {% elif obj.work_order %}<a href="{% url 'scm:workorder_detail' obj.work_order.pk %}" class="fw-600">{{ obj.work_order.number }}</a>
+          {% elif obj.shipment %}<a href="{% url 'scm:shipment_detail' obj.shipment.pk %}" class="fw-600">{{ obj.shipment.number }}</a>
+          {% elif obj.audit %}<a href="{% url 'scm:qualityaudit_detail' obj.audit.pk %}" class="fw-600">{{ obj.audit.number }}</a>
+          {% else %}—{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Detected by</dt><dd>{{ obj.detected_by.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Detected on</dt><dd>{{ obj.detected_on|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{{ obj.owner.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Due date</dt><dd>{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.due_date|date:"M d, Y" }}</span>{% else %}{{ obj.due_date|date:"M d, Y"|default:"—" }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Closed on</dt><dd>{{ obj.closed_on|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Containment action</dt><dd>{{ obj.containment_action|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Material Review Board decision</h2>
+      <span class="badge badge-{% if obj.disposition == 'pending' %}slate{% elif obj.disposition == 'use_as_is' %}green{% elif obj.disposition == 'rework' %}amber{% elif obj.disposition == 'repair' %}amber{% elif obj.disposition == 'scrap' %}red{% elif obj.disposition == 'return_to_vendor' %}info{% elif obj.disposition == 'regrade' %}info{% else %}slate{% endif %}">{{ obj.get_disposition_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if obj.disposition != 'pending' %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Disposition</dt><dd class="fw-600">{{ obj.get_disposition_display }}</dd></div>
+          <div class="detail-item"><dt>Quantity covered</dt><dd>{{ obj.disposition_quantity|floatformat:4 }}</dd></div>
+          <div class="detail-item"><dt>Decided by</dt><dd>{{ obj.disposition_by.name|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Decided on</dt><dd>{{ obj.disposition_on|date:"M d, Y H:i"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Decision notes</dt><dd>{{ obj.disposition_notes|default:"—"|linebreaksbr }}</dd></div>
+          <div class="detail-item"><dt>Posts stock</dt><dd>{% if obj.posts_stock %}<span class="badge badge-red">Yes — a scrap movement</span>{% else %}<span class="badge badge-muted">No ledger effect</span>{% endif %}</dd></div>
+        </dl>
+      {% endif %}
+      {% comment %}
+        The form is offered on exactly the condition nonconformance_disposition enforces: the role
+        gate (@tenant_admin_required), the status guard (not closed or cancelled) and the re-read
+        guard (the disposition is still pending, because it is recorded once and only once).
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.disposition == 'pending' and obj.status != 'closed' and obj.status != 'cancelled' %}
+          <form method="post" action="{% url 'scm:nonconformance_disposition' obj.pk %}" onsubmit="return confirm('Record this disposition? A scrap on stock that is actually somewhere posts a negative inventory adjustment against the ledger, and the ledger is append-only.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in disposition_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">
+              Only a <span class="fw-600">scrap</span> moves stock, only from a known location, and never for a goods receipt — units refused at the dock never entered stock, so a negative movement would drive the receiving location negative for goods it never held. <span class="fw-600">Return to vendor</span> records the decision only; the return authorisation itself is a Returns Management document. Everything else is a decision with no ledger effect.
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Record disposition</button>
+            </div>
+          </form>
+        {% endif %}
+      {% endif %}
+      {% if obj.disposition == 'pending' %}
+        <p class="text-muted" style="margin-top:.75rem;">The disposition is recorded <span class="fw-600">once</span> by a workspace administrator, in the same transaction that posts any scrap movement, so the quantity written here and the quantity that left stock are the same number by construction.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Stock movements posted by this report</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Moved at</th><th>Type</th><th>Item</th><th>Location</th><th>Lot / Serial</th><th>Quantity</th><th>Unit cost</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in moves %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <span class="badge badge-{% if m.move_type == 'adjustment' %}red{% elif m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}info{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'production' %}green{% elif m.move_type == 'consumption' %}amber{% else %}slate{% endif %}">{{ m.get_move_type_display }}</span>
+              </td>
+              <td><a href="{% url 'scm:item_detail' m.item.pk %}">{{ m.item.sku }}</a></td>
+              <td>{{ m.location.code }}</td>
+              <td>{% if m.lot_serial %}{{ m.lot_serial.number }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="fw-600">{{ m.quantity|floatformat:4 }}</td>
+              <td>{{ m.unit_cost|floatformat:4 }}</td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list"></i><h3>Nothing posted</h3><p>Only a scrap disposition on stock that is actually in a location writes to the ledger — one negative adjustment carrying this report's number. Quarantine posts nothing at all: it flips the lot's status, and the goods have not moved.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      A scrap is written as an ordinary <span class="fw-600">adjustment</span> rather than a new movement type — adjustment already means write-off, is already excluded from the demand series and already walks correctly in the FIFO, LIFO and weighted-average valuation. These rows are append-only and are never edited or deleted; a mistake is corrected with a compensating movement.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where this lot has been</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Moved at</th><th>Type</th><th>Item</th><th>Location</th><th>Quantity</th><th>Reference</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in lot_history %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <span class="badge badge-{% if m.move_type == 'adjustment' %}red{% elif m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}info{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'production' %}green{% elif m.move_type == 'consumption' %}amber{% else %}slate{% endif %}">{{ m.get_move_type_display }}</span>
+              </td>
+              <td><a href="{% url 'scm:item_detail' m.item.pk %}">{{ m.item.sku }}</a></td>
+              <td>{{ m.location.code }}</td>
+              <td>{{ m.quantity|floatformat:4 }}</td>
+              <td>{{ m.reference|default:"—" }}</td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="route"></i><h3>No lot history</h3><p>This report names no lot or serial, or the batch has never moved. Where a lot is named, every movement it has ever made appears here — evidence for a recall decision, not just the movements this report wrote.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Corrective and preventive actions</h2>
+      <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All actions</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Priority</th><th>Owner</th><th>Due</th><th>Effectiveness</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for c in capa_actions %}
+            <tr>
+              <td><a href="{% url 'scm:capaaction_detail' c.pk %}" class="fw-600">{{ c.number }}</a></td>
+              <td>{{ c.title }}</td>
+              <td>
+                <span class="badge badge-{% if c.action_type == 'corrective' %}amber{% elif c.action_type == 'preventive' %}info{% else %}slate{% endif %}">{{ c.get_action_type_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if c.priority == 'critical' %}red{% elif c.priority == 'high' %}amber{% elif c.priority == 'normal' %}info{% elif c.priority == 'low' %}muted{% else %}slate{% endif %}">{{ c.get_priority_display }}</span>
+              </td>
+              <td>{{ c.owner.name|default:"—" }}</td>
+              <td>{% if c.is_overdue %}<span class="badge badge-red">{{ c.due_date|date:"M d, Y" }}</span>{% else %}{{ c.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if c.effectiveness_result == 'effective' %}green{% elif c.effectiveness_result == 'not_effective' %}red{% elif c.effectiveness_result == 'pending' %}slate{% else %}slate{% endif %}">{{ c.get_effectiveness_result_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if c.status == 'closed' %}green{% elif c.status == 'pending_verification' %}info{% elif c.status == 'in_progress' %}amber{% elif c.status == 'investigating' %}amber{% elif c.status == 'open' %}slate{% elif c.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ c.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="wrench"></i><h3>No corrective actions</h3><p>Raise one from this report and it lands open with the problem statement, the containment action and the owner already filled in. Fixing the batch is a correction; stopping it recurring is the CAPA.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Each button matches the from_statuses tuple of the view it posts to, and the role gate
+          where the view is @tenant_admin_required. Offering one outside those conditions only ever
+          produces an error message and a bounce back to this page.
+        {% endcomment %}
+        {% if obj.status == 'open' %}
+          <form method="post" action="{% url 'scm:nonconformance_investigate' obj.pk %}" onsubmit="return confirm('Move this report to investigating?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Investigate</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'dispositioned' %}
+          <form method="post" action="{% url 'scm:nonconformance_close' obj.pk %}" onsubmit="return confirm('Close this report?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="lock"></i> Close</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'open' or obj.status == 'investigating' %}
+          <form method="post" action="{% url 'scm:nonconformance_cancel' obj.pk %}" onsubmit="return confirm('Cancel this report? Its history survives — it is not deleted.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'scm:nonconformance_raise_capa' obj.pk %}" onsubmit="return confirm('Raise a corrective action from this report? A draft is proposed with the problem statement and owner pre-filled — you own it from there.');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="wrench"></i> Raise CAPA</button>
+        </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.lot_serial and obj.lot_serial.status == 'available' %}
+            <form method="post" action="{% url 'scm:nonconformance_quarantine' obj.pk %}" onsubmit="return confirm('Quarantine the affected lot? No stock movement is posted — the goods have not moved, only their status changes.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="shield-alert"></i> Quarantine lot</button>
+            </form>
+          {% endif %}
+          {% if obj.lot_serial and obj.lot_serial.status == 'quarantine' %}
+            <form method="post" action="{% url 'scm:nonconformance_release_lot' obj.pk %}" onsubmit="return confirm('Release the affected lot back to available? No stock movement is posted.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="shield-check"></i> Release lot</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:nonconformance_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:nonconformance_delete' obj.pk %}" onsubmit="return confirm('Delete this report? A report with a recorded disposition or a corrective action against it cannot be deleted — cancel it instead.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Closing is refused while the disposition is still pending — a document saying the matter is settled over stock with no decision against it is worse than an open report. Quarantining and releasing are workspace-administrator actions because they change what the warehouse may ship; recording what was seen and proposing a corrective action are ordinary work.
+      </p>
+    </div>
+  </div>
+{% endblock %}
