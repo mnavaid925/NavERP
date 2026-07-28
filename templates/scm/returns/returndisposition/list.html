@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Returns Receiving Bench{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Returns Receiving Bench</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Disposition Management</span></div>
+      <p class="text-muted">One row per quantity of one returned line: three units back can be two restocked and one scrapped. Receiving and deciding are two separately stamped acts on the same row — intake records the quantity, the grade and the bench it landed on, and the decision follows. This bench is the <span class="fw-600">only thing in Returns Management that writes to the stock ledger</span>, and it writes exactly once per row.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returns_awaiting_disposition' %}" class="btn btn-outline"><i data-lucide="hourglass"></i> Awaiting disposition</a>
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="package-open"></i> Returns</a>
+      <a href="{% url 'scm:returndisposition_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Receive a return line</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ stats.pending|default:"0" }}</div>
+      <div class="stat-label">On the bench, awaiting a decision</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="upload"></i></div>
+      <div class="stat-value">{{ stats.awaiting_post|default:"0" }}</div>
+      <div class="stat-label">Decided to restock, not yet posted</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{{ stats.restocked|default:"0" }}</div>
+      <div class="stat-label">Restocked and posted to the ledger</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.refurbishing|default:"0" }}</div>
+      <div class="stat-label">Out for refurbishment</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="trash-2"></i></div>
+      <div class="stat-value">{{ stats.written_off|default:"0" }}</div>
+      <div class="stat-label">Scrapped, donated, recycled or liquidated</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ stats.quantity_on_bench|default:"0"|floatformat:4 }}</div>
+      <div class="stat-label">Units physically on the bench</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search notes, RMA number, item or lot…">
+        </div>
+        <div class="form-group">
+          <select name="disposition" aria-label="Disposition" class="form-select">
+            <option value="">All dispositions</option>
+            {% for val, label in disposition_choices %}
+              <option value="{{ val }}" {% if request.GET.disposition == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="condition_grade" aria-label="Condition grade" class="form-select">
+            <option value="">All grades</option>
+            {% for val, label in grade_choices %}
+              <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Bench location" class="form-select">
+            <option value="">All bench locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="restock_location" aria-label="Restock location" class="form-select">
+            <option value="">All restock locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.restock_location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="stock_posted" aria-label="Ledger state" class="form-select">
+            <option value="">Ledger — any</option>
+            <option value="True" {% if request.GET.stock_posted == "True" %}selected{% endif %}>Posted to the ledger</option>
+            <option value="False" {% if request.GET.stock_posted == "False" %}selected{% endif %}>Not posted</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="pending" aria-label="Undecided only" class="form-select">
+            <option value="">Decision — any</option>
+            <option value="yes" {% if request.GET.pending == "yes" %}selected{% endif %}>Undecided only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="unposted" aria-label="Awaiting a ledger write" class="form-select">
+            <option value="">Ledger work — any</option>
+            <option value="yes" {% if request.GET.unposted == "yes" %}selected{% endif %}>Awaiting a ledger write</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bench-date-from">Received from</label>
+          <input type="date" id="bench-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bench-date-to">Received to</label>
+          <input type="date" id="bench-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:returndisposition_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Received</th><th>RMA</th><th>Customer</th><th>Item</th><th>Lot / Serial</th><th>Qty</th><th>Grade</th><th>Restock unit cost</th><th>Item average cost</th><th>Bench</th><th>Disposition</th><th>Restock into</th><th>Ledger</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>{{ obj.received_on|date:"M d, Y" }}</td>
+              <td><a href="{% url 'scm:returnauthorization_detail' obj.return_line.return_authorization.pk %}" class="fw-600">{{ obj.return_line.return_authorization.number }}</a></td>
+              <td>{{ obj.return_line.return_authorization.customer.name }}</td>
+              <td><a href="{% url 'scm:item_detail' obj.return_line.item.pk %}">{{ obj.return_line.item.sku }}</a></td>
+              <td>
+                {% if obj.lot_serial %}
+                  <a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}">{{ obj.lot_serial.number }}</a>
+                  <span class="badge badge-{% if obj.lot_serial.status == 'available' %}green{% elif obj.lot_serial.status == 'quarantine' %}amber{% elif obj.lot_serial.status == 'expired' %}red{% elif obj.lot_serial.status == 'consumed' %}muted{% else %}slate{% endif %}">{{ obj.lot_serial.get_status_display }}</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="fw-600">{{ obj.quantity|floatformat:4 }}{% if obj.return_line.item.uom %} <span class="text-muted">{{ obj.return_line.item.uom.code }}</span>{% endif %}</td>
+              {% comment %}
+                Grade, restock unit cost and the item's own average cost sit SIDE BY SIDE on purpose.
+                The restock cost is seeded from the policy's grade write-down and then human-owned —
+                nothing recomputes it — so an outlier is only catchable by eye. A grade-A row priced
+                well above the item's average cost, or a grade-D row priced at full cost, is somebody
+                about to roll the item's weighted average in the wrong direction through an
+                append-only ledger that cannot be corrected in place.
+              {% endcomment %}
+              <td>
+                <span class="badge badge-{% if obj.condition_grade == 'a' %}green{% elif obj.condition_grade == 'b' %}info{% elif obj.condition_grade == 'c' %}amber{% elif obj.condition_grade == 'd' %}red{% else %}slate{% endif %}">{{ obj.get_condition_grade_display }}</span>
+              </td>
+              <td class="fw-600">{{ obj.restock_unit_cost|floatformat:4 }}</td>
+              <td>{{ obj.return_line.item.average_cost|floatformat:4 }}</td>
+              <td>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if obj.disposition == 'received_pending' %}slate{% elif obj.disposition == 'restock' %}green{% elif obj.disposition == 'refurbish' %}amber{% elif obj.disposition == 'repair_return' %}info{% elif obj.disposition == 'scrap' %}red{% elif obj.disposition == 'return_to_vendor' %}info{% elif obj.disposition == 'liquidate' %}amber{% elif obj.disposition == 'donate' %}muted{% elif obj.disposition == 'recycle' %}muted{% elif obj.disposition == 'quarantine' %}amber{% elif obj.disposition == 'credit_only' %}slate{% else %}slate{% endif %}">{{ obj.get_disposition_display }}</span>
+                {% if obj.disposition == 'refurbish' %}
+                  {% if obj.refurbished_on %}<br><span class="badge badge-green">Refurbished {{ obj.refurbished_on|date:"M d, Y" }}</span>
+                  {% else %}<br><span class="badge badge-amber">Work outstanding</span>{% endif %}
+                {% endif %}
+              </td>
+              <td>{% if obj.restock_location %}<a href="{% url 'scm:location_detail' obj.restock_location.pk %}">{{ obj.restock_location.code }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              {% comment %}
+                `stock_posted` is a STATE on this page, not a hidden latch. The chain below encodes
+                the same two shapes `posts_stock` does, so the badge and the "awaiting a ledger
+                write" filter can never disagree about the same row.
+              {% endcomment %}
+              <td>
+                {% if obj.stock_posted %}
+                  <span class="badge badge-green">Posted</span>
+                  {% if obj.stock_move %}<br><span class="text-muted">{{ obj.stock_move.moved_at|date:"M d, Y H:i" }}</span>{% endif %}
+                {% elif obj.posts_stock %}
+                  <span class="badge badge-amber">Awaiting post</span>
+                {% elif obj.can_restock_after_refurbish %}
+                  <span class="badge badge-amber">Refurbished — ready to post</span>
+                {% elif obj.disposition == 'received_pending' %}
+                  <span class="badge badge-slate">On the bench, off-ledger</span>
+                {% else %}
+                  <span class="badge badge-muted">No ledger effect</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returndisposition_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete are offered on exactly the condition both views enforce: a posted
+                    row is an audit record of a movement that really happened, and both refuse it.
+                  {% endcomment %}
+                  {% if not obj.stock_posted %}
+                    <a href="{% url 'scm:returndisposition_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:returndisposition_delete' obj.pk %}" onsubmit="return confirm('Delete this bench row? A row that has posted to the stock ledger cannot be deleted — the movement it recorded really happened.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% comment %}
+                      Decide and Split carry a payload (a disposition; a quantity), so they are the
+                      forms on the detail page rather than a bare button here — these are links to
+                      them. Both are tenant-admin actions, so a non-admin is not shown a control that
+                      would bounce. Split is offered only while the row is undecided AND unposted,
+                      which is exactly what `is_splittable` answers and what the view re-checks
+                      inside its lock: a posted row's quantity is history.
+                    {% endcomment %}
+                    <a href="{% url 'scm:returndisposition_detail' obj.pk %}#decide" class="btn-icon" title="Decide what happens to this unit"><i data-lucide="gavel"></i></a>
+                    {% if obj.is_splittable %}
+                      <a href="{% url 'scm:returndisposition_detail' obj.pk %}#split" class="btn-icon" title="Split this row"><i data-lucide="split"></i></a>
+                    {% endif %}
+                  {% endif %}
+                  {% if obj.disposition == 'refurbish' and not obj.refurbished_on %}
+                    <form method="post" action="{% url 'scm:returndisposition_mark_refurbished' obj.pk %}" onsubmit="return confirm('Mark this row refurbished? That unlocks the restock action on it — set the restock location and cost before posting.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Mark refurbished"><i data-lucide="wrench"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if obj.posts_stock or obj.can_restock_after_refurbish %}
+                      {% if obj.return_line.return_authorization.status != 'cancelled' and obj.return_line.return_authorization.status != 'rejected' %}
+                        <form method="post" action="{% url 'scm:returndisposition_post' obj.pk %}" onsubmit="return confirm('Post this row to the stock ledger? The ledger is append-only — a movement written here can never be corrected in place, only offset by another one.');">
+                          {% csrf_token %}<button class="btn-icon" type="submit" title="Post to the stock ledger"><i data-lucide="upload"></i></button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="14"><div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing on the bench</h3><p>Receive an approved return line to open a bench row: record how many units came back, which lot, what grade they are in and which bench they landed on. Nothing is posted to the stock ledger at intake — the decision that follows is what moves stock, if anything does.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <p>
+        <span class="fw-600">Intake posts nothing, deliberately.</span> A warehouse location in this application is a warehouse, zone, bin, staging or transit — there is no blocked-stock type — and on-hand is the sum of the ledger across every location. Anything posted at intake would inflate on-hand, inventory value, the valuation report and the reorder and safety-stock inputs, tenant-wide and indistinguishable from sellable stock. Keeping the bench off-ledger <span class="fw-600">is</span> the blocked-stock stand-in, and it is what makes the posted flag on each row trustworthy. The honest cost: goods physically standing on the bench are absent from inventory value until they are dispositioned — the <a href="{% url 'scm:returns_awaiting_disposition' %}">awaiting-disposition report</a> is what covers that, not a ledger row.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">A restocked unit re-enters stock at its graded cost, never at what the customer paid.</span> For an item valued FIFO or LIFO the valuation report and the quick on-hand × average-cost figure will disagree afterwards — that is expected and is not a bug: the report walks real cost layers while the quick figure rolls a weighted average only part of the way down.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Credit-only returns — real work this bench will never show</h2>
+      <a href="{% url 'scm:refund_queue' %}" class="btn btn-outline btn-sm"><i data-lucide="banknote"></i> Refund queue</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>RMA</th><th>Customer</th><th>Requested</th><th>Resolution</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in credit_only_waiting %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.customer.name }}</td>
+              <td>{{ r.requested_on|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge badge-{% if r.resolution == 'refund' %}green{% elif r.resolution == 'store_credit' %}info{% elif r.resolution == 'exchange' %}info{% elif r.resolution == 'repair' %}amber{% elif r.resolution == 'keep_item' %}amber{% elif r.resolution == 'none' %}muted{% else %}slate{% endif %}">{{ r.get_resolution_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if r.status == 'settled' %}green{% elif r.status == 'closed' %}green{% elif r.status == 'received' %}info{% elif r.status == 'partially_received' %}info{% elif r.status == 'approved' %}amber{% elif r.status == 'awaiting_receipt' %}amber{% elif r.status == 'requested' %}slate{% elif r.status == 'draft' %}slate{% elif r.status == 'rejected' %}red{% elif r.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ r.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="receipt"></i><h3>None waiting</h3><p>No credit-only return is outstanding. When one is, it appears here rather than being silently dropped by a bench that only knows about goods.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      A credit-only return has no physical unit, so it never produces a bench row and its received quantity is permanently zero. Any queue keyed on "received" would quietly drop it — perfectly valid work that looks abandoned. It is named here instead, and it is settled from the refund queue.
+    </div>
+  </div>
+{% endblock %}
