@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'submitted' %}info{% elif obj.status == 'acknowledged' %}info{% elif obj.status == 'approved' %}green{% elif obj.status == 'partially_approved' %}amber{% elif obj.status == 'rejected' %}red{% elif obj.status == 'expired' %}muted{% elif obj.status == 'credited' %}green{% elif obj.status == 'closed' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.defect_classification == 'manufacturing' %}red{% elif obj.defect_classification == 'material' %}red{% elif obj.defect_classification == 'component' %}amber{% elif obj.defect_classification == 'assembly' %}amber{% elif obj.defect_classification == 'workmanship' %}amber{% elif obj.defect_classification == 'transit_damage' %}info{% elif obj.defect_classification == 'misuse_excluded' %}muted{% elif obj.defect_classification == 'unknown' %}slate{% else %}slate{% endif %}">{{ obj.get_defect_classification_display }}</span>
+        {% if is_in_warranty %}<span class="badge badge-green">In warranty</span>{% else %}<span class="badge badge-amber">Outside cover</span>{% endif %}
+        {% if obj.is_overdue %}<span class="badge badge-red">Response overdue</span>{% endif %}
+        {% if is_possible_duplicate %}<span class="badge badge-red">Possible duplicate</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:warrantyclaim_list' %}">Warranty Claims</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.return_authorization %}<a href="{% url 'scm:returnauthorization_detail' obj.return_authorization.pk %}" class="btn btn-outline"><i data-lucide="package-x"></i> {{ obj.return_authorization.number }}</a>{% endif %}
+      {% if obj.nonconformance %}<a href="{% url 'scm:nonconformance_detail' obj.nonconformance.pk %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> {{ obj.nonconformance.number }}</a>{% endif %}
+      {% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="btn btn-outline"><i data-lucide="truck"></i> {{ obj.goods_receipt.number }}</a>{% endif %}
+    </div>
+  </div>
+
+  {% if is_possible_duplicate %}
+    <div class="card">
+      <div class="card-body text-muted">
+        <span class="fw-600">Another live claim on {{ obj.supplier.name }} carries the reference {{ obj.supplier_rma_number }}.</span> Check that it is not the same failure being claimed twice — a duplicate claim is the classic honest mistake as well as the classic warranty fraud. This is advisory: nothing is refused because of it.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ amount_claimed_total|floatformat:2 }}</div>
+      <div class="stat-label">Claimed from the supplier</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="handshake"></i></div>
+      <div class="stat-value">{{ obj.amount_approved|floatformat:2 }}</div>
+      <div class="stat-label">Approved by them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ obj.amount_credited|floatformat:2 }}</div>
+      <div class="stat-label">Credited back ({{ recovery_rate_pct|floatformat:2 }}%)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
+      <div class="stat-value">{{ recovery_variance|floatformat:2 }}</div>
+      <div class="stat-label">Still on the table</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ obj.days_open }}</div>
+      <div class="stat-label">Days open</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The failed unit</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Supplier</dt><dd class="fw-600">{{ obj.supplier.name }}</dd></div>
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a> · {{ obj.item.name }}</dd></div>
+        <div class="detail-item"><dt>Quantity claimed</dt><dd>{{ obj.quantity_claimed|floatformat:4 }}{% if obj.item.uom %} {{ obj.item.uom.code }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>
+          {% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}" class="fw-600">{{ obj.lot_serial.number }}</a>
+          {% elif obj.serial_reference %}{{ obj.serial_reference }} <span class="badge badge-muted">Customer-supplied</span>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Defect classification</dt><dd>{{ obj.get_defect_classification_display }}</dd></div>
+        <div class="detail-item"><dt>Usage context</dt><dd>{{ obj.usage_context|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Purchased</dt><dd>{{ obj.purchase_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Failed</dt><dd>{{ obj.failure_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Cover starts</dt><dd>{{ obj.warranty_start|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Cover ends</dt><dd>{{ obj.warranty_end|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>In warranty when it failed</dt><dd>{% if is_in_warranty %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">No — a goodwill claim</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Return authorisation</dt><dd>{% if obj.return_authorization %}<a href="{% url 'scm:returnauthorization_detail' obj.return_authorization.pk %}" class="fw-600">{{ obj.return_authorization.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Non-conformance</dt><dd>{% if obj.nonconformance %}<a href="{% url 'scm:nonconformance_detail' obj.nonconformance.pk %}" class="fw-600">{{ obj.nonconformance.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Goods receipt</dt><dd>{% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="fw-600">{{ obj.goods_receipt.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Entitlement is derived rather than registered: explicit cover dates win, and where there are none the purchase date plus the governing return policy's warranty window decides it. There is no warranty-registration master — a claim outside cover is not refused, it is badged, because a goodwill claim suppliers accept is a real thing and refusing it here would only push somebody into faking a date.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Cost lines</h2>
+      <span class="badge badge-info">{{ amount_claimed_total|floatformat:2 }} claimed</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Type</th><th>Description</th><th>Quantity</th><th>Unit amount</th><th>Claimed</th><th>Approved on this line</th></tr></thead>
+        <tbody>
+          {% for c in costs %}
+            <tr>
+              <td>
+                <span class="badge badge-{% if c.cost_type == 'part' %}info{% elif c.cost_type == 'labour' %}amber{% elif c.cost_type == 'freight' %}slate{% elif c.cost_type == 'external_service' %}amber{% elif c.cost_type == 'admin' %}muted{% elif c.cost_type == 'other' %}slate{% else %}slate{% endif %}">{{ c.get_cost_type_display }}</span>
+              </td>
+              <td>{{ c.description }}</td>
+              <td>{{ c.quantity|floatformat:4 }}</td>
+              <td>{{ c.unit_amount|floatformat:2 }}</td>
+              <td class="fw-600">{{ c.amount_claimed|floatformat:2 }}</td>
+              <td>{{ c.amount_approved|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list"></i><h3>No cost lines</h3><p>A claim with no costs asks the supplier for nothing. Add the part, the labour and the freight as separate typed lines — the normal real outcome is a partial approval that accepts one and refuses another, and a single flat figure could never record that.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        {% if costs %}
+          <tfoot>
+            <tr>
+              <th colspan="4">Total</th>
+              <th>{{ amount_claimed_total|floatformat:2 }}</th>
+              <th>{{ cost_approved_total|floatformat:2 }}</th>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The claimed amount on each line is computed from quantity × unit amount and is never typed — one number, one writer. The per-line approvals above are what the supplier accepted line by line; the single <span class="fw-600">approved</span> figure in the header is what they answered with overall, and the two are recorded separately because a supplier does not always explain which line they cut.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The negotiation</h2>
+      <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'submitted' %}info{% elif obj.status == 'acknowledged' %}info{% elif obj.status == 'approved' %}green{% elif obj.status == 'partially_approved' %}amber{% elif obj.status == 'rejected' %}red{% elif obj.status == 'expired' %}muted{% elif obj.status == 'credited' %}green{% elif obj.status == 'closed' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Submission channel</dt><dd>{{ obj.get_submission_channel_display }}</dd></div>
+        <div class="detail-item"><dt>Submitted</dt><dd>{{ obj.submitted_on|date:"M d, Y"|default:"Not sent yet" }}</dd></div>
+        <div class="detail-item"><dt>Response due</dt><dd>{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.response_due_on|date:"M d, Y" }}</span>{% else %}{{ obj.response_due_on|date:"M d, Y"|default:"—" }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Responded</dt><dd>{{ obj.responded_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Their claim reference</dt><dd>{{ obj.supplier_rma_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Credit reference</dt><dd>{{ obj.credit_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Credit received</dt><dd>{{ obj.credit_received_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Recovery rate</dt><dd>{{ recovery_rate_pct|floatformat:2 }}% of what was claimed</dd></div>
+        <div class="detail-item"><dt>Their response notes</dt><dd>{{ obj.supplier_response_notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Nothing is sent automatically. Submitting records the fact that the claim went out and by which channel — the transport itself is the integration module's job, exactly as a sales order records that a confirmation was sent without sending it. <span class="fw-600">No vendor credit note is drafted when the money comes back</span>, and that is a schema fact rather than a choice: <span class="fw-600">accounting.Bill</span> has no <span class="fw-600">kind</span> field, so there is no document to raise. SCM posts no journal entry either way.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    Both forms below are offered on exactly the conditions their views enforce, role gate included.
+
+    warrantyclaim_record_response refuses a draft, and refuses again once a response is on file:
+    the view's guard is `status in RESPONDED_STATUSES or status in ("credited", "closed")`, which
+    leaves submitted, acknowledged and expired as the states that accept one.
+
+    warrantyclaim_record_credit refuses anything but approved / partially_approved, and refuses a
+    second time once credit_received_on is stamped — the idempotency latch it re-reads inside its
+    own lock. Both are @tenant_admin_required, so both carry the role check too.
+  {% endcomment %}
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    {% if obj.status == 'submitted' or obj.status == 'acknowledged' or obj.status == 'expired' %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Record the supplier's response</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'scm:warrantyclaim_record_response' obj.pk %}" onsubmit="return confirm('Record this response? It is written once — a second response would overwrite the first without trace, and these amounts are what every recovery figure is computed from.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in response_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">
+              The outcome is a choice rather than something derived from the amount, because "approved 80% of it" and "approved all of it at a lower rate" are different answers and only the supplier knows which they gave. An approval of more than the {{ amount_claimed_total|floatformat:2 }} claimed is refused — it is the one answer that would be nonsense whatever they said, and it would push every recovery rate above 100%.
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="message-square-reply"></i> Record response</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if obj.status == 'approved' or obj.status == 'partially_approved' %}
+      {% if not obj.credit_received_on %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Record their credit</h2></div>
+          <div class="card-body">
+            <form method="post" action="{% url 'scm:warrantyclaim_record_credit' obj.pk %}" onsubmit="return confirm('Record this credit? It is recorded once — a second submission would double the recovery figure.');">
+              {% csrf_token %}
+              <div class="form-grid">
+                {% for field in credit_form %}
+                  <div class="form-group">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="form-help">
+                Crediting more than the {{ obj.amount_approved|floatformat:2 }} they approved is refused. <span class="fw-600">Nothing is drafted in Accounting</span> — there is no vendor-credit document to raise, so this is a record of what arrived and the figure the recovery rate is computed from.
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit"><i data-lucide="coins"></i> Record credit</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where this lot has been</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Moved at</th><th>Type</th><th>Item</th><th>Location</th><th>Quantity</th><th>Unit cost</th><th>Reference</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in lot_history %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <span class="badge badge-{% if m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}info{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'adjustment' %}red{% elif m.move_type == 'consumption' %}amber{% elif m.move_type == 'production' %}green{% else %}slate{% endif %}">{{ m.get_move_type_display }}</span>
+              </td>
+              <td><a href="{% url 'scm:item_detail' m.item.pk %}">{{ m.item.sku }}</a></td>
+              <td>{{ m.location.code }}</td>
+              <td class="fw-600">{{ m.quantity|floatformat:4 }}</td>
+              <td>{{ m.unit_cost|floatformat:4 }}</td>
+              <td>{{ m.reference|default:"—" }}</td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="route"></i><h3>No lot history</h3><p>This claim names no lot or serial, or the batch has never moved. Where a lot is named, every movement it has ever made appears here — not only the ones this claim relates to — because the question a supplier argument usually turns on is where the rest of that batch went.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Submit is @tenant_admin_required and refuses anything that is not a draft; it also refuses
+          a claim whose cost lines total nothing, which is why the button is gated on the total as
+          well as on the status rather than bouncing on the click.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.status == 'draft' and amount_claimed_total > 0 %}
+            <form method="post" action="{% url 'scm:warrantyclaim_submit' obj.pk %}" onsubmit="return confirm('Submit this claim to the supplier? The cost lines are frozen from here on — they are what the supplier was shown. Nothing is sent automatically; this records that it went out.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit to supplier</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:warrantyclaim_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:warrantyclaim_delete' obj.pk %}" onsubmit="return confirm('Delete this claim? Only a draft can be deleted — once submitted it is the record of what the supplier was asked for.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:warrantyclaim_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      {% if obj.status == 'draft' and amount_claimed_total <= 0 %}
+        <p class="text-muted" style="margin-top:.75rem;">This claim cannot be submitted while its cost lines total nothing — add at least one line first.</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Submitting, recording a response and recording a credit are workspace-administrator actions: each one either speaks to a counterparty or moves the recovery figures. Editing and deleting are offered only while the claim is a <span class="fw-600">draft</span> — after submission the cost lines are the record of what the supplier was shown, and a mistake is corrected by raising a new claim rather than rewriting this one.
+      </p>
+    </div>
+  </div>
+{% endblock %}
