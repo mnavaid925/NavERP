@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Return Reason{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Return Reason</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returnreason_list' %}">Return Reasons</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.code }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      {% comment %}
+        Every rule below is enforced by ReturnReasonForm.clean() and mirrored on the model, so the
+        note a configurer reads and the validation that refuses their save cannot drift apart. The
+        fee/fault sentence describes what the policy does with these fields, not a second rule.
+      {% endcomment %}
+      <p>
+        The <span class="fw-600">code</span> is unique per workspace — a duplicate is caught on the form rather than thrown as a database error on save. A reason must allow at least one of refund, store credit, exchange or repair: one that offers nothing would be shown on the portal, picked by a shopper, and then refuse every outcome with no explanation.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">Blocks restocking and suggested disposition cannot contradict each other.</span> A reason that can never put the unit back into sellable stock may not also suggest restocking it — the save is refused. Blocking is enforced twice more downstream: the bench decide form drops restock and refurbish, and the ledger write re-checks it inside its own transaction.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">Fault party is money, not commentary.</span> It decides who pays the return freight when the policy says "whoever is at fault", and it is the signal for whether a supplier warranty claim is worth raising. <span class="fw-600">Waives return fee</span> suppresses the policy's restocking fee outright. <span class="fw-600">Raises a non-conformance</span> is what puts the "Raise NCR" button on a bench row against this reason — the quality link is data-driven, never a hard-coded list of reason codes.
+      </p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:returnreason_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
