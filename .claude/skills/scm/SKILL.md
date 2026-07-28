@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.8+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), and 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.9+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,9 +9,9 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting.** 4.8–4.19 are roadmap. Build the next one with
-`/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry — **4.8 Manufacturing / Production**
-is next) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production.** 4.9–4.19 are
+roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry —
+**4.9 Quality Management System (QMS)** is next) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -405,6 +405,84 @@ The approved forecast's horizon opens **three months ago** so accuracy scores re
 has a live period. Reorder rules are calculated but deliberately **NOT applied**, so the report has a real variance.
 `_flush` deletes the 4.7 tree FIRST (`DemandForecast.item` is `PROTECT`).
 
+---
+
+## 4.8 Manufacturing / Production  (`apps/scm/*/Manufacturing/`, templates `templates/scm/manufacturing/`)
+
+The **make** side. Realizes 4.8's five bullets, built on one rule: nothing it computes is also stored.
+
+**Models** (`models/Manufacturing/`, load order WorkCenters → BillsOfMaterials → WorkOrders → ProductionTimeLogs
+— the FK chain runs backwards along it):
+
+- **`WorkCenter`** [`WC-`] (`WorkCenters.py`) — machine/assembly/manual/inspection/outsourced station.
+  `capacity_hours_per_day`, `efficiency_pct`, `setup_minutes`, split `machine_cost_per_hour`/`labor_cost_per_hour`
+  (both **capped** at `MAX_HOURLY_RATE`; see gotchas). Points at an existing **`scm.Location`** — there is
+  deliberately **no `wip` location_type**. `org_unit`→`core.OrgUnit`, `supervisor`→`core.Party`.
+  Derived, never stored: `cost_per_hour`, `effective_capacity_hours()`, `scheduled_hours()` (window **overlap**,
+  not containment), the batched `scheduled_hours_map()`, `actual_hours()`, `utilization_pct(actual=…)`,
+  `oee_chip()` (also returns `booked_hours` so the detail page needs ONE aggregate, not three).
+- **`BillOfMaterials`** [`BOM-`] + **`BOMLine`** (`BillsOfMaterials.py`) — versioned recipe with
+  `effective_from/to`, `bom_type` (manufacture/kit/phantom), `output_quantity` (components scale by
+  `order_qty / output_quantity`), `lead_time_days` (**in-house production** time — *not* `ReorderRule.lead_time_days`,
+  which is purchasing), `default_work_center` (the documented stand-in for a deferred routing master).
+  Lines carry `quantity_per`, `scrap_pct` (→ derived `effective_quantity_per`) and `issue_method`
+  (manual/backflush). `status` **IS** a form field here (master-data curation, not a stock-gating workflow) —
+  unlike `WorkOrder.status`.
+- **`WorkOrder`** [`WO-`] + **`WorkOrderComponent`** (`WorkOrders.py`) — seven-state run
+  (draft/planned/released/in_progress/completed/closed/cancelled), `order_policy` MTS/MTO with a `sales_order` peg,
+  `component_location`/`output_location` (both **PROTECT**), `output_lot_serial`.
+- **`ProductionTimeLog`** [`PRD-`] (`ProductionTimeLogs.py`) — setup/labour/machine/**downtime** in ONE table
+  (splitting downtime out would fork every utilization query). `duration_minutes` derived in `save()`.
+
+**Routes** (`urls/Manufacturing/`): `work-centers/`, `boms/`, `work-orders/`, `time-logs/` (five CRUD names each),
+plus report pages `mrp/` → `scm:mrp_report` and `production-schedule/` → `scm:production_schedule`.
+Work-order verbs, all under `<int:pk>/`: `plan/ release/ schedule/ issue/ report/ close/ cancel/`.
+
+**The two postings** (`views/Manufacturing/WorkOrders.py`) — `@tenant_admin_required @require_POST`, inside
+`transaction.atomic()` behind `select_for_update()` with the status **re-read inside the transaction**
+(a double-click otherwise posts twice). Both route through 4.3's `_post_stock_move` and `_shared_items`.
+
+**Seeder**: `_seed_manufacturing_tenant` runs LAST (it consumes 4.3's on-hand). Creates 2 work centres, a `WS-KIT`
+finished good with an active default BOM over the existing items, and `WO-00001` driven through the real
+`_issue_components` + backflush + posting path — the demo state is what the app would have written.
+
+### Non-negotiables for 4.8 (each one is a bug that was found and fixed — the tests lock them)
+
+1. **Component draws post `move_type="consumption"`, output posts `"production"` — NEVER `issue`/`receipt`.**
+   4.7's `demand_series(source="stock_issues")` reads `move_type="issue"` as **customer** demand, so booking a
+   raw-material draw as an issue silently inflates every forecast built on that source. `_item_valuation`'s
+   `!= "transfer"` layer walk includes both new types correctly.
+2. **Make-vs-buy is DERIVED, not a flag.** An item is manufactured iff an active effective BOM exists —
+   `BillOfMaterials.manufactured_item_ids()` / `explosion_index()` answer it for a whole tenant in one query.
+   There is **no `Item.is_manufactured`** column, so nothing can drift or need a data migration.
+3. **`computed_unit_cost` divides the UNABSORBED pool by THIS layer's good quantity.** Dividing the whole pool by
+   the cumulative quantity re-charges cost an earlier layer already carried — on a 3-then-2 split of a run costing
+   C that posts `C` then `0.4C`, banking **140%** of real cost and driving `wip_value` negative. The ledger is
+   append-only: an over-valued layer can never be corrected in place.
+4. **Components are a SNAPSHOT.** `explode_components()` writes `WorkOrderComponent` rows once and is a no-op if
+   any exist, so a re-explode never overwrites a hand-edited set and a later BOM edit cannot rewrite history.
+5. **`explode()` is bounded on THREE axes** — a branch-scoped visited set (cycles), `MAX_EXPLODE_DEPTH`, and
+   `MAX_EXPLODE_ROWS` (the output is the *product* of branch factors; five chained 50-line recipes are 6.25M rows,
+   an authenticated OOM). A would-be-cyclic component is emitted as a **leaf**, never dropped.
+6. **Single writers.** `quantity_produced`/`quantity_scrapped`/`produced_unit_cost`/`status`/`released_by` belong to
+   the posting and lifecycle actions; `WorkOrderComponent.quantity_issued` to the issue action;
+   `ProductionTimeLog.duration_minutes` to `save()`. All `editable=False`, absent from `Meta.fields`, and in the
+   admin's `readonly_fields`. `ProductionTimeLog.quantity_completed` is **advisory** and does NOT roll up.
+   `produced_unit_cost` holds the **last reported layer's** cost, not a run average — the page labels it so.
+7. **No WIP location, no WIP column, no journal entry.** `wip_value` is computed on the detail page. A `wip`
+   `location_type` would migrate a model 4.3/4.4/4.5 share, and `is_pickable=True` would leak WIP into 4.5's
+   available-to-promise. SCM posts no JE (L29).
+8. **MRP suggests, never acts** — it nets **net** (not gross) parent demand, excludes `fulfilled`/`invoiced`
+   orders, filters the horizon on `requested_date` (NULL included), and openly excludes open POs because 4.1's
+   `PurchaseOrderLine` has no `item` FK. A human converts each row.
+9. **Batched, not per-row.** `explosion_index()` (2 queries) is shared across an MRP run; `scheduled_hours_map()`
+   does the load board in one; `workcenter_list` uses `Exists()` not `Count()` (two Counts over two reverse
+   relations LEFT JOIN into a cartesian product). Query budgets are asserted in `test_views.py`, including
+   **scale-invariance** locks on `mrp_report` and `production_schedule`.
+10. **New PROTECT FKs need delete guards.** 4.8 added three onto `Item` (extended `item_delete`) and two onto
+    `Location` — `location_delete` now catches `ProtectedError` inside `atomic()` rather than enumerating guards
+    that go stale. `workcenter_delete` guards its own two. Forgetting this is a 500, not a message (cf. `405ee0ea`).
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -431,7 +509,7 @@ has a live period. Reorder rules are calculated but deliberately **NOT applied**
   `(param, lookup, is_int)` tuple to `filters=`; in the template reflect `request.GET` (pk filters use
   `|stringformat:"d"`).
 - **Extend the seeder**: add rows inside the per-tenant guard in `seed_scm.py`, reusing existing Party/OrgUnit rows.
-- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (1,881 tests). Ad-hoc smoke scripts live in `temp/`.
+- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (2,274 tests). Ad-hoc smoke scripts live in `temp/`.
 
 ## Sidebar wiring  (`apps/core/navigation.py`)
 
@@ -448,4 +526,9 @@ Shipment Tracking `scm:shipment_list`. **`LIVE_LINKS["4.7"]`** → Sales Forecas
 `?status=proposed` — the queue is a chip on that page and filtering the nav entry would hide the
 accepted/rejected history), Safety Stock Calculation **`scm:safety_stock_report`** (a computed REPORT,
 the `scm:reorder_alerts`/`scm:valuation_report` precedent that a bullet need not be a CRUD list).
+**`LIVE_LINKS["4.8"]`** → Bill of Materials (BOM) `scm:billofmaterials_list`, Production Scheduling
+`scm:production_schedule`, Work Order Management `scm:workorder_list`, Material Resource Planning (MRP)
+`scm:mrp_report`, Shop Floor Control **`scm:productiontimelog_list`** (the time-log list, NOT the work-centre
+master — the bullet is about *tracking* machine time, labour time and progress, which is what the log records;
+centres are reachable from it and from the schedule board).
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
