@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Non-Conformance Report{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Non-Conformance Report</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:nonconformance_list' %}">Non-Conformance Reports</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card"><div class="card-body text-muted">
+      {% comment %}
+        Three rules a quality engineer hits on this form, each one enforced by the form's own
+        clean() rather than described here and hoped for: the item requirement, the lot/item pairing
+        and the due-date ordering. The cost-of-quality note explains why that one field is editable
+        while the whole disposition block below it is not.
+      {% endcomment %}
+      <p>
+        Every report must name the <span class="fw-600">item</span> it is against and how many units are affected — only an <span class="fw-600">audit finding</span> may have neither, because "training records incomplete" is not about a batch. A lot must belong to the item named above it, and the due date cannot precede the detection date.
+      </p>
+      <p style="margin-top:.6rem;">
+        <span class="fw-600">Cost of quality is defaulted, not computed.</span> A new report against a known item and quantity is offered quantity × average cost as a starting point; after that whatever is typed here stands and nothing ever recomputes it. It posts no journal entry — accounting sees a scrap only through the stock valuation reading the ledger.
+      </p>
+      <p style="margin-top:.6rem;">
+        The disposition, the quantity it covers, who decided it and when, the quarantine flag and the status are <span class="fw-600">not on this form</span>. The Material Review Board action on the detail page writes them in the same transaction that posts the scrap movement, so the quantity recorded and the quantity that left stock cannot disagree.
+      </p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
