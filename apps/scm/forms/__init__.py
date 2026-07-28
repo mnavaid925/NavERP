@@ -205,3 +205,39 @@ from .QualityManagement.CapaActions import (  # noqa: F401
     CapaTaskFormSet,
     CapaVerificationForm,
 )
+
+# 4.10 Returns Management (Reverse Logistics)
+from .ReturnsManagement.ReturnReasons import (  # noqa: F401
+    ReturnReasonForm,
+)
+from .ReturnsManagement.ReturnPolicies import (  # noqa: F401
+    ReturnPolicyForm,
+)
+from .ReturnsManagement.ReturnAuthorizations import (  # noqa: F401
+    ReturnAuthorizationForm,
+    ReturnLineForm,
+    BaseReturnLineFormSet,
+    ReturnLineFormSet,
+    ReturnApprovalForm,
+    ReturnRejectForm,
+    ReturnReceiveAllForm,
+    PortalReturnRequestForm,
+    PublicReturnUpdateForm,
+)
+from .ReturnsManagement.ReturnDispositions import (  # noqa: F401
+    ReturnDispositionForm,
+    ReturnDispositionRowForm,
+    BaseReturnDispositionFormSet,
+    ReturnDispositionFormSet,
+    ReturnLinePickerForm,
+    ReturnDispositionDecideForm,
+    ReturnDispositionSplitForm,
+)
+from .ReturnsManagement.WarrantyClaims import (  # noqa: F401
+    WarrantyClaimForm,
+    WarrantyClaimCostForm,
+    BaseWarrantyClaimCostFormSet,
+    WarrantyClaimCostFormSet,
+    WarrantyClaimResponseForm,
+    WarrantyClaimCreditForm,
+)
