@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'passed' %}green{% elif obj.status == 'failed' %}red{% elif obj.status == 'in_progress' %}info{% elif obj.status == 'on_hold' %}amber{% elif obj.status == 'draft' %}slate{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.inspection_type == 'incoming' %}info{% elif obj.inspection_type == 'in_process' %}amber{% elif obj.inspection_type == 'outgoing' %}green{% elif obj.inspection_type == 'periodic_stock' %}slate{% else %}slate{% endif %}">{{ obj.get_inspection_type_display }}</span>
+        <span class="badge badge-{% if obj.usage_decision == 'accept' %}green{% elif obj.usage_decision == 'accept_with_deviation' %}amber{% elif obj.usage_decision == 'reject' %}red{% elif obj.usage_decision == 'pending' %}slate{% else %}slate{% endif %}">{{ obj.get_usage_decision_display }}</span>
+        {% if has_critical_failure %}<span class="badge badge-red">Critical failure</span>{% endif %}
+        {% if obj.coa_number %}<span class="badge badge-green">{{ obj.coa_number }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:qualityinspection_list' %}">Quality Inspections</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.plan %}<a href="{% url 'scm:inspectionplan_detail' obj.plan.pk %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> {{ obj.plan.code }} v{{ obj.plan.version }}</a>{% endif %}
+      {% if obj.coa_number %}<a href="{% url 'scm:coa_print' obj.pk %}" class="btn btn-outline"><i data-lucide="printer"></i> Print certificate</a>{% endif %}
+      <a href="{% url 'scm:coa_report' %}" class="btn btn-outline"><i data-lucide="award"></i> Certificates of Analysis</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="scan-line"></i></div>
+      <div class="stat-value">{{ obj.quantity_inspected|floatformat:4 }}</div>
+      <div class="stat-label">Quantity inspected{% if obj.item.uom %} ({{ obj.item.uom.code }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ obj.quantity_accepted|floatformat:4 }}</div>
+      <div class="stat-label">Accepted</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="x-circle"></i></div>
+      <div class="stat-value">{{ obj.quantity_rejected|floatformat:4 }}</div>
+      <div class="stat-label">Rejected</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ failed_count }}</div>
+      <div class="stat-label">Characteristics out of specification</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ pending_count }}</div>
+      <div class="stat-label">No value recorded · {{ mandatory_pending_count }} mandatory</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The lot's verdict, stated once and read from the context. `evaluated_result` is DERIVED from the
+    result rows — a failed critical or mandatory row fails the lot outright, an unanswered mandatory
+    row holds it open — and it is what the complete action stamps the status from. Rendering it next
+    to the status makes the difference visible while an inspection is still in progress.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Verdict from the results</h2>
+      <span class="badge badge-{% if evaluated_result == 'pass' %}green{% elif evaluated_result == 'fail' %}red{% elif evaluated_result == 'pending' %}amber{% else %}slate{% endif %}">
+        {% if evaluated_result == 'pass' %}Pass{% elif evaluated_result == 'fail' %}Fail{% elif evaluated_result == 'pending' %}Pending{% else %}{{ evaluated_result }}{% endif %}
+      </span>
+    </div>
+    <div class="card-body text-muted">
+      The verdict is derived from the result rows, never typed. A failed <span class="fw-600">critical</span> or <span class="fw-600">mandatory</span> characteristic fails the whole lot whatever the rest say; only then does a still-unanswered mandatory row hold the verdict open. Completing the inspection stamps the status from exactly this figure{% if mandatory_pending_count %}, and is refused while {{ mandatory_pending_count }} mandatory characteristic(s) still have no recorded value{% endif %}.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.item.sku }} · {{ obj.item.name }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a> · {{ obj.item.name }}</dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}" class="fw-600">{{ obj.lot_serial.number }}</a> <span class="badge badge-{% if obj.lot_serial.status == 'available' %}green{% elif obj.lot_serial.status == 'quarantine' %}amber{% elif obj.lot_serial.status == 'expired' %}red{% elif obj.lot_serial.status == 'consumed' %}muted{% else %}slate{% endif %}">{{ obj.lot_serial.get_status_display }}</span>{% else %}<span class="text-muted">Not lot-tracked on this inspection</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}" class="fw-600">{{ obj.location.code }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Inspection plan</dt><dd>{% if obj.plan %}<a href="{% url 'scm:inspectionplan_detail' obj.plan.pk %}" class="fw-600">{{ obj.plan.code }}</a> · v{{ obj.plan.version }}{% else %}<span class="badge badge-amber">No plan named</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_inspection_type_display }}</dd></div>
+        <div class="detail-item"><dt>Goods receipt</dt><dd>{% if obj.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="fw-600">{{ obj.goods_receipt.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Work order</dt><dd>{% if obj.work_order %}<a href="{% url 'scm:workorder_detail' obj.work_order.pk %}" class="fw-600">{{ obj.work_order.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Shipment</dt><dd>{% if obj.shipment %}<a href="{% url 'scm:shipment_detail' obj.shipment.pk %}" class="fw-600">{{ obj.shipment.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.supplier.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Sample size</dt><dd>{{ obj.sample_size|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Inspector</dt><dd>{{ obj.inspector.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Inspected on</dt><dd>{{ obj.inspected_on|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Action taken</dt><dd><span class="badge badge-{% if obj.action_taken == 'none' %}muted{% elif obj.action_taken == 'quarantined' %}amber{% elif obj.action_taken == 'ncr_raised' %}red{% elif obj.action_taken == 'returned_to_vendor' %}info{% else %}slate{% endif %}">{{ obj.get_action_taken_display }}</span></dd></div>
+        <div class="detail-item"><dt>Supplier's own certificate</dt><dd>{{ obj.supplier_coa_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Results <span class="badge badge-slate">{{ results|length }}</span></h2>
+      {% if failed_count %}<span class="badge badge-red">{{ failed_count }} out of specification</span>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Characteristic</th><th>Type</th><th>Specification</th><th>Measured</th><th>Observed</th><th>Test method</th><th>Flags</th><th>Verdict</th></tr></thead>
+        <tbody>
+          {% for r in results %}
+            <tr>
+              <td>{{ r.sequence }}</td>
+              <td class="fw-600">{{ r.characteristic_name }}</td>
+              <td>
+                <span class="badge badge-{% if r.characteristic_type == 'measurement' %}info{% elif r.characteristic_type == 'pass_fail' %}green{% elif r.characteristic_type == 'visual' %}amber{% elif r.characteristic_type == 'instruction' %}muted{% else %}slate{% endif %}">{{ r.get_characteristic_type_display }}</span>
+              </td>
+              {% comment %}
+                spec_text is built from the SNAPSHOT columns alone — the limits as they stood when
+                this inspection was created, not as the plan reads today. That is the whole point of
+                the snapshot and the reason a certificate printed from these rows stays true.
+              {% endcomment %}
+              <td>{{ r.spec_text }}</td>
+              <td class="fw-600">{% if r.measured_value is not None %}{{ r.measured_value|floatformat:4 }}{% if r.uom %} {{ r.uom.code }}{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ r.text_value|default:"—" }}</td>
+              <td>{{ r.test_method|default:"—" }}</td>
+              <td>
+                {% if r.is_critical %}<span class="badge badge-red">Critical</span>{% endif %}
+                {% if r.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}
+                {% if r.include_on_coa %}<span class="badge badge-green">On CoA</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if r.result == 'pass' %}green{% elif r.result == 'fail' %}red{% elif r.result == 'pending' %}amber{% elif r.result == 'not_applicable' %}muted{% else %}slate{% endif %}">{{ r.get_result_display }}</span>
+                {% if r.is_out_of_spec %}<span class="badge badge-red">Out of spec</span>{% endif %}
+                {% if r.notes %}<div class="text-muted">{{ r.notes }}</div>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No results</h3><p>Result rows are snapshotted from the inspection plan. Name a plan on the edit form, or use <span class="fw-600">Generate results</span> below — the snapshot runs once and is never re-copied, so a hand-corrected sheet can't be silently overwritten.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% if obj.plan and not results %}
+        <form method="post" action="{% url 'scm:qualityinspection_generate_results' obj.pk %}" onsubmit="return confirm('Snapshot the characteristics of this plan onto the inspection? They are copied once and never re-copied.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="copy"></i> Generate results from {{ obj.plan.code }}</button>
+        </form>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Record measured values on the <a href="{% url 'scm:qualityinspection_edit' obj.pk %}">edit form</a> while the inspection is draft or in progress. A measurement judges itself against the snapshotted limits; a pass/fail or visual check takes the inspector's verdict; an instruction has no verdict to reach.
+      </p>
+    </div>
+  </div>
+
+  {% if obj.coa_number %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Certificate of Analysis</h2>
+        <span class="badge badge-green">Issued</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Certificate number</dt><dd class="fw-600">{{ obj.coa_number }}</dd></div>
+          <div class="detail-item"><dt>Issued on</dt><dd>{{ obj.coa_issued_on|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Issued to</dt><dd>{{ obj.coa_issued_to.name|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Certified characteristics</dt><dd>{{ coa_results|length }}</dd></div>
+        </dl>
+        <div class="form-actions" style="margin-top:.75rem;">
+          <a href="{% url 'scm:coa_print' obj.pk %}" class="btn btn-primary"><i data-lucide="printer"></i> Print certificate</a>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">
+          There is no certificate table — the certificate <span class="fw-600">is</span> this inspection, stamped with a number, a date and a recipient, printed over the result rows flagged for the CoA. It is issued once and the number is never re-burned.
+        </p>
+      </div>
+    </div>
+  {% elif coa_blockers %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Why this certificate cannot be issued</h2>
+        <span class="badge badge-red">{{ coa_blockers|length }} blocker(s)</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          {% for blocker in coa_blockers %}
+            <li>{{ blocker }}</li>
+          {% endfor %}
+        </ul>
+        <p class="text-muted" style="margin-top:.75rem;">
+          {% comment %}
+            One method — QualityInspection.coa_blockers() — answers this for the report column, the
+            issue action and this panel, so the three can never disagree about what a valid
+            certificate is. The rule that matters most: a certificate must never carry an
+            out-of-specification value.
+          {% endcomment %}
+          Every reason is listed rather than just the first, because they are independent and fixing one does not imply the rest are satisfied. Once they are all cleared the inspection appears as <span class="fw-600">ready to issue</span> on the <a href="{% url 'scm:coa_report' %}">Certificate of Analysis</a> page, where a workspace administrator stamps it.
+        </p>
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Certificate of Analysis</h2>
+        <span class="badge badge-green">Ready to issue</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Seq</th><th>Characteristic</th><th>Specification</th><th>Result</th><th>Test method</th><th>Verdict</th></tr></thead>
+          <tbody>
+            {% for r in coa_results %}
+              <tr>
+                <td>{{ r.sequence }}</td>
+                <td class="fw-600">{{ r.characteristic_name }}</td>
+                <td>{{ r.spec_text }}</td>
+                <td>{% if r.measured_value is not None %}{{ r.measured_value|floatformat:4 }}{% if r.uom %} {{ r.uom.code }}{% endif %}{% else %}{{ r.text_value|default:"—" }}{% endif %}</td>
+                <td>{{ r.test_method|default:"—" }}</td>
+                <td><span class="badge badge-{% if r.result == 'pass' %}green{% elif r.result == 'fail' %}red{% elif r.result == 'pending' %}amber{% elif r.result == 'not_applicable' %}muted{% else %}slate{% endif %}">{{ r.get_result_display }}</span></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <a href="{% url 'scm:coa_report' %}" class="btn btn-primary"><i data-lucide="award"></i> Issue on the Certificate of Analysis page</a>
+        <p class="text-muted" style="margin-top:.75rem;">Issuing is a workspace-administrator action — it sends a signed document to a customer — and it happens on the certificate register so the recipient and the issue date are recorded with it.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    {% if obj.status == 'passed' or obj.status == 'failed' %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Usage Decision</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'scm:qualityinspection_decide' obj.pk %}" onsubmit="return confirm('Record this usage decision? It is a formal sign-off on what happens to the lot.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in decision_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">A note is appended to the inspection's notes, stamped with the date and the decision. The decision itself is not editable anywhere else — this action is its only writer, and it is available only once the inspection has been completed.</div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Record decision</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Non-conformances raised from this inspection</h2>
+      <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All reports</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Severity</th><th>Category</th><th>Quantity</th><th>Owner</th><th>Due</th><th>Disposition</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for n in nonconformances %}
+            <tr>
+              <td><a href="{% url 'scm:nonconformance_detail' n.pk %}" class="fw-600">{{ n.number }}</a></td>
+              <td>{{ n.title }}</td>
+              <td>
+                <span class="badge badge-{% if n.severity == 'critical' %}red{% elif n.severity == 'major' %}amber{% elif n.severity == 'minor' %}info{% elif n.severity == 'observation' %}muted{% else %}slate{% endif %}">{{ n.get_severity_display }}</span>
+              </td>
+              <td>{{ n.get_defect_category_display }}</td>
+              <td>{{ n.quantity_affected|floatformat:4 }}</td>
+              <td>{{ n.owner.name|default:"—" }}</td>
+              <td>{% if n.is_overdue %}<span class="badge badge-red">{{ n.due_date|date:"M d, Y" }}</span>{% else %}{{ n.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if n.disposition == 'pending' %}slate{% elif n.disposition == 'use_as_is' %}green{% elif n.disposition == 'rework' %}amber{% elif n.disposition == 'repair' %}amber{% elif n.disposition == 'scrap' %}red{% elif n.disposition == 'return_to_vendor' %}info{% elif n.disposition == 'regrade' %}info{% else %}slate{% endif %}">{{ n.get_disposition_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if n.status == 'closed' %}green{% elif n.status == 'dispositioned' %}info{% elif n.status == 'investigating' %}amber{% elif n.status == 'open' %}red{% elif n.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ n.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="alert-triangle"></i><h3>No non-conformances</h3><p>A failed inspection or a rejected usage decision can propose one, pre-filled with everything already recorded here. The draft lands open for a human to own — nothing is created automatically.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Every button below is wrapped in EXACTLY the condition its view enforces — the statuses in
+          the view's from_statuses tuple, and the role gate where the view is @tenant_admin_required.
+          A button offered outside those conditions always bounces with an error message, which is
+          worse than not offering it at all.
+        {% endcomment %}
+        {% if obj.status == 'draft' %}
+          <form method="post" action="{% url 'scm:qualityinspection_start' obj.pk %}" onsubmit="return confirm('Start this inspection?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'in_progress' %}
+          <form method="post" action="{% url 'scm:qualityinspection_complete' obj.pk %}" onsubmit="return confirm('Complete this inspection? The status is stamped from the verdict the result rows produce, not from a typed one.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Complete</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'draft' or obj.status == 'in_progress' %}
+          <form method="post" action="{% url 'scm:qualityinspection_hold' obj.pk %}" onsubmit="return confirm('Put this inspection on hold?');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="pause-circle"></i> Put on hold</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'on_hold' %}
+          <form method="post" action="{% url 'scm:qualityinspection_resume' obj.pk %}" onsubmit="return confirm('Resume this inspection?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Resume</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'draft' or obj.status == 'in_progress' or obj.status == 'on_hold' %}
+          <form method="post" action="{% url 'scm:qualityinspection_cancel' obj.pk %}" onsubmit="return confirm('Cancel this inspection? Its history survives — it is not deleted.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'failed' or obj.usage_decision == 'reject' %}
+          <form method="post" action="{% url 'scm:qualityinspection_raise_ncr' obj.pk %}" onsubmit="return confirm('Raise a non-conformance report from this inspection? A draft is proposed with everything already known pre-filled — you own it from there.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="alert-triangle"></i> Raise non-conformance</button>
+          </form>
+        {% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.lot_serial and obj.lot_serial.status == 'available' %}
+            <form method="post" action="{% url 'scm:qualityinspection_quarantine' obj.pk %}" onsubmit="return confirm('Quarantine the inspected lot? No stock movement is posted — the goods have not moved, only their status changes.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="shield-alert"></i> Quarantine lot</button>
+            </form>
+          {% endif %}
+          {% if obj.lot_serial and obj.lot_serial.status == 'quarantine' %}
+            <form method="post" action="{% url 'scm:qualityinspection_release_lot' obj.pk %}" onsubmit="return confirm('Release the inspected lot back to available? No stock movement is posted.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="shield-check"></i> Release lot</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:qualityinspection_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:qualityinspection_delete' obj.pk %}" onsubmit="return confirm('Delete this inspection and its result rows?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:qualityinspection_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Quarantining and releasing a lot post <span class="fw-600">no stock movement</span> — the goods are physically where they were, and on-hand is always the sum of the ledger, so a stored "blocked quantity" would be a second source of truth. Physical segregation, where it is wanted, is an ordinary stock transfer into a QC-hold location. The usage decision and both lot flips are workspace-administrator actions; starting, completing and proposing a report are ordinary inspector work.
+      </p>
+    </div>
+  </div>
+{% endblock %}
