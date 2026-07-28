@@ -123,7 +123,10 @@ def _qualityinspection_form(request, instance):
 def qualityinspection_detail(request, pk):
     obj = get_object_or_404(
         QualityInspection.objects.select_related(
-            "plan", "item", "lot_serial__item", "location", "supplier", "inspector",
+            # item__uom, not item: the template renders {{ obj.item.uom.code }}, so plain "item"
+            # left a lazy hop costing an extra query on every load. The sibling coa_print already
+            # select_relates item__uom.
+            "plan", "item__uom", "lot_serial__item", "location", "supplier", "inspector",
             "goods_receipt", "work_order__item", "shipment", "coa_issued_to"),
         pk=pk, tenant=request.tenant)
     # _result_rows() caches on the instance, so the verdict, the counts, the CoA list and every one
