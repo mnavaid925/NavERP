@@ -99,6 +99,9 @@ class WorkOrder(TenantNumbered):
                                             editable=False)
     quantity_scrapped = models.DecimalField(max_digits=14, decimal_places=4, default=0,
                                             editable=False)
+    # The MOST RECENT reported layer's unit cost, not an average across the run — each report that
+    # produced good units restates it. The per-layer figures are on the production StockMoves,
+    # which are the authoritative record; this is a convenience headline.
     produced_unit_cost = models.DecimalField(max_digits=14, decimal_places=4, default=0,
                                              editable=False)
     released_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
