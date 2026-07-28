@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+{% comment %}
+  `received` is computed ONCE here and reused everywhere below. ReturnLine.quantity_received
+  aggregates the disposition rows per line, so reading obj.quantity_received_total in five places
+  would be five passes over the same rows — and the two figures it feeds (the stat card and the
+  cancel gate) must agree in any case.
+{% endcomment %}
+{% with received=obj.quantity_received_total %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'requested' %}amber{% elif obj.status == 'approved' %}info{% elif obj.status == 'rejected' %}red{% elif obj.status == 'awaiting_receipt' %}info{% elif obj.status == 'partially_received' %}amber{% elif obj.status == 'received' %}green{% elif obj.status == 'settled' %}green{% elif obj.status == 'closed' %}muted{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.return_type == 'physical' %}info{% elif obj.return_type == 'credit_only' %}amber{% else %}slate{% endif %}">{{ obj.get_return_type_display }}</span>
+        <span class="badge badge-{% if obj.resolution == 'refund' %}green{% elif obj.resolution == 'store_credit' %}info{% elif obj.resolution == 'exchange' %}amber{% elif obj.resolution == 'repair' %}info{% elif obj.resolution == 'keep_item' %}muted{% elif obj.resolution == 'none' %}slate{% else %}slate{% endif %}">{{ obj.get_resolution_display }}</span>
+        <span class="badge badge-{% if obj.source == 'portal' %}info{% elif obj.source == 'csr' %}slate{% elif obj.source == 'email' %}muted{% elif obj.source == 'phone' %}muted{% elif obj.source == 'marketplace' %}amber{% else %}slate{% endif %}">{{ obj.get_source_display }}</span>
+        {% if obj.advance_refund %}<span class="badge badge-amber">Advance refund</span>{% endif %}
+        {% if obj.is_overdue_shipment %}<span class="badge badge-red">Nothing shipped yet</span>{% endif %}
+        {% if obj.credit_note %}<span class="badge badge-green">{{ obj.credit_note.number }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returnauthorization_list' %}">Return Authorizations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        The return slip is refused outside LABEL_STATUSES (approved, awaiting receipt, partially
+        received) by the view itself — a slip for an unapproved return is a document that looks real
+        and is not, the coa_print posture. The link is drawn on exactly those three states, and only
+        when a token exists to hang it off.
+      {% endcomment %}
+      {% if obj.public_token %}
+        {% if obj.status == 'approved' or obj.status == 'awaiting_receipt' or obj.status == 'partially_received' %}
+          <a href="{% url 'scm:returnauthorization_label' obj.public_token %}" class="btn btn-outline" target="_blank" rel="noopener"><i data-lucide="printer"></i> Print return slip</a>
+        {% endif %}
+      {% endif %}
+      {% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> {{ obj.sales_order.number }}</a>{% endif %}
+      {% if obj.credit_note %}<a href="{% url 'accounting:invoice_detail' obj.credit_note.pk %}" class="btn btn-outline"><i data-lucide="receipt"></i> {{ obj.credit_note.number }}</a>{% endif %}
+      {% if obj.replacement_order %}<a href="{% url 'scm:salesorder_detail' obj.replacement_order.pk %}" class="btn btn-outline"><i data-lucide="repeat"></i> {{ obj.replacement_order.number }}</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ obj.quantity_requested_total|floatformat:4 }}</div>
+      <div class="stat-label">Quantity requested</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ obj.quantity_approved_total|floatformat:4 }}</div>
+      <div class="stat-label">Quantity approved</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-open"></i></div>
+      <div class="stat-value">{{ received|floatformat:4 }}</div>
+      <div class="stat-label">On the bench or dispositioned</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ settlement.total|floatformat:2 }}</div>
+      <div class="stat-label">Credit this would total{% if obj.currency %} ({{ obj.currency.code }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ obj.days_open }}</div>
+      <div class="stat-label">Days open</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The eligibility verdict, twice over and deliberately side by side. The LEFT column is recomputed
+    live for the CSR looking at the page now; the RIGHT one is what was frozen into policy_snapshot
+    at approval. Editing the policy next month cannot rewrite last month's decision, so the two can
+    legitimately disagree — and seeing that they do is the whole point of keeping both.
+
+    `basis_date_used` is displayed rather than merely used: window_basis="delivery" falls through to
+    the fallback window far more often than the policy screen implies, because a delivery stamp is a
+    manual human act and is simply absent on most orders. A CSR staring at "outside the window" has
+    to be able to see WHICH date the clock ran from.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Return eligibility</h2>
+      <span class="badge badge-{% if verdict.within_window %}green{% else %}red{% endif %}">{% if verdict.within_window %}Inside the window{% else %}Outside the window{% endif %}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Policy applied</dt><dd>{% if obj.policy %}<a href="{% url 'scm:returnpolicy_detail' obj.policy.pk %}" class="fw-600">{{ obj.policy.name }}</a>{% else %}<span class="badge badge-amber">No policy is configured</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reason judged</dt><dd>{{ verdict.reason|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>The clock ran from</dt><dd class="fw-600">{{ verdict.basis_date_used|default:"—" }} <span class="badge badge-{% if verdict.basis_used == 'delivery' %}green{% elif verdict.basis_used == 'fulfilment' %}info{% elif verdict.basis_used == 'order_date' %}info{% elif verdict.basis_used == 'fallback' %}amber{% elif verdict.basis_used == 'none' %}muted{% else %}slate{% endif %}">{{ verdict.basis_used }}</span></dd></div>
+        <div class="detail-item"><dt>Window closes</dt><dd>{{ verdict.deadline|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Days remaining</dt><dd>{{ verdict.days_remaining }}</dd></div>
+        <div class="detail-item"><dt>Outcomes allowed</dt><dd>{{ verdict.allowed_resolutions|join:", "|default:"None" }}</dd></div>
+        <div class="detail-item"><dt>Proposed credit (gross)</dt><dd>{{ verdict.proposed_credit }}</dd></div>
+        <div class="detail-item"><dt>Proposed fee</dt><dd>{{ verdict.proposed_fee }}</dd></div>
+        <div class="detail-item"><dt>Proposed net</dt><dd class="fw-600">{{ verdict.proposed_net }}</dd></div>
+      </dl>
+      {% if verdict.blockers %}
+        <div class="card-header" style="margin-top:1rem;">
+          <h2 class="card-title">What stands in the way</h2>
+          <span class="badge badge-red">{{ verdict.blockers|length }} blocker(s)</span>
+        </div>
+        <ul>
+          {% for blocker in verdict.blockers %}<li>{{ blocker }}</li>{% endfor %}
+        </ul>
+        <p class="text-muted">Every reason is listed rather than only the first — they are independent, and clearing one does not imply the rest are satisfied. A window blocker can be overruled by ticking <span class="fw-600">approve anyway</span> below, and the override is written into the frozen verdict with the name of whoever made it. Anything that is not a date blocker has to be fixed, not overridden.</p>
+      {% else %}
+        <p class="text-muted">Nothing is blocking this return today.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if snapshot %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The verdict frozen at approval</h2>
+        <span class="badge badge-{% if snapshot.window_overridden %}amber{% else %}slate{% endif %}">{% if snapshot.window_overridden %}Window overridden{% else %}Within policy{% endif %}</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Approved resolution</dt><dd class="fw-600">{{ snapshot.approved_resolution|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Approved by</dt><dd>{{ snapshot.approved_by_user|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Approved on</dt><dd>{{ snapshot.approved_on|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Policy as it then read</dt><dd>{{ snapshot.policy|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Reason</dt><dd>{{ snapshot.reason|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>The clock ran from</dt><dd class="fw-600">{{ snapshot.basis_date_used|default:"—" }} <span class="badge badge-{% if snapshot.basis_used == 'delivery' %}green{% elif snapshot.basis_used == 'fulfilment' %}info{% elif snapshot.basis_used == 'order_date' %}info{% elif snapshot.basis_used == 'fallback' %}amber{% elif snapshot.basis_used == 'none' %}muted{% else %}slate{% endif %}">{{ snapshot.basis_used|default:"—" }}</span></dd></div>
+          <div class="detail-item"><dt>Window closed</dt><dd>{{ snapshot.deadline|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Inside the window</dt><dd>{% if snapshot.within_window %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Outcomes then allowed</dt><dd>{{ snapshot.allowed_resolutions|join:", "|default:"None" }}</dd></div>
+          <div class="detail-item"><dt>Credit / fee / net then proposed</dt><dd>{{ snapshot.proposed_credit|default:"—" }} · {{ snapshot.proposed_fee|default:"—" }} · <span class="fw-600">{{ snapshot.proposed_net|default:"—" }}</span></dd></div>
+        </dl>
+        {% if snapshot.blockers %}
+          <p class="text-muted" style="margin-top:.75rem;">Blockers recorded at the time:</p>
+          <ul>{% for blocker in snapshot.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">This block is stored text, not a live calculation. It is what the policy said on the day a human authorised the return, and it stays true whatever the policy is edited into afterwards.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.customer.name }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Customer</dt><dd><a href="{% url 'core:party_detail' obj.customer.pk %}" class="fw-600">{{ obj.customer.name }}</a></dd></div>
+        <div class="detail-item"><dt>Sales order</dt><dd>{% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="fw-600">{{ obj.sales_order.number }}</a>{% else %}<span class="text-muted">Blind return — no order to date it from</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Requested on</dt><dd>{{ obj.requested_on|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Approved on</dt><dd>{{ obj.approved_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Approved by</dt><dd>{{ obj.approved_by.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Refund method</dt><dd>{{ obj.get_refund_method_display }}</dd></div>
+        <div class="detail-item"><dt>Return method</dt><dd>{{ obj.get_return_method_display }}</dd></div>
+        <div class="detail-item"><dt>Drop-off location</dt><dd>{% if obj.dropoff_location %}<a href="{% url 'scm:location_detail' obj.dropoff_location.pk %}" class="fw-600">{{ obj.dropoff_location.code }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Return carrier</dt><dd>{% if obj.return_carrier %}<a href="{% url 'scm:carrier_detail' obj.return_carrier.pk %}" class="fw-600">{{ obj.return_carrier.name }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Tracking number</dt><dd>{{ obj.return_tracking_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Label</dt><dd>{% if obj.return_label_url %}<a href="{{ obj.return_label_url }}" target="_blank" rel="noopener">Carrier label</a>{% else %}—{% endif %} · cost {{ obj.label_cost|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Counterparty reference</dt><dd>{{ obj.counterparty_rma_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}<span class="badge badge-amber">Not set — a credit note cannot be raised</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Advance refund</dt><dd>{% if obj.advance_refund %}<span class="badge badge-amber">Money already went back</span> · deadline {{ obj.advance_refund_deadline|date:"M d, Y"|default:"—" }}{% else %}No{% endif %}</dd></div>
+        <div class="detail-item"><dt>Rejected because</dt><dd>{{ obj.rejected_reason|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% comment %}
+    The customer-facing surface. The token page resolves only on PUBLIC_STATUSES — a draft or a
+    cancelled return 404s rather than leak, and that guard lives in the object lookup, not in an
+    if-block on the public template — so the link is offered only on the states where it works.
+    Stated residual risk, from the model's own docstring: the token never expires and cannot be
+    rotated or revoked. A forwarded link is permanent read access to this one return.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What the customer sees</h2>
+      {% if obj.customer_shipped_on %}<span class="badge badge-green">Customer says it shipped {{ obj.customer_shipped_on|date:"M d, Y" }}</span>{% else %}<span class="badge badge-slate">No shipment confirmation yet</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if obj.public_token %}
+        {% if obj.status == 'requested' or obj.status == 'approved' or obj.status == 'awaiting_receipt' or obj.status == 'partially_received' or obj.status == 'received' or obj.status == 'settled' %}
+          <div class="form-group">
+            <label class="form-label" for="rma-public-link">Public status link</label>
+            <input id="rma-public-link" type="text" class="form-input" readonly onclick="this.select()"
+                   value="{{ request.scheme }}://{{ request.get_host }}{% url 'scm:returnauthorization_public' obj.public_token %}">
+            <div class="form-help">Send this to the customer. It needs no login, it shows no prices, no costs and no supplier data, and it lets them confirm they have posted the goods and leave a note. It never expires and cannot be revoked, so treat a forwarded link as permanent read access to this return.</div>
+          </div>
+        {% else %}
+          <p class="text-muted">The status page is closed while this return is {{ obj.get_status_display|lower }} — the link resolves only once the return has been requested and before it is cancelled or rejected.</p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">No public token has been minted for this return.</p>
+      {% endif %}
+      <dl class="detail-grid" style="margin-top:.75rem;">
+        <div class="detail-item"><dt>Customer's note</dt><dd>{{ obj.portal_note|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Customer shipped on</dt><dd>{{ obj.customer_shipped_on|date:"M d, Y"|default:"—" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Lines <span class="badge badge-slate">{{ lines|length }}</span></h2>
+      <a href="{% url 'scm:returndisposition_list' %}" class="btn btn-outline btn-sm"><i data-lucide="package-open"></i> Returns bench</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Order line</th><th>Reason</th><th>Requested</th><th>Approved</th><th>Received</th><th>Outstanding</th><th>Credit qty</th><th>Unit price</th><th>Tax %</th><th>Unit cost</th><th>Fee</th><th>Line credit</th><th>Lot / Serial</th><th>Reported condition</th><th class="table-actions">Bench</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' line.item.pk %}" class="fw-600">{{ line.item.sku }}</a> · {{ line.description|default:line.item.name }}</td>
+              <td>{% if line.sales_order_line %}{{ line.sales_order_line }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if line.reason %}
+                  <a href="{% url 'scm:returnreason_detail' line.reason.pk %}" class="fw-600">{{ line.reason.code }}</a>
+                  <span class="badge badge-{% if line.reason.fault_party == 'customer' %}slate{% elif line.reason.fault_party == 'merchant' %}red{% elif line.reason.fault_party == 'carrier' %}amber{% elif line.reason.fault_party == 'supplier' %}info{% elif line.reason.fault_party == 'unknown' %}muted{% else %}slate{% endif %}">{{ line.reason.get_fault_party_display }}</span>
+                  {% if line.reason.blocks_restock %}<span class="badge badge-red">No restock</span>{% endif %}
+                  {% if line.reason.requires_photo %}
+                    {% if line.photo %}<span class="badge badge-green">Photo attached</span>{% else %}<span class="badge badge-amber">Photo required</span>{% endif %}
+                  {% endif %}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>{{ line.quantity_requested|floatformat:4 }}</td>
+              <td>{{ line.quantity_approved|floatformat:4 }}</td>
+              <td>{{ line.quantity_received|floatformat:4 }}</td>
+              <td>{% if line.quantity_outstanding %}<span class="badge badge-amber">{{ line.quantity_outstanding|floatformat:4 }}</span>{% else %}{{ line.quantity_outstanding|floatformat:4 }}{% endif %}</td>
+              <td class="fw-600">{{ line.credit_quantity|floatformat:4 }}</td>
+              <td>{{ line.unit_price|floatformat:2 }}</td>
+              <td>{{ line.tax_pct|floatformat:2 }}</td>
+              <td>{{ line.unit_cost|floatformat:4 }}</td>
+              <td>{{ line.line_fee|floatformat:2 }}</td>
+              <td class="fw-600">{{ line.line_credit|floatformat:2 }}</td>
+              <td>{% if line.lot_serial %}<a href="{% url 'scm:lotserial_detail' line.lot_serial.pk %}">{{ line.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ line.condition_reported|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returndisposition_create' %}?line={{ line.pk }}" class="btn-icon" title="Add a bench row for this line"><i data-lucide="plus"></i></a>
+                </div>
+              </td>
+            </tr>
+            {% comment %}
+              The bench rows raised against this line, nested under it. Receiving and deciding are
+              two separately stamped acts on the SAME row: intake writes quantity, grade, date and
+              bench location at "Received — awaiting decision", and nothing is posted to the stock
+              ledger until a decision is made and posted. Goods on the bench are deliberately
+              off-ledger — there is no blocked-stock location type and on-hand sums every location,
+              so an intake receipt would inflate valuation and the reorder inputs tenant-wide.
+            {% endcomment %}
+            {% for row in line.dispositions.all %}
+              <tr>
+                <td colspan="4" style="padding-left:2rem;">
+                  <a href="{% url 'scm:returndisposition_detail' row.pk %}" class="fw-600"><i data-lucide="corner-down-right"></i> {{ row.quantity|floatformat:4 }} × {{ line.item.sku }}</a>
+                </td>
+                <td colspan="3">
+                  <span class="badge badge-{% if row.disposition == 'received_pending' %}slate{% elif row.disposition == 'restock' %}green{% elif row.disposition == 'refurbish' %}info{% elif row.disposition == 'repair_return' %}info{% elif row.disposition == 'scrap' %}red{% elif row.disposition == 'return_to_vendor' %}amber{% elif row.disposition == 'liquidate' %}amber{% elif row.disposition == 'donate' %}muted{% elif row.disposition == 'recycle' %}muted{% elif row.disposition == 'quarantine' %}amber{% elif row.disposition == 'credit_only' %}info{% else %}slate{% endif %}">{{ row.get_disposition_display }}</span>
+                  <span class="badge badge-{% if row.condition_grade == 'a' %}green{% elif row.condition_grade == 'b' %}info{% elif row.condition_grade == 'c' %}amber{% elif row.condition_grade == 'd' %}red{% else %}slate{% endif %}">{{ row.get_condition_grade_display }}</span>
+                </td>
+                <td colspan="3">
+                  {% if row.location %}Bench {{ row.location.code }}{% else %}<span class="text-muted">No bench location</span>{% endif %}
+                  {% if row.restock_location %} → {{ row.restock_location.code }}{% endif %}
+                </td>
+                <td colspan="2">{{ row.restock_unit_cost|floatformat:4 }} <span class="text-muted">restock cost</span></td>
+                <td colspan="4">
+                  {% if row.stock_posted %}<span class="badge badge-green">Posted to the ledger</span>{% else %}<span class="badge badge-slate">Off-ledger</span>{% endif %}
+                  {% if row.nonconformance %}<a href="{% url 'scm:nonconformance_detail' row.nonconformance.pk %}" class="badge badge-red">{{ row.nonconformance.number }}</a>{% endif %}
+                  {% if row.received_on %}<span class="text-muted">received {{ row.received_on|date:"M d, Y" }}</span>{% endif %}
+                  {% if row.decided_on %}<span class="text-muted">· decided {{ row.decided_on|date:"M d, Y" }}</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          {% empty %}
+            <tr><td colspan="16"><div class="empty-state"><i data-lucide="package"></i><h3>No lines</h3><p>A return with no lines cannot be approved — there is nothing to authorise. Add what is coming back on the edit form.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      <span class="fw-600">Credit qty</span> comes from the bench rows, never from what was approved: approving a return and actually receiving it are different events, and crediting the approval would refund goods that never arrived. The one exception is a credit-only return, which by definition has no bench rows — there the approved quantity <span class="fw-600">is</span> the credited quantity. <span class="fw-600">Received</span> counts every bench row including the ones still awaiting a decision, because a unit sitting in front of the grader physically came back.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Settlement</h2>
+      {% if obj.credit_note %}<span class="badge badge-green">Credit note {{ obj.credit_note.number }} drafted</span>{% elif obj.is_settleable %}<span class="badge badge-amber">Ready to credit</span>{% else %}<span class="badge badge-slate">Nothing credit-bearing yet</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Subtotal</dt><dd>{{ settlement.subtotal|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Restocking / handling fee</dt><dd>{{ settlement.fee|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Tax carried across</dt><dd>{{ settlement.tax|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Credit total</dt><dd class="fw-600">{{ settlement.total|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</dd></div>
+      </dl>
+      {% if obj.credit_note %}
+        <dl class="detail-grid" style="margin-top:.75rem;">
+          <div class="detail-item"><dt>Recorded subtotal</dt><dd>{{ obj.refund_subtotal|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Recorded fee</dt><dd>{{ obj.fee_total|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Recorded tax</dt><dd>{{ obj.tax_total|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Recorded credit</dt><dd class="fw-600">{{ obj.credit_total|floatformat:2 }}</dd></div>
+        </dl>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        The four figures above are computed live from the lines, so this page can propose a credit without anything on the record claiming one was issued. Drafting the credit note is the only thing that writes them down. Supply Chain <span class="fw-600">drafts</span> — it raises an <span class="fw-600">accounting.Invoice</span> of kind <span class="fw-600">credit note</span> in draft and stops. It posts no journal entry and creates no payment: Accounts Receivable issues the document and disburses the money. Store credit has no wallet in this system either — the credit note <span class="fw-600">is</span> the store credit until AR applies it.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Warranty claims raised from this return</h2>
+      <a href="{% url 'scm:warrantyclaim_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All claims</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Supplier</th><th>Item</th><th>Quantity</th><th>Defect</th><th>Submitted</th><th>Response due</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for claim in warranty_claims %}
+            <tr>
+              <td><a href="{% url 'scm:warrantyclaim_detail' claim.pk %}" class="fw-600">{{ claim.number }}</a></td>
+              <td>{{ claim.supplier.name }}</td>
+              <td><a href="{% url 'scm:item_detail' claim.item.pk %}">{{ claim.item.sku }}</a></td>
+              <td>{{ claim.quantity_claimed|floatformat:4 }}</td>
+              <td>{{ claim.get_defect_classification_display }}</td>
+              <td>{{ claim.submitted_on|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ claim.response_due_on|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if claim.status == 'draft' %}slate{% elif claim.status == 'submitted' %}info{% elif claim.status == 'acknowledged' %}info{% elif claim.status == 'approved' %}green{% elif claim.status == 'partially_approved' %}amber{% elif claim.status == 'rejected' %}red{% elif claim.status == 'expired' %}red{% elif claim.status == 'credited' %}green{% elif claim.status == 'closed' %}muted{% else %}slate{% endif %}">{{ claim.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="shield"></i><h3>No warranty claims</h3><p>Where the fault is the supplier's, this return can propose a draft claim against whoever we last bought the item from. Nothing is drafted in Accounting for a supplier recovery — there is no vendor-credit document to draft — so the claim records what was claimed, approved and credited, and no journal entry is posted.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    ================= the payload actions =================
+    Each block below is wrapped in EXACTLY the condition its view enforces — the statuses the view
+    accepts, plus the role gate wherever the view is @tenant_admin_required. Approving, rejecting,
+    drafting a credit note and drafting a replacement all commit us to a customer, so all four are
+    workspace-administrator work; raising a return, editing a draft, receiving goods onto the bench,
+    cancelling and proposing a supplier claim are ordinary customer-service work.
+  {% endcomment %}
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+    {% if obj.status == 'draft' or obj.status == 'requested' %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Approve this return</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'scm:returnauthorization_approve' obj.pk %}" onsubmit="return confirm('Approve this return? The eligibility verdict is frozen onto the record and the resolution becomes a promise to the customer.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in approval_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">
+              The resolution is checked against what the policy and the reason between them allow, and approving stamps who did it. A policy set to auto-approve only <span class="fw-600">pre-fills</span> this form — a return that approves itself is a return nobody looked at. Any line left at zero approved quantity is filled in with the full requested quantity. A credit-only return goes straight to <span class="fw-600">settled</span>; everything else moves to <span class="fw-600">awaiting receipt</span>.
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Approve</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Reject this return</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'scm:returnauthorization_reject' obj.pk %}" onsubmit="return confirm('Reject this return? The reason is recorded on the record the customer can see.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in reject_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">A reason is required. A rejection with no reason is a customer being told no by a system nobody can question later, and this form is the only writer of that field.</div>
+            <div class="form-actions">
+              <button class="btn btn-danger" type="submit"><i data-lucide="x-circle"></i> Reject</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {% comment %}
+    Receive-all is ordinary CSR work (@login_required), and the view refuses a credit-only return
+    outright and accepts only approved / awaiting receipt / partially received. The two tests are
+    NESTED rather than written inline with `and`/`or`, because Django would parse
+    `a != x and b == y or c == z` as `(a and b) or c` and draw the button on states the view bounces.
+  {% endcomment %}
+  {% if obj.return_type != 'credit_only' %}
+    {% if obj.status == 'approved' or obj.status == 'awaiting_receipt' or obj.status == 'partially_received' %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Receive everything onto the bench</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'scm:returnauthorization_receive_all' obj.pk %}" onsubmit="return confirm('Create a bench row for every outstanding line? Nothing is posted to the stock ledger — returned goods stay off-ledger until they are dispositioned.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in receive_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">
+              One row per outstanding line, at the grade you choose here — each can be re-graded and split afterwards. The restock cost is seeded from the policy's write-down for that grade against the item's average cost, and is human-owned from then on. A lot-tracked or serialised item with no lot recorded on the line is <span class="fw-600">skipped</span> and named, rather than written into the ledger untraceably.
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="package-open"></i> Receive all outstanding</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Draft credit note: tenant-admin, not draft/requested/rejected/cancelled, something
+          credit-bearing on the record, no credit note already drafted, and a currency to raise it
+          in — the view refuses on every one of those five, so the button is offered on none of them.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if not obj.credit_note_id %}
+            {% if obj.is_settleable and obj.currency_id %}
+              <form method="post" action="{% url 'scm:returnauthorization_draft_credit_note' obj.pk %}" onsubmit="return confirm('Draft a credit note for this return? Supply Chain drafts it — Accounts Receivable issues it and disburses the money.');">
+                {% csrf_token %}
+                <button class="btn btn-primary" type="submit"><i data-lucide="receipt"></i> Draft credit note</button>
+              </form>
+            {% endif %}
+          {% endif %}
+          {% if not obj.replacement_order_id %}
+            {% if obj.resolution == 'exchange' %}
+              {% if obj.status == 'approved' or obj.status == 'awaiting_receipt' or obj.status == 'partially_received' or obj.status == 'received' or obj.status == 'settled' or obj.status == 'closed' %}
+                <form method="post" action="{% url 'scm:returnauthorization_draft_replacement' obj.pk %}" onsubmit="return confirm('Raise the exchange order? It lands as a draft sales order priced at zero — price and submit it from Order Management.');">
+                  {% csrf_token %}
+                  <button class="btn btn-outline" type="submit"><i data-lucide="repeat"></i> Draft replacement order</button>
+                </form>
+              {% endif %}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+
+        {% if not warranty_claims %}
+          {% if obj.status == 'approved' or obj.status == 'awaiting_receipt' or obj.status == 'partially_received' or obj.status == 'received' or obj.status == 'settled' or obj.status == 'closed' %}
+            <form method="post" action="{% url 'scm:returnauthorization_raise_warranty_claim' obj.pk %}" onsubmit="return confirm('Draft a supplier warranty claim from this return? A draft is proposed against whoever we last bought the item from — you own it from there.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="shield"></i> Raise warranty claim</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% comment %}
+          Cancel is refused once anything physical or financial has happened: the view bounces when a
+          bench row exists or a credit note has been drafted, and `received` above is exactly the
+          bench-row test. Terminal returns are already cancelled, settled, closed or rejected.
+        {% endcomment %}
+        {% if not obj.is_terminal %}
+          {% if not received %}
+            {% if not obj.credit_note_id %}
+              <form method="post" action="{% url 'scm:returnauthorization_cancel' obj.pk %}" onsubmit="return confirm('Cancel this return? Its history survives — it is not deleted.');">
+                {% csrf_token %}
+                <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        {% endif %}
+
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:returnauthorization_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% if not obj.credit_note_id %}
+            {% if not received %}
+              <form method="post" action="{% url 'scm:returnauthorization_delete' obj.pk %}" onsubmit="return confirm('Delete this return and its lines?');">
+                {% csrf_token %}
+                <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Nothing on this page posts a stock movement or a journal entry. The return authorises; the bench rows are the only thing in returns that writes to the append-only stock ledger, and the draft credit note is the only thing that reaches Accounting — as a draft, for Accounts Receivable to issue. A known Module 2 defect is flagged rather than worked around here: posting an <span class="fw-600">issued</span> credit note does not currently branch on the document kind, so the entry lands the wrong way round, and Supply Chain deliberately does not touch the ledger to compensate.
+      </p>
+    </div>
+  </div>
+{% endwith %}
+{% endblock %}
