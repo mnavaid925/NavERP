@@ -100,8 +100,6 @@
                 `characteristic_count` — that is a read-only @property on the model, and Django cannot
                 set an annotation onto a property (the page 500s). Reading the property here instead
                 would be a COUNT query per rendered row.
-                of the same name — do NOT swap this for obj.characteristics.count, which would fire
-                one COUNT query per rendered row.
               {% endcomment %}
               <td class="fw-600">{{ obj.characteristic_count_agg }}</td>
               <td>{{ obj.effective_from|date:"M d, Y"|default:"Open-ended" }}</td>
