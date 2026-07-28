@@ -57,3 +57,19 @@ def add_months(value, months):
     total = value.year * 12 + (value.month - 1) + int(months)
     year, month = divmod(total, 12)
     return datetime.date(year, month + 1, 1)
+
+
+# --------------------------------------------------------------------------------- stock ledger
+def seed_stock(tenant, item, location, quantity, unit_cost, reference="OPENING"):
+    """Give an item real on-hand at a location by posting an inbound ``receipt`` StockMove.
+
+    Goes through the module's own posting service rather than ``StockMove.objects.create`` so the
+    item's cached ``average_cost`` is rolled forward exactly as production would — 4.8's component
+    issue prices at ``average_cost or standard_cost``, so a hand-written ledger row would leave the
+    two disagreeing and every costing assertion measuring the wrong thing.
+    """
+    from decimal import Decimal
+    from apps.scm.views._helpers import _post_stock_move
+    return _post_stock_move(tenant, item=item, location=location, quantity=Decimal(str(quantity)),
+                            move_type="receipt", unit_cost=Decimal(str(unit_cost)),
+                            reference=reference, reason="Opening balance")
