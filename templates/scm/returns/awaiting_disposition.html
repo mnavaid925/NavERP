@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Returns Bench{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Returns Bench</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Returns Bench</span></div>
+      <p class="text-muted">What is physically back from customers, sitting off the stock ledger, waiting for somebody to decide what happens to it. Every row here has been received and graded and has no decision against it yet.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returndisposition_list' %}" class="btn btn-outline"><i data-lucide="gavel"></i> All bench rows</a>
+      <a href="{% url 'scm:advance_refund_exposure' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Advance refunds</a>
+      <a href="{% url 'scm:refund_queue' %}" class="btn btn-outline"><i data-lucide="banknote"></i> Refund queue</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package-search"></i></div>
+      <div class="stat-value">{{ page_obj.paginator.count|default:"0" }}</div>
+      <div class="stat-label">Rows awaiting a decision</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ bench_value|floatformat:2 }}</div>
+      <div class="stat-label">Off-ledger value on this page</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ aged_over_14_days|default:"0" }}</div>
+      <div class="stat-label">On the bench over 14 days</div>
+    </div>
+  </div>
+
+  {% if off_ledger_note %}
+    <div class="card">
+      <div class="card-body text-muted"><span class="fw-600">Why this page exists.</span> {{ off_ledger_note }}</div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search item, RMA number or lot…">
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Bench location" class="form-select">
+            <option value="">All bench locations</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="condition_grade" aria-label="Condition grade" class="form-select">
+            <option value="">All grades</option>
+            {% for val, label in grade_choices %}
+              <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bench-date-from">Received from</label>
+          <input type="date" id="bench-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bench-date-to">Received to</label>
+          <input type="date" id="bench-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:returns_awaiting_disposition' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Return</th><th>Customer</th><th>Item</th><th>Quantity</th><th>Lot / Serial</th><th>Grade</th><th>Bench location</th><th>Received</th><th>Age</th><th>Off-ledger value</th><th>Reason</th><th>Suggested</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' row.rma.pk %}" class="fw-600">{{ row.rma.number }}</a></td>
+              <td>{{ row.rma.customer.name }}</td>
+              <td><a href="{% url 'scm:item_detail' row.line.item.pk %}">{{ row.line.item.sku }}</a> · {{ row.line.item.name }}</td>
+              <td class="fw-600">{{ row.obj.quantity|floatformat:4 }}{% if row.line.item.uom %} {{ row.line.item.uom.code }}{% endif %}</td>
+              <td>{% if row.obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' row.obj.lot_serial.pk %}">{{ row.obj.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <span class="badge badge-{% if row.obj.condition_grade == 'a' %}green{% elif row.obj.condition_grade == 'b' %}info{% elif row.obj.condition_grade == 'c' %}amber{% elif row.obj.condition_grade == 'd' %}red{% else %}slate{% endif %}">{{ row.obj.get_condition_grade_display }}</span>
+              </td>
+              <td>{% if row.obj.location %}<a href="{% url 'scm:location_detail' row.obj.location.pk %}">{{ row.obj.location.code }}</a>{% else %}<span class="text-muted">Not recorded</span>{% endif %}</td>
+              <td>{{ row.obj.received_on|date:"M d, Y" }}</td>
+              <td>{% if row.age_days > 14 %}<span class="badge badge-amber">{{ row.age_days }} day{{ row.age_days|pluralize }}</span>{% else %}{{ row.age_days }} day{{ row.age_days|pluralize }}{% endif %}</td>
+              <td>{{ row.off_ledger_value|floatformat:2 }}</td>
+              <td>
+                {% if row.line.reason %}{{ row.line.reason.code }}<br><span class="text-muted">{{ row.line.reason.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if row.blocks_restock %}<br><span class="badge badge-red">Cannot be restocked</span>{% endif %}
+              </td>
+              {% comment %}
+                `row.suggested` is the reason's own suggested_disposition, already resolved by the
+                view — it is the raw stored value, so the human label comes off the reason's display
+                method rather than being re-listed here. A SUGGESTION: the grader decides, and the
+                decide form on the row's detail page is what actually records it.
+              {% endcomment %}
+              <td>{% if row.suggested %}<span class="badge badge-info">{{ row.line.reason.get_suggested_disposition_display }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returndisposition_detail' row.obj.pk %}" class="btn-icon" title="View and decide"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and delete are both refused by their views once a row has posted to the
+                    append-only ledger, so both are gated on the same condition here.
+                  {% endcomment %}
+                  {% if not row.obj.stock_posted %}
+                    <a href="{% url 'scm:returndisposition_edit' row.obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:returndisposition_delete' row.obj.pk %}" onsubmit="return confirm('Delete this bench row? The goods physically came back — deleting the row says they never did.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="package-search"></i><h3>The bench is clear</h3><p>Nothing is waiting for a grading decision. Rows land here the moment a return is received — one row per quantity received against a line — and leave it as soon as somebody decides whether the unit is restocked, refurbished, scrapped, liquidated or sent back to the vendor.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      The <span class="fw-600">off-ledger value</span> is the quantity at its graded write-down cost, not at what the customer paid — a B-grade unit is worth what it is worth now. That figure is what is currently missing from inventory value, and it is the honest price of keeping intake off the ledger.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Credit-only returns — never on this bench</h2>
+      <span class="badge badge-amber">{{ credit_only_waiting|length }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Return</th><th>Customer</th><th>Requested</th><th>Resolution</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for r in credit_only_waiting %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' r.pk %}" class="fw-600">{{ r.number }}</a></td>
+              <td>{{ r.customer.name }}</td>
+              <td>{{ r.requested_on|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge badge-{% if r.resolution == 'refund' %}green{% elif r.resolution == 'store_credit' %}info{% elif r.resolution == 'exchange' %}info{% elif r.resolution == 'repair' %}amber{% elif r.resolution == 'keep_item' %}amber{% elif r.resolution == 'none' %}slate{% else %}slate{% endif %}">{{ r.get_resolution_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if r.status == 'draft' %}slate{% elif r.status == 'requested' %}info{% elif r.status == 'approved' %}green{% elif r.status == 'rejected' %}red{% elif r.status == 'awaiting_receipt' %}amber{% elif r.status == 'partially_received' %}amber{% elif r.status == 'received' %}info{% elif r.status == 'settled' %}green{% elif r.status == 'closed' %}muted{% elif r.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ r.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="file-minus"></i><h3>None outstanding</h3><p>A credit-only return asks for nothing back, so it can never appear on a bench queue. When one is waiting to be credited it is listed here rather than being silently absent — real work that structurally cannot show up in the table above.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      These returns keep (or never had) the goods and are settled straight from their approved quantities on the <a href="{% url 'scm:refund_queue' %}">refund queue</a>. They are listed here because the bench is the page somebody checks for "what is still outstanding", and a queue keyed on what has physically arrived would drop them without saying so.
+    </div>
+  </div>
+{% endblock %}
