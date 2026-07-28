@@ -16,7 +16,12 @@ from apps.scm.forms import InspectionCharacteristicFormSet, InspectionPlanForm
 def inspectionplan_list(request):
     qs = (InspectionPlan.objects.filter(tenant=request.tenant)
           .select_related("item", "item_category", "supplier")
-          .annotate(characteristic_count=Count("characteristics", distinct=True))
+          # `characteristic_count_agg`, NOT `characteristic_count`: the model already defines that
+          # name as a read-only @property, and Django cannot set an annotation onto a property when
+          # it instantiates each row — the whole list page 500s with
+          # "AttributeError: can't set attribute". Any annotation whose name shadows a property is
+          # this bug; check the model before naming one.
+          .annotate(characteristic_count_agg=Count("characteristics", distinct=True))
           # Explicit order_by: annotate() sets a GROUP BY, which makes QuerySet.ordered report
           # False even though Meta.ordering still reaches the SQL — enough for the paginator to
           # emit UnorderedObjectListWarning on every page load (4.8 finding).
