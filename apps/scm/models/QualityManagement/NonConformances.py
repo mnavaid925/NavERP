@@ -160,6 +160,9 @@ class NonConformance(TenantNumbered):
             models.Index(fields=["tenant", "source"], name="scm_ncr_tnt_source_idx"),
             models.Index(fields=["tenant", "item"], name="scm_ncr_tnt_item_idx"),
             models.Index(fields=["tenant", "due_date"], name="scm_ncr_tnt_due_idx"),
+            # detected_on is the ordering column AND the _date_window filter column; the
+            # due_date index above serves the overdue toggle and stays. Purely additive.
+            models.Index(fields=["tenant", "detected_on"], name="scm_ncr_tnt_det_date_idx"),
         ]
 
     def __str__(self):
