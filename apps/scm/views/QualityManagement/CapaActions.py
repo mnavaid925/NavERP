@@ -42,7 +42,11 @@ def capaaction_list(request):
         search_fields=["number", "title", "problem_statement", "root_cause", "notes"],
         filters=[("status", "status", False), ("action_type", "action_type", False),
                  ("priority", "priority", False), ("source", "source", False),
-                 ("owner", "owner_id", True), ("supplier", "supplier_id", True)],
+                 ("owner", "owner_id", True), ("supplier", "supplier_id", True),
+                 # `items` was already in extra_context; without this tuple the dropdown rendered
+                 # but selecting an item did nothing — a filter that silently no-ops is worse than
+                 # no filter, because the empty result looks like real data.
+                 ("item", "item_id", True)],
         extra_context={
             "status_choices": CapaAction.STATUS_CHOICES,
             "type_choices": CapaAction.ACTION_TYPE_CHOICES,
