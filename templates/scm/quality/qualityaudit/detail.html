@@ -233,10 +233,18 @@
         <a href="{% url 'scm:qualityaudit_print' obj.pk %}" class="btn btn-outline"><i data-lucide="printer"></i> Print report</a>
         {% if obj.is_editable %}
           <a href="{% url 'scm:qualityaudit_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
-          <form method="post" action="{% url 'scm:qualityaudit_delete' obj.pk %}" onsubmit="return confirm('Delete this audit? An audit with findings against it cannot be deleted — cancel it instead.');">
+          {% comment %}
+                    Delete is `planned` only — qualityaudit_delete refuses anything
+                    further along. `is_editable` was widened to include `in_progress`
+                    so the conclusion could be written, and that silently dragged
+                    Delete along with it.
+                  {% endcomment %}
+                  {% if obj.status == 'planned' %}
+                    <form method="post" action="{% url 'scm:qualityaudit_delete' obj.pk %}" onsubmit="return confirm('Delete this audit? An audit with findings against it cannot be deleted — cancel it instead.');">
             {% csrf_token %}
             <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
           </form>
+                  {% endif %}
         {% endif %}
         <a href="{% url 'scm:qualityaudit_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
       </div>
