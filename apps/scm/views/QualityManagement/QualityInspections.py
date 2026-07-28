@@ -277,6 +277,12 @@ def qualityinspection_complete(request, pk):
 @require_POST
 def qualityinspection_decide(request, pk):
     """Record the SAP-style usage decision. Tenant-admin gated: this is a formal sign-off."""
+    # Resolve the object — and therefore the TENANT — before touching the form. With the form
+    # first, a POST carrying a foreign pk and an invalid payload short-circuited to a redirect
+    # without the tenant check ever running: it disclosed nothing and changed nothing, but the
+    # tenant boundary should not be reachable-past on any path. Cheap: this action is a
+    # human-rate admin sign-off, and the authoritative read is still the locked one below.
+    get_object_or_404(QualityInspection.objects.only("pk"), pk=pk, tenant=request.tenant)
     form = QualityInspectionDecisionForm(request.POST)
     if not form.is_valid():
         messages.error(request, "; ".join(
