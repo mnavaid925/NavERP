@@ -50,6 +50,12 @@ from .QualityManagement.QualityAudits import urlpatterns as _qm_audits
 from .QualityManagement.NonConformances import urlpatterns as _qm_ncrs
 from .QualityManagement.CapaActions import urlpatterns as _qm_capa
 from .QualityManagement.Reports import urlpatterns as _qm_reports
+from .ReturnsManagement.ReturnReasons import urlpatterns as _rma_reasons
+from .ReturnsManagement.ReturnPolicies import urlpatterns as _rma_policies
+from .ReturnsManagement.ReturnAuthorizations import urlpatterns as _rma_authorizations
+from .ReturnsManagement.ReturnDispositions import urlpatterns as _rma_dispositions
+from .ReturnsManagement.WarrantyClaims import urlpatterns as _rma_warranty
+from .ReturnsManagement.Reports import urlpatterns as _rma_reports
 
 
 app_name = "scm"
@@ -117,4 +123,29 @@ urlpatterns = [
     *_qm_ncrs,                           # QualityManagement/NonConformances
     *_qm_capa,                           # QualityManagement/CapaActions
     *_qm_reports,                        # QualityManagement/Reports (Certificate of Analysis)
+    # ---------------------------------------------------------------------------------------
+    # 4.10 COLLISION CHECK — nine new first segments, each checked against the WHOLE list above
+    # and not merely against this block:
+    #
+    #   returns/              vs 4.1 `orders/`, 4.5 `sales-orders/`, 4.8 `work-orders/`,
+    #                            4.3 `reorder-rules/`/`reorder-alerts/`, 4.1 `receipts/`
+    #                            — all separate first segments; `returns/` is free.
+    #   return-reasons/       ) four distinct segments, none a prefix of another as far as Django
+    #   return-policies/      ) is concerned (it matches whole path components, so
+    #   return-dispositions/  ) `return-tracking/` cannot be captured by `returns/<int:pk>/`).
+    #   return-tracking/      )
+    #   returns-bench/        — distinct from `returns/`: `returns-bench` is ONE component and is
+    #                           never split at the hyphen.
+    #   refund-queue/ · return-portal/ · warranty-claims/ — no prior segment starts with
+    #                           refund, portal or warranty anywhere in the app.
+    #
+    # `return-tracking/<str:token>/` is the module's only greedy converter and it sits ALONE on
+    # its own first segment, so it can neither shadow nor be shadowed by any pk route. Within each
+    # block below, literal routes (`add/`) precede the `<int:pk>/` ones.
+    *_rma_reasons,                       # ReturnsManagement/ReturnReasons (master, no bullet)
+    *_rma_policies,                      # ReturnsManagement/ReturnPolicies (master, no bullet)
+    *_rma_authorizations,                # ReturnsManagement/ReturnAuthorizations (the RMA)
+    *_rma_dispositions,                  # ReturnsManagement/ReturnDispositions (the bench)
+    *_rma_warranty,                      # ReturnsManagement/WarrantyClaims
+    *_rma_reports,                       # ReturnsManagement/Reports (queues + portal + public)
 ]
