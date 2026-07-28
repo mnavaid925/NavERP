@@ -277,6 +277,12 @@ def nonconformance_disposition(request, pk):
                 messages.error(request, f"That dispositions {quantity} against only "
                                         f"{obj.quantity_affected} affected on {obj.number}.")
                 return redirect("scm:nonconformance_detail", pk=pk)
+            # A scrap of nothing is not a scrap. Accepting it recorded the disposition, left
+            # `posts_stock` True, and rendered "posts a scrap movement" above an empty ledger panel.
+            if disposition == "scrap" and quantity <= ZERO:
+                messages.error(request, "Enter the quantity being scrapped — a scrap disposition "
+                                        "moves stock, so it needs a quantity.")
+                return redirect("scm:nonconformance_detail", pk=pk)
 
             obj.disposition = disposition
             obj.disposition_quantity = quantity
@@ -340,6 +346,12 @@ def nonconformance_raise_capa(request, pk):
         if existing is not None:
             messages.info(request, f"{existing.number} was already raised from this report.")
             return redirect("scm:capaaction_detail", pk=existing.pk)
+        # A cancelled report is not a defect that happened — raising a corrective action from one
+        # would open work against a finding that was withdrawn. Closed is still fair game: a CAPA
+        # raised after the fact is normal (that is what effectiveness review is for).
+        if obj.status == "cancelled":
+            messages.error(request, "This report was cancelled — there is nothing to correct.")
+            return redirect("scm:nonconformance_detail", pk=pk)
         capa = CapaAction(
             tenant=request.tenant, action_type="corrective", source="nonconformance",
             nonconformance=obj, item_id=obj.item_id, supplier_id=obj.supplier_id,
