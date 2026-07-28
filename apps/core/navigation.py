@@ -873,6 +873,22 @@ LIVE_LINKS = {
         "Audit Management": "scm:qualityaudit_list",                     # bullet (schedule → findings → CAPA)
         "Certificate of Analysis (CoA)": "scm:coa_report",               # bullet (computed issue/print page)
     },
+    # 4.10 Returns Management (Reverse Logistics) — ReturnReason and ReturnPolicy are masters with no
+    # sidebar key (the InspectionPlan / WorkCenter / ReorderRule precedent), reached from the return
+    # portal console. ReturnDisposition is the receiving bench and the ONLY thing in 4.10 that touches
+    # the ledger: restock posts a POSITIVE `receipt` at a graded, written-down cost; everything else
+    # posts nothing off the bench. Refund Processing points at a computed settlement QUEUE that drafts
+    # an accounting.Invoice(kind="credit_note", status="draft") and stops — SCM posts no JournalEntry
+    # (L29). "Return Portal" points at the STAFF console, not the token page: L32 bars a staff sidebar
+    # bullet from pointing at a customer-facing page (this app already applied that at 4.1's
+    # "Vendor Portal").
+    "4.10": {
+        "Return Merchandise Authorization (RMA)": "scm:returnauthorization_list",  # bullet (authorise + approve)
+        "Refund Processing": "scm:refund_queue",                                   # bullet (computed settlement queue)
+        "Disposition Management": "scm:returndisposition_list",                    # bullet (the receiving bench)
+        "Return Portal": "scm:return_portal",                                      # bullet (STAFF console — L32)
+        "Warranty Claims": "scm:warrantyclaim_list",                               # bullet (supplier recovery)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
