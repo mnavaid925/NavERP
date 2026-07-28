@@ -20,7 +20,7 @@ from django.db import models
 # Exists/OuterRef, not Count(), wherever a template only asks "does this row have any?" — a COUNT
 # forces a GROUP BY over the whole child table when an EXISTS can stop at the first match, and it
 # also makes QuerySet.ordered report False, which the paginator then warns about (4.8 finding).
-from django.db.models import Count, Exists, F, OuterRef, Q, Sum
+from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
