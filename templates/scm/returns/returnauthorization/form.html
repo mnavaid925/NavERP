@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Return Authorization{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Return Authorization</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returnauthorization_list' %}">Return Authorizations</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      {% comment %}
+        The whole computed block is deliberately absent from this form: the number, the status, the
+        frozen policy verdict, the approval stamp and approver, the rejection reason, the customer's
+        own shipment date, the public token, the portal note, the credit note, the replacement order
+        and the four settlement figures. Each has exactly ONE writer and it is never a form — in
+        particular the credit-note link is editable=False so nobody can re-point a return at an
+        arbitrary invoice.
+      {% endcomment %}
+      <div class="form-help">
+        A return raised with the source set to <span class="fw-600">Customer portal</span> lands as <span class="fw-600">requested</span>; anything else starts as a <span class="fw-600">draft</span>. Leave the policy blank and the most specific active one for the first line's item category is chosen for you. The currency is taken from the sales order — a blind return has none to take, so set it here or the credit-note action will refuse. An advance refund needs a deadline: it is the only thing that makes the exposure report actionable.
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Lines — what is coming back</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Order line</th><th>Item</th><th>Description</th><th>Qty requested</th><th>Qty approved</th><th>Reason</th><th>Unit price paid</th><th>Tax %</th><th>Unit cost</th><th>Line fee</th><th>Condition reported</th><th>Lot / Serial</th><th>Photo</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for lf in formset %}
+              <tr>
+                {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.sales_order_line }}{% for e in lf.sales_order_line.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.item }}{% for e in lf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.description }}{% for e in lf.description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.quantity_requested }}{% for e in lf.quantity_requested.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.quantity_approved }}{% for e in lf.quantity_approved.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.reason }}{% for e in lf.reason.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_price }}{% for e in lf.unit_price.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.tax_pct }}{% for e in lf.tax_pct.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_cost }}{% for e in lf.unit_cost.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.line_fee }}{% for e in lf.line_fee.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.condition_reported }}{% for e in lf.condition_reported.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.lot_serial }}{% for e in lf.lot_serial.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.photo }}{% for e in lf.photo.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% comment %}
+        Three money columns that look redundant and are not. `unit_price` is what the CUSTOMER PAID
+        and sizes the credit; `unit_cost` is what the unit COST US and seeds the restock cost — a
+        restock posted at the sale price would roll Item.average_cost upward and overstate the whole
+        valuation report; `tax_pct` is the snapshot of the sold line's rate, and without it every
+        refund silently under-credits the customer by the VAT.
+      {% endcomment %}
+      <div class="card-body text-muted">
+        A return needs at least one line. The same order line may not appear twice, and the quantity requested is capped at what was ever ordered on that line, counting the other live returns against it — that cap is deliberately weak, because nothing in this codebase records a shipped or delivered quantity per line; over-return is genuinely caught on the receiving bench. Leave <span class="fw-600">Qty approved</span> at zero and approving the return fills it in with the full requested quantity; a partial approval is an edit you make here, so that it is visible rather than buried in the approval. A photo is only required where the reason says so, and the approval refuses without it. Picking an order line narrows nothing automatically — check that the item, price and tax rate match the sale.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:returnauthorization_detail' obj.pk %}{% else %}{% url 'scm:returnauthorization_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
