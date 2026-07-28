@@ -1,5 +1,6 @@
 """Small shared helpers: audit logging + per-tenant document numbering."""
 from django.contrib.contenttypes.models import ContentType
+from django.db.models.functions import Length
 
 
 def write_audit_log(user, obj, action, changes=None, tenant=None):
@@ -40,12 +41,16 @@ def next_number(model, tenant, prefix, width=5, field="number"):
     # Ordered by the NUMBER FIELD, not by -id. Both agree while the field is allocated at row
     # creation (the `number` case), but a field stamped LATER — SCM 4.9's `coa_number`, issued long
     # after the inspection row exists — is not in id order, so `-id` reads the highest-id certified
-    # row rather than the highest certificate and re-mints a number already in use. The filter pins
-    # a single prefix and the suffix is zero-padded to a fixed width, so lexicographic ordering on
-    # the field IS numeric ordering here.
+    # row rather than the highest certificate and re-mints a number already in use.
+    #
+    # LENGTH first, then value. The suffix is zero-padded to `width`, so within one width
+    # lexicographic ordering IS numeric ordering — but once a tenant crosses that width the padding
+    # stops equalising it and plain string ordering inverts: "PO-99999" sorts ABOVE "PO-100000".
+    # A longer string is unambiguously the larger number here, so length breaks that tie correctly.
     last = (
         model.objects.filter(tenant=tenant, **{f"{field}__startswith": f"{prefix}-"})
-        .order_by(f"-{field}")
+        .annotate(_num_len=Length(field))
+        .order_by("-_num_len", f"-{field}")
         .first()
     )
     seq = 1
