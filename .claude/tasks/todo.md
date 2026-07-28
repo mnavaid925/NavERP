@@ -14686,3 +14686,1232 @@ finite-capacity/APS scheduling, MRP exception messages, subcontracting, co-/by-p
 orders, barcode/MES/IoT. Parked to siblings: quality gates → 4.9, machine maintenance → 4.13, OEE analytics → 4.11.
 
 ---
+# Module 4 — Supply Chain Management (scm) — Sub-module 4.9 Quality Management System (QMS) — plan from research-scm-4.9.md (2026-07-28)
+
+**EXTENDS the existing `apps/scm` app** (4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse + 4.5 OMS +
+4.6 TMS + 4.7 Demand Planning + 4.8 Manufacturing already built) — **no new Django app, no `config/settings.py`
+change, no `config/urls.py` change.** New sub-module package `QualityManagement/` in each of
+`models/ forms/ views/ urls/`; templates under `templates/scm/quality/<entity>/`.
+
+**SCOPE DECISION ALREADY TAKEN — research Option B: 5 primary models.** All five `NavERP.md` 4.9 bullets get a
+live page, matching 4.7 and 4.8, which both map every bullet. `QualityAudit` [QA-] has **zero coupling to
+`Item`/`LotSerial`/`StockMove`/GRN/Shipment/WorkOrder** (research lines 555-556), so it is a small, low-risk
+increment — and it is what makes `NonConformance.source="audit"` honest (nothing else can create such a row).
+Do **not** re-litigate 4-vs-5.
+
+**Spine re-verified before planning (L28 — the grep is the truth, not the research file, not the docs):**
+- `grep -rn "^class " apps/scm/models/` → `Item` (`InventoryManagement/Items.py:56`; `sku`, `name`, `category`,
+  `uom`, `item_type`, **`tracking` ∈ none/lot/serial (line 82)**, `costing_method`, `standard_cost`,
+  **`average_cost` `editable=False` (line 88)**; `__str__` = `"{sku} · {name}"`), `ItemCategory` (`Items.py:17`),
+  `UOM` (`Items.py:34`, `__str__` = `code`), `Location` (`Locations.py:10`, `__str__` = `"{code} · {name}"`),
+  **`LotSerial` (`LotSerials.py:5`) — `STATUS_CHOICES` = available / quarantine / expired / consumed CONFIRMED
+  at lines 9-14; `number`, `expiry_date`, `item` CASCADE, `on_hand()`.** `StockMove` (`StockMoves.py:13`;
+  `MOVE_TYPES` includes **`adjustment`** plus 4.8's `consumption`/`production`; carries `reference` + `reason`),
+  `GoodsReceiptNote` (`ProcurementManagement/GoodsReceiptNotes.py:15`) + `GoodsReceiptLine` (`:166`, with
+  `quantity_received` / `quantity_rejected` / `rejection_reason` confirmed at 171-177), `PurchaseOrder`/
+  `PurchaseOrderLine` (`PurchaseOrders.py:15/172`), `Shipment` (`TransportationManagement/Shipments.py:18`;
+  `direction` outbound/inbound, `sales_order` FK, `status`), `SalesOrder` (`OrderManagement/SalesOrders.py:20`),
+  `WorkOrder` (`Manufacturing/WorkOrders.py:26`; `output_lot_serial`, `quantity_produced`, `quantity_scrapped`),
+  `SupplierProfile`/`SupplierScorecard`/`SupplierRiskAssessment` — **all confirmed live.**
+- `grep -rn "^class " apps/core/models/` → `core.Tenant`, `core.Party` (`Party.py:5`, `__str__` = `self.name`,
+  **no FK walk**), `core.PartyRole` (`PartyRole.py:8-17`, `ROLE_CHOICES` includes **`employee`**), `core.OrgUnit`,
+  `core.Document` (generic `content_type`/`object_id` attachment), `core.AuditLog` — **all confirmed live.**
+- `grep -rn "^class \w*(Inspection|NonConformance|Capa|Audit|Certificate)\w*\(" apps/` → **only**
+  `core.AuditLog` (the security trail) and `hrm.TrainingCertificate`. **No `apps/quality` app; no
+  `InspectionPlan`, `QualityInspection`, `NonConformance`, `CapaAction`, `QualityAudit` or
+  `CertificateOfAnalysis` anywhere.** 4.9 builds this domain from zero — no merge target, no stand-in needed.
+  (The `inspection` hits in `Manufacturing/WorkCenters.py` are a `center_type` **choice value**, not a model.)
+- `apps/scm/models/_base.py` — `TenantOwned` (tenant FK + created/updated, `related_name="+"`), `TenantNumbered`
+  (`NUMBER_PREFIX` + `number = CharField(max_length=20, editable=False)` + 5-retry collision guard in `save()`),
+  clamped quantizers **`q2()` / `q4()`**, `ZERO`, `MAX_Q2`/`MAX_Q4`.
+- `apps/core/utils.py:33` — **`next_number(model, tenant, prefix, width=5, field="number")` — the `field=`
+  kwarg is REAL and confirmed**, so `next_number(QualityInspection, tenant, "COA", field="coa_number")` works
+  without touching core. `write_audit_log(user, obj, action, changes=None, tenant=None)` at `:5`.
+- `apps/core/crud.py` — `crud_list(request, qs, template, *, search_fields=(), filters=(), extra_context=None,
+  per_page=15)` with `filters` = `(get_param, orm_lookup, is_int)` tuples (`:46`, int guard at `:55`, bogus-value
+  guard at `:63`); `crud_create/crud_edit/crud_detail/crud_delete`; `_changed(form)` with the sensitive-field
+  redaction list. **Context contract pinned:** list → `object_list` / `page_obj` / `q`; detail → `obj`;
+  form → `form` / `is_edit`.
+- `apps/scm/views/_common.py` — `messages`, `login_required`, `ValidationError`, `transaction`, `models`,
+  `Count/F/Q/Sum`, `get_object_or_404/redirect/render`, `timezone`, `require_POST`, all five `crud_*`,
+  `_changed`, `tenant_admin_required`, `Party`, `write_audit_log` **already imported**. `Exists`/`OuterRef` are
+  **not** — add them to the import line when the `Exists()` annotations below land.
+- `apps/scm/views/_helpers.py` — `_post_stock_move(tenant, *, item, location, quantity, move_type,
+  unit_cost=ZERO, lot_serial=None, reference="", reason="", moved_at=None)` at **line 95**;
+  `_insufficient_stock(item, location, quantity, lot_serial=None)` at **119**; `_item_qs`/`_location_qs` at
+  **53/65**; `_need_tenant` at **14**.
+- `apps/scm/forms/_common.py` — `TenantModelForm`, `TenantUniqueMixin` (**mix in BEFORE `TenantModelForm` on any
+  form whose model has a `unique_together` containing `tenant`**, `:81`), `_scope_to_parent` (`:111`),
+  **`_employee_parties(tenant)` at `:69`** (roles__role="employee", `.distinct()`) and
+  **`_supplier_parties(tenant)` at `:33`** (supplier OR vendor) — both confirmed, reuse them, never a new
+  person table (L29).
+- `apps/scm/urls/__init__.py` — `app_name = "scm"` set **once at line 49**; entity modules define only
+  `urlpatterns`; 37 `_<sub>_<entity>` imports spread into one master list (lines 10-46 / 51-102).
+- **Sub-package `__init__.py` files are ZERO-BYTE.** The re-export blocks live in the **parent**
+  `apps/scm/{models,forms,views,urls}/__init__.py` (4.8's blocks: `models/__init__.py:135`,
+  `forms/__init__.py:157`, `views/__init__.py:212`).
+- **Next migration: `0014_`**, depending on **`("scm", "0013_alter_workcenter_labor_cost_per_hour_and_more")`**
+  (latest on disk).
+- `apps/core/navigation.py` — last `LIVE_LINKS` key is **`"4.8"` (line 849, closes at 858); there is no
+  `"4.9"`.** Confirmed target. `NavERP.md:789-794` holds the five 4.9 bullets, quoted verbatim in Wire-up below.
+- **Auto-number prefixes in use** (`grep -rn 'NUMBER_PREFIX = "'`): PR RFQ QT PO GRN SCR SRA SC CAT TRF ADJ PUT
+  PIK CC YRD SO CAR LD SHP FRT DF DS FA SEA WC BOM WO PRD. **`QC` `NCR` `CAPA` `QA` are free**, and `COA` is
+  free as the second numbered field on `QualityInspection.coa_number`. All fit `max_length=20`.
+- **URL first-segment collision check** — taken today: `""` `adjustments/ allocations/ boms/ carriers/ catalogs/
+  categories/ contracts/ cycle-counts/ demand-signals/ forecast-accuracy/ forecast-adjustments/ forecasts/
+  freight-invoices/ items/ loads/ locations/ lot-serials/ mrp/ on-hand/ orders/ picks/ production-schedule/
+  putaway/ quotes/ receipts/ reorder-alerts/ reorder-rules/ requisitions/ rfqs/ risk-assessments/ safety-stock/
+  sales-order-lines/ sales-orders/ scorecards/ seasonality/ shipments/ stock-ledger/ suppliers/ time-logs/
+  transfers/ uoms/ valuation/ work-centers/ work-orders/ yard/`. **This pass uses `inspection-plans/`
+  `inspections/` `nonconformances/` `capa/` `quality-audits/` `coa/` — all six are first-segment-unique.**
+  (`capa/` is a distinct segment from `catalogs/`; `inspections/` from `receipts/`; Django matches the whole
+  pattern, not a prefix.)
+- Template sub-module folders on disk: `templates/scm/` = `procurement/ srm/ inventory/ warehouse/ orders/
+  transportation/ demandplanning/ manufacturing/` + flat `overview.html`. **This pass uses `quality/`.**
+- Badge classes: **`badge-green` `badge-red` `badge-amber` `badge-info` `badge-muted` `badge-slate` ONLY**
+  (`static/css/theme.css:285-290`) — `-success`/`-warning`/`-danger` do **not** exist and render unstyled (L33).
+  Stat-icon colours: `blue/green/orange/purple/slate`.
+- **`.claude/skills/scm/SKILL.md` EXISTS** — close-out is an **update**, not a create.
+- **Database is MySQL** — a conditional `UniqueConstraint(condition=…)` silently no-ops (`models.W036`). Nothing
+  in this pass needs one; if the urge appears, use `clean()` + a save-time guard (the 4.8 §0d precedent).
+
+**Scope guard:** **5 primary models + 3 tenant-less children + 2 report/print pages (+1 trimmable print page).**
+Child rows are not entities (the `PurchaseOrder`/`PurchaseOrderLine`, `BillOfMaterials`/`BOMLine` precedent).
+**No new `StockMove.move_type`, no hold/blocked-stock table, no `CertificateOfAnalysis` register, no
+`CoATemplate`, no defect-code master, no MRB board entity, no 8D step records, no SPC charts, no `GLAccount` FK,
+no `JournalEntry`** — every one of those is in Later passes below.
+
+**Trim order if the pass runs long** (cut from the bottom): (1) `quality/audit_report.html` + `qualityaudit_print`
+(the audit print page — the CoA print page is a NavERP bullet and stays); (2) the NCR detail's read-only
+"where this lot went" `StockMove` panel; (3) the Pareto/defect-category roll-up chips on the NCR list.
+
+---
+
+## 0. Six decisions to read BEFORE writing any code
+
+### 0a. NO new `StockMove.move_type` — a quality scrap is an `adjustment` (research ruling (a), do not re-open)
+- [ ] A `disposition="scrap"` posts ONE **negative** `_post_stock_move(..., move_type="adjustment",
+  reference=ncr.number, reason=f"NCR scrap — {ncr.get_defect_category_display()}")`. `StockMove.MOVE_TYPES`
+  already documents `adjustment` as "write-off / damage / cycle count / found / revaluation", and the model
+  carries both `reference` and `reason`, so a scrap report is exactly
+  `move_type="adjustment", reference__startswith="NCR-"`.
+- [ ] **Why this differs from 4.8's call:** 4.8 added `consumption`/`production` because 4.7's `demand_series`
+  reads `move_type="issue"` as *customer demand* — a correctness failure. **No equivalent contamination exists
+  for scrap:** `adjustment` is already excluded from the demand series and already participates correctly in the
+  FIFO/LIFO layer walk (`_item_valuation`'s `costed = [m for m in moves if m.move_type != "transfer"]`,
+  `views/InventoryManagement/Reports.py:33`). A new type would be a migration plus an audit of the valuation
+  walk, the demand series and MRP for zero behavioural gain. **Verify that line stays untouched.**
+- [ ] **Quarantine posts NOTHING** (ruling (b)). It sets the existing `LotSerial.status = "quarantine"` — the
+  goods are still physically there, so on-hand is unchanged (L37: on-hand is always `Sum(quantity)`). Never a
+  parallel hold table, never a stored "blocked quantity". Physical segregation, if the tenant wants it, is an
+  ordinary 4.3 `StockTransfer` into a tenant-created QC-hold `Location` — **no new schema, no new location_type.**
+- [ ] **GRN-rejected units never entered stock** (ruling (c)). `_post_grn_receipt` posts moves only for
+  `quantity_received`; `GoodsReceiptLine.quantity_rejected` was refused at the dock. An NCR with
+  `source="goods_receipt"` therefore posts **no** stock effect on any disposition — see §0c for how that is
+  enforced rather than merely documented.
+
+### 0b. Which new FKs are PROTECT, and the delete guard each one needs (the 4.8 lesson, commits `405ee0ea` / qa)
+Every new PROTECT FK onto a shared master is a 500 waiting to happen. Decided once, here:
+
+- [ ] **PROTECT + an explicit `.exists()` guard in `item_delete`** (`views/InventoryManagement/Items.py:65-92`
+  already refuses stock moves, demand forecasts, BOMs, BOM lines and work orders — add ONE more block in the
+  same shape and tone, each message saying where to look, redirecting to `scm:item_detail`):
+  - `QualityInspection.item` → PROTECT, `related_name="quality_inspections"`
+  - `NonConformance.item` → PROTECT, **`null=True, blank=True`** (an audit finding has no item),
+    `related_name="nonconformances"`
+  ```python
+  if obj.quality_inspections.exists() or obj.nonconformances.exists():
+      # "This item has quality inspections or non-conformance reports and cannot be deleted —
+      #  deactivate it instead."
+  ```
+- [ ] **PROTECT + HARDEN `lotserial_delete`** — `views/InventoryManagement/LotSerials.py:49-54` currently has
+  ONLY a `stock_moves.exists()` guard, so a PROTECT FK onto `LotSerial` is an uncaught `ProtectedError` (a 500),
+  exactly the bug `location_delete` was rewritten to prevent. **Adopt the `location_delete` shape verbatim**
+  (`views/InventoryManagement/Locations.py:52-75`): keep the friendly stock-moves guard first, then wrap
+  `crud_delete` in `try: with transaction.atomic(): … except ProtectedError as exc:` and name
+  `{obj._meta.verbose_name for obj in exc.protected_objects}` in the message. This is the maintainable fix —
+  enumerating guards goes stale the next time a sub-module lands.
+  - `QualityInspection.lot_serial` → PROTECT, null blank, `related_name="quality_inspections"`
+  - `NonConformance.lot_serial` → PROTECT, null blank, `related_name="nonconformances"`
+- [ ] **PROTECT, no code change needed — VERIFY ONLY:** `QualityInspection.location` and
+  `NonConformance.location` → PROTECT, null blank. `location_delete` already catches `ProtectedError`
+  generically (`Locations.py:66-75`), so it degrades to a message on its own. **Confirm by test, don't edit.**
+- [ ] **SET_NULL — no guard needed, and that is the point.** Every remaining new FK:
+  `QualityInspection.plan` / `.goods_receipt` / `.work_order` / `.shipment` / `.supplier` / `.inspector` /
+  `.coa_issued_to`; `NonConformance.inspection` / `.goods_receipt` / `.work_order` / `.shipment` / `.audit` /
+  `.supplier` / `.uom` / `.detected_by` / `.owner` / `.disposition_by`; `CapaAction.nonconformance` / `.audit` /
+  **`.item`** (a CAPA is a process improvement, the item is context — deliberately NOT a fourth `Item` guard) /
+  `.supplier` / `.owner` / `.verified_by`; `CapaTask.owner`; `QualityAudit.auditee_party` / `.auditee_org_unit` /
+  `.checklist_plan` / `.lead_auditor`; `InspectionPlan.item` / `.item_category` / `.supplier`;
+  `InspectionCharacteristic.uom`; `InspectionResult.characteristic` / `.uom`.
+- [ ] **CASCADE — pure children:** `InspectionCharacteristic.plan`, `InspectionResult.inspection`,
+  `CapaTask.capa`.
+- [ ] **New delete guards on 4.9's own views** (each a message + redirect to the detail, never a 500):
+  - `inspectionplan_delete` — refuse when `inspections.exists()` or `audits.exists()` ("deactivate it instead").
+  - `qualityinspection_delete` — `is_editable` (draft/in_progress) only, **and** refuse when
+    `nonconformances.exists()` or `coa_number` is set (a certificate has been issued against it).
+  - `nonconformance_delete` — `is_editable` (open/investigating) only, **and** refuse when
+    `disposition != "pending"` (stock may have moved) or `capa_actions.exists()`.
+  - `capaaction_delete` — `is_editable` (open/investigating/in_progress) only.
+  - `qualityaudit_delete` — `status == "planned"` only, **and** refuse when `findings.exists()`.
+
+### 0c. Every computed field has EXACTLY ONE writer (4.7 commit `7ba189d3`, restated by 4.8)
+- [ ] **`editable=False` + absent from `Meta.fields` + in the admin's `readonly_fields`** for every
+  action-written value: `QualityInspection.status` / `usage_decision` / `action_taken` / `coa_number` /
+  `coa_issued_on` / `coa_issued_to`; `NonConformance.status` / `disposition` / `disposition_by` /
+  `disposition_on` / `disposition_notes` / `disposition_quantity` / `quarantine_applied` / `closed_on`;
+  `CapaAction.status` / `implemented_on` / `effectiveness_result` / `verified_by` / `verified_on` /
+  `verification_notes` / `closed_on`; `QualityAudit.status` / `actual_start` / `actual_end`;
+  `InspectionResult`'s whole **snapshot block** (see the model). The admin being a second writer is the exact
+  bug 4.7 shipped and then fixed.
+- [ ] **`QualityAudit.findings_major` / `findings_minor` are NOT columns.** The research listed them as "derived
+  counts"; storing a derived count is the banned pattern. They are **properties** on the detail page and
+  **`Count(..., filter=Q(...))` annotations** on the list. Say so in the model docstring so nobody adds them
+  later.
+- [ ] **`NonConformance.cost_of_quality` IS user-entered** and must never be recomputed on save — the form's
+  `initial` defaults it to `q2(quantity_affected × item.average_cost)` (QT9's "dollars and cents to poor
+  quality"), and after that the human's figure stands. One writer: the form. State it in the `help_text`.
+- [ ] **`InspectionResult.result` — the single-writer rule, the 4.8 `duration_minutes` shape (the clock wins):**
+  `InspectionResult.save()` is the ONLY writer. For `characteristic_type == "measurement"` it is **derived**
+  from the snapshotted limits and overwrites whatever was posted; for `pass_fail` / `visual` it takes the
+  inspector's typed value; for `instruction` it is forced to `not_applicable`. The formset renders `result` as
+  an input only for the non-measurement types. **Document the precedence in the model docstring.**
+- [ ] One shared pure evaluator in `models/QualityManagement/QualityInspections.py`:
+  `_evaluate(characteristic_type, measured_value, text_value, lower, upper, target)` → `"pass" | "fail" |
+  "not_applicable" | "pending"`. Both `InspectionResult.save()` and the plan-preview call it. **One rule, one
+  place** — the pass/fail definition must not be re-implemented in a template or a report.
+- [ ] `NonConformance.disposition_quantity` and the scrap `StockMove` quantity are the SAME number; the move is
+  posted from it inside the same `transaction.atomic()` as the field write.
+
+### 0d. Formset `clean()` that reads the PARENT must get `formset.instance = form.instance` FIRST
+- [ ] This was a real shipped 4.8 bug (`_billofmaterials_form`, `views/Manufacturing/BillsOfMaterials.py:67`):
+  on **create** the formset's `instance` is `None`, so a `clean()` comparing a child against a parent field sees
+  `None` and **silently no-ops on exactly the path it exists for.**
+- [ ] Apply the fix **uniformly to all three new formsets**, in the hand-written `_<entity>_form` helper:
+  ```python
+  form_ok = form.is_valid()
+  if form_ok:
+      formset.instance = form.instance   # BEFORE formset.is_valid() — see BillsOfMaterials.py:60-67
+  if form_ok and formset.is_valid():
+      with transaction.atomic():
+          ...
+  ```
+- [ ] The parent-reading `clean()`s this actually protects:
+  - `InspectionCharacteristicFormSet.clean()` — at least one non-deleted characteristic; unique `sequence`;
+    **when the parent's `plan_type == "audit_checklist"` every characteristic must be `pass_fail` or `visual`**
+    (an audit checklist has no measurements) ← reads the parent.
+  - `CapaTaskFormSet.clean()` — **a task's `due_date` may not fall after the parent CAPA's `due_date`** ← reads
+    the parent. Unique `sequence`.
+  - `InspectionResultFormSet.clean()` — **every `is_mandatory` row must carry a value before the parent can be
+    completed** is enforced in `qualityinspection_complete`, not here (a partially-filled in-progress
+    inspection must stay savable); the formset only guards `measured_value` present when
+    `characteristic_type == "measurement"` **and** the row is being marked non-pending.
+
+### 0e. Dropdowns: tenant-scoping is NOT enough when the target's `__str__` walks an FK (140-query lesson)
+- [ ] Confirmed FK-walking `__str__`s this pass touches: **`LotSerial.__str__` → `self.item.sku`**
+  (`LotSerials.py:32`), **`WorkOrder.__str__` → `self.item`** (`WorkOrders.py:122`, and `Item.__str__` is
+  `"{sku} · {name}"`), `SalesOrder.__str__` → `self.customer.name` (`SalesOrders.py:181`). `Party.__str__` is
+  `self.name` — **no walk, no select_related needed** on inspector/auditor/supplier/owner dropdowns.
+- [ ] **Every** `ModelChoiceField` queryset in `forms/QualityManagement/` that points at a walking model gets
+  `.select_related(...)`: `lot_serial` → `.select_related("item")`, `work_order` → `.select_related("item")`,
+  `shipment` → `.select_related("sales_order__customer")` (only if `Shipment.__str__` walks — check it; if it is
+  number-only, skip). Same rule on the **list/detail** querysets and on `extra_context` filter-dropdown
+  querysets, not just the forms.
+- [ ] Cap the per-page dropdown cost the way 4.8 did after the finding: scope `lot_serial` to the chosen item
+  where one exists, and `work_order`/`goods_receipt`/`shipment` to open documents.
+
+### 0f. `Count()` annotations, `Exists()`, and the paginator
+- [ ] Any list queryset carrying a `Count()` **must** end in an explicit `.order_by(...)` — the GROUP BY makes
+  `QuerySet.ordered` False and the paginator emits an UnorderedObjectListWarning (4.8 finding). Affects the
+  `QualityAudit` list (finding counts), the `CapaAction` list (task counts) and the `InspectionPlan` list
+  (characteristic count).
+- [ ] **`Exists()` beats `Count()` when the template only asks "any?"** — use `Exists(OuterRef(...))` for:
+  "this inspection already has an NCR" (inspection list), "this audit has an open finding" (audit list + the
+  close guard), "this inspection has a failing `include_on_coa` result" (the CoA report's blocked column).
+  Add `Exists, OuterRef` to the `views/_common.py` import line.
+- [ ] Every stat-chip block is **ONE** `.aggregate(...)` with `Count("id", filter=Q(...))` terms — never one
+  query per chip, never a Python loop over the queryset.
+
+---
+
+## Models (5 primary + 3 tenant-less children)
+
+File order in `models/__init__.py` matters for readability only (all FKs are by string): **InspectionPlans →
+QualityInspections → QualityAudits → NonConformances → CapaActions.**
+
+### 1. `InspectionPlan` (no prefix, `code`-keyed) + `InspectionCharacteristic` — `models/QualityManagement/InspectionPlans.py`
+
+Realizes bullet 1's *"definition of inspection criteria"* half, and doubles as bullet 4's audit checklist.
+
+**`InspectionPlan` (`TenantOwned` — deliberately NOT `TenantNumbered`)**
+- [ ] **No `NUMBER_PREFIX`.** `code` `CharField(32)` + `unique_together ("tenant", "code", "version")` instead —
+  the `Item`/`Location`/`UOM`/`SupplierProfile` precedent for a master. This keeps a prefix free (research
+  line 427-428). Say so in the docstring so nobody "fixes" it later.
+- [ ] `name` `CharField(255)`
+- [ ] `plan_type` ∈ `incoming_receipt / in_process / outgoing_shipment / periodic_stock / audit_checklist`
+  default `incoming_receipt` (**drivers:** SAP inspection types 01/03/04, NetSuite transaction-type
+  specifications, Odoo control points per operation; `audit_checklist` is the Option-B reuse — research
+  lines 351-354)
+- [ ] `item` FK **`"scm.Item"`** SET_NULL null blank `related_name="inspection_plans"` (**driver:** NetSuite
+  spec scoped by item)
+- [ ] `item_category` FK **`"scm.ItemCategory"`** SET_NULL null blank `related_name="inspection_plans"`
+  (**driver:** Odoo control point on products *or product categories*)
+- [ ] `supplier` FK **`"core.Party"`** SET_NULL null blank `related_name="scm_inspection_plans"` (**driver:**
+  NetSuite vendor-scoped specs; AlisQI supplier-specific incoming specs)
+- [ ] `sampling_method` ∈ `all_100 / percentage / fixed_count / aql` default `all_100` (**driver:** Oracle
+  %/fixed-count/AQL with explicit accept-reject arithmetic; NetSuite conformance rules; SAP sampling procedures)
+- [ ] `sample_percentage` `Decimal(6,2)` null blank, validators `0..100`
+- [ ] `sample_size` `PositiveIntegerField` null blank
+- [ ] `aql_accept_number` / `aql_reject_number` `PositiveIntegerField` null blank (**driver:** Oracle — the lot
+  is rejected when failures ≥ the rejection number. **The ANSI/ASQ Z1.4 lookup tables are DEFERRED** — a quality
+  engineer types the two numbers)
+- [ ] `frequency` ∈ `every / random_percent / periodic` default `every` + `frequency_value` `Decimal(6,2)` null
+  blank (**driver:** NetSuite skip-lot, SAP dynamic modification, Odoo "randomly X% / periodically". **Static
+  rule only — automatic escalation/de-escalation on supplier history is DEFERRED**)
+- [ ] `version` `CharField(20, default="1")` · `effective_from` `DateField(null=True, blank=True)` ·
+  `is_active` `BooleanField(default=True)` (**driver:** AlisQI specification versions, SAP valid-from key date)
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["code", "version"]`, `unique_together = ("tenant", "code", "version")`, indexes
+  `(tenant, plan_type, is_active)` named `scm_iplan_tnt_type_idx`, `(tenant, item)` `scm_iplan_tnt_item_idx`
+- [ ] `clean()`: `percentage` requires `sample_percentage`; `fixed_count` requires `sample_size`; `aql` requires
+  both numbers **and** `aql_reject_number > aql_accept_number`; `random_percent` requires `frequency_value` in
+  `0..100`; **a non-`audit_checklist` plan requires at least one of `item` / `item_category` / `supplier`**, and
+  an `audit_checklist` plan must have **none** of them.
+- [ ] Derived (no stored columns): `characteristic_count` property, `is_effective(on=None)`,
+  `sample_quantity(lot_quantity)` → `q4()` of the sampling arithmetic (100 % → the lot; percentage →
+  `lot_qty × pct/100`; fixed_count → `min(sample_size, lot_qty)`; aql → `sample_size` when set else the lot),
+  `classmethod for_trigger(tenant, *, plan_type, item=None, supplier=None, on=None)` → the most specific active
+  effective plan (item → category → supplier → unscoped), **one query, no per-row loop**
+- **Form excludes:** `tenant`, `created_at`, `updated_at`. **Form MUST use `TenantUniqueMixin` +
+  `TenantModelForm`** — `("tenant","code","version")` is `unique_together`, so without the mixin a duplicate
+  code is an uncaught IntegrityError 500.
+
+**`InspectionCharacteristic` (plain `models.Model`, tenant-less child — reached through its parent)**
+- [ ] `plan` FK CASCADE `related_name="characteristics"` · `sequence` `PositiveIntegerField(default=10)`
+- [ ] `name` `CharField(255)`
+- [ ] `characteristic_type` ∈ `measurement / pass_fail / visual / instruction` default `measurement`
+  (**driver:** Odoo's six check types trimmed to four; Oracle values-list vs numeric limits)
+- [ ] `uom` FK `"scm.UOM"` SET_NULL null blank `related_name="+"`
+- [ ] `target_value` / `lower_limit` / `upper_limit` `Decimal(14,4)` null blank (**driver:** Oracle spec limits,
+  SAP master inspection characteristics, AlisQI internal *and* external limits, Odoo Measure tolerance)
+- [ ] `expected_text` `CharField(255, blank=True)` — the pass criterion for `pass_fail`/`visual`
+- [ ] `test_method` `CharField(255, blank=True)` (**driver:** AlisQI shows limit, unit **and test method** per
+  CoA result row)
+- [ ] `is_critical` `BooleanField(default=False)` (**driver:** Siemens CTQ, SAP critical characteristics — one
+  failed critical characteristic fails the whole lot regardless of the rest)
+- [ ] `is_mandatory` `BooleanField(default=True)`
+- [ ] **`include_on_coa` `BooleanField(default=False)`** (**driver:** AlisQI/Deacom — this single boolean is what
+  makes the CoA a *report* instead of a table. Say so in the `help_text`.)
+- [ ] `Meta`: `ordering = ["sequence", "id"]`
+- [ ] `clean()`: a `measurement` needs at least one of target/lower/upper; `upper_limit >= lower_limit` when
+  both set; a non-`measurement` type must carry **no** limits (keeps the snapshot honest);
+  `include_on_coa` requires a `measurement` or `pass_fail` type (you cannot certify an instruction).
+- [ ] **Formset:** `InspectionCharacteristicFormSet` via `inlineformset_factory`, `extra=1`, **`max_num=200`**
+  (the 4.8 security lesson — bound breadth, not just depth), `can_delete=True`, and the §0d parent-reading
+  `clean()`.
+
+### 2. `QualityInspection` [`QC-`] + `InspectionResult` — `models/QualityManagement/QualityInspections.py`
+
+Realizes bullet 1's execution half **and carries the whole of bullet 5** (the CoA is a report over this table).
+
+**`QualityInspection` (`TenantNumbered`, `NUMBER_PREFIX = "QC"`)**
+- [ ] `plan` FK `"scm.InspectionPlan"` SET_NULL null blank `related_name="inspections"` — nullable so history
+  survives a plan being unlinked; `generate_results()` requires one
+- [ ] `inspection_type` ∈ `incoming / in_process / outgoing / periodic_stock` default `incoming`
+  (**driver:** the bullet's own "incoming and outgoing goods"; SAP GR-from-vendor / in-process / pre-shipment /
+  periodic stock; NetSuite item-receipt / WO-completion / item-fulfillment; **4.8 explicitly left the in-process
+  seam**, `research-scm-4.8.md:456-459`)
+- [ ] `goods_receipt` FK `"scm.GoodsReceiptNote"` SET_NULL null blank `related_name="quality_inspections"` ·
+  `work_order` FK `"scm.WorkOrder"` SET_NULL null blank `related_name="quality_inspections"` ·
+  `shipment` FK `"scm.Shipment"` SET_NULL null blank `related_name="quality_inspections"`
+- [ ] `item` FK **`"scm.Item"`** **PROTECT** `related_name="quality_inspections"` ← **§0b guard target.**
+  **Note for the form:** a GRN has **no** item FK (4.1's PO lines are free text — `_resolve_grn_item` is
+  best-effort), so the item is always picked explicitly; the GRN link is context, never a source of truth.
+- [ ] `lot_serial` FK **`"scm.LotSerial"`** **PROTECT** null blank `related_name="quality_inspections"` ←
+  §0b `lotserial_delete` hardening target
+- [ ] `location` FK **`"scm.Location"`** **PROTECT** null blank `related_name="quality_inspections"`
+- [ ] `supplier` FK `"core.Party"` SET_NULL null blank `related_name="scm_quality_inspections"`
+- [ ] `quantity_inspected` `Decimal(14,4)` default 0, `MinValueValidator(ZERO)` · `sample_size` `Decimal(14,4)`
+  default 0 · `quantity_accepted` / `quantity_rejected` `Decimal(14,4)` default 0 (**driver:** Oracle's
+  accept/reject arithmetic; SAP inspection lot). **These three ARE typed by the inspector** — they are not
+  derived, so no single-writer conflict; `clean()` enforces
+  `quantity_accepted + quantity_rejected <= quantity_inspected` and `sample_size <= quantity_inspected`.
+- [ ] `inspector` FK **`"core.Party"`** SET_NULL null blank `related_name="scm_inspections_performed"` —
+  scoped by the existing **`_employee_parties()`** (L29: never a new inspector table)
+- [ ] `inspected_on` `DateField` (form default: today)
+- [ ] `status` ∈ `draft / in_progress / passed / failed / on_hold / cancelled` default `draft`,
+  **`editable=False`**; `EDITABLE_STATUSES = ("draft", "in_progress")` (**driver:** NetSuite pending →
+  in-process → pass/fail with hold and cancel reachable only by a quality manager)
+- [ ] `usage_decision` ∈ `pending / accept / accept_with_deviation / reject` default `pending`,
+  **`editable=False`** (**driver:** SAP usage decision; NetSuite post-inspection action)
+- [ ] `action_taken` ∈ `none / quarantined / ncr_raised / returned_to_vendor` default `none`,
+  **`editable=False`**
+- [ ] `supplier_coa_reference` `CharField(120, blank=True)` (**driver:** AlisQI/SAP supplier-CoA receipt at
+  goods-in; the PDF itself attaches as a **`core.Document`**, and automated extraction is DEFERRED)
+- [ ] `notes` `TextField(blank=True)`
+- [ ] **CoA stamp (bullet 5's "record of issuance"):** `coa_number` `CharField(20, blank=True,
+  editable=False)`, `coa_issued_on` `DateTimeField(null=True, blank=True, editable=False)`, `coa_issued_to` FK
+  `"core.Party"` SET_NULL null blank **editable=False** `related_name="scm_coa_certificates"`. Assigned via
+  **`next_number(QualityInspection, tenant, "COA", field="coa_number")`** — the `field=` kwarg is verified
+  (`apps/core/utils.py:33`). A standalone `CertificateOfAnalysis` register is **DEFERRED**; the `COA-` prefix is
+  reserved by this usage.
+- [ ] `Meta`: `ordering = ["-inspected_on", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+  `(tenant, status)` `scm_qc_tnt_status_idx`, `(tenant, inspection_type, status)` `scm_qc_tnt_type_status_idx`,
+  `(tenant, item)` `scm_qc_tnt_item_idx`, `(tenant, lot_serial)` `scm_qc_tnt_lot_idx`, `(tenant, coa_number)`
+  `scm_qc_tnt_coa_idx`
+- [ ] Derived, **nothing stored**: `is_editable`; `evaluated_result` → `"pass"` / `"fail"` / `"pending"`
+  computed from the result rows (**fail if ANY `is_critical` row failed, or any `is_mandatory` row failed**);
+  `has_critical_failure`; `failed_count`; `pending_count`; `coa_results` (the `include_on_coa` rows, ordered);
+  **`coa_blockers()`** → a list of human strings (the AlisQI guard, see below); `coa_ready` (=`not
+  coa_blockers()`); `is_coa_issued` (= `bool(coa_number)`)
+- [ ] **`coa_blockers()` — the refuse-to-certify rule, in one place:**
+  1. `inspection_type != "outgoing"` → "Only an outgoing inspection can certify a shipped batch."
+  2. `status != "passed"` → "The inspection has not passed."
+  3. `usage_decision not in ("accept", "accept_with_deviation")` → "No usage decision has accepted this lot."
+  4. any `include_on_coa` result with `result == "fail"` → "N included characteristic(s) are out of
+     specification." (**AlisQI: never issue a certificate containing an off-spec value**)
+  5. any `include_on_coa` result still `pending` → "N included characteristic(s) have no recorded value."
+  6. `lot_serial is None` **and** `item.tracking != "none"` → "A lot/batch is required for a lot-tracked item."
+  7. no `include_on_coa` results at all → "No characteristics are flagged for the certificate."
+  **One query for the results** (`prefetch_related`/one filtered queryset), never one per rule.
+- [ ] `generate_results()` — copies the plan's characteristics onto `InspectionResult` rows **only when the
+  inspection has no results yet** (the 4.8 `explode_components()` shape: never silently overwrite a
+  hand-corrected set). Returns the count created. **This is the ONLY writer of the snapshot block.**
+- **Form excludes:** `tenant`, `number`, `status`, `usage_decision`, `action_taken`, `coa_number`,
+  `coa_issued_on`, `coa_issued_to`, `created_at`, `updated_at`.
+
+**`InspectionResult` (plain `models.Model`, tenant-less child)**
+- [ ] `inspection` FK CASCADE `related_name="results"` · `sequence` `PositiveIntegerField(default=10)`
+- [ ] `characteristic` FK `"scm.InspectionCharacteristic"` SET_NULL null blank `related_name="+"` **editable=False**
+  — traceability only. **Every value rendered comes from the snapshot, never from this FK.**
+- [ ] **SNAPSHOT BLOCK — all `editable=False`, written once by `generate_results()`** (the 4.8
+  `WorkOrderComponent` precedent: a later plan edit must never rewrite a past certificate):
+  `characteristic_name` `CharField(255)`, `characteristic_type` `CharField(16, choices=…)`, `uom` FK
+  `"scm.UOM"` SET_NULL null blank `related_name="+"`, `target_value` / `lower_limit` / `upper_limit`
+  `Decimal(14,4)` null blank, `test_method` `CharField(255, blank=True)`, `include_on_coa` `BooleanField`,
+  `is_critical` `BooleanField`, `is_mandatory` `BooleanField(default=True)`
+- [ ] **INSPECTOR-TYPED:** `measured_value` `Decimal(14,4)` null blank · `text_value` `CharField(255, blank=True)`
+  · `notes` `CharField(255, blank=True)`
+- [ ] `result` ∈ `pending / pass / fail / not_applicable` default `pending` — **see §0c for the single-writer
+  precedence rule.** Rendered as an input only for `pass_fail`/`visual`.
+- [ ] `Meta`: `ordering = ["sequence", "id"]`
+- [ ] `is_out_of_spec` property; `spec_text` property (`"280.0000 – 320.0000 cd/m²"` / the expected text) — the
+  CoA table column, computed from the snapshot alone
+- [ ] **Formset:** `InspectionResultFormSet`, `extra=0`, `can_delete=True`, **`max_num=200`**; the whole
+  snapshot block rendered **read-only text, not inputs**.
+
+### 3. `QualityAudit` [`QA-`] — `models/QualityManagement/QualityAudits.py` (`TenantNumbered`)
+
+Realizes bullet 4 entirely. **Zero coupling to `Item`/`LotSerial`/`StockMove`/GRN/Shipment/WorkOrder** — nothing
+in it can destabilise the ledger.
+
+- [ ] `audit_type` ∈ `internal / supplier / customer / certification` default `internal` (**driver:** Intelex,
+  TrackWise, ETQ, Veeva external-partner audits; `NavERP.md` 12.11)
+- [ ] `title` `CharField(255)` · `standard` `CharField(120, blank=True)` (free text, e.g. "ISO 9001:2015" —
+  **driver:** Intelex "custom or ISO checklists"; a standards master is DEFERRED) · `scope` `TextField(blank=True)`
+- [ ] `auditee_party` FK `"core.Party"` SET_NULL null blank `related_name="scm_quality_audits"` ·
+  `auditee_org_unit` FK **`"core.OrgUnit"`** SET_NULL null blank `related_name="scm_quality_audits"`
+- [ ] `checklist_plan` FK `"scm.InspectionPlan"` SET_NULL null blank `related_name="audits"` — scoped in the
+  form to `plan_type="audit_checklist"` (**driver:** the checklist reuse, research lines 351-354 — the strongest
+  argument for building the plan table first)
+- [ ] `lead_auditor` FK `"core.Party"` SET_NULL null blank `related_name="scm_led_audits"` (via
+  `_employee_parties()`)
+- [ ] `planned_date` `DateField` (**driver:** Intelex audit scheduler with frequency + risk level)
+- [ ] `risk_level` ∈ `low / medium / high` default `medium` (**driver:** Intelex risk-based audit selection)
+- [ ] `actual_start` / `actual_end` `DateField(null=True, blank=True, **editable=False**)` — stamped by the
+  `start` / `complete` actions only (§0c)
+- [ ] `status` ∈ `planned / in_progress / reported / closed / cancelled` default `planned`, **`editable=False`**
+- [ ] `conclusion` `TextField(blank=True)` — **editable** (the auditor's narrative; one writer, the form). The
+  `complete` action refuses while it is blank.
+- [ ] `notes` `TextField(blank=True)`
+- [ ] **NO `findings_major` / `findings_minor` columns** — §0c. Properties + list annotations.
+- [ ] `Meta`: `ordering = ["-planned_date", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+  `(tenant, status)` `scm_qa_tnt_status_idx`, `(tenant, audit_type, status)` `scm_qa_tnt_type_status_idx`,
+  `(tenant, planned_date)` `scm_qa_tnt_date_idx`
+- [ ] `clean()`: `actual_end >= actual_start`; `audit_type in ("supplier","customer")` requires
+  `auditee_party`; `audit_type == "internal"` requires `auditee_org_unit`
+- [ ] Properties: `is_editable` (`status == "planned"`), `finding_count`, `major_count`, `minor_count`,
+  `open_finding_count`, `duration_days`
+- [ ] **Findings are `NonConformance` rows with `source="audit"` + the `audit` FK — there is NO separate finding
+  table** (research lines 356-358: one finding register, not two). Evidence attaches as a **`core.Document`**.
+- **Form excludes:** `tenant`, `number`, `status`, `actual_start`, `actual_end`, `created_at`, `updated_at`.
+
+### 4. `NonConformance` [`NCR-`] — `models/QualityManagement/NonConformances.py` (`TenantNumbered`)
+
+Realizes bullet 2 entirely — the single finding register fed by every detection source.
+
+- [ ] `source` ∈ `inspection / goods_receipt / production / supplier / audit / internal` default `internal`
+  (**driver:** QT9 "NC connects to CAPA, audits, complaints, inspections, deviations"; Intelex internal *and*
+  external. **No `customer_complaint` value on purpose** — that is CRM `Case` / 12.13)
+- [ ] `inspection` FK `"scm.QualityInspection"` SET_NULL null blank `related_name="nonconformances"` ·
+  `goods_receipt` / `work_order` / `shipment` FKs SET_NULL null blank `related_name="nonconformances"` ·
+  `audit` FK `"scm.QualityAudit"` SET_NULL null blank **`related_name="findings"`**
+- [ ] `item` FK **`"scm.Item"`** **PROTECT** **null blank** `related_name="nonconformances"` ← §0b guard target.
+  Nullable because an audit finding ("training records incomplete") has no item; `clean()` requires it unless
+  `source == "audit"`.
+- [ ] `lot_serial` FK **`"scm.LotSerial"`** **PROTECT** null blank `related_name="nonconformances"` ·
+  `location` FK **`"scm.Location"`** **PROTECT** null blank `related_name="nonconformances"`
+- [ ] `supplier` FK `"core.Party"` SET_NULL null blank `related_name="scm_nonconformances"`
+- [ ] `quantity_affected` `Decimal(14,4)` default 0, `MinValueValidator(ZERO)` · `uom` FK `"scm.UOM"` SET_NULL
+  null blank `related_name="+"`
+- [ ] `defect_category` ∈ `dimensional / visual_cosmetic / functional / material / packaging / labelling /
+  documentation / contamination / quantity_shortage / late_delivery / process_deviation / other` default `other`
+  (**driver:** Intelex defect codes, QT9 types-and-categories for KPI reporting. **A configurable per-tenant
+  defect-code TABLE is DEFERRED** — same call 4.6 made for mode/equipment matrices)
+- [ ] `severity` ∈ `critical / major / minor / observation` default `minor` (**driver:** Intelex — severity
+  selects how deep the response goes; also the audit finding grading, research line 356)
+- [ ] `title` `CharField(255)` · `description` `TextField`
+- [ ] `detected_by` FK `"core.Party"` SET_NULL null blank `related_name="scm_nonconformances_detected"` ·
+  `detected_on` `DateField`
+- [ ] `containment_action` `TextField(blank=True)` (**driver:** QT9 "quarantine affected items", "prevent
+  nonconforming shipments"; TrackWise separates corrections from CAPA)
+- [ ] `quarantine_applied` `BooleanField(default=False, **editable=False**)` — mirrors the `LotSerial.status`
+  flip; written only by the quarantine/release actions
+- [ ] **The MRB decision block, all `editable=False`, written only by `nonconformance_disposition`:**
+  `disposition` ∈ `pending / use_as_is / rework / repair / scrap / return_to_vendor / regrade` default
+  `pending`; `disposition_quantity` `Decimal(14,4)` default 0; `disposition_by` FK Party SET_NULL null blank;
+  `disposition_on` `DateTimeField(null=True, blank=True)`; `disposition_notes` `TextField(blank=True)`
+  (**driver:** the MRB convention + QT9 + SAP usage decision + NetSuite RTV. **The MRB is modelled as the
+  decision fields, NOT as a board/meeting entity** — that is DEFERRED)
+- [ ] `cost_of_quality` `Decimal(14,2)` default 0 — **user-entered, form-defaulted** (§0c). (**driver:** QT9
+  "put dollars and cents to poor quality".) **It never posts a JournalEntry (L29)** — accounting sees only the
+  scrap `StockMove` through the 4.3 valuation report. Say so in the `help_text` AND the model docstring.
+- [ ] `owner` FK Party SET_NULL null blank `related_name="scm_nonconformances_owned"` · `due_date`
+  `DateField(null=True, blank=True)` (**driver:** Intelex creation → triage → verification → resolution with due
+  dates; QT9 overdue alerts. **Email notification is integration/later** — the state and the filter ship)
+- [ ] `status` ∈ `open / investigating / dispositioned / closed / cancelled` default `open`, **`editable=False`**
+  · `closed_on` `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["-detected_on", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+  `(tenant, status)` `scm_ncr_tnt_status_idx`, `(tenant, severity, status)` `scm_ncr_tnt_sev_idx`,
+  `(tenant, source)` `scm_ncr_tnt_source_idx`, `(tenant, item)` `scm_ncr_tnt_item_idx`, `(tenant, due_date)`
+  `scm_ncr_tnt_due_idx`
+- [ ] `clean()`: `item` required unless `source == "audit"`; `quantity_affected > 0` when `item` is set;
+  `due_date >= detected_on` when both set
+- [ ] Properties: `is_editable` (open/investigating), `is_overdue` (`due_date < today` and status not in
+  closed/cancelled), `days_open`, `posts_stock` (`disposition == "scrap"` **and** `location_id` **and**
+  `source != "goods_receipt"` — §0a ruling (c) made executable, not just documented),
+  `lot_history()` → `StockMove.objects.filter(tenant=…, lot_serial=…).select_related("item","location")
+  .order_by("-moved_at")[:50]` — the read-only "where did this lot go" panel (*trim #2*). Recall execution is
+  parked (12.18 / 4.10).
+- **Form excludes:** `tenant`, `number`, `status`, `quarantine_applied`, `disposition`, `disposition_quantity`,
+  `disposition_by`, `disposition_on`, `disposition_notes`, `closed_on`, `created_at`, `updated_at`.
+
+### 5. `CapaAction` [`CAPA-`] + `CapaTask` — `models/QualityManagement/CapaActions.py`
+
+Realizes bullet 3 entirely, and closes 4.2's parked SCAR hook (`research-scm-4.2.md:305-307`) **without touching
+4.2's schema**.
+
+**`CapaAction` (`TenantNumbered`, `NUMBER_PREFIX = "CAPA"`)**
+- [ ] `action_type` ∈ `corrective / preventive` default `corrective` (**driver:** Odoo puts both on one alert;
+  ISO 9001 §10.2 — an attribute, **not two tables**)
+- [ ] `title` `CharField(255)`
+- [ ] `source` ∈ `nonconformance / audit_finding / inspection_trend / supplier / complaint /
+  internal_improvement` default `internal_improvement` (**driver:** QT9 auto-creates CAPA from feedback, quality
+  events, NC, audits, management review, risk, safety and inspections; **TrackWise names "stand-alone CAPA" a
+  first-class concept** — hence the nullable link below)
+- [ ] `nonconformance` FK `"scm.NonConformance"` SET_NULL **null blank** `related_name="capa_actions"` ·
+  `audit` FK `"scm.QualityAudit"` SET_NULL null blank `related_name="capa_actions"` (**driver:** TrackWise —
+  an audit report generates CAPA plans)
+- [ ] `item` FK `"scm.Item"` **SET_NULL** null blank `related_name="capa_actions"` (deliberately not PROTECT —
+  §0b)
+- [ ] `supplier` FK `"core.Party"` SET_NULL null blank `related_name="scm_capa_actions"` — **the SCAR**
+  (**driver:** MasterControl / ETQ supply-chain quality / Veeva supplier quality)
+- [ ] `problem_statement` `TextField` · `containment_action` `TextField(blank=True)` (**driver:** TrackWise
+  distinguishes *corrections* from CAPA)
+- [ ] `root_cause_method` ∈ `five_why / fishbone / fault_tree / eight_d / pareto / other`, `blank=True` ·
+  `root_cause` `TextField(blank=True)` (**driver:** QT9 "fully integrated RCA" + 8D; Intelex scales 8D to
+  severity. **Structured D1-D8 step records and fishbone branches are DEFERRED** — this pass stores the method
+  and the conclusion)
+- [ ] `action_plan` `TextField(blank=True)`
+- [ ] `owner` FK Party SET_NULL null blank `related_name="scm_capa_actions_owned"` · `priority` ∈
+  `low / normal / high / critical` default `normal` · `due_date` `DateField(null=True, blank=True)`
+- [ ] `status` ∈ `open / investigating / in_progress / pending_verification / closed / cancelled` default
+  `open`, **`editable=False`**
+- [ ] **Effectiveness block (**driver:** QT9 verifies effectiveness *after* final approval; `NavERP.md` 12.4
+  gives it its own bullet):** `implemented_on` `DateField(null=True, blank=True, **editable=False**)`;
+  `effectiveness_due_date` `DateField(null=True, blank=True)` — **editable, one writer = the form** (the
+  implement action *refuses* while it is blank rather than filling it, so there is never a second writer);
+  `effectiveness_result` ∈ `pending / effective / not_effective` default `pending` **editable=False**;
+  `verified_by` FK Party SET_NULL null blank **editable=False**; `verified_on` `DateField` null blank
+  **editable=False**; `verification_notes` `TextField(blank=True, editable=False)`; `closed_on`
+  `DateTimeField(null=True, blank=True, editable=False)`
+- [ ] `notes` `TextField(blank=True)`
+- [ ] `Meta`: `ordering = ["-id"]`, `unique_together = ("tenant", "number")`, indexes `(tenant, status)`
+  `scm_capa_tnt_status_idx`, `(tenant, priority, status)` `scm_capa_tnt_prio_idx`, `(tenant, due_date)`
+  `scm_capa_tnt_due_idx`, `(tenant, source)` `scm_capa_tnt_source_idx`
+- [ ] `clean()`: `effectiveness_due_date >= due_date` when both set; `nonconformance` required when
+  `source == "nonconformance"`; `audit` required when `source == "audit_finding"`; `supplier` required when
+  `source == "supplier"`
+- [ ] Properties: `is_editable` (open/investigating/in_progress), `is_overdue`, `verification_overdue`
+  (`effectiveness_due_date < today` and `effectiveness_result == "pending"` and status
+  `pending_verification`), `open_task_count` (**annotated on the list**, §0f)
+- [ ] **DEFERRED and named in the docstring:** rules-based routing / configurable approval matrices
+  (MasterControl/ETQ/Veeva) — NavERP has no workflow engine, so this pass is a fixed status ladder.
+- **Form excludes:** `tenant`, `number`, `status`, `implemented_on`, `effectiveness_result`, `verified_by`,
+  `verified_on`, `verification_notes`, `closed_on`, `created_at`, `updated_at`.
+
+**`CapaTask` (plain `models.Model`, tenant-less child)** (**driver:** QT9 "unlimited tasks involving multiple
+parties"; Veeva CAPA plans; Intelex action plans)
+- [ ] `capa` FK CASCADE `related_name="tasks"` · `sequence` `PositiveIntegerField(default=10)`
+- [ ] `description` `CharField(255)` · `owner` FK `"core.Party"` SET_NULL null blank `related_name="+"`
+- [ ] `due_date` `DateField(null=True, blank=True)` · `completed_on` `DateField(null=True, blank=True)`
+- [ ] `status` ∈ `open / in_progress / done / cancelled` default `open`
+- [ ] `Meta`: `ordering = ["sequence", "id"]`; `is_overdue` property
+- [ ] **Formset:** `CapaTaskFormSet`, `extra=1`, `max_num=100`, `can_delete=True`, **with the §0d
+  parent-reading `clean()`** (a task cannot be due after its CAPA) — and the **`formset.instance = form.instance`
+  assignment**, or the guard no-ops on create.
+- [ ] **`owner` is a tenant-less child's FK to a tenant-owning model** — `TenantModelForm` scopes it, but the
+  dropdown must still be narrowed to `_employee_parties(tenant)`.
+
+### Deliberately NOT added (say no once, here)
+- ~~A `scrap` / `quarantine` `StockMove.move_type`~~ — §0a. `adjustment` + `reference="NCR-…"` is fully
+  attributable.
+- ~~A hold / blocked-stock table or a stored `quantity_blocked`~~ — `LotSerial.status="quarantine"` already
+  exists (`LotSerials.py:9-14`). L37: on-hand is always `Sum(quantity)`.
+- ~~A standalone `CertificateOfAnalysis` register / `CoATemplate`~~ — three stamp fields on the outgoing
+  inspection + one printable template. `COA-` reserved.
+- ~~A `QualityAuditFinding` table~~ — findings ARE `NonConformance(source="audit")`. One register, not two.
+- ~~`QualityAudit.findings_major` / `findings_minor` columns~~ — derived (§0c).
+- ~~An inspector / auditor / operator person table~~ — `core.Party` + `PartyRole("employee")` via
+  `_employee_parties()` (L29).
+- ~~A supplier quality rating field~~ — 4.2 owns `SupplierScorecard.quality_score`. Feeding NCR counts into it
+  is a **4.2** change, in Later passes.
+- ~~Any `GLAccount` FK or `JournalEntry`~~ — SCM posts none (L29). `cost_of_quality` is a recorded figure.
+- ~~A per-tenant defect-code / root-cause-code master~~ — choice fields this pass.
+- ~~An attachment table~~ — `core.Document`'s generic FK is the only mechanism.
+
+---
+
+## Backend (apps/scm/{models,forms,views,urls}/QualityManagement/)
+
+**Mandatory package shape:** one new `QualityManagement/` folder in EACH of the four packages, one `<Entity>.py`
+per entity, the four layers lining up one-to-one. Every sub-package `__init__.py` is **ZERO-BYTE**; the
+re-export blocks go in the **parent** package `__init__.py`. **Imports are ABSOLUTE.** Entity modules open with
+`from apps.scm.models._base import *` (resp. `apps.scm.forms._common`, `apps.scm.views._common`).
+
+### models
+- [ ] `apps/scm/models/QualityManagement/__init__.py` — **empty file** (still its own commit)
+- [ ] `apps/scm/models/QualityManagement/InspectionPlans.py` — `InspectionPlan` + `InspectionCharacteristic`
+- [ ] `apps/scm/models/QualityManagement/QualityInspections.py` — `QualityInspection` + `InspectionResult`
+  + the shared `_evaluate(...)` pure function (§0c)
+- [ ] `apps/scm/models/QualityManagement/QualityAudits.py` — `QualityAudit`
+- [ ] `apps/scm/models/QualityManagement/NonConformances.py` — `NonConformance`
+- [ ] `apps/scm/models/QualityManagement/CapaActions.py` — `CapaAction` + `CapaTask`
+- [ ] `apps/scm/models/__init__.py` — **re-export block** `# 4.9 Quality Management System (QMS)` after the 4.8
+  block (which ends ~line 152), in dependency order: `InspectionPlan, InspectionCharacteristic`;
+  `QualityInspection, InspectionResult`; `QualityAudit`; `NonConformance`; `CapaAction, CapaTask`.
+  **Forgetting this is an ImportError at runtime, not at import time.**
+
+### forms
+- [ ] `apps/scm/forms/QualityManagement/__init__.py` — **empty**
+- [ ] `apps/scm/forms/QualityManagement/InspectionPlans.py` — `InspectionPlanForm` (**`TenantUniqueMixin` +
+  `TenantModelForm`** — `("tenant","code","version")` unique_together; scope `item`, `item_category`,
+  `supplier` → `_supplier_parties`), `InspectionCharacteristicForm`, `BaseInspectionCharacteristicFormSet`
+  (the §0d parent-reading `clean()`), `InspectionCharacteristicFormSet` (`max_num=200`)
+- [ ] `apps/scm/forms/QualityManagement/QualityInspections.py` — `QualityInspectionForm` (scope `plan` to
+  active plans **matching the chosen `inspection_type` where one is chosen**, `item`, `lot_serial`
+  **`.select_related("item")` and narrowed to the chosen item**, `location`, `goods_receipt` (received only),
+  `work_order` **`.select_related("item")`**, `shipment` (outbound for `inspection_type="outgoing"`),
+  `supplier` → `_supplier_parties`, `inspector` → **`_employee_parties`**; `clean()` mirrors the model's
+  quantity arithmetic so the error lands on the field, not as a 500), `InspectionResultForm`,
+  `BaseInspectionResultFormSet`, `InspectionResultFormSet` (`extra=0`, `max_num=200`),
+  `QualityInspectionDecisionForm` (`forms.Form`: `usage_decision`, `notes`),
+  `QualityInspectionCoAIssueForm` (`forms.Form`: `coa_issued_to` scoped to `_customer_parties`, `issued_on`)
+- [ ] `apps/scm/forms/QualityManagement/QualityAudits.py` — `QualityAuditForm` (scope `auditee_party`,
+  `auditee_org_unit`, `checklist_plan` → `plan_type="audit_checklist"`, `lead_auditor` →
+  `_employee_parties`), `QualityAuditFindingForm` (`forms.Form`: `title`, `description`, `severity`,
+  `defect_category`, `owner`, `due_date` — the raise-a-finding action's payload)
+- [ ] `apps/scm/forms/QualityManagement/NonConformances.py` — `NonConformanceForm` (scope every FK; `item`
+  optional; **`cost_of_quality` initial** = `q2(quantity_affected × item.average_cost)` on an unbound form with
+  an instance; `clean()` mirrors the model), `NonConformanceDispositionForm` (`forms.Form`: `disposition`,
+  `disposition_quantity`, `disposition_notes`)
+- [ ] `apps/scm/forms/QualityManagement/CapaActions.py` — `CapaActionForm` (scope `nonconformance`
+  **`.select_related("item")`**, `audit`, `item`, `supplier`, `owner` → `_employee_parties`),
+  `CapaTaskForm`, `BaseCapaTaskFormSet` (the §0d parent-reading `clean()`), `CapaTaskFormSet` (`max_num=100`),
+  `CapaVerificationForm` (`forms.Form`: `effectiveness_result`, `verified_by`, `verified_on`,
+  `verification_notes`)
+- [ ] `apps/scm/forms/__init__.py` — **re-export block** `# 4.9 …` for every form + base-formset + formset above
+
+### views (function-based, `@login_required`, tenant-scoped, full CRUD + filters + pagination)
+- [ ] `apps/scm/views/QualityManagement/__init__.py` — **empty**
+- [ ] `apps/scm/views/_common.py` — **EDIT**: add `Exists, OuterRef` to the
+  `from django.db.models import Count, F, Q, Sum` line (§0f)
+- [ ] `apps/scm/views/QualityManagement/InspectionPlans.py` — `inspectionplan_list/create/detail/edit/delete`.
+  Create/edit are the hand-written **`_inspectionplan_form(request, instance)`** (header +
+  `InspectionCharacteristicFormSet` in ONE `transaction.atomic()`, the `_billofmaterials_form` pattern at
+  `views/Manufacturing/BillsOfMaterials.py:46-81`), **with the §0d `formset.instance = form.instance`
+  assignment** and a hand-rolled `write_audit_log(request.user, plan, "update"/"create", _changed(form))` —
+  `crud_*` is bypassed here, so nothing logs automatically.
+  List: `crud_list(..., "scm/quality/inspectionplan/list.html",
+  search_fields=["code","name","notes"], filters=[("plan_type","plan_type",False),
+  ("item","item_id",True), ("item_category","item_category_id",True), ("supplier","supplier_id",True),
+  ("sampling_method","sampling_method",False), ("is_active","is_active",False)],
+  extra_context={"type_choices": …, "sampling_choices": …, "items": _item_qs(tenant), "categories": …,
+  "suppliers": _supplier_parties(tenant)})`, queryset annotated `Count("characteristics")` **plus an explicit
+  `.order_by("code","version")`** (§0f).
+  Detail: the characteristic table (limits / unit / test method / critical / CoA chips), the inspections run
+  from it (capped `[:10]`), the audits using it as a checklist. Delete: the §0b guard.
+- [ ] `apps/scm/views/QualityManagement/QualityInspections.py` —
+  `qualityinspection_list/create/detail/edit/delete` (hand-written `_qualityinspection_form`, atomic parent +
+  `InspectionResultFormSet`, §0d assignment) **plus the action views**, each **`@require_POST`, inside
+  `transaction.atomic()`, opening with `select_for_update()` + a status re-read** (the
+  `stocktransfer_complete` double-post guard at `views/InventoryManagement/StockTransfers.py:119-135`), each
+  catching `ValidationError` → `messages.error` (never a 500), each ending in `write_audit_log(...,
+  {"action": "<name>"})`:
+  - a shared **`_transition(request, pk, *, from_statuses, to_status, verb, stamp=None)`** helper — the
+    `views/Manufacturing/WorkOrders.py:149` shape — backing `qualityinspection_start`
+    (draft → in_progress), `qualityinspection_hold` (draft/in_progress → on_hold),
+    `qualityinspection_resume` (on_hold → in_progress), `qualityinspection_cancel`. `@login_required`.
+  - `qualityinspection_generate_results` — `@login_required`; refuses without a `plan`; refuses when results
+    already exist (info message, not an error); reports the count created.
+  - `qualityinspection_complete` — `@login_required`; `in_progress` → `passed`/`failed` from
+    **`evaluated_result`**; refuses while any `is_mandatory` result is still `pending`, naming how many.
+  - `qualityinspection_decide` — **`@tenant_admin_required`** (the usage decision is a sign-off); from
+    `passed`/`failed` only; writes `usage_decision` + appends to `notes`.
+  - `qualityinspection_quarantine` / `qualityinspection_release_lot` — **`@tenant_admin_required`**; require a
+    `lot_serial`; `select_for_update()` on the **LotSerial** row; flip `status` between `quarantine` and
+    `available`; set `action_taken="quarantined"`. **Docstring states: posts NO StockMove (§0a ruling (b)).**
+    `release_lot` refuses unless the lot is currently `quarantine`.
+  - `qualityinspection_raise_ncr` — **`@login_required`** (creates a draft document — the
+    `mrp_create_workorder` precedent); only from `failed` **or** `usage_decision="reject"`; **once only**
+    (`nonconformances.exists()` → info message + redirect to the existing NCR); pre-fills `source="inspection"`,
+    item/lot/location/supplier/uom, `quantity_affected = quantity_rejected`, `detected_by = inspector`,
+    `detected_on = inspected_on`, `title` from the inspection; sets `action_taken="ncr_raised"`; redirects to
+    `scm:nonconformance_detail`. **Compute-then-convert: Oracle auto-creates the NC; NavERP proposes it.**
+  - List filters: `q` (number/notes/item sku/lot number/`coa_number`), `status`, `inspection_type`,
+    `usage_decision`, `item`, `supplier`, `inspector`, plus `date_from`/`date_to` on `inspected_on`.
+    `extra_context` carries every choice tuple + `items`/`suppliers`/`inspectors` querysets. Stat chips (ONE
+    aggregate, §0f): open / passed / failed / on-hold / NCRs raised.
+    Queryset `.select_related("item","lot_serial__item","plan","inspector","supplier","location")` and an
+    `Exists()` annotation for "has an NCR".
+  - Detail: the result table (snapshot limits, measured value, pass/fail badge, out-of-spec highlight), the
+    posting/decision Actions sidebar (every button a **POST form with `{% csrf_token %}` + `confirm()` +
+    `{% if %}` gating that matches the view's own guard**, L: never render a button its view will bounce), the
+    CoA panel (blockers listed when not ready; number/date/recipient + a Print link when issued), the linked
+    NCRs, and the source document link (GRN / WO / Shipment).
+- [ ] `apps/scm/views/QualityManagement/QualityAudits.py` — `qualityaudit_list/create/detail/edit/delete`
+  (plain `crud_*` — no formset) **plus** `qualityaudit_start` / `qualityaudit_complete` (→ `reported`, stamps
+  `actual_end`, refuses while `conclusion` is blank) / `qualityaudit_close` (**refuses while any finding NCR is
+  still open** — Intelex/TrackWise closure verification) / `qualityaudit_cancel` via the shared `_transition`,
+  `qualityaudit_add_finding` (**`@login_required`, `@require_POST`** — creates a
+  `NonConformance(source="audit", audit=…, detected_by=lead_auditor, detected_on=today)` from
+  `QualityAuditFindingForm`; **the only creator of `source="audit"` rows**, which is what makes the sidebar key
+  honest), and `qualityaudit_print` (GET, the audit report page — *trim #1*).
+  List: filters `q` (number/title/standard/scope), `audit_type`, `status`, `risk_level`, `lead_auditor`,
+  `date_from`/`date_to` on `planned_date`; queryset annotated `Count("findings", filter=Q(findings__severity=
+  "major"))` / `"minor"` **plus an explicit `.order_by("-planned_date","-id")`** (§0f) and an `Exists()` for
+  "has an open finding".
+  Detail: scope/standard/auditee panel, the checklist plan's characteristics, the **findings table** with an
+  inline "Raise finding" POST form, the CAPAs raised from it, and the Print link.
+- [ ] `apps/scm/views/QualityManagement/NonConformances.py` — `nonconformance_list/create/detail/edit/delete`
+  (plain `crud_*` — no child formset) **plus**:
+  - `nonconformance_quarantine` / `nonconformance_release_lot` — **`@tenant_admin_required`**, `@require_POST`,
+    atomic, `select_for_update()` on the LotSerial; sets `quarantine_applied`. **Posts nothing** (§0a).
+  - **`nonconformance_disposition`** — **`@tenant_admin_required`**, `@require_POST`, atomic,
+    `select_for_update()` + `disposition` re-read (double-post guard). Takes
+    `NonConformanceDispositionForm`.
+    - `scrap` **and** `posts_stock` → ONE negative `_post_stock_move(tenant, item=…, location=…,
+      quantity=-disposition_quantity, move_type="adjustment", unit_cost=item.average_cost,
+      lot_serial=…, reference=ncr.number, reason=f"NCR scrap — {get_defect_category_display()}")`, guarded by
+      **`_insufficient_stock(item, location, qty, lot)`** → `ValidationError` → `messages.error`, **never a 500,
+      never a partial post**.
+    - `scrap` **without** a `location` → record the decision, `messages.info` explaining that nothing moved.
+    - **`source == "goods_receipt"` → record the decision and post NOTHING**, with an explicit message: *"Units
+      rejected at the dock never entered stock, so this disposition has no ledger effect."* (§0a ruling (c) —
+      enforced by `posts_stock`, not merely documented.)
+    - `return_to_vendor` → decision only + an info message naming **4.10 Returns Management** as the owner of
+      the RMA document. `use_as_is` / `rework` / `repair` / `regrade` → decision only.
+    - After any disposition: status → `dispositioned`; stamp `disposition_by`/`disposition_on`.
+  - `nonconformance_close` (requires `disposition != "pending"`) / `nonconformance_cancel` via `_transition`;
+    `nonconformance_investigate` (open → investigating).
+  - `nonconformance_raise_capa` — **`@login_required`**, `@require_POST`, **once only**; creates an **open**
+    `CapaAction(source="nonconformance", nonconformance=…, action_type="corrective", title=ncr.title,
+    problem_statement=ncr.description, item, supplier, owner=ncr.owner)`; redirects to `scm:capaaction_detail`.
+  - List filters: `q` (number/title/description/item sku/lot number), `status`, `severity`, `source`,
+    `defect_category`, `disposition`, `item`, `supplier`, `owner`, `overdue` (`yes`), `date_from`/`date_to` on
+    `detected_on`. Stat chips (ONE aggregate): open / overdue / critical-open / dispositioned / total
+    `cost_of_quality` this period. An **overdue chip on the row** (the 4.6/4.7 pattern).
+    Queryset `.select_related("item","lot_serial__item","location","supplier","owner","inspection","audit")`.
+  - Detail: identity + defect panel, containment/quarantine state, the **MRB disposition Actions sidebar** (POST
+    + csrf + confirm + status gating), the posted `StockMove` rows referencing this NCR number (so the ledger
+    effect is visible on the document — the `stocktransfer_detail` "moves" panel precedent), the linked CAPAs
+    with a "Raise CAPA" POST form, and the read-only **"where this lot went"** panel (*trim #2*).
+- [ ] `apps/scm/views/QualityManagement/CapaActions.py` — `capaaction_list/create/detail/edit/delete`
+  (hand-written `_capaaction_form`, atomic parent + `CapaTaskFormSet`, **§0d assignment**) **plus**:
+  - `capaaction_start` (open → investigating) / `capaaction_progress` (investigating → in_progress) /
+    `capaaction_cancel` via `_transition`. `@login_required`.
+  - `capaaction_implement` — `@login_required`, `@require_POST`; `in_progress` → `pending_verification`; stamps
+    `implemented_on`; **refuses** while `root_cause` is blank, while `effectiveness_due_date` is blank, or
+    while any `CapaTask` is still `open`/`in_progress` — each with its own message naming what is missing.
+  - `capaaction_verify` — **`@tenant_admin_required`** (the formal sign-off), `@require_POST`,
+    `CapaVerificationForm`; from `pending_verification` only. `effective` → `closed` + `closed_on`;
+    **`not_effective` → back to `investigating`** (QT9's re-open) with the notes recorded. Both stamp
+    `verified_by`/`verified_on`/`verification_notes`/`effectiveness_result`.
+  - List filters: `q` (number/title/problem_statement/root_cause), `status`, `action_type`, `priority`,
+    `source`, `owner`, `supplier`, `overdue` (`yes`), `date_from`/`date_to` on `due_date`. Queryset annotated
+    `Count("tasks", filter=Q(tasks__status__in=("open","in_progress")))` **plus an explicit `.order_by("-id")`**
+    (§0f). Stat chips: open / overdue / pending verification / not-effective re-opens.
+  - Detail: problem → containment → root cause → action plan narrative, the **task table** with per-task
+    overdue chips, the effectiveness panel, the source NCR/audit link, and the Actions sidebar.
+- [ ] `apps/scm/views/QualityManagement/Reports.py` — the CoA pages, the
+  `views/InventoryManagement/Reports.py` / `views/Manufacturing/Reports.py` shape (several report views in one
+  module):
+  - **`coa_report`** (`@login_required`) — **bullet 5.** Lists **outgoing** `QualityInspection` rows with lot,
+    item, shipment, customer, verdict and CoA state. GET params `q`, `coa_state`
+    (`issued` / `ready` / `blocked`), `item`, `customer`, `date_from`/`date_to` — parsed with the same
+    `is_int`/blank guards `crud_list` uses. Per row: the CoA number + issue date when issued, the **first
+    blocker string** when not, and per-row **Issue** (POST form → `scm:coa_issue`, csrf + confirm, rendered only
+    when `coa_ready`) / **Print** (link → `scm:coa_print`, rendered only when issued) actions.
+    `.select_related("item","lot_serial__item","shipment__sales_order__customer","coa_issued_to")` +
+    **`Exists()`** annotations for "has a failing included result" / "has a pending included result" — the
+    template only asks "any?" (§0f). Paginated with `has_previous`/`has_next` guards. Empty state.
+  - **`coa_issue`** (**`@tenant_admin_required`**, `@require_POST`) — atomic, `select_for_update()` + a
+    `coa_number` re-read so a double POST cannot issue two numbers; **refuses with every `coa_blockers()`
+    string as separate messages**; stamps `coa_number = next_number(QualityInspection, tenant, "COA",
+    field="coa_number")`, `coa_issued_on = timezone.now()`, `coa_issued_to` from the form; `write_audit_log`.
+    Already-issued → `messages.info` + redirect to the print page (idempotent, not an error).
+  - **`coa_print`** (`@login_required`) — renders the certificate: header (item, lot/batch, expiry, quantity,
+    customer, shipment reference, CoA number, issue date) + the **results table restricted to
+    `include_on_coa`** with measured value / specification limits / unit / test method + a conclusion and
+    signature block. **Refuses to render an unissued certificate** (redirect + message) — the certificate is
+    the issuance, not a preview.
+- [ ] `apps/scm/views/InventoryManagement/Items.py` — **EDIT**: the §0b `item_delete` guard block + a
+  "Quality" panel in `item_detail`'s context (`quality_inspections`, `nonconformances`, capped `[:10]`)
+- [ ] `apps/scm/views/InventoryManagement/LotSerials.py` — **EDIT**: the §0b `lotserial_delete`
+  `ProtectedError` hardening + a quality panel in `lotserial_detail` (inspections, NCRs, the quarantine state)
+- [ ] `apps/scm/views/__init__.py` — **re-export block** `# 4.9 …` for every new view name
+  (5 + 12 + 10 + 11 + 10 + 3)
+
+### urls
+- [ ] `apps/scm/urls/QualityManagement/__init__.py` — **empty**
+- [ ] `apps/scm/urls/QualityManagement/InspectionPlans.py` — `inspection-plans/`, `inspection-plans/add/`,
+  `inspection-plans/<int:pk>/`, `…/edit/`, `…/delete/` → `inspectionplan_list/create/detail/edit/delete`
+- [ ] `apps/scm/urls/QualityManagement/QualityInspections.py` — `inspections/`, **`inspections/add/` (literal,
+  MUST precede the pk route)**, `inspections/<int:pk>/`, `…/edit/`, `…/delete/`, `…/generate-results/`,
+  `…/start/`, `…/complete/`, `…/hold/`, `…/resume/`, `…/cancel/`, `…/decide/`, `…/quarantine/`,
+  `…/release-lot/`, `…/raise-ncr/`
+- [ ] `apps/scm/urls/QualityManagement/QualityAudits.py` — `quality-audits/`, `quality-audits/add/`,
+  `quality-audits/<int:pk>/`, `…/edit/`, `…/delete/`, `…/start/`, `…/complete/`, `…/close/`, `…/cancel/`,
+  `…/add-finding/`, `…/print/`
+- [ ] `apps/scm/urls/QualityManagement/NonConformances.py` — `nonconformances/`, `nonconformances/add/`,
+  `nonconformances/<int:pk>/`, `…/edit/`, `…/delete/`, `…/investigate/`, `…/quarantine/`, `…/release-lot/`,
+  `…/disposition/`, `…/close/`, `…/cancel/`, `…/raise-capa/`
+- [ ] `apps/scm/urls/QualityManagement/CapaActions.py` — `capa/`, `capa/add/`, `capa/<int:pk>/`, `…/edit/`,
+  `…/delete/`, `…/start/`, `…/progress/`, `…/implement/`, `…/verify/`, `…/cancel/`
+- [ ] `apps/scm/urls/QualityManagement/Reports.py` — `coa/` (literal, first), `coa/<int:pk>/issue/`,
+  `coa/<int:pk>/print/` → `coa_report`, `coa_issue`, `coa_print`
+- [ ] `apps/scm/urls/__init__.py` — append 6 imports
+  (`from .QualityManagement.InspectionPlans import urlpatterns as _qm_inspectionplans`,
+  `…QualityInspections…` `_qm_inspections`, `…QualityAudits…` `_qm_audits`, `…NonConformances…` `_qm_ncrs`,
+  `…CapaActions…` `_qm_capa`, `…Reports…` `_qm_reports`) + the 6 `*_qm_*` spreads at the end of the concatenated
+  `urlpatterns`, with a comment recording the first-segment collision check above. **`app_name` stays declared
+  once at line 49 — entity modules define only `urlpatterns`.** Every verb route sits under its own
+  `<int:pk>/`, so none can be swallowed; the literal `add/` routes precede their `<int:pk>` siblings.
+
+### admin
+- [ ] `apps/scm/admin.py` — new banner section
+  `# ============================================================ 4.9 Quality Management System (QMS)` at the
+  end + a local `from apps.scm.models import (…)  # noqa: E402` block (the existing 4.3/4.4/4.6/4.7/4.8 style at
+  `admin.py:441`), registering `InspectionPlan` (+`InspectionCharacteristicInline`), `QualityInspection`
+  (+`InspectionResultInline`), `QualityAudit`, `NonConformance`, `CapaAction` (+`CapaTaskInline`).
+  **Every computed / action-written field in `readonly_fields`** — the full §0c list, including the
+  `InspectionResult` **snapshot block on the inline** and `result` for measurement rows. **This is the 4.7
+  lesson (commit `7ba189d3`) and the 4.8 repeat (`7dc3e2`-class): the admin was a second writer of a computed
+  column and the next recompute silently overwrote it.**
+
+### migration
+- [ ] `python manage.py makemigrations scm` → **`0014_…`**, `dependencies = [("scm",
+  "0013_alter_workcenter_labor_cost_per_hour_and_more")]`. It must contain **8 `CreateModel`s**
+  (`InspectionPlan`, `InspectionCharacteristic`, `QualityInspection`, `InspectionResult`, `QualityAudit`,
+  `NonConformance`, `CapaAction`, `CapaTask`) and **NO `AlterField`** — 4.9 changes no existing model
+  (§0a: no new move type; the `LotSerial.status` value already exists).
+- [ ] `makemigrations --check` must then report **"No changes detected"**.
+
+### cross-cutting rules to encode in every file
+- [ ] **Every model has a `tenant` FK** (via `TenantOwned`/`TenantNumbered`) except the three tenant-less
+  children `InspectionCharacteristic`, `InspectionResult` and `CapaTask`, which are reached only through their
+  parent — **and any form dropdown pointing at one MUST be hand-scoped** (`forms/_common.py:111
+  _scope_to_parent`), or the select leaks other tenants' rows. (`InspectionResult.characteristic` is
+  `editable=False`, so it is never a rendered select.)
+- [ ] **Every view filters by `tenant=request.tenant`** — no `Model.objects.all()` anywhere.
+- [ ] **Every hand-rolled save path and every action view calls `write_audit_log` itself** — only the `crud_*`
+  helpers in `apps/core/crud.py` do it automatically. Use the already-imported `_changed(form)` for edit diffs.
+- [ ] `@require_POST` on **every** action and **every** delete; **`@tenant_admin_required`** on the privileged
+  writes (`qualityinspection_decide`, `…_quarantine`, `…_release_lot`, `nonconformance_quarantine`,
+  `…_release_lot`, `nonconformance_disposition`, `capaaction_verify`, `coa_issue`); `@login_required`
+  everywhere else.
+- [ ] Every computed `Decimal` goes through `q2()`/`q4()` (clamp **and** quantize).
+- [ ] Every action button rendered in a template is gated on **the same condition its view enforces** — a
+  button that always bounces is a 4.8 finding.
+- [ ] **One file per commit**, PowerShell-safe (`;` never `&&`), no `git push`.
+
+---
+
+## Seed (extend apps/scm/management/commands/seed_scm.py — idempotent, reuses existing rows)
+
+- [ ] New **`_seed_quality_tenant(self, tenant)`**, called **LAST** in `handle()` after
+  `self._seed_manufacturing_tenant(tenant)` (currently line 103) — it inspects 4.1's GRNs, 4.3's items/lots/
+  locations, 4.6's shipments and 4.8's work orders, so every one of those must already exist. Function-local
+  model imports (the file's convention). Use **`datetime.timedelta(...)`** — the module does `import datetime`
+  (line 20) and there is **no bare `timedelta`** in scope.
+- [ ] Idempotency guard: `if QualityInspection.objects.filter(tenant=tenant).exists():
+  self.stdout.write(f"{tenant.name}: quality data already exists — skipping."); return`
+- [ ] Prerequisite **warn-and-return** (the `_seed_demand_planning_tenant` shape at line 548): needs
+  `Item` `WS-16` + `MON-27`, `Location` `WH-MAIN`, a **received** `GoodsReceiptNote`, an **outbound**
+  `Shipment`, a supplier `Party`, and an **employee `Party`** — `seed_core` creates four (Olivia Martin, Liam
+  Johnson, Emma Williams, Sophia Miller, `seed_core.py:41-48`), so add a small
+  `_employee(self, tenant, name=None)` **lookup** helper (not a creator) mirroring `_supplier`/`_customer` at
+  lines 1111/1126, falling back to the first `roles__role="employee"` party. `if any(x is None …):
+  self.stdout.write(self.style.WARNING(…)); return`.
+- [ ] Rows to create (**every one through the real action/service code paths**, the 4.7/4.8 precedent — never
+  hand-set fields that merely look plausible):
+  - `InspectionPlan` **`IQC-WS16`** v1 — `incoming_receipt`, item `WS-16`, `percentage` 10 %, active, 3
+    characteristics: "Port count" (`measurement`, target/lower/upper 16, uom `EA`, **critical**,
+    `include_on_coa`), "Enclosure condition" (`visual`, expected "No dents or scratches"), "Firmware version
+    recorded" (`instruction`)
+  - `InspectionPlan` **`OQC-MON27`** v1 — `outgoing_shipment`, item `MON-27`, `fixed_count` 5, active, 4
+    characteristics of which **two carry `include_on_coa=True` with real limits and a `test_method`**
+    ("Luminance", 280–320, target 300, `cd/m²`, "Photometer, centre of panel"; "Dead pixels", upper 0,
+    "Full-screen colour sweep") — this is what makes `coa_print` render a real results table
+  - `InspectionPlan` **`AUD-ISO9001`** v1 — `audit_checklist`, **no item/category/supplier scope**, 5
+    `pass_fail` characteristics (document control, training records, calibration, corrective action, internal
+    audit programme)
+  - **`QC-00001`** — incoming against the seeded received GRN, item `WS-16`, driven through
+    generate-results → start → record all pass → complete (**`passed`**) → decide (`accept`)
+  - **`QC-00002`** — incoming, item `MON-27`, one measurement **out of spec** → complete (**`failed`**) →
+    decide (`reject`) → **raise-ncr** → `NCR-00001`, `action_taken="ncr_raised"`
+  - **`QC-00003`** — **outgoing** against the seeded outbound `Shipment`, item `MON-27` + a `LotSerial`, all
+    `include_on_coa` results pass → `passed` → decide (`accept`) → **`coa_issue`** stamps **`COA-00001`**, so
+    `coa_report` and `coa_print` both have real data on first load
+  - **`NCR-00001`** — `source="inspection"`, severity `major`, `defect_category="functional"`,
+    `quantity_affected` 2, `location=WH-MAIN`, `cost_of_quality` from `average_cost`; quarantine the lot, then
+    disposition **`scrap`** through the real action → posts the negative **`adjustment`** `StockMove` with
+    `reference="NCR-00001"` (proves §0a ruling (a)); status `dispositioned`
+  - **`NCR-00002`** — `source="goods_receipt"` against the GRN's rejected units, **`location=None`**,
+    disposition **`return_to_vendor`** → **posts nothing** (proves §0a ruling (c)); status `dispositioned`
+  - **`NCR-00003`** — `source="audit"`, **no item**, severity `minor`, linked to `QA-00001`, status **`open`**
+    (so the audit-close guard has something real to refuse)
+  - **`CAPA-00001`** — raised from `NCR-00001` through `nonconformance_raise_capa`; `corrective`,
+    `root_cause_method="five_why"`, root cause + action plan filled, **3 `CapaTask`s** (1 `done`, 2 `open`),
+    `priority="high"`, `due_date` +14 d, status `in_progress`
+  - **`CAPA-00002`** — the **SCAR**: `source="supplier"`, `preventive`, supplier = a seeded 4.1 supplier,
+    driven to **`pending_verification`** with `implemented_on` and `effectiveness_due_date` set — so
+    `capaaction_verify` has a live target and the list shows two statuses
+  - **`QA-00001`** — `internal`, standard "ISO 9001:2015", `auditee_org_unit = self._org_unit(tenant)`,
+    `checklist_plan=AUD-ISO9001`, `lead_auditor` an employee Party, `planned_date` −7 d, driven start →
+    complete (status **`reported`**, conclusion written), one finding (`NCR-00003`)
+  - **`QA-00002`** — `supplier`, `auditee_party` a seeded supplier, `planned_date` +21 d, status **`planned`**
+    — gives the list two statuses and `qualityaudit_start` a target
+- [ ] **Prepend the 4.9 teardown to `_flush()`** (**newest first**, before the 4.8 block at line 880):
+  `CapaTask` → `CapaAction` → `NonConformance` → `InspectionResult` → `QualityInspection` → `QualityAudit` →
+  `InspectionCharacteristic` → `InspectionPlan`. **Why this order and why it must go first:**
+  `QualityInspection.item/lot_serial/location` and `NonConformance.item/lot_serial/location` are **PROTECT**
+  against the 4.3 masters cleared further down (lines 969-977), so the whole 4.9 tree must precede them;
+  `CapaAction.nonconformance/audit` and `NonConformance.inspection/audit` are SET_NULL so they do not block,
+  but deleting children first keeps the intent readable. The `adjustment` `StockMove` the NCR scrap posted is
+  already covered by the existing `StockMove.objects.all().delete()` (line 969) — it carries no FK to 4.9.
+- [ ] Update the command's module docstring, its `help` string (line 60) and the final `SUCCESS` line (line
+  106) to include **"+ 4.9 quality"**.
+- [ ] **No bare `.create()` on a `TenantNumbered` model** — follow the file's
+  `filter(tenant=…, number=…).first()` / `get_or_create` style so a second run creates **no** duplicate
+  `QC-`/`NCR-`/`CAPA-`/`QA-`/`COA-` numbers.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **ONE new `LIVE_LINKS["4.9"]` entry** inserted after `"4.8"` (which closes at
+  line 858), keys matching the `NavERP.md:790-794` bullet text **VERBATIM**:
+  ```python
+  # 4.9 Quality Management System — InspectionPlan is the criteria master (no sidebar key: it is a
+  # master reached from the inspection list, the WorkCenter / ReorderRule precedent) and doubles as
+  # the audit checklist. QualityInspection is the execution record whose results are SNAPSHOTTED, so
+  # editing a plan can never rewrite a past certificate. NonConformance is the ONE finding register
+  # fed by inspections, receipts, production, suppliers and audits alike — audit findings are NCR
+  # rows with source="audit", not a second table. Scrap posts an `adjustment` StockMove (no new move
+  # type); quarantine flips LotSerial.status and posts NOTHING; SCM posts no JournalEntry (L29).
+  # "Certificate of Analysis (CoA)" points at a computed REPORT over the outgoing inspections (the
+  # scm:mrp_report / scm:safety_stock_report / scm:valuation_report precedent — a bullet may be a
+  # report rather than a CRUD list).
+  "4.9": {
+      "Quality Inspection": "scm:qualityinspection_list",              # bullet (criteria + execution)
+      "Non-Conformance Reports (NCR)": "scm:nonconformance_list",      # bullet (the finding register)
+      "Corrective and Preventive Action (CAPA)": "scm:capaaction_list",  # bullet (RCA → tasks → verify)
+      "Audit Management": "scm:qualityaudit_list",                     # bullet (schedule → findings → CAPA)
+      "Certificate of Analysis (CoA)": "scm:coa_report",               # bullet (computed issue/print page)
+  },
+  ```
+- [ ] **No `config/settings.py` / `config/urls.py` change** — `apps/scm` is already installed and included
+  (4.1 shipped it). **Confirm, don't re-add.**
+- [ ] All 5 targets are STAFF-facing management/report pages — no login-gated portal view (L32).
+- [ ] `templates/scm/overview.html` — new **Quality Management** card (the Demand Planning card at lines
+  219-231 is the shape), with buttons: Inspections, Inspection Plans, Non-Conformance, CAPA, Audits,
+  Certificates of Analysis.
+- [ ] `templates/scm/overview.html` — **ALSO add the missing 4.8 Manufacturing card.** Verified gap: the file
+  ends at line 233 with the Demand Planning card and contains **no** reference to `workorder`,
+  `billofmaterials`, `mrp_report` or `production_schedule` — 4.8's plan item was never delivered. Buttons:
+  Bills of Materials, Work Orders, Work Centers, Shop Floor, MRP, Production Schedule. (Same file, same commit
+  as the Quality card is fine — it is one file.)
+
+---
+
+## Templates (templates/scm/quality/)
+
+Two levels: sub-module folder **`quality/`**, then **one folder per entity named `<Model>` lowercased with no
+separators** — `inspectionplan/`, `qualityinspection/`, `nonconformance/`, `capaaction/`, `qualityaudit/`. Page
+files are the bare `list.html` / `detail.html` / `form.html`. **Never a flat `<entity>_<page>.html`.** The
+report/print pages are standalone and sit at the **sub-module root** (the `manufacturing/mrp_report.html` /
+`inventory/valuation_report.html` precedent).
+
+Every list page: filter bar reflecting `request.GET` (string fields `== value`; **FK/pk fields
+`|stringformat:"d"`, NEVER `|slugify`**) + Actions column (view / edit / delete-POST with `confirm()` and
+`{% csrf_token %}`) + pagination guarded by `has_previous`/`has_next` (L9) + an empty-state row + the stat-chip
+row. Badges use ONLY `badge-green/red/amber/info/muted/slate` (`static/css/theme.css:285-290`;
+`-success`/`-warning`/`-danger` do **not** exist, L33), stat-icons only `blue/green/orange/purple/slate`, and
+**every badge chain covers every choice value and ends with `{% else %}{{ obj.get_<field>_display }}`**.
+**Multi-line notes use `{% comment %}…{% endcomment %}`, never `{# #}`.** `{% extends "base.html" %}` and
+`{% include "partials/…" %}` unchanged. Detail pages use **`.detail-item` + `<dt>/<dd>`** — `.detail-label` /
+`.detail-value` do **not** exist in `theme.css` (the finding four passes running).
+
+**Badge map — write it once, use it everywhere (every value covered):**
+- `QualityInspection.status`: draft→muted, in_progress→info, passed→green, failed→red, on_hold→amber,
+  cancelled→slate
+- `usage_decision`: pending→muted, accept→green, accept_with_deviation→amber, reject→red
+- `action_taken`: none→muted, quarantined→amber, ncr_raised→red, returned_to_vendor→info
+- `InspectionResult.result`: pending→muted, pass→green, fail→red, not_applicable→slate
+- `InspectionPlan.plan_type`: incoming_receipt→info, in_process→amber, outgoing_shipment→green,
+  periodic_stock→slate, audit_checklist→muted
+- `characteristic_type`: measurement→info, pass_fail→green, visual→amber, instruction→muted
+- `NonConformance.severity`: critical→red, major→amber, minor→info, observation→muted
+- `NonConformance.status`: open→amber, investigating→info, dispositioned→green, closed→slate, cancelled→muted
+- `disposition`: pending→muted, use_as_is→info, rework→amber, repair→amber, scrap→red,
+  return_to_vendor→amber, regrade→info
+- `CapaAction.status`: open→amber, investigating→info, in_progress→info, pending_verification→amber,
+  closed→green, cancelled→slate
+- `CapaAction.priority`: low→muted, normal→info, high→amber, critical→red · `action_type`: corrective→amber,
+  preventive→info · `effectiveness_result`: pending→muted, effective→green, not_effective→red
+- `CapaTask.status`: open→muted, in_progress→info, done→green, cancelled→slate
+- `QualityAudit.status`: planned→info, in_progress→amber, reported→green, closed→slate, cancelled→muted ·
+  `audit_type`: internal→info, supplier→amber, customer→green, certification→slate · `risk_level`: low→muted,
+  medium→amber, high→red
+
+- [ ] `quality/inspectionplan/list.html` — filters `q`, `plan_type`, `item`, `item_category`, `supplier`,
+  `sampling_method`, `is_active`; columns code/version/name/type/scope/sampling/characteristics/effective
+  from/active
+- [ ] `quality/inspectionplan/detail.html` — scope + sampling + effectivity panels, the **characteristic table**
+  (sequence / name / type / limits / unit / test method / critical chip / **CoA chip**), the inspections run
+  from it, the audits using it as a checklist; Actions sidebar (Edit / Delete POST+confirm / Back)
+- [ ] `quality/inspectionplan/form.html` — header fields + the `InspectionCharacteristicFormSet` grid, with the
+  "an audit checklist takes no measurements and no item scope" rule surfaced as `help_text`
+- [ ] `quality/qualityinspection/list.html` — filters `q`, `status`, `inspection_type`, `usage_decision`,
+  `item`, `supplier`, `inspector`, `date_from`/`date_to`; columns number/date/type/item/lot/qty
+  inspected/accepted/rejected/verdict/decision/CoA chip; stat chips
+- [ ] `quality/qualityinspection/detail.html` — **the biggest page**: header + source-document panel (GRN / WO /
+  Shipment link), the **result table** (snapshot spec, measured value, pass/fail badge, out-of-spec row
+  highlight, CoA chip), the **Actions sidebar** — Generate Checklist / Start / Complete / Hold / Resume /
+  Decide / Quarantine Lot / Release Lot / Raise NCR / Cancel, each a **POST form with `{% csrf_token %}`, a
+  `confirm()`, and `{% if %}` gating that mirrors the view's guard exactly** (never a GET link, never a button
+  that will bounce); the **CoA panel** (every `coa_blockers()` string listed when not ready; number / date /
+  recipient / Print link when issued); the linked NCRs
+- [ ] `quality/qualityinspection/form.html` — header + the `InspectionResultFormSet`; the whole snapshot block
+  rendered **read-only text, not inputs**; `result` shown as an input only for `pass_fail`/`visual` with the
+  §0c precedence note as `help_text`
+- [ ] `quality/nonconformance/list.html` — filters `q`, `status`, `severity`, `source`, `defect_category`,
+  `disposition`, `item`, `supplier`, `owner`, `overdue`, `date_from`/`date_to`; columns
+  number/detected/title/item/lot/qty/severity/source/disposition/owner/due (+ **overdue chip**)/status; stat
+  chips incl. total cost of poor quality
+- [ ] `quality/nonconformance/detail.html` — identity + defect panel, containment/quarantine state, the **MRB
+  disposition Actions sidebar** (POST + csrf + confirm + status gating), the posted `StockMove` rows referencing
+  this NCR number, the "no ledger effect" explainer when `source == "goods_receipt"`, the linked CAPAs + a
+  "Raise CAPA" POST form, and the read-only **"where this lot went"** panel (*trim #2*)
+- [ ] `quality/nonconformance/form.html` — with the `cost_of_quality` default explained in `help_text` ("we
+  suggest quantity × average cost; your figure stands once entered — this never posts to accounting")
+- [ ] `quality/capaaction/list.html` — filters `q`, `status`, `action_type`, `priority`, `source`, `owner`,
+  `supplier`, `overdue`, `date_from`/`date_to`; columns
+  number/type/title/source/priority/owner/due (+overdue chip)/open tasks/effectiveness/status
+- [ ] `quality/capaaction/detail.html` — problem → containment → root cause (with the method chip) → action
+  plan, the **task table** with per-task overdue chips, the effectiveness panel (implemented / due / result /
+  verifier / notes), the source NCR/audit link, Actions sidebar (Start / Progress / Implement / Verify /
+  Cancel / Edit / Delete)
+- [ ] `quality/capaaction/form.html` — header + the `CapaTaskFormSet` grid
+- [ ] `quality/qualityaudit/list.html` — filters `q`, `audit_type`, `status`, `risk_level`, `lead_auditor`,
+  `date_from`/`date_to`; columns number/planned date/type/title/standard/auditee/lead auditor/major/minor
+  findings/status
+- [ ] `quality/qualityaudit/detail.html` — scope/standard/auditee panel, the checklist plan's characteristics,
+  the **findings table** with an inline "Raise Finding" POST form (title / description / severity / defect
+  category / owner / due date), the CAPAs raised from it, Actions sidebar (Start / Complete / Close / Cancel /
+  Print / Edit / Delete) with the "close is refused while a finding is open" state visible
+- [ ] `quality/qualityaudit/form.html`
+- [ ] `quality/coa_report.html` (flat, sub-module root) — filter bar (`q`, `coa_state`, `item`, `customer`,
+  `date_from`/`date_to`), the outgoing-inspection table with lot / item / shipment / customer / verdict / CoA
+  state, per-row **Issue** (POST + csrf + confirm, rendered only when ready) and **Print** (link, rendered only
+  when issued), the **first blocker string** shown inline when blocked, and an empty state that says so rather
+  than showing a blank table
+- [ ] `quality/coa_print.html` (flat) — the certificate: header (item, lot/batch, expiry, quantity, customer,
+  shipment reference, CoA number, issue date), the **results table restricted to `include_on_coa`** (measured
+  value / specification / unit / test method), a conclusion line and a signature block; print-oriented layout,
+  the `hrm/offboarding/relieving_letter.html` precedent
+- [ ] `quality/audit_report.html` (flat) — the audit report print page: header, scope, checklist, findings by
+  severity, conclusion, signature (*trim #1*)
+- [ ] `templates/scm/inventory/item/detail.html` — **EDIT**: a "Quality" panel (inspections + NCRs, capped) —
+  the reciprocal link the `explorer` agent asks for every pass
+- [ ] `templates/scm/inventory/lotserial/detail.html` — **EDIT**: a quality panel (inspections, NCRs) and a
+  visible **quarantine** state explaining that quarantine does not change on-hand
+- [ ] `templates/scm/overview.html` — the Quality Management card **and** the missing Manufacturing card (see
+  Wire-up)
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` → **`0014`** (**8 CreateModels, ZERO AlterFields**); then
+  `python manage.py makemigrations --check` → **"No changes detected"**
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_scm` **twice** — the second run must print
+  `"<tenant>: quality data already exists — skipping."` for every tenant and create **zero** new rows (count
+  `QualityInspection`/`NonConformance`/`CapaAction`/`QualityAudit`/`InspectionPlan`/`StockMove` before and after)
+- [ ] `python manage.py seed_scm --flush` then `seed_scm` — proves the teardown ordering (the PROTECT chain
+  onto `Item`/`LotSerial`/`Location`)
+- [ ] `python manage.py check` → clean (**and no `models.W036`**, no `UnorderedObjectListWarning` from the
+  annotated lists — §0f)
+- [ ] **`temp/smoke_scm_49.py`** — a throwaway script (delete it before the final commit, the 4.7/4.8
+  precedent), logging in as **`admin_acme` / `password`**:
+  - **Render:** every new `scm:*` route resolves and returns **200** (5 lists, 5 details, 5 create forms, 5 edit
+    forms, `coa_report`, `coa_print` on the issued `COA-00001`, `qualityaudit_print`)
+  - **POST-only → 405:** every `@require_POST` action hit with **GET** returns **405** (all 5 deletes + the ~30
+    action routes). `crud_delete` is self-defending, but `@require_POST` is what makes it a 405.
+  - **Content assertions on every page:** **no `{#` and no `{% comment` leaking into the HTML**, the page title
+    renders, and a **seeded record is present** (`QC-00001`, `NCR-00001`, `CAPA-00001`, `QA-00001`,
+    `IQC-WS16`, `COA-00001`)
+  - **Junk GET params** on every list + the CoA report: `?status=<script>`, `?item=abc`, `?item=999999`,
+    `?page=abc`, `?page=99999`, `?date_from=notadate`, `?severity=%00` → **200, never a 500**, and the filter
+    is skipped rather than applied (the `crud.py:55/63` guards)
+  - **Cross-tenant IDOR → 404** on **every** `<int:pk>` route (detail / edit / delete / all ~30 actions /
+    `coa_issue` / `coa_print`) using a second tenant's object id
+  - **The inspection lifecycle end-to-end** on a fresh inspection: generate-results → start → record →
+    complete → decide → raise-NCR, asserting the snapshot rows were written, `evaluated_result` matches the
+    stored `status`, and a **double POST of the same action does not double-apply** (the `select_for_update` +
+    re-read guard). Assert `raise_ncr` twice creates **one** NCR.
+  - **The scrap disposition:** posts exactly ONE `StockMove` with `move_type="adjustment"`,
+    `reference="NCR-…"`, negative quantity; a **double POST posts no second move**; scrapping more than on-hand
+    is refused with a message, **not a 500**, and writes **no partial moves**
+  - **Ruling (c):** a `source="goods_receipt"` NCR's disposition writes **zero** `StockMove` rows
+  - **Ruling (b):** quarantine flips `LotSerial.status` to `quarantine` and the `StockMove` count is
+    **unchanged**; release flips it back
+  - **The CoA guard:** `coa_issue` on an inspection with a failing `include_on_coa` result is **refused with
+    the blocker message**, stamps no number; on a clean one it stamps `COA-00002`; a **double POST issues no
+    second number**; `coa_print` on an unissued inspection **redirects**, does not render
+  - **The audit-close guard:** closing `QA-00001` while `NCR-00003` is open is refused; closing it after the
+    finding is closed succeeds
+  - **The CAPA implement guard:** refused while a task is open / `root_cause` blank / `effectiveness_due_date`
+    blank; `verify` with `not_effective` returns the CAPA to `investigating`
+  - **The §0b delete regressions:** `item_delete` on an item referenced only by a `QualityInspection` returns a
+    **message + redirect, not a 500**; the same for `lotserial_delete` on a lot referenced only by an
+    inspection (proves the `ProtectedError` hardening); `location_delete` on a location referenced only by an
+    NCR degrades to a message (proves the existing generic catch still holds)
+  - **Query counts** on the two heaviest pages (`qualityinspection_detail`, `coa_report`) captured with
+    `assertNumQueries`-style instrumentation — **measure, don't estimate** (the 4.7/4.8 performance lesson);
+    fail the smoke if either exceeds ~30
+- [ ] Sidebar shows **4.9 as Live** with all five bullets, and each link lands on the right page
+- [ ] `pytest apps/scm` still green before handing to `test-writer`
+
+---
+
+## Close-out
+
+- [ ] `code-reviewer` → apply + commit
+- [ ] `explorer` → apply + commit
+- [ ] `frontend-reviewer` → apply + commit (**check `.detail-item` + `<dt>/<dd>`, not `.detail-label`/
+  `.detail-value` — that class pair does not exist in `theme.css` and has now been the finding five times**)
+- [ ] `performance-reviewer` → apply + commit (the CoA report and the inspection detail are the risk:
+  **measure**, don't estimate — `select_related` on an FK leaves every hop past it lazy, and a `LotSerial`
+  dropdown re-resolves `__str__` per option, §0e)
+- [ ] `qa-smoke-tester` → apply + commit
+- [ ] `security-reviewer` → apply + commit
+- [ ] `test-writer` → apply + commit
+- [ ] **UPDATE `.claude/skills/scm/SKILL.md`** (it already exists — 4.9 models, url names, template paths,
+  seeder additions, the `adjustment`-not-a-new-move-type ruling, the quarantine-posts-nothing ruling, the
+  snapshot rule, the `coa_blockers()` contract, the single-writer list)
+- [ ] `README.md` — 4.9 marked built
+- [ ] **Reconcile the ERD rows for BOTH Module 4.9 and Module 12** in this same pass (research lines 30-36,
+  the L36 step-2 requirement): `scm` OWNS `InspectionPlan` / `QualityInspection` / `NonConformance` /
+  `CapaAction` / `QualityAudit`; **Module 12 EXTENDS them by string FK and must NOT re-declare a parallel
+  `quality.NonConformance` / `quality.CapaAction` / `quality.Inspection`.** The ERD's Module-12 `Inspection`
+  **is** `scm.QualityInspection`.
+- [ ] Delete `temp/smoke_scm_49.py`
+- [ ] Every step: `git add '<one file>'; git commit -m '<specific message>'` — **one file per commit,
+  PowerShell `;`, never `&&`, never `git push`**
+
+---
+
+## Later passes / deferred (carried over from research-scm-4.9.md)
+
+- **Standalone `CertificateOfAnalysis` register + `CoATemplate` (per product / per customer / per
+  product+customer formats) + emailing the PDF** (AlisQI, Deacom/E21) — this pass generates and stamps; the
+  `COA-` prefix is reserved by `QualityInspection.coa_number`.
+- **AQL lookup tables (ANSI/ASQ Z1.4 by lot size and inspection level) and dynamic skip-lot escalation** —
+  the plan stores accept/reject numbers and a static frequency; deriving them from lot size and
+  tightening/loosening on supplier history is later.
+- **SPC control charts (X-bar/R, control limits, trend alarms) and Cp/Cpk capability studies** (Siemens,
+  AlisQI, `NavERP.md` 12.7/12.15) — the measured values on `InspectionResult` are the data source; charting
+  needs a front-end story NavERP hasn't chosen.
+- **Structured 8D / 5-Why / fishbone templates** (D1-D8 step records, cause branches) — this pass stores the
+  method name and the conclusion text.
+- **Rules-based / conditional workflow routing and configurable approval matrices** (MasterControl, ETQ,
+  Veeva) — fixed status ladders this pass; NavERP has no workflow engine.
+- **Configurable per-tenant defect-code and root-cause-code masters** — choice fields this pass (the same call
+  4.6 made for mode/equipment capability matrices).
+- **Material Review Board as a meeting/board entity with quorum and minutes** — the MRB is the disposition
+  decision fields (who, when, why); the board itself is deferred.
+- **Automated supplier-CoA ingestion (PDF extraction)** (AlisQI) — a reference field plus an attached
+  `core.Document` this pass; extraction is an integration.
+- **Email / notification escalation for overdue NCRs and CAPAs** — the overdue *state* and filters ship; the
+  outbound channel is integration/later (the 4.5 "Customer Notifications" posture).
+- **Ad-hoc plan-less inspections with hand-added characteristics** — this pass keeps ONE writer of the snapshot
+  (`generate_results()` from a plan). A plan-less inspection is savable and records quantities + a usage
+  decision, but has no measurement grid.
+- **Electronic signatures, 21 CFR Part 11 / EU Annex 11 audit trails, ALCOA+ data integrity** → 12.20.
+  `core.AuditLog` exists; a signature manifestation does not.
+- **Training / competency linkage** (MasterControl launches training from a CAPA) → HRM 3.22-3.24 / 12.12.
+- **Document-controlled SOPs, spec approval routing, obsolescence** → Module 13 DMS / 12.1. `core.Document` is
+  the only attachment mechanism this pass.
+- **Recall / field-action execution and a lot-genealogy tracing UI** → 12.18 / 4.10. The NCR detail gets a
+  read-only "where this lot went" panel derived from `StockMove`; recall workflow is not built.
+- **Quality teams owning products/operations** (Odoo) — a single `owner` Party per record covers this pass.
+- **Mobile / offline capture, gauge & instrument integration, AI event summarisation and deviation-trend
+  detection** (Intelex, Siemens, MasterControl, Veeva, Qualio) — all integration/later.
+- **Feeding NCR counts into 4.2's `SupplierScorecard.quality_score`** — a small, high-value follow-up that
+  belongs in a **4.2** change, not a 4.9 table.
+- **In-process control points that BLOCK a work-order operation from closing** — the gate is 4.9's, but the
+  operation-level routing it would hook into does not exist (4.8 shipped work centres and time logs, not
+  routings/operations). Inspection stays document-level (`work_order` FK) until routings land.
+
+### Parked for sibling sub-modules (do NOT pull in)
+
+- **RMA / return-to-vendor execution, refunds, warranty claims, disposition of *returned* goods** → **4.10
+  Returns Management.** 4.9 records the *decision* `disposition="return_to_vendor"`; 4.10 owns the RMA
+  document. (`NavERP.md` 12.7 bundles "Reject & RMA" into IQC; NavERP splits it — respect the split.)
+- **Quality KPI dashboards, first-pass-yield trending, Pareto command centre, cross-module analytics** →
+  **4.11 Supply Chain Analytics.** 4.9 ships stat chips on its own list pages and one CoA page.
+- **Supplier qualification, approved-vendor list, supplier scorecards, supplier risk** → **4.2 SRM** (built:
+  `SupplierProfile`, `SupplierScorecard`, `SupplierRiskAssessment`). 4.9 must **not** add a supplier quality
+  rating field.
+- **ISO / certification tracking, regulatory compliance registers, contract compliance clauses** → **4.12
+  Contract & Compliance Management.**
+- **Gauge / instrument calibration schedules, as-found/as-left records, out-of-tolerance impact** → **4.13
+  Asset Management** (and 12.10). `Calibration` is not a 4.9 table.
+- **Temperature / cold-chain excursion monitoring** → **4.15 Cold Chain Management.**
+- **Customer-facing CoA download / complaint submission** → **4.16 Customer Portal.**
+- **Customer complaint intake and handling** → CRM helpdesk `Case` and **12.13**. `NonConformance.source` has
+  no `customer_complaint` value this pass **on purpose**.
+- **The whole of Module 12 QMS** (document control, design controls, ISO 14971 risk, LIMS, calibration,
+  training, complaints, management review, validation, EHS, regulatory, traceability, 21 CFR Part 11) →
+  **Module 12 EXTENDS `scm.*` by string FK.** It must not re-declare a parallel quality app (research
+  lines 19-36).
+
+## Review notes
+
+(filled in at the end)
+
+---
