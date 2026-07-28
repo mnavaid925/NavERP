@@ -243,4 +243,18 @@
       </div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Quality</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:qualityinspection_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Inspections</a>
+        <a href="{% url 'scm:inspectionplan_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Inspection Plans</a>
+        <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> NCRs</a>
+        <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> CAPA</a>
+        <a href="{% url 'scm:qualityaudit_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Audits</a>
+        <a href="{% url 'scm:coa_report' %}" class="btn btn-outline"><i data-lucide="award"></i> CoA</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
