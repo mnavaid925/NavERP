@@ -14637,3 +14637,52 @@ and `{% include "partials/…" %}` unchanged.
 ## Review notes
 
 (filled in at the end)
+
+## Review notes — 4.8 Manufacturing / Production delivered (2026-07-28)
+
+**Shipped:** `WorkCenter` [WC-], `BillOfMaterials`+`BOMLine` [BOM-], `WorkOrder`+`WorkOrderComponent` [WO-],
+`ProductionTimeLog` [PRD-], plus the `mrp_report` and `production_schedule` computed pages. 14 templates,
+migrations `0012` (models + the `StockMove.move_type` extension) and `0013` (rate validators), `LIVE_LINKS["4.8"]`
+with all five NavERP bullets, seeder `_seed_manufacturing_tenant`, and 392 new tests (SCM suite 1,882 → **2,274**,
+99% statement coverage on the 4.8 modules).
+
+**Verified:** `manage.py check` clean; `makemigrations --check` → no changes; `seed_scm --flush` → seed → seed
+idempotent and the second flush cycle survives; 36-check smoke script green (render, junk-param, IDOR, POST-only).
+
+### What the review agents actually caught (all fixed, all locked by tests)
+
+| Agent | Finding | Why it mattered |
+|---|---|---|
+| code-reviewer | `computed_unit_cost` divided the **whole** pool by the **cumulative** good qty | Banked **140%** of real cost into finished goods on a partial run and drove `wip_value` negative. The ledger is append-only — an over-valued layer can never be corrected in place. Now divides the *unabsorbed* pool by *this* layer's quantity. |
+| code-reviewer | `seed_scm --flush` deleted WS-KIT before its `PROTECT`ing StockMoves | `ProtectedError` on every flush following a 4.8 seed. The first flush passed only because 4.8 data didn't exist yet. |
+| code-reviewer | MRP exploded **gross**, counted `fulfilled`/`invoiced`, horizoned on `order_date` | Invented component shortages a planner would have converted into real requisitions; the horizon control did nothing. |
+| explorer | `consumption`/`production` fell through to `badge-muted` in two 4.3 templates | Same ledger row rendered green on the work-order page and grey on the item page. |
+| frontend-reviewer | `wip_value` rendered **green when negative** | Negative WIP is the model's own error signal; green hid the one state that means something is wrong. |
+| frontend-reviewer | Zero-capacity centre with scheduled hours rendered green "0.0%" | The worst row on the board painted as the healthiest. |
+| performance-reviewer | `explode()` = ~2.5 queries **per BOM line**; MRP ran it per item | **281 queries** on a tiny fixture, ~2,300 realistic. `explosion_index()` → 2 queries, shared across the run. Now **16**. |
+| performance-reviewer | `WorkOrderForm` lot/sales-order dropdowns re-resolved `__str__` per option per form | **140 queries** with 25 lot serials; ~8,000 on a lot-tracked tenant. Now **24**. |
+| qa-smoke-tester | BOM self-reference guard **no-opped on CREATE** | `instance=None` meant `item_id` was None, so a recipe saying "to build one WS-16 you need one WS-16" was creatable — and a work order from it would consume the item it produces. |
+| qa-smoke-tester | `location_delete` 500 on 4.8's two new PROTECT FKs | Same class as `405ee0ea`. Now catches `ProtectedError` inside `atomic()` rather than enumerating guards that go stale. |
+| security-reviewer | `explode()` bounded on depth but not **breadth** | Output is the *product* of branch factors — five chained 50-line recipes = 6.25M dicts, an authenticated OOM. `MAX_EXPLODE_ROWS` + `max_num=200`. |
+| security-reviewer | Lot not cross-checked against its item | A crafted POST could stamp item A's units under item B's lot in an append-only move. |
+| security-reviewer | Uncapped hourly rates + unbounded log interval | A plain `@login_required` member could silently drive a finished good's tenant-wide `average_cost`, because `q4()` clamps rather than errors. |
+| security-reviewer | Caught a regression **I** introduced — the `Exists()` perf change renamed annotations the template still read | Failed closed (Delete unreachable on every centre), but wrong. |
+
+### Judgement calls worth remembering
+
+- **New move types, not reused ones.** The single most consequential decision: 4.7's `demand_series` reads
+  `move_type="issue"` as *customer* demand, so booking a raw-material draw as an issue would have silently
+  inflated every forecast on the stock-issues source. Cost: one migration. Benefit: no cross-sub-module corruption.
+- **Make-vs-buy derived from an active BOM**, not an `Item.is_manufactured` flag — no second source of truth, no
+  data migration when sourcing changes.
+- **No WIP location.** A `wip` `location_type` would migrate a model 4.3/4.4/4.5 share, and `is_pickable=True`
+  would leak work-in-progress into 4.5's available-to-promise. WIP value is computed on the page.
+- **MRP suggests, never acts** — same compute-then-convert contract as reorder alerts and safety stock.
+- **A sub-quantum rounding residual remains** in `wip_value`: a 4dp unit cost times a quantity cannot represent
+  every pool exactly. Documented and bounded (one quantum per unit), not hidden.
+
+**Deferred, named:** routings/operation sequencing (`work_center` + free-text `operation` is the stand-in),
+finite-capacity/APS scheduling, MRP exception messages, subcontracting, co-/by-products, ECO workflow, disassembly
+orders, barcode/MES/IoT. Parked to siblings: quality gates → 4.9, machine maintenance → 4.13, OEE analytics → 4.11.
+
+---
