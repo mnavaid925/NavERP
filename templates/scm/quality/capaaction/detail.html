@@ -68,7 +68,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Action plan tasks <span class="badge badge-slate">{{ tasks|length }}</span></h2>
-      {% if open_task_count %}<span class="badge badge-amber">{{ open_task_count }} still open</span>{% else %}<span class="badge badge-green">All done</span>{% endif %}
+      {% if open_task_count %}<span class="badge badge-amber">{{ open_task_count }} still open</span>{% elif tasks %}<span class="badge badge-green">All done</span>{% else %}<span class="badge badge-muted">No tasks yet</span>{% endif %}
     </div>
     <div class="table-wrap">
       <table class="table">
