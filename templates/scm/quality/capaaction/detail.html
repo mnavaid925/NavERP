@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'closed' %}green{% elif obj.status == 'pending_verification' %}info{% elif obj.status == 'in_progress' %}amber{% elif obj.status == 'investigating' %}amber{% elif obj.status == 'open' %}slate{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-{% if obj.action_type == 'corrective' %}amber{% elif obj.action_type == 'preventive' %}info{% else %}slate{% endif %}">{{ obj.get_action_type_display }}</span>
+        <span class="badge badge-{% if obj.priority == 'critical' %}red{% elif obj.priority == 'high' %}amber{% elif obj.priority == 'normal' %}info{% elif obj.priority == 'low' %}muted{% else %}slate{% endif %}">{{ obj.get_priority_display }}</span>
+        <span class="badge badge-{% if obj.effectiveness_result == 'effective' %}green{% elif obj.effectiveness_result == 'not_effective' %}red{% elif obj.effectiveness_result == 'pending' %}slate{% else %}slate{% endif %}">{{ obj.get_effectiveness_result_display }}</span>
+        {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+        {% if obj.verification_overdue %}<span class="badge badge-red">Effectiveness check overdue</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:capaaction_list' %}">CAPA</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.nonconformance %}<a href="{% url 'scm:nonconformance_detail' obj.nonconformance.pk %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> {{ obj.nonconformance.number }}</a>{% endif %}
+      {% if obj.audit %}<a href="{% url 'scm:qualityaudit_detail' obj.audit.pk %}" class="btn btn-outline"><i data-lucide="shield-check"></i> {{ obj.audit.number }}</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-todo"></i></div>
+      <div class="stat-value">{{ tasks|length }}</div>
+      <div class="stat-label">Tasks on the action plan</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ open_task_count }}</div>
+      <div class="stat-label">Still open — blocks implementation</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="calendar-check"></i></div>
+      <div class="stat-value">{{ obj.implemented_on|date:"M d, Y"|default:"—" }}</div>
+      <div class="stat-label">Implemented on</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clipboard-check"></i></div>
+      <div class="stat-value">{{ obj.effectiveness_due_date|date:"M d, Y"|default:"—" }}</div>
+      <div class="stat-label">Effectiveness check due</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.title }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Action type</dt><dd>{{ obj.get_action_type_display }}</dd></div>
+        <div class="detail-item"><dt>Source</dt><dd>{{ obj.get_source_display }}</dd></div>
+        <div class="detail-item"><dt>Non-conformance</dt><dd>{% if obj.nonconformance %}<a href="{% url 'scm:nonconformance_detail' obj.nonconformance.pk %}" class="fw-600">{{ obj.nonconformance.number }}</a> · {{ obj.nonconformance.title }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Audit</dt><dd>{% if obj.audit %}<a href="{% url 'scm:qualityaudit_detail' obj.audit.pk %}" class="fw-600">{{ obj.audit.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a> · {{ obj.item.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.supplier.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{{ obj.owner.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd>{{ obj.get_priority_display }}</dd></div>
+        <div class="detail-item"><dt>Due date</dt><dd>{% if obj.is_overdue %}<span class="badge badge-red">{{ obj.due_date|date:"M d, Y" }}</span>{% else %}{{ obj.due_date|date:"M d, Y"|default:"—" }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Root cause method</dt><dd>{% if obj.root_cause_method %}{{ obj.get_root_cause_method_display }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Problem statement</dt><dd>{{ obj.problem_statement|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Containment action</dt><dd>{{ obj.containment_action|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Root cause</dt><dd>{% if obj.root_cause %}{{ obj.root_cause|linebreaksbr }}{% else %}<span class="badge badge-amber">Not recorded yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Action plan</dt><dd>{{ obj.action_plan|default:"—"|linebreaksbr }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Action plan tasks <span class="badge badge-slate">{{ tasks|length }}</span></h2>
+      {% if open_task_count %}<span class="badge badge-amber">{{ open_task_count }} still open</span>{% else %}<span class="badge badge-green">All done</span>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Description</th><th>Owner</th><th>Due date</th><th>Completed on</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for t in tasks %}
+            <tr>
+              <td>{{ t.sequence }}</td>
+              <td class="fw-600">{{ t.description }}</td>
+              <td>{{ t.owner.name|default:"—" }}</td>
+              <td>{% if t.is_overdue %}<span class="badge badge-red">{{ t.due_date|date:"M d, Y" }}</span>{% else %}{{ t.due_date|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>{{ t.completed_on|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if t.status == 'done' %}green{% elif t.status == 'in_progress' %}amber{% elif t.status == 'open' %}slate{% elif t.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ t.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="list-todo"></i><h3>No tasks</h3><p>Break the fix into steps on the edit form. An action with no tasks can still be implemented — the guard is that no task may be left open, not that there must be one.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Tasks are edited on the <a href="{% url 'scm:capaaction_edit' obj.pk %}">action form</a> while the action is open, investigating or in progress. Marking the action implemented is refused while any task is still open or in progress, while the root cause is blank, or while the effectiveness due date is unset — three refusals that each name exactly what is missing.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Effectiveness verification</h2>
+      <span class="badge badge-{% if obj.effectiveness_result == 'effective' %}green{% elif obj.effectiveness_result == 'not_effective' %}red{% elif obj.effectiveness_result == 'pending' %}slate{% else %}slate{% endif %}">{{ obj.get_effectiveness_result_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Implemented on</dt><dd>{{ obj.implemented_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Effectiveness due</dt><dd>{% if obj.verification_overdue %}<span class="badge badge-red">{{ obj.effectiveness_due_date|date:"M d, Y" }}</span>{% else %}{{ obj.effectiveness_due_date|date:"M d, Y"|default:"—" }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Result</dt><dd>{{ obj.get_effectiveness_result_display }}</dd></div>
+        <div class="detail-item"><dt>Verified by</dt><dd>{{ obj.verified_by.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Verified on</dt><dd>{{ obj.verified_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Closed on</dt><dd>{{ obj.closed_on|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Verification notes</dt><dd>{{ obj.verification_notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      {% comment %}
+        capaaction_verify is the only @tenant_admin_required view in this module and it accepts the
+        `pending_verification` status alone. Both halves of that gate are on the wrapper below —
+        offering the form anywhere else would produce a sign-off that always bounces.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.status == 'pending_verification' %}
+          <form method="post" action="{% url 'scm:capaaction_verify' obj.pk %}" onsubmit="return confirm('Record this effectiveness verdict? Effective closes the action; not effective sends it back to investigating with the notes recorded.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in verification_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">A <span class="fw-600">not effective</span> verdict is not a filing error to be tidied away — it is new information about the root cause, so the action goes back to investigating with the notes attached rather than closing with a caveat. That is the whole reason this step exists instead of closing straight from implemented.</div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="clipboard-check"></i> Record verification</button>
+            </div>
+          </form>
+        {% endif %}
+      {% endif %}
+      {% if obj.status == 'pending_verification' %}
+        <p class="text-muted" style="margin-top:.75rem;">The effectiveness check is the formal sign-off that the fix worked, so it is a workspace-administrator action — the only one in this module.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Each button matches the from_statuses tuple of the view it posts to. The ladder is fixed
+          and there is no workflow engine behind it — open → investigating → in progress → pending
+          verification → closed — so the buttons ARE the ladder.
+        {% endcomment %}
+        {% if obj.status == 'open' %}
+          <form method="post" action="{% url 'scm:capaaction_start' obj.pk %}" onsubmit="return confirm('Move this action to investigating?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Investigate</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'investigating' %}
+          <form method="post" action="{% url 'scm:capaaction_progress' obj.pk %}" onsubmit="return confirm('Move this action to in progress?');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start work</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'in_progress' %}
+          <form method="post" action="{% url 'scm:capaaction_implement' obj.pk %}" onsubmit="return confirm('Mark this action implemented? It moves to awaiting an effectiveness check.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Mark implemented</button>
+          </form>
+        {% endif %}
+        {% if obj.status == 'open' or obj.status == 'investigating' or obj.status == 'in_progress' or obj.status == 'pending_verification' %}
+          <form method="post" action="{% url 'scm:capaaction_cancel' obj.pk %}" onsubmit="return confirm('Cancel this action? Its history survives — it is not deleted.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'scm:capaaction_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:capaaction_delete' obj.pk %}" onsubmit="return confirm('Delete this action and its task list?');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      {% if obj.status == 'in_progress' %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          Implementing needs {% if not obj.root_cause %}<span class="fw-600">a recorded root cause</span>, {% endif %}{% if not obj.effectiveness_due_date %}<span class="fw-600">an effectiveness due date</span>, {% endif %}and every task done or cancelled{% if open_task_count %} — {{ open_task_count }} is still open{% endif %}. An action closed without a root cause, without a date to check it on, or with half its plan outstanding is an action that will come back.
+        </p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Closing happens through the effectiveness verification above, never directly — a fix is closed because somebody checked that it worked, not because the tasks ran out.
+      </p>
+    </div>
+  </div>
+{% endblock %}
