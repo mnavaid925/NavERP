@@ -240,10 +240,17 @@
             <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel</button>
           </form>
         {% endif %}
-        <form method="post" action="{% url 'scm:nonconformance_raise_capa' obj.pk %}" onsubmit="return confirm('Raise a corrective action from this report? A draft is proposed with the problem statement and owner pre-filled — you own it from there.');">
+        {% comment %}
+          Gated to match nonconformance_raise_capa, which refuses a cancelled report — a
+          withdrawn finding has nothing to correct. `closed` is deliberately still allowed:
+          raising a CAPA after the fact is normal, and that is what effectiveness review is for.
+        {% endcomment %}
+        {% if obj.status != 'cancelled' %}
+          <form method="post" action="{% url 'scm:nonconformance_raise_capa' obj.pk %}" onsubmit="return confirm('Raise a corrective action from this report? A draft is proposed with the problem statement and owner pre-filled — you own it from there.');">
           {% csrf_token %}
           <button class="btn btn-outline" type="submit"><i data-lucide="wrench"></i> Raise CAPA</button>
         </form>
+        {% endif %}
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
           {% if obj.lot_serial and obj.lot_serial.status == 'available' %}
             <form method="post" action="{% url 'scm:nonconformance_quarantine' obj.pk %}" onsubmit="return confirm('Quarantine the affected lot? No stock movement is posted — the goods have not moved, only their status changes.');">
@@ -258,7 +265,12 @@
             </form>
           {% endif %}
         {% endif %}
-        {% if obj.is_editable %}
+        {% comment %}
+          nonconformance_delete ALSO refuses when a CAPA has been raised, and an open
+          report with a CAPA is a normal reachable state (raise_capa only excludes
+          cancelled). Without `not capa_actions` this button bounced on exactly those.
+        {% endcomment %}
+        {% if obj.is_editable and not capa_actions %}
           <a href="{% url 'scm:nonconformance_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
           <form method="post" action="{% url 'scm:nonconformance_delete' obj.pk %}" onsubmit="return confirm('Delete this report? A report with a recorded disposition or a corrective action against it cannot be deleted — cancel it instead.');">
             {% csrf_token %}
