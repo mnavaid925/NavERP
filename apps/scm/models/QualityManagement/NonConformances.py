@@ -206,8 +206,12 @@ class NonConformance(TenantNumbered):
         there is nothing to take out. Writing a negative move anyway would drive the receiving
         location negative for stock it never held.
         """
-        return (self.disposition == "scrap" and self.location_id is not None
-                and self.source != "goods_receipt")
+        # `item_id` is part of the test, not an assumption: an audit finding legitimately carries no
+        # item (both clean() methods allow it) while still naming a location and a quantity, and the
+        # scrap path would then hand None to _insufficient_stock — an uncaught AttributeError, not a
+        # refusal, because the caller only catches ValidationError.
+        return (self.disposition == "scrap" and self.item_id is not None
+                and self.location_id is not None and self.source != "goods_receipt")
 
     def lot_history(self, limit=50):
         """Where this lot went — the read-only ledger panel on the detail page.
