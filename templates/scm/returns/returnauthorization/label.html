@@ -1,0 +1,135 @@
+{% comment %}
+  THE RETURN SLIP. A standalone document rather than a base.html page, exactly like the other print
+  page in this application: what a customer prints and puts in a box carries no navigation, no
+  sidebar and no action buttons. The toolbar is the only chrome and the print stylesheet hides it.
+
+  **This is a RETURN SLIP, not a carrier label.** There is no barcode library, no QR library, no PDF
+  library and no carrier API anywhere in this repo, so the return number prints as TEXT. The real
+  label is bought elsewhere and its tracking number is pasted onto the return afterwards.
+
+  It is reached by the same public token as the status page, and the view refuses to render it at
+  all unless the return is approved, awaiting receipt or partially received — a slip for a return
+  nobody has approved is a document that looks real and is not.
+
+  **This page grants MORE than the status page does.** It necessarily prints the warehouse return-to
+  address. The two token surfaces are not equivalent and must not later be assumed to be. Everything
+  below is escaped and nothing uses the safe filter: the address and the instructions are typed by a
+  workspace user and rendered to a stranger's browser.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Return slip {{ obj.number }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2937; margin: 0; padding: 2rem; }
+    .wrap { max-width: 820px; margin: 0 auto; }
+    .letterhead { text-align: center; border-bottom: 2px solid #1f3a8a; padding-bottom: 1rem; margin-bottom: 1.25rem; }
+    .letterhead h1 { margin: 0; font-size: 1.4rem; color: #1f3a8a; letter-spacing: 1px; }
+    .letterhead p { margin: .25rem 0 0; font-size: .85rem; color: #6b7280; }
+    h2.doc-title { text-align: center; text-transform: uppercase; letter-spacing: 2px; font-size: .95rem; margin: 1.25rem 0; }
+    h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: 1px; color: #1f3a8a; margin: 1.5rem 0 .5rem; }
+    .muted { color: #6b7280; font-size: .85rem; }
+    .rma { text-align: center; border: 2px solid #1f2937; border-radius: .4rem; padding: .9rem; margin: 1rem 0; }
+    .rma .label { font-size: .75rem; text-transform: uppercase; letter-spacing: 2px; color: #6b7280; }
+    .rma .value { font-size: 1.9rem; font-weight: 700; letter-spacing: 3px; margin-top: .2rem; }
+    .blocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1rem 0; }
+    .block { border: 1px solid #e5e7eb; border-radius: .4rem; padding: .9rem; font-size: .88rem; }
+    .block h4 { margin: 0 0 .4rem; font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; }
+    .block .addr { white-space: pre-line; line-height: 1.5; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .35rem 1.5rem; margin: 1rem 0; font-size: .88rem; }
+    .meta div { border-bottom: 1px solid #f3f4f6; padding: .35rem 0; }
+    .meta dt { display: inline; font-weight: 600; color: #374151; }
+    .meta dd { display: inline; margin: 0 0 0 .35rem; }
+    table { width: 100%; border-collapse: collapse; margin: .75rem 0; }
+    th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #e5e7eb; font-size: .85rem; }
+    th { background: #f3f4f6; }
+    td.num, th.num { text-align: right; }
+    .statement { margin-top: 1.5rem; font-size: .85rem; line-height: 1.6; border: 1px solid #e5e7eb; border-radius: .4rem; padding: .9rem; }
+    .foot { margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: .75rem; font-size: .78rem; color: #6b7280; }
+    .toolbar { max-width: 820px; margin: 0 auto 1rem; }
+    .btn { display: inline-block; padding: .5rem .9rem; background: #1f3a8a; color: #fff; border: none; border-radius: .4rem; text-decoration: none; cursor: pointer; font-size: .9rem; }
+    .btn.secondary { background: #e5e7eb; color: #1f2937; margin-left: .5rem; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">Print / Save PDF</button>
+    <a class="btn secondary" href="{% url 'scm:returnauthorization_public' obj.public_token %}">Back to your return</a>
+  </div>
+
+  <div class="wrap">
+    <div class="letterhead">
+      <h1>{{ obj.tenant.name|default:"Return Slip" }}</h1>
+      <p>Returns</p>
+    </div>
+
+    <h2 class="doc-title">Return Slip</h2>
+
+    <div class="rma">
+      <div class="label">Return authorisation number</div>
+      {% comment %}
+        Printed as TEXT, deliberately. There is no barcode or QR library in this application and
+        inventing one for a single page would be a dependency nobody asked for — the number is what
+        the receiving bench types in, and it has to be readable by a human first.
+      {% endcomment %}
+      <div class="value">{{ obj.number }}</div>
+      <div class="muted">Write this number on the outside of the parcel and put this slip inside it.</div>
+    </div>
+
+    <div class="blocks">
+      <div class="block">
+        <h4>From</h4>
+        <div class="addr">{{ obj.customer.name }}</div>
+      </div>
+      <div class="block">
+        <h4>Send it back to</h4>
+        {% if return_to_address %}
+          <div class="addr">{{ return_to_address }}</div>
+        {% else %}
+          <div class="muted">No return address has been published for this return. Contact us before sending anything back.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <dl class="meta">
+      <div><dt>Return number</dt><dd>{{ obj.number }}</dd></div>
+      <div><dt>Requested on</dt><dd>{{ obj.requested_on|date:"M d, Y" }}</dd></div>
+      <div><dt>Status</dt><dd>{{ obj.get_status_display }}</dd></div>
+      <div><dt>How to send it</dt><dd>{{ obj.get_return_method_display }}</dd></div>
+      {% if policy %}<div><dt>Policy</dt><dd>{{ policy.name }}</dd></div>{% endif %}
+      {% if obj.return_tracking_number %}<div><dt>Tracking number</dt><dd>{{ obj.return_tracking_number }}</dd></div>{% endif %}
+    </dl>
+
+    <h3>What is in the parcel</h3>
+    <table>
+      <thead><tr><th>Item</th><th>Description</th><th class="num">Quantity</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for line in lines %}
+          <tr>
+            <td>{{ line.sku|default:"—" }}</td>
+            <td>{{ line.description|default:"—" }}</td>
+            <td class="num">{{ line.quantity|floatformat:2 }}</td>
+            <td>{{ line.reason_code|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="muted">No lines are listed on this return.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="statement">
+      Pack the items listed above securely, put this slip inside the parcel and write the return number on the outside. The quantities shown are what has been authorised — anything else in the box may be sent back to you. This slip is not a postage label: buy postage in the usual way unless you have been sent a prepaid label separately.
+      {% if policy and policy.portal_instructions %}
+        <br><br>{{ policy.portal_instructions|linebreaksbr }}
+      {% endif %}
+    </div>
+
+    <div class="foot">
+      Printed {{ printed_at|date:"M d, Y H:i" }}. Return {{ obj.number }} for {{ obj.customer.name }}.
+    </div>
+  </div>
+</body>
+</html>
