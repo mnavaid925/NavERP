@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.code }} v{{ obj.version }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} <span class="text-muted">v{{ obj.version }}</span>
+        <span class="badge badge-{% if obj.plan_type == 'incoming_receipt' %}info{% elif obj.plan_type == 'in_process' %}amber{% elif obj.plan_type == 'outgoing_shipment' %}green{% elif obj.plan_type == 'periodic_stock' %}slate{% elif obj.plan_type == 'audit_checklist' %}muted{% else %}slate{% endif %}">{{ obj.get_plan_type_display }}</span>
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+        {% if is_effective_now %}<span class="badge badge-green">Effective today</span>{% else %}<span class="badge badge-amber">Not effective today</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:inspectionplan_list' %}">Inspection Plans</a><span class="sep">›</span><span>{{ obj.code }} v{{ obj.version }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:qualityinspection_create' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> New inspection</a>
+      {% if obj.plan_type == 'audit_checklist' %}
+        <a href="{% url 'scm:qualityaudit_create' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> New audit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ characteristics|length }}</div>
+      <div class="stat-label">Characteristics on this plan</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clipboard-check"></i></div>
+      <div class="stat-value">{{ inspections|length }}</div>
+      <div class="stat-label">Recent inspections shown (latest 10)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="shield-check"></i></div>
+      <div class="stat-value">{{ audits|length }}</div>
+      <div class="stat-label">Audits using this checklist (latest 10)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="filter"></i></div>
+      <div class="stat-value">{{ obj.get_sampling_method_display }}</div>
+      <div class="stat-label">Sampling method</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">{{ obj.name }}</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Code</dt><dd class="fw-600">{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Version</dt><dd>v{{ obj.version }}</dd></div>
+        <div class="detail-item"><dt>Plan type</dt><dd>{{ obj.get_plan_type_display }}</dd></div>
+        <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600">{{ obj.item.sku }}</a> · {{ obj.item.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Item category</dt><dd>{{ obj.item_category.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.supplier.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Sampling method</dt><dd>{{ obj.get_sampling_method_display }}</dd></div>
+        <div class="detail-item"><dt>Sample percentage</dt><dd>{% if obj.sample_percentage is not None %}{{ obj.sample_percentage|floatformat:2 }}%{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Fixed sample size</dt><dd>{{ obj.sample_size|default_if_none:"—" }}</dd></div>
+        <div class="detail-item"><dt>AQL accept / reject</dt><dd>{% if obj.aql_accept_number is not None %}{{ obj.aql_accept_number }} / {{ obj.aql_reject_number }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Frequency</dt><dd>{{ obj.get_frequency_display }}{% if obj.frequency_value is not None %} · {{ obj.frequency_value|floatformat:2 }}%{% endif %}</dd></div>
+        <div class="detail-item"><dt>Effective from</dt><dd>{{ obj.effective_from|date:"M d, Y"|default:"Open-ended" }}</dd></div>
+        <div class="detail-item"><dt>Effective today</dt><dd>{% if is_effective_now %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-amber">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Characteristics</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Seq</th><th>Name</th><th>Type</th><th>Target</th><th>Lower</th><th>Upper</th><th>UOM</th><th>Expected</th><th>Test method</th><th>Critical</th><th>Mandatory</th><th>On CoA</th></tr></thead>
+        <tbody>
+          {% for c in characteristics %}
+            <tr>
+              <td>{{ c.sequence }}</td>
+              <td class="fw-600">{{ c.name }}</td>
+              <td>
+                <span class="badge badge-{% if c.characteristic_type == 'measurement' %}info{% elif c.characteristic_type == 'pass_fail' %}green{% elif c.characteristic_type == 'visual' %}amber{% elif c.characteristic_type == 'instruction' %}muted{% else %}slate{% endif %}">{{ c.get_characteristic_type_display }}</span>
+              </td>
+              <td>{% if c.target_value is not None %}{{ c.target_value|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if c.lower_limit is not None %}{{ c.lower_limit|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if c.upper_limit is not None %}{{ c.upper_limit|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if c.uom %}{{ c.uom.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ c.expected_text|default:"—" }}</td>
+              <td>{{ c.test_method|default:"—" }}</td>
+              <td>{% if c.is_critical %}<span class="badge badge-red">Critical</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if c.is_mandatory %}<span class="badge badge-amber">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
+              <td>{% if c.include_on_coa %}<span class="badge badge-green">On CoA</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="12"><div class="empty-state"><i data-lucide="list-checks"></i><h3>No characteristics</h3><p>Add the checks on the edit form. A plan with no characteristics produces an empty inspection, so the formset refuses to save one.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      These rows are <span class="fw-600">copied, never referenced</span>, the moment an inspection generates its results — name, type, unit, limits, test method and all three flags are written onto the result rows once, and every reader afterwards reads the copy. Editing a limit here therefore changes what future inspections are judged against and nothing that has already run.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Inspections run from this plan</h2>
+      <a href="{% url 'scm:qualityinspection_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All inspections</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Item</th><th>Lot / Serial</th><th>Inspected on</th><th>Inspector</th><th>Decision</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for i in inspections %}
+            <tr>
+              <td><a href="{% url 'scm:qualityinspection_detail' i.pk %}" class="fw-600">{{ i.number }}</a></td>
+              <td>{{ i.get_inspection_type_display }}</td>
+              <td><a href="{% url 'scm:item_detail' i.item.pk %}">{{ i.item.sku }}</a></td>
+              <td>{% if i.lot_serial %}<a href="{% url 'scm:lotserial_detail' i.lot_serial.pk %}">{{ i.lot_serial.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ i.inspected_on|date:"M d, Y" }}</td>
+              <td>{{ i.inspector.name|default:"—" }}</td>
+              <td>
+                <span class="badge badge-{% if i.usage_decision == 'accept' %}green{% elif i.usage_decision == 'accept_with_deviation' %}amber{% elif i.usage_decision == 'reject' %}red{% elif i.usage_decision == 'pending' %}slate{% else %}slate{% endif %}">{{ i.get_usage_decision_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if i.status == 'passed' %}green{% elif i.status == 'failed' %}red{% elif i.status == 'in_progress' %}info{% elif i.status == 'on_hold' %}amber{% elif i.status == 'draft' %}slate{% elif i.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ i.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>Not used yet</h3><p>No inspection has been run from this plan. The ten most recent would appear here — this panel is a sample, not the register.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Audits using this checklist</h2>
+      <a href="{% url 'scm:qualityaudit_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> All audits</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Auditee</th><th>Planned</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for a in audits %}
+            <tr>
+              <td><a href="{% url 'scm:qualityaudit_detail' a.pk %}" class="fw-600">{{ a.number }}</a></td>
+              <td>{{ a.title }}</td>
+              <td>{{ a.get_audit_type_display }}</td>
+              <td>{% if a.auditee_party %}{{ a.auditee_party.name }}{% elif a.auditee_org_unit %}{{ a.auditee_org_unit.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ a.planned_date|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge badge-{% if a.status == 'closed' %}green{% elif a.status == 'reported' %}info{% elif a.status == 'in_progress' %}amber{% elif a.status == 'planned' %}slate{% elif a.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ a.get_status_display }}</span>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No audits</h3><p>Only a plan whose type is <span class="fw-600">audit checklist</span> can be named on an audit — its characteristics become the questions the auditor works through.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:inspectionplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:inspectionplan_delete' obj.pk %}" onsubmit="return confirm('Delete this inspection plan and its characteristics? A plan already used by an inspection or an audit cannot be deleted — deactivate it instead.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:inspectionplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Deleting is refused once any inspection or audit points at this plan — both links are set-null, so a delete would quietly orphan them rather than error, and the provenance of a certificate is worth more than the tidy-up. Deactivate the plan or issue a new version instead.
+      </p>
+    </div>
+  </div>
+{% endblock %}
