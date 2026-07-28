@@ -856,6 +856,23 @@ LIVE_LINKS = {
         # from it and from the schedule board.
         "Shop Floor Control": "scm:productiontimelog_list",         # bullet (machine/labour/downtime log)
     },
+    # 4.9 Quality Management System — InspectionPlan is the criteria master (no sidebar key: it is a
+    # master reached from the inspection list, the WorkCenter / ReorderRule precedent) and doubles
+    # as the audit checklist. QualityInspection is the execution record whose results are
+    # SNAPSHOTTED, so editing a plan can never rewrite a past certificate. NonConformance is the ONE
+    # finding register fed by inspections, receipts, production, suppliers and audits alike — audit
+    # findings are NCR rows with source="audit", not a second table. Scrap posts an `adjustment`
+    # StockMove (no new move type); quarantine flips LotSerial.status and posts NOTHING; SCM posts
+    # no JournalEntry (L29). "Certificate of Analysis (CoA)" points at a computed REPORT over the
+    # outgoing inspections (the scm:mrp_report / scm:safety_stock_report / scm:valuation_report
+    # precedent — a bullet may be a report rather than a CRUD list).
+    "4.9": {
+        "Quality Inspection": "scm:qualityinspection_list",              # bullet (criteria + execution)
+        "Non-Conformance Reports (NCR)": "scm:nonconformance_list",      # bullet (the finding register)
+        "Corrective and Preventive Action (CAPA)": "scm:capaaction_list",  # bullet (RCA → tasks → verify)
+        "Audit Management": "scm:qualityaudit_list",                     # bullet (schedule → findings → CAPA)
+        "Certificate of Analysis (CoA)": "scm:coa_report",               # bullet (computed issue/print page)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
