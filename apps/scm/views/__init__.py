@@ -229,3 +229,35 @@ from .Manufacturing.ProductionTimeLogs import (  # noqa: F401
 from .Manufacturing.Reports import (  # noqa: F401
     mrp_report, production_schedule,
 )
+
+# 4.9 Quality Management System (QMS)
+from .QualityManagement.InspectionPlans import (  # noqa: F401
+    inspectionplan_list, inspectionplan_create, inspectionplan_detail, inspectionplan_edit,
+    inspectionplan_delete,
+)
+from .QualityManagement.QualityInspections import (  # noqa: F401
+    qualityinspection_list, qualityinspection_create, qualityinspection_detail,
+    qualityinspection_edit, qualityinspection_delete, qualityinspection_generate_results,
+    qualityinspection_start, qualityinspection_complete, qualityinspection_hold,
+    qualityinspection_resume, qualityinspection_cancel, qualityinspection_decide,
+    qualityinspection_quarantine, qualityinspection_release_lot, qualityinspection_raise_ncr,
+)
+from .QualityManagement.QualityAudits import (  # noqa: F401
+    qualityaudit_list, qualityaudit_create, qualityaudit_detail, qualityaudit_edit,
+    qualityaudit_delete, qualityaudit_start, qualityaudit_complete, qualityaudit_close,
+    qualityaudit_cancel, qualityaudit_add_finding, qualityaudit_print,
+)
+from .QualityManagement.NonConformances import (  # noqa: F401
+    nonconformance_list, nonconformance_create, nonconformance_detail, nonconformance_edit,
+    nonconformance_delete, nonconformance_investigate, nonconformance_quarantine,
+    nonconformance_release_lot, nonconformance_disposition, nonconformance_close,
+    nonconformance_cancel, nonconformance_raise_capa,
+)
+from .QualityManagement.CapaActions import (  # noqa: F401
+    capaaction_list, capaaction_create, capaaction_detail, capaaction_edit, capaaction_delete,
+    capaaction_start, capaaction_progress, capaaction_implement, capaaction_verify,
+    capaaction_cancel,
+)
+from .QualityManagement.Reports import (  # noqa: F401
+    coa_report, coa_issue, coa_print,
+)
