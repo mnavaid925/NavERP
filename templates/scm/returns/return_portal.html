@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Return Portal{% endblock %}
+{% block content %}
+  {% comment %}
+    The STAFF side of the return portal, and the target of the sidebar bullet. It is deliberately
+    not the customer-facing page: a staff sidebar bullet does not point at a login-gated or
+    customer-facing surface, which is the same ruling this module already applied to 4.1's "Vendor
+    Portal". Nothing on this page writes anything — it is the inbox, the links and the two masters
+    that decide what a customer is promised and offered.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Return Portal</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Return Portal</span></div>
+      <p class="text-muted">The staff console for what customers see. Requests waiting to be reviewed, the tracking link for every live return, and the policies and reason codes that decide what a shopper is promised and what they may be offered.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnpolicy_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Policies</a>
+      <a href="{% url 'scm:returnreason_list' %}" class="btn btn-outline"><i data-lucide="tags"></i> Reason codes</a>
+      <a href="{% url 'scm:returnauthorization_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Return</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ inbox_count|default:"0" }}</div>
+      <div class="stat-label">Portal requests awaiting review</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="link"></i></div>
+      <div class="stat-value">{{ open_returns|length }}</div>
+      <div class="stat-label">Live tracking links</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="scroll-text"></i></div>
+      <div class="stat-value">{{ policies|length }}</div>
+      <div class="stat-label">Active policies</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="tags"></i></div>
+      <div class="stat-value">{{ reasons|length }}</div>
+      <div class="stat-label">Active reason codes</div>
+    </div>
+  </div>
+
+  {% if portal_note %}
+    <div class="card">
+      <div class="card-body text-muted"><span class="fw-600">What the portal actually is.</span> {{ portal_note }}</div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Portal inbox — requests awaiting review</h2>
+      {% if inbox_count %}<span class="badge badge-amber">{{ inbox_count }} waiting</span>{% else %}<span class="badge badge-green">Clear</span>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Return</th><th>Customer</th><th>Sales order</th><th>Requested</th><th>Days open</th><th>Policy</th><th>Lines</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in inbox %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.customer.name }}</td>
+              <td>{% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}">{{ obj.sales_order.number }}</a>{% else %}<span class="text-muted">No order</span>{% endif %}</td>
+              <td>{{ obj.requested_on|date:"M d, Y" }}</td>
+              <td>{{ obj.days_open }}</td>
+              <td>{% if obj.policy %}<a href="{% url 'scm:returnpolicy_detail' obj.policy.pk %}">{{ obj.policy.name }}</a>{% else %}<span class="text-muted">None matched</span>{% endif %}</td>
+              <td>
+                {% for line in obj.lines.all %}
+                  <div>{{ line.item.sku }} × {{ line.quantity_requested|floatformat:4 }}{% if line.reason %} <span class="text-muted">— {{ line.reason.name }}</span>{% endif %}</div>
+                {% empty %}
+                  <span class="text-muted">No lines</span>
+                {% endfor %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'requested' %}info{% elif obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'awaiting_receipt' %}amber{% elif obj.status == 'partially_received' %}amber{% elif obj.status == 'received' %}info{% elif obj.status == 'settled' %}green{% elif obj.status == 'closed' %}muted{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returnauthorization_detail' obj.pk %}" class="btn-icon" title="Review and approve"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing waiting</h3><p>Returns a customer raised through the portal arrive here as requests. Approving one is a decision a person makes on the return itself — a policy may pre-fill the approval form, but nothing in this module approves itself, because every approval records who made it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Only requests that came in through the portal appear here. A return raised by a customer service agent, by email or by phone is the same record with a different source and lives on the <a href="{% url 'scm:returnauthorization_list' %}">returns list</a>.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Customer tracking links</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Return</th><th>Customer</th><th>Requested</th><th>Status</th><th>Public link</th><th>Customer said shipped</th><th>Their note</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for obj in open_returns %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.customer.name }}</td>
+              <td>{{ obj.requested_on|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge badge-{% if obj.status == 'draft' %}slate{% elif obj.status == 'requested' %}info{% elif obj.status == 'approved' %}green{% elif obj.status == 'rejected' %}red{% elif obj.status == 'awaiting_receipt' %}amber{% elif obj.status == 'partially_received' %}amber{% elif obj.status == 'received' %}info{% elif obj.status == 'settled' %}green{% elif obj.status == 'closed' %}muted{% elif obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ obj.get_status_display }}</span>
+              </td>
+              {% comment %}
+                The link is built here from the request's own scheme and host rather than being
+                stored or configured, so nothing in the backend has to know the deployment's
+                hostname. Read-only, and clicking it selects the whole thing to copy.
+              {% endcomment %}
+              <td>
+                <input type="text" class="form-input" readonly onclick="this.select();" aria-label="Public tracking link for {{ obj.number }}" value="{{ request.scheme }}://{{ request.get_host }}{% url 'scm:returnauthorization_public' obj.public_token %}">
+              </td>
+              <td>{% if obj.customer_shipped_on %}{{ obj.customer_shipped_on|date:"M d, Y" }}{% if obj.return_tracking_number %}<br><span class="text-muted">{{ obj.return_tracking_number }}</span>{% endif %}{% else %}<span class="text-muted">Not yet</span>{% endif %}</td>
+              <td>{% if obj.portal_note %}{{ obj.portal_note }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returnauthorization_public' obj.public_token %}" class="btn-icon" title="Open the status page"><i data-lucide="external-link"></i></a>
+                  {% comment %}
+                    The slip prints only for the statuses returnauthorization_label accepts —
+                    approved, awaiting receipt and partially received. A slip for an unapproved
+                    return is a document that looks real and is not.
+                  {% endcomment %}
+                  {% if obj.status == 'approved' or obj.status == 'awaiting_receipt' or obj.status == 'partially_received' %}
+                    <a href="{% url 'scm:returnauthorization_label' obj.public_token %}" class="btn-icon" title="Print the return slip"><i data-lucide="printer"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="link"></i><h3>No live tracking links</h3><p>Every return gets an unguessable link the moment it is created, and it resolves while the return is live — a draft or cancelled one gives a customer nothing at all rather than leaking that it exists.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      <span class="fw-600">Treat these links as the credential they are.</span> The token is the only thing guarding the page: it never expires, cannot be rotated and cannot be revoked, so a forwarded link is permanent read access to that one return. The status page shows no prices and no costs; the printed slip carries the return-to address, so it grants more than the status page does and the two are not interchangeable.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Active return policies</h2>
+      {% if default_policy %}<span class="badge badge-info">Default: {{ default_policy.name }}</span>{% else %}<span class="badge badge-red">No policy configured</span>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Policy</th><th>Applies to</th><th>Window</th><th>Fallback</th><th>Outcomes offered</th><th>Refund basis</th><th>Restocking fee</th><th>Return shipping</th><th>Priority</th></tr></thead>
+        <tbody>
+          {% for p in policies %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:returnpolicy_detail' p.pk %}" class="fw-600">{{ p.name }}</a>
+                {% if p.is_default %}<br><span class="badge badge-info">Default</span>{% endif %}
+                {% if p.auto_approve %}<br><span class="badge badge-amber">Pre-fills approval</span>{% endif %}
+              </td>
+              <td>{% if p.item_category %}{{ p.item_category.name }}{% else %}<span class="text-muted">Every item</span>{% endif %}</td>
+              <td>{{ p.window_days }} day{{ p.window_days|pluralize }} from {{ p.get_window_basis_display|lower }}</td>
+              <td>{{ p.fallback_days }} day{{ p.fallback_days|pluralize }} from the order date</td>
+              <td>
+                {% if p.allow_refund %}<span class="badge badge-green">Refund</span> {% endif %}
+                {% if p.allow_store_credit %}<span class="badge badge-info">Store credit</span> {% endif %}
+                {% if p.allow_exchange %}<span class="badge badge-info">Exchange</span> {% endif %}
+                {% if p.allow_keep_item %}<span class="badge badge-amber">Keep the item</span>{% endif %}
+              </td>
+              <td>{{ p.get_refund_basis_display }}{% if p.refund_basis == 'percentage' %} · {{ p.refund_pct|floatformat:2 }}%{% endif %}</td>
+              <td>{{ p.get_restocking_fee_type_display }}{% if p.restocking_fee_type != 'none' %} · {{ p.restocking_fee_value|floatformat:2 }}{% endif %}</td>
+              <td>{{ p.get_return_shipping_paid_by_display }}</td>
+              <td>{{ p.priority }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="scroll-text"></i><h3>No active policies</h3><p>A policy is the promise the shop makes: how long the window is, what the clock runs from, which outcomes may be offered and what a returned unit is worth back in stock. Without one no return can be measured against anything, and every eligibility check falls back to a human's judgement.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The most specific policy wins — a category policy beats a blanket one, and among equals the lowest priority number does. A delivery-based window falls through to the fallback more often than it looks like it should, because the delivery stamp on a sales order is something a human records by hand; the eligibility verdict on each return therefore shows which date the clock actually ran from.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Active reason codes</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Name</th><th>Fault</th><th>Offers</th><th>Fee</th><th>Restock</th><th>Photo</th><th>Suggested outcome</th><th>Portal follow-up question</th></tr></thead>
+        <tbody>
+          {% for r in reasons %}
+            <tr>
+              <td><a href="{% url 'scm:returnreason_detail' r.pk %}" class="fw-600">{{ r.code }}</a></td>
+              <td>{{ r.name }}</td>
+              <td>
+                <span class="badge badge-{% if r.fault_party == 'customer' %}slate{% elif r.fault_party == 'merchant' %}red{% elif r.fault_party == 'carrier' %}amber{% elif r.fault_party == 'supplier' %}amber{% elif r.fault_party == 'unknown' %}muted{% else %}slate{% endif %}">{{ r.get_fault_party_display }}</span>
+              </td>
+              <td>
+                {% if r.allows_refund %}<span class="badge badge-green">Refund</span> {% endif %}
+                {% if r.allows_store_credit %}<span class="badge badge-info">Store credit</span> {% endif %}
+                {% if r.allows_exchange %}<span class="badge badge-info">Exchange</span> {% endif %}
+                {% if r.allows_repair %}<span class="badge badge-amber">Repair</span>{% endif %}
+              </td>
+              <td>{% if r.waives_return_fee %}<span class="badge badge-green">Waived</span>{% else %}<span class="badge badge-muted">Policy fee applies</span>{% endif %}</td>
+              <td>{% if r.blocks_restock %}<span class="badge badge-red">Never restock</span>{% else %}<span class="badge badge-muted">Allowed</span>{% endif %}</td>
+              <td>{% if r.requires_photo %}<span class="badge badge-amber">Required</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if r.suggested_disposition %}<span class="badge badge-info">{{ r.get_suggested_disposition_display }}</span>{% else %}<span class="text-muted">Grader decides</span>{% endif %}</td>
+              <td>{{ r.follow_up_question|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="tags"></i><h3>No active reason codes</h3><p>A reason is policy, not a label: what the customer says went wrong decides who pays the return freight, whether the unit may ever go back into sellable stock, and which outcomes they may even be offered. The reason narrows what the policy allows — it can never widen it.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      A customer with a portal account raises their own return through the customer request form, where the customer and the source are forced by the server rather than taken from the submission. Anonymous return requests are deliberately not built: nothing lets a stranger prove they own an order, and there is no postal code stored anywhere to check one against.
+    </div>
+  </div>
+{% endblock %}
