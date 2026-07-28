@@ -248,6 +248,12 @@ def nonconformance_disposition(request, pk):
     shortfall guard turns "you cannot scrap what you do not have" into a message rather than a
     negative ledger, and the status re-read inside the lock makes a double POST idempotent.
     """
+    # Resolve the object — and therefore the TENANT — before touching the form. With the form
+    # first, a POST carrying a foreign pk and an invalid payload short-circuited to a redirect
+    # without the tenant check ever running: it disclosed nothing and changed nothing, but the
+    # tenant boundary should not be reachable-past on any path. Cheap: this action is a
+    # human-rate admin sign-off, and the authoritative read is still the locked one below.
+    get_object_or_404(NonConformance.objects.only("pk"), pk=pk, tenant=request.tenant)
     form = NonConformanceDispositionForm(request.POST)
     if not form.is_valid():
         messages.error(request, "; ".join(
