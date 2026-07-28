@@ -1153,7 +1153,11 @@ class Command(BaseCommand):
         from apps.scm.views._helpers import _insufficient_stock, _post_stock_move
         from apps.scm.models._base import ZERO, q2
         from apps.core.utils import next_number
-        if QualityInspection.objects.filter(tenant=tenant).exists():
+        # Guarded on InspectionPlan, the FIRST thing this block writes — not on QualityInspection.
+        # The plans are plain .create() calls against a unique ("tenant","code","version"), so a run
+        # that aborted between them and the first inspection would leave a re-run to IntegrityError
+        # on a guard that had not yet tripped.
+        if InspectionPlan.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"{tenant.name}: quality data already exists — skipping.")
             return
 
