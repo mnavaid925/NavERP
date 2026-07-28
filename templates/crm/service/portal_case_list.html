@@ -8,6 +8,14 @@
     </div>
     <div class="page-actions">
       {% if access.can_submit_cases %}<a href="{% url 'crm:portal_case_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Ticket</a>{% endif %}
+      {% comment %}
+        SCM 4.10's customer return request lives behind the SAME crm.CustomerPortalAccess binding
+        this page is built on, and had no inbound link anywhere in the application — a customer
+        could only reach it by typing the URL. This hub is where a logged-in customer already
+        lands, so it is the entry point until the dedicated customer hub lands at 4.16. The SCM
+        view re-checks the access binding server-side; this link is convenience, not authorisation.
+      {% endcomment %}
+      <a href="{% url 'scm:portal_return_create' %}" class="btn btn-outline"><i data-lucide="package-x"></i> Request a Return</a>
     </div>
   </div>
 
