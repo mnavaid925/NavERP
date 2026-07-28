@@ -122,8 +122,18 @@ def coa_issue(request, pk):
             for blocker in blockers:
                 messages.error(request, blocker)
             return redirect("scm:coa_report")
-        obj.coa_number = next_number(QualityInspection, request.tenant, "COA",
-                                     field="coa_number")
+        # Belt-and-braces on top of next_number's field-ordered lookup: MySQL has no partial unique
+        # index, so a `coa_number` column that is blank on most rows cannot carry a DB constraint to
+        # catch a collision. Re-check explicitly instead — a certificate is a customer-facing
+        # document and two of them sharing a number is not something to discover later.
+        candidate = next_number(QualityInspection, request.tenant, "COA", field="coa_number")
+        taken = set(QualityInspection.objects
+                    .filter(tenant=request.tenant, coa_number__startswith="COA-")
+                    .values_list("coa_number", flat=True))
+        while candidate in taken:
+            sequence = int(candidate.rsplit("-", 1)[1]) + 1
+            candidate = f"COA-{sequence:05d}"
+        obj.coa_number = candidate
         # The form bounds `issued_on` to 2000-2100, so combining it into an aware datetime here
         # cannot overflow the way an unbounded 9999-12-31 did in 4.8.
         obj.coa_issued_on = (
