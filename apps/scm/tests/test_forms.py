@@ -2665,3 +2665,787 @@ class TestManufacturingCrossTenantFormScoping:
         form = WorkCenterForm(_work_centre_payload(location=str(location_b.pk)), tenant=tenant_a)
         assert not form.is_valid()
         assert "location" in form.errors
+
+
+# ================================================================================================
+# SCM 4.9 Quality Management
+# ================================================================================================
+
+def _qc_payload(item_obj, **overrides):
+    from django.utils import timezone
+    data = {
+        "plan": "", "inspection_type": "incoming", "goods_receipt": "", "work_order": "",
+        "shipment": "", "item": str(item_obj.pk), "lot_serial": "", "location": "", "supplier": "",
+        "quantity_inspected": "10", "sample_size": "10", "quantity_accepted": "10",
+        "quantity_rejected": "0", "inspector": "", "inspected_on": timezone.localdate().isoformat(),
+        "supplier_coa_reference": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _ncr_payload(item_obj, **overrides):
+    from django.utils import timezone
+    data = {
+        "source": "internal", "inspection": "", "goods_receipt": "", "work_order": "",
+        "shipment": "", "audit": "", "item": str(item_obj.pk), "lot_serial": "", "location": "",
+        "supplier": "", "quantity_affected": "3", "uom": "", "defect_category": "dimensional",
+        "severity": "major", "title": "Crafted finding", "description": "Crafted description.",
+        "detected_by": "", "detected_on": timezone.localdate().isoformat(),
+        "containment_action": "", "cost_of_quality": "0", "owner": "", "due_date": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _capa_payload(**overrides):
+    data = {
+        "action_type": "corrective", "title": "Crafted action",
+        "source": "internal_improvement", "nonconformance": "", "audit": "", "item": "",
+        "supplier": "", "problem_statement": "Crafted problem.", "containment_action": "",
+        "root_cause_method": "", "root_cause": "", "action_plan": "", "owner": "",
+        "priority": "normal", "due_date": "", "effectiveness_due_date": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _audit_payload(org_unit, **overrides):
+    from django.utils import timezone
+    data = {
+        "audit_type": "internal", "title": "Crafted audit", "standard": "ISO 9001:2015",
+        "scope": "Goods-in", "auditee_party": "", "auditee_org_unit": str(org_unit.pk),
+        "checklist_plan": "", "lead_auditor": "",
+        "planned_date": timezone.localdate().isoformat(), "risk_level": "medium",
+        "conclusion": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _plan_payload(item_obj=None, **overrides):
+    data = {
+        "code": "NEW-1", "name": "Crafted plan", "plan_type": "incoming_receipt",
+        "item": str(item_obj.pk) if item_obj is not None else "", "item_category": "",
+        "supplier": "",
+        "sampling_method": "all_100", "sample_percentage": "", "sample_size": "",
+        "aql_accept_number": "", "aql_reject_number": "", "frequency": "every",
+        "frequency_value": "", "version": "1", "effective_from": "", "is_active": "on",
+        "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _characteristic_payload(**overrides):
+    data = {"sequence": "10", "name": "Crafted check", "characteristic_type": "pass_fail",
+            "uom": "", "target_value": "", "lower_limit": "", "upper_limit": "",
+            "expected_text": "OK", "test_method": "", "is_mandatory": "on"}
+    data.update(overrides)
+    return data
+
+
+def _task_payload(**overrides):
+    data = {"sequence": "10", "description": "Crafted task", "owner": "", "due_date": "",
+            "completed_on": "", "status": "open"}
+    data.update(overrides)
+    return data
+
+
+# ================================================================ Mass-assignment exclusions
+class TestQualityMassAssignmentExclusions:
+    def test_inspection_form_excludes_every_single_writer_column(self):
+        """status / usage_decision / action_taken are owned by the lifecycle + decision actions and
+        the three CoA stamp columns by the issue action. A form input for any of them would let an
+        inspector certify a lot nobody signed off."""
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(tenant=None)
+        for field in ("number", "status", "usage_decision", "action_taken", "coa_number",
+                      "coa_issued_on", "coa_issued_to", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_inspection_form_still_offers_the_inspectors_own_observations(self):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(tenant=None)
+        for field in ("plan", "inspection_type", "item", "lot_serial", "location", "supplier",
+                      "quantity_inspected", "sample_size", "quantity_accepted",
+                      "quantity_rejected", "inspector", "inspected_on",
+                      "supplier_coa_reference"):
+            assert field in form.fields, field
+
+    def test_result_form_exposes_NOTHING_from_the_snapshot_block(self):
+        from apps.scm.forms import InspectionResultForm
+        form = InspectionResultForm(tenant=None)
+        for field in ("inspection", "sequence", "characteristic", "characteristic_name",
+                      "characteristic_type", "uom", "target_value", "lower_limit", "upper_limit",
+                      "test_method", "include_on_coa", "is_critical", "is_mandatory"):
+            assert field not in form.fields, field
+        assert set(form.fields) == {"measured_value", "text_value", "result", "notes"}
+
+    def test_nonconformance_form_excludes_the_whole_MRB_block(self):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(tenant=None)
+        for field in ("number", "status", "closed_on", "quarantine_applied", "disposition",
+                      "disposition_quantity", "disposition_by", "disposition_on",
+                      "disposition_notes", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+        # cost_of_quality IS editable and the form is its ONLY writer — a default, not a derived
+        # column, which is precisely why disposition_quantity above is not a field.
+        assert "cost_of_quality" in form.fields
+
+    def test_capa_form_excludes_the_verification_block_but_keeps_the_due_date(self):
+        from apps.scm.forms import CapaActionForm
+        form = CapaActionForm(tenant=None)
+        for field in ("number", "status", "implemented_on", "effectiveness_result", "verified_by",
+                      "verified_on", "verification_notes", "closed_on", "tenant", "created_at",
+                      "updated_at"):
+            assert field not in form.fields, field
+        assert "effectiveness_due_date" in form.fields
+
+    def test_capa_task_form_never_exposes_its_parent(self):
+        from apps.scm.forms import CapaTaskForm
+        form = CapaTaskForm(tenant=None)
+        assert "capa" not in form.fields
+
+    def test_audit_form_excludes_the_stamped_dates_but_keeps_the_conclusion(self):
+        from apps.scm.forms import QualityAuditForm
+        form = QualityAuditForm(tenant=None)
+        for field in ("number", "status", "actual_start", "actual_end", "tenant", "created_at",
+                      "updated_at"):
+            assert field not in form.fields, field
+        assert "conclusion" in form.fields
+
+    def test_plan_form_has_no_number_at_all_and_keeps_is_active(self):
+        from apps.scm.forms import InspectionPlanForm
+        form = InspectionPlanForm(tenant=None)
+        assert "number" not in form.fields
+        assert "tenant" not in form.fields
+        assert "is_active" in form.fields
+
+    def test_characteristic_form_never_exposes_its_parent_plan(self):
+        from apps.scm.forms import InspectionCharacteristicForm
+        form = InspectionCharacteristicForm(tenant=None)
+        assert "plan" not in form.fields
+
+    def test_a_crafted_status_and_coa_stamp_cannot_certify_an_inspection(self, tenant_a,
+                                                                        quality_inspection_a,
+                                                                        item_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(
+            _qc_payload(item_a, status="passed", usage_decision="accept",
+                        action_taken="quarantined", coa_number="COA-99999",
+                        coa_issued_on=timezone.now().isoformat(),
+                        coa_issued_to=str(customer_a.pk)),
+            instance=quality_inspection_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.status == "draft"
+        assert saved.usage_decision == "pending"
+        assert saved.action_taken == "none"
+        assert saved.coa_number == ""
+        assert saved.coa_issued_on is None
+        assert saved.coa_issued_to_id is None
+
+    def test_a_crafted_snapshot_block_cannot_rewrite_a_result_row(self, tenant_a,
+                                                                  outgoing_inspection_a,
+                                                                  uom_each_a):
+        from apps.scm.forms import InspectionResultForm
+        row = outgoing_inspection_a.results.get(sequence=10)
+        form = InspectionResultForm(
+            {"measured_value": "99.7", "text_value": "", "result": "pass", "notes": "",
+             "characteristic_name": "Hacked", "characteristic_type": "pass_fail",
+             "lower_limit": "0", "upper_limit": "1000", "target_value": "0",
+             "include_on_coa": "", "is_critical": "", "is_mandatory": "", "sequence": "999",
+             "uom": str(uom_each_a.pk), "test_method": "Hacked method"},
+            instance=row, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.characteristic_name == "Purity"
+        assert saved.characteristic_type == "measurement"
+        assert (saved.lower_limit, saved.upper_limit) == (Decimal("99.0000"), Decimal("100.0000"))
+        assert saved.test_method == "HPLC"
+        assert saved.include_on_coa is True
+        assert saved.is_critical is True
+        assert saved.is_mandatory is True
+        assert saved.sequence == 10
+
+    def test_a_crafted_result_cannot_pass_an_out_of_spec_measurement(self, tenant_a,
+                                                                    outgoing_inspection_a):
+        """`result` IS a form field, but ``InspectionResult.save()`` re-derives it for a
+        measurement — so a typed 'pass' over a value outside the band cannot stick."""
+        from apps.scm.forms import InspectionResultForm
+        row = outgoing_inspection_a.results.get(sequence=10)
+        form = InspectionResultForm({"measured_value": "1", "text_value": "", "result": "pass",
+                                     "notes": ""}, instance=row, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert form.save().result == "fail"
+
+    def test_a_crafted_disposition_block_cannot_scrap_units_through_the_form(self, tenant_a,
+                                                                            nonconformance_a,
+                                                                            item_a):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(
+            _ncr_payload(item_a, status="closed", disposition="scrap",
+                         disposition_quantity="5", disposition_notes="Hacked",
+                         quarantine_applied="on", closed_on="2026-01-01T00:00"),
+            instance=nonconformance_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.status == "open"
+        assert saved.disposition == "pending"
+        assert saved.disposition_quantity == Decimal("0")
+        assert saved.disposition_notes == ""
+        assert saved.quarantine_applied is False
+        assert saved.closed_on is None
+
+    def test_a_crafted_verification_block_cannot_close_a_capa(self, tenant_a, capa_action_a,
+                                                             employee_party_a):
+        from apps.scm.forms import CapaActionForm
+        form = CapaActionForm(
+            _capa_payload(status="closed", effectiveness_result="effective",
+                          verified_by=str(employee_party_a.pk), verified_on="2026-01-01",
+                          verification_notes="Hacked", implemented_on="2026-01-01",
+                          closed_on="2026-01-01T00:00"),
+            instance=capa_action_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.status == "open"
+        assert saved.effectiveness_result == "pending"
+        assert saved.verified_by_id is None
+        assert saved.verified_on is None
+        assert saved.verification_notes == ""
+        assert saved.implemented_on is None
+        assert saved.closed_on is None
+
+    def test_a_crafted_audit_status_and_dates_cannot_run_an_audit(self, tenant_a, quality_audit_a,
+                                                                 org_unit_a):
+        from apps.scm.forms import QualityAuditForm
+        form = QualityAuditForm(
+            _audit_payload(org_unit_a, status="closed", actual_start="2026-01-01",
+                           actual_end="2026-01-02"),
+            instance=quality_audit_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.status == "planned"
+        assert saved.actual_start is None
+        assert saved.actual_end is None
+
+
+# ================================================================ The snapshot formset guards
+class TestInspectionResultFormSetGuards:
+    def test_the_formset_carries_no_DELETE_field(self):
+        """can_delete=False is the stronger half of the snapshot rule: generate_results() short-
+        circuits on results.exists(), so a removed row can NEVER be regenerated — and deleting the
+        one failing characteristic would silently turn a failed inspection into a certifiable one."""
+        from apps.scm.forms import InspectionResultFormSet
+        assert InspectionResultFormSet.can_delete is False
+        assert InspectionResultFormSet.extra == 0
+        formset = InspectionResultFormSet()
+        for form in formset.forms:
+            assert "DELETE" not in form.fields
+
+    def test_an_INJECTED_row_is_rejected(self, tenant_a, outgoing_inspection_a):
+        """extra=0 does NOT prevent this: initial_form_count() comes from the POSTed management
+        form, so a crafted post can declare extra rows — which would take snapshot DEFAULTS (blank
+        name, no limits) and _evaluate returns 'pass' for a measurement with no limits."""
+        from apps.scm.forms import InspectionResultFormSet
+        rows = list(outgoing_inspection_a.results.order_by("sequence"))
+        data = formset_data("results", [
+            {"id": str(rows[0].pk), "measured_value": "99.6", "text_value": "", "result": "pass",
+             "notes": ""},
+            {"id": str(rows[1].pk), "measured_value": "", "text_value": "Clear",
+             "result": "pass", "notes": ""},
+            {"id": "", "measured_value": "1000", "text_value": "", "result": "pass",
+             "notes": "Injected"},
+        ], initial=2)
+        formset = InspectionResultFormSet(data, instance=outgoing_inspection_a,
+                                          form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("snapshotted from the plan" in e for e in formset.non_form_errors())
+
+    def test_a_verdict_on_a_measurement_with_no_value_is_a_field_error(self, tenant_a,
+                                                                       outgoing_inspection_a):
+        from apps.scm.forms import InspectionResultFormSet
+        rows = list(outgoing_inspection_a.results.order_by("sequence"))
+        data = formset_data("results", [
+            {"id": str(rows[0].pk), "measured_value": "", "text_value": "", "result": "pass",
+             "notes": ""},
+            {"id": str(rows[1].pk), "measured_value": "", "text_value": "Clear",
+             "result": "pass", "notes": ""},
+        ], initial=2)
+        formset = InspectionResultFormSet(data, instance=outgoing_inspection_a,
+                                          form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "measured_value" in formset.forms[0].errors
+
+    def test_a_half_filled_in_progress_set_stays_SAVABLE(self, tenant_a, quality_inspection_a):
+        """'Every mandatory row must carry a value' is qualityinspection_complete's rule, NOT the
+        formset's — an inspector has to be able to put the clipboard down."""
+        from apps.scm.forms import InspectionResultFormSet
+        quality_inspection_a.generate_results()
+        rows = list(quality_inspection_a.results.order_by("sequence"))
+        data = formset_data("results", [
+            {"id": str(row.pk), "measured_value": "", "text_value": "", "result": "pending",
+             "notes": ""} for row in rows
+        ], initial=len(rows))
+        formset = InspectionResultFormSet(data, instance=quality_inspection_a,
+                                          form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+
+class TestInspectionCharacteristicFormSetGuards:
+    def test_a_plan_with_no_characteristics_is_rejected(self, tenant_a, inspection_plan_a):
+        from apps.scm.forms import InspectionCharacteristicFormSet
+        formset = InspectionCharacteristicFormSet(formset_data("characteristics", []),
+                                                  instance=inspection_plan_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("at least one characteristic" in e for e in formset.non_form_errors())
+
+    def test_two_characteristics_may_not_share_a_sequence(self, tenant_a, inspection_plan_a):
+        from apps.scm.forms import InspectionCharacteristicFormSet
+        data = formset_data("characteristics", [
+            dict(_characteristic_payload(name="A"), id=""),
+            dict(_characteristic_payload(name="B"), id=""),
+        ])
+        formset = InspectionCharacteristicFormSet(data, instance=inspection_plan_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("share a sequence number" in e for e in formset.non_form_errors())
+
+    def test_an_audit_checklist_may_not_ask_a_MEASUREMENT_question(self, tenant_a,
+                                                                   audit_checklist_plan_a):
+        from apps.scm.forms import InspectionCharacteristicFormSet
+        data = formset_data("characteristics", [
+            dict(_characteristic_payload(characteristic_type="measurement", target_value="1"),
+                 id=""),
+        ])
+        formset = InspectionCharacteristicFormSet(data, instance=audit_checklist_plan_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "characteristic_type" in formset.forms[0].errors
+
+    def test_the_uom_option_list_is_built_once_for_the_whole_formset(self, tenant_a,
+                                                                     inspection_plan_a,
+                                                                     uom_each_a,
+                                                                     django_assert_max_num_queries):
+        from apps.scm.forms import InspectionCharacteristicFormSet
+        formset = InspectionCharacteristicFormSet(instance=inspection_plan_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        # 4 rendered rows (3 saved + 1 extra); without add_fields()'s shared `.choices` each one
+        # re-ran the identical UOM SELECT.
+        with django_assert_max_num_queries(3):
+            for form in formset.forms:
+                list(form.fields["uom"].choices)
+
+
+class TestCapaTaskFormSetGuards:
+    def test_two_tasks_may_not_share_a_sequence(self, tenant_a, capa_action_a):
+        from apps.scm.forms import CapaTaskFormSet
+        data = formset_data("tasks", [
+            dict(_task_payload(description="A"), id=""),
+            dict(_task_payload(description="B"), id=""),
+        ])
+        formset = CapaTaskFormSet(data, instance=capa_action_a, form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("share a sequence number" in e for e in formset.non_form_errors())
+
+    def test_a_task_may_not_be_due_after_the_capa_itself(self, tenant_a, capa_action_a):
+        from apps.scm.forms import CapaTaskFormSet
+        late = (capa_action_a.due_date + datetime.timedelta(days=5)).isoformat()
+        data = formset_data("tasks", [dict(_task_payload(due_date=late), id="")])
+        formset = CapaTaskFormSet(data, instance=capa_action_a, form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "due_date" in formset.forms[0].errors
+
+    def test_the_parent_rule_is_a_no_op_when_the_capa_has_no_due_date(self, tenant_a):
+        from apps.scm.models import CapaAction
+        from apps.scm.forms import CapaTaskFormSet
+        data = formset_data("tasks", [dict(_task_payload(due_date="2099-01-01"), id="")])
+        formset = CapaTaskFormSet(data, instance=CapaAction(),
+                                  form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+
+# ================================================================ Dropdown scoping
+class TestQualityFormScoping:
+    def test_the_plan_dropdown_is_narrowed_to_the_matching_plan_type(self, tenant_a,
+                                                                     inspection_plan_a,
+                                                                     outgoing_plan_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        incoming = QualityInspectionForm(_qc_payload(item_a, inspection_type="incoming"),
+                                          tenant=tenant_a)
+        outgoing = QualityInspectionForm(_qc_payload(item_a, inspection_type="outgoing"),
+                                          tenant=tenant_a)
+        assert inspection_plan_a in incoming.fields["plan"].queryset
+        assert outgoing_plan_a not in incoming.fields["plan"].queryset
+        assert outgoing_plan_a in outgoing.fields["plan"].queryset
+
+    def test_a_deactivated_plan_stays_selectable_on_the_row_that_uses_it(self, tenant_a,
+                                                                        quality_inspection_a,
+                                                                        inspection_plan_a):
+        from apps.scm.forms import QualityInspectionForm
+        inspection_plan_a.is_active = False
+        inspection_plan_a.save(update_fields=["is_active"])
+        form = QualityInspectionForm(instance=quality_inspection_a, tenant=tenant_a)
+        assert inspection_plan_a in form.fields["plan"].queryset
+
+    def test_the_lot_dropdown_is_narrowed_to_the_chosen_item(self, tenant_a, item_a, item_lot_a,
+                                                             lot_a):
+        from apps.scm.forms import QualityInspectionForm
+        wrong = QualityInspectionForm(_qc_payload(item_a), tenant=tenant_a)
+        right = QualityInspectionForm(_qc_payload(item_lot_a), tenant=tenant_a)
+        assert lot_a not in wrong.fields["lot_serial"].queryset
+        assert lot_a in right.fields["lot_serial"].queryset
+
+    def test_the_lot_dropdown_is_EMPTY_before_an_item_is_picked(self, tenant_a, lot_a):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(tenant=tenant_a)
+        assert list(form.fields["lot_serial"].queryset) == []
+
+    def test_a_junk_item_id_narrows_the_lots_to_nothing_rather_than_raising(self, tenant_a,
+                                                                            lot_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(_qc_payload(item_a, item="abc"), tenant=tenant_a)
+        assert list(form.fields["lot_serial"].queryset) == []
+        assert not form.is_valid()
+
+    def test_the_supplier_and_inspector_dropdowns_are_role_scoped(self, tenant_a, supplier_a,
+                                                                  vendor_a, customer_a,
+                                                                  employee_party_a,
+                                                                  non_supplier_party_a):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(tenant=tenant_a)
+        suppliers = list(form.fields["supplier"].queryset)
+        inspectors = list(form.fields["inspector"].queryset)
+        assert supplier_a in suppliers and vendor_a in suppliers
+        assert non_supplier_party_a not in suppliers
+        assert inspectors == [employee_party_a]
+
+    def test_an_outgoing_inspection_only_offers_OUTBOUND_shipments(self, tenant_a, item_a,
+                                                                    shipment_a, carrier_a):
+        from apps.scm.models import Shipment
+        from apps.scm.forms import QualityInspectionForm
+        inbound = Shipment.objects.create(tenant=tenant_a, carrier=carrier_a, direction="inbound")
+        form = QualityInspectionForm(_qc_payload(item_a, inspection_type="outgoing"),
+                                      tenant=tenant_a)
+        assert shipment_a in form.fields["shipment"].queryset
+        assert inbound not in form.fields["shipment"].queryset
+
+    def test_the_checklist_dropdown_only_offers_audit_checklists(self, tenant_a,
+                                                                 audit_checklist_plan_a,
+                                                                 inspection_plan_a):
+        from apps.scm.forms import QualityAuditForm
+        form = QualityAuditForm(tenant=tenant_a)
+        assert audit_checklist_plan_a in form.fields["checklist_plan"].queryset
+        assert inspection_plan_a not in form.fields["checklist_plan"].queryset
+
+    def test_the_auditee_party_dropdown_is_deliberately_the_WHOLE_party_book(self, tenant_a,
+                                                                             customer_a,
+                                                                             supplier_a):
+        """A supplier audit, a customer audit and a certification body are three roles —
+        _supplier_parties would hide two of them."""
+        from apps.scm.forms import QualityAuditForm
+        parties = list(QualityAuditForm(tenant=tenant_a).fields["auditee_party"].queryset)
+        assert customer_a in parties and supplier_a in parties
+
+    def test_the_certificate_recipient_is_scoped_to_CUSTOMERS(self, tenant_a, customer_a,
+                                                              supplier_a, carrier_party_a):
+        from apps.scm.forms import QualityInspectionCoAIssueForm
+        recipients = list(
+            QualityInspectionCoAIssueForm(tenant=tenant_a).fields["coa_issued_to"].queryset)
+        assert recipients == [customer_a]
+
+    def test_the_verifier_dropdown_is_scoped_to_EMPLOYEES(self, tenant_a, employee_party_a,
+                                                          customer_a):
+        from apps.scm.forms import CapaVerificationForm
+        verifiers = list(CapaVerificationForm(tenant=tenant_a).fields["verified_by"].queryset)
+        assert verifiers == [employee_party_a]
+
+    def test_the_finding_owner_dropdown_is_scoped_to_EMPLOYEES(self, tenant_a, employee_party_a,
+                                                               customer_a):
+        from apps.scm.forms import QualityAuditFindingForm
+        owners = list(QualityAuditFindingForm(tenant=tenant_a).fields["owner"].queryset)
+        assert owners == [employee_party_a]
+
+    def test_every_action_form_survives_a_tenant_less_user(self):
+        from apps.scm.forms import (CapaVerificationForm, QualityAuditFindingForm,
+                                    QualityInspectionCoAIssueForm)
+        for form_class in (CapaVerificationForm, QualityAuditFindingForm,
+                           QualityInspectionCoAIssueForm):
+            form = form_class(tenant=None)
+            for field in form.fields.values():
+                if hasattr(field, "queryset"):
+                    assert list(field.queryset) == []
+
+
+# ================================================================ Form-level validation
+class TestQualityInspectionFormValidation:
+    def test_the_arithmetic_lands_on_the_FIELD_not_the_whole_form(self, tenant_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(_qc_payload(item_a, quantity_inspected="10",
+                                                  quantity_accepted="8", quantity_rejected="5"),
+                                      tenant=tenant_a)
+        assert not form.is_valid()
+        assert "quantity_accepted" in form.errors
+
+    def test_an_oversized_sample_lands_on_the_sample_field(self, tenant_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(_qc_payload(item_a, sample_size="99"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "sample_size" in form.errors
+
+    def test_a_lot_from_another_item_is_refused_with_the_lot_named(self, tenant_a, item_lot_a,
+                                                                   lot_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        # The lot dropdown is narrowed by the chosen item, so a crafted POST is the only way in.
+        form = QualityInspectionForm(_qc_payload(item_a, lot_serial=str(lot_a.pk)),
+                                      tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    def test_the_matching_lot_is_accepted(self, tenant_a, item_lot_a, lot_a):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(
+            _qc_payload(item_lot_a, lot_serial=str(lot_a.pk), inspection_type="outgoing"),
+            tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_junk_quantities_are_rejected_without_raising(self, tenant_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        for junk in ("NaN", "Infinity", "-Infinity", "abc", "-5", "9" * 20):
+            form = QualityInspectionForm(_qc_payload(item_a, quantity_inspected=junk),
+                                          tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "quantity_inspected" in form.errors, junk
+
+    def test_a_junk_inspection_date_is_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import QualityInspectionForm
+        for junk in ("not-a-date", "9999-99-99", "0000-00-00"):
+            form = QualityInspectionForm(_qc_payload(item_a, inspected_on=junk), tenant=tenant_a)
+            assert not form.is_valid(), junk
+
+
+class TestNonConformanceFormValidation:
+    def test_a_non_audit_source_must_name_an_item(self, tenant_a, item_a):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(_ncr_payload(item_a, item=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_an_audit_finding_needs_no_item(self, tenant_a, item_a, quality_audit_a):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(_ncr_payload(item_a, item="", source="audit",
+                                                audit=str(quality_audit_a.pk),
+                                                quantity_affected="0"),
+                                   tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_an_item_with_no_quantity_is_refused(self, tenant_a, item_a):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(_ncr_payload(item_a, quantity_affected="0"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "quantity_affected" in form.errors
+
+    def test_a_due_date_before_detection_is_refused(self, tenant_a, item_a):
+        from django.utils import timezone
+        from apps.scm.forms import NonConformanceForm
+        yesterday = (timezone.localdate() - datetime.timedelta(days=1)).isoformat()
+        form = NonConformanceForm(_ncr_payload(item_a, due_date=yesterday), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "due_date" in form.errors
+
+    def test_a_lot_from_another_item_is_refused(self, tenant_a, item_a, lot_a):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(_ncr_payload(item_a, lot_serial=str(lot_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    def test_cost_of_quality_is_DEFAULTED_only_on_an_unbound_form(self, tenant_a,
+                                                                  nonconformance_a, item_a,
+                                                                  location_a):
+        """A default, not a derived column: offered once, then owned by whoever types over it."""
+        from apps.scm.models import NonConformance
+        from apps.scm.forms import NonConformanceForm
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "10", "6.0000")
+        NonConformance.objects.filter(pk=nonconformance_a.pk).update(cost_of_quality=Decimal("0"))
+        fresh = NonConformance.objects.get(pk=nonconformance_a.pk)
+        unbound = NonConformanceForm(instance=fresh, tenant=tenant_a)
+        assert unbound.initial["cost_of_quality"] == Decimal("30.00")   # 5 x 6.0000
+        bound = NonConformanceForm(_ncr_payload(item_a, cost_of_quality="7.50"),
+                                    instance=fresh, tenant=tenant_a)
+        assert bound.is_valid(), bound.errors
+        assert bound.save().cost_of_quality == Decimal("7.50")
+
+    def test_nothing_recomputes_cost_of_quality_once_a_human_has_typed_one(self, tenant_a,
+                                                                          nonconformance_a,
+                                                                          item_a, location_a):
+        from apps.scm.forms import NonConformanceForm
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_a, location_a, "10", "6.0000")
+        form = NonConformanceForm(instance=nonconformance_a, tenant=tenant_a)
+        assert form.initial["cost_of_quality"] == Decimal("40.00")   # the fixture's own figure
+
+    def test_junk_costs_and_quantities_are_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import NonConformanceForm
+        for junk in ("NaN", "Infinity", "abc", "-1", "9" * 20):
+            form = NonConformanceForm(_ncr_payload(item_a, cost_of_quality=junk), tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "cost_of_quality" in form.errors, junk
+
+
+class TestDispositionAndDecisionFormValidation:
+    def test_the_disposition_form_never_offers_PENDING(self):
+        from apps.scm.forms import NonConformanceDispositionForm
+        choices = [v for v, _ in NonConformanceDispositionForm().fields["disposition"].choices]
+        assert "pending" not in choices
+        assert "scrap" in choices
+
+    def test_a_negative_or_junk_disposition_quantity_is_rejected(self):
+        from apps.scm.forms import NonConformanceDispositionForm
+        for junk in ("NaN", "Infinity", "-1", "abc", "9" * 20):
+            form = NonConformanceDispositionForm({"disposition": "scrap",
+                                                  "disposition_quantity": junk})
+            assert not form.is_valid(), junk
+
+    def test_the_decision_form_never_offers_PENDING(self):
+        from apps.scm.forms import QualityInspectionDecisionForm
+        choices = [v for v, _ in QualityInspectionDecisionForm().fields["usage_decision"].choices]
+        assert "pending" not in choices
+        assert set(choices) == {"accept", "accept_with_deviation", "reject"}
+
+    def test_the_verification_form_never_offers_PENDING(self):
+        from apps.scm.forms import CapaVerificationForm
+        choices = [v for v, _ in
+                   CapaVerificationForm(tenant=None).fields["effectiveness_result"].choices]
+        assert "pending" not in choices
+        assert set(choices) == {"effective", "not_effective"}
+
+    def test_every_free_typed_date_is_BOUNDED_to_2000_2100(self, tenant_a):
+        """An unbounded 9999-12-31 has already turned an ordinary POST into an uncaught
+        OverflowError once in this module."""
+        from apps.scm.forms import (CapaVerificationForm, QualityAuditFindingForm,
+                                    QualityInspectionCoAIssueForm)
+        issue = QualityInspectionCoAIssueForm({"issued_on": "9999-12-31"}, tenant=tenant_a)
+        assert not issue.is_valid()
+        verify = CapaVerificationForm({"effectiveness_result": "effective",
+                                       "verified_on": "9999-12-31"}, tenant=tenant_a)
+        assert not verify.is_valid()
+        finding = QualityAuditFindingForm({"title": "T", "description": "D", "severity": "minor",
+                                           "defect_category": "documentation",
+                                           "due_date": "1900-01-01"}, tenant=tenant_a)
+        assert not finding.is_valid()
+
+
+class TestInspectionPlanFormValidation:
+    def test_a_duplicate_code_and_version_is_a_form_error_not_a_500(self, tenant_a,
+                                                                    inspection_plan_a, item_a):
+        """TenantUniqueMixin is mandatory here: without it the ("tenant", "code", "version")
+        constraint is skipped entirely and the duplicate raises IntegrityError on save."""
+        from apps.scm.forms import InspectionPlanForm
+        form = InspectionPlanForm(_plan_payload(item_a, code=inspection_plan_a.code,
+                                                 version=inspection_plan_a.version),
+                                   tenant=tenant_a)
+        assert not form.is_valid()
+        assert "__all__" in form.errors or "code" in form.errors
+
+    def test_the_same_code_is_free_in_another_tenant(self, tenant_b, inspection_plan_a, item_b):
+        from apps.scm.forms import InspectionPlanForm
+        form = InspectionPlanForm(_plan_payload(item_b, code=inspection_plan_a.code,
+                                                 version=inspection_plan_a.version),
+                                   tenant=tenant_b)
+        assert form.is_valid(), form.errors
+
+    def test_the_supplier_dropdown_is_role_scoped(self, tenant_a, supplier_a,
+                                                  non_supplier_party_a):
+        from apps.scm.forms import InspectionPlanForm
+        suppliers = list(InspectionPlanForm(tenant=tenant_a).fields["supplier"].queryset)
+        assert supplier_a in suppliers
+        assert non_supplier_party_a not in suppliers
+
+    def test_junk_sampling_numbers_are_rejected(self, tenant_a, item_a):
+        from apps.scm.forms import InspectionPlanForm
+        for junk in ("NaN", "Infinity", "abc", "-1", "101", "9" * 20):
+            form = InspectionPlanForm(_plan_payload(item_a, sampling_method="percentage",
+                                                     sample_percentage=junk), tenant=tenant_a)
+            assert not form.is_valid(), junk
+
+
+# ================================================================ Cross-tenant FORM binding
+class TestQualityCrossTenantFormScoping:
+    def test_the_inspection_form_refuses_another_tenants_item(self, tenant_a, item_b):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(_qc_payload(item_b), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_the_inspection_form_refuses_another_tenants_plan(self, tenant_a, item_a,
+                                                              inspection_plan_b):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(_qc_payload(item_a, plan=str(inspection_plan_b.pk)),
+                                      tenant=tenant_a)
+        assert not form.is_valid()
+        assert "plan" in form.errors
+
+    def test_the_inspection_form_refuses_another_tenants_lot_and_location(self, tenant_a, item_a,
+                                                                          lot_b, location_b):
+        from apps.scm.forms import QualityInspectionForm
+        form = QualityInspectionForm(_qc_payload(item_a, lot_serial=str(lot_b.pk),
+                                                  location=str(location_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+        assert "location" in form.errors
+
+    def test_the_nonconformance_form_refuses_another_tenants_item_and_audit(self, tenant_a,
+                                                                            item_b,
+                                                                            quality_audit_b):
+        from apps.scm.forms import NonConformanceForm
+        form = NonConformanceForm(_ncr_payload(item_b, audit=str(quality_audit_b.pk)),
+                                   tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+        assert "audit" in form.errors
+
+    def test_the_capa_form_refuses_another_tenants_nonconformance(self, tenant_a,
+                                                                  nonconformance_b):
+        from apps.scm.forms import CapaActionForm
+        form = CapaActionForm(_capa_payload(nonconformance=str(nonconformance_b.pk)),
+                               tenant=tenant_a)
+        assert not form.is_valid()
+        assert "nonconformance" in form.errors
+
+    def test_the_audit_form_refuses_another_tenants_checklist_plan(self, tenant_a, org_unit_a,
+                                                                   inspection_plan_b):
+        from apps.scm.forms import QualityAuditForm
+        form = QualityAuditForm(_audit_payload(org_unit_a,
+                                                checklist_plan=str(inspection_plan_b.pk)),
+                                 tenant=tenant_a)
+        assert not form.is_valid()
+        assert "checklist_plan" in form.errors
+
+    def test_the_plan_form_refuses_another_tenants_item_and_category(self, tenant_a, item_b,
+                                                                     category_b):
+        from apps.scm.forms import InspectionPlanForm
+        form = InspectionPlanForm(_plan_payload(item_b, item_category=str(category_b.pk)),
+                                   tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+        assert "item_category" in form.errors
+
+    def test_the_characteristic_form_refuses_another_tenants_uom(self, tenant_a, uom_each_b):
+        from apps.scm.forms import InspectionCharacteristicForm
+        form = InspectionCharacteristicForm(_characteristic_payload(uom=str(uom_each_b.pk)),
+                                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "uom" in form.errors
+
+    def test_the_task_form_refuses_another_tenants_owner(self, tenant_a, tenant_b):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.forms import CapaTaskForm
+        theirs = Party.objects.create(tenant=tenant_b, name="Globex Employee", kind="person")
+        PartyRole.objects.create(tenant=tenant_b, party=theirs, role="employee")
+        form = CapaTaskForm(_task_payload(owner=str(theirs.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "owner" in form.errors
