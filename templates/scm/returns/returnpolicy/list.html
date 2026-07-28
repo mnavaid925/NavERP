@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Return Policies{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Return Policies</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Return Policies</span></div>
+      <p class="text-muted">The published promise, per item category. A policy holds three things nothing else in this application can: the <span class="fw-600">grade write-down</span> that turns a condition grade into money, the <span class="fw-600">return-to address</span> printed on the slip (a warehouse location has no address field anywhere in this app), and the <span class="fw-600">window basis</span> — whether the clock starts at delivery, at fulfilment or at the order date.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnreason_list' %}" class="btn btn-outline"><i data-lucide="message-square-warning"></i> Return reasons</a>
+      <a href="{% url 'scm:return_portal' %}" class="btn btn-outline"><i data-lucide="globe"></i> Return portal</a>
+      <a href="{% url 'scm:returnpolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Return Policy</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="scroll-text"></i></div>
+      <div class="stat-value">{{ stats.active|default:"0" }}</div>
+      <div class="stat-label">Active policies</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="star"></i></div>
+      <div class="stat-value">{{ stats.default|default:"0" }}</div>
+      <div class="stat-label">Flagged as the catch-all default</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="zap"></i></div>
+      <div class="stat-value">{{ stats.auto_approve|default:"0" }}</div>
+      <div class="stat-label">Pre-tick the approval form</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="hand-coins"></i></div>
+      <div class="stat-value">{{ stats.keep_item|default:"0" }}</div>
+      <div class="stat-label">Allow a returnless refund</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, return-to address or portal instructions…">
+        </div>
+        <div class="form-group">
+          <select name="window_basis" aria-label="Window basis" class="form-select">
+            <option value="">All window bases</option>
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if request.GET.window_basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="refund_basis" aria-label="Refund basis" class="form-select">
+            <option value="">All refund bases</option>
+            {% for val, label in refund_basis_choices %}
+              <option value="{{ val }}" {% if request.GET.refund_basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="restocking_fee_type" aria-label="Restocking fee" class="form-select">
+            <option value="">All fee types</option>
+            {% for val, label in fee_choices %}
+              <option value="{{ val }}" {% if request.GET.restocking_fee_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item_category" aria-label="Item category" class="form-select">
+            <option value="">All categories</option>
+            {% for c in categories %}
+              <option value="{{ c.pk }}" {% if request.GET.item_category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:returnpolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Scope</th><th>Priority</th><th>Window</th><th>Refund</th><th>Restocking fee</th><th>Freight</th><th>Offers</th><th>Grade ladder A/B/C/D</th><th>Warranty</th><th>Approval</th><th>Returns</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:returnpolicy_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a>
+                {% if obj.is_default %}<span class="badge badge-info">Default</span>{% endif %}
+              </td>
+              <td>{% if obj.item_category %}{{ obj.item_category.name }}{% else %}<span class="text-muted">Every item</span>{% endif %}</td>
+              <td>{{ obj.priority }}</td>
+              <td>
+                <span class="badge badge-{% if obj.window_basis == 'delivery' %}info{% elif obj.window_basis == 'fulfilment' %}amber{% elif obj.window_basis == 'order_date' %}slate{% else %}slate{% endif %}">{{ obj.get_window_basis_display }}</span>
+                <span class="fw-600">{{ obj.window_days }}d</span>
+                <span class="text-muted">fallback {{ obj.fallback_days }}d</span>
+                {% if obj.require_delivery_confirmation %}<br><span class="badge badge-amber">Needs a delivery stamp</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.refund_basis == 'full' %}green{% elif obj.refund_basis == 'percentage' %}amber{% elif obj.refund_basis == 'none' %}red{% else %}slate{% endif %}">{{ obj.get_refund_basis_display }}</span>
+                {% if obj.refund_basis == 'percentage' %}<span class="fw-600">{{ obj.refund_pct|floatformat:2 }}%</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.restocking_fee_type == 'none' %}muted{% elif obj.restocking_fee_type == 'flat' %}amber{% elif obj.restocking_fee_type == 'percent_of_value' %}amber{% else %}slate{% endif %}">{{ obj.get_restocking_fee_type_display }}</span>
+                {% if obj.restocking_fee_type != 'none' %}<span class="fw-600">{{ obj.restocking_fee_value|floatformat:2 }}{% if obj.restocking_fee_type == 'percent_of_value' %}%{% endif %}</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if obj.return_shipping_paid_by == 'customer' %}slate{% elif obj.return_shipping_paid_by == 'merchant' %}amber{% elif obj.return_shipping_paid_by == 'by_fault' %}info{% else %}slate{% endif %}">{{ obj.get_return_shipping_paid_by_display }}</span>
+              </td>
+              <td>
+                {% if obj.allow_refund %}<span class="badge badge-green">Refund</span>{% endif %}
+                {% if obj.allow_store_credit %}<span class="badge badge-info">Credit</span>{% endif %}
+                {% if obj.allow_exchange %}<span class="badge badge-info">Exchange</span>{% endif %}
+                {% if obj.allow_keep_item %}<span class="badge badge-amber">Keep item</span>{% endif %}
+              </td>
+              <td class="fw-600">{{ obj.grade_a_cost_pct|floatformat:0 }}% / {{ obj.grade_b_cost_pct|floatformat:0 }}% / {{ obj.grade_c_cost_pct|floatformat:0 }}% / {{ obj.grade_d_cost_pct|floatformat:0 }}%</td>
+              <td>{{ obj.warranty_window_days }}d</td>
+              <td>{% if obj.auto_approve %}<span class="badge badge-amber">Pre-ticked</span>{% else %}<span class="badge badge-muted">Manual</span>{% endif %}</td>
+              {% comment %}
+                `rma_count_agg` is the list view's ANNOTATION, deliberately NOT named
+                `return_authorizations` — that is the reverse accessor's own name and an annotation
+                sharing it would shadow the manager on every row.
+              {% endcomment %}
+              <td class="fw-600">{{ obj.rma_count_agg }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returnpolicy_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:returnpolicy_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:returnpolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this policy? A policy any return was approved under cannot be deleted — deactivate it instead so past decisions keep the rules they were made under.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="14"><div class="empty-state"><i data-lucide="scroll-text"></i><h3>No return policies</h3><p>Create the promise a returning customer is held to: how long they have, what they get back, what a restocking fee costs, who pays the freight, and what a returned unit is worth at each condition grade.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      A category-specific policy beats a blanket one; among equals the <span class="fw-600">lowest priority number</span> wins, and the default flag is the last resort. The verdict a policy produces is <span class="fw-600">frozen onto the return at approval</span>, so editing a policy next month never rewrites last month's decision. <span class="fw-600">Auto-approve never approves anything</span> — it pre-ticks the approval form, and every approval still stamps who pressed it.
+    </div>
+  </div>
+{% endblock %}
