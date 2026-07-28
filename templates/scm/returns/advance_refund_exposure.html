@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Advance Refund Exposure{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Advance Refund Exposure</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Advance Refund Exposure</span></div>
+      <p class="text-muted">Money already given back against goods that have not arrived. An instant refund is a promise made before the box is in the building, and this is the list of promises still outstanding.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returns_awaiting_disposition' %}" class="btn btn-outline"><i data-lucide="package-search"></i> Returns bench</a>
+      <a href="{% url 'scm:refund_queue' %}" class="btn btn-outline"><i data-lucide="banknote"></i> Refund queue</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list"></i></div>
+      <div class="stat-value">{{ page_obj.paginator.count|default:"0" }}</div>
+      <div class="stat-label">Advance refunds still live</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ total_exposure|floatformat:2 }}</div>
+      <div class="stat-label">At risk on this page</div>
+    </div>
+  </div>
+
+  {% if clawback_note %}
+    <div class="card">
+      <div class="card-body text-muted"><span class="fw-600">There is no automatic claw-back.</span> {{ clawback_note }}</div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search RMA number or customer…">
+        </div>
+        <div class="form-group">
+          <select name="state" aria-label="State" class="form-select">
+            <option value="">Any state</option>
+            {% for val, label in state_choices %}
+              <option value="{{ val }}" {% if request.GET.state == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:advance_refund_exposure' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Return</th><th>Customer</th><th>Requested</th><th>Deadline</th><th>Days left</th><th>Refunded</th><th>Units outstanding</th><th>At risk</th><th>Customer shipped</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:returnauthorization_detail' row.obj.pk %}" class="fw-600">{{ row.obj.number }}</a></td>
+              <td>{{ row.obj.customer.name }}</td>
+              <td>{{ row.obj.requested_on|date:"M d, Y" }}</td>
+              <td>{% if row.overdue %}<span class="badge badge-red">{{ row.obj.advance_refund_deadline|date:"M d, Y" }}</span>{% else %}{{ row.obj.advance_refund_deadline|date:"M d, Y"|default:"—" }}{% endif %}</td>
+              <td>
+                {% if row.days_left is None %}<span class="text-muted">—</span>
+                {% elif row.days_left < 0 %}<span class="badge badge-red">{{ row.days_left }}</span>
+                {% else %}{{ row.days_left }}{% endif %}
+              </td>
+              {% comment %}
+                Two different figures wear the same column. Where a credit note has been drafted the
+                stored credit total is what was actually handed over; where none has, the line values
+                are the best estimate of what would be. Both are honest answers to "how much is at
+                risk" and the badge says which one this row is using — a number whose provenance is
+                invisible is the one somebody eventually acts on wrongly.
+              {% endcomment %}
+              <td>
+                {{ row.credited|floatformat:2 }}{% if row.obj.currency %} {{ row.obj.currency.code }}{% endif %}
+                {% if row.estimated %}<br><span class="badge badge-muted">Estimated from the lines</span>{% else %}<br><span class="badge badge-info">Credit note drafted</span>{% endif %}
+              </td>
+              <td>{{ row.quantity_outstanding|floatformat:4 }}</td>
+              <td class="fw-600">{{ row.at_risk|floatformat:2 }}</td>
+              <td>
+                {% if row.obj.customer_shipped_on %}{{ row.obj.customer_shipped_on|date:"M d, Y" }}
+                  {% if row.obj.return_tracking_number %}<br><span class="text-muted">{{ row.obj.return_tracking_number }}</span>{% endif %}
+                {% else %}<span class="badge badge-amber">Not shipped</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{% if row.obj.status == 'draft' %}slate{% elif row.obj.status == 'requested' %}info{% elif row.obj.status == 'approved' %}green{% elif row.obj.status == 'rejected' %}red{% elif row.obj.status == 'awaiting_receipt' %}amber{% elif row.obj.status == 'partially_received' %}amber{% elif row.obj.status == 'received' %}info{% elif row.obj.status == 'settled' %}green{% elif row.obj.status == 'closed' %}muted{% elif row.obj.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ row.obj.get_status_display }}</span>
+                {% if row.overdue %}<br><span class="badge badge-red">Deadline passed</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returnauthorization_detail' row.obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if row.obj.credit_note %}
+                    <a href="{% url 'accounting:invoice_detail' row.obj.credit_note.pk %}" class="btn-icon" title="Credit note"><i data-lucide="file-text"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="shield-check"></i><h3>No advance refunds outstanding</h3><p>Nothing has been refunded ahead of the goods. A return only appears here when it is flagged as an advance refund, and it needs a deadline — the deadline is the only thing that makes this page actionable rather than a list of worries.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <p><span class="fw-600">At risk</span> is the refunded amount on returns with units still outstanding; once everything has come back the exposure is zero even though the refund still happened. A row is <span class="fw-600">overdue</span> when its deadline has passed and the customer has never said they shipped anything — the same two conditions the deadline filter above uses, so the filtered list and the badged rows always agree.</p>
+      <p style="margin-top:.6rem;">There is no card hold and no payment gateway in this application, so an advance refund is a flag, a deadline and this report. Reversing one is a manual credit-note reversal in Accounts Receivable.</p>
+    </div>
+  </div>
+{% endblock %}
