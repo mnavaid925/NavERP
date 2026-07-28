@@ -63,11 +63,17 @@ def location_delete(request, pk):
     # WorkOrder.component_location/output_location produced an uncaught ProtectedError). So ask the
     # database and report what it names. Wrapped in atomic() so the audit row crud_delete writes
     # before deleting rolls back with the failed delete.
+    #
+    # Re-verified when 4.10 Returns Management landed: `ReturnDisposition.location` is a new PROTECT
+    # reference onto this model (the returns bench). It needs NO code change here precisely because
+    # this guard is generic — which is the whole argument for the shape. `restock_location`,
+    # `dropoff_location` and `restock_location` on the other 4.10 rows are SET_NULL and never block.
     try:
         with transaction.atomic():
             return crud_delete(request, model=Location, pk=pk, success_url="scm:location_list")
     except ProtectedError as exc:
-        blockers = sorted({obj._meta.verbose_name for obj in exc.protected_objects})
+        # `protected`, not `obj` — the loop variable was shadowing the location fetched above.
+        blockers = sorted({protected._meta.verbose_name for protected in exc.protected_objects})
         messages.error(
             request,
             f"This location is still referenced by {', '.join(blockers)} and cannot be deleted — "
