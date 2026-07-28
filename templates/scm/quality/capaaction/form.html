@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Corrective / Preventive Action{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Corrective / Preventive Action</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:capaaction_list' %}">CAPA</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <div class="form-help">
+        A source of <span class="fw-600">non-conformance</span> must name the report it answers, <span class="fw-600">audit finding</span> the audit it came out of, and <span class="fw-600">supplier</span> the supplier it is addressed to — that last combination is the supplier corrective-action request. Effectiveness is checked after the action is due, never before. Status, the implemented date and the whole verification block are not on this form: the implement and verify actions own them.
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Action plan tasks</h2></div>
+      <div class="table-wrap">
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead><tr><th>Seq</th><th>Description</th><th>Owner</th><th>Due date</th><th>Completed on</th><th>Status</th><th>Remove</th></tr></thead>
+          <tbody>
+            {% for sf in formset %}
+              <tr>
+                {% for hidden in sf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in sf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ sf.sequence }}{% for e in sf.sequence.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.description }}{% for e in sf.description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.owner }}</td>
+                <td>{{ sf.due_date }}{% for e in sf.due_date.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ sf.completed_on }}</td>
+                <td>{{ sf.status }}</td>
+                <td>{% if sf.instance.pk %}{{ sf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        No two tasks may share a sequence number, and a task cannot be due after the action itself — a plan whose last step lands after the deadline could never be complete on time. Every task must be done or cancelled before the action can be marked implemented, alongside a recorded root cause and an effectiveness due date.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:capaaction_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
