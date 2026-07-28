@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Return Reasons{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Return Reasons</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Return Reasons</span></div>
+      <p class="text-muted">A reason is <span class="fw-600">policy, not a label</span>. What the customer says went wrong decides who pays the return freight, whether the unit may ever go back into sellable stock, and which outcomes they may even be offered. The reason is the input; the bench disposition is the output — the two are never collapsed into one field, so a returns clerk can always overrule the customer's story.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:return_portal' %}" class="btn btn-outline"><i data-lucide="package-open"></i> Return portal</a>
+      <a href="{% url 'scm:returnpolicy_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Return policies</a>
+      <a href="{% url 'scm:returnreason_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Return Reason</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ stats.active|default:"0" }}</div>
+      <div class="stat-label">Active reasons</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ban"></i></div>
+      <div class="stat-value">{{ stats.blocks_restock|default:"0" }}</div>
+      <div class="stat-label">Block restocking outright</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="user-x"></i></div>
+      <div class="stat-value">{{ stats.our_fault|default:"0" }}</div>
+      <div class="stat-label">Fault sits with us, the carrier or a supplier</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="camera"></i></div>
+      <div class="stat-value">{{ stats.needs_photo|default:"0" }}</div>
+      <div class="stat-label">Demand a photo before approval</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, name or follow-up question…">
+        </div>
+        <div class="form-group">
+          <select name="fault_party" aria-label="Fault party" class="form-select">
+            <option value="">All fault parties</option>
+            {% for val, label in fault_choices %}
+              <option value="{{ val }}" {% if request.GET.fault_party == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="suggested_disposition" aria-label="Suggested disposition" class="form-select">
+            <option value="">All suggested dispositions</option>
+            {% for val, label in disposition_choices %}
+              <option value="{{ val }}" {% if request.GET.suggested_disposition == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="blocks_restock" aria-label="Blocks restock" class="form-select">
+            <option value="">Restocking — any</option>
+            <option value="True" {% if request.GET.blocks_restock == "True" %}selected{% endif %}>Blocks restocking</option>
+            <option value="False" {% if request.GET.blocks_restock == "False" %}selected{% endif %}>Allows restocking</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="requires_photo" aria-label="Requires photo" class="form-select">
+            <option value="">Photo — any</option>
+            <option value="True" {% if request.GET.requires_photo == "True" %}selected{% endif %}>Photo required</option>
+            <option value="False" {% if request.GET.requires_photo == "False" %}selected{% endif %}>No photo needed</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:returnreason_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Name</th><th>Fault</th><th>Offers</th><th>Fee</th><th>Restocking</th><th>Suggested disposition</th><th>Photo</th><th>NCR</th><th>Order</th><th>In use</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:returnreason_detail' obj.pk %}" class="fw-600">{{ obj.code }}</a></td>
+              <td>{{ obj.name }}</td>
+              <td>
+                <span class="badge badge-{% if obj.fault_party == 'customer' %}slate{% elif obj.fault_party == 'merchant' %}red{% elif obj.fault_party == 'carrier' %}info{% elif obj.fault_party == 'supplier' %}amber{% elif obj.fault_party == 'unknown' %}muted{% else %}slate{% endif %}">{{ obj.get_fault_party_display }}</span>
+              </td>
+              <td>
+                {% if obj.allows_refund %}<span class="badge badge-green">Refund</span>{% endif %}
+                {% if obj.allows_store_credit %}<span class="badge badge-info">Credit</span>{% endif %}
+                {% if obj.allows_exchange %}<span class="badge badge-info">Exchange</span>{% endif %}
+                {% if obj.allows_repair %}<span class="badge badge-amber">Repair</span>{% endif %}
+              </td>
+              <td>{% if obj.waives_return_fee %}<span class="badge badge-green">Waived</span>{% else %}<span class="text-muted">Charged</span>{% endif %}</td>
+              <td>{% if obj.blocks_restock %}<span class="badge badge-red">Blocked</span>{% else %}<span class="badge badge-muted">Allowed</span>{% endif %}</td>
+              <td>
+                {% if obj.suggested_disposition %}
+                  <span class="badge badge-{% if obj.suggested_disposition == 'restock' %}green{% elif obj.suggested_disposition == 'refurbish' %}amber{% elif obj.suggested_disposition == 'repair_return' %}info{% elif obj.suggested_disposition == 'scrap' %}red{% elif obj.suggested_disposition == 'return_to_vendor' %}info{% elif obj.suggested_disposition == 'liquidate' %}amber{% elif obj.suggested_disposition == 'donate' %}muted{% elif obj.suggested_disposition == 'recycle' %}muted{% elif obj.suggested_disposition == 'quarantine' %}amber{% elif obj.suggested_disposition == 'credit_only' %}slate{% elif obj.suggested_disposition == 'received_pending' %}slate{% else %}slate{% endif %}">{{ obj.get_suggested_disposition_display }}</span>
+                {% else %}<span class="text-muted">Grader decides</span>{% endif %}
+              </td>
+              <td>{% if obj.requires_photo %}<span class="badge badge-amber">Required</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if obj.raises_nonconformance %}<span class="badge badge-red">Raises NCR</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.sort_order }}</td>
+              {% comment %}
+                `in_use_agg` is the list view's ANNOTATION — an EXISTS subquery, not a COUNT, because
+                the page only asks whether the reason has ever been used. The `_agg` suffix is
+                mandatory across 4.10: an annotation that shares a name with a model property makes
+                Django try to set the property and the page 500s.
+              {% endcomment %}
+              <td>{% if obj.in_use_agg %}<span class="badge badge-info">On returns</span>{% else %}<span class="text-muted">Unused</span>{% endif %}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returnreason_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:returnreason_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:returnreason_delete' obj.pk %}" onsubmit="return confirm('Delete this reason? A reason already raised on a return line cannot be deleted — deactivate it instead so past returns keep their reason.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="13"><div class="empty-state"><i data-lucide="message-square-warning"></i><h3>No return reasons</h3><p>Create the codes a customer picks from on the return portal. Each one carries who is at fault, which outcomes it entitles them to, whether the unit may go back into sellable stock and what the grader should default to.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <span class="fw-600">Blocks restocking is executable, not advisory.</span> The bench decide form removes restock and refurbish from the dropdown on such a reason, and the posting action re-checks it inside the transaction that would write the ledger row — a button is a convenience, never a control. Deleting is refused once any return line points here; deactivate the reason instead and history keeps its provenance.
+    </div>
+  </div>
+{% endblock %}
