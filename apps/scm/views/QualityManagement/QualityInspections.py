@@ -288,6 +288,14 @@ def qualityinspection_decide(request, pk):
             messages.error(request, "Complete the inspection before deciding what happens to the "
                                     "lot.")
             return redirect("scm:qualityinspection_detail", pk=pk)
+        # A certificate already went out the door on the strength of this decision. Every other
+        # post-issue mutation is blocked (edit/hold/cancel all exclude `passed`); re-deciding was
+        # the remaining hole, and reversing to `reject` here would leave a live certificate that
+        # coa_blockers() now says should never have been issued.
+        if obj.coa_number:
+            messages.error(request, f"Certificate {obj.coa_number} has already been issued on this "
+                                    "decision — it cannot be changed.")
+            return redirect("scm:qualityinspection_detail", pk=pk)
         obj.usage_decision = decision
         fields = ["usage_decision", "updated_at"]
         if note:
