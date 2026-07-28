@@ -261,3 +261,34 @@ from .QualityManagement.CapaActions import (  # noqa: F401
 from .QualityManagement.Reports import (  # noqa: F401
     coa_report, coa_issue, coa_print,
 )
+
+# 4.10 Returns Management (Reverse Logistics)
+from .ReturnsManagement.ReturnReasons import (  # noqa: F401
+    returnreason_list, returnreason_create, returnreason_detail, returnreason_edit,
+    returnreason_delete,
+)
+from .ReturnsManagement.ReturnPolicies import (  # noqa: F401
+    returnpolicy_list, returnpolicy_create, returnpolicy_detail, returnpolicy_edit,
+    returnpolicy_delete,
+)
+from .ReturnsManagement.ReturnAuthorizations import (  # noqa: F401
+    returnauthorization_list, returnauthorization_create, returnauthorization_detail,
+    returnauthorization_edit, returnauthorization_delete, returnauthorization_approve,
+    returnauthorization_reject, returnauthorization_cancel, returnauthorization_receive_all,
+    returnauthorization_draft_credit_note, returnauthorization_draft_replacement,
+    returnauthorization_raise_warranty_claim,
+)
+from .ReturnsManagement.ReturnDispositions import (  # noqa: F401
+    returndisposition_list, returndisposition_create, returndisposition_detail,
+    returndisposition_edit, returndisposition_delete, returndisposition_decide,
+    returndisposition_post, returndisposition_split, returndisposition_mark_refurbished,
+)
+from .ReturnsManagement.WarrantyClaims import (  # noqa: F401
+    warrantyclaim_list, warrantyclaim_create, warrantyclaim_detail, warrantyclaim_edit,
+    warrantyclaim_delete, warrantyclaim_submit, warrantyclaim_record_response,
+    warrantyclaim_record_credit,
+)
+from .ReturnsManagement.Reports import (  # noqa: F401
+    refund_queue, returns_awaiting_disposition, advance_refund_exposure, return_portal,
+    portal_return_create, returnauthorization_public, returnauthorization_label,
+)
