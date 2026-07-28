@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}Bench row — {{ rma.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ rma.number }} <span class="text-muted">bench row</span>
+        <span class="badge badge-{% if obj.disposition == 'received_pending' %}slate{% elif obj.disposition == 'restock' %}green{% elif obj.disposition == 'refurbish' %}amber{% elif obj.disposition == 'repair_return' %}info{% elif obj.disposition == 'scrap' %}red{% elif obj.disposition == 'return_to_vendor' %}info{% elif obj.disposition == 'liquidate' %}amber{% elif obj.disposition == 'donate' %}muted{% elif obj.disposition == 'recycle' %}muted{% elif obj.disposition == 'quarantine' %}amber{% elif obj.disposition == 'credit_only' %}slate{% else %}slate{% endif %}">{{ obj.get_disposition_display }}</span>
+        <span class="badge badge-{% if obj.condition_grade == 'a' %}green{% elif obj.condition_grade == 'b' %}info{% elif obj.condition_grade == 'c' %}amber{% elif obj.condition_grade == 'd' %}red{% else %}slate{% endif %}">{{ obj.get_condition_grade_display }}</span>
+        {% if obj.stock_posted %}<span class="badge badge-green">Posted to the ledger</span>
+        {% elif obj.posts_stock %}<span class="badge badge-amber">Awaiting post</span>
+        {% elif obj.can_restock_after_refurbish %}<span class="badge badge-amber">Refurbished — ready to post</span>
+        {% elif obj.disposition == 'received_pending' %}<span class="badge badge-slate">On the bench, off-ledger</span>
+        {% else %}<span class="badge badge-muted">No ledger effect</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:returndisposition_list' %}">Receiving Bench</a><span class="sep">›</span><span>{{ rma.number }} · {{ line.item.sku }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:returnauthorization_detail' rma.pk %}" class="btn btn-outline"><i data-lucide="package-open"></i> {{ rma.number }}</a>
+      {% if obj.nonconformance %}
+        <a href="{% url 'scm:nonconformance_detail' obj.nonconformance.pk %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> {{ obj.nonconformance.number }}</a>
+      {% elif can_raise_ncr %}
+        {% comment %}
+          Data-driven, not a hard-coded list of reason codes: the button appears only when this
+          line's own reason says it raises a non-conformance and no NCR has been linked yet. It
+          links to the existing 4.9 page rather than inventing a fourth conversion action here, and
+          the report is then tied back through this row's non-conformance link.
+        {% endcomment %}
+        <a href="{% url 'scm:nonconformance_create' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Raise a non-conformance</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ obj.quantity|floatformat:4 }}</div>
+      <div class="stat-label">Units on this row{% if line.item.uom %} ({{ line.item.uom.code }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ obj.restock_unit_cost|floatformat:4 }}</div>
+      <div class="stat-label">Restock unit cost (yours to set)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="scale"></i></div>
+      <div class="stat-value">{{ item_average_cost|floatformat:4 }}</div>
+      <div class="stat-label">This item's average cost</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="calculator"></i></div>
+      <div class="stat-value">{{ suggested_restock_cost|floatformat:4 }}</div>
+      <div class="stat-label">Policy suggestion at grade {{ obj.condition_grade|upper }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hand-coins"></i></div>
+      <div class="stat-value">{{ obj.recovery_value|floatformat:2 }}</div>
+      <div class="stat-label">Recovered (management figure, no GL effect)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ line.item.sku }} · {{ line.item.name }}</h2>
+      <span class="badge badge-{% if rma.status == 'settled' %}green{% elif rma.status == 'closed' %}green{% elif rma.status == 'received' %}info{% elif rma.status == 'partially_received' %}info{% elif rma.status == 'approved' %}amber{% elif rma.status == 'awaiting_receipt' %}amber{% elif rma.status == 'requested' %}slate{% elif rma.status == 'draft' %}slate{% elif rma.status == 'rejected' %}red{% elif rma.status == 'cancelled' %}muted{% else %}slate{% endif %}">{{ rma.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Return</dt><dd><a href="{% url 'scm:returnauthorization_detail' rma.pk %}" class="fw-600">{{ rma.number }}</a> · {{ rma.customer.name }}</dd></div>
+        <div class="detail-item"><dt>Return line</dt><dd>{{ line.quantity_approved|floatformat:4 }} approved of {{ line.quantity_requested|floatformat:4 }} requested</dd></div>
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' line.item.pk %}" class="fw-600">{{ line.item.sku }}</a> · {{ line.item.name }}</dd></div>
+        <div class="detail-item"><dt>Reason</dt><dd>
+          {% if line.reason %}
+            <a href="{% url 'scm:returnreason_detail' line.reason.pk %}" class="fw-600">{{ line.reason.code }}</a> · {{ line.reason.name }}
+            {% if line.reason.blocks_restock %}<span class="badge badge-red">Blocks restocking</span>{% endif %}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Policy</dt><dd>{% if policy %}<a href="{% url 'scm:returnpolicy_detail' policy.pk %}" class="fw-600">{{ policy.name }}</a>{% else %}<span class="text-muted">No policy is configured for this workspace</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quantity</dt><dd class="fw-600">{{ obj.quantity|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Condition grade</dt><dd>{{ obj.get_condition_grade_display }}</dd></div>
+        <div class="detail-item"><dt>Bench location</dt><dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}" class="fw-600">{{ obj.location.code }}</a>{% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Restock into</dt><dd>{% if obj.restock_location %}<a href="{% url 'scm:location_detail' obj.restock_location.pk %}" class="fw-600">{{ obj.restock_location.code }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>
+          {% if obj.lot_serial %}
+            <a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}" class="fw-600">{{ obj.lot_serial.number }}</a>
+            <span class="badge badge-{% if obj.lot_serial.status == 'available' %}green{% elif obj.lot_serial.status == 'quarantine' %}amber{% elif obj.lot_serial.status == 'expired' %}red{% elif obj.lot_serial.status == 'consumed' %}muted{% else %}slate{% endif %}">{{ obj.lot_serial.get_status_display }}</span>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Received on</dt><dd>{{ obj.received_on|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Received by</dt><dd>{{ obj.received_by.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Decided on</dt><dd>{{ obj.decided_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Decided by</dt><dd>{{ obj.decided_by.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Refurbished on</dt><dd>{{ obj.refurbished_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Restock unit cost</dt><dd class="fw-600">{{ obj.restock_unit_cost|floatformat:4 }} <span class="text-muted">vs. average cost {{ item_average_cost|floatformat:4 }}</span></dd></div>
+        <div class="detail-item"><dt>Recovery value</dt><dd>{{ obj.recovery_value|floatformat:2 }} <span class="text-muted">variance {{ obj.recovery_variance|floatformat:2 }}</span></dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% comment %}
+          The three figures above — grade, restock unit cost and the item's average cost — are the
+          ones that quietly corrupt this module if nobody looks at them together. The cost is seeded
+          once from the policy's grade write-down and is human-owned afterwards; nothing recomputes
+          it, and the ledger it is posted into cannot be corrected in place.
+        {% endcomment %}
+        The restock unit cost was seeded from the policy's write-down at grade <span class="fw-600">{{ obj.condition_grade|upper }}</span> ({{ suggested_restock_cost|floatformat:4 }}) and is human-owned from then on — a refurbisher who spent real money on parts knows the unit's worth better than a percentage table does. What it must never be is the price the customer paid: posting a return back in at the sale price rolls this item's weighted average <span class="fw-600">up</span> toward the selling price and overstates inventory value.
+      </p>
+    </div>
+  </div>
+
+  <div class="card" id="decide">
+    <div class="card-header">
+      <h2 class="card-title">Bench decision</h2>
+      <span class="badge badge-{% if obj.disposition == 'received_pending' %}slate{% elif obj.disposition == 'restock' %}green{% elif obj.disposition == 'refurbish' %}amber{% elif obj.disposition == 'repair_return' %}info{% elif obj.disposition == 'scrap' %}red{% elif obj.disposition == 'return_to_vendor' %}info{% elif obj.disposition == 'liquidate' %}amber{% elif obj.disposition == 'donate' %}muted{% elif obj.disposition == 'recycle' %}muted{% elif obj.disposition == 'quarantine' %}amber{% elif obj.disposition == 'credit_only' %}slate{% else %}slate{% endif %}">{{ obj.get_disposition_display }}</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        The decide form is offered on exactly the condition returndisposition_decide enforces: the
+        role gate (@tenant_admin_required). It posts NOTHING to the ledger — deciding and posting are
+        two separate acts, which is what makes the posted flag on a row trustworthy and lets a
+        mis-decided row be corrected right up until the ledger sees it. Restock is refused on a row
+        that has already posted, and the choice list itself drops restock and refurbish when the
+        line's reason blocks restocking.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'scm:returndisposition_decide' obj.pk %}" onsubmit="return confirm('Record this decision? Nothing is posted to the stock ledger yet — Post is a separate, explicit act.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in decide_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">
+            Only a <span class="fw-600">restock</span> — or a refurbished row being restocked — writes a positive movement into stock, at the graded cost and into a location that is not the bench. A <span class="fw-600">write-off</span> takes the unit back out only if it had actually been restocked first; straight off the bench it posts nothing, because the goods never entered stock. <span class="fw-600">Return to vendor</span> and <span class="fw-600">repair and return</span> post nothing at all — our stock never re-entered in the first case and it was never ours in the second. <span class="fw-600">Quarantine</span> flips the lot's status and posts nothing: a lot status is not a quantity. Leaving the restock cost blank re-seeds it from the grade write-down.
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Record the decision</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="text-muted">Deciding what happens to a returned unit is a workspace-administrator action — it is what determines whether the customer's goods become sellable stock or a write-off.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ledger and bench actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Post is gated on exactly what returndisposition_post enforces: the role gate, the terminal
+          RMA guard, and the executable posts_stock / can_restock_after_refurbish rule that answers
+          whether this row has a ledger effect RIGHT NOW. A row that has already posted, an
+          undecided row and every disposition with no ledger effect are all excluded by that rule,
+          so the button is never shown where the view would bounce it.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if obj.posts_stock or obj.can_restock_after_refurbish %}
+            {% if rma.status != 'cancelled' and rma.status != 'rejected' %}
+              <form method="post" action="{% url 'scm:returndisposition_post' obj.pk %}" onsubmit="return confirm('Post this row to the stock ledger? The ledger is append-only — a movement written here can never be corrected in place, only offset by another one.');">
+                {% csrf_token %}
+                <button class="btn btn-primary" type="submit"><i data-lucide="upload"></i> Post to the stock ledger</button>
+              </form>
+            {% endif %}
+          {% endif %}
+        {% endif %}
+        {% if obj.disposition == 'refurbish' and not obj.refurbished_on %}
+          <form method="post" action="{% url 'scm:returndisposition_mark_refurbished' obj.pk %}" onsubmit="return confirm('Mark this row refurbished? That unlocks the restock action on it — set the restock location and cost before posting.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="wrench"></i> Mark refurbished</button>
+          </form>
+        {% endif %}
+        {% if not obj.stock_posted %}
+          <a href="{% url 'scm:returndisposition_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          <form method="post" action="{% url 'scm:returndisposition_delete' obj.pk %}" onsubmit="return confirm('Delete this bench row? A row that has posted to the stock ledger cannot be deleted — the movement it recorded really happened.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:returndisposition_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to the bench</a>
+      </div>
+      {% if obj.stock_posted %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          This row has posted to the append-only stock ledger, so its quantity and its decision are history — edit, delete and split are all refused. Raise a stock adjustment if the figures are wrong. For an item valued FIFO or LIFO the valuation report and the quick on-hand × average-cost figure now disagree, and that is <span class="fw-600">expected</span>: the report walks real cost layers while the quick figure rolls a weighted average only part of the way down.
+        </p>
+      {% elif obj.disposition == 'received_pending' %}
+        <p class="text-muted" style="margin-top:.75rem;">Nothing has been decided yet, so there is nothing to post. Goods on the bench are deliberately off-ledger — that is this application's blocked-stock stand-in, and it is what makes one ledger write per row possible.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card" id="split">
+    <div class="card-header"><h2 class="card-title">Split this row</h2></div>
+    <div class="card-body">
+      {% comment %}
+        Split is offered on exactly what returndisposition_split enforces: the role gate, plus
+        is_splittable — undecided AND unposted, both re-checked inside the lock. It is the one thing
+        that makes disposition-as-a-row survive the real receive-then-grade sequence: three units
+        back as two restocked and one scrapped is not knowable at intake, and it is the case that
+        justifies the row grain at all.
+      {% endcomment %}
+      {% if obj.is_splittable %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:returndisposition_split' obj.pk %}" onsubmit="return confirm('Split this row? The quantity moves onto a new bench row so each part can be graded separately.');">
+            {% csrf_token %}
+            <div class="form-grid">
+              {% for field in split_form %}
+                <div class="form-group">
+                  <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                  {{ field }}
+                  {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            <div class="form-help">
+              The quantity moved off must leave something behind — splitting the whole row would just be a re-grade. This row currently carries <span class="fw-600">{{ obj.quantity|floatformat:4 }}</span>.
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit"><i data-lucide="scissors"></i> Split the row</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="text-muted">Splitting a bench row is a workspace-administrator action.</p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">Only an <span class="fw-600">undecided, unposted</span> row can be split — this one has already been graded or posted, and once stock has moved its quantity is history.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Other rows against this return line</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Quantity</th><th>Grade</th><th>Disposition</th><th>Bench</th><th>Restock into</th><th>Received</th><th>Ledger</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in sibling_rows %}
+            <tr>
+              <td class="fw-600">{{ s.quantity|floatformat:4 }}</td>
+              <td>
+                <span class="badge badge-{% if s.condition_grade == 'a' %}green{% elif s.condition_grade == 'b' %}info{% elif s.condition_grade == 'c' %}amber{% elif s.condition_grade == 'd' %}red{% else %}slate{% endif %}">{{ s.get_condition_grade_display }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{% if s.disposition == 'received_pending' %}slate{% elif s.disposition == 'restock' %}green{% elif s.disposition == 'refurbish' %}amber{% elif s.disposition == 'repair_return' %}info{% elif s.disposition == 'scrap' %}red{% elif s.disposition == 'return_to_vendor' %}info{% elif s.disposition == 'liquidate' %}amber{% elif s.disposition == 'donate' %}muted{% elif s.disposition == 'recycle' %}muted{% elif s.disposition == 'quarantine' %}amber{% elif s.disposition == 'credit_only' %}slate{% else %}slate{% endif %}">{{ s.get_disposition_display }}</span>
+              </td>
+              <td>{% if s.location %}{{ s.location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if s.restock_location %}{{ s.restock_location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ s.received_on|date:"M d, Y" }}</td>
+              <td>{% if s.stock_posted %}<span class="badge badge-green">Posted</span>{% else %}<span class="badge badge-muted">Not posted</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:returndisposition_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="rows-3"></i><h3>This is the only row</h3><p>One return line can carry several bench rows — three units back can be two restocked and one scrapped. Split this row when the units turn out not to be in the same condition.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Stock movements against {{ rma.number }}</h2>
+      <a href="{% url 'scm:stock_ledger' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> Stock ledger</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Moved at</th><th>Type</th><th>Item</th><th>Location</th><th>Lot / Serial</th><th>Quantity</th><th>Unit cost</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in moves %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <span class="badge badge-{% if m.move_type == 'adjustment' %}red{% elif m.move_type == 'receipt' %}green{% elif m.move_type == 'issue' %}info{% elif m.move_type == 'transfer' %}info{% elif m.move_type == 'production' %}green{% elif m.move_type == 'consumption' %}amber{% else %}slate{% endif %}">{{ m.get_move_type_display }}</span>
+              </td>
+              <td><a href="{% url 'scm:item_detail' m.item.pk %}">{{ m.item.sku }}</a></td>
+              <td>{{ m.location.code }}</td>
+              <td>{% if m.lot_serial %}{{ m.lot_serial.number }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="fw-600">{{ m.quantity|floatformat:4 }}</td>
+              <td>{{ m.unit_cost|floatformat:4 }}</td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="scroll"></i><h3>No movements yet</h3><p>Nothing has been posted against this return. The stock ledger keeps only the return's number as its link back, so every row this return ever writes appears here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      These are every movement carrying this return's number, not only the ones this row wrote — the ledger keeps the document number as its link back, so a sibling row's restock or write-off shows up here too.
+    </div>
+  </div>
+{% endblock %}
