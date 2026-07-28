@@ -43,14 +43,20 @@ def next_number(model, tenant, prefix, width=5, field="number"):
     # after the inspection row exists — is not in id order, so `-id` reads the highest-id certified
     # row rather than the highest certificate and re-mints a number already in use.
     #
-    # LENGTH first, then value. The suffix is zero-padded to `width`, so within one width
-    # lexicographic ordering IS numeric ordering — but once a tenant crosses that width the padding
-    # stops equalising it and plain string ordering inverts: "PO-99999" sorts ABOVE "PO-100000".
-    # A longer string is unambiguously the larger number here, so length breaks that tie correctly.
+    # Plain field ordering, deliberately: it is satisfiable by the (tenant, <field>) index, so this
+    # walks the index backwards and reads ONE row. An expression-ordered variant (e.g. annotating
+    # Length to survive a width rollover) cannot use that index and turns every numbered INSERT
+    # across every app into a filesort over the tenant's whole range — TenantNumbered.save() calls
+    # this for every PO/PR/RFQ/GRN/SO/SHP/WO/QC/NCR/CAPA/QA created.
+    #
+    # KNOWN LIMIT, and the reason that trade is the right one: the suffix is zero-padded to
+    # `width`, so ordering is correct up to `10**width - 1` per tenant per prefix; past that the
+    # padding stops equalising and "PO-99999" sorts above "PO-100000". Reaching it needs 100,000
+    # documents of ONE type in ONE tenant — the same territory as the concurrency caveat above, and
+    # the sequence-table hardening noted there fixes both properly.
     last = (
         model.objects.filter(tenant=tenant, **{f"{field}__startswith": f"{prefix}-"})
-        .annotate(_num_len=Length(field))
-        .order_by("-_num_len", f"-{field}")
+        .order_by(f"-{field}")
         .first()
     )
     seq = 1
