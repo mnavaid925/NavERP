@@ -1,4 +1,6 @@
 """Accounting 2.2 General Ledger — Currencies views (split from views.py/views_advanced.py)."""
+from django.db.models import ProtectedError
+
 from apps.accounting.views._common import *  # noqa: F401,F403
 from apps.accounting.models import (
     Currency,
@@ -57,7 +59,21 @@ def currency_edit(request, pk):
 @require_POST
 def currency_delete(request, pk):
     obj = get_object_or_404(Currency, pk=pk)
-    write_audit_log(request.user, obj, "delete")
-    obj.delete()
+    # SCM 4.10's `ReturnAuthorization.currency` is the ONLY PROTECT reference onto this global
+    # master anywhere in the repo — every one of the twenty sibling currency FKs is SET_NULL — so
+    # this bare delete became an uncaught ProtectedError (a 500) the moment any return existed in
+    # that currency. Deleting a currency is an ordinary admin act, so it has to fail with a message.
+    # Generic catch rather than an .exists() enumeration, matching the shape item/location/lot use.
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, obj, "delete")
+            obj.delete()
+    except ProtectedError as exc:
+        blockers = sorted({protected._meta.verbose_name for protected in exc.protected_objects})
+        messages.error(
+            request,
+            f"This currency is still referenced by {', '.join(blockers)} and cannot be deleted — "
+            "deactivate it instead.")
+        return redirect("accounting:currency_list")
     messages.success(request, "Deleted successfully.")
     return redirect("accounting:currency_list")
