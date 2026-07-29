@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.10+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.11+), or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,9 +9,9 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management.** 4.10–4.19 are
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management.** 4.11–4.19 are
 roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry —
-**4.10 Returns Management (Reverse Logistics)** is next) — see the reference apps
+**4.11 Supply Chain Analytics** is next) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -569,6 +569,95 @@ nothing to flip and the scrap has nothing to draw against.
 13. **Prefetch + `_result_rows()` together.** Chaining `.select_related()` off a related manager CLEARS a
     prefetch and re-queries, so a `Prefetch` alone provably changes nothing — `_result_rows()` is prefetch-aware
     and `generate_results()` invalidates both caches. `coa_report` is asserted scale-invariant in the tests.
+
+---
+
+## 4.10 Returns Management (Reverse Logistics)  (`apps/scm/*/ReturnsManagement/`, templates `templates/scm/returns/`)
+
+The **backwards** flow. **SCM owns these tables** — the unbuilt `5.10 Returns Management (RMA)` and
+`9.5 OMS → Returns & Exchanges` extend them by FK rather than build a second RMA (L36, declared in the
+`ReturnAuthorization` and `ReturnDisposition` docstrings; the `scm_return_*` / `scm_warranty_*` reverse-accessor
+namespace is reserved so a later module cannot collide).
+
+**Models** (`models/ReturnsManagement/`):
+
+- **`ReturnReason`** — master, **no prefix** (`("tenant","code")` is the key). A reason is **policy, not a
+  label**: `fault_party` (customer/merchant/carrier/supplier/unknown) decides who pays return freight;
+  `blocks_restock` decides whether the unit may re-enter sellable stock; four `allows_*` booleans rather than an
+  M2M so the offer set stays filterable and migration-free. Also `requires_photo`, `raises_nonconformance`,
+  `suggested_disposition` (pre-selects only).
+- **`ReturnPolicy`** — master, **no prefix**. The published promise: `window_basis`
+  (delivery/fulfilment/order_date) + `window_days` + `fallback_days`, `refund_basis`, `restocking_fee_type`,
+  `return_shipping_paid_by`, `auto_approve` (**pre-fills the approve form only, never auto-acts**). It earns its
+  table on two things nothing else can hold: **`grade_a..d_cost_pct`** (defaults 100/75/40/0 — without them
+  `condition_grade` is decorative) and **`return_to_address`**, because `scm.Location` has NO address field and
+  the return slip must print one.
+- **`ReturnAuthorization`** [`RMA-`] + **`ReturnLine`** — a deliberately **NON-POSTING** document: it authorises
+  and owns neither stock nor money. A portal submission is this record at `status="requested"` — a status is not
+  a document, so there is no separate intake table. `policy_snapshot` freezes the eligibility verdict **at
+  approval** (the 4.9 `InspectionResult` precedent). `public_token` is minted once in `save()` with
+  `secrets.token_urlsafe(32)`. Lines hold `unit_price` (what they paid) **separately from** `unit_cost` (what it
+  cost us), plus a `tax_pct` snapshot.
+- **`ReturnDisposition`** — **no prefix** (the `SalesOrderAllocation` precedent). One row per
+  *(line, decision, quantity)*. Receiving and deciding are **two separately stamped acts on the same row**.
+  `condition_grade` is the INPUT, `disposition` the OUTPUT — never collapsed. `stock_posted` is the idempotency
+  latch; `posts_stock` is an executable property.
+- **`WarrantyClaim`** [`WTY-`] + **`WarrantyClaimCost`** — supplier recovery, with typed cost children
+  (part/labour/freight/external_service/admin) because the normal real outcome is a **partial** approval that
+  accepts the part and refuses the labour, which a flat `claim_value` cannot express.
+
+**Routes** (`urls/ReturnsManagement/`): `returns/`, `return-reasons/`, `return-policies/`,
+`return-dispositions/` (deliberately not the generic `dispositions/`, which Module 5 will want),
+`warranty-claims/`, plus `refund-queue/`, `returns-bench/`, `return-portal/` and **`return-tracking/<str:token>/`**
+— the two public pages sit on their own first segment rather than under `returns/`, which removes the
+greedy-converter ordering hazard entirely.
+
+**`@tenant_admin_required`** (ten, so their buttons need the role check too): `returnauthorization_approve`,
+`_reject`, `_draft_credit_note`, `_draft_replacement`; `returndisposition_decide`, `_post`, `_split`;
+`warrantyclaim_submit`, `_record_response`, `_record_credit`. The two public views have **no decorator at all**.
+
+**Seeder**: `_seed_returns_tenant` runs LAST. Four RMAs by design — one settled with a real restock plus an
+off-ledger scrap, one **credit-only** (it never gets a disposition row and would otherwise be silently dropped
+by every received-keyed queue), one on the bench, and one at `awaiting_receipt` **because `LABEL_STATUSES`
+excludes every other seeded state** and the return slip would otherwise 404 for all demo data.
+
+### Non-negotiables for 4.10
+
+1. **`ReturnDisposition` is the ONLY ledger writer.** Everything else in 4.10 posts nothing, ever.
+2. **Intake posts NOTHING.** Keeping the returns bench off-ledger IS the blocked-stock stand-in: `Location` has
+   no blocked type and `Item.on_hand()` sums every location, so an intake row would inflate on-hand, valuation
+   and 4.7's reorder inputs tenant-wide and indistinguishably from sellable stock. The honest cost (bench goods
+   absent from inventory value) is surfaced by `scm:returns_awaiting_disposition`, not papered over.
+3. **A restock is a POSITIVE `receipt` at `restock_unit_cost`, never a transfer pair.** `_post_transfer` passes
+   `item.average_cost` *specifically* so a transfer is value-neutral, and `_item_valuation` excludes
+   `"transfer"` from the FIFO/LIFO walk — so a transfer could never carry a grade write-down. No new move_type:
+   checked against all five `move_type` consumers.
+4. **`unit_price` must never reach a StockMove.** It is the SALE price; restocking at it would roll
+   `average_cost` toward the selling price via `apply_receipt()`. Hence the separate `unit_cost` snapshot and
+   `restock_unit_cost`.
+5. **FIFO/LIFO divergence is EXPECTED after a written-down restock.** `_item_valuation` walks layers and ignores
+   `average_cost`, while `Item.total_value()` multiplies `on_hand × average_cost`. Pre-existing dual-figure
+   design; 4.10 is the first module to make it diverge routinely. Documented and test-pinned — do not "fix" it.
+6. **The credit note drafts and STOPS.** `accounting.Invoice(kind="credit_note", status="draft")`, mirroring the
+   4.6 freight hand-off. SCM posts no JournalEntry (L29) and creates no `accounting.Payment` — an outbound
+   payment posts against the AP liability account, which is wrong for a customer refund. **Refuse to draft when
+   `credit_total <= 0`**: `invoice_post` requires a positive total, so a credit whose fees meet its value would
+   be permanently unpostable.
+7. **The credited quantity comes from the DISPOSITION rows**, never from `quantity_approved` — and
+   `quantity_received` includes `received_pending`, or anything on the bench silently disappears from the queues.
+8. **A `credit_only` RMA never gets a disposition row.** Every received-keyed queue must branch on
+   `return_type` or it drops perfectly valid work as abandoned.
+9. **`accounting.Currency` is GLOBAL** — no tenant FK, no `is_base`. There is no "tenant default currency" to
+   fall back to; a portal return inherits from the customer's order history, and a null currency is a **loud
+   refusal at settlement**, not a guess on a money document.
+10. **The public token surface** resolves its tenant **off the object**, never `request.tenant` (None for an
+    anonymous visitor), refuses an inactive tenant, puts the state guard in the queryset so a draft/cancelled
+    RMA 404s rather than leaks, writes through a **conditional UPDATE** (TOCTOU-safe), and leaks no price, cost
+    or supplier data. The token never expires and cannot be revoked — a stated residual risk; no token in this
+    repo can.
+11. **No `customer_return` on `NonConformance.SOURCE_CHOICES`.** `source` is `max_length=14` and the value is 15
+    characters, so it is a column widen against a 4.9 model plus a reversal of 4.9's documented reasoning. 4.10
+    links via `ReturnDisposition.nonconformance` instead.
 
 ## Conventions & gotchas
 
