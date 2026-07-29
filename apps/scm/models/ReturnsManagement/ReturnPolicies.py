@@ -68,13 +68,14 @@ class ReturnPolicy(TenantOwned):
 
     # --- the window -----------------------------------------------------------------------------
     window_basis = models.CharField(max_length=10, choices=WINDOW_BASIS_CHOICES, default="delivery")
-    window_days = models.PositiveIntegerField(default=30)
+    window_days = models.PositiveIntegerField(
+        default=30, validators=[MaxValueValidator(3650)])
     require_delivery_confirmation = models.BooleanField(
         default=False,
         help_text="Refuse a return until the order carries a delivery stamp. Note that stamp is a "
                   "MANUAL human action in 4.5 — turning this on will refuse a lot of honest returns")
     fallback_days = models.PositiveIntegerField(
-        default=45,
+        default=45, validators=[MaxValueValidator(3650)],
         help_text="Window measured from the ORDER date when the basis event never happened — "
                   "Loop's documented answer to unreliable delivery events")
 
@@ -119,8 +120,12 @@ class ReturnPolicy(TenantOwned):
         max_digits=5, decimal_places=2, default=ZERO,
         validators=[MinValueValidator(ZERO), MaxValueValidator(ONE_HUNDRED)])
 
+    # Capped, like the two window fields above: all three are fed to datetime.timedelta(days=...),
+    # and MySQL's PositiveIntegerField accepts up to 4294967295 — an uncaught OverflowError (a 500),
+    # not a validation error. One saved value would permanently break the RMA list, every RMA detail
+    # page and the approve action for the whole tenant: a stored denial of service.
     warranty_window_days = models.PositiveIntegerField(
-        default=365,
+        default=365, validators=[MaxValueValidator(3650)],
         help_text="Supplier/manufacturer warranty length used by WarrantyClaim.is_in_warranty")
 
     return_to_address = models.TextField(
