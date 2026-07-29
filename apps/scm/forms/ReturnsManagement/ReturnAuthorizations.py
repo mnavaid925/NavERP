@@ -248,7 +248,10 @@ class BaseReturnLineFormSet(forms.BaseInlineFormSet):
         still go through ``self.queryset``, so POST validation and tenant scoping are untouched.
         """
         super().add_fields(form, index)
-        for name in ("reason", "item", "sales_order_line", "lot_serial"):
+        # `photo` included: it IS on Meta.fields and IS rendered per row, and
+        # ModelChoiceField.__deepcopy__ calls queryset.all() per form — so leaving one field name
+        # out of this tuple silently re-SELECTed the whole core.Document table once per line.
+        for name in ("reason", "item", "sales_order_line", "lot_serial", "photo"):
             if name not in form.fields:
                 continue
             cache = f"_{name}_choices"
@@ -367,7 +370,15 @@ class PortalReturnRequestForm(forms.Form):
         self.fields["sales_order"].queryset = orders
         self.fields["sales_order_line"].queryset = (
             SalesOrderLine.objects.filter(sales_order__in=orders).select_related("item"))
-        self.fields["item"].queryset = Item.objects.filter(tenant=tenant).order_by("sku")
+        # Scoped to what THIS customer has actually been sold — not merely to the tenant. An
+        # external party had the full internal catalogue in a dropdown, and could file returns
+        # against items never sold to them, polluting the CSR approval inbox. Same reasoning as the
+        # order and line querysets two lines up; `condition_reported` remains the free-text escape
+        # hatch for anything genuinely off-catalogue.
+        self.fields["item"].queryset = (
+            Item.objects.filter(tenant=tenant,
+                                sales_order_lines__sales_order__in=orders)
+            .distinct().select_related("uom").order_by("sku"))
         self.fields["reason"].queryset = (
             ReturnReason.objects.filter(tenant=tenant, is_active=True)
             .order_by("sort_order", "code"))
