@@ -26,6 +26,8 @@ portal / EDI (``submitted_on`` + ``submission_channel`` are the data hooks).
 """
 import datetime
 
+from django.utils.functional import cached_property
+
 from apps.scm.models._base import *  # noqa: F401,F403
 
 
@@ -132,7 +134,12 @@ class WarrantyClaim(TenantNumbered):
             models.Index(fields=["tenant", "supplier"], name="scm_wty_tnt_supp_idx"),
             models.Index(fields=["tenant", "item"], name="scm_wty_tnt_item_idx"),
             models.Index(fields=["tenant", "response_due_on"], name="scm_wty_tnt_due_idx"),
-        ]
+            # Meta.ordering is ["-created_at", "-id"] and the list view re-states it, but nothing
+            # indexed created_at — so every page filesorted the tenant's whole claim table and
+            # page 20 cost the same as page 1. The ordering column is the paginator's stability
+            # key, so it needs the index. Matches the app-wide (tenant, <date>) pattern.
+            models.Index(fields=["tenant", "created_at"], name="scm_wty_tnt_created_idx"),
+            models.Index(fields=["tenant", "submitted_on"], name="scm_wty_tnt_subon_idx"),        ]
 
     def __str__(self):
         return f"{self.number or 'WTY'} · {self.item_id and self.item.sku}"
@@ -153,12 +160,12 @@ class WarrantyClaim(TenantNumbered):
     def is_editable(self):
         return self.status in self.EDITABLE_STATUSES
 
-    @property
+    @cached_property
     def amount_claimed_total(self):
         """The sum of the typed cost lines — what we are ASKING for."""
         return q2(self.costs.aggregate(s=Sum("amount_claimed"))["s"] or ZERO)
 
-    @property
+    @cached_property
     def cost_approved_total(self):
         """The sum of the per-line approvals the supplier granted."""
         return q2(self.costs.aggregate(s=Sum("amount_approved"))["s"] or ZERO)
