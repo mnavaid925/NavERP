@@ -62,11 +62,26 @@ class ReturnDispositionForm(TenantModelForm):
                   "disposition", "restock_location", "restock_unit_cost", "recovery_value",
                   "nonconformance", "notes"]
 
-    def __init__(self, *args, **kwargs):
+    #: The three columns `returndisposition_decide` reserves for a tenant admin. This form writes the
+    #: SAME columns, so without the same gate the one on the action is decoration — a plain member
+    #: could choose restock vs scrap and set the cost at which returned goods re-enter stock. Exactly
+    #: the ReorderRuleForm / safety_stock_apply situation, and the same remedy.
+    ADMIN_ONLY_FIELDS = ("disposition", "restock_location", "restock_unit_cost")
+
+    def __init__(self, *args, is_tenant_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
         # ReturnLine is tenant-less, so TenantModelForm cannot scope it — by hand, or the picker
         # lists every tenant's return lines.
         _scope_to_parent(self, "return_line", _receivable_lines(self.tenant))
+        if not is_tenant_admin:
+            for name in self.ADMIN_ONLY_FIELDS:
+                if name in self.fields:
+                    # `disabled`, not readonly: Django ignores the SUBMITTED value entirely and keeps
+                    # the instance's, so a crafted POST cannot set it either.
+                    self.fields[name].disabled = True
+                    self.fields[name].help_text = (
+                        "Set by a workspace admin on the bench — use Decide on the disposition "
+                        "detail page.")
         if "lot_serial" in self.fields:
             self.fields["lot_serial"].queryset = (
                 self.fields["lot_serial"].queryset.select_related("item")
@@ -80,7 +95,7 @@ class ReturnDispositionForm(TenantModelForm):
             # item beside it — one join, saved on every option.
             self.fields["nonconformance"].queryset = (
                 self.fields["nonconformance"].queryset.select_related("item"))
-        if "disposition" in self.fields and self.instance.pk and self.instance.stock_posted:
+        if "disposition" in self.fields and self.instance.pk and self.instance.stock_move_id is not None:
             # A posted row's decision is history. The view refuses the edit too (§7.5 — the gate
             # lives in both places); this makes the field itself inert so a crafted POST that got
             # past the view still cannot rewrite what the ledger recorded.
@@ -150,13 +165,22 @@ class BaseReturnDispositionFormSet(forms.BaseInlineFormSet):
         # arrives from the client. If INITIAL_FORMS disagrees with what is actually on file, the
         # POST is either stale (somebody else graded a row while this page was open) or crafted —
         # and in both cases writing it would silently duplicate or skip audit rows.
+        # Only comparable when the formset was RENDERED against this same parent. The bare "Receive
+        # a return line" page loads with no `?line`, so BaseInlineFormSet substitutes an unsaved
+        # ReturnLine() and the management form goes out with INITIAL_FORMS=0; the view then attaches
+        # the picked line on POST. Comparing 0 against that line's existing rows dead-ended the
+        # module's main create button for every line `receive_all` had already touched — which is
+        # every partially-received line. The guard is right in principle, so it is narrowed rather
+        # than dropped: a stale or crafted POST against a page that WAS rendered with the parent
+        # still fails.
+        rendered_against_parent = self.initial_form_count() > 0
         on_file = self.instance.dispositions.count() if self.instance.pk else 0
-        if self.initial_form_count() != on_file:
+        if rendered_against_parent and self.initial_form_count() != on_file:
             raise ValidationError(
                 "The rows on this page no longer match the ones on file — reload the bench and "
                 "grade it again.")
         for form in self.forms[:self.initial_form_count()]:
-            if form.instance.pk and form.instance.stock_posted and form.has_changed():
+            if form.instance.pk and form.instance.stock_move_id is not None and form.has_changed():
                 changed = set(form.changed_data) - {"notes", "recovery_value"}
                 if changed:
                     raise ValidationError(
