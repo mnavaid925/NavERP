@@ -142,7 +142,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Credit-only returns — never on this bench</h2>
-      <span class="badge badge-amber">{{ credit_only_waiting|length }}</span>
+      {% if credit_only_waiting %}<span class="badge badge-amber">{{ credit_only_waiting|length }}</span>{% else %}<span class="badge badge-green">None outstanding</span>{% endif %}
     </div>
     <div class="table-wrap">
       <table class="table">
