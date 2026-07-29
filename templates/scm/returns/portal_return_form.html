@@ -60,7 +60,7 @@
             <tr>
               <td class="fw-600">{{ r.number }}</td>
               <td>{{ r.requested_on|date:"d M Y" }}</td>
-              <td><span class="badge">{{ r.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if r.status == 'requested' %}info{% elif r.status == 'approved' %}green{% elif r.status == 'awaiting_receipt' or r.status == 'partially_received' %}amber{% elif r.status == 'received' or r.status == 'settled' %}green{% elif r.status == 'rejected' or r.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ r.get_status_display }}</span></td>
               <td class="text-right">
                 {% if r.public_token %}
                   {# The customer's own tracking page — never the staff detail view. #}
