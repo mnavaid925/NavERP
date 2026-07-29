@@ -40,8 +40,8 @@ if one is ever added (a "post the whole bench" button), it MUST route its rows t
 """
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import (_acting_party, _date_window, _insufficient_stock, _item_qs,
-                                     _location_qs, _need_tenant, _post_stock_move)
+from apps.scm.views._helpers import (_acting_party, _date_window, _insufficient_stock, _is_tenant_admin,
+                                     _item_qs, _location_qs, _need_tenant, _post_stock_move)
 from apps.scm.models._base import q4
 from apps.scm.models import LotSerial, ReturnDisposition, ReturnLine, StockMove, select_policy
 from apps.scm.forms import (ReturnDispositionDecideForm, ReturnDispositionForm,
@@ -78,11 +78,17 @@ def returndisposition_list(request):
     if request.GET.get("pending", "").strip() == "yes":
         qs = qs.filter(disposition="received_pending")
     if request.GET.get("unposted", "").strip() == "yes":
-        # The SQL half of `posts_stock`: rows that WOULD move stock and have not. It must agree
-        # with the per-row badge (§7.5), so it encodes the same two shapes the property does.
+        # The SQL half of "would move stock and has not". It must agree with the per-row badge
+        # (§7.5), and there are THREE shapes the row renders, not two: the third — a refurbished
+        # row that is ready to go back — was missing, so a unit sitting refurbished and ready was
+        # invisible to the page whose whole job is "what still needs posting?", while the row
+        # itself said "ready to post". It then never gets posted, never valued and never sold.
+        # Mirrors the corrected `can_restock_after_refurbish` clause for clause.
         qs = qs.filter(
             Q(disposition="restock", stock_posted=False, restock_location__isnull=False)
             | Q(disposition__in=ReturnDisposition.WRITE_OFF_DISPOSITIONS, stock_posted=True,
+                restock_location__isnull=False)
+            | Q(disposition="refurbish", refurbished_on__isnull=False, stock_posted=False,
                 restock_location__isnull=False))
     stats = ReturnDisposition.objects.filter(tenant=request.tenant).aggregate(
         pending=Count("id", filter=Q(disposition="received_pending")),
@@ -191,13 +197,19 @@ def returndisposition_edit(request, pk):
     what the append-only ledger recorded.
     """
     obj = get_object_or_404(_bench_queryset(request.tenant), pk=pk)
-    if obj.stock_posted:
+    # `stock_move_id`, NOT `stock_posted`: after a restock-then-write-off the latch is set back
+    # to False (correctly — the unit is no longer IN stock), but the row has by then written TWO
+    # movements into an append-only ledger. Keying this guard on the latch re-opened edit and
+    # delete on the only audit record linking those movements to the RMA. `stock_move` is set by
+    # either posting and never cleared, so it is the honest "has ever touched the ledger" test.
+    if obj.stock_move_id is not None:
         messages.error(request, "This row has already posted to the stock ledger — the ledger is "
                                 "append-only, so its quantity and decision are history. Raise a "
                                 "stock adjustment if the figures are wrong.")
         return redirect("scm:returndisposition_detail", pk=pk)
     if request.method == "POST":
-        form = ReturnDispositionForm(request.POST, instance=obj, tenant=request.tenant)
+        form = ReturnDispositionForm(request.POST, instance=obj, tenant=request.tenant,
+                                     is_tenant_admin=_is_tenant_admin(request.user))
         if form.is_valid():
             with transaction.atomic():
                 row = form.save(commit=False)
@@ -211,7 +223,8 @@ def returndisposition_edit(request, pk):
             messages.success(request, "Bench row updated.")
             return redirect("scm:returndisposition_detail", pk=row.pk)
     else:
-        form = ReturnDispositionForm(instance=obj, tenant=request.tenant)
+        form = ReturnDispositionForm(instance=obj, tenant=request.tenant,
+                                     is_tenant_admin=_is_tenant_admin(request.user))
     return render(request, "scm/returns/returndisposition/form.html", {
         "form": form, "is_edit": True, "obj": obj,
         "line": obj.return_line, "picker": None, "formset": None})
@@ -269,7 +282,12 @@ def returndisposition_detail(request, pk):
 def returndisposition_delete(request, pk):
     obj = get_object_or_404(ReturnDisposition.objects.select_related("return_line"),
                             pk=pk, tenant=request.tenant)
-    if obj.stock_posted:
+    # `stock_move_id`, NOT `stock_posted`: after a restock-then-write-off the latch is set back
+    # to False (correctly — the unit is no longer IN stock), but the row has by then written TWO
+    # movements into an append-only ledger. Keying this guard on the latch re-opened edit and
+    # delete on the only audit record linking those movements to the RMA. `stock_move` is set by
+    # either posting and never cleared, so it is the honest "has ever touched the ledger" test.
+    if obj.stock_move_id is not None:
         messages.error(request, "This row posted to the append-only stock ledger and cannot be "
                                 "deleted — the movement it recorded really happened.")
         return redirect("scm:returndisposition_detail", pk=pk)
