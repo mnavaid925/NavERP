@@ -217,6 +217,23 @@ class ReturnDisposition(TenantOwned):
             raise ValidationError(
                 {"restock_location": "This unit was restocked, so writing it off has to take it "
                                      "out of the location it was put into."})
+        # The authorised-quantity cap lives HERE, on the model, so every writer inherits it. It used
+        # to exist only in the formset's clean(), which left the single-row edit path free to raise a
+        # bench row's quantity to anything DecimalField(14,4) holds — and because the credit note is
+        # deliberately computed FROM the disposition rows, that flowed straight into a real
+        # accounting.Invoice for more than was ever returned. The rows are the ceiling, so the
+        # ceiling has to be enforced on every path that writes a row.
+        if self.return_line_id is not None and self.quantity is not None:
+            line = self.return_line
+            approved = line.quantity_approved or line.quantity_requested or ZERO
+            if approved > ZERO:
+                siblings = (line.dispositions.exclude(pk=self.pk)
+                            .aggregate(s=Sum("quantity"))["s"] or ZERO)
+                if siblings + self.quantity > approved:
+                    raise ValidationError({
+                        "quantity": f"That would receive {siblings + self.quantity} against "
+                                    f"{approved} authorised on this line "
+                                    f"({siblings} already recorded on other rows)."})
 
     # --- derived (nothing below is stored) -------------------------------------------------------
     @property
@@ -253,13 +270,26 @@ class ReturnDisposition(TenantOwned):
         receive-then-grade sequence — the 2-restock/1-scrap case that justifies the row grain at
         all. Once stock has moved the row is an audit record and its quantity is history.
         """
-        return self.disposition == "received_pending" and not self.stock_posted
+        # `stock_move_id`, not the latch — see the edit/delete guards: after a restock-then-write-off
+        # the latch is False again but the row has written two real movements, and its quantity is
+        # history either way.
+        return self.disposition == "received_pending" and self.stock_move_id is None
 
     @property
     def can_restock_after_refurbish(self):
-        """A refurbished row unlocks the same restock action it was refused at the decision."""
+        """A refurbished row unlocks the same restock action it was refused at the decision.
+
+        The ``restock_location_id`` test is NOT optional and is the same one :attr:`posts_stock`
+        carries: nothing forces a location onto a refurbish row (``clean()`` requires one only for
+        ``restock``), so without it a refurbished row with nowhere to go draws the Post button on
+        both the bench list and the detail page, and pressing it hands ``location=None`` to
+        ``_post_stock_move`` — an IntegrityError on a non-null FK inside the atomic block, which the
+        caller's ``except ValidationError`` does not catch. A 500 on the sub-module's only
+        ledger-writing action. One rule, one definition, three consumers (this property, the two
+        templates, and the bench filter's SQL).
+        """
         return (self.disposition == "refurbish" and self.refurbished_on is not None
-                and not self.stock_posted)
+                and not self.stock_posted and self.restock_location_id is not None)
 
     @property
     def recovery_variance(self):
