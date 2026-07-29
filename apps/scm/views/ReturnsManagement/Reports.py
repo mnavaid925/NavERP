@@ -314,6 +314,12 @@ def return_portal(request):
                                         queryset=ReturnLine.objects.select_related("item",
                                                                                    "reason")))
              .order_by("requested_on", "id"))
+    # Capped and materialised ONCE. The sibling `open_returns` below already carries [:25]; this
+    # queryset was unbounded and then had .count() called on it as well, so a tenant with a genuine
+    # backlog of unapproved portal requests — exactly the state this page exists to surface —
+    # rendered every one of them plus every one of their lines, and paid for a separate COUNT of the
+    # same rows. `inbox_count` is now len() of what is actually shown.
+    inbox = list(inbox[:50])
     # The public URL is built IN THE TEMPLATE from request.scheme/get_host + the token (the
     # landing-page detail pattern), so nothing here has to know the deployment's host.
     open_returns = (ReturnAuthorization.objects
@@ -324,7 +330,7 @@ def return_portal(request):
                     .order_by("-requested_on", "-id")[:25])
     return render(request, "scm/returns/return_portal.html", {
         "inbox": inbox,
-        "inbox_count": inbox.count(),
+        "inbox_count": len(inbox),
         "open_returns": open_returns,
         "policies": (ReturnPolicy.objects.filter(tenant=request.tenant, is_active=True)
                      .select_related("item_category").order_by("priority", "name")),
@@ -439,8 +445,13 @@ def portal_return_create(request):
         "access": access,
         "party": party,
         "policy": select_policy(request.tenant),
+        # Narrowed to PUBLIC_STATUSES: the template's "Track" link goes to the token page, whose
+        # lookup resolves only those states, so a draft, rejected or cancelled row was rendered with
+        # a link that 404s on a page the customer was just shown. Filtering here rather than hiding
+        # the link keeps one definition of "trackable" instead of two.
         "my_returns": (ReturnAuthorization.objects
-                       .filter(tenant=request.tenant, customer=party)
+                       .filter(tenant=request.tenant, customer=party,
+                               status__in=ReturnAuthorization.PUBLIC_STATUSES)
                        .order_by("-requested_on", "-id")[:10]),
     })
 
@@ -488,8 +499,14 @@ def returnauthorization_public(request, token):
             now = timezone.now()
             if action == "shipped":
                 tracking = (form.cleaned_data.get("return_tracking_number") or "").strip()[:64]
+                # The STATE GUARD belongs in the UPDATE filter, not only in the template flag that
+                # decides whether to draw the button. This is an UNAUTHENTICATED endpoint: a direct
+                # POST against a still-unapproved or already-settled return would otherwise stamp
+                # `customer_shipped_on` — permanently suppressing the overdue-shipment chase badge —
+                # and overwrite a staff-entered tracking number with attacker-supplied text.
                 updated = ReturnAuthorization.objects.filter(
-                    pk=obj.pk, customer_shipped_on__isnull=True).update(
+                    pk=obj.pk, status__in=ReturnAuthorization.SHIPPABLE_STATUSES,
+                    customer_shipped_on__isnull=True).update(
                         customer_shipped_on=timezone.localdate(),
                         return_tracking_number=tracking or obj.return_tracking_number,
                         updated_at=now)
@@ -500,8 +517,10 @@ def returnauthorization_public(request, token):
                                     {"via": "return_portal", "action": "shipped"})
             else:
                 note = (form.cleaned_data.get("portal_note") or "").strip()[:500]
-                ReturnAuthorization.objects.filter(pk=obj.pk).update(
-                    portal_note=note, updated_at=now)
+                # Same state guard: a settled or closed return is not a conversation any more.
+                ReturnAuthorization.objects.filter(
+                    pk=obj.pk, status__in=ReturnAuthorization.NOTEABLE_STATUSES).update(
+                        portal_note=note, updated_at=now)
                 write_audit_log(None, obj, "update", {"via": "return_portal", "action": "note"})
             return redirect("scm:returnauthorization_public", token=token)
     lines = list(obj.lines.select_related("item", "reason"))
