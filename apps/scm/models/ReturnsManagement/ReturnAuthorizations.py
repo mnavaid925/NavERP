@@ -111,6 +111,16 @@ class ReturnAuthorization(TenantNumbered):
     #: Only these may print a return slip — the spirit of ``coa_print`` refusing an unissued
     #: certificate. A slip for an unapproved return is a document that looks real and is not.
     LABEL_STATUSES = ("approved", "awaiting_receipt", "partially_received")
+    #: States in which the ANONYMOUS token page may stamp "I've shipped it". Narrower than
+    #: ``PUBLIC_STATUSES`` on purpose: this is an unauthenticated write, so the guard belongs in the
+    #: UPDATE's own filter — a direct POST against an unapproved or already-settled return would
+    #: otherwise permanently suppress the overdue-shipment chase and overwrite a staff-entered
+    #: tracking number.
+    SHIPPABLE_STATUSES = ("approved", "awaiting_receipt", "partially_received")
+    #: States in which the anonymous visitor may leave a note. A settled or closed return is no
+    #: longer a conversation.
+    NOTEABLE_STATUSES = ("requested", "approved", "awaiting_receipt", "partially_received",
+                         "received")
 
     customer = models.ForeignKey("core.Party", on_delete=models.PROTECT,
                                  related_name="scm_return_authorizations")
@@ -207,7 +217,13 @@ class ReturnAuthorization(TenantNumbered):
             models.Index(fields=["tenant", "requested_on"], name="scm_rma_tnt_reqon_idx"),
             models.Index(fields=["tenant", "return_type"], name="scm_rma_tnt_type_idx"),
             models.Index(fields=["tenant", "source"], name="scm_rma_tnt_source_idx"),
-        ]
+            # The advance-refund exposure report — money already out the door against goods not yet
+            # back — filters advance_refund=True, orders by this deadline and adds __lt=today on
+            # ?state=overdue, none of which the five indexes above serve. Only advance refunds carry
+            # a deadline (enforced in clean()), so this doubles as a near-partial index for the
+            # boolean filter too — which a low-selectivity boolean could not serve on its own.
+            models.Index(fields=["tenant", "advance_refund_deadline"],
+                         name="scm_rma_tnt_advdl_idx"),        ]
 
     def save(self, *args, **kwargs):
         """Mint the unguessable public token ONCE, then hand off to ``TenantNumbered.save``.
@@ -425,7 +441,14 @@ class ReturnLine(models.Model):
         front of the grader. There is a test that receives, leaves the row pending, and asserts
         this figure is non-zero.
         """
-        return self.dispositions.aggregate(s=Sum("quantity"))["s"] or ZERO
+        # Summed in PYTHON over the related manager, not with a DB aggregate. Every caller already
+        # pays for `Prefetch("lines__dispositions")`, and a `.aggregate()` on the related manager
+        # never consults `_prefetched_objects_cache` — so the aggregate bypassed the prefetch and
+        # fired one round trip per line, four times over on the detail page (here, via
+        # quantity_outstanding, via quantity_received_total, and again via is_fully_received).
+        # Measured 97 queries on a 12-line RMA. The rule above is preserved exactly: every row
+        # counts, `received_pending` included.
+        return sum((row.quantity or ZERO) for row in self.dispositions.all()) or ZERO
 
     @property
     def quantity_outstanding(self):
@@ -444,8 +467,11 @@ class ReturnLine(models.Model):
         """
         if self.return_authorization.return_type == "credit_only":
             return self.quantity_approved or ZERO
-        return (self.dispositions.filter(disposition__in=CREDIT_BEARING_DISPOSITIONS)
-                .aggregate(s=Sum("quantity"))["s"] or ZERO)
+        # Filtered in PYTHON for the same reason as `quantity_received` — a `.filter().aggregate()`
+        # on the related manager discards the prefetch the refund queue already paid for, which took
+        # that page from 13 to 55 queries on a 15-row page of 3-line RMAs.
+        return sum((row.quantity or ZERO) for row in self.dispositions.all()
+                   if row.disposition in CREDIT_BEARING_DISPOSITIONS) or ZERO
 
     @property
     def line_credit(self):
