@@ -3482,3 +3482,578 @@ class TestQualityCSRFEnforcement:
             {"title": "T", "description": "D", "severity": "minor",
              "defect_category": "documentation"}).status_code == 403
         assert NonConformance.objects.filter(tenant=tenant_a).count() == 0
+
+
+# ================================================================================================
+# SCM 4.10 Returns Management (Reverse Logistics) — security
+# ================================================================================================
+#: The TEN ``@tenant_admin_required`` routes in 4.10. Anything added to the sub-module that commits
+#: us to a customer, moves stock or speaks to a counterparty belongs in this tuple AND in the test
+#: below, or the gate is decoration.
+_RETURNS_ADMIN_ONLY = (
+    "returnauthorization_approve", "returnauthorization_reject",
+    "returnauthorization_draft_credit_note", "returnauthorization_draft_replacement",
+    "returndisposition_decide", "returndisposition_post", "returndisposition_split",
+    "warrantyclaim_submit", "warrantyclaim_record_response", "warrantyclaim_record_credit",
+)
+#: Every mutating 4.10 route — all of them ``@require_POST``.
+_RETURNS_POST_ONLY = _RETURNS_ADMIN_ONLY + (
+    "returnauthorization_delete", "returnauthorization_cancel",
+    "returnauthorization_receive_all", "returnauthorization_raise_warranty_claim",
+    "returndisposition_delete", "returndisposition_mark_refurbished",
+    "returnpolicy_delete", "returnreason_delete", "warrantyclaim_delete",
+)
+_RETURNS_READ_ROUTES = ("returnauthorization_list", "returnauthorization_create",
+                        "returndisposition_list", "returndisposition_create",
+                        "returnpolicy_list", "returnpolicy_create",
+                        "returnreason_list", "returnreason_create",
+                        "warrantyclaim_list", "warrantyclaim_create",
+                        "refund_queue", "returns_awaiting_disposition",
+                        "advance_refund_exposure", "return_portal", "portal_return_create")
+
+
+def _returns_rma_payload(customer, item, reason):
+    from django.utils import timezone
+    data = {
+        "customer": str(customer.pk), "sales_order": "", "return_type": "physical",
+        "source": "csr", "policy": "", "requested_on": timezone.localdate().isoformat(),
+        "resolution": "refund", "refund_method": "original_tender",
+        "return_method": "mail_prepaid", "dropoff_location": "", "return_carrier": "",
+        "return_tracking_number": "", "return_label_url": "", "label_cost": "0",
+        "counterparty_rma_number": "", "currency": "", "advance_refund_deadline": "",
+        "notes": "",
+    }
+    data.update(formset_data("lines", [{
+        "sales_order_line": "", "item": str(item.pk), "description": "Widget",
+        "quantity_requested": "1", "quantity_approved": "0", "reason": str(reason.pk),
+        "unit_price": "15.00", "tax_pct": "0", "unit_cost": "8.0000", "line_fee": "0.00",
+        "condition_reported": "", "lot_serial": "", "photo": "", "id": "",
+    }]))
+    return data
+
+
+class TestReturnsAnonymousRedirect:
+    def test_every_staff_route_redirects_to_login(self):
+        c = Client()
+        for name in _RETURNS_READ_ROUTES:
+            resp = c.get(reverse(f"scm:{name}"))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+    def test_every_detail_route_redirects_to_login(self, return_authorization_a, disposition_a,
+                                                   return_policy_a, return_reason_a,
+                                                   warranty_claim_a):
+        c = Client()
+        for name, obj in (("returnauthorization_detail", return_authorization_a),
+                          ("returnauthorization_edit", return_authorization_a),
+                          ("returndisposition_detail", disposition_a),
+                          ("returndisposition_edit", disposition_a),
+                          ("returnpolicy_detail", return_policy_a),
+                          ("returnpolicy_edit", return_policy_a),
+                          ("returnreason_detail", return_reason_a),
+                          ("returnreason_edit", return_reason_a),
+                          ("warrantyclaim_detail", warranty_claim_a),
+                          ("warrantyclaim_edit", warranty_claim_a)):
+            resp = c.get(reverse(f"scm:{name}", args=[obj.pk]))
+            assert resp.status_code == 302, name
+            assert "login" in resp["Location"], name
+
+    def test_the_two_TOKEN_routes_are_deliberately_public(self, rma_awaiting_receipt_a):
+        c = Client()
+        assert c.get(reverse("scm:returnauthorization_public",
+                             args=[rma_awaiting_receipt_a.public_token])).status_code == 200
+        assert c.get(reverse("scm:returnauthorization_label",
+                             args=[rma_awaiting_receipt_a.public_token])).status_code == 200
+
+    def test_they_are_the_ONLY_public_routes_in_the_sub_module(self, disposition_a,
+                                                               warranty_claim_a):
+        c = Client()
+        for name, obj in (("returnauthorization_approve", disposition_a),
+                          ("returndisposition_post", disposition_a),
+                          ("warrantyclaim_submit", warranty_claim_a)):
+            resp = c.post(reverse(f"scm:{name}", args=[obj.pk]))
+            assert resp.status_code in (302, 403), name
+            if resp.status_code == 302:
+                assert "login" in resp["Location"], name
+
+
+class TestReturnsAdminRequiredGates:
+    """REGRESSION LOCK (item 15). Ten privileged routes; a plain tenant member gets 403 on every
+    one of them and nothing changes."""
+
+    def test_ALL_TEN_privileged_routes_403_a_plain_member(self, member_client,
+                                                          return_authorization_a, disposition_a,
+                                                          warranty_claim_a):
+        targets = {
+            "returnauthorization_approve": return_authorization_a,
+            "returnauthorization_reject": return_authorization_a,
+            "returnauthorization_draft_credit_note": return_authorization_a,
+            "returnauthorization_draft_replacement": return_authorization_a,
+            "returndisposition_decide": disposition_a,
+            "returndisposition_post": disposition_a,
+            "returndisposition_split": disposition_a,
+            "warrantyclaim_submit": warranty_claim_a,
+            "warrantyclaim_record_response": warranty_claim_a,
+            "warrantyclaim_record_credit": warranty_claim_a,
+        }
+        assert set(targets) == set(_RETURNS_ADMIN_ONLY)
+        for name, obj in targets.items():
+            assert member_client.post(reverse(f"scm:{name}",
+                                              args=[obj.pk])).status_code == 403, name
+
+    def test_a_403_changes_nothing_and_posts_nothing(self, member_client, tenant_a,
+                                                     return_authorization_a, disposition_a,
+                                                     warranty_claim_a, location_a2):
+        from apps.accounting.models import Invoice, JournalEntry
+        from apps.scm.models import StockMove
+        moves, journals = StockMove.objects.count(), JournalEntry.objects.count()
+        before_all = (return_authorization_a.status, return_authorization_a.rejected_reason,
+                      disposition_a.disposition, disposition_a.stock_posted,
+                      warranty_claim_a.status)
+        member_client.post(reverse("scm:returnauthorization_approve",
+                                   args=[return_authorization_a.pk]), {"resolution": "refund"})
+        member_client.post(reverse("scm:returnauthorization_reject",
+                                   args=[return_authorization_a.pk]),
+                           {"rejected_reason": "No"})
+        member_client.post(reverse("scm:returndisposition_decide", args=[disposition_a.pk]),
+                           {"disposition": "restock",
+                            "restock_location": str(location_a2.pk)})
+        member_client.post(reverse("scm:returndisposition_post", args=[disposition_a.pk]))
+        member_client.post(reverse("scm:returndisposition_split", args=[disposition_a.pk]),
+                           {"quantity": "1"})
+        member_client.post(reverse("scm:warrantyclaim_submit", args=[warranty_claim_a.pk]))
+        return_authorization_a.refresh_from_db()
+        disposition_a.refresh_from_db()
+        warranty_claim_a.refresh_from_db()
+        # before == after. This test asks whether a 403 mutates anything, and that is exactly what
+        # a snapshot answers; an absolute pin asserts the fixture graph, which legitimately arrives
+        # advanced here because `disposition_a` drags in return_line_a.
+        assert (return_authorization_a.status, return_authorization_a.rejected_reason,
+                disposition_a.disposition, disposition_a.stock_posted,
+                warranty_claim_a.status) == before_all
+        assert StockMove.objects.count() == moves
+        assert JournalEntry.objects.count() == journals
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+
+    def test_an_admin_may_run_the_same_routes(self, client_a, return_authorization_a,
+                                              disposition_a, warranty_claim_a, location_a2):
+        assert client_a.post(reverse("scm:returnauthorization_approve",
+                                     args=[return_authorization_a.pk]),
+                             {"resolution": "refund"}).status_code == 302
+        assert client_a.post(reverse("scm:returndisposition_decide", args=[disposition_a.pk]),
+                             {"disposition": "restock",
+                              "restock_location": str(location_a2.pk),
+                              "restock_unit_cost": "4.0000"}).status_code == 302
+        assert client_a.post(reverse("scm:returndisposition_post",
+                                     args=[disposition_a.pk])).status_code == 302
+        assert client_a.post(reverse("scm:warrantyclaim_submit",
+                                     args=[warranty_claim_a.pk])).status_code == 302
+
+    def test_the_three_privileged_bench_columns_are_admin_only_on_the_EDIT_FORM_too(
+        self, member_client, disposition_a, location_a, location_a2,
+    ):
+        """REGRESSION LOCK (item 10). The edit view writes the SAME columns ``decide`` reserves, so
+        without the same gate the one on the action is decoration."""
+        resp = member_client.post(
+            reverse("scm:returndisposition_edit", args=[disposition_a.pk]),
+            {"return_line": str(disposition_a.return_line_id), "quantity": "3",
+             "location": str(location_a.pk), "lot_serial": "", "condition_grade": "c",
+             "disposition": "restock", "restock_location": str(location_a2.pk),
+             "restock_unit_cost": "15.0000", "recovery_value": "0.00", "nonconformance": "",
+             "notes": ""})
+        assert resp.status_code == 302                    # the edit itself is ordinary CSR work
+        disposition_a.refresh_from_db()
+        assert disposition_a.condition_grade == "c"       # what they FOUND is theirs to record
+        assert disposition_a.disposition == "received_pending"
+        assert disposition_a.restock_location_id is None
+        assert disposition_a.restock_unit_cost == Decimal("8.0000")
+
+
+class TestReturnsOrdinaryActionsAllowNonAdmin:
+    def test_a_member_may_raise_and_edit_a_return(self, member_client, tenant_a, customer_a,
+                                                  item_a, return_reason_a):
+        from apps.scm.models import ReturnAuthorization
+        assert member_client.post(reverse("scm:returnauthorization_create"),
+                                  _returns_rma_payload(customer_a, item_a,
+                                                       return_reason_a)).status_code == 302
+        assert ReturnAuthorization.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_member_may_cancel_a_draft_return(self, member_client, return_authorization_a):
+        assert member_client.post(reverse("scm:returnauthorization_cancel",
+                                          args=[return_authorization_a.pk])).status_code != 403
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "cancelled"
+
+    def test_a_member_may_receive_goods_onto_the_bench(self, member_client,
+                                                       rma_awaiting_receipt_a, location_a):
+        from apps.scm.models import ReturnDisposition
+        assert member_client.post(reverse("scm:returnauthorization_receive_all",
+                                          args=[rma_awaiting_receipt_a.pk]),
+                                  {"location": str(location_a.pk),
+                                   "condition_grade": "a"}).status_code != 403
+        assert ReturnDisposition.objects.filter(
+            return_line__return_authorization=rma_awaiting_receipt_a).exists()
+
+    def test_a_member_may_mark_a_row_refurbished(self, member_client, client_a, disposition_a):
+        client_a.post(reverse("scm:returndisposition_decide", args=[disposition_a.pk]),
+                      {"disposition": "refurbish"})
+        assert member_client.post(reverse("scm:returndisposition_mark_refurbished",
+                                          args=[disposition_a.pk])).status_code != 403
+        disposition_a.refresh_from_db()
+        assert disposition_a.refurbished_on is not None
+
+    def test_a_member_may_raise_a_warranty_claim_from_a_return(self, member_client, tenant_a,
+                                                               rma_received_a, item_a,
+                                                               purchase_order_a, supplier_a):
+        from apps.scm.models import PurchaseOrderLine, WarrantyClaim
+        PurchaseOrderLine.objects.create(purchase_order=purchase_order_a,
+                                         item_description="Widget", sku_hint=item_a.sku,
+                                         quantity=Decimal("5"), unit_price=Decimal("8.00"))
+        assert member_client.post(reverse("scm:returnauthorization_raise_warranty_claim",
+                                          args=[rma_received_a.pk])).status_code != 403
+        assert WarrantyClaim.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_member_may_maintain_the_two_masters(self, member_client, tenant_a):
+        from apps.scm.models import ReturnPolicy, ReturnReason
+        assert member_client.post(reverse("scm:returnreason_create"),
+                                  {"code": "MBR-1", "name": "Member reason",
+                                   "fault_party": "customer", "allows_refund": "on",
+                                   "suggested_disposition": "", "follow_up_question": "",
+                                   "sort_order": "10", "is_active": "on"}).status_code == 302
+        assert ReturnReason.objects.filter(tenant=tenant_a, code="MBR-1").exists()
+        assert member_client.post(reverse("scm:returnpolicy_create"), {
+            "name": "Member policy", "is_active": "on", "priority": "100", "item_category": "",
+            "window_basis": "delivery", "window_days": "30", "fallback_days": "45",
+            "allow_refund": "on", "refund_basis": "full", "refund_pct": "100",
+            "restocking_fee_type": "none", "restocking_fee_value": "0",
+            "return_shipping_paid_by": "customer", "grade_a_cost_pct": "100",
+            "grade_b_cost_pct": "75", "grade_c_cost_pct": "40", "grade_d_cost_pct": "0",
+            "warranty_window_days": "365", "return_to_address": "",
+            "portal_instructions": ""}).status_code == 302
+        assert ReturnPolicy.objects.filter(tenant=tenant_a, name="Member policy").exists()
+
+    def test_a_member_may_delete_an_unposted_bench_row(self, member_client, disposition_a):
+        from apps.scm.models import ReturnDisposition
+        assert member_client.post(reverse("scm:returndisposition_delete",
+                                          args=[disposition_a.pk])).status_code != 403
+        assert not ReturnDisposition.objects.filter(pk=disposition_a.pk).exists()
+
+
+class TestReturnsCrossTenantIDOR:
+    """REGRESSION LOCK (item 15). Tenant A's admin against every one of tenant B's five models."""
+
+    def test_every_detail_and_edit_route_404s_across_the_tenant_line(self, client_a,
+                                                                     return_authorization_b,
+                                                                     disposition_b,
+                                                                     return_policy_b,
+                                                                     return_reason_b,
+                                                                     warranty_claim_b):
+        for name, obj in (("returnauthorization_detail", return_authorization_b),
+                          ("returnauthorization_edit", return_authorization_b),
+                          ("returndisposition_detail", disposition_b),
+                          ("returndisposition_edit", disposition_b),
+                          ("returnpolicy_detail", return_policy_b),
+                          ("returnpolicy_edit", return_policy_b),
+                          ("returnreason_detail", return_reason_b),
+                          ("returnreason_edit", return_reason_b),
+                          ("warrantyclaim_detail", warranty_claim_b),
+                          ("warrantyclaim_edit", warranty_claim_b)):
+            assert client_a.get(reverse(f"scm:{name}", args=[obj.pk])).status_code == 404, name
+
+    def test_every_POST_action_404s_across_the_tenant_line(self, client_a,
+                                                           return_authorization_b,
+                                                           disposition_b, return_policy_b,
+                                                           return_reason_b, warranty_claim_b,
+                                                           location_a2):
+        payloads = {
+            "returnauthorization_approve": (return_authorization_b, {"resolution": "refund"}),
+            "returnauthorization_reject": (return_authorization_b,
+                                           {"rejected_reason": "No"}),
+            "returnauthorization_cancel": (return_authorization_b, {}),
+            "returnauthorization_delete": (return_authorization_b, {}),
+            "returnauthorization_receive_all": (return_authorization_b,
+                                                {"location": str(location_a2.pk),
+                                                 "condition_grade": "a"}),
+            "returnauthorization_draft_credit_note": (return_authorization_b, {}),
+            "returnauthorization_draft_replacement": (return_authorization_b, {}),
+            "returnauthorization_raise_warranty_claim": (return_authorization_b, {}),
+            "returndisposition_decide": (disposition_b, {"disposition": "scrap"}),
+            "returndisposition_post": (disposition_b, {}),
+            "returndisposition_split": (disposition_b, {"quantity": "1"}),
+            "returndisposition_delete": (disposition_b, {}),
+            "returndisposition_mark_refurbished": (disposition_b, {}),
+            "returnpolicy_delete": (return_policy_b, {}),
+            "returnreason_delete": (return_reason_b, {}),
+            "warrantyclaim_submit": (warranty_claim_b, {}),
+            "warrantyclaim_record_response": (warranty_claim_b,
+                                              {"outcome": "approved",
+                                               "amount_approved": "10.00"}),
+            "warrantyclaim_record_credit": (warranty_claim_b,
+                                            {"amount_credited": "10.00",
+                                             "credit_reference": "CN-1"}),
+            "warrantyclaim_delete": (warranty_claim_b, {}),
+        }
+        for name, (obj, data) in payloads.items():
+            assert client_a.post(reverse(f"scm:{name}", args=[obj.pk]),
+                                 data).status_code == 404, name
+
+    def test_none_of_those_attempts_changed_anything(self, client_a, return_authorization_b,
+                                                     disposition_b, return_policy_b,
+                                                     return_reason_b, warranty_claim_b,
+                                                     location_a2):
+        from apps.scm.models import (ReturnDisposition, ReturnPolicy, ReturnReason, StockMove,
+                                     WarrantyClaim)
+        moves = StockMove.objects.count()
+        for name, obj, data in (("returnauthorization_approve", return_authorization_b,
+                                 {"resolution": "refund"}),
+                                ("returndisposition_decide", disposition_b,
+                                 {"disposition": "scrap"}),
+                                ("returndisposition_post", disposition_b, {}),
+                                ("warrantyclaim_submit", warranty_claim_b, {})):
+            client_a.post(reverse(f"scm:{name}", args=[obj.pk]), data)
+        return_authorization_b.refresh_from_db()
+        disposition_b.refresh_from_db()
+        warranty_claim_b.refresh_from_db()
+        assert return_authorization_b.status == "awaiting_receipt"
+        assert disposition_b.disposition == "received_pending"
+        assert warranty_claim_b.status == "draft"
+        assert ReturnDisposition.objects.filter(pk=disposition_b.pk).exists()
+        assert ReturnPolicy.objects.filter(pk=return_policy_b.pk).exists()
+        assert ReturnReason.objects.filter(pk=return_reason_b.pk).exists()
+        assert WarrantyClaim.objects.filter(pk=warranty_claim_b.pk).exists()
+        assert StockMove.objects.count() == moves
+
+    def test_no_returns_list_or_queue_ever_shows_another_tenants_rows(self, client_a,
+                                                                      return_authorization_b,
+                                                                      disposition_b,
+                                                                      return_policy_b,
+                                                                      return_reason_b,
+                                                                      warranty_claim_b):
+        foreign = {return_authorization_b.pk, disposition_b.pk, return_policy_b.pk,
+                   return_reason_b.pk, warranty_claim_b.pk}
+        for name in ("returnauthorization_list", "returndisposition_list", "returnpolicy_list",
+                     "returnreason_list", "warrantyclaim_list"):
+            rows = client_a.get(reverse(f"scm:{name}")).context["object_list"]
+            assert not ({row.pk for row in rows} & foreign), name
+        for name in ("refund_queue", "advance_refund_exposure",
+                     "returns_awaiting_disposition"):
+            rows = client_a.get(reverse(f"scm:{name}")).context["rows"]
+            assert not ({row["obj"].pk for row in rows} & foreign), name
+
+    def test_a_crafted_POST_carrying_another_tenants_pk_in_an_FK_is_rejected(
+        self, client_a, tenant_a, customer_b, item_b, return_reason_b, location_b,
+    ):
+        from apps.scm.models import ReturnAuthorization
+        resp = client_a.post(reverse("scm:returnauthorization_create"),
+                             _returns_rma_payload(customer_b, item_b, return_reason_b))
+        assert resp.status_code == 200                 # the form re-renders with errors
+        assert not ReturnAuthorization.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_bench_POST_cannot_book_against_another_tenants_line(self, client_a,
+                                                                           tenant_a,
+                                                                           return_line_b,
+                                                                           location_a):
+        from apps.scm.models import ReturnDisposition
+        data = {"return_line": str(return_line_b.pk)}
+        data.update(formset_data("dispositions", [{
+            "quantity": "1", "location": str(location_a.pk), "lot_serial": "",
+            "condition_grade": "a", "disposition": "received_pending", "restock_location": "",
+            "restock_unit_cost": "8.0000", "recovery_value": "0.00", "notes": "", "id": ""}]))
+        assert client_a.post(reverse("scm:returndisposition_create"), data).status_code == 200
+        assert not ReturnDisposition.objects.filter(tenant=tenant_a).exists()
+
+    def test_another_tenants_public_token_still_resolves_but_only_as_the_PUBLIC_page(
+        self, client_a, return_authorization_b,
+    ):
+        """The token is a bearer credential and the tenant is taken OFF THE OBJECT — a logged-in
+        tenant-A user gains nothing a stranger with the same link would not have."""
+        resp = client_a.get(reverse("scm:returnauthorization_public",
+                                    args=[return_authorization_b.public_token]))
+        assert resp.status_code == 200
+        assert resp.context["obj"].tenant_id == return_authorization_b.tenant_id
+        assert client_a.get(reverse("scm:returnauthorization_detail",
+                                    args=[return_authorization_b.pk])).status_code == 404
+
+
+class TestReturnsPostOnlyActions:
+    def test_a_GET_on_every_mutating_route_returns_405(self, client_a, return_authorization_a,
+                                                       disposition_a, return_policy_a,
+                                                       return_reason_a, warranty_claim_a):
+        targets = {
+            "returnauthorization_approve": return_authorization_a,
+            "returnauthorization_reject": return_authorization_a,
+            "returnauthorization_cancel": return_authorization_a,
+            "returnauthorization_delete": return_authorization_a,
+            "returnauthorization_receive_all": return_authorization_a,
+            "returnauthorization_draft_credit_note": return_authorization_a,
+            "returnauthorization_draft_replacement": return_authorization_a,
+            "returnauthorization_raise_warranty_claim": return_authorization_a,
+            "returndisposition_decide": disposition_a,
+            "returndisposition_post": disposition_a,
+            "returndisposition_split": disposition_a,
+            "returndisposition_delete": disposition_a,
+            "returndisposition_mark_refurbished": disposition_a,
+            "returnpolicy_delete": return_policy_a,
+            "returnreason_delete": return_reason_a,
+            "warrantyclaim_submit": warranty_claim_a,
+            "warrantyclaim_record_response": warranty_claim_a,
+            "warrantyclaim_record_credit": warranty_claim_a,
+            "warrantyclaim_delete": warranty_claim_a,
+        }
+        assert set(targets) == set(_RETURNS_POST_ONLY)
+        for name, obj in targets.items():
+            assert client_a.get(reverse(f"scm:{name}",
+                                        args=[obj.pk])).status_code == 405, name
+
+    def test_a_GET_never_deletes_never_moves_a_status_and_never_posts_stock(
+        self, client_a, tenant_a, return_authorization_a, disposition_a, return_policy_a,
+        return_reason_a, warranty_claim_a,
+    ):
+        from apps.accounting.models import Invoice
+        from apps.scm.models import (ReturnAuthorization, ReturnDisposition, ReturnPolicy,
+                                     ReturnReason, StockMove, WarrantyClaim)
+        moves = StockMove.objects.count()
+        for name, obj in (("returnauthorization_approve", return_authorization_a),
+                          ("returnauthorization_delete", return_authorization_a),
+                          ("returndisposition_post", disposition_a),
+                          ("returndisposition_delete", disposition_a),
+                          ("returnpolicy_delete", return_policy_a),
+                          ("returnreason_delete", return_reason_a),
+                          ("warrantyclaim_submit", warranty_claim_a),
+                          ("warrantyclaim_delete", warranty_claim_a)):
+            client_a.get(reverse(f"scm:{name}", args=[obj.pk]))
+        assert ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).exists()
+        assert ReturnDisposition.objects.filter(pk=disposition_a.pk).exists()
+        assert ReturnPolicy.objects.filter(pk=return_policy_a.pk).exists()
+        assert ReturnReason.objects.filter(pk=return_reason_a.pk).exists()
+        assert WarrantyClaim.objects.filter(pk=warranty_claim_a.pk).exists()
+        return_authorization_a.refresh_from_db()
+        disposition_a.refresh_from_db()
+        warranty_claim_a.refresh_from_db()
+        # before == after, NOT an absolute pin. This test asks one question — "does a GET mutate?" —
+        # and before == after answers exactly that. An absolute "draft" baseline instead asserts the
+        # FIXTURE GRAPH: requesting `disposition_a` drags in return_line_a, which advances
+        # `return_authorization_a` to awaiting_receipt before this test body ever runs, so the pin
+        # failed on a module that was behaving correctly.
+        assert (return_authorization_a.status, disposition_a.disposition,
+                disposition_a.stock_posted, warranty_claim_a.status) == before
+        assert StockMove.objects.count() == moves
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+
+
+class TestReturnsCSRFEnforcement:
+    def _client(self, user):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(user)
+        return c
+
+    def test_the_ledger_write_is_rejected_without_a_token(self, admin_user, tenant_a,
+                                                          disposition_a, location_a2, client_a):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:returndisposition_decide", args=[disposition_a.pk]),
+                      {"disposition": "restock", "restock_location": str(location_a2.pk),
+                       "restock_unit_cost": "4.0000"})
+        before = StockMove.objects.count()
+        assert self._client(admin_user).post(
+            reverse("scm:returndisposition_post", args=[disposition_a.pk])).status_code == 403
+        disposition_a.refresh_from_db()
+        assert disposition_a.stock_posted is False
+        assert StockMove.objects.count() == before
+
+    def test_every_lifecycle_action_is_rejected_without_a_token(self, admin_user,
+                                                                return_authorization_a,
+                                                                disposition_a,
+                                                                warranty_claim_a):
+        before = (return_authorization_a.status, disposition_a.disposition,
+                  disposition_a.stock_posted, warranty_claim_a.status)
+        client = self._client(admin_user)
+        for name, obj, data in (
+            ("returnauthorization_approve", return_authorization_a, {"resolution": "refund"}),
+            ("returnauthorization_reject", return_authorization_a,
+             {"rejected_reason": "No"}),
+            ("returnauthorization_cancel", return_authorization_a, {}),
+            ("returnauthorization_draft_credit_note", return_authorization_a, {}),
+            ("returnauthorization_draft_replacement", return_authorization_a, {}),
+            ("returndisposition_decide", disposition_a, {"disposition": "scrap"}),
+            ("returndisposition_split", disposition_a, {"quantity": "1"}),
+            ("returndisposition_mark_refurbished", disposition_a, {}),
+            ("warrantyclaim_submit", warranty_claim_a, {}),
+            ("warrantyclaim_record_response", warranty_claim_a,
+             {"outcome": "approved", "amount_approved": "10.00"}),
+            ("warrantyclaim_record_credit", warranty_claim_a,
+             {"amount_credited": "10.00", "credit_reference": "CN-1"}),
+        ):
+            assert client.post(reverse(f"scm:{name}", args=[obj.pk]),
+                               data).status_code == 403, name
+        return_authorization_a.refresh_from_db()
+        disposition_a.refresh_from_db()
+        warranty_claim_a.refresh_from_db()
+        # before == after: eleven CSRF-less lifecycle POSTs must leave every row exactly where the
+        # fixtures put it. An absolute "draft" pin asserts the fixture graph instead — requesting
+        # `disposition_a` drags in return_line_a, which advances this RMA before the body runs.
+        assert (return_authorization_a.status, disposition_a.disposition,
+                disposition_a.stock_posted, warranty_claim_a.status) == before
+
+    def test_every_delete_is_rejected_without_a_token(self, admin_user, return_authorization_a,
+                                                      disposition_a, return_policy_a,
+                                                      return_reason_a, warranty_claim_a):
+        from apps.scm.models import (ReturnAuthorization, ReturnDisposition, ReturnPolicy,
+                                     ReturnReason, WarrantyClaim)
+        client = self._client(admin_user)
+        for name, obj in (("returnauthorization_delete", return_authorization_a),
+                          ("returndisposition_delete", disposition_a),
+                          ("returnpolicy_delete", return_policy_a),
+                          ("returnreason_delete", return_reason_a),
+                          ("warrantyclaim_delete", warranty_claim_a)):
+            assert client.post(reverse(f"scm:{name}", args=[obj.pk])).status_code == 403, name
+        assert ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).exists()
+        assert ReturnDisposition.objects.filter(pk=disposition_a.pk).exists()
+        assert ReturnPolicy.objects.filter(pk=return_policy_a.pk).exists()
+        assert ReturnReason.objects.filter(pk=return_reason_a.pk).exists()
+        assert WarrantyClaim.objects.filter(pk=warranty_claim_a.pk).exists()
+
+    def test_every_create_is_rejected_without_a_token(self, admin_user, tenant_a, customer_a,
+                                                      item_a, return_reason_a, supplier_a):
+        from apps.scm.models import ReturnAuthorization, ReturnPolicy, ReturnReason
+        client = self._client(admin_user)
+        assert client.post(reverse("scm:returnauthorization_create"),
+                           _returns_rma_payload(customer_a, item_a,
+                                                return_reason_a)).status_code == 403
+        assert client.post(reverse("scm:returnreason_create"),
+                           {"code": "CSRF-1", "name": "X", "fault_party": "customer",
+                            "allows_refund": "on", "sort_order": "1"}).status_code == 403
+        assert client.post(reverse("scm:returnpolicy_create"),
+                           {"name": "CSRF policy"}).status_code == 403
+        assert not ReturnAuthorization.objects.filter(tenant=tenant_a).exists()
+        assert not ReturnReason.objects.filter(tenant=tenant_a, code="CSRF-1").exists()
+        assert not ReturnPolicy.objects.filter(tenant=tenant_a, name="CSRF policy").exists()
+
+    def test_the_receive_all_action_is_rejected_without_a_token(self, admin_user,
+                                                                rma_awaiting_receipt_a,
+                                                                location_a):
+        from apps.scm.models import ReturnDisposition
+        assert self._client(admin_user).post(
+            reverse("scm:returnauthorization_receive_all", args=[rma_awaiting_receipt_a.pk]),
+            {"location": str(location_a.pk), "condition_grade": "a"}).status_code == 403
+        assert ReturnDisposition.objects.count() == 0
+
+    def test_the_PUBLIC_token_page_is_NOT_csrf_exempt(self, rma_awaiting_receipt_a):
+        """The repo's only CSRF exemption is the Stripe webhook; nothing in 4.10 exempts itself."""
+        c = Client(enforce_csrf_checks=True)
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_awaiting_receipt_a.public_token])
+        assert c.get(url).status_code == 200
+        assert c.post(url, {"action": "shipped"}).status_code == 403
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.customer_shipped_on is None
+
+    def test_the_portal_request_form_is_not_csrf_exempt(self, portal_user_a, portal_access_a,
+                                                        tenant_a, item_a, return_reason_a,
+                                                        returns_sales_order_a):
+        from apps.scm.models import ReturnAuthorization
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(portal_user_a)
+        assert client.post(reverse("scm:portal_return_create"),
+                           {"item": str(item_a.pk), "quantity_requested": "1",
+                            "reason": str(return_reason_a.pk)}).status_code == 403
+        assert not ReturnAuthorization.objects.filter(tenant=tenant_a).exists()
