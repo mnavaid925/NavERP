@@ -3607,9 +3607,6 @@ class TestReturnsAdminRequiredGates:
         from apps.accounting.models import Invoice, JournalEntry
         from apps.scm.models import StockMove
         moves, journals = StockMove.objects.count(), JournalEntry.objects.count()
-        before_all = (return_authorization_a.status, return_authorization_a.rejected_reason,
-                      disposition_a.disposition, disposition_a.stock_posted,
-                      warranty_claim_a.status)
         member_client.post(reverse("scm:returnauthorization_approve",
                                    args=[return_authorization_a.pk]), {"resolution": "refund"})
         member_client.post(reverse("scm:returnauthorization_reject",
@@ -3625,12 +3622,15 @@ class TestReturnsAdminRequiredGates:
         return_authorization_a.refresh_from_db()
         disposition_a.refresh_from_db()
         warranty_claim_a.refresh_from_db()
-        # before == after. This test asks whether a 403 mutates anything, and that is exactly what
-        # a snapshot answers; an absolute pin asserts the fixture graph, which legitimately arrives
-        # advanced here because `disposition_a` drags in return_line_a.
-        assert (return_authorization_a.status, return_authorization_a.rejected_reason,
-                disposition_a.disposition, disposition_a.stock_posted,
-                warranty_claim_a.status) == before_all
+        # Pinned ABSOLUTELY, not as before == after: a snapshot still passes if a fixture arrives
+        # already approved or already posted, which is the regression this test exists to catch.
+        # `return_authorization_a` is genuinely still a draft — `rma_awaiting_receipt_a` builds its
+        # own row (`_build_draft_rma` in conftest) instead of mutating this one.
+        assert return_authorization_a.status == "draft"
+        assert return_authorization_a.rejected_reason == ""
+        assert disposition_a.disposition == "received_pending"
+        assert disposition_a.stock_posted is False
+        assert warranty_claim_a.status == "draft"
         assert StockMove.objects.count() == moves
         assert JournalEntry.objects.count() == journals
         assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
@@ -3667,6 +3667,29 @@ class TestReturnsAdminRequiredGates:
         assert disposition_a.disposition == "received_pending"
         assert disposition_a.restock_location_id is None
         assert disposition_a.restock_unit_cost == Decimal("8.0000")
+
+    def test_the_three_privileged_bench_columns_are_admin_only_on_the_CREATE_PATH_too(
+        self, member_client, return_line_a, location_a, location_a2,
+    ):
+        """The edit form is gated (above) and so is ``decide`` — but a CSR receiving goods reaches
+        the SAME three columns through the intake formset, which is the path they use every day.
+        A member POSTing a decision here must have it ignored exactly as on the other two."""
+        from apps.scm.models import ReturnDisposition, StockMove
+        moves = StockMove.objects.count()
+        data = {"return_line": str(return_line_a.pk)}
+        data.update(formset_data("dispositions", [{
+            "quantity": "3", "location": str(location_a.pk), "lot_serial": "",
+            "condition_grade": "a", "disposition": "restock",
+            "restock_location": str(location_a2.pk), "restock_unit_cost": "999.0000",
+            "recovery_value": "0.00", "notes": "", "id": ""}]))
+        resp = member_client.post(reverse("scm:returndisposition_create"), data)
+        assert resp.status_code == 302                    # receiving goods IS ordinary CSR work
+        row = ReturnDisposition.objects.get(return_line=return_line_a)
+        assert row.disposition == "received_pending"      # the decision is NOT theirs to make
+        assert row.restock_location_id is None
+        assert row.restock_unit_cost != Decimal("999.0000")
+        assert row.stock_posted is False
+        assert StockMove.objects.count() == moves         # intake posts nothing, by design
 
 
 class TestReturnsOrdinaryActionsAllowNonAdmin:
@@ -3930,13 +3953,15 @@ class TestReturnsPostOnlyActions:
         return_authorization_a.refresh_from_db()
         disposition_a.refresh_from_db()
         warranty_claim_a.refresh_from_db()
-        # before == after, NOT an absolute pin. This test asks one question — "does a GET mutate?" —
-        # and before == after answers exactly that. An absolute "draft" baseline instead asserts the
-        # FIXTURE GRAPH: requesting `disposition_a` drags in return_line_a, which advances
-        # `return_authorization_a` to awaiting_receipt before this test body ever runs, so the pin
-        # failed on a module that was behaving correctly.
-        assert (return_authorization_a.status, disposition_a.disposition,
-                disposition_a.stock_posted, warranty_claim_a.status) == before
+        # Pinned ABSOLUTELY. `return_authorization_a` really is still a draft here: since
+        # `rma_awaiting_receipt_a` builds its OWN row (see `_build_draft_rma` in conftest) rather
+        # than mutating this one, requesting `disposition_a` no longer advances it. A before ==
+        # after snapshot would pass even if a fixture arrived already approved or already posted,
+        # which is precisely what a "a GET must not mutate" test has to rule out.
+        assert return_authorization_a.status == "draft"
+        assert disposition_a.disposition == "received_pending"
+        assert disposition_a.stock_posted is False
+        assert warranty_claim_a.status == "draft"
         assert StockMove.objects.count() == moves
         assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
 
@@ -3964,8 +3989,6 @@ class TestReturnsCSRFEnforcement:
                                                                 return_authorization_a,
                                                                 disposition_a,
                                                                 warranty_claim_a):
-        before = (return_authorization_a.status, disposition_a.disposition,
-                  disposition_a.stock_posted, warranty_claim_a.status)
         client = self._client(admin_user)
         for name, obj, data in (
             ("returnauthorization_approve", return_authorization_a, {"resolution": "refund"}),
@@ -3988,11 +4011,12 @@ class TestReturnsCSRFEnforcement:
         return_authorization_a.refresh_from_db()
         disposition_a.refresh_from_db()
         warranty_claim_a.refresh_from_db()
-        # before == after: eleven CSRF-less lifecycle POSTs must leave every row exactly where the
-        # fixtures put it. An absolute "draft" pin asserts the fixture graph instead — requesting
-        # `disposition_a` drags in return_line_a, which advances this RMA before the body runs.
-        assert (return_authorization_a.status, disposition_a.disposition,
-                disposition_a.stock_posted, warranty_claim_a.status) == before
+        # Pinned ABSOLUTELY: eleven CSRF-less lifecycle POSTs must leave every row exactly where
+        # its fixture put it — draft RMA, undecided bench row, unposted ledger, draft claim.
+        assert return_authorization_a.status == "draft"
+        assert disposition_a.disposition == "received_pending"
+        assert disposition_a.stock_posted is False
+        assert warranty_claim_a.status == "draft"
 
     def test_every_delete_is_rejected_without_a_token(self, admin_user, return_authorization_a,
                                                       disposition_a, return_policy_a,
