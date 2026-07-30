@@ -202,3 +202,41 @@ from .ReturnsManagement.WarrantyClaims import (  # noqa: F401
     WarrantyClaim,
     WarrantyClaimCost,
 )
+
+# 4.11 Supply Chain Analytics
+# _choices FIRST — it owns the closed metric catalog and every shared vocabulary, and all three
+# entity modules import from it. It deliberately imports no sibling model, so the edge runs one way
+# and there is no cycle (the 4.10 ReturnReasons-first precedent).
+#
+# It also exists to keep apps/scm/analytics.py importable: that module reads the models to aggregate
+# over 4.1-4.10, so KpiTarget.metric cannot take its `choices` from analytics without closing a loop.
+# Splitting the vocabulary out is the same fix apps/crm already shipped
+# (models/AnalyticsReporting/_choices.py vs apps/crm/analytics.py).
+from .SupplyChainAnalytics._choices import (  # noqa: F401
+    METRIC_META,
+    METRIC_CHOICES,
+    METRIC_LABELS,
+    METRIC_GROUP_CHOICES,
+    METRIC_GROUP_PAGES,
+    METRIC_UNIT_CHOICES,
+    SCOPE_CHOICES,
+    SCOPE_FIELDS,
+    DIRECTION_CHOICES,
+    PERIOD_GRAIN_CHOICES,
+    DATE_RANGE_CHOICES,
+    SEVERITY_CHOICES,
+    BAND_CHOICES,
+    ALERT_TYPE_CHOICES,
+    ALERT_STATUS_CHOICES,
+    OPEN_ALERT_STATUSES,
+)
+from .SupplyChainAnalytics.KpiTargets import (  # noqa: F401
+    KpiTarget,
+)
+from .SupplyChainAnalytics.KpiSnapshots import (  # noqa: F401
+    KpiSnapshot,
+    format_metric_value,
+)
+from .SupplyChainAnalytics.SupplyChainAlerts import (  # noqa: F401
+    SupplyChainAlert,
+)
