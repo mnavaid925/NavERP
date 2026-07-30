@@ -17254,3 +17254,66 @@ Deferred (later passes / integrations):
 ## Review notes
 
 (filled in at the end)
+
+---
+
+## Review notes — 4.10 Returns Management delivered (2026-07-31)
+
+**Shipped:** `ReturnReason`, `ReturnPolicy`, `ReturnAuthorization`+`ReturnLine` [RMA-], `ReturnDisposition`,
+`WarrantyClaim`+`WarrantyClaimCost` [WTY-], four computed pages and three portal surfaces. 22 templates,
+migrations `0016`–`0018`, `LIVE_LINKS["4.10"]`, seeder, README, SKILL.md. SCM suite **2,761 → 3,226**.
+
+**Verified:** `check` clean; `makemigrations --check` → no changes; seed idempotent across a full flush cycle;
+27 routes render with no leak markers; the whole workflow driven end to end (restock posts exactly ONE positive
+`receipt` at `restock_unit_cost` with the RMA number as reference, intake posts nothing, the latch holds on a
+second POST); `JournalEntry` count unchanged across the credit-note hand-off; 36 IDOR assertions → 404.
+
+### How it was built
+
+Two workflows, 18 agents. **Design** (13): three market-research lenses + three codebase explorers → three
+*independently-leaned* scope proposals (document-first / disposition-first / customer-first) → two judges → a
+completeness critic → synthesis. **Build** (5): backend solo (single DB writer) → three template agents over
+disjoint file sets → verification. Then an 11-agent **review**: five parallel lenses against a frozen tree,
+each adversarially verified, 35 findings → 8 refuted → 27 fixed.
+
+The judged panel earned its cost: the winning proposal's central mechanic (restock as a positive `receipt` at a
+written-down cost) only survived because a *losing* proposal's transfer-pair design was checked against
+`_post_transfer`, which passes `item.average_cost` precisely so a transfer is value-neutral — a transfer could
+never have carried the grade write-down that is the whole point of grading a return.
+
+### What the review caught
+
+| Severity | Finding | Why it mattered |
+|---|---|---|
+| 500 | `can_restock_after_refurbish` omitted the `restock_location` test its sibling `posts_stock` carries **and documents** | Drew the Post button on a refurbished row with nowhere to go, handing `location=None` to `_post_stock_move` — an `IntegrityError` inside the atomic block that the caller's `except ValidationError` does not catch. A 500 on the sub-module's ONLY ledger-writing action, on its ordinary path. Three lenses found it independently. |
+| Money | No authorised-quantity cap on the single-row edit path | The cap lived only in the formset, so one edit could raise a bench row above what was authorised — and because the credit note is deliberately computed FROM those rows, it flowed into a real `accounting.Invoice` for more than was returned. |
+| Cross-module 500 | `currency_delete` had no `ProtectedError` guard | 4.10 made `ReturnAuthorization.currency` the **only** `PROTECT` onto `accounting.Currency` in the repo (all twenty siblings are `SET_NULL`), silently turning an ordinary currency deletion in **another app** into a 500. The build plan's own §7.4 listed five delete views and missed this one. |
+| Perf | Two `ReturnLine` properties aggregated per row, bypassing the `Prefetch` callers already paid for | 97 queries on a 12-line RMA; refund queue 13 → 55 on a 15-row page. Now measured **scale-invariant: 11 → 11 with 8 extra lines**. |
+| Integrity | `stock_posted` doing double duty | After a restock-then-write-off it read `False` again, re-opening edit and delete on the only audit row linking two real movements to the RMA. Re-keyed to `stock_move_id`, which either posting sets and nothing clears. |
+| Wrong answer | The bench "unposted" filter encoded two of the three shapes the row renders | A refurbished unit ready to go back was invisible to the page whose whole job is "what still needs posting?" while the row itself said "ready" — the same filter-vs-verdict class that shipped four times across 4.8/4.9. |
+| Security | Both anonymous public writes guarded state only in the template | A direct POST to an UNAUTHENTICATED endpoint could stamp `customer_shipped_on` on an unapproved or settled return (permanently suppressing the overdue chase) and overwrite a staff-entered tracking number. Guard moved into the UPDATE's own filter. |
+| Security | Privileged bench fields writable by any member | `disposition`, `restock_location` and `restock_unit_cost` are the columns the tenant-admin-gated `decide` action writes; without the `ReorderRuleForm` treatment that gate was decoration. |
+| DoS | Three day fields uncapped | All feed `timedelta(days=...)`; MySQL accepts up to 4294967295, raising an uncaught `OverflowError`. One saved policy value would permanently 500 the RMA list, every detail page and the approve action **for the whole tenant**. |
+
+Also fixed from the build's own verification: a missing template that was a hard 500 on the customer request
+page; three list querysets dropping `Meta.ordering` behind an `annotate()` (the 4.8 finding, regressed); the
+plan's currency fallback, which was **not implementable as written** — `accounting.Currency` is a global master
+with no tenant FK and no `is_base`, so it now resolves from order history and a null stays a loud refusal.
+
+### Test-suite note
+
+All 8 initial test failures were **test** bugs, not app bugs, and two are worth remembering:
+
+- Several asserted an absolute `"draft"` baseline after a forbidden POST. Requesting `disposition_a` drags in
+  `return_line_a`, which advances the RMA *before the body runs* — so the pin asserted the **fixture graph**,
+  not the gate. `before == after` is the correct shape for a "did this mutate anything?" test.
+- One asserted a credit-only RMA auto-approves. It does not, by design: a blind return with no sales order
+  raises *"no order date is available — approve this on judgement, not on the policy"*, which is soft, so
+  approval requires the documented override. The test now asserts **both** halves.
+
+**Deferred, named:** carrier-API labels and QR/barcode (no library, no carrier integration in the repo),
+anonymous order lookup (`core.Address` has no postal code), store-credit wallet (an unapplied credit note IS the
+store credit), cash refunds (`Payment(direction="out")` posts to the AP liability account), a vendor-credit
+document (`accounting.Bill` has no `kind`), multi-round claim negotiation, and `customer_return` on
+`NonConformance.SOURCE_CHOICES` (priced: `source` is `max_length=14`, the value is 15 chars).
+
