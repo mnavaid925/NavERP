@@ -1387,3 +1387,366 @@ def quality_audit_b(db, tenant_b):
     return QualityAudit.objects.create(
         tenant=tenant_b, audit_type="internal", title="Globex audit",
         planned_date=timezone.localdate())
+
+
+# ------------------------------------------------------------------ SCM 4.10 Returns Management
+# Every reference date below is derived from ``timezone.localdate()`` — the SAME basis
+# ``evaluate_return_eligibility``, ``ReturnAuthorization.is_overdue_shipment``,
+# ``ReturnDisposition.save()`` and ``WarrantyClaim.is_in_warranty`` read (lesson L16). A literal
+# ``datetime.date.today()`` here would flake for the hours around local midnight on USE_TZ=True.
+#
+# The money is deliberately EXACT so the credit-note arithmetic can be asserted to the penny:
+#
+#   returns_sales_order_a   10 x item_a @ 15.00, tax 20 %              (ordered TODAY)
+#   return_authorization_a   3 x item_a @ 15.00, tax 20 %, cost 8.0000
+#                            -> subtotal 45.00, tax 9.00, fee 0.00, credit 54.00
+#   return_policy_a          grade ladder 100 / 75 / 40 / 0 %, no restocking fee
+#
+# ``unit_price`` (15.00) and ``unit_cost`` (8.0000) are deliberately DIFFERENT so a restock posted
+# at the sale price is detectable — that is the one cost trap the whole bench is built around.
+@pytest.fixture
+def return_reason_a(db, tenant_a):
+    """An ordinary customer-fault reason that permits a restock."""
+    from apps.scm.models import ReturnReason
+    return ReturnReason.objects.create(
+        tenant=tenant_a, code="WRONG-SIZE", name="Wrong size ordered", fault_party="customer",
+        allows_refund=True, allows_store_credit=True, allows_exchange=True,
+        suggested_disposition="restock", sort_order=10,
+    )
+
+
+@pytest.fixture
+def return_reason_blocking_a(db, tenant_a):
+    """A reason whose unit can NEVER go back into sellable stock — the blocks_restock gate."""
+    from apps.scm.models import ReturnReason
+    return ReturnReason.objects.create(
+        tenant=tenant_a, code="CONTAM", name="Contaminated", fault_party="supplier",
+        allows_refund=True, allows_store_credit=False, allows_exchange=False,
+        waives_return_fee=True, blocks_restock=True, raises_nonconformance=True,
+        suggested_disposition="scrap", sort_order=20,
+    )
+
+
+@pytest.fixture
+def return_reason_photo_a(db, tenant_a):
+    """A reason that REQUIRES a photo on the line before approval."""
+    from apps.scm.models import ReturnReason
+    return ReturnReason.objects.create(
+        tenant=tenant_a, code="DAMAGED", name="Arrived damaged", fault_party="carrier",
+        allows_refund=True, requires_photo=True, sort_order=30,
+    )
+
+
+@pytest.fixture
+def return_reason_b(db, tenant_b):
+    from apps.scm.models import ReturnReason
+    return ReturnReason.objects.create(
+        tenant=tenant_b, code="WRONG-SIZE", name="Globex wrong size", allows_refund=True,
+    )
+
+
+@pytest.fixture
+def return_policy_a(db, tenant_a):
+    """The tenant_a catch-all promise: 30-day window, full refund, no fee, real grade ladder."""
+    from apps.scm.models import ReturnPolicy
+    return ReturnPolicy.objects.create(
+        tenant=tenant_a, name="Standard 30-day", is_active=True, is_default=True, priority=100,
+        window_basis="delivery", window_days=30, fallback_days=45,
+        allow_refund=True, allow_store_credit=True, allow_exchange=True, allow_keep_item=False,
+        refund_basis="full", restocking_fee_type="none", return_shipping_paid_by="customer",
+        grade_a_cost_pct=Decimal("100"), grade_b_cost_pct=Decimal("75"),
+        grade_c_cost_pct=Decimal("40"), grade_d_cost_pct=Decimal("0"),
+        warranty_window_days=365, return_to_address="Acme Returns, Unit 4, Springfield",
+        portal_instructions="Pack it in the original box.",
+    )
+
+
+@pytest.fixture
+def return_policy_fee_a(db, tenant_a, category_a):
+    """A category-specific policy charging a FLAT 10.00 restocking fee — beats the default."""
+    from apps.scm.models import ReturnPolicy
+    return ReturnPolicy.objects.create(
+        tenant=tenant_a, name="Widgets 14-day", is_active=True, priority=10,
+        item_category=category_a, window_basis="order_date", window_days=14, fallback_days=14,
+        refund_basis="full", restocking_fee_type="flat", restocking_fee_value=Decimal("10.00"),
+        auto_approve=True,
+    )
+
+
+@pytest.fixture
+def return_policy_b(db, tenant_b):
+    from apps.scm.models import ReturnPolicy
+    return ReturnPolicy.objects.create(tenant=tenant_b, name="Globex 30-day", is_default=True)
+
+
+@pytest.fixture
+def returns_sales_order_a(db, tenant_a, customer_a, item_a, usd):
+    """A SUBMITTED order dated TODAY — so a return raised against it sits inside every window.
+
+    ``sales_order_a`` is anchored on a fixed 2026-01-05 for the 4.5 tests; a return dated from it
+    would fall outside a 30/45-day policy window and every approval assertion would then be
+    measuring the override path instead of the happy one.
+    """
+    from django.utils import timezone
+    from apps.scm.models import SalesOrder, SalesOrderLine
+    order = SalesOrder.objects.create(
+        tenant=tenant_a, customer=customer_a, order_date=timezone.localdate(), currency=usd,
+        status="submitted",
+    )
+    SalesOrderLine.objects.create(
+        sales_order=order, item=item_a, description="Widget", quantity_ordered=Decimal("10"),
+        unit_price=Decimal("15.00"), tax_pct=Decimal("20.00"),
+    )
+    order.recalc_totals()
+    return order
+
+
+def _build_draft_rma(tenant, customer, sales_order, policy, reason, item, currency):
+    """Create a DRAFT physical RMA: 3 x item @ 15.00 (20 % tax, 8.0000 cost), no fee.
+
+    A plain function rather than a fixture so ``return_authorization_a`` and
+    ``rma_awaiting_receipt_a`` can each own a SEPARATE row. Chaining them — the latter taking the
+    former and mutating it in place — made pytest's per-test fixture cache hand BOTH names the same
+    ReturnAuthorization, so a test asking for a draft return AND an authorised one silently got one
+    row in the later state. That is not a state any real workspace can be in, and it quietly
+    disarmed every "this forbidden POST left the draft alone" assertion in test_security.py.
+    """
+    from django.utils import timezone
+    from apps.scm.models import ReturnAuthorization, ReturnLine
+    rma = ReturnAuthorization.objects.create(
+        tenant=tenant, customer=customer, sales_order=sales_order,
+        return_type="physical", source="csr", policy=policy,
+        requested_on=timezone.localdate(), resolution="refund",
+        refund_method="original_tender", return_method="mail_prepaid", currency=currency,
+    )
+    ReturnLine.objects.create(
+        return_authorization=rma, sales_order_line=sales_order.lines.first(),
+        item=item, description="Widget", quantity_requested=Decimal("3"),
+        reason=reason, unit_price=Decimal("15.00"), tax_pct=Decimal("20.00"),
+        unit_cost=Decimal("8.0000"),
+    )
+    return rma
+
+
+@pytest.fixture
+def return_authorization_a(db, tenant_a, customer_a, returns_sales_order_a, return_policy_a,
+                           return_reason_a, item_a, usd):
+    """A DRAFT physical RMA: 3 x item_a @ 15.00 (20 % tax, 8.0000 cost), no fee."""
+    return _build_draft_rma(tenant_a, customer_a, returns_sales_order_a, return_policy_a,
+                            return_reason_a, item_a, usd)
+
+
+@pytest.fixture
+def rma_awaiting_receipt_a(db, tenant_a, customer_a, returns_sales_order_a, return_policy_a,
+                           return_reason_a, item_a, usd):
+    """A SECOND, INDEPENDENT authorised RMA: every line approved in full, awaiting_receipt.
+
+    Deliberately NOT built on ``return_authorization_a``: a test that asks for both wants a draft
+    return AND an authorised one, and mutating the draft in place handed it the same row twice.
+
+    Written straight onto the row rather than through ``returnauthorization_approve`` so the bench
+    tests start from a known state; the approve action itself is driven through its real POST route
+    in its own test class.
+    """
+    from django.utils import timezone
+    rma = _build_draft_rma(tenant_a, customer_a, returns_sales_order_a, return_policy_a,
+                           return_reason_a, item_a, usd)
+    for line in rma.lines.all():
+        line.quantity_approved = line.quantity_requested
+        line.save(update_fields=["quantity_approved"])
+    rma.status = "awaiting_receipt"
+    rma.approved_on = timezone.localdate()
+    rma.save(update_fields=["status", "approved_on", "updated_at"])
+    return rma
+
+
+@pytest.fixture
+def return_line_a(db, rma_awaiting_receipt_a):
+    """The single approved line of rma_awaiting_receipt_a (3 approved of 3 requested)."""
+    return rma_awaiting_receipt_a.lines.first()
+
+
+@pytest.fixture
+def disposition_a(db, tenant_a, return_line_a, location_a):
+    """A ``received_pending`` bench row: 3 units on the WH1 bench at grade A, cost 8.0000.
+
+    Nothing is posted — the bench is deliberately off-ledger (see the ReturnDisposition module
+    docstring), which is exactly what the intake tests assert.
+    """
+    from django.utils import timezone
+    from apps.scm.models import ReturnDisposition
+    return ReturnDisposition.objects.create(
+        tenant=tenant_a, return_line=return_line_a, quantity=Decimal("3"),
+        received_on=timezone.localdate(), location=location_a, condition_grade="a",
+        disposition="received_pending", restock_unit_cost=Decimal("8.0000"),
+    )
+
+
+@pytest.fixture
+def rma_received_a(db, disposition_a, rma_awaiting_receipt_a):
+    """rma_awaiting_receipt_a with its goods physically on the bench (status ``received``)."""
+    rma_awaiting_receipt_a.status = "received"
+    rma_awaiting_receipt_a.save(update_fields=["status", "updated_at"])
+    return rma_awaiting_receipt_a
+
+
+@pytest.fixture
+def rma_credit_only_a(db, tenant_a, customer_a, return_policy_a, return_reason_a, item_a, usd):
+    """A SETTLED credit-only RMA — 2 x 25.00, no tax, and NO bench row, ever.
+
+    §7.11's trap made a fixture: this record never produces a ``ReturnDisposition``, so any queue
+    keyed on "has received goods" drops it silently.
+    """
+    from django.utils import timezone
+    from apps.scm.models import ReturnAuthorization, ReturnLine
+    rma = ReturnAuthorization.objects.create(
+        tenant=tenant_a, customer=customer_a, return_type="credit_only", source="csr",
+        policy=return_policy_a, requested_on=timezone.localdate(), resolution="refund",
+        refund_method="original_tender", return_method="keep_item", currency=usd,
+    )
+    ReturnLine.objects.create(
+        return_authorization=rma, item=item_a, description="Widget kept by the customer",
+        quantity_requested=Decimal("2"), quantity_approved=Decimal("2"), reason=return_reason_a,
+        unit_price=Decimal("25.00"), unit_cost=Decimal("8.0000"),
+    )
+    rma.status = "settled"
+    rma.approved_on = timezone.localdate()
+    rma.save(update_fields=["status", "approved_on", "updated_at"])
+    return rma
+
+
+@pytest.fixture
+def rma_advance_refund_a(db, tenant_a, customer_a, return_policy_a, return_reason_a, item_a, usd):
+    """An advance-refunded RMA whose deadline has PASSED and whose goods never shipped."""
+    from django.utils import timezone
+    from apps.scm.models import ReturnAuthorization, ReturnLine
+    rma = ReturnAuthorization.objects.create(
+        tenant=tenant_a, customer=customer_a, return_type="physical", source="portal",
+        policy=return_policy_a, requested_on=timezone.localdate() - datetime.timedelta(days=40),
+        resolution="refund", return_method="mail_prepaid", currency=usd,
+        advance_refund=True,
+        advance_refund_deadline=timezone.localdate() - datetime.timedelta(days=5),
+    )
+    ReturnLine.objects.create(
+        return_authorization=rma, item=item_a, quantity_requested=Decimal("1"),
+        quantity_approved=Decimal("1"), reason=return_reason_a, unit_price=Decimal("30.00"),
+        unit_cost=Decimal("8.0000"),
+    )
+    rma.status = "awaiting_receipt"
+    rma.approved_on = timezone.localdate() - datetime.timedelta(days=39)
+    rma.save(update_fields=["status", "approved_on", "updated_at"])
+    return rma
+
+
+@pytest.fixture
+def return_authorization_b(db, tenant_b, customer_b, return_policy_b, return_reason_b, item_b):
+    """The tenant_b RMA every cross-tenant IDOR assertion points at."""
+    from django.utils import timezone
+    from apps.scm.models import ReturnAuthorization, ReturnLine
+    rma = ReturnAuthorization.objects.create(
+        tenant=tenant_b, customer=customer_b, return_type="physical", policy=return_policy_b,
+        requested_on=timezone.localdate(), resolution="refund",
+    )
+    ReturnLine.objects.create(
+        return_authorization=rma, item=item_b, quantity_requested=Decimal("2"),
+        quantity_approved=Decimal("2"), reason=return_reason_b, unit_price=Decimal("20.00"),
+    )
+    rma.status = "awaiting_receipt"
+    rma.approved_on = timezone.localdate()
+    rma.save(update_fields=["status", "approved_on", "updated_at"])
+    return rma
+
+
+@pytest.fixture
+def return_line_b(db, return_authorization_b):
+    return return_authorization_b.lines.first()
+
+
+@pytest.fixture
+def disposition_b(db, tenant_b, return_line_b, location_b):
+    from django.utils import timezone
+    from apps.scm.models import ReturnDisposition
+    return ReturnDisposition.objects.create(
+        tenant=tenant_b, return_line=return_line_b, quantity=Decimal("2"),
+        received_on=timezone.localdate(), location=location_b, condition_grade="a",
+        disposition="received_pending",
+    )
+
+
+@pytest.fixture
+def warranty_claim_a(db, tenant_a, supplier_a, item_a, return_policy_a):
+    """A DRAFT claim on supplier_a: 1 unit, one 100.00 part cost line, inside its warranty."""
+    from django.utils import timezone
+    from apps.scm.models import WarrantyClaim, WarrantyClaimCost
+    claim = WarrantyClaim.objects.create(
+        tenant=tenant_a, supplier=supplier_a, item=item_a, quantity_claimed=Decimal("1"),
+        purchase_date=timezone.localdate() - datetime.timedelta(days=10),
+        failure_date=timezone.localdate(), defect_classification="manufacturing",
+        submission_channel="email", description="Gear sheared under normal load.",
+        response_due_on=timezone.localdate() + datetime.timedelta(days=30),
+    )
+    WarrantyClaimCost.objects.create(
+        claim=claim, cost_type="part", description="Replacement gear", quantity=Decimal("1"),
+        unit_amount=Decimal("100.00"),
+    )
+    return claim
+
+
+@pytest.fixture
+def warranty_claim_submitted_a(db, warranty_claim_a):
+    """warranty_claim_a sent to the supplier — the record-response fixture."""
+    from django.utils import timezone
+    warranty_claim_a.status = "submitted"
+    warranty_claim_a.submitted_on = timezone.localdate()
+    warranty_claim_a.save(update_fields=["status", "submitted_on", "updated_at"])
+    return warranty_claim_a
+
+
+@pytest.fixture
+def warranty_claim_approved_a(db, warranty_claim_submitted_a):
+    """The supplier accepted 80.00 of the 100.00 claimed — the record-credit fixture."""
+    from django.utils import timezone
+    claim = warranty_claim_submitted_a
+    claim.status = "partially_approved"
+    claim.amount_approved = Decimal("80.00")
+    claim.responded_on = timezone.localdate()
+    claim.save(update_fields=["status", "amount_approved", "responded_on", "updated_at"])
+    return claim
+
+
+@pytest.fixture
+def warranty_claim_b(db, tenant_b, supplier_b, item_b):
+    from apps.scm.models import WarrantyClaim, WarrantyClaimCost
+    claim = WarrantyClaim.objects.create(
+        tenant=tenant_b, supplier=supplier_b, item=item_b, quantity_claimed=Decimal("1"),
+    )
+    WarrantyClaimCost.objects.create(claim=claim, cost_type="part", description="Globex part",
+                                     quantity=Decimal("1"), unit_amount=Decimal("50.00"))
+    return claim
+
+
+# --- the CRM portal binding the customer-facing request form is built on ------------------------
+@pytest.fixture
+def portal_user_a(db, tenant_a):
+    from apps.accounts.models import User
+    return User.objects.create_user(
+        email="shopper@acme.com", username="shopper_acme", password="TestPass123!",
+        tenant=tenant_a, is_tenant_admin=False,
+    )
+
+
+@pytest.fixture
+def portal_access_a(db, tenant_a, customer_a, portal_user_a):
+    """An ACTIVE ``crm.CustomerPortalAccess`` binding portal_user_a to customer_a."""
+    from apps.crm.models import CustomerPortalAccess
+    return CustomerPortalAccess.objects.create(
+        tenant=tenant_a, customer_party=customer_a, portal_user=portal_user_a, is_active=True,
+    )
+
+
+@pytest.fixture
+def portal_client_a(db, portal_access_a, portal_user_a):
+    from django.test import Client
+    c = Client()
+    c.force_login(portal_user_a)
+    return c
