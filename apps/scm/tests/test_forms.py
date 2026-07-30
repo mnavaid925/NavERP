@@ -4265,6 +4265,32 @@ class TestPortalReturnRequestForm:
         assert returns_sales_order_a in offered
         assert sales_order_b not in offered
 
+    def test_the_LINE_picker_offers_only_lines_off_this_customers_own_orders(
+        self, tenant_a, customer_a, returns_sales_order_a, sales_order_b,
+    ):
+        """The line picker is the one that leaks quantities and prices, and ``SalesOrderLine`` has
+        no tenant column of its own — it is narrowed by hand through the order. The sibling tests
+        cover ``item`` and ``sales_order``; without this one the line queryset could fall back to
+        every tenant's order lines and the suite would not notice."""
+        from apps.scm.forms import PortalReturnRequestForm
+        offered = list(PortalReturnRequestForm(tenant=tenant_a,
+                                                customer=customer_a).fields["sales_order_line"]
+                       .queryset)
+        assert returns_sales_order_a.lines.first() in offered
+        foreign = sales_order_b.lines.first()
+        if foreign is not None:                     # another TENANT's line, never offerable
+            assert foreign not in offered
+
+    def test_the_LINE_picker_is_empty_when_the_customer_is_unknown(self, tenant_a):
+        """No customer means no entitlement, so the fallback must be EMPTY rather than unscoped —
+        the ``_scope_to_parent`` rule. An unscoped default here hands an anonymous caller every
+        order line in the database."""
+        from apps.scm.forms import PortalReturnRequestForm
+        form = PortalReturnRequestForm(tenant=tenant_a, customer=None)
+        assert list(form.fields["sales_order_line"].queryset) == []
+        assert list(form.fields["sales_order"].queryset) == []
+        assert list(form.fields["item"].queryset) == []
+
     def test_a_cancelled_order_is_not_offered(self, tenant_a, customer_a, returns_sales_order_a,
                                               return_reason_a):
         from apps.scm.forms import PortalReturnRequestForm
