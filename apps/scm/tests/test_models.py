@@ -6674,3 +6674,1330 @@ class TestQualityEditableStatuses:
                                  ("cancelled", False)):
             capa_action_a.status = status
             assert capa_action_a.is_editable is editable, status
+
+
+# ================================================================================================
+# SCM 4.10 Returns Management (Reverse Logistics)
+#
+# Every test below that is marked REGRESSION LOCK fails against the pre-review behaviour. They are
+# not decoration: each one is a defect the review pass found in code that had already shipped.
+# ================================================================================================
+class TestReturnsAutoNumbering:
+    def test_rma_numbers_are_sequential_per_tenant(self, tenant_a, tenant_b, customer_a,
+                                                   customer_b):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        one = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 requested_on=timezone.localdate())
+        two = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 requested_on=timezone.localdate())
+        theirs = ReturnAuthorization.objects.create(tenant=tenant_b, customer=customer_b,
+                                                    requested_on=timezone.localdate())
+        assert (one.number, two.number) == ("RMA-00001", "RMA-00002")
+        assert theirs.number == "RMA-00001"       # a separate per-tenant sequence
+
+    def test_rma_number_is_unique_together_with_the_tenant(self, tenant_a, customer_a,
+                                                           return_authorization_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        with pytest.raises(IntegrityError):
+            ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                               requested_on=timezone.localdate(),
+                                               number=return_authorization_a.number)
+
+    def test_warranty_claim_numbers_are_prefixed_wty(self, tenant_a, tenant_b, supplier_a,
+                                                     supplier_b, item_a, item_b):
+        from apps.scm.models import WarrantyClaim
+        one = WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                           quantity_claimed=Decimal("1"))
+        two = WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                           quantity_claimed=Decimal("1"))
+        theirs = WarrantyClaim.objects.create(tenant=tenant_b, supplier=supplier_b, item=item_b,
+                                              quantity_claimed=Decimal("1"))
+        assert (one.number, two.number, theirs.number) == ("WTY-00001", "WTY-00002", "WTY-00001")
+
+    def test_warranty_claim_number_is_unique_together_with_the_tenant(self, tenant_a, supplier_a,
+                                                                     item_a, warranty_claim_a):
+        from apps.scm.models import WarrantyClaim
+        with pytest.raises(IntegrityError):
+            WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                         quantity_claimed=Decimal("1"),
+                                         number=warranty_claim_a.number)
+
+    def test_the_bench_row_and_the_two_masters_carry_NO_number(self):
+        """``ReturnDisposition``/``ReturnPolicy``/``ReturnReason`` are rows and configuration, not
+        documents — the ``SalesOrderAllocation`` precedent."""
+        from apps.scm.models import ReturnDisposition, ReturnPolicy, ReturnReason
+        for model in (ReturnDisposition, ReturnPolicy, ReturnReason):
+            assert not hasattr(model, "NUMBER_PREFIX") or model.NUMBER_PREFIX == ""
+            assert "number" not in {f.name for f in model._meta.get_fields()}, model.__name__
+
+    def test_the_reason_code_is_unique_per_tenant_and_reusable_across_tenants(self, tenant_a,
+                                                                             tenant_b,
+                                                                             return_reason_a,
+                                                                             return_reason_b):
+        from apps.scm.models import ReturnReason
+        assert return_reason_a.code == return_reason_b.code    # same code, two tenants: fine
+        with pytest.raises(IntegrityError):
+            ReturnReason.objects.create(tenant=tenant_a, code=return_reason_a.code, name="Dup")
+
+
+class TestReturnAuthorizationBasics:
+    def test_defaults(self, tenant_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 requested_on=timezone.localdate())
+        assert rma.status == "draft"
+        assert rma.return_type == "physical"
+        assert rma.source == "csr"
+        assert rma.resolution == "refund"
+        assert rma.refund_method == "original_tender"
+        assert rma.return_method == "mail_prepaid"
+        assert rma.advance_refund is False
+        assert rma.policy_snapshot == ""
+        assert rma.credit_note_id is None
+        assert rma.replacement_order_id is None
+        for figure in (rma.refund_subtotal, rma.fee_total, rma.tax_total, rma.credit_total,
+                       rma.label_cost):
+            assert figure == Decimal("0")
+
+    def test_str_is_the_number_and_the_customer(self, return_authorization_a, customer_a):
+        assert str(return_authorization_a) == f"{return_authorization_a.number} · {customer_a.name}"
+
+    def test_the_public_token_is_minted_once_from_the_CSPRNG(self, return_authorization_a):
+        token = return_authorization_a.public_token
+        assert token and len(token) >= 32
+        return_authorization_a.notes = "touched"
+        return_authorization_a.save()
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.public_token == token   # never rotated on a later save
+
+    def test_two_returns_never_share_a_token(self, tenant_a, tenant_b, customer_a, customer_b):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        tokens = {
+            ReturnAuthorization.objects.create(tenant=tenant, customer=customer,
+                                               requested_on=timezone.localdate()).public_token
+            for tenant, customer in ((tenant_a, customer_a), (tenant_a, customer_a),
+                                     (tenant_b, customer_b))
+        }
+        assert len(tokens) == 3
+
+    def test_the_status_choice_ladder_is_exactly_the_documented_one(self):
+        from apps.scm.models import ReturnAuthorization
+        assert [c[0] for c in ReturnAuthorization.STATUS_CHOICES] == [
+            "draft", "requested", "approved", "rejected", "awaiting_receipt",
+            "partially_received", "received", "settled", "closed", "cancelled"]
+
+    def test_the_status_bands_partition_the_ladder_the_way_the_views_assume(self):
+        from apps.scm.models import ReturnAuthorization as R
+        ladder = {c[0] for c in R.STATUS_CHOICES}
+        assert set(R.EDITABLE_STATUSES) <= ladder
+        assert set(R.OPEN_STATUSES) <= ladder
+        assert set(R.TERMINAL_STATUSES) <= ladder
+        assert set(R.PUBLIC_STATUSES) <= ladder
+        assert set(R.LABEL_STATUSES) <= ladder
+        assert set(R.SHIPPABLE_STATUSES) <= ladder
+        assert set(R.NOTEABLE_STATUSES) <= ladder
+        assert not set(R.OPEN_STATUSES) & set(R.TERMINAL_STATUSES)
+        # The public page must never resolve a draft or a cancelled return.
+        assert "draft" not in R.PUBLIC_STATUSES and "cancelled" not in R.PUBLIC_STATUSES
+        # The anonymous "I've shipped it" write is NARROWER than what the page will render.
+        assert set(R.SHIPPABLE_STATUSES) < set(R.PUBLIC_STATUSES)
+        assert "requested" not in R.SHIPPABLE_STATUSES
+        assert "settled" not in R.SHIPPABLE_STATUSES
+        # A slip may only be printed for an authorised return.
+        assert set(R.LABEL_STATUSES) <= set(R.PUBLIC_STATUSES)
+        assert "requested" not in R.LABEL_STATUSES
+
+    def test_is_editable_only_while_draft_or_requested(self, return_authorization_a):
+        from apps.scm.models import ReturnAuthorization
+        for status, _label in ReturnAuthorization.STATUS_CHOICES:
+            return_authorization_a.status = status
+            assert return_authorization_a.is_editable is (status in ("draft", "requested")), status
+
+    def test_is_terminal_matches_the_declared_band(self, return_authorization_a):
+        from apps.scm.models import ReturnAuthorization
+        for status, _label in ReturnAuthorization.STATUS_CHOICES:
+            return_authorization_a.status = status
+            assert return_authorization_a.is_terminal is (
+                status in ReturnAuthorization.TERMINAL_STATUSES), status
+
+
+class TestReturnAuthorizationClean:
+    def test_a_sales_order_belonging_to_another_customer_is_refused(self, tenant_a, customer_a,
+                                                                    sales_order_b, item_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization(tenant=tenant_a, customer=customer_a, sales_order=sales_order_b,
+                                  requested_on=timezone.localdate())
+        with pytest.raises(ValidationError) as exc:
+            rma.clean()
+        assert "sales_order" in exc.value.error_dict
+
+    def test_an_advance_refund_without_a_deadline_is_refused(self, tenant_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization(tenant=tenant_a, customer=customer_a, advance_refund=True,
+                                  requested_on=timezone.localdate())
+        with pytest.raises(ValidationError) as exc:
+            rma.clean()
+        assert "advance_refund_deadline" in exc.value.error_dict
+
+    def test_a_credit_only_return_must_ask_for_nothing_back(self, tenant_a, customer_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization(tenant=tenant_a, customer=customer_a,
+                                  return_type="credit_only", return_method="mail_prepaid",
+                                  requested_on=timezone.localdate())
+        with pytest.raises(ValidationError) as exc:
+            rma.clean()
+        assert "return_method" in exc.value.error_dict
+        rma.return_method = "keep_item"
+        rma.clean()      # now consistent
+
+
+class TestReturnAuthorizationDerivedQuantities:
+    def test_the_three_quantity_roll_ups_are_derived_from_the_rows(self, rma_awaiting_receipt_a,
+                                                                    disposition_a):
+        rma = rma_awaiting_receipt_a
+        assert rma.quantity_requested_total == Decimal("3.0000")
+        assert rma.quantity_approved_total == Decimal("3.0000")
+        assert rma.quantity_received_total == Decimal("3.0000")
+        assert rma.is_fully_received is True
+
+    def test_quantity_received_total_INCLUDES_rows_still_awaiting_a_decision(
+        self, rma_awaiting_receipt_a, disposition_a,
+    ):
+        """REGRESSION LOCK (item 9). A unit on the bench with no decision yet physically came back;
+        counting only decided rows would report an empty bench while it is full."""
+        assert disposition_a.disposition == "received_pending"
+        assert rma_awaiting_receipt_a.quantity_received_total == Decimal("3.0000")
+
+    def test_nothing_received_leaves_the_roll_ups_at_zero(self, rma_awaiting_receipt_a):
+        assert rma_awaiting_receipt_a.quantity_received_total == Decimal("0")
+        assert rma_awaiting_receipt_a.is_fully_received is False
+
+    def test_is_fully_received_needs_a_non_zero_approval(self, return_authorization_a):
+        assert return_authorization_a.quantity_approved_total == Decimal("0")
+        assert return_authorization_a.is_fully_received is False
+
+    def test_days_open_counts_from_the_request_and_never_goes_negative(self, tenant_a,
+                                                                       customer_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization(tenant=tenant_a, customer=customer_a,
+                                  requested_on=timezone.localdate() - datetime.timedelta(days=7))
+        assert rma.days_open == 7
+        rma.requested_on = timezone.localdate() + datetime.timedelta(days=3)
+        assert rma.days_open == 0
+
+    def test_is_overdue_shipment_uses_the_policys_own_window_as_the_grace_period(
+        self, rma_awaiting_receipt_a, return_policy_a,
+    ):
+        from django.utils import timezone
+        rma = rma_awaiting_receipt_a
+        rma.approved_on = timezone.localdate() - datetime.timedelta(days=10)
+        assert rma.is_overdue_shipment is False              # inside the 30-day window
+        rma.approved_on = timezone.localdate() - datetime.timedelta(days=31)
+        assert rma.is_overdue_shipment is True
+        return_policy_a.window_days = 90
+        assert rma.is_overdue_shipment is False              # a 90-day policy chases later
+
+    def test_is_overdue_shipment_is_false_once_the_customer_has_said_they_shipped(
+        self, rma_awaiting_receipt_a,
+    ):
+        from django.utils import timezone
+        rma = rma_awaiting_receipt_a
+        rma.approved_on = timezone.localdate() - datetime.timedelta(days=60)
+        rma.customer_shipped_on = timezone.localdate()
+        assert rma.is_overdue_shipment is False
+
+    def test_is_overdue_shipment_needs_an_approval_date_and_a_live_status(self,
+                                                                          rma_awaiting_receipt_a):
+        from django.utils import timezone
+        rma = rma_awaiting_receipt_a
+        rma.approved_on = None
+        assert rma.is_overdue_shipment is False
+        rma.approved_on = timezone.localdate() - datetime.timedelta(days=90)
+        rma.status = "settled"
+        assert rma.is_overdue_shipment is False
+
+    def test_is_overdue_shipment_falls_back_to_30_days_without_a_policy(self, tenant_a,
+                                                                        customer_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization(tenant=tenant_a, customer=customer_a, policy=None,
+                                  requested_on=timezone.localdate())
+        rma.status = "approved"
+        rma.approved_on = timezone.localdate() - datetime.timedelta(days=31)
+        assert rma.is_overdue_shipment is True
+
+
+class TestReturnAuthorizationSettlement:
+    def test_is_settleable_is_false_before_anything_is_authorised(self, return_authorization_a):
+        assert return_authorization_a.status == "draft"
+        assert return_authorization_a.is_settleable is False
+
+    def test_a_physical_return_is_settleable_only_once_a_credit_bearing_row_exists(
+        self, tenant_a, rma_received_a, disposition_a,
+    ):
+        assert disposition_a.disposition == "received_pending"
+        assert rma_received_a.is_settleable is False      # nothing decided yet
+        disposition_a.disposition = "scrap"
+        disposition_a.save(update_fields=["disposition"])
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.is_settleable is True
+
+    def test_repair_return_is_deliberately_NOT_credit_bearing(self, rma_received_a,
+                                                              disposition_a):
+        """The unit goes BACK to the customer repaired — they keep the goods, so they do not also
+        keep the money."""
+        from apps.scm.models import CREDIT_BEARING_DISPOSITIONS
+        assert "repair_return" not in CREDIT_BEARING_DISPOSITIONS
+        assert "received_pending" not in CREDIT_BEARING_DISPOSITIONS
+        disposition_a.disposition = "repair_return"
+        disposition_a.save(update_fields=["disposition"])
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.is_settleable is False
+
+    def test_a_credit_only_return_is_settleable_with_NO_bench_row_at_all(self, rma_credit_only_a):
+        """REGRESSION LOCK (item 8) — the credit-only trap, on the model."""
+        assert rma_credit_only_a.lines.first().dispositions.count() == 0
+        assert rma_credit_only_a.is_settleable is True
+
+    def test_settlement_figures_carry_the_tax_and_net_the_fee(self, tenant_a, rma_received_a,
+                                                              disposition_a):
+        disposition_a.disposition = "restock"
+        disposition_a.save(update_fields=["disposition"])
+        line = rma_received_a.lines.first()
+        line.line_fee = Decimal("5.00")
+        line.save(update_fields=["line_fee"])
+        rma_received_a.refresh_from_db()
+        subtotal, fee, tax, total = rma_received_a.settlement_figures
+        assert subtotal == Decimal("45.00")               # 3 x 15.00
+        assert fee == Decimal("5.00")
+        assert tax == Decimal("9.00")                    # 20 % of 45.00
+        assert total == Decimal("49.00")                 # 45 + 9 - 5
+
+    def test_settlement_figures_are_zero_while_nothing_is_credit_bearing(self, rma_received_a,
+                                                                        disposition_a):
+        assert rma_received_a.settlement_figures == (Decimal("0.00"), Decimal("0.00"),
+                                                     Decimal("0.00"), Decimal("0.00"))
+
+    def test_the_four_settlement_columns_are_NOT_written_by_reading_the_property(
+        self, rma_received_a, disposition_a,
+    ):
+        """The stored figures have exactly ONE writer — the draft-credit-note action. Reading the
+        proposal must leave the record saying no credit was issued."""
+        disposition_a.disposition = "restock"
+        disposition_a.save(update_fields=["disposition"])
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.settlement_figures[3] == Decimal("54.00")
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.credit_total == Decimal("0")
+        assert rma_received_a.refund_subtotal == Decimal("0")
+
+    def test_snapshot_decodes_json_and_never_raises_on_rubbish(self, return_authorization_a):
+        import json
+        rma = return_authorization_a
+        assert rma.snapshot == {}
+        rma.policy_snapshot = json.dumps({"within_window": True})
+        assert rma.snapshot == {"within_window": True}
+        rma.policy_snapshot = "not json at all"
+        assert rma.snapshot == {}
+        rma.policy_snapshot = json.dumps([1, 2, 3])       # valid JSON, wrong shape
+        assert rma.snapshot == {}
+
+
+class TestReturnLineDerived:
+    def test_str_is_the_sku_and_the_requested_quantity(self, return_line_a, item_a):
+        assert str(return_line_a) == f"{item_a.sku} ×{return_line_a.quantity_requested}"
+
+    def test_quantity_received_sums_every_row_pending_included(self, tenant_a, return_line_a,
+                                                               location_a):
+        """REGRESSION LOCK (item 9), at the line grain."""
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        assert return_line_a.quantity_received == Decimal("0")
+        ReturnDisposition.objects.create(tenant=tenant_a, return_line=return_line_a,
+                                         quantity=Decimal("2"), received_on=timezone.localdate(),
+                                         location=location_a, disposition="received_pending")
+        assert return_line_a.quantity_received == Decimal("2.0000")
+
+    def test_quantity_outstanding_never_goes_negative(self, tenant_a, return_line_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        assert return_line_a.quantity_outstanding == Decimal("3.0000")
+        ReturnDisposition.objects.create(tenant=tenant_a, return_line=return_line_a,
+                                         quantity=Decimal("3"), received_on=timezone.localdate(),
+                                         location=location_a, disposition="received_pending")
+        return_line_a.refresh_from_db()
+        assert return_line_a.quantity_outstanding == Decimal("0")
+
+    def test_quantity_outstanding_falls_back_to_the_requested_quantity(self,
+                                                                       return_authorization_a):
+        line = return_authorization_a.lines.first()
+        assert line.quantity_approved == Decimal("0")
+        assert line.quantity_outstanding == Decimal("3.0000")
+
+    def test_credit_quantity_comes_from_the_DISPOSITION_rows_not_the_approval(self, rma_received_a,
+                                                                              disposition_a):
+        line = rma_received_a.lines.first()
+        assert line.quantity_approved == Decimal("3.0000")
+        assert line.credit_quantity == Decimal("0")       # nothing decided yet
+        disposition_a.disposition = "restock"
+        disposition_a.save(update_fields=["disposition"])
+        line.refresh_from_db()
+        assert line.credit_quantity == Decimal("3.0000")
+
+    def test_credit_quantity_on_a_credit_only_return_IS_the_approved_quantity(self,
+                                                                              rma_credit_only_a):
+        line = rma_credit_only_a.lines.first()
+        assert line.dispositions.count() == 0
+        assert line.credit_quantity == Decimal("2.0000")
+
+    def test_credit_quantity_mixes_a_partial_split(self, tenant_a, rma_received_a, disposition_a,
+                                                   location_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        disposition_a.quantity = Decimal("2")
+        disposition_a.disposition = "restock"
+        disposition_a.save(update_fields=["quantity", "disposition"])
+        ReturnDisposition.objects.create(tenant=tenant_a, return_line=disposition_a.return_line,
+                                         quantity=Decimal("1"), received_on=timezone.localdate(),
+                                         location=location_a, disposition="repair_return")
+        line = rma_received_a.lines.first()
+        line.refresh_from_db()
+        assert line.credit_quantity == Decimal("2.0000")   # the repair_return is not credited
+
+    def test_line_credit_and_line_tax(self, rma_received_a, disposition_a):
+        disposition_a.disposition = "restock"
+        disposition_a.save(update_fields=["disposition"])
+        line = rma_received_a.lines.first()
+        line.line_fee = Decimal("4.50")
+        line.save(update_fields=["line_fee"])
+        line.refresh_from_db()
+        assert line.line_credit == Decimal("40.50")        # 45.00 - 4.50
+        assert line.line_tax == Decimal("9.00")
+
+    def test_a_line_without_a_tax_snapshot_credits_no_tax(self, rma_credit_only_a):
+        line = rma_credit_only_a.lines.first()
+        assert line.tax_pct == Decimal("0.00")
+        assert line.line_tax == Decimal("0.00")
+        assert line.line_credit == Decimal("50.00")
+
+
+class TestReturnLineClean:
+    def test_approving_more_than_was_asked_for_is_refused(self, return_line_a):
+        return_line_a.quantity_approved = Decimal("4")
+        with pytest.raises(ValidationError) as exc:
+            return_line_a.full_clean()
+        assert "quantity_approved" in exc.value.error_dict
+
+    def test_a_lot_belonging_to_another_item_is_refused(self, return_line_a, lot_a):
+        return_line_a.lot_serial = lot_a          # lot_a belongs to item_lot_a, not item_a
+        with pytest.raises(ValidationError) as exc:
+            return_line_a.clean()
+        assert "lot_serial" in exc.value.error_dict
+
+    def test_an_order_line_for_a_different_item_is_refused(self, return_line_a, tenant_a,
+                                                           returns_sales_order_a, item_lot_a):
+        from apps.scm.models import SalesOrderLine
+        other = SalesOrderLine.objects.create(sales_order=returns_sales_order_a, item=item_lot_a,
+                                              quantity_ordered=Decimal("1"))
+        return_line_a.sales_order_line = other
+        with pytest.raises(ValidationError) as exc:
+            return_line_a.clean()
+        assert "sales_order_line" in exc.value.error_dict
+
+    def test_a_zero_requested_quantity_is_refused_by_the_validator(self, return_line_a):
+        return_line_a.quantity_requested = Decimal("0")
+        with pytest.raises(ValidationError) as exc:
+            return_line_a.full_clean()
+        assert "quantity_requested" in exc.value.error_dict
+
+
+class TestReturnDispositionBasics:
+    def test_defaults_and_str(self, disposition_a):
+        assert disposition_a.disposition == "received_pending"
+        assert disposition_a.condition_grade == "a"
+        assert disposition_a.stock_posted is False
+        assert disposition_a.stock_move_id is None
+        assert disposition_a.refurbished_on is None
+        assert disposition_a.decided_on is None
+        disposition_a.refresh_from_db()
+        assert str(disposition_a) == "Received — awaiting decision ×3.0000 (grade A)"
+
+    def test_received_on_is_stamped_in_save_when_left_blank(self, tenant_a, return_line_a,
+                                                            location_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        row = ReturnDisposition(tenant=tenant_a, return_line=return_line_a,
+                                quantity=Decimal("1"), location=location_a)
+        row.save()
+        assert row.received_on == timezone.localdate()
+
+    def test_the_disposition_ladder_is_the_shared_vocabulary(self):
+        from apps.scm.models import (DECIDED_DISPOSITION_CHOICES, DISPOSITION_CHOICES,
+                                     ReturnDisposition)
+        assert ReturnDisposition.DISPOSITION_CHOICES is DISPOSITION_CHOICES
+        assert ReturnDisposition.DECIDED_DISPOSITION_CHOICES is DECIDED_DISPOSITION_CHOICES
+        assert [c[0] for c in DISPOSITION_CHOICES][0] == "received_pending"
+        # received_pending is reached by RECEIVING, never by deciding.
+        assert "received_pending" not in {c[0] for c in DECIDED_DISPOSITION_CHOICES}
+        assert len(DECIDED_DISPOSITION_CHOICES) == len(DISPOSITION_CHOICES) - 1
+
+    def test_the_write_off_band_and_the_consuming_band_agree(self):
+        from apps.scm.models import ReturnDisposition
+        assert ReturnDisposition.WRITE_OFF_DISPOSITIONS == ("scrap", "donate", "recycle",
+                                                            "liquidate")
+        assert ReturnDisposition.CONSUMING_DISPOSITIONS == \
+            ReturnDisposition.WRITE_OFF_DISPOSITIONS
+
+    def test_is_decided_flips_off_received_pending(self, disposition_a):
+        assert disposition_a.is_decided is False
+        disposition_a.disposition = "scrap"
+        assert disposition_a.is_decided is True
+
+    def test_recovery_variance_is_a_management_figure(self, disposition_a):
+        disposition_a.recovery_value = Decimal("30.00")
+        disposition_a.restock_unit_cost = Decimal("8.0000")
+        assert disposition_a.recovery_variance == Decimal("6.00")     # 30 - 3 x 8
+
+
+class TestReturnDispositionPostsStock:
+    """The per-disposition ledger effect, as an EXECUTABLE table."""
+
+    def test_intake_posts_nothing(self, disposition_a):
+        assert disposition_a.posts_stock is False
+
+    def test_a_restock_with_a_destination_posts_and_only_once(self, disposition_a, location_a2):
+        disposition_a.disposition = "restock"
+        disposition_a.restock_location = location_a2
+        assert disposition_a.posts_stock is True
+        disposition_a.stock_posted = True
+        assert disposition_a.posts_stock is False
+
+    def test_a_restock_with_NO_destination_never_claims_it_can_post(self, disposition_a):
+        disposition_a.disposition = "restock"
+        assert disposition_a.restock_location_id is None
+        assert disposition_a.posts_stock is False
+
+    def test_the_four_non_posting_decisions_post_nothing(self, disposition_a, location_a2):
+        disposition_a.restock_location = location_a2
+        for decision in ("return_to_vendor", "repair_return", "quarantine", "credit_only"):
+            disposition_a.disposition = decision
+            assert disposition_a.posts_stock is False, decision
+
+    def test_a_write_off_straight_off_the_bench_posts_nothing(self, disposition_a, location_a2):
+        from apps.scm.models import ReturnDisposition
+        disposition_a.restock_location = location_a2
+        for decision in ReturnDisposition.WRITE_OFF_DISPOSITIONS:
+            disposition_a.disposition = decision
+            disposition_a.stock_posted = False
+            assert disposition_a.posts_stock is False, decision
+
+    def test_a_write_off_of_a_unit_that_WAS_restocked_reverses_it(self, disposition_a,
+                                                                  location_a2):
+        from apps.scm.models import ReturnDisposition
+        disposition_a.restock_location = location_a2
+        disposition_a.stock_posted = True
+        for decision in ReturnDisposition.WRITE_OFF_DISPOSITIONS:
+            disposition_a.disposition = decision
+            assert disposition_a.posts_stock is True, decision
+
+    def test_a_write_off_with_no_location_refuses_rather_than_handing_None_onward(self,
+                                                                                  disposition_a):
+        """``_insufficient_stock`` would get ``location=None`` and raise an uncaught
+        AttributeError — the caller only catches ValidationError."""
+        disposition_a.disposition = "scrap"
+        disposition_a.stock_posted = True
+        assert disposition_a.restock_location_id is None
+        assert disposition_a.posts_stock is False
+
+    def test_a_row_with_no_line_or_no_item_posts_nothing(self, tenant_a):
+        from apps.scm.models import ReturnDisposition
+        assert ReturnDisposition(tenant=tenant_a, disposition="restock").posts_stock is False
+
+
+class TestCanRestockAfterRefurbish:
+    """REGRESSION LOCK (item 1). Without the ``restock_location_id`` clause a refurbished row with
+    nowhere to go drew the Post button on two pages, and pressing it handed ``location=None`` to
+    ``_post_stock_move`` — an IntegrityError inside the atomic block that the caller's
+    ``except ValidationError`` does not catch. A hard 500 on 4.10's only ledger action."""
+
+    def test_a_refurbished_row_with_NO_restock_location_is_not_postable(self, disposition_a):
+        from django.utils import timezone
+        disposition_a.disposition = "refurbish"
+        disposition_a.refurbished_on = timezone.localdate()
+        assert disposition_a.restock_location_id is None
+        assert disposition_a.can_restock_after_refurbish is False
+        assert disposition_a.posts_stock is False
+
+    def test_a_refurbished_row_WITH_one_is_postable(self, disposition_a, location_a2):
+        from django.utils import timezone
+        disposition_a.disposition = "refurbish"
+        disposition_a.refurbished_on = timezone.localdate()
+        disposition_a.restock_location = location_a2
+        assert disposition_a.can_restock_after_refurbish is True
+
+    def test_an_unfinished_refurbishment_is_not_postable(self, disposition_a, location_a2):
+        disposition_a.disposition = "refurbish"
+        disposition_a.restock_location = location_a2
+        assert disposition_a.refurbished_on is None
+        assert disposition_a.can_restock_after_refurbish is False
+
+    def test_an_already_posted_refurbishment_is_not_postable_again(self, disposition_a,
+                                                                   location_a2):
+        from django.utils import timezone
+        disposition_a.disposition = "refurbish"
+        disposition_a.refurbished_on = timezone.localdate()
+        disposition_a.restock_location = location_a2
+        disposition_a.stock_posted = True
+        assert disposition_a.can_restock_after_refurbish is False
+
+    def test_only_a_refurbish_row_qualifies(self, disposition_a, location_a2):
+        from django.utils import timezone
+        disposition_a.refurbished_on = timezone.localdate()
+        disposition_a.restock_location = location_a2
+        for decision in ("received_pending", "restock", "scrap", "quarantine"):
+            disposition_a.disposition = decision
+            assert disposition_a.can_restock_after_refurbish is False, decision
+
+
+class TestIsSplittableKeysOnTheLedgerNotTheLatch:
+    """REGRESSION LOCK (item 5). After a restock-then-write-off the latch is False again (correctly
+    — the unit is no longer IN stock) but the row has written TWO real movements."""
+
+    def test_an_undecided_unposted_row_is_splittable(self, disposition_a):
+        assert disposition_a.is_splittable is True
+
+    def test_a_decided_row_is_not(self, disposition_a):
+        disposition_a.disposition = "restock"
+        assert disposition_a.is_splittable is False
+
+    def test_a_row_that_ever_touched_the_ledger_is_not_even_with_the_latch_off(
+        self, tenant_a, disposition_a, item_a, location_a2,
+    ):
+        from django.utils import timezone
+        from apps.scm.models import StockMove
+        move = StockMove.objects.create(tenant=tenant_a, item=item_a, location=location_a2,
+                                        quantity=Decimal("-3"), move_type="adjustment",
+                                        moved_at=timezone.now())
+        disposition_a.disposition = "received_pending"     # somebody re-opened it
+        disposition_a.stock_posted = False                 # the latch says "not in stock"
+        disposition_a.stock_move = move                    # but the ledger remembers
+        assert disposition_a.is_splittable is False
+
+
+class TestReturnDispositionClean:
+    def test_a_tracked_item_needs_its_lot(self, tenant_a, rma_awaiting_receipt_a, item_lot_a,
+                                          return_reason_a, location_a):
+        from apps.scm.models import ReturnDisposition, ReturnLine
+        line = ReturnLine.objects.create(
+            return_authorization=rma_awaiting_receipt_a, item=item_lot_a,
+            quantity_requested=Decimal("2"), quantity_approved=Decimal("2"),
+            reason=return_reason_a)
+        row = ReturnDisposition(tenant=tenant_a, return_line=line, quantity=Decimal("1"),
+                                location=location_a)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "lot_serial" in exc.value.error_dict
+
+    def test_a_lot_from_another_item_is_refused(self, tenant_a, disposition_a, lot_a):
+        disposition_a.lot_serial = lot_a       # belongs to item_lot_a, the line is item_a
+        with pytest.raises(ValidationError) as exc:
+            disposition_a.clean()
+        assert "lot_serial" in exc.value.error_dict
+
+    def test_a_restock_needs_somewhere_to_go(self, disposition_a):
+        disposition_a.disposition = "restock"
+        with pytest.raises(ValidationError) as exc:
+            disposition_a.clean()
+        assert "restock_location" in exc.value.error_dict
+
+    def test_a_restock_may_not_leave_the_unit_on_the_bench(self, disposition_a, location_a):
+        disposition_a.disposition = "restock"
+        disposition_a.restock_location = location_a          # the bench itself
+        with pytest.raises(ValidationError) as exc:
+            disposition_a.clean()
+        assert "restock_location" in exc.value.error_dict
+
+    def test_a_reason_that_blocks_restocking_refuses_it_on_the_model_too(
+        self, tenant_a, rma_awaiting_receipt_a, return_reason_blocking_a, item_a, location_a,
+        location_a2,
+    ):
+        from apps.scm.models import ReturnDisposition, ReturnLine
+        line = ReturnLine.objects.create(
+            return_authorization=rma_awaiting_receipt_a, item=item_a,
+            quantity_requested=Decimal("1"), quantity_approved=Decimal("1"),
+            reason=return_reason_blocking_a)
+        row = ReturnDisposition(tenant=tenant_a, return_line=line, quantity=Decimal("1"),
+                                location=location_a, disposition="restock",
+                                restock_location=location_a2)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "disposition" in exc.value.error_dict
+
+    def test_an_expired_lot_may_not_be_restocked(self, tenant_a, rma_awaiting_receipt_a,
+                                                  item_lot_a, lot_a, return_reason_a, location_a,
+                                                  location_a2):
+        from apps.scm.models import ReturnDisposition, ReturnLine
+        lot_a.status = "expired"
+        lot_a.save(update_fields=["status"])
+        line = ReturnLine.objects.create(
+            return_authorization=rma_awaiting_receipt_a, item=item_lot_a,
+            quantity_requested=Decimal("1"), quantity_approved=Decimal("1"),
+            reason=return_reason_a)
+        row = ReturnDisposition(tenant=tenant_a, return_line=line, quantity=Decimal("1"),
+                                location=location_a, lot_serial=lot_a, disposition="restock",
+                                restock_location=location_a2)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "disposition" in exc.value.error_dict
+
+    def test_writing_off_a_restocked_unit_needs_the_location_it_went_into(self, disposition_a):
+        disposition_a.disposition = "scrap"
+        disposition_a.stock_posted = True
+        with pytest.raises(ValidationError) as exc:
+            disposition_a.clean()
+        assert "restock_location" in exc.value.error_dict
+
+
+class TestReturnDispositionAuthorisedQuantityCap:
+    """REGRESSION LOCK (item 3). The cap used to live ONLY in the formset's ``clean()``, which left
+    the single-row edit path free to raise a bench quantity to anything ``DecimalField(14, 4)``
+    holds — and because the credit note is deliberately computed FROM the bench rows, that flowed
+    straight into a real ``accounting.Invoice`` for more than was ever returned."""
+
+    def test_a_single_row_edit_cannot_exceed_the_authorised_quantity(self, disposition_a):
+        assert disposition_a.return_line.quantity_approved == Decimal("3.0000")
+        disposition_a.quantity = Decimal("5")
+        with pytest.raises(ValidationError) as exc:
+            disposition_a.clean()
+        assert "quantity" in exc.value.error_dict
+        assert "3.0000 authorised" in str(exc.value)
+
+    def test_the_cap_counts_the_SIBLING_rows_on_the_same_line(self, tenant_a, return_line_a,
+                                                              disposition_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        second = ReturnDisposition(tenant=tenant_a, return_line=return_line_a,
+                                   quantity=Decimal("1"), received_on=timezone.localdate(),
+                                   location=location_a)
+        with pytest.raises(ValidationError) as exc:
+            second.clean()
+        assert "quantity" in exc.value.error_dict
+
+    def test_the_cap_excludes_the_row_being_edited(self, disposition_a):
+        disposition_a.quantity = Decimal("3")
+        disposition_a.clean()                 # unchanged at the ceiling — legal
+        disposition_a.quantity = Decimal("1")
+        disposition_a.clean()                 # reduced — legal
+
+    def test_the_cap_falls_back_to_the_requested_quantity_when_nothing_is_approved(
+        self, tenant_a, return_authorization_a, location_a,
+    ):
+        from apps.scm.models import ReturnDisposition
+        line = return_authorization_a.lines.first()
+        assert line.quantity_approved == Decimal("0")
+        row = ReturnDisposition(tenant=tenant_a, return_line=line, quantity=Decimal("9"),
+                                location=location_a)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "quantity" in exc.value.error_dict
+
+    def test_the_cap_is_reached_through_full_clean_too(self, disposition_a):
+        disposition_a.quantity = Decimal("4")
+        with pytest.raises(ValidationError) as exc:
+            disposition_a.full_clean()
+        assert "quantity" in exc.value.error_dict
+
+
+class TestReturnPolicyDerived:
+    def test_str_and_defaults(self, tenant_a):
+        from apps.scm.models import ReturnPolicy
+        policy = ReturnPolicy.objects.create(tenant=tenant_a, name="Bare")
+        assert str(policy) == "Bare"
+        assert policy.is_active is True
+        assert policy.is_default is False
+        assert policy.priority == 100
+        assert policy.window_basis == "delivery"
+        assert (policy.window_days, policy.fallback_days) == (30, 45)
+        assert policy.warranty_window_days == 365
+        assert policy.refund_basis == "full"
+        assert policy.refund_pct == Decimal("100.00")
+        assert policy.restocking_fee_type == "none"
+        assert policy.auto_approve is False
+        assert policy.allow_keep_item is False
+
+    def test_the_grade_ladder_is_a_real_curve(self, return_policy_a):
+        assert return_policy_a.grade_cost_pct("a") == Decimal("100.00")
+        assert return_policy_a.grade_cost_pct("B") == Decimal("75.00")
+        assert return_policy_a.grade_cost_pct("c") == Decimal("40.00")
+        assert return_policy_a.grade_cost_pct("d") == Decimal("0.00")
+
+    def test_an_ungraded_unit_is_written_down_to_zero_not_up_to_full_cost(self, return_policy_a):
+        """Falling back to 100 % would restock an ungraded unit at full cost — the expensive
+        direction to be wrong in."""
+        assert return_policy_a.grade_cost_pct("z") == Decimal("0")
+        assert return_policy_a.grade_cost_pct("") == Decimal("0")
+        assert return_policy_a.grade_cost_pct(None) == Decimal("0")
+
+    def test_restock_cost_for_seeds_from_the_grade_and_the_average_cost(self, return_policy_a):
+        assert return_policy_a.restock_cost_for("a", Decimal("10")) == Decimal("10.0000")
+        assert return_policy_a.restock_cost_for("b", Decimal("10")) == Decimal("7.5000")
+        assert return_policy_a.restock_cost_for("c", Decimal("10")) == Decimal("4.0000")
+        assert return_policy_a.restock_cost_for("d", Decimal("10")) == Decimal("0.0000")
+        assert return_policy_a.restock_cost_for("a", None) == Decimal("0.0000")
+
+    def test_fee_for_handles_all_three_types(self, return_policy_a):
+        assert return_policy_a.fee_for(Decimal("100")) == Decimal("0")
+        return_policy_a.restocking_fee_type = "flat"
+        return_policy_a.restocking_fee_value = Decimal("7.50")
+        assert return_policy_a.fee_for(Decimal("100")) == Decimal("7.50")
+        return_policy_a.restocking_fee_type = "percent_of_value"
+        return_policy_a.restocking_fee_value = Decimal("15")
+        assert return_policy_a.fee_for(Decimal("100")) == Decimal("15.00")
+
+    def test_refund_for_handles_all_three_bases(self, return_policy_a):
+        assert return_policy_a.refund_for(Decimal("80")) == Decimal("80.00")
+        return_policy_a.refund_basis = "percentage"
+        return_policy_a.refund_pct = Decimal("50")
+        assert return_policy_a.refund_for(Decimal("80")) == Decimal("40.00")
+        return_policy_a.refund_basis = "none"
+        assert return_policy_a.refund_for(Decimal("80")) == Decimal("0")
+
+    def test_allowed_resolutions_reflects_the_four_booleans(self, return_policy_a):
+        assert return_policy_a.allowed_resolutions == ("refund", "store_credit", "exchange")
+        return_policy_a.allow_keep_item = True
+        return_policy_a.allow_store_credit = False
+        assert return_policy_a.allowed_resolutions == ("refund", "exchange", "keep_item")
+
+
+class TestReturnPolicyClean:
+    def test_a_zero_percent_percentage_refund_is_refused(self, return_policy_a):
+        return_policy_a.refund_basis = "percentage"
+        return_policy_a.refund_pct = Decimal("0")
+        with pytest.raises(ValidationError) as exc:
+            return_policy_a.clean()
+        assert "refund_pct" in exc.value.error_dict
+
+    def test_a_configured_fee_with_no_value_is_refused(self, return_policy_a):
+        return_policy_a.restocking_fee_type = "flat"
+        with pytest.raises(ValidationError) as exc:
+            return_policy_a.clean()
+        assert "restocking_fee_value" in exc.value.error_dict
+
+    def test_a_percentage_fee_over_100_is_refused(self, return_policy_a):
+        return_policy_a.restocking_fee_type = "percent_of_value"
+        return_policy_a.restocking_fee_value = Decimal("120")
+        with pytest.raises(ValidationError) as exc:
+            return_policy_a.clean()
+        assert "restocking_fee_value" in exc.value.error_dict
+
+    def test_a_policy_that_accepts_no_return_at_all_is_refused(self, return_policy_a):
+        return_policy_a.window_days = 0
+        return_policy_a.fallback_days = 0
+        with pytest.raises(ValidationError) as exc:
+            return_policy_a.clean()
+        assert "window_days" in exc.value.error_dict
+
+
+class TestReturnPolicyDayFieldCaps:
+    """REGRESSION LOCK (item 13). All three fields are fed to ``datetime.timedelta(days=...)`` and
+    a PositiveIntegerField accepts up to 4294967295 — an uncaught ``OverflowError`` (a 500), not a
+    validation error. ONE saved value would permanently break the RMA list, every RMA detail page
+    and the approve action for the whole tenant: a stored denial of service."""
+
+    def test_each_of_the_three_day_fields_is_capped_at_3650(self, return_policy_a):
+        for field in ("window_days", "fallback_days", "warranty_window_days"):
+            fresh = type(return_policy_a).objects.get(pk=return_policy_a.pk)
+            setattr(fresh, field, 3651)
+            with pytest.raises(ValidationError) as exc:
+                fresh.full_clean()
+            assert field in exc.value.error_dict, field
+
+    def test_exactly_3650_is_still_accepted(self, return_policy_a):
+        return_policy_a.window_days = 3650
+        return_policy_a.fallback_days = 3650
+        return_policy_a.warranty_window_days = 3650
+        return_policy_a.full_clean()
+
+    def test_the_value_that_used_to_500_is_refused_at_the_model(self, return_policy_a):
+        return_policy_a.window_days = 4294967295
+        with pytest.raises(ValidationError) as exc:
+            return_policy_a.full_clean()
+        assert "window_days" in exc.value.error_dict
+
+
+class TestSelectPolicy:
+    def test_a_category_specific_policy_beats_the_blanket_one(self, tenant_a, item_a,
+                                                              return_policy_a,
+                                                              return_policy_fee_a):
+        from apps.scm.models import select_policy
+        assert select_policy(tenant_a, item_a) == return_policy_fee_a
+
+    def test_an_item_in_no_matching_category_falls_back_to_the_default(self, tenant_a, item_lot_a,
+                                                                       return_policy_a,
+                                                                       return_policy_fee_a):
+        from apps.scm.models import select_policy
+        assert select_policy(tenant_a, item_lot_a) == return_policy_a
+
+    def test_an_inactive_policy_is_never_selected(self, tenant_a, item_a, return_policy_a,
+                                                  return_policy_fee_a):
+        from apps.scm.models import select_policy
+        return_policy_fee_a.is_active = False
+        return_policy_fee_a.save(update_fields=["is_active"])
+        assert select_policy(tenant_a, item_a) == return_policy_a
+
+    def test_a_workspace_with_no_policies_returns_None(self, tenant_a, item_a):
+        from apps.scm.models import select_policy
+        assert select_policy(tenant_a, item_a) is None
+
+    def test_no_tenant_returns_None(self, item_a):
+        from apps.scm.models import select_policy
+        assert select_policy(None, item_a) is None
+
+    def test_another_tenants_policy_is_never_selected(self, tenant_a, item_a, return_policy_b):
+        from apps.scm.models import select_policy
+        assert select_policy(tenant_a, item_a) is None
+
+
+class TestEvaluateReturnEligibility:
+    def test_no_policy_at_all_blocks_with_a_named_reason(self, returns_sales_order_a, item_a,
+                                                          return_reason_a):
+        from apps.scm.models import evaluate_return_eligibility
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a, None)
+        assert verdict["within_window"] is False
+        assert verdict["basis_used"] == "none"
+        assert verdict["allowed_resolutions"] == []
+        assert any("No return policy is configured" in b for b in verdict["blockers"])
+        assert verdict["reason"] == return_reason_a.code
+
+    def test_an_order_with_no_delivery_stamp_falls_back_to_the_order_date(
+        self, returns_sales_order_a, item_a, return_reason_a, return_policy_a,
+    ):
+        from apps.scm.models import evaluate_return_eligibility
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert verdict["basis_used"] == "fallback"
+        assert verdict["basis_date_used"] == returns_sales_order_a.order_date.isoformat()
+        assert verdict["within_window"] is True
+        assert verdict["days_remaining"] == 45         # the FALLBACK window, not the 30-day one
+
+    def test_a_delivered_order_uses_the_delivery_basis(self, returns_sales_order_a, item_a,
+                                                        return_reason_a, return_policy_a):
+        from django.utils import timezone
+        from apps.scm.models import evaluate_return_eligibility
+        returns_sales_order_a.delivered_notification_at = timezone.now()
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert verdict["basis_used"] == "delivery"
+        assert verdict["days_remaining"] == 30
+
+    def test_the_fulfilment_basis_reads_the_ship_stamp(self, returns_sales_order_a, item_a,
+                                                       return_reason_a, return_policy_a):
+        from django.utils import timezone
+        from apps.scm.models import evaluate_return_eligibility
+        return_policy_a.window_basis = "fulfilment"
+        returns_sales_order_a.shipped_notification_at = timezone.now()
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert verdict["basis_used"] == "fulfilment"
+
+    def test_the_order_date_basis_is_used_verbatim(self, returns_sales_order_a, item_a,
+                                                    return_reason_a, return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        return_policy_a.window_basis = "order_date"
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert verdict["basis_used"] == "order_date"
+        assert verdict["days_remaining"] == 30
+
+    def test_a_closed_window_blocks_and_names_the_date_it_ran_from(self, sales_order_a, item_a,
+                                                                    return_reason_a,
+                                                                    return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        verdict = evaluate_return_eligibility(sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert verdict["within_window"] is False
+        assert any("Outside the 45-day window" in b for b in verdict["blockers"])
+        assert verdict["basis_date_used"] == sales_order_a.order_date.isoformat()
+
+    def test_a_blind_return_is_legitimate_but_needs_a_human(self, item_a, return_reason_a,
+                                                             return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        verdict = evaluate_return_eligibility(None, item_a, return_reason_a, return_policy_a)
+        assert verdict["basis_used"] == "none"
+        assert verdict["deadline"] == ""
+        assert any("approve this on judgement" in b for b in verdict["blockers"])
+
+    def test_require_delivery_confirmation_blocks_an_unstamped_order(self, returns_sales_order_a,
+                                                                      item_a, return_reason_a,
+                                                                      return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        return_policy_a.require_delivery_confirmation = True
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert any("requires a confirmed delivery" in b for b in verdict["blockers"])
+
+    def test_a_cancelled_order_has_nothing_to_return_against(self, returns_sales_order_a, item_a,
+                                                              return_reason_a, return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        returns_sales_order_a.status = "cancelled"
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert any("was cancelled" in b for b in verdict["blockers"])
+
+    def test_an_inactive_policy_or_reason_blocks(self, returns_sales_order_a, item_a,
+                                                 return_reason_a, return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        return_policy_a.is_active = False
+        return_reason_a.is_active = False
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert any("is inactive" in b for b in verdict["blockers"])
+
+    def test_the_reason_NARROWS_the_policy_and_never_widens_it(self, returns_sales_order_a,
+                                                               item_a, return_reason_a,
+                                                               return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        return_reason_a.allows_exchange = False
+        return_reason_a.allows_store_credit = False
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert verdict["allowed_resolutions"] == ["refund"]
+        # A reason that allows a repair cannot unlock one the policy never offered.
+        return_reason_a.allows_repair = True
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert "repair" not in verdict["allowed_resolutions"]
+
+    def test_a_policy_and_a_reason_that_allow_nothing_together_block(self, returns_sales_order_a,
+                                                                      item_a, return_reason_a,
+                                                                      return_policy_a):
+        from apps.scm.models import evaluate_return_eligibility
+        return_policy_a.allow_refund = False
+        return_policy_a.allow_store_credit = False
+        return_policy_a.allow_exchange = False
+        return_reason_a.allows_repair = True
+        return_reason_a.allows_refund = False
+        return_reason_a.allows_store_credit = False
+        return_reason_a.allows_exchange = False
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a)
+        assert any("allow no outcome at all" in b for b in verdict["blockers"])
+
+    def test_the_money_is_the_policys_and_a_waiving_reason_suppresses_the_fee(
+        self, returns_sales_order_a, item_a, return_reason_a, return_policy_a,
+    ):
+        from apps.scm.models import evaluate_return_eligibility
+        return_policy_a.restocking_fee_type = "flat"
+        return_policy_a.restocking_fee_value = Decimal("10.00")
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a, line_value=Decimal("45.00"))
+        assert verdict["proposed_credit"] == "45.00"
+        assert verdict["proposed_fee"] == "10.00"
+        assert verdict["proposed_net"] == "35.00"
+        return_reason_a.waives_return_fee = True
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a, line_value=Decimal("45.00"))
+        assert verdict["proposed_fee"] == "0"
+        assert verdict["proposed_net"] == "45.00"
+
+    def test_the_verdict_is_json_round_trippable_because_it_is_STORED_as_text(
+        self, returns_sales_order_a, item_a, return_reason_a, return_policy_a,
+    ):
+        import json
+        from apps.scm.models import evaluate_return_eligibility
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a, line_value=Decimal("45.00"))
+        assert json.loads(json.dumps(verdict)) == verdict
+
+    def test_as_of_is_injectable_so_the_window_never_depends_on_the_wall_clock(
+        self, returns_sales_order_a, item_a, return_reason_a, return_policy_a,
+    ):
+        from apps.scm.models import evaluate_return_eligibility
+        far = returns_sales_order_a.order_date + datetime.timedelta(days=999)
+        verdict = evaluate_return_eligibility(returns_sales_order_a, item_a, return_reason_a,
+                                              return_policy_a, as_of=far)
+        assert verdict["within_window"] is False
+
+
+class TestReturnReason:
+    def test_str_and_defaults(self, tenant_a):
+        from apps.scm.models import ReturnReason
+        reason = ReturnReason.objects.create(tenant=tenant_a, code="X", name="Something")
+        assert str(reason) == "X · Something"
+        assert reason.fault_party == "customer"
+        assert reason.allows_refund is True
+        assert reason.allows_repair is False
+        assert reason.blocks_restock is False
+        assert reason.requires_photo is False
+        assert reason.raises_nonconformance is False
+        assert reason.sort_order == 100
+        assert reason.is_active is True
+
+    def test_allowed_resolutions_reflects_the_four_booleans(self, return_reason_a):
+        assert return_reason_a.allowed_resolutions == ("refund", "store_credit", "exchange")
+        return_reason_a.allows_repair = True
+        return_reason_a.allows_refund = False
+        assert return_reason_a.allowed_resolutions == ("store_credit", "exchange", "repair")
+
+    def test_a_reason_that_offers_nothing_is_refused(self, return_reason_a):
+        return_reason_a.allows_refund = False
+        return_reason_a.allows_store_credit = False
+        return_reason_a.allows_exchange = False
+        return_reason_a.allows_repair = False
+        with pytest.raises(ValidationError) as exc:
+            return_reason_a.clean()
+        assert "allows_refund" in exc.value.error_dict
+
+    def test_a_reason_cannot_block_and_suggest_a_restock_at_once(self, return_reason_a):
+        return_reason_a.blocks_restock = True
+        return_reason_a.suggested_disposition = "restock"
+        with pytest.raises(ValidationError) as exc:
+            return_reason_a.clean()
+        assert "suggested_disposition" in exc.value.error_dict
+
+    def test_the_suggested_disposition_choices_exclude_received_pending(self):
+        from apps.scm.models import ReturnReason
+        offered = {c[0] for c in ReturnReason._meta.get_field("suggested_disposition").choices}
+        assert "received_pending" not in offered
+        assert "restock" in offered
+
+
+class TestWarrantyClaim:
+    def test_str_and_defaults(self, tenant_a, supplier_a, item_a):
+        from apps.scm.models import WarrantyClaim
+        claim = WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                             quantity_claimed=Decimal("1"))
+        assert str(claim) == f"{claim.number} · {item_a.sku}"
+        assert claim.status == "draft"
+        assert claim.defect_classification == "unknown"
+        assert claim.submission_channel == "email"
+        assert claim.amount_approved == Decimal("0")
+        assert claim.amount_credited == Decimal("0")
+        assert claim.credit_reference == ""
+        assert claim.credit_received_on is None
+
+    def test_is_editable_only_while_draft(self, warranty_claim_a):
+        from apps.scm.models import WarrantyClaim
+        for status, _label in WarrantyClaim.STATUS_CHOICES:
+            warranty_claim_a.status = status
+            assert warranty_claim_a.is_editable is (status == "draft"), status
+
+    def test_the_amounts_are_derived_from_the_typed_cost_lines(self, warranty_claim_a):
+        from apps.scm.models import WarrantyClaimCost
+        assert warranty_claim_a.amount_claimed_total == Decimal("100.00")
+        WarrantyClaimCost.objects.create(claim=warranty_claim_a, cost_type="labour",
+                                          description="2 h fitting", quantity=Decimal("2"),
+                                          unit_amount=Decimal("25.00"),
+                                          amount_approved=Decimal("10.00"))
+        fresh = type(warranty_claim_a).objects.get(pk=warranty_claim_a.pk)
+        assert fresh.amount_claimed_total == Decimal("150.00")
+        assert fresh.cost_approved_total == Decimal("10.00")
+
+    def test_a_claim_with_no_cost_lines_totals_zero_and_never_divides_by_zero(self, tenant_a,
+                                                                              supplier_a, item_a):
+        from apps.scm.models import WarrantyClaim
+        claim = WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                             quantity_claimed=Decimal("1"))
+        assert claim.amount_claimed_total == Decimal("0.00")
+        assert claim.recovery_rate_pct == Decimal("0")
+        assert claim.recovery_variance == Decimal("0.00")
+
+    def test_recovery_variance_and_rate(self, warranty_claim_approved_a):
+        claim = warranty_claim_approved_a
+        claim.amount_credited = Decimal("60.00")
+        assert claim.recovery_variance == Decimal("40.00")
+        assert claim.recovery_rate_pct == Decimal("60.00")
+
+    def test_is_in_warranty_prefers_explicit_dates(self, warranty_claim_a):
+        from django.utils import timezone
+        claim = warranty_claim_a
+        claim.warranty_start = timezone.localdate() - datetime.timedelta(days=30)
+        claim.warranty_end = timezone.localdate() + datetime.timedelta(days=30)
+        assert claim.is_in_warranty is True
+        claim.warranty_end = timezone.localdate() - datetime.timedelta(days=1)
+        assert claim.is_in_warranty is False
+        claim.warranty_start = timezone.localdate() + datetime.timedelta(days=1)
+        claim.warranty_end = timezone.localdate() + datetime.timedelta(days=30)
+        assert claim.is_in_warranty is False        # it failed before cover began
+
+    def test_is_in_warranty_derives_from_the_purchase_date_and_the_policy_window(
+        self, warranty_claim_a, return_policy_a,
+    ):
+        from django.utils import timezone
+        claim = warranty_claim_a
+        assert claim.warranty_end is None
+        assert claim.is_in_warranty is True                      # 10 days old, 365-day window
+        return_policy_a.warranty_window_days = 5
+        return_policy_a.save(update_fields=["warranty_window_days"])
+        assert claim.is_in_warranty is False
+        claim.purchase_date = None
+        assert claim.is_in_warranty is False                     # nothing to derive from
+
+    def test_is_overdue_needs_a_deadline_a_live_status_and_no_response(self, warranty_claim_a):
+        from django.utils import timezone
+        claim = warranty_claim_a
+        claim.response_due_on = timezone.localdate() - datetime.timedelta(days=1)
+        claim.status = "submitted"
+        assert claim.is_overdue is True
+        claim.responded_on = timezone.localdate()
+        assert claim.is_overdue is False
+        claim.responded_on = None
+        claim.status = "rejected"                                 # terminal
+        assert claim.is_overdue is False
+        claim.status = "submitted"
+        claim.response_due_on = None
+        assert claim.is_overdue is False
+
+    def test_days_open_counts_from_submission_or_creation(self, warranty_claim_a):
+        from django.utils import timezone
+        claim = warranty_claim_a
+        assert claim.days_open >= 0
+        claim.submitted_on = timezone.localdate() - datetime.timedelta(days=9)
+        assert claim.days_open == 9
+        claim.credit_received_on = timezone.localdate() - datetime.timedelta(days=4)
+        assert claim.days_open == 5
+
+    def test_is_possible_duplicate_is_advisory_and_scoped_to_the_supplier(self, tenant_a,
+                                                                          supplier_a, vendor_a,
+                                                                          item_a,
+                                                                          warranty_claim_a):
+        from apps.scm.models import WarrantyClaim
+        warranty_claim_a.supplier_rma_number = "THEIR-1"
+        warranty_claim_a.save(update_fields=["supplier_rma_number"])
+        assert warranty_claim_a.is_possible_duplicate is False
+        twin = WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                           quantity_claimed=Decimal("1"),
+                                           supplier_rma_number="THEIR-1")
+        warranty_claim_a.refresh_from_db()
+        assert warranty_claim_a.is_possible_duplicate is True
+        twin.status = "closed"
+        twin.save(update_fields=["status"])
+        assert warranty_claim_a.is_possible_duplicate is False    # closed claims do not count
+        # A different supplier reusing the same reference is not a duplicate.
+        twin.status = "submitted"
+        twin.supplier = vendor_a
+        twin.save(update_fields=["status", "supplier"])
+        assert warranty_claim_a.is_possible_duplicate is False
+
+    def test_is_possible_duplicate_is_false_without_a_reference(self, warranty_claim_a):
+        assert warranty_claim_a.supplier_rma_number == ""
+        assert warranty_claim_a.is_possible_duplicate is False
+
+    def test_lot_history_is_empty_without_a_lot_and_reads_the_ledger_with_one(
+        self, tenant_a, warranty_claim_a, item_lot_a, lot_a, location_a,
+    ):
+        from apps.scm.tests._helpers import seed_stock
+        assert list(warranty_claim_a.lot_history()) == []
+        warranty_claim_a.item = item_lot_a
+        warranty_claim_a.lot_serial = lot_a
+        warranty_claim_a.save(update_fields=["item", "lot_serial"])
+        move = seed_stock(tenant_a, item_lot_a, location_a, "5", "1.0000")
+        move.lot_serial = lot_a
+        move.save(update_fields=["lot_serial"])
+        assert list(warranty_claim_a.lot_history()) == [move]
+
+    def test_clean_guards_the_three_impossible_date_and_lot_combinations(self, warranty_claim_a,
+                                                                         lot_a):
+        from django.utils import timezone
+        claim = warranty_claim_a
+        claim.lot_serial = lot_a           # belongs to item_lot_a, the claim is on item_a
+        with pytest.raises(ValidationError) as exc:
+            claim.clean()
+        assert "lot_serial" in exc.value.error_dict
+        claim.lot_serial = None
+        claim.warranty_start = timezone.localdate()
+        claim.warranty_end = timezone.localdate() - datetime.timedelta(days=1)
+        with pytest.raises(ValidationError) as exc:
+            claim.clean()
+        assert "warranty_end" in exc.value.error_dict
+        claim.warranty_end = None
+        claim.warranty_start = None
+        claim.purchase_date = timezone.localdate()
+        claim.failure_date = timezone.localdate() - datetime.timedelta(days=1)
+        with pytest.raises(ValidationError) as exc:
+            claim.clean()
+        assert "failure_date" in exc.value.error_dict
+
+
+class TestWarrantyClaimCost:
+    def test_amount_claimed_is_COMPUTED_in_save_never_typed(self, warranty_claim_a):
+        from apps.scm.models import WarrantyClaimCost
+        row = WarrantyClaimCost.objects.create(
+            claim=warranty_claim_a, cost_type="freight", description="Return freight",
+            quantity=Decimal("3"), unit_amount=Decimal("12.50"),
+            amount_claimed=Decimal("9999.99"))       # a crafted value is overwritten
+        row.refresh_from_db()
+        assert row.amount_claimed == Decimal("37.50")
+
+    def test_amount_claimed_is_not_editable(self):
+        from apps.scm.models import WarrantyClaimCost
+        assert WarrantyClaimCost._meta.get_field("amount_claimed").editable is False
+
+    def test_a_supplier_cannot_approve_more_than_was_claimed(self, warranty_claim_a):
+        from apps.scm.models import WarrantyClaimCost
+        row = WarrantyClaimCost(claim=warranty_claim_a, description="X", quantity=Decimal("1"),
+                                unit_amount=Decimal("10.00"), amount_approved=Decimal("11.00"))
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "amount_approved" in exc.value.error_dict
+
+    def test_str_is_the_type_and_the_description(self, warranty_claim_a):
+        row = warranty_claim_a.costs.first()
+        assert str(row) == "Replacement part · Replacement gear"
+
+
+class TestReturnsNothingIsStored:
+    """Ledger-adjacent code: quantities and balances are DERIVED, never stored."""
+
+    def test_the_bench_row_holds_no_quantity_received_column(self):
+        from apps.scm.models import ReturnLine
+        columns = {f.name for f in ReturnLine._meta.get_fields()}
+        for derived in ("quantity_received", "quantity_outstanding", "credit_quantity",
+                        "line_credit", "line_tax"):
+            assert derived not in columns, derived
+
+    def test_the_rma_holds_no_quantity_roll_up_columns(self):
+        from apps.scm.models import ReturnAuthorization
+        columns = {f.name for f in ReturnAuthorization._meta.get_fields()}
+        for derived in ("quantity_requested_total", "quantity_approved_total",
+                        "quantity_received_total", "is_fully_received", "days_open",
+                        "is_settleable", "settlement_figures"):
+            assert derived not in columns, derived
+
+    def test_the_stored_settlement_columns_are_all_editable_False(self):
+        from apps.scm.models import ReturnAuthorization
+        for name in ("refund_subtotal", "fee_total", "tax_total", "credit_total", "status",
+                     "policy_snapshot", "approved_on", "approved_by", "rejected_reason",
+                     "customer_shipped_on", "public_token", "portal_note", "credit_note",
+                     "replacement_order", "number"):
+            assert ReturnAuthorization._meta.get_field(name).editable is False, name
+
+    def test_the_bench_rows_stamped_columns_are_all_editable_False(self):
+        from apps.scm.models import ReturnDisposition
+        for name in ("received_on", "received_by", "refurbished_on", "stock_posted", "stock_move",
+                     "decided_on", "decided_by"):
+            assert ReturnDisposition._meta.get_field(name).editable is False, name
+
+    def test_the_warranty_negotiation_columns_are_all_editable_False(self):
+        from apps.scm.models import WarrantyClaim
+        for name in ("number", "status", "submitted_on", "responded_on",
+                     "supplier_response_notes", "amount_approved", "amount_credited",
+                     "credit_reference", "credit_received_on"):
+            assert WarrantyClaim._meta.get_field(name).editable is False, name
+
+    def test_the_warranty_claim_total_is_an_aggregate_not_a_column(self, warranty_claim_a):
+        from django.db.models import Sum
+        from apps.scm.models import WarrantyClaimCost
+        assert warranty_claim_a.amount_claimed_total == (
+            WarrantyClaimCost.objects.filter(claim=warranty_claim_a)
+            .aggregate(s=Sum("amount_claimed"))["s"])
+        assert "amount_claimed_total" not in {f.name
+                                              for f in type(warranty_claim_a)._meta.get_fields()}
