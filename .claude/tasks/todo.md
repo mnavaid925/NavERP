@@ -16519,3 +16519,738 @@ Nobody read the two colliding NavERP sections. They are not vague overlap; they 
 - **`### 9.5 Order Management System (OMS)` → "Returns & Exchanges (RMA) — self-service return initiation, label generation, refund routing, and restocking logic."** Module 9 nominally owns precisely the self-service initiation and label generation all three proposals defer.
 
 Under L36, SCM shipping first means **SCM owns these tables and 5.10 / 9.5 extend by FK** — but that ruling has to be *written down in the model docstrings and the research file*, with the reverse-accessor namespace reserved, or 5.10 will build a second RMA table. All three proposals mention Module 5/9 only in passing (P2: "3PL-run returns → 4.17"; P3: "logged-in hub → 4.16"); **none names 5.10 or 9.5, none quotes their bullets, and none declares the ownership.** That is the single largest gap in the set.
+
+---
+
+# Sub-module 4.11 — Supply Chain Analytics (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.11.md  (2026-07-31)
+
+**EXTEND run, not a scaffold run.** `apps/scm` exists and ships 4.1–4.10. No `config/settings.py` /
+`config/urls.py` changes. New backend sub-package name: **`SupplyChainAnalytics/`** in all four layers.
+New template sub-module slug: **`analytics/`** (matching the existing `procurement/ srm/ inventory/ warehouse/
+orders/ transportation/ demandplanning/ manufacturing/ quality/ returns/`).
+
+**Shape of the sub-module (from the research headline):** an analytics module is *overwhelmingly computed pages
+over transactional rows*. 4.11 = **5 computed report pages + 3 stored models + 1 closed metric registry**.
+Nothing here posts a `StockMove` or a `JournalEntry` — 4.11 is READ-ONLY over every earlier sub-module's ledger.
+
+**Scope boundary to write into the code comments (research §"CRM 1.6 pattern"):** *Module 10 (`bi`) 10.11 lets
+you author a formula for any domain; 4.11 lets you set a target on one of ~36 hard-coded supply-chain metrics.*
+Do **not** rebuild `AnalyticsDashboard`/`DashboardWidget` in `scm` — 10.8/10.10/10.12/10.13/10.15/10.16 own the
+generic BI engine.
+
+## Pre-flight (do these BEFORE writing a single file)
+
+- [ ] `grep -n '\.badge-\|detail-item\|detail-label\|stat-icon' static/css/theme.css` — **mandatory pre-write
+      step, not a pre-ship check** (L33 hardened after 4 recurrences; L40 §2). Known-good, re-confirmed this pass:
+      badges `badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate` **only** —
+      `badge-success` / `-danger` / `-warning` **DO NOT EXIST**; layout is
+      `<dl class="detail-grid"><div class="detail-item"><dt>Label</dt><dd>Value</dd></div></dl>` —
+      `.detail-label` / `.detail-value` **DO NOT EXIST** (`.detail-item` is what supplies `flex-direction: column`;
+      without it the pair renders run-together, 200 OK, invisible to every test). `stat-icon` has
+      `blue/green/orange/purple/slate` — **no `amber`, no `red`**.
+- [ ] Re-run the spine grep before FK-ing anything (L28): `grep -rn "^class KpiTarget\|^class Item\|^class Carrier\|^class Location\|^class ItemCategory\|^class Shipment\|^class PurchaseOrder" apps/scm/models/`
+      + `grep -rn "^class Party\|^class OrgUnit" apps/core/models/` + `grep -rn "^class GLAccount" apps/accounting/models/`.
+      All of `scm.Item / ItemCategory / Location / LotSerial / StockMove / ReorderRule / PurchaseOrder(+Line) /
+      GoodsReceiptNote(+Line) / RFQQuote / SupplierContract / SupplierScorecard / SupplierCatalogItem /
+      SupplierRiskAssessment / SalesOrder(+Line) / SalesOrderAllocation / Shipment / TrackingEvent / Load /
+      LoadStop / Carrier / CarrierRateCard / FreightInvoice / YardVisit / PickTask(+Line) / WorkOrder /
+      ProductionTimeLog / NonConformance / CapaAction / DemandForecast(+Period) / DemandSignal /
+      ReturnDisposition / WarrantyClaimCost`, `core.Party`, `core.OrgUnit`, `accounting.GLAccount` were verified
+      present at plan time. `KpiTarget` / `KpiSnapshot` / `SupplyChainAlert` were verified **absent** (new).
+- [ ] Confirm `apps/scm/analytics.py` does not exist yet (verified at plan time: `apps/scm/` root holds only
+      `__init__.py`, `apps.py`, `admin.py`).
+
+---
+
+## Models (from research — 3, in `apps/scm/models/SupplyChainAnalytics/`)
+
+Shared conventions: `from apps.scm.models._base import *` (gives `TenantOwned` / `TenantNumbered` / `q2` / `q4` /
+`MAX_Q2` / `MAX_Q4` / `ZERO` / `settings` / validators). Money = `DecimalField(14,2)` written through **`q2()`**,
+quantity/score = `DecimalField(14–16,4)` written through **`q4()`** — clamping, not just quantizing, because an
+over-range value raises `DataError` **inside** `bulk_update` and fails the whole batch rather than the one row
+(`_base.py:38-50`). Every FK by string. Every model carries a `tenant` FK via the base.
+
+### Model 1 — `KpiTarget` [`KPI-`] · `models/SupplyChainAnalytics/KpiTargets.py`
+
+**Why STORED and not derived:** a target, a warning band, a critical band and the metric knobs (dead-stock N days,
+carrying-cost rate) are **human intent**. No row anywhere in 4.1–4.10 says "our turnover target is 6 turns" or
+"alert me when dead stock exceeds 50 000". There is nothing to derive it from.
+
+- [ ] `class KpiTarget(TenantNumbered)`, `NUMBER_PREFIX = "KPI"`.
+- [ ] `metric` — `CharField(max_length=40, choices=METRIC_CHOICES)` where `METRIC_CHOICES` is imported from
+      `apps.scm.analytics` (the **closed** registry — *not* a formula field). *Driver: Oracle Fusion prebuilt KPI
+      library; SAP IBP alert-definition "threshold key".*
+- [ ] `name` — `CharField(120)`. *Driver: Oracle personalized KPI dashboards (per-audience tile labels).*
+- [ ] `scope` — `CharField(12, choices=SCOPE_CHOICES)` = `all` | `category` | `location` | `carrier` | `vendor`.
+      *Driver: SAP IBP "calculation level" (Product/Location/Customer).*
+- [ ] Four **nullable scope FKs**, `SET_NULL`, `null=True, blank=True`, each with an explicit `related_name`:
+      `scope_category`→`scm.ItemCategory` (`kpi_targets`), `scope_location`→`scm.Location` (`kpi_targets`),
+      `scope_carrier`→`scm.Carrier` (`kpi_targets`), `scope_vendor`→`core.Party` (`scm_kpi_targets`).
+      **Four FKs, not one generic `scope_ref` integer** — a bare int carries no tenant and no type, so it can point
+      at a deleted or cross-tenant row and the page would silently narrow to the wrong thing (L40 §3 "same tenant is
+      not the same subject" — an untyped int does not even give you the tenant).
+- [ ] `period_grain` — `CharField(8, choices)` = `day|week|month|quarter`. *Driver: SAP IBP Month/Week calculation
+      level; Sievo's weekly/monthly refresh cycle sold as a product feature.*
+- [ ] `date_range` — `CharField(10, choices=DATE_RANGE_CHOICES)` = `last_7|last_30|last_90|quarter|year|all`
+      (the CRM `ANALYTICS_RANGE_CHOICES` shape; resolved by `analytics.range_bounds()`).
+- [ ] `direction` — `CharField(16, choices)` = `higher_is_better` | `lower_is_better`. *Driver: SAP IBP alert rules'
+      `Greater than` / `Less than` operators.* Defaults from the registry entry when blank on the form.
+- [ ] `target_value` / `warning_threshold` / `critical_threshold` — `DecimalField(14,2), null=True, blank=True`.
+      *Driver: Oracle KPI targets, Netstock KPI benchmarking, Kinaxis tunable exceptions.*
+- [ ] `parameter_days` — `PositiveIntegerField(null=True, blank=True,
+      validators=[MinValueValidator(1), MaxValueValidator(3650)])` — the dead-stock N, expiry-window N,
+      contract-expiry N, stale-tracking N. *Driver: Netstock dead stock; o9 aging-inventory risk flagging.*
+- [ ] `parameter_pct` — `DecimalField(6,2, null=True, blank=True,
+      validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("999.99"))])` — annual carrying rate,
+      demand-spike deviation band. *Driver: Netstock carrying-cost benchmarking; o9/Blue Yonder demand alerts.*
+- [ ] `is_alerting` — `BooleanField(default=False)`. *Driver: SAP IBP custom-alert definition.*
+- [ ] `min_impact_value` — `DecimalField(14,2, default=0)` — the alert-fatigue floor: a breach worth less than
+      this raises nothing. *Driver: Kinaxis explicit alert tuning; Blue Yonder "anomalies with material impact".*
+- [ ] `severity` — `CharField(8, choices)` = `info|warning|critical` (the severity stamped on alerts this target
+      raises). *Driver: SAP IBP alert General-info step (severity + category).*
+- [ ] `owner` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, `null/blank`, `related_name="scm_kpi_targets_owned"`.
+      *Driver: Oracle KPI library owner; SAP "case assigned to a responsible user".*
+- [ ] `is_pinned` `BooleanField(default=False)` + `display_order` `PositiveIntegerField(default=0)` — the
+      control-tower tile order. **This is the personalization 4.11 gets INSTEAD of a widget canvas** (10.8 owns
+      drag-and-drop). *Driver: Oracle personalized KPI dashboards per audience.*
+- [ ] `is_active` `BooleanField(default=True)`; `notes` `TextField(blank=True)`.
+- [ ] `last_evaluated_at` — `DateTimeField(null=True, blank=True, editable=False)`, stamped by the snapshot/detect
+      services. *Driver: Sievo data-freshness; the in-repo `AnalyticsReport.last_run_at` precedent.*
+- [ ] **Form excludes:** `tenant`, `number` (auto), `last_evaluated_at` (system stamp, L22), `created_at`,
+      `updated_at`. Nothing secret here (L20 n/a).
+- [ ] `clean()` — five checks, all registry-driven, no hard-coded if-chain per metric:
+      (a) bands ordered **in the direction the metric runs** — `lower_is_better`: `target ≤ warning ≤ critical`;
+      `higher_is_better`: `target ≥ warning ≥ critical`;
+      (b) the scope FK matching `scope` is set **and every non-matching scope FK is blank** (a scope switch must not
+      leave a stale pointer quietly narrowing the metric);
+      (c) **every set scope FK's `tenant` == `self.tenant`** — the form querysets are tenant-scoped as *UX*;
+      `clean()` is the *guard* (L39 §2: a narrowed dropdown never held against a crafted POST);
+      (d) a metric whose registry entry declares `requires_days` / `requires_pct` must carry that parameter;
+      (e) `scope` must be one the registry entry declares in `SCM_METRICS[metric]["scopes"]` — a carrier scope on
+      a dead-stock metric is an empty conjunction.
+- [ ] **L39 conjunction to write down and check:** `is_alerting=True` with **no** `warning_threshold` **and** no
+      `critical_threshold` can never raise anything — reject it in `clean()` rather than shipping a tick-box that
+      does nothing. And the create form is **unbound**, so the four scope FK querysets must be non-empty on a
+      fresh form (offer the full tenant-scoped set; do not narrow by a not-yet-chosen `scope`).
+- [ ] `Meta`: `ordering = ["display_order", "name", "-id"]`; `unique_together = ("tenant", "number")`;
+      indexes `(tenant, metric)` `scm_kpi_tnt_metric_idx`, `(tenant, is_active)` `scm_kpi_tnt_active_idx`,
+      `(tenant, is_alerting)` `scm_kpi_tnt_alerting_idx`.
+- [ ] `__str__` → `f"{self.number or 'KPI'} · {self.name}"`.
+- [ ] Docstring states the 10.11 boundary verbatim.
+
+### Model 2 — `KpiSnapshot` · `models/SupplyChainAnalytics/KpiSnapshots.py`
+
+**Why STORED and not derived — three independent reasons:** (1) **history drifts** — `Item.average_cost` is
+recomputed on every receipt and back-dated `StockMove`/GRN rows are legal, so re-deriving last quarter's turnover
+*silently rewrites the past*; a trend is only trustworthy if the value is frozen as it stood; (2) **cost** — a
+12-period trend line is otherwise 12 full FIFO ledger walks per page load; (3) every leader ships it (Sievo sells
+the refresh cycle, Oracle trends KPI cards, CRM 1.6's `ReportSnapshot` is the in-repo precedent).
+
+- [ ] `class KpiSnapshot(TenantOwned)` — **NOT `TenantNumbered`**: it is a child fact row, exactly like
+      `DashboardWidget` / `ReportSnapshot`. No `KPS-` prefix.
+- [ ] `kpi_target` — FK `scm.KpiTarget`, `CASCADE`, `related_name="snapshots"`.
+- [ ] `metric` — `CharField(40, choices=METRIC_CHOICES)`, **denormalized** so a deleted target does not orphan the
+      meaning of the frozen number.
+- [ ] `period_start` / `period_end` — `DateField`.
+- [ ] `dimension_key` — `CharField(64, blank=True)`, `""` = the roll-up; otherwise `vendor:<pk>` / `carrier:<pk>` /
+      `item:<pk>` / `category:<pk>` / `location:<pk>`. *Driver: SAP IBP calculation level.*
+- [ ] `dimension_label` — `CharField(160, blank=True)` — the display name **frozen at capture**, so a renamed or
+      deleted vendor cannot rewrite the trend's labels.
+- [ ] `value` — `DecimalField(16,4)` written through `q4()`.
+- [ ] `target_value_at_time` — `DecimalField(14,2, null=True, blank=True)` — what the target said *then*.
+- [ ] `status_band` — `CharField(8, choices)` = `ok|warning|critical|unknown`.
+- [ ] `breakdown` — `JSONField(default=dict, blank=True)` — the component arithmetic. This is
+      `SupplierScorecard.signal_summary`'s idea in structured form and is what makes the disruption score
+      **explainable**. *Driver: Resilinc's named composite components; SAP's evidence-bearing alerts.*
+- [ ] `computed_at` — `DateTimeField(default=timezone.now, editable=False)` (re-stamped on an idempotent re-run —
+      **not** `auto_now_add`, which would freeze the first run's time forever);
+      `computed_by` — FK user, `SET_NULL`, `null/blank`, `editable=False`, `related_name="scm_kpi_snapshots"`.
+- [ ] `Meta`: `ordering = ["-period_end", "metric", "dimension_key"]`;
+      **`unique_together = ("tenant", "kpi_target", "period_start", "dimension_key")`** so a re-run is idempotent
+      rather than duplicating; indexes `(tenant, metric, period_end)` `scm_kps_tnt_met_end_idx`,
+      `(tenant, kpi_target, period_end)` `scm_kps_tnt_tgt_end_idx`, `(tenant, status_band)` `scm_kps_tnt_band_idx`.
+- [ ] **Append-only, SYSTEM-WRITTEN — no `ModelForm` at all** (the `ReportSnapshot` rule). This is a **deliberate,
+      documented exception** to the CRUD-completeness rule: CRUD is `list` + `detail` + `delete` (POST), and the
+      *create* path is the `kpisnapshot_capture` POST action. Write this reasoning into the model docstring **and**
+      the view module docstring so the code-reviewer reads it as a decision, not an omission.
+
+### Model 3 — `SupplyChainAlert` [`ALR-`] · `models/SupplyChainAnalytics/SupplyChainAlerts.py`
+
+**Why STORED and not derived:** acknowledgement, assignment, snooze and resolution notes are **human state no
+aggregate can reproduce**. A purely computed exception list forgets that somebody already looked at it — which is
+exactly the alert-fatigue failure Kinaxis names. SAP IBP turns alerts into cases assigned to a responsible user;
+Blue Yonder wraps them in Resolution Rooms with an audit trail; o9 pushes them to a person.
+
+- [ ] `class SupplyChainAlert(TenantNumbered)`, `NUMBER_PREFIX = "ALR"`.
+- [ ] `kpi_target` — FK, `SET_NULL`, `null/blank`, `related_name="alerts"` (rule-based exceptions like
+      "shipment stale > N h" legitimately have no target).
+- [ ] `metric` — `CharField(40, blank=True)` (registry key, or blank for a pure rule).
+- [ ] `alert_type` — `CharField(24, choices=ALERT_TYPE_CHOICES)` = `kpi_breach | dead_stock | expiry_risk |
+      stockout_risk | demand_spike | shipment_at_risk | stale_tracking | supplier_risk | contract_expiry |
+      off_contract_spend | price_variance | freight_variance`. *Drivers, one per entry: SAP IBP alert category;
+      Netstock dead stock; Netstock aged lots; Blue Yonder "projected inventory below safety stock in week N";
+      o9 demand alerts; o9 order-at-risk / FourKites shipment risk; project44 stale-signal; Resilinc supplier
+      resiliency; Sievo contract-compliance; Sievo maverick spend; Sievo price variance; project44 freight audit.*
+- [ ] `title` `CharField(200)`; `severity` `CharField(8, choices)` = `info|warning|critical`.
+- [ ] `observed_value` / `threshold_value` — `DecimalField(16,4, null=True, blank=True)`.
+- [ ] `impact_value` — `DecimalField(14,2, default=0)` — **value at risk**; the default ordering key.
+      *Driver: Blue Yonder "anomalies with material impact"; o9 "only constrained nodes highlighted".*
+- [ ] `dimension_key` `CharField(64, blank=True)` / `dimension_label` `CharField(160, blank=True)`.
+- [ ] **Six nullable subject FKs, all `SET_NULL`, each with a DISTINCT `related_name`** (two FKs from one model to
+      the same target without `related_name` is a hard `SystemCheckError`, and `core.Party` already carries
+      `sales_orders` / `accounting_invoices` / `scm_scorecards` / `demand_signals`):
+      `item`→`scm.Item` (`scm_alerts`), `party`→`core.Party` (`scm_supply_alerts`), `carrier`→`scm.Carrier`
+      (`scm_alerts`), `shipment`→`scm.Shipment` (`scm_alerts`), `purchase_order`→`scm.PurchaseOrder`
+      (`scm_alerts`), `location`→`scm.Location` (`scm_alerts`).
+- [ ] `detail` — `JSONField(default=dict, blank=True)` — the evidence rows behind the number.
+- [ ] `status` — `CharField(14, choices)` = `open|acknowledged|snoozed|resolved|dismissed`, `default="open"`,
+      **`editable=False`** (workflow-controlled, L22). `OPEN_STATUSES = ("open", "acknowledged", "snoozed")`.
+- [ ] `dedupe_key` — `CharField(120, blank=True, db_index=True)` = `<alert_type>:<dimension_key>[:<target pk>]`
+      for detector-written rows, **blank for hand-raised ones**. *Driver: the alert-fatigue lesson stated
+      explicitly by Kinaxis.*
+- [ ] `assigned_to` FK user `SET_NULL` `related_name="scm_alerts_assigned"`;
+      `acknowledged_by` FK user `editable=False` `related_name="scm_alerts_acknowledged"` + `acknowledged_at`
+      `DateTimeField(null/blank, editable=False)`; `snoozed_until` `DateField(null/blank, editable=False)`;
+      `resolved_by` FK user `editable=False` `related_name="scm_alerts_resolved"` + `resolved_at`
+      `DateTimeField(null/blank, editable=False)` + `resolution_note` `TextField(blank=True)`.
+- [ ] `raised_at` `DateTimeField(default=timezone.now, editable=False)`;
+      `last_seen_at` `DateTimeField(default=timezone.now, editable=False)` — the re-fire stamp, so a breach that
+      keeps firing shows "still breaching" **without** a duplicate row. `notes` `TextField(blank=True)`.
+- [ ] **Form excludes:** `tenant`, `number`, `status`, `dedupe_key`, `acknowledged_by/at`, `snoozed_until`,
+      `resolved_by/at`, `raised_at`, `last_seen_at`, `created_at`, `updated_at`. Editable on the form:
+      `alert_type`, `metric`, `kpi_target`, `title`, `severity`, `observed_value`, `threshold_value`,
+      `impact_value`, `dimension_label`, the six subject FKs, `assigned_to`, `notes` — a hand-raised exception is a
+      real workflow (SAP IBP lets a planner raise a case), so full CRUD ships, but every state column is action-only.
+- [ ] `Meta`: `ordering = ["-impact_value", "-raised_at", "-id"]` (rank by material impact, not by count — the
+      Blue Yonder/o9 point); `unique_together = ("tenant", "number")`;
+      indexes `(tenant, status)` `scm_alr_tnt_status_idx`, `(tenant, severity)` `scm_alr_tnt_sev_idx`,
+      `(tenant, raised_at)` `scm_alr_tnt_raised_idx`, `(tenant, assigned_to)` `scm_alr_tnt_asg_idx`,
+      `(tenant, dedupe_key)` `scm_alr_tnt_dedupe_idx`.
+- [ ] **De-dupe is enforced in the DETECTOR, not by a constraint.** Do **NOT** add
+      `unique_together ("tenant","kpi_target","dimension_key","status")` — a resolved row would block the next
+      genuine breach and it still duplicates across statuses. Do **NOT** rely on
+      `UniqueConstraint(condition=Q(status__in=OPEN_STATUSES))` either: **MariaDB has no partial indexes**, so
+      Django silently omits the constraint and it protects nothing in this deployment. The real guard is:
+      `detect_alerts()` resolves the open set by `dedupe_key` in ONE query inside `transaction.atomic()` and
+      **updates** the existing open row (`observed_value`, `impact_value`, `detail`, `last_seen_at`) instead of
+      creating a second one. Write that reasoning into the model docstring.
+- [ ] `__str__` → `f"{self.number or 'ALR'} · {self.get_alert_type_display()} · {self.dimension_label or 'network'}"`.
+
+---
+
+## Metric registry — `apps/scm/analytics.py` (FLAT at the app root)
+
+Flat at the app root per CLAUDE.md Backend rule 8 (`admin.py` / `apps.py` / `analytics.py` / `services.py` stay
+flat). Mirrors `apps/crm/analytics.py:263 WIDGET_METRICS`. **Import direction is one-way: `analytics.py` imports
+`models`; `models/*` never imports `analytics` at module scope** (a lazy function-local import is the only
+exception — see the shared-formula item).
+
+- [ ] Module docstring states the result contract, exactly like the CRM twin:
+      `resolver(tenant, start, end, scope) -> {"value": Decimal, "display": str, "breakdown": {...},
+      "rows": [...] (table metrics only)}`, every value JSON-serializable so `KpiSnapshot.breakdown` stores it
+      verbatim.
+- [ ] `range_bounds(key)` — the `last_7 / last_30 / last_90 / quarter / year / all` window selector (copy the CRM
+      shape; do not re-invent).
+- [ ] `period_windows(grain, count, end=None)` — the trend-line window generator, and **`period_count(grain,
+      start, end)` computed ARITHMETICALLY** (L40 §1: a guard written as `len(build_the_whole_thing())` **is** the
+      payload). Reuse 4.7's `period_count()` shape rather than re-deriving it.
+- [ ] `_money / _num / _pct / _days / _turns` display formatters (raw number and display string kept separate).
+- [ ] `SCM_METRICS = {...}` — the single source of truth. Each entry:
+      `{"label", "group" (inventory|procurement|logistics|margin|risk), "unit" (turns|days|pct|money|count|score),
+      "direction", "scopes": (…), "requires_days": bool, "requires_pct": bool, "kind": scalar|table, "resolver"}`.
+- [ ] `METRIC_CHOICES = [(key, meta["label"]) for key, meta in SCM_METRICS.items()]` — **this is what
+      `KpiTarget.metric` / `KpiSnapshot.metric` build their `choices` from.** Closed set, no user SQL.
+- [ ] `compute_metric(tenant, metric, *, start, end, scope=None, target=None)` — the one entry point every page,
+      the snapshot service and the detector call, so a number can only be computed once.
+- [ ] `band_for(target, value)` — `ok|warning|critical|unknown`, honouring `direction`. Used by both
+      `KpiSnapshot.status_band` and the alert detector, so a tile and its alert can never disagree.
+- [ ] **Shared formula extraction (research line 277).** `supplier_delivery_stats(tenant, party, start, end)` and
+      `supplier_quality_stats(...)` live here and use the **identical** GRN-vs-`PurchaseOrder.expected_date` and
+      `quantity_rejected ÷ (received + rejected)` arithmetic as
+      `SupplierScorecard.recompute_from_signals`. Refactor 4.2's method to call them via a **function-local**
+      import (that method already does local sibling-model imports for the same cycle reason).
+      **Guard on the refactor (L38 — apply the finding, not the biggest hammer):** it must be a *pure extraction*
+      — the existing 4.2 scorecard tests must stay green with **zero edits**. If any goes red, revert the
+      extraction and instead ship `supplier_delivery_stats` standalone with a docstring naming
+      `recompute_from_signals` as its twin **plus** a parity test asserting both return the same number for the
+      same window. Commit the 4.2 file separately either way.
+
+### Registry entries — what each aggregates over (all tables grep-verified at plan time)
+
+**P1** = a metric the NavERP bullet literally names (must ship). **P2** = ship when the aggregate is a one-liner.
+
+Inventory group → `inventory_analytics` · over `StockMove`, `Item`, `ItemCategory`, `Location`, `LotSerial`, `ReorderRule`
+- [ ] `inv_turnover` **P1** — cost issued ÷ average on-hand value. `move_type in {issue, consumption}` × `unit_cost`;
+      **`transfer` EXCLUDED** — it double-counts, exactly as the 4.3 FIFO/LIFO walk excludes it
+      (`views/InventoryManagement/Reports.py:33`). `issue` = customer demand, `consumption` = work-order draw
+      (the deliberate 4.8 distinction) — **print that decision on the page.** unit=turns, higher_is_better.
+- [ ] `inv_days_on_hand` **P2** — 365 ÷ turns. days, lower_is_better.
+- [ ] `inv_dead_stock_value` **P1** — derived on-hand > 0 with zero `issue`/`consumption` for `parameter_days`
+      (default 90), valued. money, lower_is_better, `requires_days`.
+- [ ] `inv_aging_over_days_value` **P1** — remaining FIFO cost layers older than `parameter_days`, valued; the
+      page also renders the 0–30 / 31–60 / 61–90 / 91–180 / 181+ buckets by item and `ItemCategory` (the 4.3
+      valuation layer walk, re-bucketed by `StockMove.moved_at`). money, lower_is_better, `requires_days`.
+- [ ] `inv_expiry_risk_value` **P2** — on-hand tied to `LotSerial.expiry_date` inside `parameter_days`, valued.
+- [ ] `inv_excess_vs_policy_value` **P2** — on-hand above `ReorderRule.safety_stock` /
+      `computed_safety_stock` + cover, valued.
+- [ ] `inv_carrying_cost` **P2** — on-hand value × `parameter_pct` annual rate, pro-rated to the window.
+      money, lower_is_better, `requires_pct`.
+- [ ] `inv_stockout_count` **P2** — active `ReorderRule` rows at-or-below reorder point. **Use
+      `ReorderRule.on_hand_map(tenant, rules)` — the bulk grouped helper. NEVER `Item.on_hand()` in a loop.**
+      The live list stays 4.3's `scm:reorder_alerts`; 4.11 shows the count and its trend only.
+- [ ] `inv_abc_a_share_pct` **P2** — value share of `ReorderRule.abc_class == "A"`. **Reads 4.7's stored
+      classification; does NOT compute a rival one.** Same for `xyz_class`.
+
+Procurement group → `spend_analytics` · over `PurchaseOrder(+Line)`, `PurchaseRequisition`, `RFQ`/`RFQQuote`, `GoodsReceiptNote(+Line)`, `SupplierContract`, `SupplierScorecard`, `SupplierCatalogItem`, `core.Party`, `core.OrgUnit`, `accounting.GLAccount`
+- [ ] `spend_total` **P1** — Σ `PurchaseOrder.total` by `order_date`. The page renders the **spend cube**:
+      supplier (`vendor`→`core.Party`) × category (`PurchaseOrderLine.gl_account`→`accounting.GLAccount`) ×
+      business unit (`ship_to`→`core.OrgUnit`) × period, as `values().annotate()`.
+      **Caveat strip on the page (honest, not fudged): 4.1 PO lines carry `item_description`/`sku_hint` free text
+      and NO `Item` FK, so the category axis is GL-account-based (with a `sku_hint`→`Item.sku` join where it
+      resolves) — not a real item taxonomy.**
+- [ ] `spend_off_contract_pct` **P1** — PO value with no active `SupplierContract` for that vendor at
+      `order_date`, plus `requisition IS NULL` as the unrequisitioned-buy proxy. pct, lower_is_better.
+      **Caveat: vendor-level, not line-level — no contract↔item linkage exists in 4.2.**
+- [ ] `spend_top_supplier_share_pct` **P2** — top-5 vendor share of spend + vendor count + share of `sku_hint`s
+      with exactly one supplier (`SupplierCatalogItem`). Concentration/sole-source. lower_is_better.
+- [ ] `spend_tail_share_pct` **P2** — bottom-decile vendors' share of value.
+- [ ] `savings_negotiated` **P1** ("cost-saving opportunities") — for POs awarded from an RFQ
+      (`PurchaseOrder.quote`→`RFQQuote`): awarded total vs the median competing quote **on the same RFQ**. money,
+      higher_is_better. *The one genuinely evidence-backed savings figure in the repo.*
+- [ ] `savings_price_variance_opportunity` **P1** — same `sku_hint` bought at different unit prices across vendors
+      or periods; opportunity = qty × (paid − best). money, higher_is_better.
+- [ ] `supplier_otd_pct` **P1** — `GoodsReceiptNote.receipt_date` ≤ `PurchaseOrder.expected_date`
+      (the shared `supplier_delivery_stats`). pct, higher_is_better. Rendered as an all-suppliers leaderboard.
+- [ ] `supplier_reject_rate_pct` **P1** — `GoodsReceiptLine.quantity_rejected ÷ (received + rejected)`
+      (the shared `supplier_quality_stats`). pct, lower_is_better.
+- [ ] `supplier_score_avg` **P1** ("supplier performance trends") — mean `SupplierScorecard.overall_score` of
+      **published** cards by `period_end`, per supplier and blended. **Trends the STORED 4.2 rows; never derives a
+      rival supplier score.**
+- [ ] `procure_cycle_days` **P2** — requisition→PO days. `procure_lead_days` **P2** — PO→GRN days.
+
+Logistics group → `logistics_kpis` · over `Shipment`, `TrackingEvent`, `Load`, `LoadStop`, `Carrier`, `CarrierRateCard`, `FreightInvoice(+Line)`, `YardVisit`
+- [ ] `otd_pct` **P1** — delivered `Shipment` with `actual_delivery_at`::date ≤ `planned_delivery_date`, by
+      carrier / lane / month. pct, higher_is_better.
+- [ ] `otif_pct` **P2** — OTD ∧ in-full. **"In full" is DEFINED EXACTLY ONCE, here, and stated on the page:**
+      `SalesOrderLine` has **no `quantity_shipped` column** and `quantity_allocated()` is a *method*, so in-full is
+      derived from `SalesOrderAllocation` + `issue` `StockMove`s.
+- [ ] `freight_cost_per_unit` **P1** — audited `FreightInvoice.billed_amount` ÷ a **selectable basis**
+      (kg `Shipment.weight_kg` | m³ `volume_cbm` | package `package_count` | shipment | km `Load.distance_km`).
+      money, lower_is_better.
+- [ ] `equipment_utilization_pct` **P1** ("vehicle utilization") — Σ shipment `weight_kg` ÷
+      `Load.equipment_capacity_weight_kg`, plus the `volume_cbm` twin, aggregated across loads and by equipment
+      type. (4.6 shows single-load cube utilization; 4.11 aggregates it.) higher_is_better.
+- [ ] `freight_variance_pct` **P2** — Σ `FreightInvoice.variance_amount` ÷ Σ `contract_amount`, by carrier;
+      recovered vs disputed via `match_status`. lower_is_better.
+- [ ] `carrier_otd_trend` **P2** — trends the already-derived `Carrier.on_time_delivery_pct` (4.6). **Does not
+      restate it.** Feeds the carrier scorecard table (OTD %, avg transit vs `CarrierRateCard.transit_days`,
+      cost/kg, variance %, exception count) — the project44 canonical row.
+- [ ] `dwell_hours_avg` **P2** — `YardVisit` yard/dock dwell + gaps between `TrackingEvent` rows.
+
+Margin group → `margin_analytics` · over `SalesOrder(+Line)`, `StockMove`, `Item`, `ItemCategory`, `FreightInvoice`, `Shipment`, `PickTask(+Line)`, `NonConformance`, `ReturnDisposition`, `WarrantyClaimCost`, `WorkOrder`, `ProductionTimeLog`, `core.Party`
+- [ ] `gross_margin_pct` **P1** — revenue (`quantity_ordered × unit_price × (1 − discount_pct/100)`) − COGS (the
+      order's `issue` `StockMove.unit_cost`, falling back to `Item.average_cost`), by item / customer /
+      `ItemCategory` / `SalesOrder.source_channel`. pct, higher_is_better.
+- [ ] `margin_after_cost_to_serve_pct` **P1 (the differentiator — the single most valuable page in this bullet)** —
+      gross margin minus allocated freight (`FreightInvoice.billed_amount` via `Shipment.sales_order`), returns
+      cost (`ReturnDisposition.restock_unit_cost` write-down + `WarrantyClaimCost.amount_claimed`), cost of
+      quality (`NonConformance.cost_of_quality`), warehouse handling proxy (`PickTask(+Line)` units/lines) →
+      plus a **customer profitability ranking**. *Driver: Coupa "cost-to-serve computed per product and per
+      customer with all fixed and variable costs allocated".*
+- [ ] `supply_cost_stack` **P1** (`kind="table"`) — one waterfall: purchase cost · inbound freight ·
+      warehousing/handling · production (`WorkOrder` + `ProductionTimeLog`) · outbound freight · quality cost ·
+      returns cost.
+- [ ] `ppv_value` **P2** — `PurchaseOrderLine.unit_price` vs `Item.standard_cost` (matched via `sku_hint`; state
+      the caveat). `scrap_value` **P2** — negative `adjustment` `StockMove`s × `unit_cost`, split by 4.9 NCR
+      disposition.
+- [ ] **⚠️ L29 disclaimer rendered ON the page, not just in a comment:** SCM posts **no** `JournalEntry`;
+      `apps.accounting` owns the ledger. This page is an **operational margin estimate over SCM rows**, explicitly
+      *not* the statutory P&L — and it must link out to `accounting:` Balance Sheet / P&L / budget-variance.
+      Do not restate accounting's budget variance here (that is 2.x + 6.15).
+
+Risk group → `disruption_risk` · over all of the above + `SupplierRiskAssessment`, `SupplierContract`, `CapaAction`, `DemandForecast(+Period)`, `DemandSignal`, `SalesOrderAllocation`
+- [ ] **Honest-framing rule, mandatory and non-negotiable:** every score here is a **deterministic, fully
+      explainable weighted composite over real rows**, rendered with its component arithmetic visible (the
+      `SupplierScorecard.signal_summary` precedent, structured into `breakdown`). **No ML, no model artefacts, and
+      the UI must NOT say "AI"** — genuine ML/AutoML is 10.13. The NavERP bullet says "AI-driven"; the page says
+      what it actually does.
+- [ ] `supplier_disruption_score` **P1** — 0–100 composite, each component shown with its own points and evidence:
+      late-delivery rate (`GoodsReceiptNote` vs `PurchaseOrder.expected_date`) · quality/NCR rate
+      (`GoodsReceiptLine.quantity_rejected`, `NonConformance` weighted by `severity`) · open `CapaAction` count ·
+      contract expiring within `parameter_days` or **no active** `SupplierContract` · single-source concentration
+      (only vendor for K `sku_hint`s; share of spend) · acknowledgement latency (`PurchaseOrder.acknowledged_at`) ·
+      **4.2's STORED `SupplierRiskAssessment.risk_index` as ONE weighted input**. lower_is_better.
+      **No second supplier-risk register** — 4.2 owns that table; 4.11 consumes it and freezes the composite into
+      `KpiSnapshot`.
+- [ ] `demand_spike_count` **P1** — trailing short-window `issue` volume vs the trailing long-window mean beyond
+      `parameter_pct` (a plain ratio/σ band, stated on screen), plus `DemandForecastPeriod` actual-vs-forecast
+      deviation. **DECIDE THE NETTING, do not leave it ambiguous** (`research-scm-4.10.md:290` deferred it to
+      here): at build time inspect the `reference` string `_post_stock_move` writes for a 4.10 restock — if it is
+      reliably resolvable, ship the **netted** series; if not, print the **gross-series caveat verbatim** on both
+      `disruption_risk` and `inventory_analytics`.
+- [ ] `projected_stockout_count` **P1** — (derived on-hand − open `SalesOrderAllocation` + open `PurchaseOrderLine`
+      receipts) ÷ `ReorderRule.avg_daily_demand` vs `ReorderRule.lead_time_days`. *Driver: Blue Yonder "projected
+      inventory below safety stock in week 5".*
+- [ ] `shipments_at_risk_count` **P2** — in-transit `Shipment` whose `eta` > `planned_delivery_date`, or with no
+      `TrackingEvent` for > `parameter_days`.
+- [ ] Page also renders the **exception-with-material-impact ranking**: open `SupplyChainAlert`s ordered by
+      `impact_value`, not by count.
+- [ ] **Multi-currency (deferred, but must be VISIBLE):** `PurchaseOrder` / `SalesOrder` / `FreightInvoice` each
+      carry a nullable `accounting.Currency` and there is **no FX-rate table verified in this repo**. Aggregate in
+      the tenant's presentation currency and render a **mixed-currency warning** when the window spans more than
+      one currency — never invent a rate.
+
+---
+
+## Backend (packages, MANDATORY — `apps/scm/{models,forms,views,urls}/SupplyChainAnalytics/`)
+
+Four new folders, one per layer, lining up **one-to-one**. Absolute imports only
+(`from apps.scm.models import X`) — a relative `from .models import X` resolves one level deeper and breaks.
+Entity modules pull the toolkit from `_base.py` (models) / `_common.py` (forms, views) via `import *`.
+
+- [ ] `apps/scm/models/SupplyChainAnalytics/__init__.py` (empty — still its own commit)
+- [ ] `apps/scm/models/SupplyChainAnalytics/KpiTargets.py` — `KpiTarget` + `SCOPE_CHOICES` / `DIRECTION_CHOICES` /
+      `PERIOD_GRAIN_CHOICES` / `DATE_RANGE_CHOICES` / `SEVERITY_CHOICES` / `BAND_CHOICES`
+- [ ] `apps/scm/models/SupplyChainAnalytics/KpiSnapshots.py` — `KpiSnapshot`
+- [ ] `apps/scm/models/SupplyChainAnalytics/SupplyChainAlerts.py` — `SupplyChainAlert` + `ALERT_TYPE_CHOICES`
+- [ ] `apps/scm/analytics.py` — the registry + `range_bounds` / `period_windows` / `period_count` /
+      `compute_metric` / `band_for` / `supplier_delivery_stats` / `supplier_quality_stats` + all resolvers
+- [ ] `apps/scm/services.py`? **No** — put `capture_snapshots(tenant, targets, *, period_end, user)` and
+      `detect_alerts(tenant, *, user)` in `apps/scm/analytics.py` alongside the registry. One new flat module, not
+      two; the seeder and the POST actions both call these, so nothing hand-sets a value that merely looks
+      plausible (the 4.10 seeder posture).
+- [ ] `apps/scm/forms/SupplyChainAnalytics/__init__.py`
+- [ ] `apps/scm/forms/SupplyChainAnalytics/KpiTargets.py` — `KpiTargetForm(TenantModelForm)`: tenant-scoped
+      querysets for the four scope FKs and `owner`; **`.select_related()` on any queryset whose target's
+      `__str__` walks a second FK** (4.8/4.9 lesson — `Item.__str__`/`LotSerial.__str__` read `self.item.sku`,
+      one query per rendered option otherwise); `Meta.exclude` per the model item above.
+- [ ] `apps/scm/forms/SupplyChainAnalytics/SupplyChainAlerts.py` — `SupplyChainAlertForm` (+ the tiny action forms:
+      `AlertAssignForm`, `AlertSnoozeForm` (`snooze_days`, validated 1–90), `AlertResolveForm`
+      (`resolution_note`)). Same `select_related` rule on `item` / `shipment` / `purchase_order` dropdowns.
+- [ ] **No `KpiSnapshots.py` in `forms/`** — deliberate (system-written; see Model 2).
+- [ ] `apps/scm/views/SupplyChainAnalytics/__init__.py`
+- [ ] `apps/scm/views/SupplyChainAnalytics/KpiTargets.py` — `kpitarget_list / _create / _detail / _edit / _delete`
+      (+ `kpitarget_snapshot` POST: capture this one target now). `@login_required`, tenant-scoped, filters +
+      search + pagination, `write_audit_log` (the `crud_*` helpers in `apps/core/crud.py` call it automatically;
+      any hand-rolled save path must call it itself).
+- [ ] `apps/scm/views/SupplyChainAnalytics/KpiSnapshots.py` — `kpisnapshot_list / _detail / _delete` +
+      `kpisnapshot_capture` (POST batch over every active target, **`@tenant_admin_required`** — it writes the
+      frozen history every trend line reads) + `kpisnapshot_export` (CSV, whitelisted params only).
+- [ ] `apps/scm/views/SupplyChainAnalytics/SupplyChainAlerts.py` — `supplychainalert_list / _create / _detail /
+      _edit / _delete` + `_acknowledge / _assign / _snooze / _resolve / _dismiss` (all `@require_POST`) +
+      `supplychainalert_detect` (POST batch, **`@tenant_admin_required`**).
+- [ ] `apps/scm/views/SupplyChainAnalytics/Reports.py` — `inventory_analytics`, `spend_analytics`,
+      `logistics_kpis`, `margin_analytics`, `disruption_risk`, each with a whitelisted-filter helper and a
+      `<page>_export` CSV sibling. Follow `views/DemandPlanning/Reports.py` exactly: a private
+      `_filtered_*(request, data=None)` so a POST action re-uses the exact filter spec the page rendered with, and
+      a `_report_url(data)` built from a **whitelist** so a post-action redirect can never carry the CSRF token
+      into a URL.
+- [ ] `apps/scm/urls/SupplyChainAnalytics/__init__.py` + `KpiTargets.py` + `KpiSnapshots.py` +
+      `SupplyChainAlerts.py` + `Reports.py`
+- [ ] **Re-export blocks — the #1 breakage source. All four `__init__.py` files, or it is an `ImportError` /
+      `AttributeError` at runtime:**
+  - [ ] `apps/scm/models/__init__.py` — append a `# 4.11 Supply Chain Analytics` block after the 4.10 block:
+        `from .SupplyChainAnalytics.KpiTargets import (KpiTarget, SCOPE_CHOICES, DIRECTION_CHOICES,
+        PERIOD_GRAIN_CHOICES, DATE_RANGE_CHOICES, SEVERITY_CHOICES, BAND_CHOICES)  # noqa: F401`,
+        then `KpiSnapshots import (KpiSnapshot)`, then `SupplyChainAlerts import (SupplyChainAlert,
+        ALERT_TYPE_CHOICES)`. **Order matters: `KpiTargets` FIRST** — the other two import its choice vocabularies
+        (the 4.10 `ReturnReasons`-first precedent); the dependency runs one way, so no cycle.
+  - [ ] `apps/scm/forms/__init__.py` — `from .SupplyChainAnalytics.KpiTargets import (KpiTargetForm)` and
+        `from .SupplyChainAnalytics.SupplyChainAlerts import (SupplyChainAlertForm, AlertAssignForm,
+        AlertSnoozeForm, AlertResolveForm)  # noqa: F401`
+  - [ ] `apps/scm/views/__init__.py` — re-export **all 24** view callables by name (5 target + 1 target-snapshot,
+        3 snapshot + capture + export, 5 alert CRUD + 5 alert actions + detect, 5 report pages + their exports).
+        A view missing here is an `AttributeError` the moment the URLconf loads.
+  - [ ] `apps/scm/urls/__init__.py` — 4 new `from .SupplyChainAnalytics.<X> import urlpatterns as _sca_<x>`
+        imports + 4 new `*_sca_<x>,` entries appended AFTER `*_rma_reports`.
+- [ ] `apps/scm/admin.py` — register `KpiTarget`, `KpiSnapshot`, `SupplyChainAlert` with
+      `list_display / list_filter / search_fields`, and **`readonly_fields` for every `editable=False` column**:
+      `number`, `last_evaluated_at`, `status`, `dedupe_key`, `acknowledged_by/at`, `snoozed_until`,
+      `resolved_by/at`, `raised_at`, `last_seen_at`, `computed_at`, `computed_by`.
+- [ ] `python manage.py makemigrations scm` → expect **`0019_kpitarget_kpisnapshot_supplychainalert_and_more.py`**
+      (0018 is current). Incremental: **three new tables + their indexes and NOTHING ELSE.** If the generated
+      migration touches any 4.1–4.10 table, something was edited that should not have been — stop and find it.
+- [ ] Extend `apps/scm/management/commands/seed_scm.py` (see the Seeder section below).
+
+### URL routes + the 4.11 COLLISION CHECK (verified against the whole concatenated list, not just this block)
+
+Django matches **whole path components** and is **first-match-wins, so order is behaviour**. Eight new first
+segments; each was checked at plan time against every existing `scm` segment
+(`orders/ requisitions/ rfqs/ receipts/ suppliers/ scorecards/ contracts/ catalogs/ risk-assessments/ items/
+categories/ uoms/ locations/ lot-serials/ transfers/ adjustments/ reorder-rules/ valuation/ reorder-alerts/
+stock-ledger/ on-hand/ putaway/ picks/ cycle-counts/ yard/ sales-orders/ allocations/ carriers/ loads/ shipments/
+freight-invoices/ seasonality/ forecasts/ demand-signals/ forecast-adjustments/ safety-stock/ forecast-accuracy/
+work-centers/ boms/ work-orders/ time-logs/ mrp/ production-schedule/ inspection-plans/ inspections/
+quality-audits/ nonconformances/ capa/ coa/ returns/ return-reasons/ return-policies/ return-dispositions/
+return-tracking/ returns-bench/ refund-queue/ return-portal/ warranty-claims/`):
+
+- [ ] `kpi-targets/` — nothing existing starts with `kpi`. FREE.
+- [ ] `kpi-snapshots/` — distinct whole component from `kpi-targets/`. FREE.
+- [ ] `alerts/` — **`reorder-alerts/` exists (4.3)**, but `alerts` and `reorder-alerts` are different whole
+      components; neither can shadow the other. FREE. *(Do not "helpfully" rename either.)*
+- [ ] `inventory-analytics/` · `spend-analytics/` · `logistics-kpis/` · `margin-analytics/` — nothing existing
+      starts with `inventory`, `spend`, `logistics` or `margin`. FREE.
+- [ ] `disruption-risk/` — **`risk-assessments/` exists (4.2)**; `disruption-risk` is a distinct first component.
+      FREE.
+- [ ] **CSV exports get a literal sub-route under an already-claimed segment** (`inventory-analytics/export/`,
+      `kpi-snapshots/export/`) — zero new first segments, zero new collision surface.
+- [ ] **4.11 introduces NO greedy `<str:…>` converter** (4.10's `return-tracking/<str:token>/` is the module's
+      only one and sits alone on its own segment). State that in the collision comment.
+- [ ] Within every module: literal routes (`add/`, `export/`, `capture/`, `detect/`) **before** the `<int:pk>/`
+      ones; every verb route sits under its own `<int:pk>/`.
+- [ ] Route names (these are what `LIVE_LINKS` and the smoke test reverse):
+      `kpitarget_list/_create/_detail/_edit/_delete/_snapshot` ·
+      `kpisnapshot_list/_detail/_delete/_capture/_export` ·
+      `supplychainalert_list/_create/_detail/_edit/_delete/_acknowledge/_assign/_snooze/_resolve/_dismiss/_detect` ·
+      `inventory_analytics/_export`, `spend_analytics/_export`, `logistics_kpis/_export`,
+      `margin_analytics/_export`, `disruption_risk/_export`.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **ONE new `LIVE_LINKS["4.11"]` entry**, appended after the `"4.10"` block, with
+      the five NavERP.md bullet names **verbatim** (NavERP.md lines 804–808):
+      ```
+      "4.11": {
+          "Inventory Dashboards":  "scm:inventory_analytics",   # computed (valuation_report precedent)
+          "Procurement Analytics": "scm:spend_analytics",       # computed spend cube + savings tables
+          "Logistics KPIs":        "scm:logistics_kpis",        # computed carrier/lane/utilization scorecards
+          "Financial Reporting":   "scm:margin_analytics",      # operational margin + cost-to-serve, NOT the ledger
+          "Predictive Analytics":  "scm:disruption_risk",       # explainable composite + spike detection
+      },
+      ```
+- [ ] Preceding comment block in the established 4.9/4.10 style, recording: `KpiTarget` and `KpiSnapshot` are
+      **masters with no sidebar key** (the `InspectionPlan` / `WorkCenter` / `ReorderRule` / `ReturnReason`
+      precedent), reached from the analytics pages; the **alert inbox** `scm:supplychainalert_list` is reached from
+      a persistent open-count chip in every analytics page header; 4.11 writes **no** `StockMove` and **no**
+      `JournalEntry`; and the 10.8/10.11 boundary.
+- [ ] **All five destinations are distinct** (L30 — the "four bullets, one URL" failure). Confirm at smoke time.
+- [ ] L32 is a non-issue here — all five are staff-facing computed pages; there is no portal view in 4.11.
+- [ ] **NO `config/settings.py` change, NO `config/urls.py` change** — `apps.scm` is already registered and
+      `include("apps.scm.urls")` is already wired.
+
+---
+
+## Templates (`templates/scm/analytics/` — sub-module folder, then entity folder)
+
+Per the mandatory folder rule: `templates/<app>/<submodule>/<entity>/<page>.html` with **bare page filenames**;
+standalone report pages sit at the **sub-module root** (rule 6, matching
+`templates/scm/demandplanning/safety_stock_report.html`). `{% extends "base.html" %}` unchanged.
+
+Entity pages:
+- [ ] `templates/scm/analytics/kpitarget/list.html`
+- [ ] `templates/scm/analytics/kpitarget/detail.html`
+- [ ] `templates/scm/analytics/kpitarget/form.html`
+- [ ] `templates/scm/analytics/kpisnapshot/list.html`
+- [ ] `templates/scm/analytics/kpisnapshot/detail.html`  *(no `form.html` — system-written; the "Capture" POST is
+      the create path. Note this in the list page's empty state so it is not read as a missing feature.)*
+- [ ] `templates/scm/analytics/supplychainalert/list.html`  ← **the daily-driver page**
+- [ ] `templates/scm/analytics/supplychainalert/detail.html`
+- [ ] `templates/scm/analytics/supplychainalert/form.html`
+
+Standalone report pages (sub-module root, no entity folder):
+- [ ] `templates/scm/analytics/inventory_analytics.html`
+- [ ] `templates/scm/analytics/spend_analytics.html`
+- [ ] `templates/scm/analytics/logistics_kpis.html`
+- [ ] `templates/scm/analytics/margin_analytics.html`
+- [ ] `templates/scm/analytics/disruption_risk.html`
+
+Rules every one of the 13 must satisfy:
+- [ ] **Badges: colour-named ONLY** (L33 ×4, L40 §2). Fixed mapping to use everywhere in 4.11 —
+      `status_band`: `ok→badge-green`, `warning→badge-amber`, `critical→badge-red`, `unknown→badge-muted`;
+      `SupplyChainAlert.status`: `open→badge-red`, `acknowledged→badge-amber`, `snoozed→badge-info`,
+      `resolved→badge-green`, `dismissed→badge-muted`;
+      `severity`: `critical→badge-red`, `warning→badge-amber`, `info→badge-info`;
+      `direction`/`scope`/`period_grain` chips → `badge-slate`. Always an `{% else %}` fallback rendering
+      `{{ obj.get_<field>_display }}`. **`badge-success` / `badge-danger` / `badge-warning` do not exist.**
+- [ ] **Detail pages use `<dl class="detail-grid"><div class="detail-item"><dt>…</dt><dd>…</dd></div></dl>`** —
+      `.detail-label` / `.detail-value` do not exist (L40 §2). `stat-icon` modifiers: `blue/green/orange/purple/
+      slate` only — **no `amber`, no `red`**; a zero count that is *good news* renders green, not amber (the
+      4.10 correction — an amber zero trains people to ignore the amber that matters).
+- [ ] **Every list page:** a filter bar reflecting `request.GET` + an **Actions column** (view eye / edit pencil /
+      delete bin as a POST form with `{% csrf_token %}` and `onclick="return confirm(...)"`) + pagination with
+      `{% if page_obj.has_previous %}` / `has_next` guards (L9) + a real empty state.
+      `kpisnapshot/list.html` has view + delete only (no edit) — state why inline.
+- [ ] **Every detail page:** an Actions sidebar (Edit / Delete POST+confirm / Back to List), status-conditional
+      where the workflow says so.
+- [ ] FK filter comparison: `{% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}` —
+      **never `|slugify`**. String fields compare directly against the choice value.
+- [ ] Filters per list page — and **the view must pass every one of these into the context** (the recurring bug):
+  - [ ] `kpitarget_list`: `q` (number/name/metric), `metric`, `scope`, `severity`, `is_alerting`, `status`
+        (active/inactive) → context needs `metric_choices`, `scope_choices`, `severity_choices`.
+  - [ ] `kpisnapshot_list`: `q` (metric/dimension_label), `metric`, `status_band`, `kpi_target`,
+        `date_from`/`date_to` on `period_end` (reuse `_date_window` from `views/_helpers.py`) → context needs
+        `metric_choices`, `band_choices`, `targets`.
+  - [ ] `supplychainalert_list`: `q` (number/title/dimension_label), `status`, `severity`, `alert_type`,
+        `assigned_to`, `min_impact` → context needs `status_choices`, `severity_choices`, `alert_type_choices`,
+        `assignees`. Default ordering by `impact_value` desc, with a "sort by newest" toggle.
+- [ ] Report page filter bars: `date_range` (registry keys) + `date_from`/`date_to` override, plus —
+      inventory: `category`, `location`; spend: `vendor`, `gl_account`, `org_unit`; logistics: `carrier`,
+      `basis`; margin: `customer`, `category`, `channel`; risk: `severity`, `vendor`. **Filters are applied to the
+      queryset BEFORE any aggregation/pagination.**
+- [ ] Every report page header carries: the page title, an **"as of &lt;timestamp&gt;" data-freshness stamp**, and
+      an **open-alert count chip** linking `scm:supplychainalert_list`. Six lines, repeated inline in each of the
+      five templates — do **not** invent a module-local partial (there are none under `templates/scm/`, and
+      partials live at the templates root).
+- [ ] Caveat strips rendered on the page (not buried in a docstring): the GL-account category axis
+      (`spend_analytics`), vendor-level off-contract (`spend_analytics`), the OTIF in-full definition
+      (`logistics_kpis`), the `issue`-vs-`consumption`-vs-`transfer` turnover decision (`inventory_analytics`),
+      the L29 not-the-statutory-P&L notice + link-out (`margin_analytics`), the "deterministic explainable
+      composite — not AI/ML" notice (`disruption_risk`), the gross-vs-netted demand series note, and the
+      mixed-currency warning wherever a window spans more than one currency.
+- [ ] **SKU-level drill-down** (Netstock's "high-level KPI to item detail in seconds"): every inventory bucket row
+      links to the item rows, and each item row links to the existing `scm:item_detail`. Spend rows link to
+      `scm:purchaseorder_detail` / `scm:supplierprofile_detail`; logistics rows to `scm:carrier_detail` /
+      `scm:shipment_detail`; risk rows to the subject FK's own detail page.
+- [ ] No `{#` / `{% comment` leaks; no template renders a field the view did not pass.
+
+---
+
+## Seeder — `apps/scm/management/commands/seed_scm.py`
+
+- [ ] Add `_seed_analytics_tenant(self, tenant)` and call it **LAST in `handle()`**, immediately after
+      `self._seed_returns_tenant(tenant)` (currently line ~114), with a comment in the established style:
+      *"4.11 LAST OF ALL: it snapshots figures derived from every earlier sub-module's rows — 4.1 POs/GRNs,
+      4.2 scorecards/contracts/risk, 4.3 the stock ledger, 4.5 sales orders, 4.6 shipments/freight invoices,
+      4.7 forecasts/reorder rules, 4.8 work orders, 4.9 NCRs/CAPAs and 4.10 returns — so every one of those must
+      already exist. It WRITES no StockMove and no JournalEntry."*
+- [ ] **Idempotent guard on the FIRST row this block writes** — `if KpiTarget.objects.filter(tenant=tenant)
+      .exists(): print "<tenant>: analytics data already exists — skipping." ; return`. (Guarding on a *later*
+      row is the 4.9/4.10 correction: a run that aborted mid-block would re-raise on the un-tripped guard.)
+- [ ] **Prerequisite check: warn and `return` rather than half-seed** — require at least one `StockMove` and one
+      `PurchaseOrder` for the tenant; otherwise
+      `self.stdout.write(self.style.WARNING(f"{tenant.name}: no stock or purchase history — skipping analytics seed."))`.
+- [ ] Create ~6 `KpiTarget` rows spanning all five pages and both directions, each with `parameter_*` where the
+      registry requires it:
+      `inv_turnover` (higher, target 6.00 / warn 4.00 / crit 3.00, month grain, pinned) ·
+      `inv_dead_stock_value` (lower, `parameter_days=90`, target 0 / warn 5000 / crit 20000, `is_alerting=True`,
+      `min_impact_value=1000`) ·
+      `spend_off_contract_pct` (lower, target 5 / warn 15 / crit 25) ·
+      `otd_pct` (higher, target 95 / warn 90 / crit 85, `is_alerting=True`) ·
+      `gross_margin_pct` (higher, target 35 / warn 28 / crit 20) ·
+      `supplier_disruption_score` (lower, `parameter_days=60`, target 20 / warn 40 / crit 60, `is_alerting=True`,
+      `scope="vendor"`, `scope_vendor=` the 4.1 supplier `Party` matched by name).
+      Set `owner` from `self._admin(tenant)`.
+- [ ] Create 3 back-dated monthly `KpiSnapshot` rows per target by calling **`analytics.capture_snapshots()`** —
+      the exact function the POST action calls. **Nothing here hand-sets a value that merely looks plausible**
+      (the 4.10 seeder posture). `unique_together` makes a re-run update-in-place rather than duplicate.
+- [ ] Raise alerts by calling **`analytics.detect_alerts()`** — again the exact function the POST action calls —
+      so the seeded inbox is real, then hand-advance one row to `acknowledged` (assigned to the tenant admin) and
+      one to `resolved` with a `resolution_note`, so every status badge and every severity colour renders on the
+      list page.
+- [ ] Print the established one-line summary (`"<tenant>: analytics — 6 KPI targets, N snapshots, M alerts."`)
+      and extend the final `SUCCESS` string with `"+ 4.11 analytics"`.
+- [ ] Idempotency proof: `python manage.py seed_scm` twice; the second run must print the skip line and change
+      no row counts.
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` → `0019_…`; confirm it creates only the 3 new tables + indexes
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py makemigrations --check` → "No changes detected" after the migration
+- [ ] `python manage.py seed_scm` ×2 — second run idempotent (skip line, identical counts)
+- [ ] `python manage.py check` → 0 issues (in particular: no `fields.E304/E305` reverse-accessor clash from the
+      six subject FKs and the four scope FKs)
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`**:
+  - [ ] every new `scm:*` url reverses and returns 200/302 (all 24 route names listed above)
+  - [ ] content assertions: no `{#` or `{% comment` leaks; each page's `<title>`/H1 present; the seeded
+        `KPI-00001` and an `ALR-…` visible; the "as of" stamp present on all five report pages; the L29
+        not-the-statutory-P&L notice present on `margin_analytics`; the "not AI/ML" notice on `disruption_risk`
+  - [ ] **cross-tenant IDOR → 404** on `kpitarget_detail` / `_edit` / `_delete`, `kpisnapshot_detail` / `_delete`,
+        `supplychainalert_detail` / `_edit` / `_delete` **and on every POST action**
+  - [ ] every POST-only action rejects GET (405/302, never a state change)
+  - [ ] a non-admin tenant member is refused `kpisnapshot_capture` and `supplychainalert_detect`
+        (`@tenant_admin_required`)
+- [ ] **L40 §1 — the O(1)-guard check.** Anything bounded must be bounded by a count computed **arithmetically**,
+      never by `len(build_the_whole_thing())`:
+  - [ ] `capture_snapshots` caps the per-target dimension fan-out with `MAX_SNAPSHOT_DIMENSIONS` checked against a
+        `.count()` **before** materializing rows
+  - [ ] the trend window is capped by `MAX_TREND_PERIODS` derived from `period_count(grain, start, end)`
+        (arithmetic — reuse 4.7's shape, do not re-derive)
+  - [ ] `detect_alerts` caps rows per `alert_type` and honours `min_impact_value` **in the query**, not after
+  - [ ] **test each guard with the actual attack input** — a `scope="all"` target on a tenant with a large
+        catalogue, and a `day`-grain `all`-time range — not a merely-large one
+- [ ] **L40 §3 (a) — grep for EVERY writer of a "protected" column before calling it protected.** The protected
+      set is `KpiSnapshot.value` / `.status_band` / `.breakdown` and `SupplyChainAlert.status` /
+      `.acknowledged_*` / `.resolved_*` / `.snoozed_until`. Enumerate and confirm the complete writer list is:
+      `capture_snapshots`, `detect_alerts`, the five alert workflow actions, the seeder — and that `admin.py` has
+      them in `readonly_fields` and both `ModelForm`s exclude them. *Gating the new path is not gating the column.*
+- [ ] **L40 §3 (b) — two records joined by an action must agree on more than the tenant.** Check and test:
+      a `KpiSnapshot` must carry its **target's own** `metric` and scope (never a caller-supplied `metric`);
+      an alert's `kpi_target`, when set, must be the target whose `metric` the alert names; every `KpiTarget`
+      scope FK must belong to the same tenant (validated in `clean()`, not merely narrowed in the form).
+- [ ] **L39 — write the conjunctions down and check each is non-empty:** can `is_alerting` ever fire with no band?
+      can a detector-refired alert still reach `resolved`? does `snooze` require a status the UI can actually be
+      in? And test the forms **unbound**: `KpiTargetForm(tenant=t).fields["scope_vendor"].queryset.count() > 0`
+      on a fresh create form (the 4.5 `ship_to_address` failure — a queryset narrowed by a not-yet-chosen key is
+      permanently empty).
+- [ ] Performance: no `Item.on_hand()` in a loop anywhere (use `ReorderRule.on_hand_map`); every report page's
+      query count is O(1) in row count, not O(n); `select_related` / `prefetch_related` on every list and on every
+      form queryset whose `__str__` walks a second FK.
+- [ ] Sidebar shows **4.11 Live** with five links, each landing on a **distinct** page (L30 human/product pass);
+      no bullet renders "Soon".
+
+---
+
+## Close-out
+
+- [ ] `code-reviewer` → apply findings → commit
+- [ ] `explorer` → apply → commit
+- [ ] `frontend-reviewer` → apply → commit
+- [ ] `performance-reviewer` → apply → commit
+- [ ] `qa-smoke-tester` → apply → commit
+- [ ] `security-reviewer` → apply → commit
+- [ ] `test-writer` → apply → commit
+- [ ] **Update `.claude/skills/scm/SKILL.md`** (it exists — extend it, do not recreate): 4.11's three models +
+      the `analytics.py` registry, the 24 url names, the 13 templates, the `_seed_analytics_tenant` block, the
+      `LIVE_LINKS["4.11"]` entry, and a "Conventions & gotchas" line for the 10.8/10.11 boundary and the
+      no-JournalEntry/no-StockMove rule.
+- [ ] README — add 4.11 to the SCM module section.
+- [ ] One file per commit throughout, PowerShell `;` separators, **never `git push`**.
+
+---
+
+## Later passes / deferred (carried over from research-scm-4.11.md)
+
+Parked for sibling sub-modules:
+- Carbon footprint / emissions alongside cost → **4.12** "Sustainability Tracking" (4.6 already stored
+  `Load.distance_km` + `estimated_fuel_cost` for it)
+- Asset/fleet uptime, MTBF, maintenance-cost analytics → **4.13**
+- Labor productivity (units/hour, picker accuracy) dashboards → **4.14** (even though `PickTask` /
+  `ProductionTimeLog` rows exist today)
+- Cold-chain temperature-excursion analytics → **4.15**; 3PL billing / customer-facing analytics portal →
+  **4.16** / **4.17**
+- Savings-**initiative lifecycle** tracker (identified → approved → in sourcing → realized → validated) →
+  **6.5 / 6.14**. 4.11's bullet says "cost-saving opportunit**ies**" = the *identification* page, which ships here
+- Supplier 360 feedback / PIPs / external industry benchmarks → **6.16**; restricted-party screening →  **6.17**
+- **Generic dashboard builder, formula-authored KPI library, OLAP cubes, ML/AutoML, NLQ, scheduled
+  distribution/bursting/notification center → Module 10 (`bi`): 10.8, 10.10, 10.11, 10.12, 10.13, 10.15, 10.16.
+  This is the single most important boundary in the pass.**
+- Statutory P&L, budget variance, journal-backed COGS → **`apps.accounting`** (L29)
+
+Deferred (later passes / integrations):
+- Scenario / what-if simulation, digital twin, network optimization — needs a solver; 4.7 already ships forecast
+  scenarios
+- External data: market rate benchmarks (project44/SONAR), community spend benchmarks (Coupa/Sievo), category
+  price indices (Sievo/GEP), weather/geopolitical/port-congestion feeds (Everstream/Resilinc), third-party credit
+  scores — all shape `SupplyChainAlert.detail` / `KpiSnapshot.breakdown`, ship nothing now
+- ML-derived thresholds (SAP's k-means/DBSCAN alerting), AutoML, propensity models → **10.13**
+- Spend auto-classification into a category taxonomy + supplier normalization/dedup — needs a classifier **and** is
+  blocked upstream by 4.1 PO lines carrying `sku_hint` free text instead of an `Item` FK. Note the future
+  migration; GL account is the category axis for now
+- Contract-**line**-level compliance / leakage — needs a `SupplierContract`↔item/price linkage 4.2 did not build
+- Multi-currency normalization — no FX-rate table verified in this repo; show the mixed-currency warning, do not
+  invent a rate. Revisit when accounting exposes rates
+- Resolution Rooms / threaded collaboration on an alert (Blue Yonder) — `resolution_note` + `core.Activity` cover
+  the audit trail this pass
+- Snapshot **scheduling** — POST-triggered + management command this pass; cron/Celery is integration/later and
+  10.16 territory
+- Alert **subscriptions** scoped by filter, push notifications (SAP/o9) → in-app only this pass; 10.16 owns
+  distribution
+
+## Review notes
+
+(filled in at the end)
