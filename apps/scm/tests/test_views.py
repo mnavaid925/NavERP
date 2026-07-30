@@ -10993,3 +10993,2231 @@ class TestQualityFormPagesRender:
         assert create.context["formset"].total_form_count() == 1
         edit = client_a.get(reverse("scm:capaaction_edit", args=[capa_action_a.pk]))
         assert edit.context["formset"].total_form_count() == 2   # 1 saved + 1 extra
+
+
+# ================================================================================================
+# SCM 4.10 Returns Management (Reverse Logistics) — views
+#
+# Every class marked REGRESSION LOCK pins a defect the review pass found and fixed. Each of those
+# tests fails against the pre-fix behaviour — that is the whole point of writing them.
+# ================================================================================================
+def _returns_query_count(client, url, params=None):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(url, params or {})
+    assert resp.status_code == 200
+    return len(ctx.captured_queries)
+
+
+def _rma_line_row(item, reason, **overrides):
+    row = {
+        "sales_order_line": "", "item": str(item.pk), "description": "Widget",
+        "quantity_requested": "3", "quantity_approved": "0", "reason": str(reason.pk),
+        "unit_price": "15.00", "tax_pct": "20.00", "unit_cost": "8.0000", "line_fee": "0.00",
+        "condition_reported": "", "lot_serial": "", "photo": "", "id": "",
+    }
+    row.update(overrides)
+    return row
+
+
+def _rma_post(customer, item, reason, *, rows=None, **overrides):
+    """Header + the ``lines`` inline formset, the wire format the RMA form view parses."""
+    from django.utils import timezone
+    data = {
+        "customer": str(customer.pk), "sales_order": "", "return_type": "physical",
+        "source": "csr", "policy": "", "requested_on": timezone.localdate().isoformat(),
+        "resolution": "refund", "refund_method": "original_tender",
+        "return_method": "mail_prepaid", "dropoff_location": "", "return_carrier": "",
+        "return_tracking_number": "", "return_label_url": "", "label_cost": "0",
+        "counterparty_rma_number": "", "currency": "", "advance_refund_deadline": "", "notes": "",
+    }
+    data.update(overrides)
+    data.update(formset_data("lines", rows if rows is not None
+                             else [_rma_line_row(item, reason)]))
+    return data
+
+
+def _bench_row(location, **overrides):
+    row = {"quantity": "1", "location": str(location.pk), "lot_serial": "",
+           "condition_grade": "a", "disposition": "received_pending", "restock_location": "",
+           "restock_unit_cost": "8.0000", "recovery_value": "0.00", "notes": "", "id": ""}
+    row.update(overrides)
+    return row
+
+
+def _bench_post(line, location, *, rows=None, **overrides):
+    data = {"return_line": str(line.pk)}
+    data.update(overrides)
+    data.update(formset_data("dispositions", rows if rows is not None
+                             else [_bench_row(location)]))
+    return data
+
+
+def _claim_post(supplier, item, *, rows=None, **overrides):
+    data = {
+        "supplier": str(supplier.pk), "item": str(item.pk), "quantity_claimed": "1",
+        "lot_serial": "", "serial_reference": "", "return_authorization": "",
+        "nonconformance": "", "goods_receipt": "", "purchase_date": "", "warranty_start": "",
+        "warranty_end": "", "failure_date": "", "usage_context": "",
+        "defect_classification": "unknown", "supplier_rma_number": "",
+        "submission_channel": "email", "response_due_on": "", "description": "", "notes": "",
+    }
+    # `initial` belongs to the FORMSET's management form, not to the claim form — without threading
+    # it, an edit POST declared costs-INITIAL_FORMS=0 while supplying an existing row's id, which
+    # BaseWarrantyClaimCostFormSet.clean() correctly refuses as a stale/crafted post.
+    initial = overrides.pop("initial", 0)
+    data.update(overrides)
+    data.update(formset_data("costs", rows if rows is not None else [
+        {"cost_type": "part", "description": "Part", "quantity": "1", "unit_amount": "100.00",
+         "amount_approved": "0.00", "id": "", "DELETE": ""}], initial=initial))
+    return data
+
+
+def _decide(client, row, **overrides):
+    data = {"disposition": "restock", "condition_grade": "a", "restock_location": "",
+            "restock_unit_cost": "", "recovery_value": "", "notes": ""}
+    data.update(overrides)
+    return client.post(reverse("scm:returndisposition_decide", args=[row.pk]), data)
+
+
+_RETURNS_LIST_ROUTES = ("returnauthorization_list", "returndisposition_list",
+                        "returnpolicy_list", "returnreason_list", "warrantyclaim_list")
+_RETURNS_QUEUE_ROUTES = ("refund_queue", "returns_awaiting_disposition",
+                         "advance_refund_exposure", "return_portal")
+
+
+class TestReturnAuthorizationCRUD:
+    def test_list_returns_200_with_the_right_template_and_context(self, client_a,
+                                                                   return_authorization_a):
+        resp = client_a.get(reverse("scm:returnauthorization_list"))
+        assert resp.status_code == 200
+        assert "scm/returns/returnauthorization/list.html" in [t.name for t in resp.templates]
+        assert return_authorization_a in resp.context["object_list"]
+        for key in ("status_choices", "type_choices", "source_choices", "resolution_choices",
+                    "method_choices", "customers", "policies", "stats", "page_obj", "q"):
+            assert key in resp.context, key
+
+    def test_list_never_contains_another_tenants_rows(self, client_a, return_authorization_a,
+                                                      return_authorization_b):
+        rows = list(client_a.get(reverse("scm:returnauthorization_list")).context["object_list"])
+        assert return_authorization_a in rows
+        assert return_authorization_b not in rows
+
+    def test_list_search_matches_the_number_the_customer_and_the_sku(self, client_a,
+                                                                     return_authorization_a,
+                                                                     item_a):
+        url = reverse("scm:returnauthorization_list")
+        for term in (return_authorization_a.number, "Acme Retail", item_a.sku):
+            rows = list(client_a.get(url, {"q": term}).context["object_list"])
+            assert return_authorization_a in rows, term
+        assert return_authorization_a not in list(
+            client_a.get(url, {"q": "nothing matches this"}).context["object_list"])
+
+    def test_list_filters_by_status_type_source_and_customer(self, client_a,
+                                                              return_authorization_a,
+                                                              rma_credit_only_a, customer_a):
+        url = reverse("scm:returnauthorization_list")
+        drafts = list(client_a.get(url, {"status": "draft"}).context["object_list"])
+        assert return_authorization_a in drafts and rma_credit_only_a not in drafts
+        credit = list(client_a.get(url, {"return_type": "credit_only"}).context["object_list"])
+        assert rma_credit_only_a in credit and return_authorization_a not in credit
+        assert return_authorization_a in list(
+            client_a.get(url, {"source": "csr"}).context["object_list"])
+        assert return_authorization_a in list(
+            client_a.get(url, {"customer": str(customer_a.pk)}).context["object_list"])
+
+    def test_the_stats_strip_counts_the_credit_only_and_advance_refund_bands(
+        self, client_a, return_authorization_a, rma_credit_only_a, rma_advance_refund_a,
+    ):
+        stats = client_a.get(reverse("scm:returnauthorization_list")).context["stats"]
+        assert stats["credit_only"] == 1
+        assert stats["advance_refunds"] == 1
+        assert stats["open"] >= 2
+        assert stats["credited"] == 0
+
+    def test_the_overdue_filter_narrows_to_unshipped_approved_returns(self, client_a,
+                                                                       rma_advance_refund_a,
+                                                                       rma_awaiting_receipt_a):
+        rows = list(client_a.get(reverse("scm:returnauthorization_list"),
+                                 {"overdue": "yes"}).context["object_list"])
+        assert rma_advance_refund_a in rows          # approved 39 days ago, nothing shipped
+        assert rma_awaiting_receipt_a not in rows    # approved today
+
+    def test_create_saves_with_the_request_tenant_and_lands_as_a_draft(self, client_a, tenant_a,
+                                                                        customer_a, item_a,
+                                                                        return_reason_a,
+                                                                        return_policy_a):
+        from apps.scm.models import ReturnAuthorization
+        resp = client_a.post(reverse("scm:returnauthorization_create"),
+                             _rma_post(customer_a, item_a, return_reason_a))
+        assert resp.status_code == 302
+        rma = ReturnAuthorization.objects.get(tenant=tenant_a, customer=customer_a)
+        assert rma.status == "draft"
+        assert rma.number.startswith("RMA-")
+        assert rma.lines.count() == 1
+        assert rma.policy == return_policy_a          # selected from the item's category ladder
+
+    def test_a_portal_sourced_return_lands_as_requested(self, client_a, tenant_a, customer_a,
+                                                        item_a, return_reason_a):
+        from apps.scm.models import ReturnAuthorization
+        client_a.post(reverse("scm:returnauthorization_create"),
+                      _rma_post(customer_a, item_a, return_reason_a, source="portal"))
+        assert ReturnAuthorization.objects.get(tenant=tenant_a).status == "requested"
+
+    def test_create_takes_the_currency_from_the_order_when_none_is_given(self, client_a,
+                                                                         tenant_a, customer_a,
+                                                                         item_a, return_reason_a,
+                                                                         returns_sales_order_a,
+                                                                         usd):
+        from apps.scm.models import ReturnAuthorization
+        client_a.post(reverse("scm:returnauthorization_create"),
+                      _rma_post(customer_a, item_a, return_reason_a,
+                                sales_order=str(returns_sales_order_a.pk)))
+        assert ReturnAuthorization.objects.get(tenant=tenant_a).currency == usd
+
+    def test_create_refuses_a_return_with_no_lines(self, client_a, tenant_a, customer_a, item_a,
+                                                   return_reason_a):
+        from apps.scm.models import ReturnAuthorization
+        resp = client_a.post(reverse("scm:returnauthorization_create"),
+                             _rma_post(customer_a, item_a, return_reason_a, rows=[]))
+        assert resp.status_code == 200
+        assert ReturnAuthorization.objects.filter(tenant=tenant_a).count() == 0
+
+    def test_the_create_page_renders_one_blank_line_row(self, client_a):
+        resp = client_a.get(reverse("scm:returnauthorization_create"))
+        assert resp.status_code == 200
+        assert "scm/returns/returnauthorization/form.html" in [t.name for t in resp.templates]
+        assert resp.context["is_edit"] is False
+        assert resp.context["obj"] is None
+        assert resp.context["formset"].total_form_count() == 1
+
+    def test_edit_saves_and_the_edit_page_renders_the_saved_lines(self, client_a,
+                                                                  return_authorization_a,
+                                                                  customer_a, item_a,
+                                                                  return_reason_a):
+        url = reverse("scm:returnauthorization_edit", args=[return_authorization_a.pk])
+        page = client_a.get(url)
+        assert page.status_code == 200
+        assert page.context["is_edit"] is True
+        assert page.context["formset"].total_form_count() == 2      # 1 saved + 1 extra
+        existing = return_authorization_a.lines.first()
+        rows = [_rma_line_row(item_a, return_reason_a, id=str(existing.pk),
+                              description="Corrected description")]
+        assert client_a.post(url, _rma_post(customer_a, item_a, return_reason_a,
+                                            rows=rows, initial=1,
+                                            notes="Edited")).status_code == 302
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.notes == "Edited"
+
+    def test_edit_is_refused_once_the_return_is_no_longer_a_promise_in_progress(
+        self, client_a, rma_awaiting_receipt_a,
+    ):
+        resp = client_a.get(reverse("scm:returnauthorization_edit",
+                                    args=[rma_awaiting_receipt_a.pk]))
+        assert resp.status_code == 302
+        assert str(rma_awaiting_receipt_a.pk) in resp["Location"]
+
+    def test_detail_renders_the_documented_context(self, client_a, return_authorization_a):
+        resp = client_a.get(reverse("scm:returnauthorization_detail",
+                                    args=[return_authorization_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/returns/returnauthorization/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "lines", "verdict", "snapshot", "settlement", "warranty_claims",
+                    "approval_form", "reject_form", "receive_form", "locations", "items"):
+            assert key in resp.context, key
+        assert set(resp.context["settlement"]) == {"subtotal", "fee", "tax", "total"}
+
+    def test_delete_is_POST_only_and_a_GET_never_deletes(self, client_a,
+                                                          return_authorization_a):
+        from apps.scm.models import ReturnAuthorization
+        assert client_a.get(reverse("scm:returnauthorization_delete",
+                                    args=[return_authorization_a.pk])).status_code == 405
+        assert ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).exists()
+        assert client_a.post(reverse("scm:returnauthorization_delete",
+                                     args=[return_authorization_a.pk])).status_code == 302
+        assert not ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).exists()
+
+    def test_delete_is_refused_once_goods_are_on_the_bench(self, client_a, rma_received_a,
+                                                            disposition_a):
+        from apps.scm.models import ReturnAuthorization
+        assert client_a.post(reverse("scm:returnauthorization_delete",
+                                     args=[rma_received_a.pk])).status_code == 302
+        assert ReturnAuthorization.objects.filter(pk=rma_received_a.pk).exists()
+
+    def test_delete_is_refused_once_a_credit_note_exists(self, client_a, tenant_a,
+                                                          return_authorization_a, customer_a,
+                                                          usd):
+        from django.utils import timezone
+        from apps.accounting.models import Invoice
+        from apps.scm.models import ReturnAuthorization
+        invoice = Invoice.objects.create(tenant=tenant_a, party=customer_a, kind="credit_note",
+                                         issue_date=timezone.localdate(), currency=usd)
+        ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).update(
+            credit_note=invoice)
+        assert client_a.post(reverse("scm:returnauthorization_delete",
+                                     args=[return_authorization_a.pk])).status_code == 302
+        assert ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).exists()
+
+
+class TestReturnAuthorizationLifecycle:
+    def test_approve_freezes_the_verdict_and_fills_the_approved_quantities(
+        self, client_a, return_authorization_a, admin_user,
+    ):
+        from django.utils import timezone
+        resp = client_a.post(reverse("scm:returnauthorization_approve",
+                                     args=[return_authorization_a.pk]),
+                             {"resolution": "refund", "refund_method": "original_tender"})
+        assert resp.status_code == 302
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "awaiting_receipt"
+        assert return_authorization_a.approved_on == timezone.localdate()
+        assert return_authorization_a.lines.first().quantity_approved == Decimal("3.0000")
+        snapshot = return_authorization_a.snapshot
+        assert snapshot["approved_resolution"] == "refund"
+        assert snapshot["window_overridden"] is False
+        assert snapshot["approved_by_user"] == admin_user.get_username()
+
+    def test_approving_a_credit_only_return_settles_it_immediately(self, client_a, tenant_a,
+                                                                    customer_a, item_a,
+                                                                    return_reason_a,
+                                                                    return_policy_a, usd):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        rma = ReturnAuthorization.objects.create(
+            tenant=tenant_a, customer=customer_a, return_type="credit_only",
+            return_method="keep_item", policy=return_policy_a,
+            requested_on=timezone.localdate(), currency=usd)
+        ReturnLine.objects.create(return_authorization=rma, item=item_a,
+                                  quantity_requested=Decimal("1"), reason=return_reason_a,
+                                  unit_price=Decimal("10.00"))
+        # A blind return (no sales_order) legitimately raises the "no order date is available —
+        # approve this on judgement, not on the policy" blocker, which is soft, so approval requires
+        # the documented override. That refusal is the design, not a bug: assert BOTH halves.
+        client_a.post(reverse("scm:returnauthorization_approve", args=[rma.pk]),
+                      {"resolution": "refund"})
+        rma.refresh_from_db()
+        assert rma.status == "draft", "a blind return must not auto-approve past the policy"
+        client_a.post(reverse("scm:returnauthorization_approve", args=[rma.pk]),
+                      {"resolution": "refund", "override_window": "on"})
+        rma.refresh_from_db()
+        assert rma.status == "settled"
+
+    def test_a_second_approve_is_a_no_op(self, client_a, return_authorization_a):
+        url = reverse("scm:returnauthorization_approve", args=[return_authorization_a.pk])
+        client_a.post(url, {"resolution": "refund"})
+        return_authorization_a.refresh_from_db()
+        first = return_authorization_a.policy_snapshot
+        client_a.post(url, {"resolution": "exchange"})
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.policy_snapshot == first
+        assert return_authorization_a.resolution == "refund"
+
+    def test_approving_a_return_with_no_lines_is_refused(self, client_a, tenant_a, customer_a,
+                                                          return_policy_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        rma = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 policy=return_policy_a,
+                                                 requested_on=timezone.localdate())
+        client_a.post(reverse("scm:returnauthorization_approve", args=[rma.pk]),
+                      {"resolution": "refund"})
+        rma.refresh_from_db()
+        assert rma.status == "draft"
+
+    def test_a_reason_that_requires_a_photo_blocks_approval_until_one_is_attached(
+        self, client_a, tenant_a, customer_a, return_policy_a, return_reason_photo_a, item_a,
+        returns_sales_order_a,
+    ):
+        from django.utils import timezone
+        from apps.core.models import Document
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        rma = ReturnAuthorization.objects.create(
+            tenant=tenant_a, customer=customer_a, sales_order=returns_sales_order_a,
+            policy=return_policy_a, requested_on=timezone.localdate())
+        line = ReturnLine.objects.create(return_authorization=rma, item=item_a,
+                                         quantity_requested=Decimal("1"),
+                                         reason=return_reason_photo_a,
+                                         unit_price=Decimal("15.00"))
+        client_a.post(reverse("scm:returnauthorization_approve", args=[rma.pk]),
+                      {"resolution": "refund"})
+        rma.refresh_from_db()
+        assert rma.status == "draft"
+        line.photo = Document.objects.create(tenant=tenant_a, name="Damage photo", file="documents/x.jpg")
+        line.save(update_fields=["photo"])
+        client_a.post(reverse("scm:returnauthorization_approve", args=[rma.pk]),
+                      {"resolution": "refund"})
+        rma.refresh_from_db()
+        assert rma.status == "awaiting_receipt"
+
+    def test_a_closed_window_is_refused_and_the_override_records_itself(self, client_a, tenant_a,
+                                                                        customer_a,
+                                                                        return_policy_a,
+                                                                        return_reason_a, item_a,
+                                                                        sales_order_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        rma = ReturnAuthorization.objects.create(
+            tenant=tenant_a, customer=customer_a, sales_order=sales_order_a,
+            policy=return_policy_a, requested_on=timezone.localdate())
+        ReturnLine.objects.create(return_authorization=rma, item=item_a,
+                                  quantity_requested=Decimal("1"), reason=return_reason_a,
+                                  unit_price=Decimal("15.00"))
+        url = reverse("scm:returnauthorization_approve", args=[rma.pk])
+        client_a.post(url, {"resolution": "refund"})
+        rma.refresh_from_db()
+        assert rma.status == "draft"                    # the window closed months ago
+        client_a.post(url, {"resolution": "refund", "override_window": "on"})
+        rma.refresh_from_db()
+        assert rma.status == "awaiting_receipt"
+        assert rma.snapshot["window_overridden"] is True
+
+    def test_a_resolution_the_policy_does_not_allow_is_refused(self, client_a,
+                                                                return_authorization_a,
+                                                                return_policy_a):
+        return_policy_a.allow_exchange = False
+        return_policy_a.save(update_fields=["allow_exchange"])
+        client_a.post(reverse("scm:returnauthorization_approve",
+                              args=[return_authorization_a.pk]), {"resolution": "exchange"})
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "draft"
+
+    def test_an_invalid_approve_payload_is_a_friendly_refusal_not_a_500(self, client_a,
+                                                                        return_authorization_a):
+        resp = client_a.post(reverse("scm:returnauthorization_approve",
+                                     args=[return_authorization_a.pk]),
+                             {"resolution": "not-a-resolution", "approved_on": "yesterday"})
+        assert resp.status_code == 302
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "draft"
+
+    def test_reject_requires_a_reason_and_records_it(self, client_a, return_authorization_a):
+        url = reverse("scm:returnauthorization_reject", args=[return_authorization_a.pk])
+        client_a.post(url, {"rejected_reason": ""})
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "draft"
+        client_a.post(url, {"rejected_reason": "Bought elsewhere."})
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "rejected"
+        assert return_authorization_a.rejected_reason == "Bought elsewhere."
+
+    def test_a_rejected_return_cannot_be_rejected_twice(self, client_a, return_authorization_a):
+        url = reverse("scm:returnauthorization_reject", args=[return_authorization_a.pk])
+        client_a.post(url, {"rejected_reason": "First"})
+        client_a.post(url, {"rejected_reason": "Second"})
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.rejected_reason == "First"
+
+    def test_cancel_works_and_is_refused_once_goods_are_on_the_bench(self, client_a,
+                                                                     return_authorization_a,
+                                                                     rma_received_a):
+        # Two DISTINCT returns, which is the whole point: `rma_received_a` has goods on the bench
+        # and must refuse the cancel, `return_authorization_a` is still a draft and must accept it.
+        # These are separate rows only because `rma_awaiting_receipt_a` builds its own RMA rather
+        # than mutating the draft one in place — see `_build_draft_rma` in conftest.
+        client_a.post(reverse("scm:returnauthorization_cancel", args=[rma_received_a.pk]))
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.status == "received"
+        client_a.post(reverse("scm:returnauthorization_cancel",
+                              args=[return_authorization_a.pk]))
+        return_authorization_a.refresh_from_db()
+        assert return_authorization_a.status == "cancelled"
+
+    def test_cancelling_a_terminal_return_is_a_no_op(self, client_a, rma_credit_only_a):
+        client_a.post(reverse("scm:returnauthorization_cancel", args=[rma_credit_only_a.pk]))
+        rma_credit_only_a.refresh_from_db()
+        assert rma_credit_only_a.status == "settled"
+
+
+class TestReturnAuthorizationReceiveAll:
+    def test_receiving_creates_a_pending_row_per_line_and_posts_NOTHING(self, client_a, tenant_a,
+                                                                        rma_awaiting_receipt_a,
+                                                                        location_a):
+        """REGRESSION LOCK (item 6). Intake is deliberately OFF-ledger: there is no blocked-stock
+        location type and ``Item.on_hand()`` sums every location, so an intake receipt would inflate
+        on-hand, valuation and 4.7's reorder inputs tenant-wide."""
+        from apps.scm.models import ReturnDisposition, StockMove
+        before = StockMove.objects.count()
+        resp = client_a.post(reverse("scm:returnauthorization_receive_all",
+                                     args=[rma_awaiting_receipt_a.pk]),
+                             {"location": str(location_a.pk), "condition_grade": "b"})
+        assert resp.status_code == 302
+        rows = ReturnDisposition.objects.filter(return_line__return_authorization=
+                                                rma_awaiting_receipt_a)
+        assert rows.count() == 1
+        row = rows.first()
+        assert row.disposition == "received_pending"
+        assert row.condition_grade == "b"
+        assert row.location == location_a
+        assert row.quantity == Decimal("3.0000")
+        assert StockMove.objects.count() == before          # nothing posted, ever
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.status == "received"
+
+    def test_the_restock_cost_is_seeded_from_the_grade_write_down_never_the_sale_price(
+        self, client_a, tenant_a, rma_awaiting_receipt_a, location_a, item_a, return_policy_a,
+    ):
+        from apps.scm.models import ReturnDisposition
+        item_a.average_cost = Decimal("10.0000")
+        item_a.save(update_fields=["average_cost"])
+        client_a.post(reverse("scm:returnauthorization_receive_all",
+                              args=[rma_awaiting_receipt_a.pk]),
+                      {"location": str(location_a.pk), "condition_grade": "c"})
+        row = ReturnDisposition.objects.get(
+            return_line__return_authorization=rma_awaiting_receipt_a)
+        assert row.restock_unit_cost == Decimal("4.0000")     # 40 % of 10.0000
+        assert row.restock_unit_cost != Decimal("15.0000")    # NEVER the sale price
+
+    def test_receiving_twice_adds_nothing(self, client_a, rma_awaiting_receipt_a, location_a):
+        from apps.scm.models import ReturnDisposition
+        url = reverse("scm:returnauthorization_receive_all", args=[rma_awaiting_receipt_a.pk])
+        client_a.post(url, {"location": str(location_a.pk), "condition_grade": "a"})
+        client_a.post(url, {"location": str(location_a.pk), "condition_grade": "a"})
+        assert ReturnDisposition.objects.filter(
+            return_line__return_authorization=rma_awaiting_receipt_a).count() == 1
+
+    def test_a_credit_only_return_has_nothing_to_receive(self, client_a, rma_credit_only_a,
+                                                          location_a):
+        from apps.scm.models import ReturnDisposition
+        client_a.post(reverse("scm:returnauthorization_receive_all",
+                              args=[rma_credit_only_a.pk]),
+                      {"location": str(location_a.pk), "condition_grade": "a"})
+        assert ReturnDisposition.objects.count() == 0
+
+    def test_an_unapproved_return_may_not_be_received_against(self, client_a,
+                                                               return_authorization_a,
+                                                               location_a):
+        from apps.scm.models import ReturnDisposition
+        client_a.post(reverse("scm:returnauthorization_receive_all",
+                              args=[return_authorization_a.pk]),
+                      {"location": str(location_a.pk), "condition_grade": "a"})
+        assert ReturnDisposition.objects.count() == 0
+
+    def test_a_tracked_line_with_no_lot_is_SKIPPED_rather_than_posted_untraceably(
+        self, client_a, tenant_a, rma_awaiting_receipt_a, item_lot_a, return_reason_a, location_a,
+    ):
+        from apps.scm.models import ReturnDisposition, ReturnLine
+        ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a, item=item_lot_a,
+                                  quantity_requested=Decimal("2"),
+                                  quantity_approved=Decimal("2"), reason=return_reason_a)
+        client_a.post(reverse("scm:returnauthorization_receive_all",
+                              args=[rma_awaiting_receipt_a.pk]),
+                      {"location": str(location_a.pk), "condition_grade": "a"})
+        rows = ReturnDisposition.objects.filter(
+            return_line__return_authorization=rma_awaiting_receipt_a)
+        assert rows.count() == 1
+        assert rows.first().return_line.item_id != item_lot_a.pk
+
+    def test_a_missing_bench_location_is_a_friendly_refusal(self, client_a,
+                                                             rma_awaiting_receipt_a):
+        from apps.scm.models import ReturnDisposition
+        resp = client_a.post(reverse("scm:returnauthorization_receive_all",
+                                     args=[rma_awaiting_receipt_a.pk]), {"condition_grade": "a"})
+        assert resp.status_code == 302
+        assert ReturnDisposition.objects.count() == 0
+
+
+class TestReturnDispositionCRUD:
+    def test_list_returns_200_with_the_right_template_and_context(self, client_a, disposition_a):
+        resp = client_a.get(reverse("scm:returndisposition_list"))
+        assert resp.status_code == 200
+        assert "scm/returns/returndisposition/list.html" in [t.name for t in resp.templates]
+        assert disposition_a in resp.context["object_list"]
+        for key in ("disposition_choices", "grade_choices", "locations", "items", "stats",
+                    "credit_only_waiting"):
+            assert key in resp.context, key
+
+    def test_list_never_contains_another_tenants_rows(self, client_a, disposition_a,
+                                                      disposition_b):
+        rows = list(client_a.get(reverse("scm:returndisposition_list")).context["object_list"])
+        assert disposition_a in rows and disposition_b not in rows
+
+    def test_list_search_and_filters(self, client_a, disposition_a, item_a, location_a,
+                                     rma_received_a):
+        url = reverse("scm:returndisposition_list")
+        for term in (item_a.sku, rma_received_a.number):
+            assert disposition_a in list(client_a.get(url, {"q": term}).context["object_list"]), term
+        assert disposition_a in list(
+            client_a.get(url, {"disposition": "received_pending"}).context["object_list"])
+        assert disposition_a in list(
+            client_a.get(url, {"condition_grade": "a"}).context["object_list"])
+        assert disposition_a in list(
+            client_a.get(url, {"location": str(location_a.pk)}).context["object_list"])
+        assert disposition_a in list(
+            client_a.get(url, {"item": str(item_a.pk)}).context["object_list"])
+        assert disposition_a in list(client_a.get(url, {"pending": "yes"}).context["object_list"])
+
+    def test_create_receives_rows_against_one_line_and_posts_nothing(self, client_a, tenant_a,
+                                                                      rma_awaiting_receipt_a,
+                                                                      return_line_a, location_a):
+        from apps.scm.models import ReturnDisposition, StockMove
+        before = StockMove.objects.count()
+        resp = client_a.post(reverse("scm:returndisposition_create"),
+                             _bench_post(return_line_a, location_a,
+                                         rows=[_bench_row(location_a, quantity="2")]))
+        assert resp.status_code == 302
+        row = ReturnDisposition.objects.get(return_line=return_line_a)
+        assert row.tenant == tenant_a
+        assert row.quantity == Decimal("2.0000")
+        assert row.disposition == "received_pending"
+        assert StockMove.objects.count() == before
+
+    def test_create_refuses_more_than_was_authorised(self, client_a, return_line_a, location_a):
+        from apps.scm.models import ReturnDisposition
+        resp = client_a.post(reverse("scm:returndisposition_create"),
+                             _bench_post(return_line_a, location_a,
+                                         rows=[_bench_row(location_a, quantity="9")]))
+        assert resp.status_code == 200
+        assert ReturnDisposition.objects.count() == 0
+
+    def test_the_create_page_can_be_pre_pointed_at_a_line(self, client_a, return_line_a):
+        resp = client_a.get(reverse("scm:returndisposition_create"),
+                            {"line": str(return_line_a.pk)})
+        assert resp.status_code == 200
+        assert resp.context["line"] == return_line_a
+        assert "scm/returns/returndisposition/form.html" in [t.name for t in resp.templates]
+
+    def test_a_junk_line_parameter_still_renders(self, client_a):
+        for junk in ("abc", "-1", "999999", ""):
+            resp = client_a.get(reverse("scm:returndisposition_create"), {"line": junk})
+            assert resp.status_code == 200, junk
+            assert resp.context["line"] is None, junk
+
+    def test_detail_renders_the_documented_context(self, client_a, disposition_a):
+        resp = client_a.get(reverse("scm:returndisposition_detail", args=[disposition_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/returns/returndisposition/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "line", "rma", "policy", "item_average_cost",
+                    "suggested_restock_cost", "moves", "sibling_rows", "decide_form",
+                    "split_form", "can_raise_ncr"):
+            assert key in resp.context, key
+
+    def test_the_raise_ncr_button_is_data_driven_by_the_reason(self, client_a, disposition_a,
+                                                               return_reason_a):
+        assert client_a.get(reverse("scm:returndisposition_detail",
+                                    args=[disposition_a.pk])).context["can_raise_ncr"] is False
+        return_reason_a.raises_nonconformance = True
+        return_reason_a.save(update_fields=["raises_nonconformance"])
+        assert client_a.get(reverse("scm:returndisposition_detail",
+                                    args=[disposition_a.pk])).context["can_raise_ncr"] is True
+
+    def test_edit_saves_and_delete_is_POST_only(self, client_a, disposition_a, location_a):
+        from apps.scm.models import ReturnDisposition
+        url = reverse("scm:returndisposition_edit", args=[disposition_a.pk])
+        assert client_a.get(url).status_code == 200
+        data = {"return_line": str(disposition_a.return_line_id), "quantity": "2",
+                "location": str(location_a.pk), "lot_serial": "", "condition_grade": "d",
+                "disposition": "received_pending", "restock_location": "",
+                "restock_unit_cost": "8.0000", "recovery_value": "0.00", "nonconformance": "",
+                "notes": "Regraded"}
+        assert client_a.post(url, data).status_code == 302
+        disposition_a.refresh_from_db()
+        assert disposition_a.condition_grade == "d"
+        assert client_a.get(reverse("scm:returndisposition_delete",
+                                    args=[disposition_a.pk])).status_code == 405
+        assert ReturnDisposition.objects.filter(pk=disposition_a.pk).exists()
+        assert client_a.post(reverse("scm:returndisposition_delete",
+                                     args=[disposition_a.pk])).status_code == 302
+        assert not ReturnDisposition.objects.filter(pk=disposition_a.pk).exists()
+
+    def test_deleting_the_last_bench_row_walks_the_rma_status_back(self, client_a,
+                                                                    rma_received_a,
+                                                                    disposition_a):
+        client_a.post(reverse("scm:returndisposition_delete", args=[disposition_a.pk]))
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.status == "awaiting_receipt"
+
+    def test_a_partial_receipt_moves_the_rma_to_partially_received(self, client_a, tenant_a,
+                                                                    rma_awaiting_receipt_a,
+                                                                    return_line_a, location_a):
+        client_a.post(reverse("scm:returndisposition_create"),
+                      _bench_post(return_line_a, location_a,
+                                  rows=[_bench_row(location_a, quantity="1")]))
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.status == "partially_received"
+
+
+class TestReturnDispositionDecideAndPost:
+    """REGRESSION LOCK (item 6) — the per-disposition ledger table, executed."""
+
+    def _restock(self, client, row, location, cost="4.0000"):
+        return _decide(client, row, disposition="restock",
+                       restock_location=str(location.pk), restock_unit_cost=cost,
+                       condition_grade="c")
+
+    def test_deciding_posts_nothing_by_itself(self, client_a, disposition_a, location_a2):
+        from apps.scm.models import StockMove
+        before = StockMove.objects.count()
+        assert self._restock(client_a, disposition_a, location_a2).status_code == 302
+        disposition_a.refresh_from_db()
+        assert disposition_a.disposition == "restock"
+        assert disposition_a.restock_location == location_a2
+        assert disposition_a.restock_unit_cost == Decimal("4.0000")
+        assert disposition_a.decided_on is not None
+        assert disposition_a.stock_posted is False
+        assert StockMove.objects.count() == before
+
+    def test_a_restock_posts_exactly_ONE_positive_receipt_at_the_graded_cost(
+        self, client_a, tenant_a, disposition_a, rma_received_a, location_a2, item_a,
+    ):
+        from apps.scm.models import StockMove
+        self._restock(client_a, disposition_a, location_a2)
+        assert client_a.post(reverse("scm:returndisposition_post",
+                                     args=[disposition_a.pk])).status_code == 302
+        moves = list(StockMove.objects.filter(tenant=tenant_a, item=item_a))
+        assert len(moves) == 1
+        move = moves[0]
+        assert move.move_type == "receipt"
+        assert move.quantity == Decimal("3.0000")            # POSITIVE
+        assert move.unit_cost == Decimal("4.0000")           # the graded cost
+        assert move.unit_cost != Decimal("15.00")            # NEVER the sale price
+        assert move.location == location_a2
+        assert move.reference == rma_received_a.number       # the RMA, not a GRN
+        disposition_a.refresh_from_db()
+        assert disposition_a.stock_posted is True
+        assert disposition_a.stock_move_id == move.pk
+
+    def test_a_second_post_writes_no_second_movement(self, client_a, tenant_a, disposition_a,
+                                                      location_a2, item_a):
+        from apps.scm.models import StockMove
+        self._restock(client_a, disposition_a, location_a2)
+        url = reverse("scm:returndisposition_post", args=[disposition_a.pk])
+        client_a.post(url)
+        client_a.post(url)
+        assert StockMove.objects.filter(tenant=tenant_a, item=item_a).count() == 1
+
+    def test_posting_an_undecided_row_is_refused(self, client_a, tenant_a, disposition_a):
+        from apps.scm.models import StockMove
+        before = StockMove.objects.count()
+        assert client_a.post(reverse("scm:returndisposition_post",
+                                     args=[disposition_a.pk])).status_code == 302
+        assert StockMove.objects.count() == before
+
+    def test_the_four_non_posting_decisions_write_nothing(self, client_a, tenant_a,
+                                                           disposition_a, location_a2):
+        from apps.scm.models import StockMove
+        before = StockMove.objects.count()
+        for decision in ("return_to_vendor", "repair_return", "quarantine", "credit_only"):
+            _decide(client_a, disposition_a, disposition=decision)
+            disposition_a.refresh_from_db()
+            assert disposition_a.disposition == decision, decision
+            client_a.post(reverse("scm:returndisposition_post", args=[disposition_a.pk]))
+            assert StockMove.objects.count() == before, decision
+            disposition_a.refresh_from_db()
+            assert disposition_a.stock_posted is False, decision
+
+    def test_a_write_off_straight_off_the_bench_posts_nothing(self, client_a, tenant_a,
+                                                               disposition_a, location_a2):
+        from apps.scm.models import StockMove
+        before = StockMove.objects.count()
+        _decide(client_a, disposition_a, disposition="scrap",
+                restock_location=str(location_a2.pk))
+        client_a.post(reverse("scm:returndisposition_post", args=[disposition_a.pk]))
+        assert StockMove.objects.count() == before
+        disposition_a.refresh_from_db()
+        assert disposition_a.stock_move_id is None
+
+    def test_a_blocking_reason_is_re_checked_inside_the_posting_transaction(
+        self, client_a, tenant_a, disposition_a, location_a2, return_reason_a,
+    ):
+        from apps.scm.models import StockMove
+        self._restock(client_a, disposition_a, location_a2)
+        return_reason_a.blocks_restock = True
+        return_reason_a.save(update_fields=["blocks_restock"])
+        before = StockMove.objects.count()
+        assert client_a.post(reverse("scm:returndisposition_post",
+                                     args=[disposition_a.pk])).status_code == 302
+        assert StockMove.objects.count() == before
+
+    def test_nothing_may_be_posted_against_a_cancelled_return(self, client_a, tenant_a,
+                                                               disposition_a, rma_received_a,
+                                                               location_a2):
+        from apps.scm.models import ReturnAuthorization, StockMove
+        self._restock(client_a, disposition_a, location_a2)
+        ReturnAuthorization.objects.filter(pk=rma_received_a.pk).update(status="cancelled")
+        before = StockMove.objects.count()
+        client_a.post(reverse("scm:returndisposition_post", args=[disposition_a.pk]))
+        assert StockMove.objects.count() == before
+
+    def test_deciding_a_restock_with_nowhere_to_go_is_refused(self, client_a, disposition_a):
+        resp = _decide(client_a, disposition_a, disposition="restock")
+        assert resp.status_code == 302
+        disposition_a.refresh_from_db()
+        assert disposition_a.disposition == "received_pending"
+
+    def test_deciding_a_restock_back_onto_the_bench_is_refused(self, client_a, disposition_a,
+                                                               location_a):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a.pk))
+        disposition_a.refresh_from_db()
+        assert disposition_a.disposition == "received_pending"
+
+    def test_a_blank_restock_cost_re_seeds_from_the_grade_write_down(self, client_a,
+                                                                      disposition_a, item_a,
+                                                                      location_a2,
+                                                                      return_policy_a):
+        from apps.scm.models import ReturnDisposition
+        item_a.average_cost = Decimal("10.0000")
+        item_a.save(update_fields=["average_cost"])
+        ReturnDisposition.objects.filter(pk=disposition_a.pk).update(
+            restock_unit_cost=Decimal("0"))
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), condition_grade="b", restock_unit_cost="")
+        disposition_a.refresh_from_db()
+        assert disposition_a.restock_unit_cost == Decimal("7.5000")     # 75 % of 10.0000
+
+    def test_a_quarantine_flips_the_LOT_and_posts_no_movement(self, client_a, tenant_a,
+                                                               rma_awaiting_receipt_a, item_lot_a,
+                                                               lot_a, return_reason_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition, ReturnLine, StockMove
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a,
+                                         item=item_lot_a, quantity_requested=Decimal("1"),
+                                         quantity_approved=Decimal("1"), reason=return_reason_a)
+        row = ReturnDisposition.objects.create(tenant=tenant_a, return_line=line,
+                                               quantity=Decimal("1"),
+                                               received_on=timezone.localdate(),
+                                               location=location_a, lot_serial=lot_a)
+        before = StockMove.objects.count()
+        _decide(client_a, row, disposition="quarantine")
+        lot_a.refresh_from_db()
+        assert lot_a.status == "quarantine"
+        assert StockMove.objects.count() == before
+
+    def test_a_restock_returns_a_consumed_lot_to_available(self, client_a, tenant_a,
+                                                            rma_awaiting_receipt_a, item_lot_a,
+                                                            lot_a, return_reason_a, location_a,
+                                                            location_a2):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition, ReturnLine
+        lot_a.status = "consumed"
+        lot_a.save(update_fields=["status"])
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a,
+                                         item=item_lot_a, quantity_requested=Decimal("1"),
+                                         quantity_approved=Decimal("1"), reason=return_reason_a)
+        row = ReturnDisposition.objects.create(tenant=tenant_a, return_line=line,
+                                               quantity=Decimal("1"),
+                                               received_on=timezone.localdate(),
+                                               location=location_a, lot_serial=lot_a)
+        _decide(client_a, row, disposition="restock", restock_location=str(location_a2.pk),
+                restock_unit_cost="1.0000")
+        lot_a.refresh_from_db()
+        assert lot_a.status == "available"
+
+    def test_an_expired_lot_may_not_be_restocked_through_the_action(self, client_a, tenant_a,
+                                                                     rma_awaiting_receipt_a,
+                                                                     item_lot_a, lot_a,
+                                                                     return_reason_a, location_a,
+                                                                     location_a2):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition, ReturnLine
+        lot_a.status = "expired"
+        lot_a.save(update_fields=["status"])
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a,
+                                         item=item_lot_a, quantity_requested=Decimal("1"),
+                                         quantity_approved=Decimal("1"), reason=return_reason_a)
+        row = ReturnDisposition.objects.create(tenant=tenant_a, return_line=line,
+                                               quantity=Decimal("1"),
+                                               received_on=timezone.localdate(),
+                                               location=location_a, lot_serial=lot_a)
+        _decide(client_a, row, disposition="restock", restock_location=str(location_a2.pk))
+        row.refresh_from_db()
+        assert row.disposition == "received_pending"
+
+    def test_an_invalid_decide_payload_is_a_friendly_refusal_not_a_500(self, client_a,
+                                                                       disposition_a):
+        for junk in ("NaN", "Infinity", "-1", "abc", "999999999999999999.9999"):
+            resp = _decide(client_a, disposition_a, disposition="scrap",
+                           restock_unit_cost=junk)
+            assert resp.status_code == 302, junk
+            disposition_a.refresh_from_db()
+            assert disposition_a.disposition == "received_pending", junk
+
+
+class TestRefurbishedRowIsNotPostableWithoutADestination:
+    """REGRESSION LOCK (item 1). ``returndisposition_post`` used to hand ``location=None`` to
+    ``_post_stock_move`` for a refurbished row with no restock location — an IntegrityError inside
+    the atomic block, which ``except ValidationError`` does not catch. A hard 500."""
+
+    def test_a_refurbished_row_with_no_destination_refuses_cleanly(self, client_a, tenant_a,
+                                                                    disposition_a):
+        from apps.scm.models import StockMove
+        _decide(client_a, disposition_a, disposition="refurbish")
+        assert client_a.post(reverse("scm:returndisposition_mark_refurbished",
+                                     args=[disposition_a.pk])).status_code == 302
+        disposition_a.refresh_from_db()
+        assert disposition_a.refurbished_on is not None
+        assert disposition_a.restock_location_id is None
+        assert disposition_a.can_restock_after_refurbish is False
+        before = StockMove.objects.count()
+        resp = client_a.post(reverse("scm:returndisposition_post", args=[disposition_a.pk]))
+        assert resp.status_code == 302                       # a redirect, NOT a 500
+        assert StockMove.objects.count() == before
+        disposition_a.refresh_from_db()
+        assert disposition_a.stock_posted is False
+        assert disposition_a.stock_move_id is None
+
+    def test_with_a_destination_the_same_row_posts(self, client_a, tenant_a, disposition_a,
+                                                   location_a2, item_a):
+        from apps.scm.models import StockMove
+        _decide(client_a, disposition_a, disposition="refurbish")
+        client_a.post(reverse("scm:returndisposition_mark_refurbished",
+                              args=[disposition_a.pk]))
+        _decide(client_a, disposition_a, disposition="refurbish",
+                restock_location=str(location_a2.pk), restock_unit_cost="6.0000")
+        disposition_a.refresh_from_db()
+        assert disposition_a.can_restock_after_refurbish is True
+        client_a.post(reverse("scm:returndisposition_post", args=[disposition_a.pk]))
+        move = StockMove.objects.get(tenant=tenant_a, item=item_a)
+        assert move.move_type == "receipt"
+        assert move.quantity == Decimal("3.0000")
+        assert move.unit_cost == Decimal("6.0000")
+        disposition_a.refresh_from_db()
+        assert disposition_a.stock_posted is True
+
+    def test_only_a_refurbish_row_can_be_marked_refurbished(self, client_a, disposition_a):
+        client_a.post(reverse("scm:returndisposition_mark_refurbished",
+                              args=[disposition_a.pk]))
+        disposition_a.refresh_from_db()
+        assert disposition_a.refurbished_on is None
+
+    def test_marking_it_twice_keeps_the_first_date(self, client_a, disposition_a):
+        import datetime as _dt
+        from apps.scm.models import ReturnDisposition
+        _decide(client_a, disposition_a, disposition="refurbish")
+        client_a.post(reverse("scm:returndisposition_mark_refurbished",
+                              args=[disposition_a.pk]))
+        disposition_a.refresh_from_db()
+        first = disposition_a.refurbished_on
+        ReturnDisposition.objects.filter(pk=disposition_a.pk).update(
+            refurbished_on=first - _dt.timedelta(days=1))
+        client_a.post(reverse("scm:returndisposition_mark_refurbished",
+                              args=[disposition_a.pk]))
+        disposition_a.refresh_from_db()
+        assert disposition_a.refurbished_on == first - _dt.timedelta(days=1)
+
+
+class TestBenchUnpostedFilterAgreesWithTheBadge:
+    """REGRESSION LOCK (item 2). The ``?unposted=yes`` SQL had only TWO of the three shapes: a
+    refurbished-and-ready row was invisible to the page whose whole job is "what still needs
+    posting?" while the row itself said "ready to post". It then never gets posted, never valued
+    and never sold."""
+
+    def _three_shapes(self, client, tenant, rma, line, location, restock_location):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        rma.lines.all().update(quantity_approved=Decimal("9"))
+        rows = []
+        for _ in range(3):
+            rows.append(ReturnDisposition.objects.create(
+                tenant=tenant, return_line=line, quantity=Decimal("1"),
+                received_on=timezone.localdate(), location=location,
+                restock_unit_cost=Decimal("4.0000")))
+        awaiting_restock, written_off, refurbished = rows
+        _decide(client, awaiting_restock, disposition="restock",
+                restock_location=str(restock_location.pk), restock_unit_cost="4.0000")
+        _decide(client, written_off, disposition="restock",
+                restock_location=str(restock_location.pk), restock_unit_cost="4.0000")
+        client.post(reverse("scm:returndisposition_post", args=[written_off.pk]))
+        _decide(client, written_off, disposition="scrap",
+                restock_location=str(restock_location.pk))
+        _decide(client, refurbished, disposition="refurbish",
+                restock_location=str(restock_location.pk), restock_unit_cost="4.0000")
+        client.post(reverse("scm:returndisposition_mark_refurbished", args=[refurbished.pk]))
+        for row in rows:
+            row.refresh_from_db()
+        return awaiting_restock, written_off, refurbished
+
+    def test_all_three_postable_shapes_are_in_the_filtered_set(self, client_a, tenant_a,
+                                                               rma_received_a, return_line_a,
+                                                               disposition_a, location_a,
+                                                               location_a2):
+        awaiting, written_off, refurbished = self._three_shapes(
+            client_a, tenant_a, rma_received_a, return_line_a, location_a, location_a2)
+        rows = list(client_a.get(reverse("scm:returndisposition_list"),
+                                 {"unposted": "yes"}).context["object_list"])
+        assert awaiting in rows
+        assert written_off in rows
+        assert refurbished in rows, "the refurbished-and-ready shape was the missing third one"
+
+    def test_the_set_invariant_holds_in_both_directions(self, client_a, tenant_a, rma_received_a,
+                                                        return_line_a, disposition_a, location_a,
+                                                        location_a2):
+        """Every row the filter returns draws a badge, and every row that draws a badge is in the
+        filtered set. One rule, two expressions of it (§7.5)."""
+        from apps.scm.models import ReturnDisposition
+        self._three_shapes(client_a, tenant_a, rma_received_a, return_line_a, location_a,
+                           location_a2)
+        url = reverse("scm:returndisposition_list")
+        filtered = {row.pk for row in client_a.get(url, {"unposted": "yes"})
+                    .context["object_list"]}
+        badged, unbadged = set(), set()
+        for row in ReturnDisposition.objects.filter(tenant=tenant_a):
+            (badged if (row.posts_stock or row.can_restock_after_refurbish)
+             else unbadged).add(row.pk)
+        assert filtered == badged
+        assert not filtered & unbadged
+
+    def test_a_refurbished_row_with_NOWHERE_to_go_is_in_neither_the_filter_nor_the_badge(
+        self, client_a, tenant_a, disposition_a, location_a,
+    ):
+        _decide(client_a, disposition_a, disposition="refurbish")
+        client_a.post(reverse("scm:returndisposition_mark_refurbished",
+                              args=[disposition_a.pk]))
+        disposition_a.refresh_from_db()
+        assert disposition_a.can_restock_after_refurbish is False
+        rows = list(client_a.get(reverse("scm:returndisposition_list"),
+                                 {"unposted": "yes"}).context["object_list"])
+        assert disposition_a not in rows
+
+
+class TestPostedRowsAreAuditRecords:
+    """REGRESSION LOCK (item 5). After a restock-then-write-off the latch is False again, but the
+    row has written TWO real movements into an append-only ledger. Guarding on the latch re-opened
+    edit and delete on the only audit record linking those movements to the RMA."""
+
+    def _restock_then_scrap(self, client, row, restock_location):
+        _decide(client, row, disposition="restock",
+                restock_location=str(restock_location.pk), restock_unit_cost="4.0000")
+        client.post(reverse("scm:returndisposition_post", args=[row.pk]))
+        _decide(client, row, disposition="scrap", restock_location=str(restock_location.pk))
+        client.post(reverse("scm:returndisposition_post", args=[row.pk]))
+        row.refresh_from_db()
+        return row
+
+    def test_the_write_off_posts_a_negative_adjustment_and_clears_the_latch(self, client_a,
+                                                                            tenant_a,
+                                                                            disposition_a,
+                                                                            location_a2, item_a):
+        from apps.scm.models import StockMove
+        self._restock_then_scrap(client_a, disposition_a, location_a2)
+        moves = list(StockMove.objects.filter(tenant=tenant_a, item=item_a)
+                     .order_by("id"))
+        assert [m.move_type for m in moves] == ["receipt", "adjustment"]
+        assert [m.quantity for m in moves] == [Decimal("3.0000"), Decimal("-3.0000")]
+        assert disposition_a.stock_posted is False        # correctly: no longer IN stock
+        assert disposition_a.stock_move_id == moves[-1].pk
+
+    def test_edit_delete_and_split_all_refuse_once_the_ledger_has_seen_the_row(
+        self, client_a, tenant_a, disposition_a, location_a2,
+    ):
+        from apps.scm.models import ReturnDisposition
+        self._restock_then_scrap(client_a, disposition_a, location_a2)
+        assert disposition_a.stock_posted is False
+        assert disposition_a.stock_move_id is not None
+        edit = client_a.get(reverse("scm:returndisposition_edit", args=[disposition_a.pk]))
+        assert edit.status_code == 302
+        assert client_a.post(reverse("scm:returndisposition_delete",
+                                     args=[disposition_a.pk])).status_code == 302
+        assert ReturnDisposition.objects.filter(pk=disposition_a.pk).exists()
+        assert client_a.post(reverse("scm:returndisposition_split",
+                                     args=[disposition_a.pk]),
+                             {"quantity": "1"}).status_code == 302
+        assert ReturnDisposition.objects.filter(return_line=disposition_a.return_line).count() == 1
+
+    def test_a_crafted_edit_post_cannot_rewrite_what_the_ledger_recorded(self, client_a,
+                                                                         disposition_a,
+                                                                         location_a,
+                                                                         location_a2):
+        self._restock_then_scrap(client_a, disposition_a, location_a2)
+        client_a.post(reverse("scm:returndisposition_edit", args=[disposition_a.pk]),
+                      {"return_line": str(disposition_a.return_line_id), "quantity": "99",
+                       "location": str(location_a.pk), "lot_serial": "", "condition_grade": "a",
+                       "disposition": "received_pending", "restock_location": "",
+                       "restock_unit_cost": "1.0000", "recovery_value": "0.00",
+                       "nonconformance": "", "notes": ""})
+        disposition_a.refresh_from_db()
+        assert disposition_a.quantity == Decimal("3.0000")
+        assert disposition_a.disposition == "scrap"
+
+
+class TestReturnDispositionSplit:
+    def test_splitting_moves_quantity_onto_a_new_row(self, client_a, tenant_a, disposition_a):
+        from apps.scm.models import ReturnDisposition
+        resp = client_a.post(reverse("scm:returndisposition_split", args=[disposition_a.pk]),
+                             {"quantity": "1"})
+        assert resp.status_code == 302
+        disposition_a.refresh_from_db()
+        assert disposition_a.quantity == Decimal("2.0000")
+        rows = ReturnDisposition.objects.filter(return_line=disposition_a.return_line)
+        assert rows.count() == 2
+        sibling = rows.exclude(pk=disposition_a.pk).first()
+        assert sibling.quantity == Decimal("1.0000")
+        assert sibling.disposition == "received_pending"
+        assert sibling.location == disposition_a.location
+
+    def test_splitting_off_everything_is_refused(self, client_a, disposition_a):
+        from apps.scm.models import ReturnDisposition
+        client_a.post(reverse("scm:returndisposition_split", args=[disposition_a.pk]),
+                      {"quantity": "3"})
+        assert ReturnDisposition.objects.filter(return_line=disposition_a.return_line).count() == 1
+
+    def test_a_decided_row_may_not_be_split(self, client_a, disposition_a, location_a2):
+        from apps.scm.models import ReturnDisposition
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        client_a.post(reverse("scm:returndisposition_split", args=[disposition_a.pk]),
+                      {"quantity": "1"})
+        assert ReturnDisposition.objects.filter(return_line=disposition_a.return_line).count() == 1
+
+    def test_junk_split_quantities_are_refused_not_500(self, client_a, disposition_a):
+        from apps.scm.models import ReturnDisposition
+        for junk in ("NaN", "Infinity", "-1", "0", "abc", ""):
+            resp = client_a.post(reverse("scm:returndisposition_split",
+                                         args=[disposition_a.pk]), {"quantity": junk})
+            assert resp.status_code == 302, junk
+        assert ReturnDisposition.objects.filter(return_line=disposition_a.return_line).count() == 1
+
+
+class TestCreditNoteHandoff:
+    """REGRESSION LOCK (item 7). SCM DRAFTS; Accounting issues. **No JournalEntry, ever (L29).**"""
+
+    def _decided(self, client, row, location):
+        _decide(client, row, disposition="restock", restock_location=str(location.pk),
+                restock_unit_cost="4.0000")
+        return row
+
+    def test_a_draft_credit_note_carries_the_tax_and_nets_the_fee_as_a_negative_line(
+        self, client_a, tenant_a, rma_received_a, disposition_a, location_a2, customer_a, usd,
+    ):
+        from apps.accounting.models import Invoice, JournalEntry
+        self._decided(client_a, disposition_a, location_a2)
+        line = rma_received_a.lines.first()
+        line.line_fee = Decimal("5.00")
+        line.save(update_fields=["line_fee"])
+        journals = JournalEntry.objects.count()
+        resp = client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                                     args=[rma_received_a.pk]))
+        assert resp.status_code == 302
+        rma_received_a.refresh_from_db()
+        invoice = rma_received_a.credit_note
+        assert invoice is not None
+        assert invoice.kind == "credit_note"
+        assert invoice.status == "draft"
+        assert invoice.tenant == tenant_a
+        assert invoice.party == customer_a
+        assert invoice.currency == usd
+        rows = list(invoice.lines.all())
+        assert len(rows) == 2
+        assert rows[0].quantity == Decimal("3.0000")
+        assert rows[0].unit_price == Decimal("15.00")
+        assert rows[0].tax_rate_pct == Decimal("20.00")     # the snapshot, carried across
+        assert rows[1].unit_price == Decimal("-5.00")       # the fee, netted as a NEGATIVE line
+        assert rows[1].tax_rate_pct == Decimal("0.00")
+        assert rma_received_a.refund_subtotal == Decimal("45.00")
+        assert rma_received_a.fee_total == Decimal("5.00")
+        assert rma_received_a.tax_total == Decimal("9.00")
+        assert rma_received_a.credit_total == Decimal("49.00")
+        assert rma_received_a.status == "settled"
+        assert JournalEntry.objects.count() == journals     # SCM posts NO journal entry
+
+    def test_a_second_post_never_raises_a_second_credit_note(self, client_a, tenant_a,
+                                                             rma_received_a, disposition_a,
+                                                             location_a2):
+        from apps.accounting.models import Invoice
+        self._decided(client_a, disposition_a, location_a2)
+        url = reverse("scm:returnauthorization_draft_credit_note", args=[rma_received_a.pk])
+        client_a.post(url)
+        client_a.post(url)
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 1
+
+    def test_a_credit_note_that_could_never_be_posted_or_paid_is_REFUSED(
+        self, client_a, tenant_a, rma_received_a, disposition_a, location_a2,
+    ):
+        """``invoice_post`` guards ``total > ZERO`` and ``recompute_payment_status`` only reaches
+        ``paid`` above zero, so a fee that meets or exceeds the value makes a PERMANENTLY unpostable
+        document."""
+        from apps.accounting.models import Invoice, JournalEntry
+        self._decided(client_a, disposition_a, location_a2)
+        line = rma_received_a.lines.first()
+        line.line_fee = Decimal("100.00")               # 45.00 + 9.00 tax - 100.00 = -46.00
+        line.save(update_fields=["line_fee"])
+        journals = JournalEntry.objects.count()
+        resp = client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                                     args=[rma_received_a.pk]))
+        assert resp.status_code == 302
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.credit_note_id is None
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+        assert JournalEntry.objects.count() == journals
+
+    def test_a_return_with_nothing_credit_bearing_yet_is_refused(self, client_a, tenant_a,
+                                                                  rma_received_a, disposition_a):
+        from apps.accounting.models import Invoice
+        client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                              args=[rma_received_a.pk]))
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+
+    def test_an_unapproved_return_may_not_be_credited(self, client_a, tenant_a,
+                                                       return_authorization_a):
+        from apps.accounting.models import Invoice
+        client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                              args=[return_authorization_a.pk]))
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+
+    def test_a_return_with_no_currency_is_refused_rather_than_guessed(self, client_a, tenant_a,
+                                                                       rma_received_a,
+                                                                       disposition_a,
+                                                                       location_a2):
+        from apps.accounting.models import Invoice
+        from apps.scm.models import ReturnAuthorization
+        self._decided(client_a, disposition_a, location_a2)
+        ReturnAuthorization.objects.filter(pk=rma_received_a.pk).update(currency=None)
+        client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                              args=[rma_received_a.pk]))
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+
+    def test_a_credit_only_return_is_credited_with_no_bench_row_at_all(self, client_a, tenant_a,
+                                                                        rma_credit_only_a):
+        """REGRESSION LOCK (item 8), on the money path."""
+        from apps.accounting.models import Invoice
+        client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                              args=[rma_credit_only_a.pk]))
+        rma_credit_only_a.refresh_from_db()
+        assert rma_credit_only_a.credit_note is not None
+        assert rma_credit_only_a.credit_total == Decimal("50.00")
+        assert Invoice.objects.get(tenant=tenant_a, kind="credit_note").lines.count() == 1
+
+
+class TestReplacementAndWarrantyHandoff:
+    def test_a_replacement_order_is_drafted_at_zero_price_once(self, client_a, tenant_a,
+                                                                rma_received_a, disposition_a):
+        from apps.scm.models import SalesOrder
+        rma_received_a.resolution = "exchange"
+        rma_received_a.save(update_fields=["resolution"])
+        url = reverse("scm:returnauthorization_draft_replacement", args=[rma_received_a.pk])
+        assert client_a.post(url).status_code == 302
+        rma_received_a.refresh_from_db()
+        order = rma_received_a.replacement_order
+        assert order is not None
+        assert order.status == "draft"
+        assert order.lines.first().unit_price == Decimal("0.00")
+        assert order.lines.first().quantity_ordered == Decimal("3.0000")
+        client_a.post(url)
+        assert SalesOrder.objects.filter(tenant=tenant_a,
+                                         notes__contains=rma_received_a.number).count() == 1
+
+    def test_a_return_that_is_not_an_exchange_raises_nothing(self, client_a, rma_received_a):
+        client_a.post(reverse("scm:returnauthorization_draft_replacement",
+                              args=[rma_received_a.pk]))
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.replacement_order_id is None
+
+    def test_a_warranty_claim_is_raised_from_the_return_when_a_supplier_is_known(
+        self, client_a, tenant_a, rma_received_a, item_a, purchase_order_a, supplier_a,
+    ):
+        from apps.scm.models import PurchaseOrderLine, WarrantyClaim
+        PurchaseOrderLine.objects.create(purchase_order=purchase_order_a,
+                                         item_description="Widget", sku_hint=item_a.sku,
+                                         quantity=Decimal("5"), unit_price=Decimal("8.00"))
+        assert client_a.post(reverse("scm:returnauthorization_raise_warranty_claim",
+                                     args=[rma_received_a.pk])).status_code == 302
+        claim = WarrantyClaim.objects.get(tenant=tenant_a, return_authorization=rma_received_a)
+        assert claim.supplier == supplier_a
+        assert claim.item == item_a
+        assert claim.status == "draft"
+        assert claim.quantity_claimed == Decimal("3.0000")
+
+    def test_no_known_supplier_says_so_rather_than_guessing(self, client_a, tenant_a,
+                                                            rma_received_a):
+        from apps.scm.models import WarrantyClaim
+        resp = client_a.post(reverse("scm:returnauthorization_raise_warranty_claim",
+                                     args=[rma_received_a.pk]))
+        assert resp.status_code == 302
+        assert WarrantyClaim.objects.filter(tenant=tenant_a).count() == 0
+
+    def test_an_unapproved_return_raises_no_claim(self, client_a, tenant_a,
+                                                   return_authorization_a):
+        from apps.scm.models import WarrantyClaim
+        client_a.post(reverse("scm:returnauthorization_raise_warranty_claim",
+                              args=[return_authorization_a.pk]))
+        assert WarrantyClaim.objects.filter(tenant=tenant_a).count() == 0
+
+
+class TestRefundQueue:
+    def test_the_queue_renders_and_totals_what_is_owed(self, client_a, rma_received_a,
+                                                       disposition_a, location_a2):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        resp = client_a.get(reverse("scm:refund_queue"))
+        assert resp.status_code == 200
+        assert "scm/returns/refund_queue.html" in [t.name for t in resp.templates]
+        rows = resp.context["rows"]
+        assert {row["obj"].pk for row in rows} == {rma_received_a.pk}
+        assert rows[0]["credit"] == Decimal("54.00")
+        assert rows[0]["unpostable"] is False
+        assert resp.context["total_owed"] == Decimal("54.00")
+        assert resp.context["accounting_caveat"]
+
+    def test_a_credit_only_return_reaches_the_queue_with_NO_disposition_row(self, client_a,
+                                                                            rma_credit_only_a):
+        """REGRESSION LOCK (item 8) — a queue keyed on "has received goods" drops this silently."""
+        rows = client_a.get(reverse("scm:refund_queue")).context["rows"]
+        assert rma_credit_only_a.pk in {row["obj"].pk for row in rows}
+        row = next(r for r in rows if r["obj"].pk == rma_credit_only_a.pk)
+        assert row["credit_only"] is True
+        assert row["credit"] == Decimal("50.00")
+
+    def test_an_unpostable_row_is_flagged_before_the_click(self, client_a, rma_received_a,
+                                                           disposition_a, location_a2):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        line = rma_received_a.lines.first()
+        line.line_fee = Decimal("100.00")
+        line.save(update_fields=["line_fee"])
+        row = client_a.get(reverse("scm:refund_queue")).context["rows"][0]
+        assert row["unpostable"] is True
+
+    def test_an_already_credited_return_leaves_the_queue(self, client_a, tenant_a,
+                                                          rma_received_a, disposition_a,
+                                                          location_a2):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                              args=[rma_received_a.pk]))
+        rows = client_a.get(reverse("scm:refund_queue")).context["rows"]
+        assert rma_received_a.pk not in {row["obj"].pk for row in rows}
+
+    def test_a_draft_or_rejected_return_never_reaches_the_queue(self, client_a,
+                                                                 return_authorization_a):
+        rows = client_a.get(reverse("scm:refund_queue")).context["rows"]
+        assert return_authorization_a.pk not in {row["obj"].pk for row in rows}
+
+    def test_the_queue_never_leaks_another_tenants_returns(self, client_a,
+                                                            return_authorization_b,
+                                                            disposition_b):
+        rows = client_a.get(reverse("scm:refund_queue")).context["rows"]
+        assert return_authorization_b.pk not in {row["obj"].pk for row in rows}
+
+    def test_the_queue_search_and_filters(self, client_a, rma_credit_only_a, customer_a,
+                                          return_policy_a):
+        url = reverse("scm:refund_queue")
+        for params in ({"q": rma_credit_only_a.number}, {"q": "Acme Retail"},
+                       {"customer": str(customer_a.pk)}, {"policy": str(return_policy_a.pk)},
+                       {"resolution": "refund"}, {"return_type": "credit_only"}):
+            rows = client_a.get(url, params).context["rows"]
+            assert rma_credit_only_a.pk in {row["obj"].pk for row in rows}, params
+        assert client_a.get(url, {"q": "no such thing"}).context["rows"] == []
+
+
+class TestReturnsBenchQueue:
+    def test_the_bench_queue_renders_with_its_off_ledger_note(self, client_a, disposition_a):
+        resp = client_a.get(reverse("scm:returns_awaiting_disposition"))
+        assert resp.status_code == 200
+        assert "scm/returns/awaiting_disposition.html" in [t.name for t in resp.templates]
+        assert {row["obj"].pk for row in resp.context["rows"]} == {disposition_a.pk}
+        assert resp.context["bench_value"] == Decimal("24.00")     # 3 x 8.0000, off the books
+        assert resp.context["off_ledger_note"]
+        assert resp.context["aged_over_14_days"] == 0
+
+    def test_a_decided_row_leaves_the_bench_queue(self, client_a, disposition_a, location_a2):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        assert client_a.get(reverse("scm:returns_awaiting_disposition")).context["rows"] == []
+
+    def test_the_credit_only_strip_names_what_the_bench_can_never_see(self, client_a,
+                                                                       rma_credit_only_a,
+                                                                       disposition_a):
+        """REGRESSION LOCK (item 8) — §7.11's visible half, on BOTH bench surfaces."""
+        waiting = client_a.get(
+            reverse("scm:returns_awaiting_disposition")).context["credit_only_waiting"]
+        assert rma_credit_only_a.pk in {rma.pk for rma in waiting}
+        strip = client_a.get(reverse("scm:returndisposition_list")).context["credit_only_waiting"]
+        assert rma_credit_only_a.pk in {rma.pk for rma in strip}
+
+    def test_the_bench_queue_filters_and_never_leaks_another_tenant(self, client_a,
+                                                                     disposition_a,
+                                                                     disposition_b, item_a,
+                                                                     location_a):
+        url = reverse("scm:returns_awaiting_disposition")
+        for params in ({"q": item_a.sku}, {"location": str(location_a.pk)},
+                       {"item": str(item_a.pk)}, {"condition_grade": "a"}):
+            rows = client_a.get(url, params).context["rows"]
+            assert {row["obj"].pk for row in rows} == {disposition_a.pk}, params
+        assert disposition_b.pk not in {row["obj"].pk
+                                        for row in client_a.get(url).context["rows"]}
+
+    def test_an_aged_row_is_counted(self, client_a, tenant_a, disposition_a):
+        import datetime as _dt
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        ReturnDisposition.objects.filter(pk=disposition_a.pk).update(
+            received_on=timezone.localdate() - _dt.timedelta(days=20))
+        resp = client_a.get(reverse("scm:returns_awaiting_disposition"))
+        assert resp.context["aged_over_14_days"] == 1
+        assert resp.context["rows"][0]["age_days"] == 20
+
+
+class TestAdvanceRefundExposure:
+    def test_the_report_lists_the_money_already_out_the_door(self, client_a,
+                                                              rma_advance_refund_a):
+        resp = client_a.get(reverse("scm:advance_refund_exposure"))
+        assert resp.status_code == 200
+        assert "scm/returns/advance_refund_exposure.html" in [t.name for t in resp.templates]
+        row = resp.context["rows"][0]
+        assert row["obj"].pk == rma_advance_refund_a.pk
+        assert row["overdue"] is True
+        assert row["estimated"] is True
+        assert row["at_risk"] == Decimal("30.00")
+        assert resp.context["total_exposure"] == Decimal("30.00")
+        assert resp.context["clawback_note"]
+
+    def test_the_state_filters_and_the_search(self, client_a, rma_advance_refund_a):
+        url = reverse("scm:advance_refund_exposure")
+        assert client_a.get(url, {"state": "overdue"}).context["rows"]
+        assert client_a.get(url, {"state": "received"}).context["rows"] == []
+        assert client_a.get(url, {"q": rma_advance_refund_a.number}).context["rows"]
+        assert client_a.get(url, {"q": "no such thing"}).context["rows"] == []
+
+    def test_a_return_with_no_advance_refund_never_appears(self, client_a, rma_received_a,
+                                                            disposition_a):
+        assert client_a.get(reverse("scm:advance_refund_exposure")).context["rows"] == []
+
+    def test_the_report_never_leaks_another_tenant(self, client_a, tenant_b, customer_b,
+                                                   rma_advance_refund_a):
+        import datetime as _dt
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        theirs = ReturnAuthorization.objects.create(
+            tenant=tenant_b, customer=customer_b, requested_on=timezone.localdate(),
+            advance_refund=True,
+            advance_refund_deadline=timezone.localdate() - _dt.timedelta(days=1))
+        rows = client_a.get(reverse("scm:advance_refund_exposure")).context["rows"]
+        assert theirs.pk not in {row["obj"].pk for row in rows}
+
+
+class TestReturnPortalStaffConsole:
+    def test_the_console_renders_the_inbox_and_the_masters(self, client_a, tenant_a, customer_a,
+                                                            return_policy_a, return_reason_a,
+                                                            item_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        rma = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 source="portal",
+                                                 requested_on=timezone.localdate())
+        ReturnLine.objects.create(return_authorization=rma, item=item_a,
+                                  quantity_requested=Decimal("1"), reason=return_reason_a)
+        rma.status = "requested"
+        rma.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:return_portal"))
+        assert resp.status_code == 200
+        assert "scm/returns/return_portal.html" in [t.name for t in resp.templates]
+        assert rma.pk in {row.pk for row in resp.context["inbox"]}
+        assert resp.context["inbox_count"] == 1
+        assert rma.pk in {row.pk for row in resp.context["open_returns"]}
+        assert return_policy_a in list(resp.context["policies"])
+        assert return_reason_a in list(resp.context["reasons"])
+        assert resp.context["default_policy"] == return_policy_a
+        assert resp.context["portal_note"]
+
+    def test_a_draft_return_is_not_a_public_link(self, client_a, return_authorization_a):
+        resp = client_a.get(reverse("scm:return_portal"))
+        assert return_authorization_a.pk not in {row.pk for row in resp.context["open_returns"]}
+
+    def test_the_inbox_is_capped_and_counted_from_what_is_shown(self, client_a, tenant_a,
+                                                                customer_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization
+        for _ in range(55):
+            rma = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                     source="portal",
+                                                     requested_on=timezone.localdate())
+            rma.status = "requested"
+            rma.save(update_fields=["status"])
+        resp = client_a.get(reverse("scm:return_portal"))
+        assert len(resp.context["inbox"]) == 50
+        assert resp.context["inbox_count"] == 50
+
+    def test_the_console_never_shows_another_tenants_returns(self, client_a,
+                                                              return_authorization_b):
+        resp = client_a.get(reverse("scm:return_portal"))
+        assert return_authorization_b.pk not in {row.pk for row in resp.context["open_returns"]}
+
+
+class TestPortalReturnCreate:
+    """REGRESSION LOCK (item 12). ``customer`` is FORCED server-side from
+    ``crm.CustomerPortalAccess`` — a portal user can never file for another customer."""
+
+    def _payload(self, item, reason, **overrides):
+        data = {"sales_order": "", "sales_order_line": "", "item": str(item.pk),
+                "quantity_requested": "1", "reason": str(reason.pk), "condition_reported": "",
+                "notes": ""}
+        data.update(overrides)
+        return data
+
+    def test_the_page_renders_for_a_bound_portal_user(self, portal_client_a, customer_a,
+                                                      return_policy_a, returns_sales_order_a):
+        resp = portal_client_a.get(reverse("scm:portal_return_create"))
+        assert resp.status_code == 200
+        assert "scm/returns/portal_return_form.html" in [t.name for t in resp.templates]
+        assert resp.context["party"] == customer_a
+        assert resp.context["policy"] == return_policy_a
+        assert "my_returns" in resp.context
+
+    def test_a_user_with_no_portal_access_is_turned_away(self, member_client):
+        resp = member_client.get(reverse("scm:portal_return_create"))
+        assert resp.status_code == 302
+        # dashboard:home resolves to "/" — assert the resolved target, not a substring of it.
+        assert resp["Location"] == reverse("dashboard:home")
+
+    def test_a_portal_account_with_no_linked_customer_is_REFUSED_not_scoped_to_nothing(
+        self, db, tenant_a, portal_user_a,
+    ):
+        from django.test import Client
+        from apps.crm.models import CustomerPortalAccess
+        CustomerPortalAccess.objects.create(tenant=tenant_a, customer_party=None,
+                                            portal_user=portal_user_a, is_active=True)
+        client = Client()
+        client.force_login(portal_user_a)
+        resp = client.get(reverse("scm:portal_return_create"))
+        assert resp.status_code == 302
+
+    def test_an_inactive_portal_binding_is_turned_away(self, db, tenant_a, portal_access_a,
+                                                       portal_user_a):
+        from django.test import Client
+        portal_access_a.is_active = False
+        portal_access_a.save(update_fields=["is_active"])
+        client = Client()
+        client.force_login(portal_user_a)
+        assert client.get(reverse("scm:portal_return_create")).status_code == 302
+
+    def test_filing_forces_the_customer_the_source_and_the_status(self, portal_client_a,
+                                                                   tenant_a, customer_a, item_a,
+                                                                   return_reason_a,
+                                                                   returns_sales_order_a, usd):
+        from apps.scm.models import ReturnAuthorization
+        resp = portal_client_a.post(reverse("scm:portal_return_create"),
+                                    self._payload(item_a, return_reason_a))
+        assert resp.status_code == 302
+        rma = ReturnAuthorization.objects.get(tenant=tenant_a)
+        assert rma.customer == customer_a
+        assert rma.source == "portal"
+        assert rma.status == "requested"
+        assert rma.return_type == "physical"
+        assert rma.currency == usd               # taken from their last order, never guessed
+        assert rma.lines.count() == 1
+        assert resp["Location"].endswith(f"/return-tracking/{rma.public_token}/")
+
+    def test_a_POSTED_foreign_customer_id_cannot_file_for_someone_else(self, portal_client_a,
+                                                                       tenant_a, customer_a,
+                                                                       item_a, return_reason_a,
+                                                                       returns_sales_order_a):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import ReturnAuthorization
+        victim = Party.objects.create(tenant=tenant_a, name="Someone Else", kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=victim, role="customer")
+        portal_client_a.post(reverse("scm:portal_return_create"),
+                             self._payload(item_a, return_reason_a, customer=str(victim.pk),
+                                           source="csr", status="approved"))
+        rma = ReturnAuthorization.objects.get(tenant=tenant_a)
+        assert rma.customer == customer_a
+        assert rma.source == "portal"
+        assert rma.status == "requested"
+
+    def test_an_item_this_customer_was_never_sold_is_refused(self, portal_client_a, tenant_a,
+                                                             item_lot_a, return_reason_a,
+                                                             returns_sales_order_a):
+        from apps.scm.models import ReturnAuthorization
+        resp = portal_client_a.post(reverse("scm:portal_return_create"),
+                                    self._payload(item_lot_a, return_reason_a))
+        assert resp.status_code == 200
+        assert ReturnAuthorization.objects.filter(tenant=tenant_a).count() == 0
+
+    def test_my_returns_contains_only_TRACKABLE_states(self, portal_client_a, tenant_a,
+                                                       customer_a, returns_sales_order_a,
+                                                       return_authorization_a,
+                                                       rma_credit_only_a):
+        """A draft row was rendered with a Track link that 404s on the page the customer was just
+        shown."""
+        rows = portal_client_a.get(reverse("scm:portal_return_create")).context["my_returns"]
+        assert return_authorization_a.pk not in {rma.pk for rma in rows}   # draft
+        assert rma_credit_only_a.pk in {rma.pk for rma in rows}            # settled
+
+    def test_the_line_snapshots_the_price_and_the_tax_from_the_sold_line(self, portal_client_a,
+                                                                          tenant_a, item_a,
+                                                                          return_reason_a,
+                                                                          returns_sales_order_a):
+        from apps.scm.models import ReturnAuthorization
+        so_line = returns_sales_order_a.lines.first()
+        portal_client_a.post(reverse("scm:portal_return_create"),
+                             self._payload(item_a, return_reason_a,
+                                           sales_order=str(returns_sales_order_a.pk),
+                                           sales_order_line=str(so_line.pk)))
+        line = ReturnAuthorization.objects.get(tenant=tenant_a).lines.first()
+        assert line.unit_price == Decimal("15.00")
+        assert line.tax_pct == Decimal("20.00")
+
+
+class TestPublicTokenSurface:
+    """REGRESSION LOCK (item 11). The only unauthenticated routes in ``apps/scm``."""
+
+    def _anon(self):
+        from django.test import Client
+        return Client()
+
+    def test_a_valid_token_renders_the_status_page(self, rma_awaiting_receipt_a,
+                                                    return_policy_a):
+        resp = self._anon().get(reverse("scm:returnauthorization_public",
+                                        args=[rma_awaiting_receipt_a.public_token]))
+        assert resp.status_code == 200
+        assert "scm/returns/returnauthorization/public.html" in [t.name for t in resp.templates]
+        assert resp.context["obj"].pk == rma_awaiting_receipt_a.pk
+        assert resp.context["can_confirm_shipment"] is True
+        assert resp.context["can_print_label"] is True
+
+    def test_a_bad_token_404s(self):
+        assert self._anon().get(reverse("scm:returnauthorization_public",
+                                        args=["not-a-real-token"])).status_code == 404
+
+    def test_a_draft_or_cancelled_return_404s_rather_than_leaking(self, return_authorization_a):
+        from apps.scm.models import ReturnAuthorization
+        url = reverse("scm:returnauthorization_public",
+                      args=[return_authorization_a.public_token])
+        assert self._anon().get(url).status_code == 404          # draft
+        ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).update(
+            status="cancelled")
+        assert self._anon().get(url).status_code == 404
+        ReturnAuthorization.objects.filter(pk=return_authorization_a.pk).update(
+            status="rejected")
+        assert self._anon().get(url).status_code == 404
+
+    def test_an_INACTIVE_tenants_token_404s(self, tenant_a, rma_awaiting_receipt_a):
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_awaiting_receipt_a.public_token])
+        assert self._anon().get(url).status_code == 200
+        tenant_a.is_active = False
+        tenant_a.save(update_fields=["is_active"])
+        assert self._anon().get(url).status_code == 404
+
+    def test_the_page_leaks_no_price_cost_or_supplier_value(self, rma_awaiting_receipt_a,
+                                                             supplier_a, item_a):
+        item_a.average_cost = Decimal("8.0000")
+        item_a.save(update_fields=["average_cost"])
+        body = self._anon().get(reverse("scm:returnauthorization_public",
+                                        args=[rma_awaiting_receipt_a.public_token])).content.decode()
+        for secret in ("15.00", "8.0000", supplier_a.name, "45.00"):
+            assert secret not in body, secret
+        assert [set(row) for row in
+                self._anon().get(reverse("scm:returnauthorization_public",
+                                         args=[rma_awaiting_receipt_a.public_token]))
+                .context["lines"]] == [{"description", "quantity", "reason",
+                                        "follow_up_question"}]
+
+    def test_the_shipped_stamp_works_from_a_SHIPPABLE_state(self, rma_awaiting_receipt_a):
+        from django.utils import timezone
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_awaiting_receipt_a.public_token])
+        assert self._anon().post(url, {"action": "shipped",
+                                       "return_tracking_number": "TRK-1"}).status_code == 302
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.customer_shipped_on == timezone.localdate()
+        assert rma_awaiting_receipt_a.return_tracking_number == "TRK-1"
+
+    def test_an_anonymous_shipped_POST_against_a_REQUESTED_return_stamps_NOTHING(
+        self, tenant_a, customer_a, return_policy_a, item_a, return_reason_a,
+    ):
+        """The state guard belongs in the UPDATE's own filter, not only in the template flag that
+        decides whether to draw the button — this is an UNAUTHENTICATED endpoint."""
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        rma = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                 policy=return_policy_a, source="portal",
+                                                 requested_on=timezone.localdate(),
+                                                 return_tracking_number="STAFF-ENTERED")
+        ReturnLine.objects.create(return_authorization=rma, item=item_a,
+                                  quantity_requested=Decimal("1"), reason=return_reason_a)
+        ReturnAuthorization.objects.filter(pk=rma.pk).update(status="requested")
+        url = reverse("scm:returnauthorization_public", args=[rma.public_token])
+        assert self._anon().get(url).status_code == 200          # the page still resolves
+        self._anon().post(url, {"action": "shipped", "return_tracking_number": "ATTACKER"})
+        rma.refresh_from_db()
+        assert rma.customer_shipped_on is None
+        assert rma.return_tracking_number == "STAFF-ENTERED"
+
+    def test_an_anonymous_shipped_POST_against_a_SETTLED_return_stamps_NOTHING(
+        self, rma_credit_only_a,
+    ):
+        from apps.scm.models import ReturnAuthorization
+        ReturnAuthorization.objects.filter(pk=rma_credit_only_a.pk).update(
+            return_tracking_number="STAFF-ENTERED")
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_credit_only_a.public_token])
+        assert self._anon().get(url).status_code == 200
+        self._anon().post(url, {"action": "shipped", "return_tracking_number": "ATTACKER"})
+        rma_credit_only_a.refresh_from_db()
+        assert rma_credit_only_a.customer_shipped_on is None
+        assert rma_credit_only_a.return_tracking_number == "STAFF-ENTERED"
+
+    def test_a_second_shipped_POST_cannot_overwrite_the_first(self, rma_awaiting_receipt_a):
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_awaiting_receipt_a.public_token])
+        self._anon().post(url, {"action": "shipped", "return_tracking_number": "FIRST"})
+        self._anon().post(url, {"action": "shipped", "return_tracking_number": "SECOND"})
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.return_tracking_number == "FIRST"
+
+    def test_a_note_is_stored_truncated_and_refused_when_empty(self, rma_awaiting_receipt_a):
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_awaiting_receipt_a.public_token])
+        assert self._anon().post(url, {"action": "note", "portal_note": "   "}).status_code == 200
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.portal_note == ""
+        self._anon().post(url, {"action": "note", "portal_note": "It is in the post."})
+        rma_awaiting_receipt_a.refresh_from_db()
+        assert rma_awaiting_receipt_a.portal_note == "It is in the post."
+
+    def test_a_note_against_a_SETTLED_return_is_not_a_conversation(self, rma_credit_only_a):
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_credit_only_a.public_token])
+        self._anon().post(url, {"action": "note", "portal_note": "Hello?"})
+        rma_credit_only_a.refresh_from_db()
+        assert rma_credit_only_a.portal_note == ""
+
+    def test_the_label_renders_only_inside_LABEL_STATUSES(self, rma_awaiting_receipt_a,
+                                                           rma_credit_only_a, return_policy_a):
+        resp = self._anon().get(reverse("scm:returnauthorization_label",
+                                        args=[rma_awaiting_receipt_a.public_token]))
+        assert resp.status_code == 200
+        assert "scm/returns/returnauthorization/label.html" in [t.name for t in resp.templates]
+        assert resp.context["return_to_address"] == return_policy_a.return_to_address
+        assert self._anon().get(reverse("scm:returnauthorization_label",
+                                        args=[rma_credit_only_a.public_token])).status_code == 404
+
+    def test_the_label_404s_for_a_bad_token_and_an_inactive_tenant(self, tenant_a,
+                                                                    rma_awaiting_receipt_a):
+        assert self._anon().get(reverse("scm:returnauthorization_label",
+                                        args=["rubbish"])).status_code == 404
+        tenant_a.is_active = False
+        tenant_a.save(update_fields=["is_active"])
+        assert self._anon().get(reverse("scm:returnauthorization_label",
+                                        args=[rma_awaiting_receipt_a.public_token])
+                                ).status_code == 404
+
+
+class TestReturnPolicyAndReasonCRUD:
+    def test_the_policy_list_renders_with_its_filter_context(self, client_a, return_policy_a):
+        resp = client_a.get(reverse("scm:returnpolicy_list"))
+        assert resp.status_code == 200
+        assert "scm/returns/returnpolicy/list.html" in [t.name for t in resp.templates]
+        assert return_policy_a in resp.context["object_list"]
+        for key in ("basis_choices", "refund_basis_choices", "fee_choices", "categories",
+                    "stats"):
+            assert key in resp.context, key
+
+    def test_the_policy_detail_renders_the_grade_ladder(self, client_a, return_policy_a):
+        resp = client_a.get(reverse("scm:returnpolicy_detail", args=[return_policy_a.pk]))
+        assert resp.status_code == 200
+        ladder = resp.context["grade_ladder"]
+        assert [row["grade"] for row in ladder] == ["A", "B", "C", "D"]
+        assert [row["pct"] for row in ladder] == [Decimal("100.00"), Decimal("75.00"),
+                                                  Decimal("40.00"), Decimal("0.00")]
+
+    def test_creating_and_editing_a_policy(self, client_a, tenant_a):
+        from apps.scm.models import ReturnPolicy
+        payload = {
+            "name": "New policy", "is_active": "on", "priority": "50", "item_category": "",
+            "window_basis": "delivery", "window_days": "21", "fallback_days": "30",
+            "allow_refund": "on", "refund_basis": "full", "refund_pct": "100",
+            "restocking_fee_type": "none", "restocking_fee_value": "0",
+            "return_shipping_paid_by": "customer", "grade_a_cost_pct": "100",
+            "grade_b_cost_pct": "75", "grade_c_cost_pct": "40", "grade_d_cost_pct": "0",
+            "warranty_window_days": "180", "return_to_address": "", "portal_instructions": "",
+        }
+        assert client_a.post(reverse("scm:returnpolicy_create"), payload).status_code == 302
+        policy = ReturnPolicy.objects.get(tenant=tenant_a, name="New policy")
+        assert policy.window_days == 21
+        payload["name"] = "Renamed policy"
+        client_a.post(reverse("scm:returnpolicy_edit", args=[policy.pk]), payload)
+        policy.refresh_from_db()
+        assert policy.name == "Renamed policy"
+
+    def test_a_policy_in_use_refuses_to_delete_CLEANLY(self, client_a, return_policy_a,
+                                                        return_authorization_a):
+        """§7.4 — a policy deleted out from under a frozen ``policy_snapshot`` would leave a
+        decision nobody can trace back to its rules."""
+        from apps.scm.models import ReturnPolicy
+        resp = client_a.post(reverse("scm:returnpolicy_delete", args=[return_policy_a.pk]))
+        assert resp.status_code == 302
+        assert ReturnPolicy.objects.filter(pk=return_policy_a.pk).exists()
+
+    def test_an_unused_policy_deletes(self, client_a, tenant_a):
+        from apps.scm.models import ReturnPolicy
+        policy = ReturnPolicy.objects.create(tenant=tenant_a, name="Unused")
+        assert client_a.post(reverse("scm:returnpolicy_delete",
+                                     args=[policy.pk])).status_code == 302
+        assert not ReturnPolicy.objects.filter(pk=policy.pk).exists()
+
+    def test_the_reason_list_renders_with_its_in_use_annotation(self, client_a, return_reason_a,
+                                                                 return_authorization_a):
+        resp = client_a.get(reverse("scm:returnreason_list"))
+        assert resp.status_code == 200
+        assert "scm/returns/returnreason/list.html" in [t.name for t in resp.templates]
+        row = next(r for r in resp.context["object_list"] if r.pk == return_reason_a.pk)
+        assert row.in_use_agg is True
+        for key in ("fault_choices", "disposition_choices", "stats"):
+            assert key in resp.context, key
+
+    def test_the_reason_detail_lists_the_lines_raised_on_it(self, client_a, return_reason_a,
+                                                             return_authorization_a):
+        resp = client_a.get(reverse("scm:returnreason_detail", args=[return_reason_a.pk]))
+        assert resp.status_code == 200
+        assert len(resp.context["return_lines"]) == 1
+        assert resp.context["allowed_resolutions"] == ("refund", "store_credit", "exchange")
+
+    def test_creating_and_editing_a_reason(self, client_a, tenant_a):
+        from apps.scm.models import ReturnReason
+        payload = {"code": "NEW-1", "name": "New reason", "fault_party": "merchant",
+                   "allows_refund": "on", "suggested_disposition": "", "follow_up_question": "",
+                   "sort_order": "5", "is_active": "on"}
+        assert client_a.post(reverse("scm:returnreason_create"), payload).status_code == 302
+        reason = ReturnReason.objects.get(tenant=tenant_a, code="NEW-1")
+        payload["name"] = "Renamed reason"
+        client_a.post(reverse("scm:returnreason_edit", args=[reason.pk]), payload)
+        reason.refresh_from_db()
+        assert reason.name == "Renamed reason"
+
+    def test_a_reason_in_use_refuses_to_delete_CLEANLY(self, client_a, return_reason_a,
+                                                        return_authorization_a):
+        from apps.scm.models import ReturnReason
+        resp = client_a.post(reverse("scm:returnreason_delete", args=[return_reason_a.pk]))
+        assert resp.status_code == 302
+        assert ReturnReason.objects.filter(pk=return_reason_a.pk).exists()
+
+    def test_an_unused_reason_deletes(self, client_a, tenant_a):
+        from apps.scm.models import ReturnReason
+        reason = ReturnReason.objects.create(tenant=tenant_a, code="UNUSED", name="Unused")
+        assert client_a.post(reverse("scm:returnreason_delete",
+                                     args=[reason.pk])).status_code == 302
+        assert not ReturnReason.objects.filter(pk=reason.pk).exists()
+
+
+class TestCurrencyDeleteIsProtectedByAReturn:
+    """REGRESSION LOCK (item 14). ``ReturnAuthorization.currency`` is the ONLY PROTECT reference
+    onto the GLOBAL Currency master anywhere in the repo — every one of the twenty sibling currency
+    FKs is SET_NULL — so the bare delete became an uncaught ProtectedError (a 500) the moment any
+    return existed in that currency."""
+
+    def test_a_currency_an_rma_references_refuses_cleanly(self, client_a, usd,
+                                                          return_authorization_a):
+        from apps.accounting.models import Currency
+        assert return_authorization_a.currency == usd
+        resp = client_a.post(reverse("accounting:currency_delete", args=[usd.pk]))
+        assert resp.status_code == 302
+        assert "login" not in resp["Location"]
+        assert Currency.objects.filter(pk=usd.pk).exists()
+
+    def test_an_unreferenced_currency_still_deletes(self, client_a, db):
+        from apps.accounting.models import Currency
+        spare = Currency.objects.create(code="XTS", name="Test currency")
+        assert client_a.post(reverse("accounting:currency_delete",
+                                     args=[spare.pk])).status_code == 302
+        assert not Currency.objects.filter(pk=spare.pk).exists()
+
+
+class TestWarrantyClaimCRUDAndLifecycle:
+    def test_the_list_renders_with_its_filter_context(self, client_a, warranty_claim_a):
+        resp = client_a.get(reverse("scm:warrantyclaim_list"))
+        assert resp.status_code == 200
+        assert "scm/returns/warrantyclaim/list.html" in [t.name for t in resp.templates]
+        assert warranty_claim_a in resp.context["object_list"]
+        for key in ("status_choices", "defect_choices", "channel_choices", "suppliers", "items",
+                    "stats"):
+            assert key in resp.context, key
+
+    def test_the_list_search_and_filters(self, client_a, warranty_claim_a, supplier_a, item_a):
+        url = reverse("scm:warrantyclaim_list")
+        for params in ({"q": warranty_claim_a.number}, {"q": item_a.sku},
+                       {"status": "draft"}, {"supplier": str(supplier_a.pk)},
+                       {"item": str(item_a.pk)},
+                       {"defect_classification": "manufacturing"}):
+            assert warranty_claim_a in list(
+                client_a.get(url, params).context["object_list"]), params
+
+    def test_the_overdue_filter_agrees_with_the_badge(self, client_a, tenant_a,
+                                                      warranty_claim_submitted_a):
+        import datetime as _dt
+        from django.utils import timezone
+        from apps.scm.models import WarrantyClaim
+        WarrantyClaim.objects.filter(pk=warranty_claim_submitted_a.pk).update(
+            response_due_on=timezone.localdate() - _dt.timedelta(days=1))
+        rows = list(client_a.get(reverse("scm:warrantyclaim_list"),
+                                 {"overdue": "yes"}).context["object_list"])
+        assert warranty_claim_submitted_a.pk in {row.pk for row in rows}
+        warranty_claim_submitted_a.refresh_from_db()
+        assert warranty_claim_submitted_a.is_overdue is True
+
+    def test_create_edit_and_delete(self, client_a, tenant_a, supplier_a, item_a):
+        from apps.scm.models import WarrantyClaim
+        assert client_a.post(reverse("scm:warrantyclaim_create"),
+                             _claim_post(supplier_a, item_a)).status_code == 302
+        claim = WarrantyClaim.objects.get(tenant=tenant_a)
+        assert claim.number.startswith("WTY-")
+        assert claim.costs.count() == 1
+        assert claim.amount_claimed_total == Decimal("100.00")
+        existing = claim.costs.first()
+        rows = [{"cost_type": "part", "description": "Renamed part", "quantity": "1",
+                 "unit_amount": "100.00", "amount_approved": "0.00", "id": str(existing.pk),
+                 "DELETE": ""}]
+        assert client_a.post(reverse("scm:warrantyclaim_edit", args=[claim.pk]),
+                             _claim_post(supplier_a, item_a, rows=rows, initial=1,
+                                         notes="Edited")).status_code == 302
+        claim.refresh_from_db()
+        assert claim.notes == "Edited"
+        assert client_a.get(reverse("scm:warrantyclaim_delete",
+                                    args=[claim.pk])).status_code == 405
+        assert client_a.post(reverse("scm:warrantyclaim_delete",
+                                     args=[claim.pk])).status_code == 302
+        assert not WarrantyClaim.objects.filter(pk=claim.pk).exists()
+
+    def test_a_submitted_claim_can_no_longer_be_edited_or_deleted(self, client_a,
+                                                                   warranty_claim_submitted_a):
+        from apps.scm.models import WarrantyClaim
+        assert client_a.get(reverse("scm:warrantyclaim_edit",
+                                    args=[warranty_claim_submitted_a.pk])).status_code == 302
+        client_a.post(reverse("scm:warrantyclaim_delete",
+                              args=[warranty_claim_submitted_a.pk]))
+        assert WarrantyClaim.objects.filter(pk=warranty_claim_submitted_a.pk).exists()
+
+    def test_the_detail_page_renders_the_documented_context(self, client_a, warranty_claim_a):
+        resp = client_a.get(reverse("scm:warrantyclaim_detail", args=[warranty_claim_a.pk]))
+        assert resp.status_code == 200
+        assert "scm/returns/warrantyclaim/detail.html" in [t.name for t in resp.templates]
+        for key in ("obj", "costs", "amount_claimed_total", "cost_approved_total",
+                    "recovery_variance", "recovery_rate_pct", "is_in_warranty",
+                    "is_possible_duplicate", "lot_history", "response_form", "credit_form"):
+            assert key in resp.context, key
+
+    def test_submit_stamps_the_date_and_only_once(self, client_a, warranty_claim_a):
+        from django.utils import timezone
+        url = reverse("scm:warrantyclaim_submit", args=[warranty_claim_a.pk])
+        assert client_a.post(url).status_code == 302
+        warranty_claim_a.refresh_from_db()
+        assert warranty_claim_a.status == "submitted"
+        assert warranty_claim_a.submitted_on == timezone.localdate()
+        first = warranty_claim_a.submitted_on
+        client_a.post(url)
+        warranty_claim_a.refresh_from_db()
+        assert warranty_claim_a.submitted_on == first
+
+    def test_a_claim_that_asks_for_nothing_may_not_be_submitted(self, client_a, tenant_a,
+                                                                 supplier_a, item_a):
+        from apps.scm.models import WarrantyClaim
+        claim = WarrantyClaim.objects.create(tenant=tenant_a, supplier=supplier_a, item=item_a,
+                                             quantity_claimed=Decimal("1"))
+        client_a.post(reverse("scm:warrantyclaim_submit", args=[claim.pk]))
+        claim.refresh_from_db()
+        assert claim.status == "draft"
+
+    def test_recording_a_response_and_its_guards(self, client_a, warranty_claim_submitted_a):
+        url = reverse("scm:warrantyclaim_record_response",
+                      args=[warranty_claim_submitted_a.pk])
+        client_a.post(url, {"outcome": "approved", "amount_approved": "500.00"})
+        warranty_claim_submitted_a.refresh_from_db()
+        assert warranty_claim_submitted_a.status == "submitted"       # more than was claimed
+        client_a.post(url, {"outcome": "partially_approved", "amount_approved": "80.00",
+                            "supplier_rma_number": "THEIR-7",
+                            "supplier_response_notes": "Part only."})
+        warranty_claim_submitted_a.refresh_from_db()
+        assert warranty_claim_submitted_a.status == "partially_approved"
+        assert warranty_claim_submitted_a.amount_approved == Decimal("80.00")
+        assert warranty_claim_submitted_a.supplier_rma_number == "THEIR-7"
+        assert "Part only." in warranty_claim_submitted_a.supplier_response_notes
+        client_a.post(url, {"outcome": "rejected", "amount_approved": "0"})
+        warranty_claim_submitted_a.refresh_from_db()
+        assert warranty_claim_submitted_a.status == "partially_approved"   # recorded once only
+
+    def test_a_response_may_not_be_recorded_on_a_draft(self, client_a, warranty_claim_a):
+        client_a.post(reverse("scm:warrantyclaim_record_response", args=[warranty_claim_a.pk]),
+                      {"outcome": "approved", "amount_approved": "50.00"})
+        warranty_claim_a.refresh_from_db()
+        assert warranty_claim_a.status == "draft"
+
+    def test_recording_the_credit_and_its_guards(self, client_a, warranty_claim_approved_a):
+        from django.utils import timezone
+        url = reverse("scm:warrantyclaim_record_credit", args=[warranty_claim_approved_a.pk])
+        client_a.post(url, {"amount_credited": "100.00", "credit_reference": "CN-1"})
+        warranty_claim_approved_a.refresh_from_db()
+        assert warranty_claim_approved_a.credit_received_on is None    # above the approval
+        client_a.post(url, {"amount_credited": "80.00", "credit_reference": "CN-2"})
+        warranty_claim_approved_a.refresh_from_db()
+        assert warranty_claim_approved_a.status == "credited"
+        assert warranty_claim_approved_a.amount_credited == Decimal("80.00")
+        assert warranty_claim_approved_a.credit_reference == "CN-2"
+        assert warranty_claim_approved_a.credit_received_on == timezone.localdate()
+        client_a.post(url, {"amount_credited": "10.00", "credit_reference": "CN-3"})
+        warranty_claim_approved_a.refresh_from_db()
+        assert warranty_claim_approved_a.amount_credited == Decimal("80.00")
+
+    def test_a_credit_may_not_be_recorded_before_an_approval(self, client_a,
+                                                              warranty_claim_submitted_a):
+        client_a.post(reverse("scm:warrantyclaim_record_credit",
+                              args=[warranty_claim_submitted_a.pk]),
+                      {"amount_credited": "10.00", "credit_reference": "CN-1"})
+        warranty_claim_submitted_a.refresh_from_db()
+        assert warranty_claim_submitted_a.credit_received_on is None
+
+    def test_no_journal_entry_and_no_stock_move_is_written_anywhere_on_the_claim_path(
+        self, client_a, tenant_a, warranty_claim_a,
+    ):
+        from apps.accounting.models import JournalEntry
+        from apps.scm.models import StockMove
+        journals, moves = JournalEntry.objects.count(), StockMove.objects.count()
+        client_a.post(reverse("scm:warrantyclaim_submit", args=[warranty_claim_a.pk]))
+        client_a.post(reverse("scm:warrantyclaim_record_response", args=[warranty_claim_a.pk]),
+                      {"outcome": "approved", "amount_approved": "100.00"})
+        client_a.post(reverse("scm:warrantyclaim_record_credit", args=[warranty_claim_a.pk]),
+                      {"amount_credited": "100.00", "credit_reference": "CN-1"})
+        assert JournalEntry.objects.count() == journals
+        assert StockMove.objects.count() == moves
+
+
+class TestReturnsNegativeInputHardening:
+    """REGRESSION LOCK (item 17). Junk FK filter params (L11), pages past the end (L9) and bad
+    dates must all 200 — never 500."""
+
+    def test_every_list_and_queue_survives_junk_fk_filter_params(self, client_a,
+                                                                  return_authorization_a,
+                                                                  disposition_a,
+                                                                  warranty_claim_a,
+                                                                  return_policy_a,
+                                                                  return_reason_a):
+        junk = {"customer": "abc", "policy": "-1", "location": "NaN", "item": "1e9",
+                "restock_location": "'; DROP TABLE", "supplier": "abc", "item_category": "xyz",
+                "status": "not-a-status", "disposition": "nope", "condition_grade": "z",
+                "stock_posted": "maybe", "is_active": "perhaps", "return_type": "??",
+                "resolution": "??", "source": "??", "fault_party": "??", "window_basis": "??",
+                "refund_basis": "??", "restocking_fee_type": "??", "blocks_restock": "abc",
+                "requires_photo": "abc", "suggested_disposition": "??",
+                "defect_classification": "??", "submission_channel": "??",
+                "return_method": "??", "state": "??", "unposted": "abc", "pending": "abc",
+                "overdue": "abc"}
+        for name in _RETURNS_LIST_ROUTES + _RETURNS_QUEUE_ROUTES:
+            assert client_a.get(reverse(f"scm:{name}"), junk).status_code == 200, name
+
+    def test_every_list_and_queue_survives_a_page_past_the_end(self, client_a,
+                                                               return_authorization_a,
+                                                               disposition_a, warranty_claim_a):
+        for name in _RETURNS_LIST_ROUTES + _RETURNS_QUEUE_ROUTES:
+            for page in ("999", "0", "-1", "abc", ""):
+                assert client_a.get(reverse(f"scm:{name}"),
+                                    {"page": page}).status_code == 200, (name, page)
+
+    def test_page_2_works_when_the_rows_exceed_the_page_size(self, client_a, tenant_a,
+                                                             customer_a, return_reason_a,
+                                                             item_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        for _ in range(20):
+            rma = ReturnAuthorization.objects.create(tenant=tenant_a, customer=customer_a,
+                                                     requested_on=timezone.localdate())
+            ReturnLine.objects.create(return_authorization=rma, item=item_a,
+                                      quantity_requested=Decimal("1"), reason=return_reason_a)
+        first = client_a.get(reverse("scm:returnauthorization_list"))
+        second = client_a.get(reverse("scm:returnauthorization_list"), {"page": "2"})
+        assert first.status_code == second.status_code == 200
+        assert second.context["page_obj"].number == 2
+        assert len(second.context["object_list"]) == 5
+        assert not ({row.pk for row in first.context["object_list"]}
+                    & {row.pk for row in second.context["object_list"]})
+
+    def test_bad_date_windows_narrow_nothing_rather_than_raising(self, client_a,
+                                                                  return_authorization_a,
+                                                                  disposition_a,
+                                                                  warranty_claim_a):
+        for junk in ("lastweek", "2026-13-45", "0000-00-00", "NaN", "'; DROP TABLE"):
+            for name in ("returnauthorization_list", "returndisposition_list",
+                         "warrantyclaim_list", "refund_queue",
+                         "returns_awaiting_disposition"):
+                resp = client_a.get(reverse(f"scm:{name}"),
+                                    {"date_from": junk, "date_to": junk})
+                assert resp.status_code == 200, (name, junk)
+
+    def test_a_junk_pk_in_a_url_404s_rather_than_500ing(self, client_a):
+        for name in ("returnauthorization_detail", "returndisposition_detail",
+                     "returnpolicy_detail", "returnreason_detail", "warrantyclaim_detail"):
+            assert client_a.get(reverse(f"scm:{name}", args=[999999])).status_code == 404, name
+
+
+class TestReturnsQueryBudgets:
+    """The MEASURED post-fix budgets. ``ReturnLine.quantity_received`` and ``credit_quantity`` sum
+    in PYTHON over the prefetched related manager: an ``.aggregate()`` on a related manager never
+    consults ``_prefetched_objects_cache``, so it bypassed the prefetch and fired one round trip per
+    line — four times over on the detail page."""
+
+    def _multiply_lines(self, rma, item, reason, count):
+        from apps.scm.models import ReturnLine
+        for _ in range(count):
+            ReturnLine.objects.create(return_authorization=rma, item=item,
+                                      quantity_requested=Decimal("1"),
+                                      quantity_approved=Decimal("1"), reason=reason,
+                                      unit_price=Decimal("15.00"), tax_pct=Decimal("20.00"))
+
+    def test_the_rma_detail_page_is_scale_invariant_in_its_lines(self, client_a, rma_received_a,
+                                                                  disposition_a, item_a,
+                                                                  return_reason_a):
+        url = reverse("scm:returnauthorization_detail", args=[rma_received_a.pk])
+        self._multiply_lines(rma_received_a, item_a, return_reason_a, 4)
+        client_a.get(url)
+        before = _returns_query_count(client_a, url)
+        self._multiply_lines(rma_received_a, item_a, return_reason_a, 8)
+        assert _returns_query_count(client_a, url) == before, "the prefetch is being bypassed"
+
+    def test_the_refund_queue_is_scale_invariant_in_its_lines(self, client_a, rma_received_a,
+                                                              disposition_a, item_a,
+                                                              return_reason_a, location_a2):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        url = reverse("scm:refund_queue")
+        self._multiply_lines(rma_received_a, item_a, return_reason_a, 4)
+        client_a.get(url)
+        before = _returns_query_count(client_a, url)
+        self._multiply_lines(rma_received_a, item_a, return_reason_a, 8)
+        assert _returns_query_count(client_a, url) == before, "the prefetch is being bypassed"
+
+    def test_the_advance_refund_report_is_scale_invariant_in_its_lines(self, client_a,
+                                                                       rma_advance_refund_a,
+                                                                       item_a, return_reason_a):
+        url = reverse("scm:advance_refund_exposure")
+        self._multiply_lines(rma_advance_refund_a, item_a, return_reason_a, 4)
+        client_a.get(url)
+        before = _returns_query_count(client_a, url)
+        self._multiply_lines(rma_advance_refund_a, item_a, return_reason_a, 8)
+        assert _returns_query_count(client_a, url) == before
+
+    def test_the_five_list_pages_stay_inside_20_queries(self, client_a, django_assert_max_num_queries,
+                                                        return_authorization_a, disposition_a,
+                                                        warranty_claim_a, return_policy_a,
+                                                        return_reason_a, rma_credit_only_a):
+        for name in _RETURNS_LIST_ROUTES:
+            with django_assert_max_num_queries(20):
+                assert client_a.get(reverse(f"scm:{name}")).status_code == 200, name
+
+    def test_the_refund_queue_and_the_rma_detail_stay_inside_20(self, client_a,
+                                                                django_assert_max_num_queries,
+                                                                rma_received_a, disposition_a,
+                                                                location_a2):
+        _decide(client_a, disposition_a, disposition="restock",
+                restock_location=str(location_a2.pk), restock_unit_cost="4.0000")
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:refund_queue")).status_code == 200
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:returnauthorization_detail",
+                                        args=[rma_received_a.pk])).status_code == 200
+
+    def test_the_remaining_queues_and_detail_pages_stay_inside_their_budgets(
+        self, client_a, django_assert_max_num_queries, rma_advance_refund_a, warranty_claim_a,
+        rma_awaiting_receipt_a, disposition_a, rma_credit_only_a,
+    ):
+        with django_assert_max_num_queries(18):
+            assert client_a.get(reverse("scm:advance_refund_exposure")).status_code == 200
+        with django_assert_max_num_queries(16):
+            assert client_a.get(reverse("scm:warrantyclaim_detail",
+                                        args=[warranty_claim_a.pk])).status_code == 200
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:return_portal")).status_code == 200
+
+    def test_the_public_token_page_stays_inside_20(self, db, django_assert_max_num_queries,
+                                                   rma_awaiting_receipt_a):
+        from django.test import Client
+        url = reverse("scm:returnauthorization_public",
+                      args=[rma_awaiting_receipt_a.public_token])
+        with django_assert_max_num_queries(20):
+            assert Client().get(url).status_code == 200
+
+    def test_the_bench_list_does_not_query_per_rendered_row(self, client_a, tenant_a,
+                                                            return_line_a, location_a):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition
+        url = reverse("scm:returndisposition_list")
+
+        def _receive(count):
+            for _ in range(count):
+                ReturnDisposition.objects.create(tenant=tenant_a, return_line=return_line_a,
+                                                 quantity=Decimal("0.5"),
+                                                 received_on=timezone.localdate(),
+                                                 location=location_a)
+
+        _receive(4)
+        client_a.get(url)
+        before = _returns_query_count(client_a, url)
+        _receive(4)
+        assert _returns_query_count(client_a, url) == before
+
+    def test_the_rma_form_page_does_not_query_per_option(self, client_a,
+                                                         django_assert_max_num_queries,
+                                                         return_authorization_a, item_a,
+                                                         return_reason_a, carrier_a, usd,
+                                                         location_a):
+        with django_assert_max_num_queries(30):
+            assert client_a.get(reverse("scm:returnauthorization_edit",
+                                        args=[return_authorization_a.pk])).status_code == 200
+
+
+class TestFifoLifoDivergenceIsExpected:
+    """REGRESSION LOCK (item 18). ``_item_valuation`` walks cost layers and ignores
+    ``average_cost``; ``Item.total_value()`` is ``on_hand x average_cost``. A grade-C restock adds a
+    layer at 40 % of cost while the weighted average rolls only part-way down.
+
+    **This divergence is EXPECTED. Do NOT "fix" it** — this test exists so the next reviewer does
+    not try. It is pre-existing dual-figure design; 4.10 is simply the first module to make the two
+    disagree routinely.
+    """
+
+    def test_a_written_down_restock_leaves_the_two_valuations_apart(self, client_a, tenant_a,
+                                                                     rma_awaiting_receipt_a,
+                                                                     item_fifo_a,
+                                                                     return_reason_a, location_a,
+                                                                     location_a2):
+        from django.utils import timezone
+        from apps.scm.models import ReturnDisposition, ReturnLine, StockMove
+        from apps.scm.tests._helpers import seed_stock
+        from apps.scm.views._helpers import _post_stock_move
+        from apps.scm.views.InventoryManagement.Reports import _item_valuation
+
+        # Two real cost layers, then an outbound — the shape in which the two figures can differ.
+        seed_stock(tenant_a, item_fifo_a, location_a2, "10", "10.0000")
+        seed_stock(tenant_a, item_fifo_a, location_a2, "10", "20.0000")
+        _post_stock_move(tenant_a, item=item_fifo_a, location=location_a2,
+                         quantity=Decimal("-10"), move_type="issue",
+                         unit_cost=Decimal("15.0000"), reference="SALE")
+        item_fifo_a.refresh_from_db()
+        assert item_fifo_a.average_cost == Decimal("15.0000")
+
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a,
+                                         item=item_fifo_a, quantity_requested=Decimal("2"),
+                                         quantity_approved=Decimal("2"), reason=return_reason_a,
+                                         unit_price=Decimal("30.00"),
+                                         unit_cost=Decimal("10.0000"))
+        row = ReturnDisposition.objects.create(tenant=tenant_a, return_line=line,
+                                               quantity=Decimal("2"),
+                                               received_on=timezone.localdate(),
+                                               location=location_a)
+        _decide(client_a, row, disposition="restock", restock_location=str(location_a2.pk),
+                restock_unit_cost="4.0000", condition_grade="c")
+        assert client_a.post(reverse("scm:returndisposition_post",
+                                     args=[row.pk])).status_code == 302
+
+        item_fifo_a.refresh_from_db()
+        moves = list(StockMove.objects.filter(tenant=tenant_a, item=item_fifo_a)
+                     .order_by("moved_at", "id"))
+        restock = moves[-1]
+        assert restock.move_type == "receipt"
+        assert restock.unit_cost == Decimal("4.0000")     # a real inbound layer at the write-down
+
+        on_hand, fifo_value = _item_valuation(item_fifo_a, moves)
+        quick_value = item_fifo_a.total_value()
+        assert on_hand == Decimal("12.0000")
+        # FIFO consumed the OLD 10 @ 10.00 layer, so what remains is 10 @ 20.00 + 2 @ 4.00.
+        assert fifo_value == Decimal("208.00")
+        # The weighted average rolled only PART-WAY down: (10 x 15.0000 + 2 x 4.0000) / 12.
+        assert item_fifo_a.average_cost == Decimal("13.1667")
+        assert quick_value == Decimal("158.00")
+        assert fifo_value != quick_value, "the divergence is documented and expected"
+
+    def test_the_valuation_report_still_renders_both_figures_without_error(self, client_a,
+                                                                           tenant_a,
+                                                                           item_fifo_a,
+                                                                           location_a2):
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, item_fifo_a, location_a2, "5", "4.0000")
+        assert client_a.get(reverse("scm:valuation_report")).status_code == 200
