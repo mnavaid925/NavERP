@@ -12110,6 +12110,15 @@ class TestCreditNoteHandoff:
         assert rma_received_a.credit_total == Decimal("49.00")
         assert rma_received_a.status == "settled"
         assert JournalEntry.objects.count() == journals     # SCM posts NO journal entry
+        # The DOCUMENT's own totals, not just SCM's. ``credit_total`` and ``recalc_totals()`` are
+        # two independent computations over the same rows — nothing else in the suite forces them
+        # to agree, so a fee or tax that reached one and not the other would ship a credit note
+        # whose printed total contradicted the RMA it came from.
+        invoice.refresh_from_db()
+        assert invoice.subtotal == Decimal("40.00")         # 45.00 goods − 5.00 fee
+        assert invoice.tax_total == Decimal("9.00")
+        assert invoice.total == Decimal("49.00")
+        assert invoice.total == rma_received_a.credit_total
 
     def test_a_second_post_never_raises_a_second_credit_note(self, client_a, tenant_a,
                                                              rma_received_a, disposition_a,
@@ -12140,6 +12149,31 @@ class TestCreditNoteHandoff:
         assert rma_received_a.credit_note_id is None
         assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
         assert JournalEntry.objects.count() == journals
+
+    def test_a_credit_note_totalling_EXACTLY_zero_is_refused_too(
+        self, client_a, tenant_a, rma_received_a, disposition_a, location_a2,
+    ):
+        """The boundary the guard actually defends. ``invoice_post`` requires ``total > ZERO``, so
+        zero is just as unpostable as negative — but the sibling test above only ever drives the
+        total to −46.00, which a ``<=`` → ``<`` slip would still refuse. This case is the one that
+        tells the two apart."""
+        from apps.accounting.models import Invoice, JournalEntry
+        self._decided(client_a, disposition_a, location_a2)
+        line = rma_received_a.lines.first()
+        line.line_fee = Decimal("54.00")                # 45.00 + 9.00 tax − 54.00 = exactly 0.00
+        line.save(update_fields=["line_fee"])
+        # ``settlement_figures`` is what the guard actually reads — the four stored columns are
+        # only written on success, so asserting the stored ``credit_total`` here would pass on the
+        # default and prove nothing. This pins the total at the boundary itself.
+        assert rma_received_a.settlement_figures[3] == Decimal("0.00")
+        journals = JournalEntry.objects.count()
+        client_a.post(reverse("scm:returnauthorization_draft_credit_note",
+                              args=[rma_received_a.pk]))
+        rma_received_a.refresh_from_db()
+        assert rma_received_a.credit_note_id is None
+        assert Invoice.objects.filter(tenant=tenant_a, kind="credit_note").count() == 0
+        assert JournalEntry.objects.count() == journals
+        assert rma_received_a.status != "settled"
 
     def test_a_return_with_nothing_credit_bearing_yet_is_refused(self, client_a, tenant_a,
                                                                   rma_received_a, disposition_a):
@@ -12824,14 +12858,35 @@ class TestWarrantyClaimCRUDAndLifecycle:
                     "stats"):
             assert key in resp.context, key
 
-    def test_the_list_search_and_filters(self, client_a, warranty_claim_a, supplier_a, item_a):
+    def test_the_list_search_and_filters(self, client_a, tenant_a, warranty_claim_a, supplier_a,
+                                         item_a, vendor_a, item_lot_a):
+        """Every parameter is checked BOTH ways. Asserting only that the matching row is present
+        passes just as happily against a filter that ignores its parameter entirely and returns the
+        whole table — so each case also asserts a deliberately non-matching decoy is excluded."""
+        import datetime as _dt
+        from django.utils import timezone
+        from apps.scm.models import WarrantyClaim
+        decoy = WarrantyClaim.objects.create(
+            tenant=tenant_a, supplier=vendor_a, item=item_lot_a, quantity_claimed=Decimal("1"),
+            purchase_date=timezone.localdate() - _dt.timedelta(days=10),
+            failure_date=timezone.localdate(), defect_classification="design",
+            status="submitted", submission_channel="portal", description="Different claim.",
+        )
         url = reverse("scm:warrantyclaim_list")
         for params in ({"q": warranty_claim_a.number}, {"q": item_a.sku},
                        {"status": "draft"}, {"supplier": str(supplier_a.pk)},
                        {"item": str(item_a.pk)},
                        {"defect_classification": "manufacturing"}):
-            assert warranty_claim_a in list(
-                client_a.get(url, params).context["object_list"]), params
+            rows = list(client_a.get(url, params).context["object_list"])
+            assert warranty_claim_a in rows, params
+            assert decoy not in rows, params
+        # And the mirror image: each decoy-selecting parameter excludes the original.
+        for params in ({"q": decoy.number}, {"status": "submitted"},
+                       {"supplier": str(vendor_a.pk)}, {"item": str(item_lot_a.pk)},
+                       {"defect_classification": "design"}):
+            rows = list(client_a.get(url, params).context["object_list"])
+            assert decoy in rows, params
+            assert warranty_claim_a not in rows, params
 
     def test_the_overdue_filter_agrees_with_the_badge(self, client_a, tenant_a,
                                                       warranty_claim_submitted_a):
