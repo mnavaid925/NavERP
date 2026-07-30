@@ -3449,3 +3449,1228 @@ class TestQualityCrossTenantFormScoping:
         form = CapaTaskForm(_task_payload(owner=str(theirs.pk)), tenant=tenant_a)
         assert not form.is_valid()
         assert "owner" in form.errors
+
+
+# ================================================================================================
+# SCM 4.10 Returns Management (Reverse Logistics) — forms
+# ================================================================================================
+def _rma_payload(party, **overrides):
+    from django.utils import timezone
+    data = {
+        "customer": str(party.pk), "sales_order": "", "return_type": "physical",
+        "source": "csr", "policy": "", "requested_on": timezone.localdate().isoformat(),
+        "resolution": "refund", "refund_method": "original_tender",
+        "return_method": "mail_prepaid", "dropoff_location": "", "return_carrier": "",
+        "return_tracking_number": "", "return_label_url": "", "label_cost": "0",
+        "counterparty_rma_number": "", "currency": "", "advance_refund_deadline": "",
+        "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _return_line_row(item, reason, **overrides):
+    row = {
+        "sales_order_line": "", "item": str(item.pk), "description": "Widget",
+        "quantity_requested": "3", "quantity_approved": "0", "reason": str(reason.pk),
+        "unit_price": "15.00", "tax_pct": "20.00", "unit_cost": "8.0000", "line_fee": "0.00",
+        "condition_reported": "", "lot_serial": "", "photo": "", "id": "",
+    }
+    row.update(overrides)
+    return row
+
+
+def _disposition_payload(line, location, **overrides):
+    data = {
+        "return_line": str(line.pk), "quantity": "1", "location": str(location.pk),
+        "lot_serial": "", "condition_grade": "a", "disposition": "received_pending",
+        "restock_location": "", "restock_unit_cost": "8.0000", "recovery_value": "0.00",
+        "nonconformance": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _policy_payload(**overrides):
+    data = {
+        "name": "Policy", "is_active": "on", "priority": "100", "item_category": "",
+        "window_basis": "delivery", "window_days": "30", "fallback_days": "45",
+        "allow_refund": "on", "allow_store_credit": "on", "allow_exchange": "on",
+        "refund_basis": "full", "refund_pct": "100", "restocking_fee_type": "none",
+        "restocking_fee_value": "0", "return_shipping_paid_by": "customer",
+        "grade_a_cost_pct": "100", "grade_b_cost_pct": "75", "grade_c_cost_pct": "40",
+        "grade_d_cost_pct": "0", "warranty_window_days": "365", "return_to_address": "",
+        "portal_instructions": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _reason_payload(**overrides):
+    data = {
+        "code": "RSN-1", "name": "A reason", "fault_party": "customer", "allows_refund": "on",
+        "suggested_disposition": "", "follow_up_question": "", "sort_order": "100",
+        "is_active": "on",
+    }
+    data.update(overrides)
+    return data
+
+
+def _claim_payload(supplier, item, **overrides):
+    data = {
+        "supplier": str(supplier.pk), "item": str(item.pk), "quantity_claimed": "1",
+        "lot_serial": "", "serial_reference": "", "return_authorization": "",
+        "nonconformance": "", "goods_receipt": "", "purchase_date": "", "warranty_start": "",
+        "warranty_end": "", "failure_date": "", "usage_context": "",
+        "defect_classification": "unknown", "supplier_rma_number": "",
+        "submission_channel": "email", "response_due_on": "", "description": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _claim_cost_row(**overrides):
+    row = {"cost_type": "part", "description": "Part", "quantity": "1", "unit_amount": "100.00",
+           "amount_approved": "0.00", "id": "", "DELETE": ""}
+    row.update(overrides)
+    return row
+
+
+class TestReturnsMassAssignmentExclusions:
+    """L20/L22 across all five 4.10 models: no form writes an ``editable=False`` column, and the
+    ``public_token`` bearer credential is never rendered into an edit form."""
+
+    def test_the_rma_form_excludes_every_single_writer_column(self):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(tenant=None)
+        for field in ("number", "status", "policy_snapshot", "approved_on", "approved_by",
+                      "rejected_reason", "customer_shipped_on", "public_token", "portal_note",
+                      "credit_note", "replacement_order", "refund_subtotal", "fee_total",
+                      "tax_total", "credit_total", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_rma_form_never_ships_the_public_token_in_the_edit_page(self,
+                                                                        return_authorization_a,
+                                                                        tenant_a):
+        """A secret in ``Meta.fields`` ships plaintext in the edit form (L20/L22). The token is the
+        ONLY credential guarding the public status page."""
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(instance=return_authorization_a, tenant=tenant_a)
+        assert "public_token" not in form.fields
+        assert return_authorization_a.public_token not in form.as_p()
+
+    def test_the_rma_form_still_offers_what_a_CSR_owns(self):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(tenant=None)
+        for field in ("customer", "sales_order", "return_type", "source", "policy",
+                      "requested_on", "resolution", "refund_method", "return_method",
+                      "dropoff_location", "return_carrier", "return_tracking_number",
+                      "return_label_url", "label_cost", "counterparty_rma_number", "currency",
+                      "advance_refund", "advance_refund_deadline", "notes"):
+            assert field in form.fields, field
+
+    def test_the_line_form_never_exposes_its_parent(self):
+        from apps.scm.forms import ReturnLineForm
+        form = ReturnLineForm(tenant=None)
+        assert "return_authorization" not in form.fields
+
+    def test_the_bench_form_excludes_the_whole_stamped_block(self):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(tenant=None)
+        for field in ("received_on", "received_by", "refurbished_on", "stock_posted",
+                      "stock_move", "decided_on", "decided_by", "tenant", "created_at",
+                      "updated_at"):
+            assert field not in form.fields, field
+        # restock_unit_cost IS a field — SEEDED once, then human-owned (the cost_of_quality posture).
+        assert "restock_unit_cost" in form.fields
+
+    def test_the_bench_row_form_drops_the_line_picker(self):
+        """Repeating the picker per row would let one row be re-pointed at another line and quietly
+        escape the formset cap."""
+        from apps.scm.forms import ReturnDispositionForm, ReturnDispositionRowForm
+        assert "return_line" in ReturnDispositionForm(tenant=None).fields
+        assert "return_line" not in ReturnDispositionRowForm(tenant=None).fields
+
+    def test_the_warranty_claim_form_excludes_the_whole_negotiation_block(self):
+        from apps.scm.forms import WarrantyClaimForm
+        form = WarrantyClaimForm(tenant=None)
+        for field in ("number", "status", "submitted_on", "responded_on",
+                      "supplier_response_notes", "amount_approved", "amount_credited",
+                      "credit_reference", "credit_received_on", "tenant", "created_at",
+                      "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_cost_form_never_exposes_the_computed_claim_amount_or_its_parent(self):
+        from apps.scm.forms import WarrantyClaimCostForm
+        form = WarrantyClaimCostForm(tenant=None)
+        assert "amount_claimed" not in form.fields
+        assert "claim" not in form.fields
+        assert set(form.fields) == {"cost_type", "description", "quantity", "unit_amount",
+                                    "amount_approved"}
+
+    def test_the_two_masters_expose_no_system_columns(self):
+        from apps.scm.forms import ReturnPolicyForm, ReturnReasonForm
+        for form in (ReturnPolicyForm(tenant=None), ReturnReasonForm(tenant=None)):
+            for field in ("tenant", "created_at", "updated_at", "number"):
+                assert field not in form.fields, field
+
+    def test_no_returns_form_carries_a_field_the_model_calls_uneditable(self):
+        """The sweep: every ModelForm in 4.10, every field, against ``editable``."""
+        from apps.scm.forms import (ReturnAuthorizationForm, ReturnDispositionForm,
+                                    ReturnDispositionRowForm, ReturnLineForm, ReturnPolicyForm,
+                                    ReturnReasonForm, WarrantyClaimCostForm, WarrantyClaimForm)
+        for form_class in (ReturnAuthorizationForm, ReturnLineForm, ReturnDispositionForm,
+                           ReturnDispositionRowForm, ReturnPolicyForm, ReturnReasonForm,
+                           WarrantyClaimForm, WarrantyClaimCostForm):
+            form = form_class(tenant=None)
+            model = form._meta.model
+            for name in form.fields:
+                try:
+                    field = model._meta.get_field(name)
+                except Exception:                       # a non-model form field
+                    continue
+                assert field.editable is True, f"{form_class.__name__}.{name}"
+
+    def test_a_crafted_post_cannot_set_the_status_or_the_settlement_figures(self, tenant_a,
+                                                                            customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(
+            _rma_payload(customer_a, status="settled", credit_total="9999.99",
+                         public_token="attacker-token", policy_snapshot="{}"),
+            tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        rma = form.save(commit=False)
+        rma.tenant = tenant_a
+        rma.save()
+        assert rma.status == "draft"
+        assert rma.credit_total == Decimal("0")
+        assert rma.policy_snapshot == ""
+        assert rma.public_token != "attacker-token"
+
+
+class TestReturnAuthorizationFormValidation:
+    def test_a_minimal_payload_is_accepted(self, tenant_a, customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        assert ReturnAuthorizationForm(_rma_payload(customer_a), tenant=tenant_a).is_valid()
+
+    def test_the_customer_is_required(self, tenant_a, customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(_rma_payload(customer_a, customer=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "customer" in form.errors
+
+    def test_the_requested_date_is_required(self, tenant_a, customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(_rma_payload(customer_a, requested_on=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "requested_on" in form.errors
+
+    def test_an_order_belonging_to_another_customer_is_refused(self, tenant_a, customer_a,
+                                                                sales_order_a):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.forms import ReturnAuthorizationForm
+        other = Party.objects.create(tenant=tenant_a, name="Second Customer",
+                                     kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=other, role="customer")
+        form = ReturnAuthorizationForm(
+            _rma_payload(other, sales_order=str(sales_order_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "sales_order" in form.errors
+
+    def test_an_advance_refund_needs_a_deadline(self, tenant_a, customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(_rma_payload(customer_a, advance_refund="on"),
+                                        tenant=tenant_a)
+        assert not form.is_valid()
+        assert "advance_refund_deadline" in form.errors
+
+    def test_a_credit_only_return_must_say_keep_the_item(self, tenant_a, customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(_rma_payload(customer_a, return_type="credit_only"),
+                                        tenant=tenant_a)
+        assert not form.is_valid()
+        assert "return_method" in form.errors
+        assert ReturnAuthorizationForm(
+            _rma_payload(customer_a, return_type="credit_only", return_method="keep_item"),
+            tenant=tenant_a).is_valid()
+
+    def test_a_negative_or_over_range_label_cost_is_refused(self, tenant_a, customer_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        for junk in ("-1", "NaN", "Infinity", "abc", "999999999999999999.99"):
+            form = ReturnAuthorizationForm(_rma_payload(customer_a, label_cost=junk),
+                                            tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "label_cost" in form.errors, junk
+
+    def test_the_customer_dropdown_offers_only_customer_role_parties(self, tenant_a, customer_a,
+                                                                      supplier_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        offered = list(ReturnAuthorizationForm(tenant=tenant_a).fields["customer"].queryset)
+        assert customer_a in offered
+        assert supplier_a not in offered
+
+    def test_the_policy_dropdown_offers_only_active_policies(self, tenant_a, return_policy_a,
+                                                              return_policy_fee_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        return_policy_fee_a.is_active = False
+        return_policy_fee_a.save(update_fields=["is_active"])
+        offered = list(ReturnAuthorizationForm(tenant=tenant_a).fields["policy"].queryset)
+        assert return_policy_a in offered
+        assert return_policy_fee_a not in offered
+
+    def test_the_sales_order_dropdown_narrows_to_the_returns_own_customer(self, tenant_a,
+                                                                          return_authorization_a,
+                                                                          returns_sales_order_a,
+                                                                          sales_order_a):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(instance=return_authorization_a, tenant=tenant_a)
+        offered = list(form.fields["sales_order"].queryset)
+        assert returns_sales_order_a in offered
+        assert sales_order_a in offered            # same customer_a — both are legitimately theirs
+
+    def test_the_currency_dropdown_is_narrowed_to_active_currencies(self, tenant_a, usd):
+        from apps.accounting.models import Currency
+        from apps.scm.forms import ReturnAuthorizationForm
+        dead = Currency.objects.create(code="ZZZ", name="Retired", is_active=False)
+        offered = list(ReturnAuthorizationForm(tenant=tenant_a).fields["currency"].queryset)
+        assert usd in offered
+        assert dead not in offered
+
+
+class TestReturnLineFormAndFormSet:
+    def test_approving_more_than_was_asked_for_is_refused(self, tenant_a, item_a,
+                                                          return_reason_a):
+        from apps.scm.forms import ReturnLineForm
+        form = ReturnLineForm(_return_line_row(item_a, return_reason_a, quantity_approved="9"),
+                              tenant=tenant_a)
+        assert not form.is_valid()
+        assert "quantity_approved" in form.errors
+
+    def test_a_lot_from_another_item_is_refused(self, tenant_a, item_a, return_reason_a, lot_a):
+        from apps.scm.forms import ReturnLineForm
+        form = ReturnLineForm(_return_line_row(item_a, return_reason_a,
+                                               lot_serial=str(lot_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    def test_an_order_line_for_a_different_item_is_refused(self, tenant_a, item_a,
+                                                            return_reason_a,
+                                                            returns_sales_order_a, item_lot_a):
+        from apps.scm.forms import ReturnLineForm
+        from apps.scm.models import SalesOrderLine
+        other = SalesOrderLine.objects.create(sales_order=returns_sales_order_a, item=item_lot_a,
+                                              quantity_ordered=Decimal("1"))
+        form = ReturnLineForm(_return_line_row(item_a, return_reason_a,
+                                               sales_order_line=str(other.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "sales_order_line" in form.errors
+
+    def test_the_reason_dropdown_offers_only_active_reasons(self, tenant_a, return_reason_a,
+                                                             return_reason_blocking_a):
+        from apps.scm.forms import ReturnLineForm
+        return_reason_blocking_a.is_active = False
+        return_reason_blocking_a.save(update_fields=["is_active"])
+        offered = list(ReturnLineForm(tenant=tenant_a).fields["reason"].queryset)
+        assert return_reason_a in offered
+        assert return_reason_blocking_a not in offered
+
+    def test_a_tenant_less_form_offers_NO_order_lines_rather_than_every_tenants(self):
+        """``ReturnLine`` has no tenant column, so ``_scope_to_parent``'s fallback has to be an
+        EMPTY queryset — the unscoped default would leak every tenant's order lines."""
+        from apps.scm.forms import ReturnLineForm
+        assert list(ReturnLineForm(tenant=None).fields["sales_order_line"].queryset) == []
+
+    def test_a_return_with_no_lines_is_refused(self, tenant_a, return_authorization_a):
+        from apps.scm.forms import ReturnLineFormSet
+        from apps.scm.tests._helpers import formset_data
+        formset = ReturnLineFormSet(formset_data("lines", []), instance=return_authorization_a,
+                                     form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("at least one line" in e for e in formset.non_form_errors())
+
+    def test_the_same_order_line_twice_on_one_return_is_refused(self, tenant_a,
+                                                                 return_authorization_a, item_a,
+                                                                 return_reason_a,
+                                                                 returns_sales_order_a):
+        from apps.scm.forms import ReturnLineFormSet
+        from apps.scm.tests._helpers import formset_data
+        so_line = returns_sales_order_a.lines.first()
+        rows = [_return_line_row(item_a, return_reason_a, sales_order_line=str(so_line.pk),
+                                 quantity_requested="1"),
+                _return_line_row(item_a, return_reason_a, sales_order_line=str(so_line.pk),
+                                 quantity_requested="1")]
+        formset = ReturnLineFormSet(formset_data("lines", rows),
+                                     instance=return_authorization_a,
+                                     form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "sales_order_line" in formset.forms[1].errors
+
+    def test_the_over_return_cap_reads_the_PARENTS_order(self, tenant_a, return_authorization_a,
+                                                          item_a, return_reason_a,
+                                                          returns_sales_order_a):
+        """§7.1 — the cap only bites because the view assigns ``formset.instance`` from the header
+        form BEFORE ``is_valid()``. 10 were ordered; 3 are already on this RMA's own line."""
+        from apps.scm.forms import ReturnLineFormSet
+        from apps.scm.tests._helpers import formset_data
+        so_line = returns_sales_order_a.lines.first()
+        rows = [_return_line_row(item_a, return_reason_a, sales_order_line=str(so_line.pk),
+                                 quantity_requested="11")]
+        formset = ReturnLineFormSet(formset_data("lines", rows),
+                                     instance=return_authorization_a,
+                                     form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "quantity_requested" in formset.forms[0].errors
+
+    def test_the_cap_counts_OTHER_live_returns_against_the_same_sold_line(
+        self, tenant_a, customer_a, return_authorization_a, item_a, return_reason_a,
+        returns_sales_order_a,
+    ):
+        from django.utils import timezone
+        from apps.scm.forms import ReturnLineFormSet
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        from apps.scm.tests._helpers import formset_data
+        so_line = returns_sales_order_a.lines.first()
+        other = ReturnAuthorization.objects.create(
+            tenant=tenant_a, customer=customer_a, sales_order=returns_sales_order_a,
+            requested_on=timezone.localdate())
+        ReturnLine.objects.create(return_authorization=other, sales_order_line=so_line,
+                                  item=item_a, quantity_requested=Decimal("8"),
+                                  reason=return_reason_a)
+        rows = [_return_line_row(item_a, return_reason_a, sales_order_line=str(so_line.pk),
+                                 quantity_requested="5")]
+        formset = ReturnLineFormSet(formset_data("lines", rows),
+                                     instance=return_authorization_a,
+                                     form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "quantity_requested" in formset.forms[0].errors
+
+    def test_a_cancelled_sibling_return_does_not_consume_the_cap(self, tenant_a, customer_a,
+                                                                  return_authorization_a, item_a,
+                                                                  return_reason_a,
+                                                                  returns_sales_order_a):
+        from django.utils import timezone
+        from apps.scm.forms import ReturnLineFormSet
+        from apps.scm.models import ReturnAuthorization, ReturnLine
+        from apps.scm.tests._helpers import formset_data
+        so_line = returns_sales_order_a.lines.first()
+        other = ReturnAuthorization.objects.create(
+            tenant=tenant_a, customer=customer_a, sales_order=returns_sales_order_a,
+            requested_on=timezone.localdate())
+        other.status = "cancelled"
+        other.save(update_fields=["status"])
+        ReturnLine.objects.create(return_authorization=other, sales_order_line=so_line,
+                                  item=item_a, quantity_requested=Decimal("8"),
+                                  reason=return_reason_a)
+        rows = [_return_line_row(item_a, return_reason_a, sales_order_line=str(so_line.pk),
+                                 quantity_requested="5")]
+        formset = ReturnLineFormSet(formset_data("lines", rows),
+                                     instance=return_authorization_a,
+                                     form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+
+class TestReturnDispositionFormAdminGate:
+    """REGRESSION LOCK (item 10). ``returndisposition_decide`` is tenant-admin gated, and this form
+    writes the SAME three columns — without the same gate the one on the action is decoration."""
+
+    def test_a_non_admin_gets_the_three_privileged_fields_disabled(self, tenant_a):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(tenant=tenant_a, is_tenant_admin=False)
+        assert ReturnDispositionForm.ADMIN_ONLY_FIELDS == ("disposition", "restock_location",
+                                                           "restock_unit_cost")
+        for name in ReturnDispositionForm.ADMIN_ONLY_FIELDS:
+            assert form.fields[name].disabled is True, name
+
+    def test_an_admin_keeps_them_editable(self, tenant_a):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(tenant=tenant_a, is_tenant_admin=True)
+        for name in ReturnDispositionForm.ADMIN_ONLY_FIELDS:
+            assert form.fields[name].disabled is False, name
+
+    def test_a_crafted_non_admin_post_cannot_decide_or_price_the_row(self, tenant_a,
+                                                                      disposition_a, location_a,
+                                                                      location_a2):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(
+            _disposition_payload(disposition_a.return_line, location_a, quantity="3",
+                                 disposition="restock",
+                                 restock_location=str(location_a2.pk),
+                                 restock_unit_cost="15.0000"),
+            instance=disposition_a, tenant=tenant_a, is_tenant_admin=False)
+        assert form.is_valid(), form.errors
+        row = form.save()
+        assert row.disposition == "received_pending"          # the instance's value stood
+        assert row.restock_location_id is None
+        assert row.restock_unit_cost == Decimal("8.0000")
+
+    def test_an_admin_post_does_write_them(self, tenant_a, disposition_a, location_a,
+                                           location_a2):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(
+            _disposition_payload(disposition_a.return_line, location_a, quantity="3",
+                                 disposition="restock",
+                                 restock_location=str(location_a2.pk),
+                                 restock_unit_cost="4.0000"),
+            instance=disposition_a, tenant=tenant_a, is_tenant_admin=True)
+        assert form.is_valid(), form.errors
+        row = form.save()
+        assert row.disposition == "restock"
+        assert row.restock_location_id == location_a2.pk
+        assert row.restock_unit_cost == Decimal("4.0000")
+
+    def test_a_non_admin_can_still_record_what_they_found(self, tenant_a, disposition_a,
+                                                           location_a):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(
+            _disposition_payload(disposition_a.return_line, location_a, quantity="2",
+                                 condition_grade="c", notes="Scuffed on the corner"),
+            instance=disposition_a, tenant=tenant_a, is_tenant_admin=False)
+        assert form.is_valid(), form.errors
+        row = form.save()
+        assert row.condition_grade == "c"
+        assert row.quantity == Decimal("2.0000")
+
+
+class TestReturnDispositionFormValidation:
+    def test_a_restock_needs_a_destination_that_is_not_the_bench(self, tenant_a, disposition_a,
+                                                                  location_a):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(
+            _disposition_payload(disposition_a.return_line, location_a, disposition="restock"),
+            tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "restock_location" in form.errors
+        form = ReturnDispositionForm(
+            _disposition_payload(disposition_a.return_line, location_a, disposition="restock",
+                                 restock_location=str(location_a.pk)),
+            tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "restock_location" in form.errors
+
+    def test_a_blocking_reason_refuses_a_restock_on_the_form(self, tenant_a,
+                                                              rma_awaiting_receipt_a, item_a,
+                                                              return_reason_blocking_a,
+                                                              location_a, location_a2):
+        from apps.scm.forms import ReturnDispositionForm
+        from apps.scm.models import ReturnLine
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a, item=item_a,
+                                         quantity_requested=Decimal("1"),
+                                         quantity_approved=Decimal("1"),
+                                         reason=return_reason_blocking_a)
+        form = ReturnDispositionForm(
+            _disposition_payload(line, location_a, disposition="restock",
+                                 restock_location=str(location_a2.pk)),
+            tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "disposition" in form.errors
+
+    def test_a_tracked_item_needs_its_lot(self, tenant_a, rma_awaiting_receipt_a, item_lot_a,
+                                          return_reason_a, location_a):
+        from apps.scm.forms import ReturnDispositionForm
+        from apps.scm.models import ReturnLine
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a,
+                                         item=item_lot_a, quantity_requested=Decimal("1"),
+                                         quantity_approved=Decimal("1"), reason=return_reason_a)
+        form = ReturnDispositionForm(_disposition_payload(line, location_a), tenant=tenant_a,
+                                      is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    def test_an_expired_lot_may_not_be_restocked(self, tenant_a, rma_awaiting_receipt_a,
+                                                  item_lot_a, lot_a, return_reason_a, location_a,
+                                                  location_a2):
+        from apps.scm.forms import ReturnDispositionForm
+        from apps.scm.models import ReturnLine
+        lot_a.status = "expired"
+        lot_a.save(update_fields=["status"])
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a,
+                                         item=item_lot_a, quantity_requested=Decimal("1"),
+                                         quantity_approved=Decimal("1"), reason=return_reason_a)
+        form = ReturnDispositionForm(
+            _disposition_payload(line, location_a, lot_serial=str(lot_a.pk),
+                                 disposition="restock", restock_location=str(location_a2.pk)),
+            tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "disposition" in form.errors
+
+    def test_a_posted_rows_quantity_and_decision_are_inert(self, tenant_a, disposition_a, item_a,
+                                                            location_a2):
+        from django.utils import timezone
+        from apps.scm.forms import ReturnDispositionForm
+        from apps.scm.models import StockMove
+        move = StockMove.objects.create(tenant=tenant_a, item=item_a, location=location_a2,
+                                        quantity=Decimal("3"), move_type="receipt",
+                                        moved_at=timezone.now())
+        disposition_a.stock_move = move
+        disposition_a.disposition = "restock"
+        disposition_a.restock_location = location_a2
+        disposition_a.save()
+        form = ReturnDispositionForm(instance=disposition_a, tenant=tenant_a,
+                                      is_tenant_admin=True)
+        assert form.fields["disposition"].disabled is True
+        assert form.fields["quantity"].disabled is True
+
+    def test_the_restock_cost_is_SEEDED_from_the_grade_write_down_on_an_unbound_form(
+        self, tenant_a, return_line_a, location_a, item_a, return_policy_a,
+    ):
+        from django.utils import timezone
+        from apps.scm.forms import ReturnDispositionForm
+        from apps.scm.models import ReturnDisposition
+        item_a.average_cost = Decimal("10.0000")
+        item_a.save(update_fields=["average_cost"])
+        row = ReturnDisposition.objects.create(tenant=tenant_a, return_line=return_line_a,
+                                               quantity=Decimal("1"),
+                                               received_on=timezone.localdate(),
+                                               location=location_a, condition_grade="c")
+        form = ReturnDispositionForm(instance=row, tenant=tenant_a, is_tenant_admin=True)
+        assert form.initial["restock_unit_cost"] == Decimal("4.0000")   # 40 % of 10.0000
+        assert form.item_average_cost == Decimal("10.0000")
+
+    def test_the_line_picker_offers_only_approved_live_PHYSICAL_lines(self, tenant_a,
+                                                                       return_line_a,
+                                                                       rma_credit_only_a,
+                                                                       return_authorization_a):
+        from apps.scm.forms import ReturnLinePickerForm
+        offered = list(ReturnLinePickerForm(tenant=tenant_a).fields["return_line"].queryset)
+        assert return_line_a in offered
+        assert rma_credit_only_a.lines.first() not in offered   # no physical unit, ever
+
+    def test_a_tenant_less_picker_offers_nothing(self):
+        from apps.scm.forms import ReturnLinePickerForm
+        assert list(ReturnLinePickerForm(tenant=None).fields["return_line"].queryset) == []
+
+
+class TestReturnDispositionFormSetGuards:
+    def test_the_cap_reads_the_PARENT_line(self, tenant_a, return_line_a, location_a):
+        """§7.1 — two rows that are each individually legal but together exceed the approval. Only
+        the FORMSET can see that, and only because the view assigns ``formset.instance`` from the
+        picked line BEFORE ``is_valid()``."""
+        from apps.scm.forms import ReturnDispositionFormSet
+        from apps.scm.tests._helpers import formset_data
+        row = {"quantity": "2", "location": str(location_a.pk), "lot_serial": "",
+               "condition_grade": "a", "disposition": "received_pending",
+               "restock_location": "", "restock_unit_cost": "8.0000",
+               "recovery_value": "0.00", "notes": "", "id": ""}
+        formset = ReturnDispositionFormSet(formset_data("dispositions", [dict(row), dict(row)]),
+                                            instance=return_line_a,
+                                            form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("4 against only 3" in e for e in formset.non_form_errors())
+
+    def test_a_single_row_over_the_cap_is_caught_by_the_MODEL(self, tenant_a, return_line_a,
+                                                              location_a):
+        """REGRESSION LOCK (item 3) — the ceiling is on the model, so every writer inherits it."""
+        from apps.scm.forms import ReturnDispositionFormSet
+        from apps.scm.tests._helpers import formset_data
+        rows = [{"quantity": "4", "location": str(location_a.pk), "lot_serial": "",
+                 "condition_grade": "a", "disposition": "received_pending",
+                 "restock_location": "", "restock_unit_cost": "8.0000",
+                 "recovery_value": "0.00", "notes": "", "id": ""}]
+        formset = ReturnDispositionFormSet(formset_data("dispositions", rows),
+                                            instance=return_line_a,
+                                            form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "quantity" in formset.forms[0].errors
+
+    def test_within_the_cap_is_accepted(self, tenant_a, return_line_a, location_a):
+        from apps.scm.forms import ReturnDispositionFormSet
+        from apps.scm.tests._helpers import formset_data
+        rows = [{"quantity": "2", "location": str(location_a.pk), "lot_serial": "",
+                 "condition_grade": "a", "disposition": "received_pending",
+                 "restock_location": "", "restock_unit_cost": "8.0000",
+                 "recovery_value": "0.00", "notes": "", "id": ""}]
+        formset = ReturnDispositionFormSet(formset_data("dispositions", rows),
+                                            instance=return_line_a,
+                                            form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+    def test_a_crafted_INITIAL_FORMS_that_disagrees_with_the_file_is_refused(self, tenant_a,
+                                                                              return_line_a,
+                                                                              disposition_a,
+                                                                              location_a):
+        """§7.2 — ``extra=0``/``can_delete=False`` govern RENDERING; the management form governs
+        PARSING and arrives from the client."""
+        from apps.scm.forms import ReturnDispositionFormSet
+        from apps.scm.tests._helpers import formset_data
+        rows = [{"quantity": "1", "location": str(location_a.pk), "lot_serial": "",
+                 "condition_grade": "a", "disposition": "received_pending",
+                 "restock_location": "", "restock_unit_cost": "8.0000",
+                 "recovery_value": "0.00", "notes": "", "id": str(disposition_a.pk)},
+                {"quantity": "1", "location": str(location_a.pk), "lot_serial": "",
+                 "condition_grade": "a", "disposition": "received_pending",
+                 "restock_location": "", "restock_unit_cost": "8.0000",
+                 "recovery_value": "0.00", "notes": "", "id": ""}]
+        data = formset_data("dispositions", rows, initial=2)     # the file holds ONE row
+        formset = ReturnDispositionFormSet(data, instance=return_line_a,
+                                            form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("no longer match" in e for e in formset.non_form_errors())
+
+    def test_the_guard_does_NOT_dead_end_the_bare_create_page(self, tenant_a, return_line_a,
+                                                               disposition_a, location_a):
+        """The create page loads with no ``?line``, so INITIAL_FORMS goes out as 0 and the view
+        attaches the picked line on POST. Comparing 0 against that line's existing rows used to
+        dead-end the module's main create button for every partially-received line."""
+        from apps.scm.forms import ReturnDispositionFormSet
+        from apps.scm.tests._helpers import formset_data
+        rows = [{"quantity": "1", "location": str(location_a.pk), "lot_serial": "",
+                 "condition_grade": "a", "disposition": "received_pending",
+                 "restock_location": "", "restock_unit_cost": "8.0000",
+                 "recovery_value": "0.00", "notes": "", "id": ""}]
+        formset = ReturnDispositionFormSet(formset_data("dispositions", rows, initial=0),
+                                            instance=return_line_a,
+                                            form_kwargs={"tenant": tenant_a})
+        # The cap still bites (3 approved, 3 already on the bench, +1 more).
+        assert not formset.is_valid()
+        assert not any("no longer match" in e for e in formset.non_form_errors())
+
+    def test_the_formset_cannot_delete_a_bench_row(self):
+        from apps.scm.forms import ReturnDispositionFormSet
+        assert ReturnDispositionFormSet.can_delete is False
+
+
+class TestReturnActionPayloadForms:
+    def test_the_approval_form_never_offers_no_resolution(self):
+        from apps.scm.forms import ReturnApprovalForm
+        assert "none" not in {c[0] for c in ReturnApprovalForm().fields["resolution"].choices}
+
+    def test_the_approval_form_requires_a_resolution_only(self):
+        from apps.scm.forms import ReturnApprovalForm
+        assert ReturnApprovalForm({"resolution": "refund"}).is_valid()
+        form = ReturnApprovalForm({})
+        assert not form.is_valid()
+        assert "resolution" in form.errors
+
+    def test_a_rejection_without_a_reason_is_refused(self):
+        from apps.scm.forms import ReturnRejectForm
+        form = ReturnRejectForm({"rejected_reason": ""})
+        assert not form.is_valid()
+        assert "rejected_reason" in form.errors
+        assert ReturnRejectForm({"rejected_reason": "Outside the window."}).is_valid()
+
+    def test_the_receive_all_form_requires_a_bench_location_scoped_to_the_tenant(self, tenant_a,
+                                                                                  location_a,
+                                                                                  location_b):
+        from apps.scm.forms import ReturnReceiveAllForm
+        form = ReturnReceiveAllForm({"condition_grade": "a"}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "location" in form.errors
+        assert ReturnReceiveAllForm({"location": str(location_a.pk), "condition_grade": "a"},
+                                     tenant=tenant_a).is_valid()
+        foreign = ReturnReceiveAllForm({"location": str(location_b.pk), "condition_grade": "a"},
+                                        tenant=tenant_a)
+        assert not foreign.is_valid()
+        assert "location" in foreign.errors
+
+    def test_a_tenant_less_receive_form_offers_no_locations(self):
+        from apps.scm.forms import ReturnReceiveAllForm
+        assert list(ReturnReceiveAllForm(tenant=None).fields["location"].queryset) == []
+
+    def test_the_decide_form_never_offers_received_pending(self, tenant_a):
+        from apps.scm.forms import ReturnDispositionDecideForm
+        offered = {c[0]
+                   for c in ReturnDispositionDecideForm(tenant=tenant_a).fields["disposition"]
+                   .choices}
+        assert "received_pending" not in offered
+
+    def test_the_decide_form_drops_restock_when_the_reason_blocks_it(self, tenant_a,
+                                                                      rma_awaiting_receipt_a,
+                                                                      item_a,
+                                                                      return_reason_blocking_a):
+        from apps.scm.forms import ReturnDispositionDecideForm
+        from apps.scm.models import ReturnLine
+        line = ReturnLine.objects.create(return_authorization=rma_awaiting_receipt_a, item=item_a,
+                                         quantity_requested=Decimal("1"),
+                                         reason=return_reason_blocking_a)
+        offered = {c[0] for c in ReturnDispositionDecideForm(tenant=tenant_a, line=line)
+                   .fields["disposition"].choices}
+        assert "restock" not in offered
+        assert "refurbish" not in offered
+        assert "scrap" in offered
+
+    def test_the_decide_form_refuses_a_restock_with_nowhere_to_go(self, tenant_a):
+        from apps.scm.forms import ReturnDispositionDecideForm
+        form = ReturnDispositionDecideForm({"disposition": "restock"}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "restock_location" in form.errors
+
+    def test_the_decide_form_refuses_junk_money(self, tenant_a):
+        from apps.scm.forms import ReturnDispositionDecideForm
+        for junk in ("NaN", "Infinity", "-1", "abc", "99999999999999999.0000"):
+            form = ReturnDispositionDecideForm({"disposition": "scrap",
+                                                "restock_unit_cost": junk}, tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "restock_unit_cost" in form.errors, junk
+
+    def test_the_split_form_refuses_leaving_nothing_behind(self, disposition_a):
+        from apps.scm.forms import ReturnDispositionSplitForm
+        form = ReturnDispositionSplitForm({"quantity": "3"}, row=disposition_a)
+        assert not form.is_valid()
+        assert "quantity" in form.errors
+        assert ReturnDispositionSplitForm({"quantity": "1"}, row=disposition_a).is_valid()
+
+    def test_the_split_form_refuses_junk_and_zero(self, disposition_a):
+        from apps.scm.forms import ReturnDispositionSplitForm
+        for junk in ("0", "-1", "NaN", "Infinity", "abc", ""):
+            assert not ReturnDispositionSplitForm({"quantity": junk},
+                                                   row=disposition_a).is_valid(), junk
+
+    def test_the_public_update_form_carries_no_state_or_money_field(self):
+        from apps.scm.forms import PublicReturnUpdateForm
+        assert set(PublicReturnUpdateForm().fields) == {"action", "return_tracking_number",
+                                                        "portal_note"}
+
+    def test_the_public_update_form_only_accepts_the_two_declared_actions(self):
+        from apps.scm.forms import PublicReturnUpdateForm
+        assert PublicReturnUpdateForm({"action": "shipped"}).is_valid()
+        form = PublicReturnUpdateForm({"action": "cancel"})
+        assert not form.is_valid()
+        assert "action" in form.errors
+
+    def test_an_empty_public_note_is_refused(self):
+        from apps.scm.forms import PublicReturnUpdateForm
+        form = PublicReturnUpdateForm({"action": "note", "portal_note": "   "})
+        assert not form.is_valid()
+        assert "portal_note" in form.errors
+
+
+class TestPortalReturnRequestForm:
+    """REGRESSION LOCK (item 12). The picker offers only what THIS customer was actually sold — an
+    external party otherwise had the full internal catalogue in a dropdown."""
+
+    def _payload(self, sold_item, sold_reason, **overrides):
+        data = {"sales_order": "", "sales_order_line": "", "item": str(sold_item.pk),
+                "quantity_requested": "1", "reason": str(sold_reason.pk),
+                "condition_reported": "", "notes": ""}
+        data.update(overrides)
+        return data
+
+    def test_the_item_picker_offers_only_items_this_customer_was_sold(self, tenant_a, customer_a,
+                                                                       item_a, item_lot_a,
+                                                                       returns_sales_order_a,
+                                                                       return_reason_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        offered = list(PortalReturnRequestForm(tenant=tenant_a,
+                                                customer=customer_a).fields["item"].queryset)
+        assert item_a in offered
+        assert item_lot_a not in offered            # in the catalogue, never sold to them
+
+    def test_the_order_picker_offers_only_this_customers_orders(self, tenant_a, customer_a,
+                                                                 returns_sales_order_a,
+                                                                 sales_order_b):
+        from apps.scm.forms import PortalReturnRequestForm
+        offered = list(PortalReturnRequestForm(tenant=tenant_a,
+                                                customer=customer_a).fields["sales_order"]
+                       .queryset)
+        assert returns_sales_order_a in offered
+        assert sales_order_b not in offered
+
+    def test_a_cancelled_order_is_not_offered(self, tenant_a, customer_a, returns_sales_order_a,
+                                              return_reason_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        returns_sales_order_a.status = "cancelled"
+        returns_sales_order_a.save(update_fields=["status"])
+        offered = list(PortalReturnRequestForm(tenant=tenant_a,
+                                                customer=customer_a).fields["sales_order"]
+                       .queryset)
+        assert returns_sales_order_a not in offered
+
+    def test_neither_a_line_nor_an_item_is_refused(self, tenant_a, customer_a, item_a,
+                                                    returns_sales_order_a, return_reason_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        form = PortalReturnRequestForm(self._payload(item_a, return_reason_a, item=""),
+                                        tenant=tenant_a, customer=customer_a)
+        assert not form.is_valid()
+
+    def test_the_item_is_inferred_from_the_picked_order_line(self, tenant_a, customer_a, item_a,
+                                                              returns_sales_order_a,
+                                                              return_reason_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        so_line = returns_sales_order_a.lines.first()
+        form = PortalReturnRequestForm(
+            self._payload(item_a, return_reason_a, item="",
+                          sales_order_line=str(so_line.pk)),
+            tenant=tenant_a, customer=customer_a)
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["item"] == item_a
+
+    def test_a_line_that_is_not_on_the_picked_order_is_refused(self, tenant_a, customer_a,
+                                                               item_a, returns_sales_order_a,
+                                                               sales_order_a, return_reason_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        stray = sales_order_a.lines.first()
+        form = PortalReturnRequestForm(
+            self._payload(item_a, return_reason_a,
+                          sales_order=str(returns_sales_order_a.pk),
+                          sales_order_line=str(stray.pk)),
+            tenant=tenant_a, customer=customer_a)
+        assert not form.is_valid()
+        assert "sales_order_line" in form.errors
+
+    def test_the_reason_dropdown_is_tenant_scoped_and_active_only(self, tenant_a, customer_a,
+                                                                   return_reason_a,
+                                                                   return_reason_b,
+                                                                   returns_sales_order_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        offered = list(PortalReturnRequestForm(tenant=tenant_a,
+                                                customer=customer_a).fields["reason"].queryset)
+        assert return_reason_a in offered
+        assert return_reason_b not in offered
+
+    def test_a_form_with_no_binding_offers_nothing_at_all(self):
+        from apps.scm.forms import PortalReturnRequestForm
+        form = PortalReturnRequestForm(tenant=None, customer=None)
+        for name in ("sales_order", "sales_order_line", "item", "reason"):
+            assert list(form.fields[name].queryset) == [], name
+
+    def test_a_zero_or_junk_quantity_is_refused(self, tenant_a, customer_a, item_a,
+                                                returns_sales_order_a, return_reason_a):
+        from apps.scm.forms import PortalReturnRequestForm
+        for junk in ("0", "-3", "NaN", "Infinity", "abc"):
+            form = PortalReturnRequestForm(
+                self._payload(item_a, return_reason_a, quantity_requested=junk),
+                tenant=tenant_a, customer=customer_a)
+            assert not form.is_valid(), junk
+
+
+class TestReturnPolicyFormValidation:
+    def test_a_minimal_payload_is_accepted(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        assert ReturnPolicyForm(_policy_payload(), tenant=tenant_a).is_valid()
+
+    def test_the_three_day_fields_refuse_anything_over_3650(self, tenant_a):
+        """REGRESSION LOCK (item 13) — a stored tenant-wide 500 via ``timedelta`` OverflowError."""
+        from apps.scm.forms import ReturnPolicyForm
+        for field in ("window_days", "fallback_days", "warranty_window_days"):
+            form = ReturnPolicyForm(_policy_payload(**{field: "3651"}), tenant=tenant_a)
+            assert not form.is_valid(), field
+            assert field in form.errors, field
+        big = ReturnPolicyForm(_policy_payload(window_days="4294967295"), tenant=tenant_a)
+        assert not big.is_valid()
+        assert "window_days" in big.errors
+
+    def test_the_day_fields_refuse_negatives_and_junk(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        for junk in ("-1", "NaN", "Infinity", "abc", "1e400"):
+            form = ReturnPolicyForm(_policy_payload(window_days=junk), tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "window_days" in form.errors, junk
+
+    def test_a_zero_percent_percentage_refund_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(refund_basis="percentage", refund_pct="0"),
+                                 tenant=tenant_a)
+        assert not form.is_valid()
+        assert "refund_pct" in form.errors
+
+    def test_a_configured_fee_with_no_value_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(restocking_fee_type="flat"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "restocking_fee_value" in form.errors
+
+    def test_a_percentage_fee_over_100_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(restocking_fee_type="percent_of_value",
+                                                 restocking_fee_value="150"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "restocking_fee_value" in form.errors
+
+    def test_a_policy_that_accepts_no_return_at_all_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(window_days="0", fallback_days="0"),
+                                 tenant=tenant_a)
+        assert not form.is_valid()
+        assert "window_days" in form.errors
+
+    def test_a_grade_ladder_that_rises_as_the_condition_falls_is_flagged(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(grade_b_cost_pct="120"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "grade_b_cost_pct" in form.errors
+
+    def test_a_grade_percentage_over_100_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(grade_a_cost_pct="101"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "grade_a_cost_pct" in form.errors
+
+    def test_another_tenants_item_category_is_never_accepted(self, tenant_a, category_b):
+        from apps.scm.forms import ReturnPolicyForm
+        form = ReturnPolicyForm(_policy_payload(item_category=str(category_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item_category" in form.errors
+
+
+class TestReturnReasonFormValidation:
+    def test_a_minimal_payload_is_accepted(self, tenant_a):
+        from apps.scm.forms import ReturnReasonForm
+        assert ReturnReasonForm(_reason_payload(), tenant=tenant_a).is_valid()
+
+    def test_a_duplicate_code_is_caught_on_the_form_not_by_an_IntegrityError(self, tenant_a,
+                                                                             return_reason_a):
+        from apps.scm.forms import ReturnReasonForm
+        form = ReturnReasonForm(_reason_payload(code=return_reason_a.code), tenant=tenant_a)
+        assert not form.is_valid()
+
+    def test_the_same_code_in_another_tenant_is_fine(self, tenant_a, return_reason_b):
+        from apps.scm.forms import ReturnReasonForm
+        assert ReturnReasonForm(_reason_payload(code=return_reason_b.code),
+                                 tenant=tenant_a).is_valid()
+
+    def test_a_reason_that_offers_the_customer_nothing_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnReasonForm
+        form = ReturnReasonForm(_reason_payload(allows_refund=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "allows_refund" in form.errors
+
+    def test_a_reason_cannot_block_and_suggest_a_restock_at_once(self, tenant_a):
+        from apps.scm.forms import ReturnReasonForm
+        form = ReturnReasonForm(_reason_payload(blocks_restock="on",
+                                                 suggested_disposition="restock"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "suggested_disposition" in form.errors
+
+    def test_a_junk_suggested_disposition_is_refused(self, tenant_a):
+        from apps.scm.forms import ReturnReasonForm
+        form = ReturnReasonForm(_reason_payload(suggested_disposition="received_pending"),
+                                 tenant=tenant_a)
+        assert not form.is_valid()
+        assert "suggested_disposition" in form.errors
+
+
+class TestWarrantyClaimFormValidation:
+    def test_a_minimal_payload_is_accepted(self, tenant_a, supplier_a, item_a):
+        from apps.scm.forms import WarrantyClaimForm
+        assert WarrantyClaimForm(_claim_payload(supplier_a, item_a), tenant=tenant_a).is_valid()
+
+    def test_the_supplier_dropdown_accepts_both_role_spellings_and_no_others(self, tenant_a,
+                                                                             supplier_a,
+                                                                             vendor_a,
+                                                                             non_supplier_party_a):
+        from apps.scm.forms import WarrantyClaimForm
+        offered = list(WarrantyClaimForm(tenant=tenant_a).fields["supplier"].queryset)
+        assert supplier_a in offered and vendor_a in offered
+        assert non_supplier_party_a not in offered
+
+    def test_a_lot_from_another_item_is_refused(self, tenant_a, supplier_a, item_a, lot_a):
+        from apps.scm.forms import WarrantyClaimForm
+        form = WarrantyClaimForm(_claim_payload(supplier_a, item_a, lot_serial=str(lot_a.pk)),
+                                  tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    def test_cover_that_ends_before_it_starts_is_refused(self, tenant_a, supplier_a, item_a):
+        from django.utils import timezone
+        from apps.scm.forms import WarrantyClaimForm
+        today = timezone.localdate()
+        form = WarrantyClaimForm(
+            _claim_payload(supplier_a, item_a, warranty_start=today.isoformat(),
+                           warranty_end=(today - datetime.timedelta(days=1)).isoformat()),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "warranty_end" in form.errors
+
+    def test_a_unit_that_failed_before_it_was_bought_is_refused(self, tenant_a, supplier_a,
+                                                                item_a):
+        from django.utils import timezone
+        from apps.scm.forms import WarrantyClaimForm
+        today = timezone.localdate()
+        form = WarrantyClaimForm(
+            _claim_payload(supplier_a, item_a, purchase_date=today.isoformat(),
+                           failure_date=(today - datetime.timedelta(days=2)).isoformat()),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "failure_date" in form.errors
+
+    def test_a_zero_or_junk_claimed_quantity_is_refused(self, tenant_a, supplier_a, item_a):
+        from apps.scm.forms import WarrantyClaimForm
+        for junk in ("0", "-1", "NaN", "Infinity", "abc", "99999999999999999.0000"):
+            form = WarrantyClaimForm(_claim_payload(supplier_a, item_a, quantity_claimed=junk),
+                                      tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "quantity_claimed" in form.errors, junk
+
+    def test_a_bad_date_is_refused_rather_than_500ing(self, tenant_a, supplier_a, item_a):
+        from apps.scm.forms import WarrantyClaimForm
+        for junk in ("2026-13-45", "yesterday", "0000-00-00"):
+            form = WarrantyClaimForm(_claim_payload(supplier_a, item_a, failure_date=junk),
+                                      tenant=tenant_a)
+            assert not form.is_valid(), junk
+            assert "failure_date" in form.errors, junk
+
+
+class TestWarrantyClaimCostFormSetGuards:
+    def test_a_claim_with_no_costs_asks_the_supplier_for_nothing(self, tenant_a,
+                                                                  warranty_claim_a):
+        from apps.scm.forms import WarrantyClaimCostFormSet
+        from apps.scm.tests._helpers import formset_data
+        rows = [_claim_cost_row(id=str(warranty_claim_a.costs.first().pk), DELETE="on")]
+        formset = WarrantyClaimCostFormSet(formset_data("costs", rows, initial=1),
+                                            instance=warranty_claim_a,
+                                            form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("asks the supplier for nothing" in e for e in formset.non_form_errors())
+
+    def test_a_crafted_INITIAL_FORMS_that_disagrees_with_the_file_is_refused(self, tenant_a,
+                                                                              warranty_claim_a):
+        from apps.scm.forms import WarrantyClaimCostFormSet
+        from apps.scm.tests._helpers import formset_data
+        rows = [_claim_cost_row(id=str(warranty_claim_a.costs.first().pk)), _claim_cost_row()]
+        formset = WarrantyClaimCostFormSet(formset_data("costs", rows, initial=2),
+                                            instance=warranty_claim_a,
+                                            form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert any("no longer match" in e for e in formset.non_form_errors())
+
+    def test_a_submitted_claims_cost_lines_may_not_be_deleted_or_added_to(
+        self, tenant_a, warranty_claim_submitted_a,
+    ):
+        from apps.scm.forms import WarrantyClaimCostFormSet
+        from apps.scm.tests._helpers import formset_data
+        existing = warranty_claim_submitted_a.costs.first()
+        drop = WarrantyClaimCostFormSet(
+            formset_data("costs", [_claim_cost_row(id=str(existing.pk), DELETE="on")], initial=1),
+            instance=warranty_claim_submitted_a, form_kwargs={"tenant": tenant_a})
+        assert not drop.is_valid()
+        add = WarrantyClaimCostFormSet(
+            formset_data("costs", [_claim_cost_row(id=str(existing.pk)),
+                                   _claim_cost_row(description="Sneaked in")], initial=1),
+            instance=warranty_claim_submitted_a, form_kwargs={"tenant": tenant_a})
+        assert not add.is_valid()
+
+    def test_a_line_approved_above_what_it_claims_is_refused(self, tenant_a):
+        from apps.scm.forms import WarrantyClaimCostForm
+        form = WarrantyClaimCostForm(_claim_cost_row(unit_amount="10.00",
+                                                      amount_approved="11.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "amount_approved" in form.errors
+
+
+class TestWarrantyResponseAndCreditForms:
+    def test_a_rejection_approves_nothing(self):
+        from apps.scm.forms import WarrantyClaimResponseForm
+        form = WarrantyClaimResponseForm({"outcome": "rejected", "amount_approved": "50.00"})
+        assert not form.is_valid()
+        assert "amount_approved" in form.errors
+        assert WarrantyClaimResponseForm({"outcome": "rejected",
+                                           "amount_approved": "0"}).is_valid()
+
+    def test_an_approval_with_no_money_on_it_is_a_rejection(self):
+        from apps.scm.forms import WarrantyClaimResponseForm
+        for outcome in ("approved", "partially_approved"):
+            form = WarrantyClaimResponseForm({"outcome": outcome, "amount_approved": "0"})
+            assert not form.is_valid(), outcome
+            assert "amount_approved" in form.errors, outcome
+
+    def test_the_response_form_refuses_junk_money(self):
+        from apps.scm.forms import WarrantyClaimResponseForm
+        for junk in ("NaN", "Infinity", "-5", "abc", "999999999999999999.99"):
+            form = WarrantyClaimResponseForm({"outcome": "approved", "amount_approved": junk})
+            assert not form.is_valid(), junk
+            assert "amount_approved" in form.errors, junk
+
+    def test_the_credit_form_requires_an_amount_and_their_reference(self):
+        from apps.scm.forms import WarrantyClaimCreditForm
+        form = WarrantyClaimCreditForm({})
+        assert not form.is_valid()
+        assert "amount_credited" in form.errors
+        assert "credit_reference" in form.errors
+        assert WarrantyClaimCreditForm({"amount_credited": "80.00",
+                                         "credit_reference": "CN-9"}).is_valid()
+
+    def test_the_credit_form_refuses_junk_money(self):
+        from apps.scm.forms import WarrantyClaimCreditForm
+        for junk in ("NaN", "Infinity", "-1", "abc", "999999999999999999.99"):
+            form = WarrantyClaimCreditForm({"amount_credited": junk, "credit_reference": "CN-9"})
+            assert not form.is_valid(), junk
+            assert "amount_credited" in form.errors, junk
+
+
+class TestReturnsCrossTenantFormScoping:
+    def test_the_rma_form_refuses_another_tenants_customer_order_policy_and_carrier(
+        self, tenant_a, customer_b, sales_order_b, return_policy_b, carrier_b, location_b,
+    ):
+        from apps.scm.forms import ReturnAuthorizationForm
+        form = ReturnAuthorizationForm(
+            _rma_payload(customer_b, sales_order=str(sales_order_b.pk),
+                         policy=str(return_policy_b.pk), return_carrier=str(carrier_b.pk),
+                         dropoff_location=str(location_b.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        for field in ("customer", "sales_order", "policy", "return_carrier", "dropoff_location"):
+            assert field in form.errors, field
+
+    def test_the_line_form_refuses_another_tenants_item_reason_and_lot(self, tenant_a, item_b,
+                                                                        return_reason_b, lot_b):
+        from apps.scm.forms import ReturnLineForm
+        form = ReturnLineForm(_return_line_row(item_b, return_reason_b,
+                                                lot_serial=str(lot_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        for field in ("item", "reason", "lot_serial"):
+            assert field in form.errors, field
+
+    def test_the_line_form_refuses_another_tenants_order_line(self, tenant_a, item_a,
+                                                               return_reason_a,
+                                                               sales_order_line_b):
+        from apps.scm.forms import ReturnLineForm
+        form = ReturnLineForm(_return_line_row(item_a, return_reason_a,
+                                                sales_order_line=str(sales_order_line_b.pk)),
+                               tenant=tenant_a)
+        assert not form.is_valid()
+        assert "sales_order_line" in form.errors
+
+    def test_the_bench_form_refuses_another_tenants_return_line_and_locations(
+        self, tenant_a, return_line_b, location_b, location_a,
+    ):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(
+            _disposition_payload(return_line_b, location_b,
+                                 restock_location=str(location_b.pk)),
+            tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "return_line" in form.errors
+        assert "location" in form.errors
+
+    def test_the_bench_form_refuses_another_tenants_lot_and_nonconformance(self, tenant_a,
+                                                                            return_line_a,
+                                                                            location_a, lot_b,
+                                                                            nonconformance_b):
+        from apps.scm.forms import ReturnDispositionForm
+        form = ReturnDispositionForm(
+            _disposition_payload(return_line_a, location_a, lot_serial=str(lot_b.pk),
+                                 nonconformance=str(nonconformance_b.pk)),
+            tenant=tenant_a, is_tenant_admin=True)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+        assert "nonconformance" in form.errors
+
+    def test_the_picker_refuses_another_tenants_line(self, tenant_a, return_line_b):
+        from apps.scm.forms import ReturnLinePickerForm
+        form = ReturnLinePickerForm({"return_line": str(return_line_b.pk)}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "return_line" in form.errors
+
+    def test_the_decide_form_refuses_another_tenants_restock_location(self, tenant_a, location_b):
+        from apps.scm.forms import ReturnDispositionDecideForm
+        form = ReturnDispositionDecideForm({"disposition": "restock",
+                                            "restock_location": str(location_b.pk)},
+                                           tenant=tenant_a)
+        assert not form.is_valid()
+        assert "restock_location" in form.errors
+
+    def test_the_claim_form_refuses_another_tenants_supplier_item_rma_and_ncr(
+        self, tenant_a, supplier_b, item_b, return_authorization_b, nonconformance_b,
+        goods_receipt_b,
+    ):
+        from apps.scm.forms import WarrantyClaimForm
+        form = WarrantyClaimForm(
+            _claim_payload(supplier_b, item_b,
+                           return_authorization=str(return_authorization_b.pk),
+                           nonconformance=str(nonconformance_b.pk),
+                           goods_receipt=str(goods_receipt_b.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        for field in ("supplier", "item", "return_authorization", "nonconformance",
+                      "goods_receipt"):
+            assert field in form.errors, field
