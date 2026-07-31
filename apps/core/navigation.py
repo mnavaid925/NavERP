@@ -889,6 +889,30 @@ LIVE_LINKS = {
         "Return Portal": "scm:return_portal",                                      # bullet (STAFF console — L32)
         "Warranty Claims": "scm:warrantyclaim_list",                               # bullet (supplier recovery)
     },
+    # 4.11 Supply Chain Analytics — all five bullets are COMPUTED pages. That is not a shortcut: the
+    # survey of thirteen control-tower/spend-analytics products found the same shape in every one of
+    # them, and the only things they store are metric targets, point-in-time snapshots and alert
+    # instances carrying human acknowledgement state. So 4.11's three models are cross-cutting
+    # machinery rather than one table per bullet, and none of them takes a sidebar key: KpiTarget and
+    # KpiSnapshot are masters reached from the analytics pages (the InspectionPlan / WorkCenter /
+    # ReorderRule / ReturnReason precedent), and the alert inbox `scm:supplychainalert_list` is
+    # reached from the open-count chip in every analytics page header.
+    #
+    # 4.11 is READ-ONLY over 4.1-4.10: it writes no StockMove and no JournalEntry. "Financial
+    # Reporting" is an OPERATIONAL margin estimate over SCM rows and says so on the page — the
+    # statutory P&L belongs to apps.accounting (L29). "Predictive Analytics" is a deterministic,
+    # fully explainable weighted composite rendered with its own component arithmetic; genuine
+    # ML/AutoML is Module 10's 10.13, and the page deliberately never says "AI".
+    #
+    # The dashboard BUILDER stays out: 10.8 owns drag-and-drop canvases and 10.11 owns a
+    # formula-authored KPI library, so 4.11 ships a CLOSED metric registry instead.
+    "4.11": {
+        "Inventory Dashboards":  "scm:inventory_analytics",   # bullet (turnover, dead stock, aging buckets)
+        "Procurement Analytics": "scm:spend_analytics",       # bullet (spend cube + savings + supplier trend)
+        "Logistics KPIs":        "scm:logistics_kpis",        # bullet (OTD/OTIF, freight/unit, utilization)
+        "Financial Reporting":   "scm:margin_analytics",      # bullet (margin + cost-to-serve — NOT the ledger)
+        "Predictive Analytics":  "scm:disruption_risk",       # bullet (explainable composite + spike detection)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
