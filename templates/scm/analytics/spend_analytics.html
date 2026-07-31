@@ -1,0 +1,664 @@
+{% extends "base.html" %}
+{% block title %}Procurement Analytics{% endblock %}
+{% block content %}
+  {% comment %}
+    SCM 4.11 — Procurement Analytics (scm:spend_analytics, views/SupplyChainAnalytics/Reports.py).
+
+    Every name used below comes from _base_context() + _spend_context(): page / spec / tiles / tile /
+    has_data / no_tenant / no_tenant_note / generated_at / range_choices / date_range / start / end /
+    scope_label / scope_ignored / scope_invalid / open_alert_count / critical_alert_count /
+    alerts_are_open / currency_notice / chart_data / report_url / export_url / params /
+    display_only_filters / vendors / spend_cube / gl_account_options / org_unit_options /
+    period_axis_note / gl_axis_caveat / sku_hint_caveat / off_contract_caveat / spend_statuses /
+    savings_rows / price_variance_rows / supplier_otd_rows / supplier_score_rows.
+
+    Two deliberate reaches into `tile` (the {metric key: result} map the view passes for exactly
+    this): supplier_reject_rate_pct's rows, which have no named context key of their own, and each
+    tile's own breakdown for the small provenance blocks. Nothing here does arithmetic — a template
+    that computes is a second implementation of a metric under the same name.
+
+    No pagination: these are aggregate rows already capped at analytics.MAX_DETAIL_ROWS by the
+    database (a LIMIT, not a len() of something already built), and there is no queryset to page.
+    No Actions column: nothing on this page is an editable record — the rows are computed groupings,
+    so they drill through to the records behind them instead.
+  {% endcomment %}
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ page.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>{{ page.title }}</span></div>
+      <p class="text-muted">{{ page.bullet }} — the spend cube over committed purchase orders, the two savings figures that have evidence behind them, and the supplier league. Every number is computed on read from 4.1 and 4.2 records; this page writes no stock move and no journal entry.</p>
+      <p class="text-muted">
+        As of <span class="fw-600">{{ generated_at|date:"M d, Y H:i" }}</span>
+        · window {{ start|date:"M d, Y"|default:"earliest record" }} – {{ end|date:"M d, Y" }}{% if spec.window_days %} ({{ spec.window_days }} day{{ spec.window_days|pluralize }}){% endif %}
+        · {{ scope_label }}
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline">
+        <i data-lucide="bell"></i> Alerts
+        {% if critical_alert_count %}<span class="badge badge-red">{{ open_alert_count }} open · {{ critical_alert_count }} critical</span>
+        {% elif alerts_are_open %}<span class="badge badge-amber">{{ open_alert_count }} open</span>
+        {% else %}<span class="badge badge-green">None open</span>{% endif %}
+      </a>
+      <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building-2"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+
+    <div class="card">
+      <div class="card-body">
+        <form method="get" class="filter-bar">
+          <div class="form-group">
+            <select name="date_range" aria-label="Window" class="form-select">
+              {% for key, label in range_choices %}
+                <option value="{{ key }}" {% if date_range == key %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <input type="date" name="date_from" value="{{ request.GET.date_from|default:'' }}" aria-label="From" class="form-input">
+          </div>
+          <div class="form-group">
+            <input type="date" name="date_to" value="{{ request.GET.date_to|default:'' }}" aria-label="To" class="form-input">
+          </div>
+          <div class="form-group">
+            <select name="vendor" aria-label="Supplier" class="form-select">
+              <option value="">All suppliers</option>
+              {% for v in vendors %}
+                <option value="{{ v.pk }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <select name="gl_account" aria-label="GL account" class="form-select">
+              <option value="">All GL accounts</option>
+              {% for acc in gl_account_options %}
+                <option value="{{ acc }}" {% if request.GET.gl_account == acc %}selected{% endif %}>{{ acc }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <select name="org_unit" aria-label="Business unit" class="form-select">
+              <option value="">All business units</option>
+              {% for unit in org_unit_options %}
+                <option value="{{ unit }}" {% if request.GET.org_unit == unit %}selected{% endif %}>{{ unit }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+          <a href="{% url 'scm:spend_analytics' %}" class="btn btn-outline">Reset</a>
+        </form>
+        <div class="form-help">
+          The window and the supplier narrow <span class="fw-600">every figure on the page</span>. GL account and business unit are cube faces, not metric scopes: they narrow the two tables they name and nothing else, and their options are drawn from the rows already computed — so a value with no spend behind it never appears in the list.
+        </div>
+
+        {% if scope_invalid %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Filter dropped</span>
+            A supplier was asked for that does not exist in this workspace. The figures below are network-wide rather than silently narrowed to somebody else's supplier — a different number under the same name is worse than no filter.
+          </p>
+        {% endif %}
+        {% if scope_ignored %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Filter ignored</span>
+            A metric narrows to exactly one subject, so only the first of the scope filters set was applied. Ignored: {{ scope_ignored|join:", " }}.
+          </p>
+        {% endif %}
+        {% if currency_notice.mixed %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Mixed currency</span>
+            {{ currency_notice.note }}
+            {% if currency_notice.codes %}Currencies in this window: <span class="fw-600">{{ currency_notice.codes|join:", " }}</span>.{% endif %}
+            {% if currency_notice.metrics %}Affected: {{ currency_notice.metrics|join:", " }}.{% endif %}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not has_data %}
+      <div class="card">
+        <div class="card-body">
+          <div class="empty-state">
+            <i data-lucide="shopping-cart"></i>
+            <h3>Nothing to measure in this window</h3>
+            <p>No committed purchase orders fall inside it. Spend counts orders in status <span class="fw-600">{{ spend_statuses|join:", " }}</span> — a draft or a cancelled order is not a commitment, so it is deliberately not counted.</p>
+            <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Purchase orders</a>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="wallet"></i></div>
+        <div class="stat-value">{% if tile.spend_total.value is not None %}{{ tile.spend_total.display }}{% else %}—{% endif %}</div>
+        <div class="stat-label">
+          Total committed spend
+          <span class="badge {{ tile.spend_total.band_css|default:'badge-muted' }}">
+            {% if tile.spend_total.band == 'ok' %}On target
+            {% elif tile.spend_total.band == 'warning' %}Warning
+            {% elif tile.spend_total.band == 'critical' %}Critical
+            {% else %}No target{% endif %}
+          </span>
+          {% if tile.spend_total.breakdown.orders %}<br>{{ tile.spend_total.breakdown.orders }} order{{ tile.spend_total.breakdown.orders|pluralize }} · {{ tile.spend_total.breakdown.suppliers }} supplier{{ tile.spend_total.breakdown.suppliers|pluralize }}{% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="file-warning"></i></div>
+        <div class="stat-value">{% if tile.spend_off_contract_pct.value is not None %}{{ tile.spend_off_contract_pct.display }}{% else %}—{% endif %}</div>
+        <div class="stat-label">
+          Off-contract spend
+          <span class="badge {{ tile.spend_off_contract_pct.band_css|default:'badge-muted' }}">
+            {% if tile.spend_off_contract_pct.band == 'ok' %}On target
+            {% elif tile.spend_off_contract_pct.band == 'warning' %}Warning
+            {% elif tile.spend_off_contract_pct.band == 'critical' %}Critical
+            {% else %}No target{% endif %}
+          </span>
+          {% if tile.spend_off_contract_pct.breakdown.unrequisitioned_pct is not None %}<br>{{ tile.spend_off_contract_pct.breakdown.unrequisitioned_pct|floatformat:1 }}% placed with no requisition{% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="pie-chart"></i></div>
+        <div class="stat-value">{% if tile.spend_top_supplier_share_pct.value is not None %}{{ tile.spend_top_supplier_share_pct.display }}{% else %}—{% endif %}</div>
+        <div class="stat-label">
+          Top-5 supplier share
+          <span class="badge {{ tile.spend_top_supplier_share_pct.band_css|default:'badge-muted' }}">
+            {% if tile.spend_top_supplier_share_pct.band == 'ok' %}On target
+            {% elif tile.spend_top_supplier_share_pct.band == 'warning' %}Warning
+            {% elif tile.spend_top_supplier_share_pct.band == 'critical' %}Critical
+            {% else %}No target{% endif %}
+          </span>
+          {% if tile.spend_top_supplier_share_pct.breakdown.sole_source_skus %}<br>{{ tile.spend_top_supplier_share_pct.breakdown.sole_source_skus }} of {{ tile.spend_top_supplier_share_pct.breakdown.sku_hints }} SKU hints are sole-source{% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="badge-percent"></i></div>
+        <div class="stat-value">{% if tile.savings_negotiated.value is not None %}{{ tile.savings_negotiated.display }}{% else %}—{% endif %}</div>
+        <div class="stat-label">
+          Negotiated savings
+          <span class="badge {{ tile.savings_negotiated.band_css|default:'badge-muted' }}">
+            {% if tile.savings_negotiated.band == 'ok' %}On target
+            {% elif tile.savings_negotiated.band == 'warning' %}Warning
+            {% elif tile.savings_negotiated.band == 'critical' %}Critical
+            {% else %}No target{% endif %}
+          </span>
+          {% if tile.savings_negotiated.breakdown.awards_compared %}<br>{{ tile.savings_negotiated.breakdown.awards_compared }} award{{ tile.savings_negotiated.breakdown.awards_compared|pluralize }} compared against a median competing quote{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Every procurement metric in this window</h2>
+        <span class="badge badge-slate">{{ tiles|length }} metric{{ tiles|length|pluralize }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Metric</th><th>Value</th><th>Band</th><th>Goal</th><th>Warning</th><th>Critical</th><th>Why not computed</th></tr></thead>
+          <tbody>
+            {% for t in tiles %}
+              <tr>
+                <td class="fw-600">{{ t.label }} {% if t.primary %}<span class="badge badge-info">Headline</span>{% endif %}<br><span class="text-muted mono">{{ t.metric }}</span></td>
+                <td class="fw-600">{% if t.value is not None %}{{ t.display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>
+                  <span class="badge {{ t.band_css|default:'badge-muted' }}">
+                    {% if t.band == 'ok' %}On target
+                    {% elif t.band == 'warning' %}Warning
+                    {% elif t.band == 'critical' %}Critical
+                    {% elif t.band == 'unknown' %}No target
+                    {% else %}Not banded{% endif %}
+                  </span>
+                </td>
+                <td>{% if t.target and t.target.target_value is not None %}{{ t.target.target_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if t.target and t.target.warning_threshold is not None %}{{ t.target.warning_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if t.target and t.target.critical_threshold is not None %}{{ t.target.critical_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="text-muted">{{ t.unavailable|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="gauge"></i><h3>No procurement metrics in the catalog</h3><p>The metric registry is closed and ships with this build — if this is empty the page has nothing to compute.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        A blank value is not a zero. Zero is a fact ("no off-contract spend"); a dash means the figure was deliberately <span class="fw-600">not</span> computed, and the reason is in the last column. A band reads <span class="badge badge-muted">No target</span> until somebody creates a <a href="{% url 'scm:kpitarget_list' %}">KPI target</a> whose thresholds measure this same subject — a target set for one supplier never bands a network-wide figure.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Spend over time — the cube's period axis</h2>
+        <span class="badge badge-slate">Frozen snapshots</span>
+      </div>
+      <div class="card-body">
+        {% if chart_data.has_data %}
+          <canvas id="spend-trend-chart" height="120"></canvas>
+          <p class="text-muted" style="margin-top:.75rem;">
+            {{ period_axis_note }} Percentages and scores are plotted on the right axis, money and counts on the left — a spend total and an on-time percentage do not share a scale, and drawing them as if they did is how a chart lies without a single wrong number in it.
+          </p>
+        {% else %}
+          <div class="empty-state">
+            <i data-lucide="line-chart"></i>
+            <h3>No frozen periods yet</h3>
+            <p>{{ chart_data.note }}</p>
+            <p>{{ period_axis_note }}</p>
+            <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> Create a KPI target</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Spend cube · by supplier</h2>
+        <span class="badge badge-slate">{{ spend_cube.by_vendor|length }} row{{ spend_cube.by_vendor|length|pluralize }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Supplier</th><th class="text-right">Orders</th><th class="text-right">Committed value</th><th class="text-right">Share</th><th class="th-actions">Records</th></tr></thead>
+          <tbody>
+            {% for row in spend_cube.by_vendor %}
+              <tr>
+                <td class="fw-600">{{ row.vendor|default:"(unnamed supplier)" }}</td>
+                <td class="text-right">{{ row.orders|default:"0" }}</td>
+                <td class="text-right fw-600">{{ row.total|floatformat:2 }}</td>
+                <td class="text-right">{% if row.share_pct is not None %}{{ row.share_pct|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:supplierprofile_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="Supplier profile"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:purchaseorder_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="This supplier's purchase orders"><i data-lucide="file-text"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="users"></i><h3>No committed spend by supplier</h3><p>Nothing was bought in this window, or every order in it is still a draft.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Ranked by value and capped by the database at the biggest rows, so this is "the largest N suppliers", not the supplier count. The drill-throughs search by supplier <span class="fw-600">name</span> rather than linking a record id: these are grouped aggregates, and the group carries the name it was grouped on.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Spend cube · by GL account</h2>
+        {% if request.GET.gl_account %}<span class="badge badge-info">Narrowed to {{ request.GET.gl_account }}</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_account|length }} account{{ spend_cube.by_account|length|pluralize }}</span>{% endif %}
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          <span class="badge badge-amber">Read this before using the category axis</span>
+          {{ gl_axis_caveat }} There is no item taxonomy behind procurement spend: a purchase-order line carries a free-text SKU hint and no item foreign key, so "category" here means the account the line was posted to, which is an accounting decision rather than a description of what was bought.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>GL account</th><th class="text-right">Line value</th></tr></thead>
+          <tbody>
+            {% for row in spend_cube.by_account %}
+              <tr>
+                <td class="fw-600 mono">{{ row.account|default:"(unposted)" }}</td>
+                <td class="text-right">{{ row.amount|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2"><div class="empty-state"><i data-lucide="book-open"></i><h3>No spend on this axis</h3><p>Either nothing was committed in this window, or the GL-account filter above matches no line. Lines with no account are grouped as <span class="fw-600">(unposted)</span> rather than dropped.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        These are purchase-order <span class="fw-600">line</span> totals, so they will not tie exactly to the order-header total above when an order carries charges that sit outside its lines.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Spend cube · by business unit</h2>
+        {% if request.GET.org_unit %}<span class="badge badge-info">Narrowed to {{ request.GET.org_unit }}</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_business_unit|length }} unit{{ spend_cube.by_business_unit|length|pluralize }}</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Business unit (ship-to)</th><th class="text-right">Committed value</th></tr></thead>
+          <tbody>
+            {% for row in spend_cube.by_business_unit %}
+              <tr>
+                <td class="fw-600">{{ row.unit|default:"(unassigned)" }}</td>
+                <td class="text-right">{{ row.amount|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2"><div class="empty-state"><i data-lucide="warehouse"></i><h3>No spend on this axis</h3><p>Nothing committed in this window, or the business-unit filter matches no order.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        The business unit is the order's ship-to location — the unit that receives the goods, which is the only unit 4.1 records. Orders with no ship-to are grouped as <span class="fw-600">(unassigned)</span>.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Spend cube · by currency</h2>
+        {% if currency_notice.mixed %}<span class="badge badge-amber">Mixed</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_currency|length }} currenc{{ spend_cube.by_currency|length|pluralize:"y,ies" }}</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Currency</th><th class="text-right">Committed value (face)</th></tr></thead>
+          <tbody>
+            {% for row in spend_cube.by_currency %}
+              <tr>
+                <td class="fw-600">{{ row.currency|default:"(none)" }}</td>
+                <td class="text-right">{{ row.amount|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2"><div class="empty-state"><i data-lucide="coins"></i><h3>No currency split</h3><p>No committed orders in this window to split.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        This build ships no FX rate table, so a headline money figure is a sum of <span class="fw-600">face values</span> across whatever currencies the orders were raised in. This split is how you read it honestly; a rate is never invented to make the total look like one currency.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Contract cover</h2>
+        <span class="badge {{ tile.spend_off_contract_pct.band_css|default:'badge-muted' }}">{% if tile.spend_off_contract_pct.value is not None %}{{ tile.spend_off_contract_pct.display }} off contract{% else %}Not computed{% endif %}</span>
+      </div>
+      <div class="card-body">
+        {% if tile.spend_off_contract_pct.value is not None %}
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>On contract</dt><dd class="fw-600">{{ tile.spend_off_contract_pct.breakdown.on_contract_spend|floatformat:2 }}</dd></div>
+            <div class="detail-item"><dt>Off contract</dt><dd class="fw-600">{{ tile.spend_off_contract_pct.breakdown.off_contract_spend|floatformat:2 }}</dd></div>
+            <div class="detail-item"><dt>Off-contract orders</dt><dd>{{ tile.spend_off_contract_pct.breakdown.off_contract_orders|default:"0" }} of {{ tile.spend_off_contract_pct.breakdown.orders|default:"0" }}</dd></div>
+            <div class="detail-item"><dt>Placed with no requisition</dt><dd>{{ tile.spend_off_contract_pct.breakdown.unrequisitioned_spend|floatformat:2 }}{% if tile.spend_off_contract_pct.breakdown.unrequisitioned_pct is not None %} <span class="text-muted">({{ tile.spend_off_contract_pct.breakdown.unrequisitioned_pct|floatformat:1 }}%)</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Tail-supplier share</dt><dd>{% if tile.spend_tail_share_pct.value is not None %}{{ tile.spend_tail_share_pct.display }} <span class="text-muted">across {{ tile.spend_tail_share_pct.breakdown.tail_suppliers }} of {{ tile.spend_tail_share_pct.breakdown.suppliers }} suppliers</span>{% else %}<span class="text-muted">{{ tile.spend_tail_share_pct.unavailable|default:"—" }}</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Requisition-to-order cycle</dt><dd>{% if tile.procure_cycle_days.value is not None %}{{ tile.procure_cycle_days.display }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          </dl>
+        {% else %}
+          <div class="empty-state">
+            <i data-lucide="file-check"></i>
+            <h3>Contract cover not computed</h3>
+            <p>{{ tile.spend_off_contract_pct.unavailable|default:"No committed purchase orders in this window." }}</p>
+          </div>
+        {% endif %}
+        {% if off_contract_caveat %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Caveat</span> {{ off_contract_caveat }} The unrequisitioned share sits beside it because that is the maverick-buying evidence 4.1 can actually produce.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Negotiated savings — awarded against the median competing quote</h2>
+        <span class="badge badge-slate">{{ savings_rows|length }} award{{ savings_rows|length|pluralize }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Order</th><th>Supplier</th><th>Currency</th><th class="text-right">Awarded</th><th class="text-right">Median competing</th><th class="text-right">Competing quotes</th><th class="text-right">Saving</th><th class="th-actions">Records</th></tr></thead>
+          <tbody>
+            {% for row in savings_rows %}
+              <tr>
+                <td class="fw-600 mono">{{ row.order|default:"—" }}</td>
+                <td>{{ row.vendor|default:"(unnamed supplier)" }}</td>
+                <td>{{ row.currency|default:"—" }}</td>
+                <td class="text-right">{{ row.awarded_value|floatformat:2 }}</td>
+                <td class="text-right">{{ row.median_competing|floatformat:2 }}</td>
+                <td class="text-right">{{ row.competing_quotes|default:"0" }}</td>
+                <td class="text-right fw-600">{{ row.saving|floatformat:2 }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:purchaseorder_list' %}?q={{ row.order|urlencode }}" class="btn-icon" title="Open this purchase order"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:rfq_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="RFQs for this supplier"><i data-lucide="file-text"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8"><div class="empty-state"><i data-lucide="handshake"></i><h3>No award has a competing quote to measure against</h3><p>{{ tile.savings_negotiated.unavailable|default:"Award a purchase order from an RFQ that received more than one quote, and the saving becomes measurable." }}</p><a href="{% url 'scm:rfq_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> RFQs</a></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        The one savings figure here with evidence behind it: both numbers are rows a supplier actually sent. The comparison is the <span class="fw-600">median</span> of the other quotes on the same RFQ, so a single absurd quote cannot mint a saving, and the awarded quote is excluded from its own comparison set. An RFQ whose award was the only quote is skipped entirely rather than scored as zero{% if tile.savings_negotiated.breakdown.awards_skipped_no_competition %} — {{ tile.savings_negotiated.breakdown.awards_skipped_no_competition }} award{{ tile.savings_negotiated.breakdown.awards_skipped_no_competition|pluralize }} skipped for that reason in this window{% endif %}.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Price-variance opportunity — same SKU hint, different price paid</h2>
+        <span class="badge badge-slate">{% if tile.savings_price_variance_opportunity.value is not None %}{{ tile.savings_price_variance_opportunity.display }} total{% else %}Not computed{% endif %}</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          <span class="badge badge-amber">An opportunity, not a saving</span>
+          {{ sku_hint_caveat }} And the lowest price may have carried a lead time or a minimum order the other buys could not have taken, so this is what buying every unit at the best price already paid <span class="fw-600">would</span> have saved — it is not money anybody has banked.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>SKU hint</th><th class="text-right">Lines</th><th class="text-right">Suppliers</th><th class="text-right">Quantity</th><th class="text-right">Spend</th><th class="text-right">Best unit price</th><th class="text-right">Opportunity</th></tr></thead>
+          <tbody>
+            {% for row in price_variance_rows %}
+              <tr>
+                <td class="fw-600 mono">{{ row.sku_hint|default:"—" }}</td>
+                <td class="text-right">{{ row.lines|default:"0" }}</td>
+                <td class="text-right">{% if row.vendors > 1 %}<span class="badge badge-amber">{{ row.vendors }}</span>{% else %}{{ row.vendors|default:"0" }}{% endif %}</td>
+                <td class="text-right">{{ row.quantity|floatformat:2 }}</td>
+                <td class="text-right">{{ row.spend|floatformat:2 }}</td>
+                <td class="text-right">{{ row.best_unit_price|floatformat:4 }}</td>
+                <td class="text-right fw-600">{{ row.opportunity|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7"><div class="empty-state"><i data-lucide="tags"></i><h3>No price variance to act on</h3><p>{{ tile.savings_price_variance_opportunity.unavailable|default:"Every SKU hint bought in this window was bought at one price, or no line carries a hint to group on." }}</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        A row with more than one supplier is the consolidation candidate — the same hint bought from two sources at two prices{% if tile.savings_price_variance_opportunity.breakdown.skus_multi_vendor %} ({{ tile.savings_price_variance_opportunity.breakdown.skus_multi_vendor }} here){% endif %}. Lines with a blank or mistyped hint are not grouped at all, so this figure is a floor, never a ceiling.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Supplier leaderboard</h2>
+        <span class="badge badge-slate">Delivery · quality · scorecard</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          Three leagues, deliberately not merged into one row per supplier. Each is measured over a different denominator and a different population — receipts that had a promised date, quantity actually presented, and published 4.2 scorecards — so a supplier can appear in one and not the others. Joining them would imply an agreement between three numbers that does not exist.
+        </p>
+      </div>
+
+      <div class="card-body">
+        <h3 class="card-title">On-time delivery{% if tile.supplier_otd_pct.value is not None %} — {{ tile.supplier_otd_pct.display }} overall{% endif %}</h3>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Supplier</th><th class="text-right">Receipts measured</th><th class="text-right">On time</th><th class="text-right">Late</th><th class="text-right">OTD</th><th class="th-actions">Records</th></tr></thead>
+          <tbody>
+            {% for row in supplier_otd_rows %}
+              <tr>
+                <td class="fw-600">{{ row.vendor|default:"(unnamed supplier)" }}</td>
+                <td class="text-right">{{ row.receipts|default:"0" }}</td>
+                <td class="text-right">{{ row.on_time|default:"0" }}</td>
+                <td class="text-right">{{ row.late|default:"0" }}</td>
+                <td class="text-right">
+                  {% if row.otd_pct is None %}<span class="badge badge-muted">—</span>
+                  {% elif row.otd_pct >= 95 %}<span class="badge badge-green">{{ row.otd_pct|floatformat:1 }}%</span>
+                  {% elif row.otd_pct >= 85 %}<span class="badge badge-amber">{{ row.otd_pct|floatformat:1 }}%</span>
+                  {% else %}<span class="badge badge-red">{{ row.otd_pct|floatformat:1 }}%</span>{% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:supplierprofile_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="Supplier profile"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:goodsreceipt_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="Goods receipts"><i data-lucide="package-check"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6"><div class="empty-state"><i data-lucide="truck"></i><h3>Nothing can be measured as on time</h3><p>{{ tile.supplier_otd_pct.unavailable|default:"No goods receipt in this window came from an order with a promised date — with nothing promised there is nothing to be late against." }}</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        {{ tile.supplier_otd_pct.breakdown.basis|default:"GoodsReceiptNote.receipt_date <= PurchaseOrder.expected_date" }}{% if tile.supplier_otd_pct.breakdown.excluded %} Excluded: {{ tile.supplier_otd_pct.breakdown.excluded }}{% endif %} The colours above are a fixed reading scale for this table, not a KPI band — banding is only ever done against a target that measures the same subject.
+      </div>
+
+      <div class="card-body">
+        <h3 class="card-title">Reject rate{% if tile.supplier_reject_rate_pct.value is not None %} — {{ tile.supplier_reject_rate_pct.display }} overall{% endif %}</h3>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Supplier</th><th class="text-right">Received</th><th class="text-right">Rejected</th><th class="text-right">Reject rate</th><th class="th-actions">Records</th></tr></thead>
+          <tbody>
+            {% for row in tile.supplier_reject_rate_pct.rows %}
+              <tr>
+                <td class="fw-600">{{ row.vendor|default:"(unnamed supplier)" }}</td>
+                <td class="text-right">{{ row.received|floatformat:2 }}</td>
+                <td class="text-right">{{ row.rejected|floatformat:2 }}</td>
+                <td class="text-right">
+                  {% if row.reject_pct is None %}<span class="badge badge-muted">—</span>
+                  {% elif row.reject_pct <= 1 %}<span class="badge badge-green">{{ row.reject_pct|floatformat:1 }}%</span>
+                  {% elif row.reject_pct <= 5 %}<span class="badge badge-amber">{{ row.reject_pct|floatformat:1 }}%</span>
+                  {% else %}<span class="badge badge-red">{{ row.reject_pct|floatformat:1 }}%</span>{% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:supplierprofile_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="Supplier profile"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:goodsreceipt_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="Goods receipts"><i data-lucide="package-check"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="shield-alert"></i><h3>No quantity to measure rejections against</h3><p>{{ tile.supplier_reject_rate_pct.unavailable|default:"No goods receipt lines fall inside this window." }}</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        {{ tile.supplier_reject_rate_pct.breakdown.basis|default:"quantity_rejected / (quantity_received + quantity_rejected)" }} — the denominator is everything the supplier <span class="fw-600">presented</span>, so a rejected delivery still counts in what they shipped.
+      </div>
+
+      <div class="card-body">
+        <h3 class="card-title">4.2 scorecard average{% if tile.supplier_score_avg.value is not None %} — {{ tile.supplier_score_avg.display }} across {{ tile.supplier_score_avg.breakdown.scorecards }} published card{{ tile.supplier_score_avg.breakdown.scorecards|pluralize }}{% endif %}</h3>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Supplier</th><th class="text-right">Published cards</th><th class="text-right">Mean overall score</th><th class="th-actions">Records</th></tr></thead>
+          <tbody>
+            {% for row in supplier_score_rows %}
+              <tr>
+                <td class="fw-600">{{ row.vendor|default:"(unnamed supplier)" }}</td>
+                <td class="text-right">{{ row.scorecards|default:"0" }}</td>
+                <td class="text-right fw-600">{% if row.score is not None %}{{ row.score|floatformat:1 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:supplierprofile_list' %}?q={{ row.vendor|urlencode }}" class="btn-icon" title="Supplier profile"><i data-lucide="eye"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="clipboard-check"></i><h3>No published scorecard closes in this window</h3><p>{{ tile.supplier_score_avg.unavailable|default:"Scorecards are published from 4.2 Supplier Relationship Management. A draft card is a work in progress, not a rating, so it is excluded." }}</p><a href="{% url 'scm:supplierprofile_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Suppliers</a></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        {{ tile.supplier_score_avg.breakdown.source|default:"SupplierScorecard.overall_score (4.2), published cards only — read, not recomputed" }}{% if tile.supplier_score_avg.breakdown.weights %} Weights: {{ tile.supplier_score_avg.breakdown.weights }}.{% endif %} This page never derives a rival supplier score — 4.2 already blends delivery, quality, price and responsiveness under reviewed weights, and a second blend under the same name would be indefensible.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What this page counted, and what it did not</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Orders counted</dt><dd>Purchase orders in status <span class="fw-600">{{ spend_statuses|join:", " }}</span> — a commitment, not an intention. Drafts, pending approval and cancelled orders are excluded.</dd></div>
+          <div class="detail-item"><dt>Category axis</dt><dd>{{ gl_axis_caveat }}</dd></div>
+          <div class="detail-item"><dt>SKU grouping</dt><dd>{{ sku_hint_caveat }}</dd></div>
+          <div class="detail-item"><dt>Period axis</dt><dd>{{ period_axis_note }}</dd></div>
+          <div class="detail-item"><dt>Money</dt><dd>Face values with no currency symbol: there is no FX rate table in this build, so a symbol over a mixed sum would be a lie that looks like a fact. Read the per-currency split.</dd></div>
+          <div class="detail-item"><dt>Writes</dt><dd>None. 4.11 is read-only over 4.1–4.10 — it posts no stock move and no journal entry, and the ledger stays the accounting module's.</dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">
+          <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export this view as CSV</a>
+          <span style="margin-inline-start:.75rem;">The export carries the same filters, the same tables and the same caveats — an exported number outlives the page it came from.</span>
+        </p>
+      </div>
+    </div>
+
+    {{ chart_data|json_script:"spend-trend-data" }}
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var canvas = document.getElementById('spend-trend-chart');
+    var payload = document.getElementById('spend-trend-data');
+    if (!canvas || !payload || typeof Chart === 'undefined') { return; }
+
+    var data;
+    try { data = JSON.parse(payload.textContent); } catch (e) { return; }
+    if (!data || !data.has_data || !data.labels || !data.labels.length) { return; }
+
+    var PALETTE = ['#2563eb', '#7c3aed', '#0891b2', '#16a34a', '#d97706', '#dc2626', '#475569'];
+    var needsRate = false;
+    var datasets = (data.series || []).map(function (series, index) {
+      // A percentage and a money total do not share a scale. Rates and scores go right, everything
+      // else left, so neither line is flattened into the other's range.
+      var onRight = (series.unit === 'pct' || series.unit === 'score');
+      if (onRight) { needsRate = true; }
+      var colour = PALETTE[index % PALETTE.length];
+      return {
+        label: series.label + (onRight ? ' (right axis)' : ''),
+        data: series.values,
+        yAxisID: onRight ? 'yRate' : 'yValue',
+        borderColor: colour,
+        backgroundColor: colour,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.3,
+        spanGaps: true,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      };
+    });
+    if (!datasets.length) { return; }
+
+    var scales = { yValue: { position: 'left', beginAtZero: false } };
+    if (needsRate) {
+      scales.yRate = { position: 'right', beginAtZero: false, grid: { drawOnChartArea: false } };
+    }
+
+    new Chart(canvas, {
+      type: 'line',
+      data: { labels: data.labels, datasets: datasets },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true, position: 'bottom' } },
+        scales: scales
+      }
+    });
+  })();
+</script>
+{% endblock %}
