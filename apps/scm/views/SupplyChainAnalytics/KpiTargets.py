@@ -197,7 +197,7 @@ def kpitarget_detail(request, pk):
     })
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def kpitarget_delete(request, pk):
     """Delete the target — and say what goes with it.
@@ -207,6 +207,13 @@ def kpitarget_delete(request, pk):
     successfully." admits, and those figures cannot be re-derived later — which is the entire reason
     the snapshot table exists. Alerts SURVIVE: ``SupplyChainAlert.kpi_target`` is ``SET_NULL``, and
     an acknowledged exception is the record of a human decision, not a child of the target.
+
+    **Tenant-admin gated, and the paragraph above is why.** Writing this history is admin-only
+    (``kpitarget_snapshot``, ``kpisnapshot_capture``); leaving the destructive path open to any
+    member let them cascade-delete, irreversibly, the same rows they could not create — the gate
+    inverted. ``kpitarget_edit`` stays open to members deliberately: tuning a threshold is the daily
+    work of the planner who owns the target, and locking it would put routine configuration behind
+    an admin. Deleting the frozen record of what was true is not routine.
     """
     obj = get_object_or_404(KpiTarget, pk=pk, tenant=request.tenant)
     frozen = obj.snapshots.filter(tenant=request.tenant).count()
