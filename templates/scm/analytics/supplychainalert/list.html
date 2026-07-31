@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Supply Chain Alerts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Supply Chain Alerts</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Alerts</span></div>
+      <p class="text-muted">The exception queue. Everything else in Analytics is a page you read; this is the one you work through. It opens on what still needs attention, <span class="fw-600">ranked by what acting on it is worth</span> rather than by how many there are — a queue ordered by count is a queue people learn to ignore. Acknowledging, assigning, snoozing, resolving and dismissing are recorded against the row, so nobody re-investigates something a colleague already closed.</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        Gated on exactly what @tenant_admin_required tests (apps/core/decorators.py:18) — superuser
+        OR is_tenant_admin — so the button is never shown to somebody it would 403 on. Detection is
+        the ONLY action in 4.11 that creates rows, and it is a batch, which is why it is a POST
+        button and never a page load. The query string carries the current filter state back through
+        the redirect: supplychainalert_detect ends on _return_url(None, request.GET), which
+        re-whitelists what it reads, so a filtered inbox stays filtered after a run.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'scm:supplychainalert_detect' %}?{{ return_query }}" onsubmit="return confirm('Run every detector now? This evaluates each alerting KPI target plus the rule-based exception passes. A breach that is already open is re-fired in place — it never adds a second row.');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="radar"></i> Run detection</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'scm:supplychainalert_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise Exception</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The five tiles are ONE aggregate in the view, over the UNFILTERED tenant set: they say what the
+    workspace looks like, not what the current filter narrowed it to.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ stats.attention|default:"0" }}</div>
+      <div class="stat-label">Needs attention</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.critical|default:"0" }}</div>
+      <div class="stat-label">Critical, still open</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="user-x"></i></div>
+      <div class="stat-value">{{ stats.unassigned|default:"0" }}</div>
+      <div class="stat-label">Nobody's name on them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ stats.at_risk|default:"0"|floatformat:2 }}</div>
+      <div class="stat-label">Value at risk</div>
+    </div>
+    {% comment %}
+      Snoozed renders GREEN rather than amber: a snoozed alert is one somebody HAS triaged and
+      parked on purpose, and it is the only bucket the default view hides. An amber count here
+      would read as a problem and would train people to ignore the amber that matters (the 4.10
+      correction). The number is shown at all so the bucket is never invisible — a snooze that
+      nobody can find is the black hole the model's is_snooze_expired exists to prevent.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ stats.snoozed|default:"0" }}</div>
+      <div class="stat-label">Snoozed until later</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search alert number, title or subject…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The status select carries two values that are not statuses. The blank one is the
+            default view — open, acknowledged, and any snooze whose window has run out — and "all"
+            is the escape hatch that shows closed rows too. `status_value` is what the VIEW
+            resolved, not the raw GET value, so a hand-edited ?status=junk shows the select on the
+            page that actually rendered instead of on nothing.
+          {% endcomment %}
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="" {% if status_value == "" %}selected{% endif %}>Needs attention (default)</option>
+            <option value="all" {% if status_value == "all" %}selected{% endif %}>All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if status_value == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">All severities</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="alert_type" aria-label="Alert type" class="form-select">
+            <option value="">All exception types</option>
+            {% for val, label in alert_type_choices %}
+              <option value="{{ val }}" {% if request.GET.alert_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            "unassigned" is a real triage question and is not an equality filter — the view branches
+            on it before crud_list's int-FK filter, whose .isdigit() guard (L11) means the two can
+            never both fire on the same value. Numeric options compare through stringformat:"d",
+            never slugify.
+          {% endcomment %}
+          <select name="assigned_to" aria-label="Assigned to" class="form-select">
+            <option value="">Anyone</option>
+            <option value="unassigned" {% if request.GET.assigned_to == "unassigned" %}selected{% endif %}>Unassigned</option>
+            {% for a in assignees %}
+              <option value="{{ a.pk }}" {% if request.GET.assigned_to == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.get_full_name|default:a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="alr-min-impact">Impact at least</label>
+          <input type="number" step="0.01" min="0" id="alr-min-impact" name="min_impact" value="{{ request.GET.min_impact|default:'' }}" class="form-input" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <select name="sort" aria-label="Sort" class="form-select">
+            {% for val, label in sort_choices %}
+              <option value="{{ val }}" {% if sort == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Alert</th><th>What fired</th><th>Subject</th><th>Severity</th><th>Observed vs target</th><th>Impact</th><th>Assigned to</th><th>Raised</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:supplychainalert_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a><br>
+                <span class="badge badge-slate">{{ obj.get_alert_type_display }}</span>
+              </td>
+              <td>
+                {{ obj.title }}
+                {% if obj.metric %}<br><span class="text-muted">{{ obj.get_metric_display }}</span>{% endif %}
+                {% if obj.kpi_target %}<br><a href="{% url 'scm:kpitarget_detail' obj.kpi_target.pk %}" class="text-muted">{{ obj.kpi_target.number }}</a>{% endif %}
+              </td>
+              {% comment %}
+                The drill-down the whole sub-module is sold on: a high-level exception reaches the
+                row it is about in one click. Every FK below is select_related in _ALERT_SELECT, so
+                this chain costs no query. The order matches SupplyChainAlert.subject_label, so the
+                link and the text a detail page shows point at the same thing.
+              {% endcomment %}
+              <td>
+                {% if obj.item %}<a href="{% url 'scm:item_detail' obj.item.pk %}">{{ obj.item.sku }}</a>
+                {% elif obj.party %}<a href="{% url 'core:party_detail' obj.party.pk %}">{{ obj.party.name }}</a>
+                {% elif obj.carrier %}<a href="{% url 'scm:carrier_detail' obj.carrier.pk %}">{{ obj.carrier }}</a>
+                {% elif obj.shipment %}<a href="{% url 'scm:shipment_detail' obj.shipment.pk %}">{{ obj.shipment.number }}</a>
+                {% elif obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}">{{ obj.purchase_order.number }}</a>
+                {% elif obj.location %}<a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location.code }}</a>
+                {% else %}<span class="text-muted">{{ obj.subject_label }}</span>{% endif %}
+                {% if obj.dimension_label %}<br><span class="text-muted">{{ obj.dimension_label }}</span>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span></td>
+              {% comment %}
+                Tested against None, not against truthiness: an on-time-delivery of 0% is exactly the
+                kind of breach that fires here, and `{% if obj.observed_value %}` would hide it. The
+                unit lives in METRIC_META and is not in this page's context, so the figures render as
+                bare numbers — the detail page is where format_metric_value puts the % / days / turns
+                back on. floatformat:"-2" keeps a whole number whole (95) and trims the model's four
+                stored decimal places on a fractional one (92.53). A rule-based exception has no
+                metric and therefore no pair to show.
+              {% endcomment %}
+              <td>
+                {% if obj.observed_value is not None or obj.threshold_value is not None %}
+                  <span class="fw-600">{{ obj.observed_value|floatformat:"-2"|default:"—" }}</span>
+                  <span class="text-muted">vs {{ obj.threshold_value|floatformat:"-2"|default:"—" }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="fw-600">{{ obj.impact_value|floatformat:2 }}</td>
+              <td>
+                {% if obj.assigned_to %}{{ obj.assigned_to.get_full_name|default:obj.assigned_to }}
+                {% else %}<span class="text-muted">Unassigned</span>{% endif %}
+              </td>
+              <td>
+                {{ obj.raised_at|date:"M d, Y" }}
+                {% comment %}
+                  Compared at DAY grain on purpose. Both columns default to timezone.now, and the
+                  two defaults are evaluated in separate calls, so a HAND-RAISED alert has a
+                  last_seen_at microseconds after its raised_at — a strict datetime comparison would
+                  badge every freshly typed row "still breaching". The detector passes one shared
+                  `now` to both on create and only ever moves last_seen_at forward, so a later DAY
+                  means exactly one thing: detection has run since and the breach is still true. It
+                  also matches what the badge itself prints, which is a date.
+                {% endcomment %}
+                {% if obj.last_seen_at|date:"Ymd" > obj.raised_at|date:"Ymd" %}<br><span class="badge badge-amber">Still breaching {{ obj.last_seen_at|date:"M d" }}</span>{% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                {% if obj.is_snooze_expired %}<br><span class="badge badge-amber">Snooze expired</span>
+                {% elif obj.status == 'snoozed' %}<br><span class="text-muted">until {{ obj.snoozed_until|date:"M d, Y" }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:supplychainalert_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Inline triage is limited to the two moves that need no input — acknowledge and
+                    dismiss. Assign, snooze and resolve all take a value (a person, a day count, a
+                    note) and live on the detail page rather than being guessed at from a row.
+
+                    `?{{ return_query }}` is what brings the redirect back to THIS filtered page:
+                    the view built that string from a whitelist of filter params, and re-whitelists
+                    it on the way back, so nothing a caller invents can reach the redirect.
+
+                    Acknowledge is offered only on `open`, because the model makes it a no-op once
+                    acknowledged (the first acknowledger is the true one). Dismiss is offered on any
+                    open status — including a re-fired one, which stays open by design.
+                  {% endcomment %}
+                  {% if obj.status == 'open' %}
+                    <form method="post" action="{% url 'scm:supplychainalert_acknowledge' obj.pk %}?{{ return_query }}">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Acknowledge"><i data-lucide="check"></i></button>
+                    </form>
+                  {% endif %}
+                  {% if obj.is_open %}
+                    <form method="post" action="{% url 'scm:supplychainalert_dismiss' obj.pk %}?{{ return_query }}" onsubmit="return confirm('Dismiss this exception as not worth acting on? It is closed against your name. If a detector raised it and it is still true, it will be raised again on the next run.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Dismiss"><i data-lucide="ban"></i></button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'scm:supplychainalert_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:supplychainalert_delete' obj.pk %}" onsubmit="return confirm('Delete this alert? Deleting is for a row raised by hand in error — a detector-raised exception that is still true will simply be raised again. Resolving is what records that somebody dealt with it.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            {% comment %}
+              Two empty states, because "nothing needs attention" is a lie under a filter and an
+              empty page that congratulates you is how a filtered-to-nothing queue gets mistaken for
+              a clear one. `status_value` is falsy only on the default view, so it doubles as the
+              "is a status filter on" test.
+            {% endcomment %}
+            {% if q or status_value or request.GET.severity or request.GET.alert_type or request.GET.assigned_to or request.GET.min_impact %}
+              <tr><td colspan="10"><div class="empty-state"><i data-lucide="search-x"></i><h3>No exception matches this filter</h3><p>Nothing in the queue answers to the search and filters above — which is not the same as nothing needing attention. Clear them with Reset to go back to the default view: open, acknowledged, and any snooze whose window has run out.</p></div></td></tr>
+            {% else %}
+              <tr><td colspan="10"><div class="empty-state"><i data-lucide="inbox"></i><h3>Nothing needs attention</h3><p>Either nothing is breaching, or everything that was has been closed. Exceptions arrive here from two places: a KPI target with alerting switched on crossing its warning or critical band, and the rule-based detectors — dead stock, expiring lots, projected stockouts, demand spikes, shipments at risk or gone quiet, risky suppliers, expiring contracts, off-contract spend, price variance and freight variance. A workspace administrator can run detection now from the button above, and you can raise an exception by hand for something no rule covers. Closed alerts are not gone: switch the status filter to "All statuses" to read them back.</p></div></td></tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <p><span class="fw-600">The default view is what still needs attention</span> — open, acknowledged, and any snooze whose window has run out. A live snooze is deliberately hidden, because counting a suppression you asked for would make snoozing pointless; the count is on the tile above and the rows are one filter away. <span class="fw-600">Impact</span> is the value at risk, and it is what the queue is ranked by: acting on the biggest exception first is the whole point of an inbox that has more rows than hours.</p>
+      <p style="margin-top:.6rem;">Running detection is a workspace-administrator action — it is the only thing in Analytics that writes rows, and it is a batch that evaluates every alerting target plus each rule-based pass. A breach that keeps breaching <span class="fw-600">re-fires the alert that is already open</span> and moves its "last seen" stamp; it never adds a second row. Nothing here posts stock or writes to the ledger: an alert points at the rows that caused it and records what a person decided.</p>
+    </div>
+  </div>
+{% endblock %}
