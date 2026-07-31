@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}KPI Snapshots{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">KPI Snapshots</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>KPI Snapshots</span></div>
+      <p class="text-muted">One frozen measurement per target, per period — the value <span class="fw-600">as it stood at capture</span>. Every trend line, sparkline and period-over-period arrow in this module reads these rows; nothing re-computes history on render, because a back-dated stock movement or a rolled average cost would otherwise silently rewrite a closed period.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      {% if can_capture %}
+        {% comment %}
+          This button posts the capture form further down the page through the HTML `form`
+          attribute rather than carrying a second copy of it. One form means one CSRF token and —
+          the part that matters — ONE period input: a duplicated header form would freeze today
+          while the date the operator actually picked sat visible and ignored below it.
+        {% endcomment %}
+        <button type="submit" form="kps-capture-form" class="btn btn-primary"><i data-lucide="camera"></i> Capture now</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="camera"></i></div>
+      <div class="stat-value">{{ stats.total|default:"0" }}</div>
+      <div class="stat-label">Snapshots on file</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ stats.on_target|default:"0" }}</div>
+      <div class="stat-label">On target</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
+      <div class="stat-value">{{ stats.off_target|default:"0" }}</div>
+      <div class="stat-label">Off target — {{ stats.critical|default:"0" }} critical</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="help-circle"></i></div>
+      <div class="stat-value">{{ stats.not_banded|default:"0" }}</div>
+      <div class="stat-label">Measured, but no target to band against</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.last_captured|date:"M d, H:i"|default:"Never" }}</div>
+      <div class="stat-label">Last capture run</div>
+    </div>
+  </div>
+
+  {% comment %}
+    These five counts are deliberately taken over the WHOLE tenant, not over the filtered page — an
+    "off target" figure that quietly re-scoped itself to the current filter would report that nothing
+    is wrong the moment somebody narrowed the list to one metric.
+  {% endcomment %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Capture a period</h2>
+      <span class="badge badge-slate">{{ active_target_count }} active target{{ active_target_count|pluralize }}</span>
+    </div>
+    <div class="card-body">
+      {% if can_capture %}
+        <form method="post" id="kps-capture-form" action="{% url 'scm:kpisnapshot_capture' %}" class="filter-bar" onsubmit="return confirm('Freeze the period ending ' + (this.period_end.value || 'today') + ' for every active KPI target? Re-running a period that already exists updates those rows rather than adding new ones.');">
+          {% csrf_token %}
+          {% comment %}
+            The current filters are re-posted as hidden fields — a whitelist the view built, never a
+            loop over request.GET — so the redirect after capture lands back on the same filtered
+            view without anything else from the request tagging along. Iterating request.GET here is
+            how a csrfmiddlewaretoken ends up in a query string, and from there in browser history.
+          {% endcomment %}
+          {% for key, value in active_filters %}
+            <input type="hidden" name="{{ key }}" value="{{ value }}">
+          {% endfor %}
+          <div class="form-group">
+            <label class="form-label" for="kps-period-end">Period ending</label>
+            <input type="date" id="kps-period-end" name="period_end" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" class="form-input">
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="camera"></i> Capture snapshots</button>
+        </form>
+        <div class="form-help">Each target is measured over <span class="fw-600">its own period grain</span> containing that date — a monthly target freezes the whole calendar month, not the rolling window its live tile reads. A period that has not finished yet is refused, here and on the server: a part-period stored as though it were a whole one is a number nothing later can tell apart. A target whose metric returns no value is left as a <span class="fw-600">gap</span> in the trend, never stored as a zero.</div>
+      {% else %}
+        <p class="text-muted">Capturing writes the frozen history that every trend line, tile arrow and alert comparison in this module reads — for the whole workspace, in one press — so it is a workspace-administrator action. Ask an administrator to run it, or open a <a href="{% url 'scm:kpitarget_list' %}">KPI target</a> to see what would be measured.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search metric, dimension, target number or name…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            metric_choices is the GROUPED catalog — [(group label, [(key, label), …]), …] — so it
+            unpacks into optgroups and the dropdown reads the way the sidebar does.
+          {% endcomment %}
+          <select name="metric" aria-label="Metric" class="form-select">
+            <option value="">All metrics</option>
+            {% for group_label, group_metrics in metric_choices %}
+              <optgroup label="{{ group_label }}">
+                {% for val, label in group_metrics %}
+                  <option value="{{ val }}" {% if request.GET.metric == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status_band" aria-label="Band" class="form-select">
+            <option value="">All bands</option>
+            {% for val, label in band_choices %}
+              <option value="{{ val }}" {% if request.GET.status_band == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The target filter is an int FK lookup, so it compares against the pk through
+            stringformat:"d" — slugify would agree only by accident and the view guards the value
+            with .isdigit() before it ever reaches .filter().
+          {% endcomment %}
+          <select name="kpi_target" aria-label="KPI target" class="form-select">
+            <option value="">All targets</option>
+            {% for t in targets %}
+              <option value="{{ t.pk }}" {% if request.GET.kpi_target == t.pk|stringformat:"d" %}selected{% endif %}>{{ t.number }} · {{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="kps-date-from">Period ending from</label>
+          <input type="date" id="kps-date-from" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="kps-date-to">Period ending to</label>
+          <input type="date" id="kps-date-to" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:kpisnapshot_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Period</th><th>Metric</th><th>Target</th><th>Dimension</th><th>Value</th><th>Target then</th><th>Band</th><th>Captured</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:kpisnapshot_detail' obj.pk %}" class="fw-600">{{ obj.period_start|date:"M d" }} → {{ obj.period_end|date:"M d, Y" }}</a></td>
+              <td>{{ obj.metric_label }}</td>
+              <td><a href="{% url 'scm:kpitarget_detail' obj.kpi_target.pk %}">{{ obj.kpi_target.number }}</a> <span class="text-muted">· {{ obj.kpi_target.name }}</span></td>
+              <td>{% if obj.dimension_label %}<span class="badge badge-slate">{{ obj.dimension_label }}</span>{% else %}<span class="text-muted">Whole network</span>{% endif %}</td>
+              {% comment %}
+                obj.display formats the raw Decimal for the metric's own unit (turns / days / % /
+                money), so a figure reads identically here, on the detail page, on a live tile and in
+                the CSV. The column never re-decides the unit itself.
+              {% endcomment %}
+              <td class="fw-600">{{ obj.display }}</td>
+              <td>{% if obj.target_value_at_time is not None %}{{ obj.target_value_at_time|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              {% comment %}
+                obj.band_css is the model's own BAND_CSS map (ok→badge-green, warning→badge-amber,
+                critical→badge-red, unknown→badge-muted). theme.css badge classes are COLOUR-named:
+                badge-success / badge-warning / badge-danger DO NOT EXIST and render as an unstyled
+                pill with no error anywhere (L33). Reading the map rather than re-deciding the colour
+                here is what keeps this row, the detail page and the alert queue in agreement.
+              {% endcomment %}
+              <td><span class="badge {{ obj.band_css }}">{{ obj.get_status_band_display }}</span></td>
+              <td>{{ obj.computed_at|date:"M d, Y H:i" }}{% if obj.computed_by %}<br><span class="text-muted">{{ obj.computed_by.get_username }}</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:kpisnapshot_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    View and Delete only — there is no Edit icon, and its absence is a decision
+                    rather than an oversight. This model is system-written: it has no ModelForm and
+                    no edit view, because a hand-typed value would be a fabricated measurement
+                    wearing the same badge as a computed one, which destroys the single property the
+                    table has. The same reasoning removes the Add button from the header — the
+                    create path is the capture run above. Delete survives because a bad capture run
+                    is the one correction a human legitimately needs to make. The note under the
+                    table says all of this on the page, so the gap reads as intent to an operator
+                    too, not only to whoever opens this file.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'scm:kpisnapshot_delete' obj.pk %}" onsubmit="return confirm('Delete this frozen point? Its period may since have drifted in the underlying ledger, so re-capturing it will not necessarily give the same number back.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="camera-off"></i><h3>No snapshots</h3><p>There is no “Add snapshot” button and that is not an omission — this table is system-written. Create a <a href="{% url 'scm:kpitarget_list' %}">KPI target</a>, then press <span class="fw-600">Capture now</span>: a snapshot is only ever the output of a target's own metric. If you were expecting rows here, try clearing the filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <span class="fw-600">View and Delete only — no Add and no Edit.</span> This table is written by the capture run, never by a form: a typed value would be a fabricated measurement carrying the same badge as a measured one, which would destroy the only property the table has. Delete is here because a bad capture run is the one thing a human legitimately needs to undo — but note that deleting a closed period is not always reversible, since re-capturing it re-reads a ledger that may have moved since. Re-running a period that already exists <span class="fw-600">updates</span> its row and re-stamps its capture time; it never stacks a second one. Rows are newest period first, and the export carries whatever filters are set above — capped at {{ max_export_rows }} rows, with the file itself saying so when the cap bites.
+    </div>
+  </div>
+{% endblock %}
