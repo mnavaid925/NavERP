@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.11 — shared create/edit form for SupplyChainAlert.
+
+Context (apps/scm/views/SupplyChainAnalytics/SupplyChainAlerts.py::_alert_form — a HAND-ROLLED
+path, not crud_create, so that the tenant is stamped on the instance BEFORE validation runs):
+  * form     — SupplyChainAlertForm (bound on POST)
+  * is_edit  — False on create, True on edit
+  * obj      — the SupplyChainAlert on the EDIT path; None on create
+
+Fields are rendered BY NAME so they can be grouped into fieldsets, which couples this page to
+SupplyChainAlertForm.Meta.fields — a WHITELIST of seventeen names, and all seventeen appear below.
+A name added to that whitelist and not added to a card here would never reach the POST; a required
+one would then fail validation with nothing on screen to say why.
+
+Every rule the operator notes state is enforced by SupplyChainAlertForm.clean() or by
+SupplyChainAlert.clean(), never by this template — so the words somebody reads and the validation
+that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}Raise Exception{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+      {% else %}Raise an Exception{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:supplychainalert_list' %}">Alerts</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+      <p class="text-muted">Most exceptions reach the queue from detection. This screen is for the one a planner sees that no rule covers — and for correcting the description of one that is already in the queue.</p>
+    </div>
+  </div>
+
+  {% if is_edit and obj.dedupe_key %}
+    {% comment %}
+      A DETECTOR-raised row (dedupe_key is set; a hand-raised one leaves it blank). detect_alerts()
+      re-fires an open row in place rather than adding a second one, and that re-fire overwrites
+      title, severity, the three values, the subject label and the evidence JSON
+      (apps/scm/analytics.py — the update_fields list on the existing-row branch). Saying so here is
+      the honest version: the edit is real, it just does not survive the next run while the alert is
+      still open and still breaching.
+    {% endcomment %}
+    <div class="card"><div class="card-body">
+      <span class="badge badge-info">Raised by detection</span>
+      <p class="form-help" style="margin:.5rem 0 0;">This one was raised by a detector, not by hand. While it stays open, the next detection run re-fires it in place and rewrites the title, severity, measured values and subject label from what it measures then — so an edit to those here is a correction for now, not a permanent one. The assignee and the notes are yours and are never touched by a run.</p>
+    </div></div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">title</span> is the one line the queue is read by, so write what is wrong rather than what it is called. A <span class="fw-600">KPI target</span> and a <span class="fw-600">metric</span> have to describe the same figure: naming a target adopts its metric, and naming a different one is refused, because the "open the report" link on the detail page would otherwise land on the wrong page. A rule-based exception legitimately has neither — but the "KPI breach" type does need one of the two, or nothing says which figure broke.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.alert_type %}
+          {% include "partials/form_field.html" with field=form.metric %}
+          {% include "partials/form_field.html" with field=form.kpi_target %}
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.severity %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Measurement</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The measured figure and what it was measured against are both optional — an exception a person spotted often has no number behind it. <span class="fw-600">Value at risk is what the inbox is ordered by</span>, biggest first, so an exception left at zero sits below every costed one; that is the right place for something nobody has priced, but if you know roughly what acting on this is worth, say so. It is a magnitude and cannot be negative. The subject label is the line the queue shows: leave it blank and it falls back to whichever record you name below, and to "Network-wide" when you name none.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.observed_value %}
+          {% include "partials/form_field.html" with field=form.threshold_value %}
+          {% include "partials/form_field.html" with field=form.impact_value %}
+          {% include "partials/form_field.html" with field=form.dimension_label %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Subject</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Set the ones that apply. Each becomes a one-click link on the detail page, and that link is the whole difference between an exception somebody can act on and a number somebody has to go hunting for. They are offered in full rather than narrowed — an exception can be about a wound-down location or a cancelled order. Two combinations are checked on save: a <span class="fw-600">shipment and a carrier</span> must be the same movement, and a <span class="fw-600">purchase order and a counterparty</span> must be the same supplier, because otherwise the detail page points at two unrelated things. Every record named is checked against this workspace however the form was submitted.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.item %}
+          {% include "partials/form_field.html" with field=form.party %}
+          {% include "partials/form_field.html" with field=form.carrier %}
+          {% include "partials/form_field.html" with field=form.shipment %}
+          {% include "partials/form_field.html" with field=form.purchase_order %}
+          {% include "partials/form_field.html" with field=form.location %}
+        </div>
+      </div>
+    </div>
+
+    {% comment %}
+      EVERY LIFECYCLE COLUMN IS ACTION-ONLY AND IS DELIBERATELY ABSENT FROM THIS FORM.
+
+      status, snoozed_until, acknowledged_by/_at, resolved_by/_at, resolution_note, raised_at,
+      last_seen_at, number, dedupe_key, dimension_key and detail are none of them on
+      SupplyChainAlertForm.Meta.fields. They are written only by the five workflow methods on the
+      model, reached from the buttons on the detail page (acknowledge / assign / snooze / resolve /
+      dismiss), so each one keeps exactly one writer and the audit trail records what happened
+      rather than what somebody typed. A resolution note in particular cannot exist without a
+      resolver and a timestamp beside it, which is only true while resolve() is its only writer.
+
+      assigned_to is the ONE triage column that IS here, deliberately: it is a name, not a state.
+      It is rendered even on a closed exception rather than hidden — an unrendered field posts
+      nothing, which the form would read as "un-assign" and then refuse. The form refuses a CHANGE
+      to it on a closed alert instead, which is the same rule assign() enforces.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Ownership</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Putting a name on an exception is the step that stops it being everybody's and therefore nobody's; leave it blank and it shows up under "Unassigned" in the inbox. Deactivated logins are not offered — work handed to a login nobody signs into is a queue item nobody sees — but whoever already holds this alert stays selectable. <span class="fw-600">No other triage column is on this form:</span> status, the snooze window and the acknowledged/closed stamps are written only by the buttons on the detail page, and the alert number is issued on save.</p>
+        {% if is_edit and not obj.is_open %}
+          <p class="form-help" style="margin:0 0 .9rem;"><span class="fw-600">This exception is closed.</span> Its description can still be corrected, but it cannot be handed to somebody else — there is nothing left to hand over.</p>
+        {% endif %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.assigned_to %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:supplychainalert_detail' obj.pk %}{% else %}{% url 'scm:supplychainalert_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
