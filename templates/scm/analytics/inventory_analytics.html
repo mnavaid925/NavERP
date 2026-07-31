@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+{% block title %}Inventory Dashboards{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ page.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>{{ page.title }}</span></div>
+      <p class="text-muted">
+        {{ page.bullet }} — turnover, days of cover, dead stock, the FIFO age buckets and what holding it all costs.
+        Every figure on this page is <span class="fw-600">computed live</span> from the append-only stock ledger and the item, lot and reorder masters in 4.1–4.10.
+        Nothing here writes a stock move and nothing here writes a journal entry: this page reads.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alerts</a>
+      <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As of {{ generated_at|date:"M d, Y H:i" }}</span>
+        <span class="badge badge-slate">Window {{ start|date:"M d, Y"|default:"Earliest record" }} – {{ end|date:"M d, Y" }}{% if spec.window_days %} · {{ spec.window_days }} day{{ spec.window_days|pluralize }}{% endif %}</span>
+        <span class="badge badge-slate">Narrowed to {{ scope_label }}</span>
+        {% if spec.custom_window %}<span class="badge badge-info">Custom dates override the range</span>{% endif %}
+        <a href="{% url 'scm:supplychainalert_list' %}" class="badge {% if critical_alert_count %}badge-red{% elif alerts_are_open %}badge-amber{% else %}badge-green{% endif %}">
+          {{ open_alert_count }} open alert{{ open_alert_count|pluralize }}{% if critical_alert_count %} · {{ critical_alert_count }} critical{% endif %}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building-2"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="inv-date-range">Window</label>
+          <select name="date_range" id="inv-date-range" class="form-select">
+            {% for val, label in range_choices %}
+              <option value="{{ val }}" {% if date_range == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inv-date-from">From</label>
+          <input type="date" id="inv-date-from" name="date_from" value="{{ params.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inv-date-to">To</label>
+          <input type="date" id="inv-date-to" name="date_to" value="{{ params.date_to }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inv-category">Category</label>
+          <select name="category" id="inv-category" class="form-select">
+            <option value="">All categories</option>
+            {% for cat in categories %}
+              <option value="{{ cat.pk }}" {% if params.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inv-location">Location</label>
+          <select name="location" id="inv-location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if params.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }} · {{ loc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'scm:inventory_analytics' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        A metric narrows to <span class="fw-600">one</span> subject, so category and location are alternatives rather than a pair: set both and the category wins and the page says so. Custom dates override the window above them.
+      </div>
+    </div>
+  </div>
+
+  {% if scope_invalid or scope_ignored or currency_notice.mixed or display_only_filters %}
+    <div class="card">
+      <div class="card-body">
+        {% if scope_invalid %}
+          <p><span class="badge badge-amber">Filter dropped</span> One of the filters named a record this workspace does not have, so it was not applied. The figures below are for <span class="fw-600">{{ scope_label }}</span> — they were deliberately not widened under a name that promises something narrower.</p>
+        {% endif %}
+        {% if scope_ignored %}
+          <p><span class="badge badge-amber">Only one narrowing applies</span> Applied <span class="fw-600">{{ scope_label }}</span>; ignored {{ scope_ignored|join:", " }}. A metric measures one subject, so the extra filter was not silently intersected.</p>
+        {% endif %}
+        {% if currency_notice.mixed %}
+          <p><span class="badge badge-amber">Mixed currency</span> {{ currency_notice.note }} Currencies in this window: {{ currency_notice.codes|join:", " }}. Affected: {{ currency_notice.metrics|join:", " }}.</p>
+        {% endif %}
+        {% if display_only_filters %}
+          <p><span class="badge badge-info">Table filter</span> {{ display_only_filters|join:", " }} narrows the tables below, not the headline figures.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="refresh-cw"></i></div>
+      <div class="stat-value">{% if tile.inv_turnover.value is not None %}{{ tile.inv_turnover.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Inventory turnover <span class="text-muted">annualised</span>
+        <span class="badge {{ tile.inv_turnover.band_css }}">
+          {% if tile.inv_turnover.value is None %}Not computed
+          {% elif tile.inv_turnover.band == 'ok' %}On target
+          {% elif tile.inv_turnover.band == 'warning' %}Warning
+          {% elif tile.inv_turnover.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="calendar-days"></i></div>
+      <div class="stat-value">{% if tile.inv_days_on_hand.value is not None %}{{ tile.inv_days_on_hand.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Days inventory on hand
+        <span class="badge {{ tile.inv_days_on_hand.band_css }}">
+          {% if tile.inv_days_on_hand.value is None %}Not computed
+          {% elif tile.inv_days_on_hand.band == 'ok' %}On target
+          {% elif tile.inv_days_on_hand.band == 'warning' %}Warning
+          {% elif tile.inv_days_on_hand.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="package-x"></i></div>
+      <div class="stat-value">{% if tile.inv_dead_stock_value.value is not None %}{{ tile.inv_dead_stock_value.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Dead stock value <span class="text-muted">no outbound move in {{ dead_stock_days }} days</span>
+        <span class="badge {{ tile.inv_dead_stock_value.band_css }}">
+          {% if tile.inv_dead_stock_value.value is None %}Not computed
+          {% elif tile.inv_dead_stock_value.band == 'ok' %}On target
+          {% elif tile.inv_dead_stock_value.band == 'warning' %}Warning
+          {% elif tile.inv_dead_stock_value.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{% if tile.inv_aging_over_days_value.value is not None %}{{ tile.inv_aging_over_days_value.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Aging stock value <span class="text-muted">layers older than {{ aging_days }} days</span>
+        <span class="badge {{ tile.inv_aging_over_days_value.band_css }}">
+          {% if tile.inv_aging_over_days_value.value is None %}Not computed
+          {% elif tile.inv_aging_over_days_value.band == 'ok' %}On target
+          {% elif tile.inv_aging_over_days_value.band == 'warning' %}Warning
+          {% elif tile.inv_aging_over_days_value.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{% if tile.inv_carrying_cost.value is not None %}{{ tile.inv_carrying_cost.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Carrying cost <span class="text-muted">{{ carrying_pct }}% a year, pro-rated</span>
+        <span class="badge {{ tile.inv_carrying_cost.band_css }}">
+          {% if tile.inv_carrying_cost.value is None %}Not computed
+          {% elif tile.inv_carrying_cost.band == 'ok' %}On target
+          {% elif tile.inv_carrying_cost.band == 'warning' %}Warning
+          {% elif tile.inv_carrying_cost.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  {% if not has_data %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="database"></i>
+          <h3>Nothing measurable in this window</h3>
+          <p>No metric on this page could be computed for {{ scope_label }} between {{ start|date:"M d, Y"|default:"the earliest record" }} and {{ end|date:"M d, Y" }}. Widen the window or clear the category and location filters. Each metric's own reason is listed in the metric table below — none of them is an error, and none of them is a zero.</p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How these figures are calculated</h2>
+      <span class="badge badge-slate">Method, stated on the page</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Turnover basis</dt>
+          <dd>Counts <span class="fw-600">{{ turnover_move_types|join:" + " }}</span> movements and <span class="fw-600">excludes {{ turnover_excludes }}</span>. {{ turnover_note }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Stock age</dt>
+          <dd>{{ aging_note }}{% if not aging_note %}Age is measured on the remaining FIFO cost layer, not on the item.{% endif %} The headline counts layers older than {{ aging_days }} days.</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Dead stock</dt>
+          <dd>On hand at the window end with no issue and no consumption movement in the last {{ dead_stock_days }} days. Valued at on-hand quantity × the item's cached average cost.</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Carrying cost</dt>
+          <dd>Stock value × {{ carrying_pct }}% a year, pro-rated to this window. The rate is a policy number — storage, capital, insurance, shrinkage — set on a KPI target, not derived from any record.</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Demand series</dt>
+          <dd>{{ demand_netting_note }}</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Stock age buckets</h2>
+      <span class="badge badge-slate">Remaining FIFO layers as at {{ end|date:"M d, Y" }}</span>
+    </div>
+    <div class="card-body">
+      {% if tile.inv_aging_over_days_value.value is not None %}
+        <canvas id="aging-bucket-chart" height="110"></canvas>
+      {% else %}
+        <p><span class="badge badge-amber">Buckets not computed</span> {{ tile.inv_aging_over_days_value.unavailable|default:"The aging walk returned nothing for this scope." }} The bucket boundaries are still listed below, so the page never looks like it simply has no buckets.</p>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Age of the remaining cost layer</th><th class="text-right">Value on hand</th><th class="th-actions">Drill down</th></tr></thead>
+        <tbody>
+          {% for row in aging_buckets %}
+            <tr>
+              <td class="fw-600">{{ row.bucket }} days</td>
+              <td class="text-right">{% if row.value is not None %}{{ row.value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="#aging-items" class="btn-icon" title="Items holding the aged layers"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="hourglass"></i><h3>No age buckets</h3><p>Nothing is on hand in this scope at the window end, so there are no cost layers to age.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Boundaries are the ones the walk itself used. Transfers are excluded from the walk, so a relocated layer keeps its original age rather than restarting the clock.
+      {% if tile.inv_aging_over_days_value.breakdown.truncated %}<span class="badge badge-amber">Capped</span> The walk was bounded by the database to the highest-value items and a fixed number of ledger rows; anything beyond that is not in these buckets.{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Dead stock</h2>
+      <span class="badge badge-slate">Nothing outbound in {{ dead_stock_days }} days</span>
+    </div>
+    <div class="card-body">
+      {% if tile.inv_dead_stock_value.value is not None %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Dead stock value</dt><dd class="fw-600">{{ tile.inv_dead_stock_value.display }}</dd></div>
+          <div class="detail-item"><dt>Items with nothing moving</dt><dd>{{ tile.inv_dead_stock_value.breakdown.dead_items|default:"0" }} of {{ tile.inv_dead_stock_value.breakdown.items_on_hand|default:"0" }} on hand</dd></div>
+          <div class="detail-item"><dt>Share of stock value</dt><dd>{% if tile.inv_dead_stock_value.breakdown.dead_share_pct is not None %}{{ tile.inv_dead_stock_value.breakdown.dead_share_pct|floatformat:2 }}%{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>No movement since</dt><dd>{{ tile.inv_dead_stock_value.breakdown.cutoff|default:"—" }}</dd></div>
+        </dl>
+      {% else %}
+        <p><span class="badge badge-amber">Deliberately not computed</span> {{ tile.inv_dead_stock_value.unavailable|default:"No dead-stock figure for this scope." }}</p>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>SKU</th><th>Item</th><th class="text-right">Quantity</th><th class="text-right">Unit cost</th><th class="text-right">Value</th><th class="th-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in dead_stock_rows %}
+            <tr>
+              <td class="fw-600 mono">{{ row.sku }}</td>
+              <td>{{ row.name }}</td>
+              <td class="text-right">{{ row.quantity|floatformat:4 }}</td>
+              <td class="text-right">{% if row.unit_cost is not None %}{{ row.unit_cost|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="text-right fw-600">{% if row.value is not None %}{{ row.value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:item_list' %}?q={{ row.sku|urlencode }}" class="btn-icon" title="Open this item"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="package-check"></i><h3>Nothing is sitting still</h3><p>Every item holding stock in this scope has moved outbound in the last {{ dead_stock_days }} days — or there is nothing on hand to go dead. Read the figure above before treating this as good news.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Highest value first, capped by the database at the top rows rather than by trimming a list after building it. Dead means <span class="fw-600">no issue and no consumption</span> — a transfer between your own locations does not revive a line.
+      {% if tile.inv_dead_stock_value.breakdown.truncated %}<span class="badge badge-amber">Capped</span> The on-hand position hit its row cap, so the value above is a floor.{% endif %}
+    </div>
+  </div>
+
+  <div class="card" id="aging-items">
+    <div class="card-header">
+      <h2 class="card-title">Aged stock by item</h2>
+      <span class="badge badge-slate">Layers older than {{ aging_days }} days</span>
+    </div>
+    <div class="card-body text-muted">
+      {% comment %}
+        Honest heading, deliberately not "by category": the aging resolver returns its supporting rows
+        per ITEM (sku / name / value_over_days) and the view passes them straight through. There is no
+        per-category aging aggregate in this page's context, and computing one here would be the
+        template inventing arithmetic. Narrow with the Category filter above to read one category.
+      {% endcomment %}
+      One row per item holding a cost layer older than {{ aging_days }} days. To read a single category, use the Category filter above — that narrows the whole page, headline figures included.
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>SKU</th><th>Item</th><th class="text-right">Value over {{ aging_days }} days</th><th class="th-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in tile.inv_aging_over_days_value.rows %}
+            <tr>
+              <td class="fw-600 mono">{{ row.sku }}</td>
+              <td>{{ row.name }}</td>
+              <td class="text-right fw-600">{% if row.value_over_days is not None %}{{ row.value_over_days|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:item_list' %}?q={{ row.sku|urlencode }}" class="btn-icon" title="Open this item"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="hourglass"></i><h3>No layer is older than {{ aging_days }} days</h3><p>Either the stock in this scope turns faster than the threshold, or the aging walk could not run — the buckets above say which.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Every inventory metric on this page</h2>
+      <span class="badge badge-slate">{{ tiles|length }} metric{{ tiles|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Metric</th><th class="text-right">Value</th><th>Band</th><th>Target</th><th>Warning</th><th>Critical</th><th>Narrowed to</th><th>Notes</th><th class="th-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for t in tiles %}
+            <tr>
+              <td class="fw-600">{{ t.label }}{% if t.primary %} <span class="badge badge-info">Headline</span>{% endif %}<div class="text-muted mono">{{ t.metric }}</div></td>
+              <td class="text-right fw-600">{% if t.value is not None %}{{ t.display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <span class="badge {{ t.band_css }}">
+                  {% if t.value is None %}Not computed
+                  {% elif t.band == 'ok' %}On target
+                  {% elif t.band == 'warning' %}Warning
+                  {% elif t.band == 'critical' %}Critical
+                  {% else %}No target{% endif %}
+                </span>
+              </td>
+              <td>{% if t.target and t.target.target_value is not None %}{{ t.target.target_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if t.target and t.target.warning_threshold is not None %}{{ t.target.warning_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if t.target and t.target.critical_threshold is not None %}{{ t.target.critical_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap">{{ t.scope_label }}</td>
+              <td class="text-muted">
+                {% if t.unavailable %}{{ t.unavailable }}
+                {% elif t.breakdown.note %}{{ t.breakdown.note }}
+                {% else %}—{% endif %}
+                {% if t.breakdown.truncated %} <span class="badge badge-amber">Capped</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% if t.target %}
+                    <a href="{% url 'scm:kpitarget_detail' t.target.pk %}" class="btn-icon" title="The target banding this figure"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:kpitarget_edit' t.target.pk %}" class="btn-icon" title="Retune this target's bands"><i data-lucide="pencil"></i></a>
+                  {% else %}
+                    <a href="{% url 'scm:kpitarget_create' %}" class="btn-icon" title="Set a target so this figure gets a band"><i data-lucide="target"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="gauge"></i><h3>Nothing computed</h3><p>No metric ran for this workspace and window.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      A figure with <span class="fw-600">no target</span> is still a true figure — it simply has no threshold to be judged against, which is why its band reads grey rather than green. A <span class="fw-600">not computed</span> row is not a zero and not an error: the reason is in its own words in the Notes column, and widening the figure to the whole network under a narrower name is deliberately not on offer.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Frozen trend</h2>
+      <span class="badge badge-slate">Captured snapshots, never re-derived</span>
+    </div>
+    <div class="card-body">
+      {% if chart_data.has_data %}
+        <canvas id="inventory-trend-chart" height="120"></canvas>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Each point is one captured period for a target that measures <span class="fw-600">this same subject</span>. Trends are drawn from frozen history rather than re-walked on load: average cost is recomputed on every receipt and back-dated moves are legal, so re-deriving last quarter would silently rewrite it.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="line-chart"></i>
+          <h3>No trend yet</h3>
+          <p>{{ chart_data.note }}</p>
+          <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where to act on this</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Reorder alerts</a>
+        <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="boxes"></i> Items</a>
+        <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Supply chain alerts</a>
+        <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        This page measures; it does not move stock. The actionable replenishment list stays 4.3's Reorder Alerts, which also carries the one-click hand-off into a requisition — two live lists of the same rows would drift apart.
+      </p>
+    </div>
+  </div>
+
+  {{ aging_buckets|json_script:"aging-bucket-data" }}
+  {{ chart_data|json_script:"inventory-trend-data" }}
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    if (typeof Chart === 'undefined') { return; }
+
+    function payload(id) {
+      var el = document.getElementById(id);
+      if (!el) { return null; }
+      try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+
+    // --- Stock age buckets: oldest money is the money that hurts, so the ramp runs cool to hot.
+    var agingCanvas = document.getElementById('aging-bucket-chart');
+    var buckets = payload('aging-bucket-data');
+    if (agingCanvas && buckets && buckets.length) {
+      var RAMP = ['#16a34a', '#2563eb', '#d97706', '#ea580c', '#dc2626'];
+      new Chart(agingCanvas, {
+        type: 'bar',
+        data: {
+          labels: buckets.map(function (row) { return row.bucket + ' days'; }),
+          datasets: [{
+            label: 'Value on hand',
+            data: buckets.map(function (row) { return row.value; }),
+            backgroundColor: buckets.map(function (_, i) { return RAMP[i % RAMP.length]; }),
+            borderWidth: 0,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    // --- Frozen KPI trend: one line per target that measures this page's subject.
+    var trendCanvas = document.getElementById('inventory-trend-chart');
+    var trend = payload('inventory-trend-data');
+    if (trendCanvas && trend && trend.labels && trend.labels.length && trend.series && trend.series.length) {
+      var LINES = ['#2563eb', '#7c3aed', '#16a34a', '#d97706', '#dc2626', '#0891b2'];
+      new Chart(trendCanvas, {
+        type: 'line',
+        data: {
+          labels: trend.labels,
+          datasets: trend.series.map(function (s, i) {
+            var colour = LINES[i % LINES.length];
+            return {
+              label: s.label,
+              data: s.values,
+              borderColor: colour,
+              backgroundColor: colour,
+              borderWidth: 2,
+              fill: false,
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 3,
+              pointHoverRadius: 5
+            };
+          })
+        },
+        options: {
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: true, position: 'bottom' } },
+          scales: { y: { beginAtZero: false } }
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}
