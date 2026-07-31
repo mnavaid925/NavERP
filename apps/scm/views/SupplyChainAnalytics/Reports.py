@@ -1016,7 +1016,10 @@ def _margin_context(request, spec):
                                              analytics.HANDLING_COST_PER_PICK_UNIT),
         "item_margins": _rows_of(gross),
         "by_category": _labelled(_breakdown(gross, "by_category", {}), "category", "margin_pct"),
-        "by_customer": _keep(by_customer, "customer", customer_pick),
+        # `by_customer` itself is NOT passed to the template: the page already ranks customers by
+        # margin-after-cost-to-serve, which is the figure worth acting on, and a second gross-margin
+        # customer table beside it invites reading the wrong one. The local is still computed
+        # because `customer_options` (the filter dropdown) is derived from it.
         "by_channel": _keep(by_channel, "channel", channel_pick),
         "customer_ranking": _keep(_rows_of(cost_to_serve), "customer", customer_pick),
         "allocation_note": _breakdown(cost_to_serve, "allocation", ""),
@@ -1129,7 +1132,12 @@ def _risk_context(request, spec):
         "risk_weights": _breakdown(disruption, "weights", {}),
         "components_scored": _breakdown(disruption, "components_scored", 0),
         "components_total": _breakdown(disruption, "components_total", 0),
-        "supplier_league": _rows_of(disruption),
+        # ONLY at network scope. `_r_supplier_disruption_score` returns two different row shapes:
+        # per-supplier signal rows when no supplier is chosen, and this supplier's own weighted
+        # COMPONENT rows when one is — and the component shape is already rendered above from
+        # `risk_components`. Handing the league the component rows made every column of the supplier
+        # table blank (they share no keys), which renders as a table of dashes rather than an error.
+        "supplier_league": _rows_of(disruption) if not spec["params"].get("vendor") else [],
         "spike_rows": _rows_of(spike),
         "spike_threshold_pct": _breakdown(spike, "parameter_pct", analytics.SPIKE_PCT),
         "spike_window_days": analytics.SPIKE_SHORT_DAYS,
