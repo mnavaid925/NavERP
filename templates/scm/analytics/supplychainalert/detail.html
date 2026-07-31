@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    Context contract — supplychainalert_detail (apps/scm/views/SupplyChainAnalytics/SupplyChainAlerts.py):
+      obj, metric_label, metric_page_url, metric_page_title, observed_display, threshold_display,
+      evidence_rows (a list of (label, text) tuples), subjects (a list of {label, text, url} dicts),
+      assign_form, snooze_form, resolve_form.
+    Nothing else is passed; every name below is one of those or an attribute of `obj`.
+
+    THE "STILL BREACHING" TEST IS DELIBERATELY NOT `last_seen_at > raised_at`. Both columns default
+    to `timezone.now`, and a model default is evaluated once PER FIELD — so on a freshly raised row
+    last_seen_at is already a few microseconds after raised_at and a naive comparison would badge
+    every alert in the workspace as re-fired. Comparing epoch seconds with a 60-second tolerance is
+    what makes the badge mean what it says: a detector re-fire is minutes or hours later, never
+    inside the same minute as the row it re-fires.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+        <span class="badge badge-slate">{{ obj.get_alert_type_display }}</span>
+        {% if obj.is_snooze_expired %}<span class="badge badge-amber">Snooze expired</span>{% endif %}
+        {% if obj.last_seen_at|date:"U"|add:0 > obj.raised_at|date:"U"|add:60 %}<span class="badge badge-amber">Still breaching</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:supplychainalert_list' %}">Alerts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.title }}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.kpi_target %}<a href="{% url 'scm:kpitarget_detail' obj.kpi_target.pk %}" class="btn btn-outline"><i data-lucide="target"></i> {{ obj.kpi_target.number }}</a>{% endif %}
+      {% if metric_page_url %}<a href="{% url metric_page_url %}" class="btn btn-outline"><i data-lucide="activity"></i> {{ metric_page_title }}</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ obj.impact_value|floatformat:2 }}</div>
+      <div class="stat-label">Value at risk — what acting on this is worth</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{{ observed_display }}</div>
+      <div class="stat-label">What was measured</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="target"></i></div>
+      <div class="stat-value">{{ threshold_display }}</div>
+      <div class="stat-label">What it was measured against</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{% if obj.resolved_at %}{{ obj.raised_at|timesince:obj.resolved_at }}{% else %}{{ obj.raised_at|timesince }}{% endif %}</div>
+      <div class="stat-label">{% if obj.resolved_at %}Open for, before it closed{% else %}Open for{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What fired</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Exception type</dt><dd><span class="badge badge-slate">{{ obj.get_alert_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Severity</dt><dd><span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span></dd></div>
+        <div class="detail-item"><dt>Metric</dt><dd>
+          {% if metric_label %}{% if metric_page_url %}<a href="{% url metric_page_url %}" class="fw-600">{{ metric_label }}</a>{% else %}<span class="fw-600">{{ metric_label }}</span>{% endif %}
+          {% else %}<span class="text-muted">Rule-based — no metric behind it</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>KPI target</dt><dd>
+          {% if obj.kpi_target %}<a href="{% url 'scm:kpitarget_detail' obj.kpi_target.pk %}" class="fw-600">{{ obj.kpi_target.number }}</a> · {{ obj.kpi_target.name }}
+          {% else %}<span class="text-muted">None — this is a rule, not a goal somebody set</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Observed</dt><dd class="fw-600">{{ observed_display }}</dd></div>
+        <div class="detail-item"><dt>Threshold</dt><dd>{{ threshold_display }}</dd></div>
+        <div class="detail-item"><dt>Value at risk</dt><dd class="fw-600">{{ obj.impact_value|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Subject label</dt><dd>{{ obj.dimension_label|default:"Network-wide" }}</dd></div>
+        <div class="detail-item"><dt>Raised by</dt><dd>{% if obj.dedupe_key %}<span class="badge badge-info">Detection</span>{% else %}<span class="badge badge-slate">By hand</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% comment %}
+          Two facts worth stating on the page rather than burying in a docstring: the number here
+          and the number on the report page come from ONE computation, and a repeat breach re-fires
+          this row rather than raising a second one. Both are the reasons this queue can be trusted;
+          neither is visible from the data alone.
+        {% endcomment %}
+        The observed figure is computed by the same function the report page renders, so an alert can never quote a number the page it links to disagrees with. <span class="fw-600">A breach that keeps breaching moves the "last seen" stamp on this row</span> rather than adding a second one — which is why an old alert can be very recent news. Nothing on this page posts stock or writes to the ledger.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What it is about</h2>
+      {% if subjects %}<span class="badge badge-info">{{ subjects|length }} record{{ subjects|length|pluralize }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if subjects %}
+        <dl class="detail-grid">
+          {% for s in subjects %}
+            <div class="detail-item"><dt>{{ s.label }}</dt><dd>
+              {% if s.url %}<a href="{{ s.url }}" class="fw-600">{{ s.text }}</a>{% else %}<span class="fw-600">{{ s.text }}</span>{% endif %}
+            </dd></div>
+          {% endfor %}
+        </dl>
+      {% else %}
+        <div class="empty-state"><i data-lucide="globe"></i><h3>Network-wide</h3><p>This exception names no single item, supplier, carrier, shipment, order or location — it is about the whole network, or about a grouping (a category, a period) that has no row of its own. Where a subject IS named it links straight to that record, so a high-level number reaches the thing behind it in one click.</p></div>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Each subject is a typed link rather than a stored id, and every one survives its subject being retired: the reference is cleared, never cascaded, because an alert is the record that something happened and has to outlive the row it happened to.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Evidence</h2>
+      <span class="badge badge-info">{{ evidence_rows|length }} value{{ evidence_rows|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Component</th><th>Value</th></tr></thead>
+        <tbody>
+          {% for label, text in evidence_rows %}
+            <tr><td class="fw-600">{{ label }}</td><td>{{ text }}</td></tr>
+          {% empty %}
+            <tr><td colspan="2"><div class="empty-state"><i data-lucide="search"></i><h3>No recorded evidence</h3><p>Detection writes the component arithmetic behind every number it raises, so a score can be checked rather than trusted. An exception raised by hand carries none — its description and notes are its evidence.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Every score in Analytics is a <span class="fw-600">deterministic, fully explainable composite over real rows</span> — the components above are its actual arithmetic. Nothing here is inferred and there is no model artefact behind it: what you see is what was counted.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Lifecycle</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Stage</th><th>Who</th><th>When</th><th>What was recorded</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">Raised</td>
+            <td>{% if obj.dedupe_key %}Detection{% else %}A person, by hand{% endif %}</td>
+            <td>{{ obj.raised_at|date:"M d, Y H:i" }}</td>
+            <td>{{ obj.title }}</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Last seen</td>
+            <td>{% if obj.dedupe_key %}Detection{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{{ obj.last_seen_at|date:"M d, Y H:i" }}</td>
+            <td>
+              {% if obj.last_seen_at|date:"U"|add:0 > obj.raised_at|date:"U"|add:60 %}<span class="badge badge-amber">Still breaching</span> — a repeat breach moved this stamp instead of raising a second row
+              {% else %}<span class="text-muted">Not re-fired since it was raised</span>{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="fw-600">Assigned</td>
+            <td>{% if obj.assigned_to %}<span class="fw-600">{{ obj.assigned_to.get_full_name }}</span>{% else %}<span class="text-muted">Nobody</span>{% endif %}</td>
+            <td><span class="text-muted">—</span></td>
+            <td>{% if obj.assigned_to %}{{ obj.assigned_to.email }}{% else %}<span class="text-muted">An unassigned exception is the one that sits. Putting a name on it is what makes the queue move.</span>{% endif %}</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Acknowledged</td>
+            <td>{% if obj.acknowledged_by %}<span class="fw-600">{{ obj.acknowledged_by.get_full_name }}</span>{% else %}<span class="text-muted">Nobody yet</span>{% endif %}</td>
+            <td>{{ obj.acknowledged_at|date:"M d, Y H:i"|default:"—" }}</td>
+            <td>{% if obj.acknowledged_by %}Seen — the first acknowledger is the one kept{% else %}<span class="text-muted">Nobody has said they have seen this yet</span>{% endif %}</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Snoozed</td>
+            <td><span class="text-muted">Not attributed</span></td>
+            <td>{% if obj.snoozed_until %}Until {{ obj.snoozed_until|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>
+              {% if obj.is_snooze_expired %}<span class="badge badge-amber">Window has run out</span> — it is back in the queue on its own
+              {% elif obj.snoozed_until %}<span class="badge badge-info">Suppressed</span> — it returns to the queue when the window runs out
+              {% else %}<span class="text-muted">Never snoozed, or the window was cleared when it left that state</span>{% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td class="fw-600">Closed</td>
+            <td>{% if obj.resolved_by %}<span class="fw-600">{{ obj.resolved_by.get_full_name }}</span>{% else %}<span class="text-muted">Still open</span>{% endif %}</td>
+            <td>{{ obj.resolved_at|date:"M d, Y H:i"|default:"—" }}</td>
+            <td>
+              {% if obj.status == 'resolved' %}<span class="badge badge-green">Resolved</span> — dealt with
+              {% elif obj.status == 'dismissed' %}<span class="badge badge-muted">Dismissed</span> — judged not worth acting on
+              {% else %}<span class="text-muted">Not closed</span>{% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Resolution note</dt><dd>{{ obj.resolution_note|default:"—"|linebreaksbr }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% comment %}
+          Stating the three non-obvious lifecycle rules the model enforces, so the page and the code
+          agree: a snooze window is dropped rather than kept as history when the alert leaves that
+          state (so "is this still suppressed?" stays answerable); dismiss shares resolve's
+          attribution pair, because there is deliberately no dismissed_by — an unattributed close is
+          an audit hole; and assignment records a name but no timestamp, which is why that row shows
+          no time rather than inventing one.
+        {% endcomment %}
+        <span class="fw-600">Snoozing is suppression, not closure.</span> A snoozed alert returns to the queue on its own once the window runs out, and the window is cleared — not kept as history — the moment the alert moves to any other state. Resolving and dismissing are both terminal and both recorded against the same person and time: the status is what says whether the exception was fixed or judged not worth acting on. Assignment records a name and no timestamp, so that row deliberately shows none.
+      </p>
+    </div>
+  </div>
+
+  {% if obj.is_open %}
+    {% comment %}
+      The three forms below are offered on exactly the condition their views enforce: assign(),
+      snooze() and resolve() are each a silent no-op once the alert is closed, and hiding them then
+      is what stops somebody typing a resolution note that would be discarded without a word. Each
+      needs a VALUE, which is why they are forms here and not one-click buttons like acknowledge and
+      dismiss. Every one posts with no query string, so the action view's _return_url() lands back on
+      this page rather than on the inbox.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Hand it to somebody</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:supplychainalert_assign' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in assign_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">Leaving the choice empty un-assigns it. Only a member of this workspace can be named — an exception and the person handed it have to agree on more than existing.</div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="user-check"></i> Assign</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Snooze it</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:supplychainalert_snooze' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in snooze_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">It disappears from the default queue and comes back on its own when the window runs out — snoozing again simply moves the date. It is not a way of closing anything.</div>
+          <div class="form-actions">
+            <button class="btn btn-outline" type="submit"><i data-lucide="alarm-clock"></i> Snooze</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Close it as dealt with</h2></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:supplychainalert_resolve' obj.pk %}" onsubmit="return confirm('Resolve this exception? It closes against your name, and re-resolving it later cannot overwrite that.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% for field in resolve_form %}
+              <div class="form-group">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-help">Say what was actually done — the note is required, because an exception closed with no account of it is a number nobody can explain later. If detection raised this one and the underlying problem is still true, the next run raises it again: resolving records that somebody dealt with it, it does not make it stop being true.</div>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Resolve</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Acknowledge is offered on the condition acknowledge() actually acts on — is_open AND not
+          already acknowledged. That is open OR snoozed, not open alone: acknowledging a snoozed
+          alert is legal and clears the suppression window, so gating on status == 'open' would
+          strand the button on exactly the rows somebody has just come back to (L39 1).
+          Dismiss is offered for the whole open set, which is what dismiss() accepts.
+        {% endcomment %}
+        {% if obj.is_open and obj.status != 'acknowledged' %}
+          <form method="post" action="{% url 'scm:supplychainalert_acknowledge' obj.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Acknowledge</button>
+          </form>
+        {% endif %}
+        {% if obj.is_open %}
+          <form method="post" action="{% url 'scm:supplychainalert_dismiss' obj.pk %}" onsubmit="return confirm('Dismiss this exception as not worth acting on? It closes against your name.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Dismiss</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:supplychainalert_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:supplychainalert_delete' obj.pk %}" onsubmit="return confirm('Delete this alert? Deleting is for a row raised by hand in error — a detector-raised exception that is still true will simply be raised again on the next run.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if obj.is_open %}
+          Every triage action above and in the three cards before it is a no-op once the exception is closed, so each is offered only while it can do something.
+        {% else %}
+          This exception is <span class="fw-600">{{ obj.get_status_display|lower }}</span>, so no triage action is offered: acknowledging, assigning, snoozing and re-closing are all no-ops on a closed alert, and re-closing in particular would only overwrite who closed it.
+        {% endif %}
+        Editing changes the description of the exception and never its triage state — status, the snooze window and the acknowledged/closed stamps are written only by the buttons here, which is what makes the audit trail a record of what actually happened. <span class="fw-600">Deleting is for a row raised in error</span>; if detection raised this one and the problem is still real, the next run will raise it again.
+      </p>
+    </div>
+  </div>
+{% endblock %}
