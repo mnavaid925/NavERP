@@ -212,9 +212,11 @@
                     An apostrophe in a user-typed name would be escaped to &#x27;, which the HTML
                     parser hands to JavaScript as a bare quote and the dialog breaks.
                   {% endcomment %}
-                  <form method="post" action="{% url 'scm:kpitarget_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its frozen trend points go with it and cannot be re-derived — the ledger they were measured from has moved on since. Alerts already raised from it survive.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:kpitarget_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its frozen trend points go with it and cannot be re-derived — the ledger they were measured from has moved on since. Alerts already raised from it survive.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
