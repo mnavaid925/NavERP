@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+{% block title %}Predictive Analytics{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ page.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>{{ page.title }}</span></div>
+      <p class="text-muted">
+        {{ page.bullet }} — supplier disruption risk, demand spikes, projected stockouts and shipments at risk.
+        Every score is <span class="fw-600">computed live</span> from rows that already exist in 4.1–4.10, and every one of them shows its own arithmetic.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alerts</a>
+      <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As of {{ generated_at|date:"M d, Y H:i" }}</span>
+        <span class="badge badge-slate">Window {{ start|date:"M d, Y"|default:"Earliest record" }} – {{ end|date:"M d, Y" }}{% if spec.window_days %} · {{ spec.window_days }} day{{ spec.window_days|pluralize }}{% endif %}</span>
+        <span class="badge badge-slate">Narrowed to {{ scope_label }}</span>
+        {% if spec.custom_window %}<span class="badge badge-info">Custom dates override the range</span>{% endif %}
+        <a href="{% url 'scm:supplychainalert_list' %}" class="badge {% if critical_alert_count %}badge-red{% elif alerts_are_open %}badge-amber{% else %}badge-green{% endif %}">
+          {{ open_alert_count }} open alert{{ open_alert_count|pluralize }}{% if critical_alert_count %} · {{ critical_alert_count }} critical{% endif %}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    The honest-framing card. The NavERP bullet says "AI-driven predictions"; this page says what it
+    actually does. Every figure below is a deterministic weighted composite over real rows, rendered
+    with its components visible. Genuine ML/AutoML belongs to Module 10 (10.13). The word "AI" does
+    not appear on this page on purpose — a score a planner cannot reproduce by hand is a score they
+    cannot argue with a supplier about.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How these numbers are produced</h2>
+      <span class="badge badge-info">Deterministic, not machine learning</span>
+    </div>
+    <div class="card-body">
+      <p>{{ method_note }}</p>
+      {% if not_ml_note and not_ml_note != method_note %}<p class="text-muted">{{ not_ml_note }}</p>{% endif %}
+      {% if reuse_note %}<p class="text-muted">{{ reuse_note }}</p>{% endif %}
+      <p class="text-muted">
+        There is no model artefact, no training set and nothing to retrain. Each score is a weighted blend of components measured directly from purchase orders, goods receipts, non-conformances, contracts, catalogs and the stock ledger — re-weighted across whichever components could be scored, so a supplier with no quality history is not silently given a zero for it. Every component's points, weight, contribution and underlying evidence are shown below, and the same figure is frozen into a snapshot so a past assessment stays reproducible.
+      </p>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building-2"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="risk-date-range">Window</label>
+          <select name="date_range" id="risk-date-range" class="form-select">
+            {% for val, label in range_choices %}
+              <option value="{{ val }}" {% if date_range == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="risk-date-from">From</label>
+          <input type="date" id="risk-date-from" name="date_from" value="{{ params.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="risk-date-to">To</label>
+          <input type="date" id="risk-date-to" name="date_to" value="{{ params.date_to }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="risk-vendor">Supplier</label>
+          <select name="vendor" id="risk-vendor" class="form-select">
+            <option value="">All suppliers</option>
+            {% for v in vendors %}
+              <option value="{{ v.pk }}" {% if params.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="risk-severity">Alert severity</label>
+          <select name="severity" id="risk-severity" class="form-select">
+            <option value="">All severities</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'scm:disruption_risk' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        Severity narrows the exception queue at the foot of the page, not the scores above it. Custom dates override the window.
+      </div>
+    </div>
+  </div>
+
+  {% if scope_invalid or scope_ignored or currency_notice.mixed or display_only_filters %}
+    <div class="card">
+      <div class="card-body">
+        {% if scope_invalid %}
+          <p><span class="badge badge-amber">Filter dropped</span> One of the filters named a record this workspace does not have, so it was not applied. The figures below are for <span class="fw-600">{{ scope_label }}</span>.</p>
+        {% endif %}
+        {% if scope_ignored %}
+          <p><span class="badge badge-amber">Only one narrowing applies</span> Applied <span class="fw-600">{{ scope_label }}</span>; ignored {{ scope_ignored|join:", " }}.</p>
+        {% endif %}
+        {% if currency_notice.mixed %}
+          <p><span class="badge badge-amber">Mixed currency</span> {{ currency_notice.note }} Currencies in this window: {{ currency_notice.codes|join:", " }}. Affected: {{ currency_notice.metrics|join:", " }}.</p>
+        {% endif %}
+        {% if display_only_filters %}
+          <p><span class="badge badge-info">Table filter</span> {{ display_only_filters|join:", " }} narrows the tables below, not the headline figures.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{% if tile.supplier_disruption_score.value is not None %}{{ tile.supplier_disruption_score.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Supplier disruption risk <span class="text-muted">0–100, lower is better</span>
+        <span class="badge {{ tile.supplier_disruption_score.band_css }}">
+          {% if tile.supplier_disruption_score.value is None %}Not computed
+          {% elif tile.supplier_disruption_score.band == 'ok' %}On target
+          {% elif tile.supplier_disruption_score.band == 'warning' %}Warning
+          {% elif tile.supplier_disruption_score.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{% if tile.demand_spike_count.value is not None %}{{ tile.demand_spike_count.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Demand spikes detected <span class="text-muted">over {{ spike_threshold_pct }}% deviation</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package-x"></i></div>
+      <div class="stat-value">{% if tile.projected_stockout_count.value is not None %}{{ tile.projected_stockout_count.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Projected stockouts <span class="text-muted">within lead time</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{% if tile.shipments_at_risk_count.value is not None %}{{ tile.shipments_at_risk_count.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Shipments at risk</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What the disruption score is made of</h2>
+      {% if components_total %}<span class="badge badge-slate">{{ components_scored }} of {{ components_total }} components scored</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if risk_components %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Component</th>
+              <th style="text-align:end;">Points</th>
+              <th style="text-align:end;">Weight</th>
+              <th style="text-align:end;">Contribution</th>
+              <th>What it measured</th>
+            </tr></thead>
+            <tbody>
+              {% for c in risk_components %}
+                <tr>
+                  <td>
+                    {{ c.label }}
+                    {% if not c.scored %}<span class="badge badge-muted">No signal</span>{% endif %}
+                  </td>
+                  <td style="text-align:end;">{% if c.points is not None %}{{ c.points }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{{ c.weight|default:"—" }}</td>
+                  <td style="text-align:end;">{% if c.contribution is not None %}{{ c.contribution }}{% else %}—{% endif %}</td>
+                  <td>
+                    <span class="text-muted">{{ c.explanation|default:"Not scored in this window." }}</span>
+                    {% if c.evidence %}
+                      <dl class="detail-grid">
+                        {% for k, v in c.evidence.items %}
+                          <div class="detail-item"><dt>{{ k|cut:"_"|capfirst }}</dt><dd>{{ v }}</dd></div>
+                        {% endfor %}
+                      </dl>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">
+          A component with no signal is left <span class="fw-600">unscored</span> rather than counted as zero, and the remaining weights are re-normalised over the components that did score. That is why a new supplier with no delivery history does not appear artificially safe — and why the count above matters when reading the headline number.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="shield-alert"></i>
+          <h3>Nothing to score yet</h3>
+          <p>The composite needs purchase orders, receipts or quality findings in this window before it can show its arithmetic.</p>
+          <a href="{% url 'scm:supplierprofile_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Suppliers</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if supplier_league %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Suppliers by disruption risk</h2>
+        <span class="badge badge-slate">Highest risk first</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Supplier</th>
+            <th style="text-align:end;">Score</th>
+            <th style="text-align:end;">Late %</th>
+            <th style="text-align:end;">Reject %</th>
+            <th style="text-align:end;">Open CAPAs</th>
+            <th>Contract</th>
+            <th style="text-align:end;">Spend at risk</th>
+          </tr></thead>
+          <tbody>
+            {% for r in supplier_league %}
+              <tr>
+                <td>{{ r.label|default:"—" }}</td>
+                <td style="text-align:end;">
+                  {% if r.value is not None %}
+                    <span class="badge {% if r.value >= 60 %}badge-red{% elif r.value >= 30 %}badge-amber{% else %}badge-green{% endif %}">{{ r.value }}</span>
+                  {% else %}<span class="badge badge-muted">Not scored</span>{% endif %}
+                </td>
+                <td style="text-align:end;">{{ r.late_pct|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.reject_pct|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.open_capas|default:"0" }}</td>
+                <td>
+                  {% if r.contract_status == 'expiring' %}<span class="badge badge-amber">Expiring</span>
+                  {% elif r.contract_status == 'none' %}<span class="badge badge-red">No active contract</span>
+                  {% elif r.contract_status == 'active' %}<span class="badge badge-green">Active</span>
+                  {% else %}<span class="badge badge-muted">{{ r.contract_status|default:"Unknown" }}</span>{% endif %}
+                </td>
+                <td style="text-align:end;">{{ r.spend|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Demand spikes</h2></div>
+    <div class="card-body">
+      {% if demand_netting_note %}<p><span class="badge badge-info">How demand was counted</span> {{ demand_netting_note }}</p>{% endif %}
+      {% if spike_rows %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Item</th>
+              <th style="text-align:end;">Recent {{ spike_window_days }}d</th>
+              <th style="text-align:end;">Baseline</th>
+              <th style="text-align:end;">Deviation</th>
+            </tr></thead>
+            <tbody>
+              {% for r in spike_rows %}
+                <tr>
+                  <td>{{ r.label|default:"—" }}</td>
+                  <td style="text-align:end;">{{ r.recent|default:"—" }}</td>
+                  <td style="text-align:end;">{{ r.baseline|default:"—" }}</td>
+                  <td style="text-align:end;">
+                    {% if r.deviation_pct is not None %}
+                      <span class="badge {% if r.deviation_pct >= 100 %}badge-red{% else %}badge-amber{% endif %}">+{{ r.deviation_pct }}%</span>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">
+          A spike is a plain ratio: the trailing {{ spike_window_days }}-day issue volume against the longer trailing mean, flagged past {{ spike_threshold_pct }}%. No curve is fitted and nothing is extrapolated — the number is arithmetic on the stock ledger.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="trending-up"></i>
+          <h3>No spikes in this window</h3>
+          <p>Demand stayed inside the {{ spike_threshold_pct }}% band on every item with enough history to judge.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if stockout_rows %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Projected stockouts</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Item</th><th>Location</th>
+            <th style="text-align:end;">On hand</th><th style="text-align:end;">Committed</th>
+            <th style="text-align:end;">Incoming</th><th style="text-align:end;">Days of cover</th>
+            <th style="text-align:end;">Lead time</th>
+          </tr></thead>
+          <tbody>
+            {% for r in stockout_rows %}
+              <tr>
+                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.location|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.on_hand|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.committed|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.incoming|default:"—" }}</td>
+                <td style="text-align:end;">
+                  {% if r.days_of_cover is not None %}
+                    <span class="badge {% if r.shortfall %}badge-red{% else %}badge-amber{% endif %}">{{ r.days_of_cover }}</span>
+                  {% else %}<span class="badge badge-muted">No demand rate</span>{% endif %}
+                </td>
+                <td style="text-align:end;">{{ r.lead_time_days|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          Cover is derived on-hand less open allocations plus open purchase-order receipts, divided by the rule's average daily demand, compared against its lead time. Replenishing is 4.3's job — this page names the item, it does not raise the requisition.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if shipments_at_risk_rows %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Shipments at risk</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Shipment</th><th>Carrier</th><th>Planned</th><th>ETA</th><th>Why flagged</th>
+          </tr></thead>
+          <tbody>
+            {% for r in shipments_at_risk_rows %}
+              <tr>
+                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.carrier|default:"—" }}</td>
+                <td>{{ r.planned|default:"—" }}</td>
+                <td>{{ r.eta|default:"—" }}</td>
+                <td>{% if r.reason %}<span class="badge badge-amber">{{ r.reason }}</span>{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Open exceptions</h2>
+      <span class="badge badge-slate">Ranked by value at risk</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ alert_rank_note }}</p>
+      {% if open_alerts %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Alert</th><th>Severity</th><th>Type</th><th>Subject</th>
+              <th style="text-align:end;">Observed</th><th style="text-align:end;">Threshold</th>
+              <th style="text-align:end;">Value at risk</th><th>Status</th><th>Raised</th><th></th>
+            </tr></thead>
+            <tbody>
+              {% for a in open_alerts %}
+                <tr>
+                  <td><a href="{% url 'scm:supplychainalert_detail' a.pk %}">{{ a.number }}</a><div class="text-muted">{{ a.title }}</div></td>
+                  <td><span class="badge {{ a.severity_css }}">{{ a.get_severity_display }}</span></td>
+                  <td>{{ a.get_alert_type_display }}</td>
+                  <td>{{ a.subject_label|default:"Network" }}</td>
+                  <td style="text-align:end;">{{ a.observed_value|default:"—" }}</td>
+                  <td style="text-align:end;">{{ a.threshold_value|default:"—" }}</td>
+                  <td style="text-align:end;">{{ a.impact_value }}</td>
+                  <td><span class="badge {{ a.status_css }}">{{ a.get_status_display }}</span></td>
+                  <td>{{ a.raised_at|date:"M d, Y" }}</td>
+                  <td class="table-actions">
+                    <a class="btn-icon" href="{% url 'scm:supplychainalert_detail' a.pk %}" title="View"><i data-lucide="eye"></i></a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="bell-off"></i>
+          <h3>No open exceptions</h3>
+          <p>Nothing is currently breaching{% if severity %} at this severity{% endif %}. Run detection from the alert inbox to sweep again.</p>
+          <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alert inbox</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Frozen trend</h2>
+      <span class="badge badge-slate">Captured snapshots, never re-derived</span>
+    </div>
+    <div class="card-body">
+      {% if chart_data.has_data %}
+        <canvas id="risk-trend-chart" height="120"></canvas>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Each point is one captured period for a target measuring <span class="fw-600">this same subject</span>. A risk score is only meaningful as a trend if the past points were frozen when they were true.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="line-chart"></i>
+          <h3>No trend yet</h3>
+          <p>{{ chart_data.note }}</p>
+          <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where to act on this</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:riskassessment_list' %}" class="btn btn-outline"><i data-lucide="shield"></i> Supplier risk register</a>
+        <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Contracts</a>
+        <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Reorder alerts</a>
+        <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alert inbox</a>
+        <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        4.2 owns the supplier risk register and this page consumes it as one weighted input — it does not keep a second, rival one. Mitigating a risk happens there; deciding which supplier to open happens here.
+      </p>
+    </div>
+  </div>
+
+  {{ chart_data|json_script:"risk-trend-data" }}
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    if (typeof Chart === 'undefined') { return; }
+
+    function payload(id) {
+      var el = document.getElementById(id);
+      if (!el) { return null; }
+      try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+
+    var trendCanvas = document.getElementById('risk-trend-chart');
+    var trend = payload('risk-trend-data');
+    if (trendCanvas && trend && trend.labels && trend.labels.length && trend.series && trend.series.length) {
+      var LINES = ['#dc2626', '#d97706', '#2563eb', '#7c3aed', '#16a34a', '#0891b2'];
+      new Chart(trendCanvas, {
+        type: 'line',
+        data: {
+          labels: trend.labels,
+          datasets: trend.series.map(function (s, i) {
+            var colour = LINES[i % LINES.length];
+            return {
+              label: s.label,
+              data: s.values,
+              borderColor: colour,
+              backgroundColor: colour,
+              borderWidth: 2,
+              fill: false,
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 3,
+              pointHoverRadius: 5
+            };
+          })
+        },
+        options: {
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: true, position: 'bottom' } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}
