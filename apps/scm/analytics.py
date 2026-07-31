@@ -3412,12 +3412,25 @@ def _r_supplier_disruption_score(tenant, start, end, scope, params=DEFAULT_PARAM
 
     scored = {key: entry for key, entry in components.items() if entry["scored"]}
     if not scored:
+        # `components` keeps the SAME shape it has on the scored path — dict[str, dict], not
+        # dict[str, str]. It used to collapse to {key: explanation}, and `_risk_components` in the
+        # view calls `entry.get("points")` on each value, so a tenant with no supply-chain history
+        # at all got an AttributeError instead of this page's own "nothing measurable" empty state.
+        # That is the FIRST-RUN path: a workspace created through the onboarding wizard clicking the
+        # sidebar's Predictive Analytics bullet. One producer, one shape.
+        #
+        # Carrying the full entries is also strictly more useful: the page can now name which
+        # components found no signal and why, which is the explainability this metric promises.
+        for entry in components.values():
+            entry.pop("_raw", None)
+            entry["contribution"] = None
         return _unavailable("supplier_disruption_score",
                             "There is no delivery, quality, contract, acknowledgement or risk-"
                             "assessment signal for this supplier in the window, so nothing can be "
                             "scored. A supplier with no history is an unknown, not a safe bet.",
-                            components={key: entry["explanation"]
-                                        for key, entry in components.items()},
+                            components=components,
+                            components_scored=0,
+                            components_total=len(components),
                             parameter_days=horizon_days)
     total_weight = sum(entry["weight"] for entry in scored.values())
     composite = sum((entry["_raw"] * entry["weight"] for entry in scored.values()),
