@@ -108,7 +108,9 @@ def _filtered_snapshots(request):
     if band:
         qs = qs.filter(status_band=band)
     target = request.GET.get("kpi_target", "").strip()
-    if target.isdigit():  # L11 — never hand a non-numeric GET value to an int FK filter
+    # isdecimal(), not isdigit(): int() accepts only category Nd, while isdigit() also passes
+    # superscripts, so ?kpi_target=² raised ValueError from inside .filter().
+    if target.isdecimal():  # L11 — never hand a non-numeric GET value to an int FK filter
         qs = qs.filter(kpi_target_id=int(target))
     # The window is on `period_end` — the period a point MEASURES, not `computed_at`, the moment it
     # happened to be captured. Filtering a trend by when somebody pressed the button would put a
