@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+{% block title %}Logistics KPIs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ page.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>{{ page.title }}</span></div>
+      <p class="text-muted">
+        {{ page.bullet }} — on-time delivery, OTIF, what a unit of freight actually costs and how full the equipment went out.
+        Every figure is <span class="fw-600">computed live</span> from 4.6's shipments, tracking events, loads and audited freight invoices.
+        This page measures; it books no freight and moves no stock.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alerts</a>
+      <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As of {{ generated_at|date:"M d, Y H:i" }}</span>
+        <span class="badge badge-slate">Window {{ start|date:"M d, Y"|default:"Earliest record" }} – {{ end|date:"M d, Y" }}{% if spec.window_days %} · {{ spec.window_days }} day{{ spec.window_days|pluralize }}{% endif %}</span>
+        <span class="badge badge-slate">Narrowed to {{ scope_label }}</span>
+        {% if spec.custom_window %}<span class="badge badge-info">Custom dates override the range</span>{% endif %}
+        <a href="{% url 'scm:supplychainalert_list' %}" class="badge {% if critical_alert_count %}badge-red{% elif alerts_are_open %}badge-amber{% else %}badge-green{% endif %}">
+          {{ open_alert_count }} open alert{{ open_alert_count|pluralize }}{% if critical_alert_count %} · {{ critical_alert_count }} critical{% endif %}
+        </a>
+      </div>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building-2"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="log-date-range">Window</label>
+          <select name="date_range" id="log-date-range" class="form-select">
+            {% for val, label in range_choices %}
+              <option value="{{ val }}" {% if date_range == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="log-date-from">From</label>
+          <input type="date" id="log-date-from" name="date_from" value="{{ params.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="log-date-to">To</label>
+          <input type="date" id="log-date-to" name="date_to" value="{{ params.date_to }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="log-carrier">Carrier</label>
+          <select name="carrier" id="log-carrier" class="form-select">
+            <option value="">All carriers</option>
+            {% for c in carriers %}
+              <option value="{{ c.pk }}" {% if params.carrier == c.pk|stringformat:"d" %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="log-basis">Freight cost basis</label>
+          <select name="basis" id="log-basis" class="form-select">
+            {% for b in freight_bases %}
+              <option value="{{ b.key }}" {% if b.selected %}selected{% endif %}>{{ b.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'scm:logistics_kpis' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        Freight cost per unit is only meaningful against a stated basis — per kilogram, per cubic metre, per package, per shipment or per kilometre — so the basis is chosen here and printed beside the number. Custom dates override the window above them.
+      </div>
+    </div>
+  </div>
+
+  {% if scope_invalid or scope_ignored or currency_notice.mixed or display_only_filters %}
+    <div class="card">
+      <div class="card-body">
+        {% if scope_invalid %}
+          <p><span class="badge badge-amber">Filter dropped</span> One of the filters named a record this workspace does not have, so it was not applied. The figures below are for <span class="fw-600">{{ scope_label }}</span>.</p>
+        {% endif %}
+        {% if scope_ignored %}
+          <p><span class="badge badge-amber">Only one narrowing applies</span> Applied <span class="fw-600">{{ scope_label }}</span>; ignored {{ scope_ignored|join:", " }}.</p>
+        {% endif %}
+        {% if currency_notice.mixed %}
+          <p><span class="badge badge-amber">Mixed currency</span> {{ currency_notice.note }} Currencies in this window: {{ currency_notice.codes|join:", " }}. Affected: {{ currency_notice.metrics|join:", " }}.</p>
+        {% endif %}
+        {% if display_only_filters %}
+          <p><span class="badge badge-info">Table filter</span> {{ display_only_filters|join:", " }} narrows the tables below, not the headline figures.</p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{% if tile.otd_pct.value is not None %}{{ tile.otd_pct.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        On-time delivery
+        <span class="badge {{ tile.otd_pct.band_css }}">
+          {% if tile.otd_pct.value is None %}Not computed
+          {% elif tile.otd_pct.band == 'ok' %}On target
+          {% elif tile.otd_pct.band == 'warning' %}Warning
+          {% elif tile.otd_pct.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{% if tile.otif_pct.value is not None %}{{ tile.otif_pct.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        On-time in-full
+        <span class="badge {{ tile.otif_pct.band_css }}">
+          {% if tile.otif_pct.value is None %}Not computed
+          {% elif tile.otif_pct.band == 'ok' %}On target
+          {% elif tile.otif_pct.band == 'warning' %}Warning
+          {% elif tile.otif_pct.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{% if tile.freight_cost_per_unit.value is not None %}{{ tile.freight_cost_per_unit.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Freight cost <span class="text-muted">{{ basis_label|default:"per unit" }}</span>
+        <span class="badge {{ tile.freight_cost_per_unit.band_css }}">
+          {% if tile.freight_cost_per_unit.value is None %}Not computed
+          {% elif tile.freight_cost_per_unit.band == 'ok' %}On target
+          {% elif tile.freight_cost_per_unit.band == 'warning' %}Warning
+          {% elif tile.freight_cost_per_unit.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="container"></i></div>
+      <div class="stat-value">{% if tile.equipment_utilization_pct.value is not None %}{{ tile.equipment_utilization_pct.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Equipment utilization
+        <span class="badge {{ tile.equipment_utilization_pct.band_css }}">
+          {% if tile.equipment_utilization_pct.value is None %}Not computed
+          {% elif tile.equipment_utilization_pct.band == 'ok' %}On target
+          {% elif tile.equipment_utilization_pct.band == 'warning' %}Warning
+          {% elif tile.equipment_utilization_pct.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="receipt-text"></i></div>
+      <div class="stat-value">{% if tile.freight_variance_pct.value is not None %}{{ tile.freight_variance_pct.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Freight billing variance <span class="text-muted">audited invoices</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{% if tile.dwell_hours_avg.value is not None %}{{ tile.dwell_hours_avg.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Average yard / dock dwell</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The "in full" definition is printed rather than assumed. SalesOrderLine has no quantity_shipped
+    column, so OTIF's in-full half has to be derived from allocations and issue moves — and a KPI
+    whose definition is invisible is a KPI two people will read two different ways.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How OTIF is measured here</h2></div>
+    <div class="card-body">
+      <p><span class="badge badge-info">Definition</span> {{ in_full_definition }}</p>
+      {% if otif_caveat %}<p class="text-muted">{{ otif_caveat }}</p>{% endif %}
+      <p class="text-muted">
+        On-time is the delivered shipment's actual delivery date against its planned delivery date. In-full is the harder half and is defined once, in the compute layer, so this page, its CSV export, its frozen snapshot and any alert it raises can never disagree about what was measured.
+      </p>
+    </div>
+  </div>
+
+  {% if otif_failures %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Where OTIF was missed</h2>
+        <span class="badge badge-slate">{{ otif_failures|length }} shown</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Order</th><th>Customer</th><th>Carrier</th><th>Reason</th>
+            <th style="text-align:end;">Ordered</th><th style="text-align:end;">Delivered</th>
+          </tr></thead>
+          <tbody>
+            {% for r in otif_failures %}
+              <tr>
+                <td>{{ r.order|default:"—" }}</td>
+                <td>{{ r.customer|default:"—" }}</td>
+                <td>{{ r.carrier|default:"—" }}</td>
+                <td>{% if r.reason %}<span class="badge badge-amber">{{ r.reason }}</span>{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{{ r.quantity_ordered|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.quantity_delivered|default:"—" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Carrier scorecard</h2>
+      {% if scorecard_source %}<span class="badge badge-slate">{{ scorecard_source }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      {% if carrier_scorecard %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Carrier</th>
+              <th style="text-align:end;">On-time %</th>
+              <th style="text-align:end;">Avg transit</th>
+              <th style="text-align:end;">Promised</th>
+              <th style="text-align:end;">Cost / {{ basis_label|default:"unit" }}</th>
+              <th style="text-align:end;">Variance %</th>
+              <th style="text-align:end;">Exceptions</th>
+            </tr></thead>
+            <tbody>
+              {% for r in carrier_scorecard %}
+                <tr>
+                  <td>{{ r.label|default:r.carrier|default:"—" }}</td>
+                  <td style="text-align:end;">
+                    {% if r.on_time_pct is not None %}
+                      <span class="badge {% if r.on_time_pct >= 95 %}badge-green{% elif r.on_time_pct >= 85 %}badge-amber{% else %}badge-red{% endif %}">{{ r.on_time_pct }}%</span>
+                    {% else %}<span class="badge badge-muted">No signal</span>{% endif %}
+                  </td>
+                  <td style="text-align:end;">{{ r.avg_transit_days|default:"—" }}</td>
+                  <td style="text-align:end;">{{ r.promised_transit_days|default:"—" }}</td>
+                  <td style="text-align:end;">{{ r.cost_per_unit|default:"—" }}</td>
+                  <td style="text-align:end;">{{ r.variance_pct|default:"—" }}</td>
+                  <td style="text-align:end;">{{ r.exception_count|default:"0" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if scorecard_window_note %}<p class="text-muted" style="margin-top:.75rem;">{{ scorecard_window_note }}</p>{% endif %}
+        <p class="text-muted" style="margin-top:.5rem;">
+          The on-time column trends the figure 4.6 already derives on the carrier record — it is not a second, rival calculation. Where the two would differ it is because they cover different windows, not different arithmetic.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="truck"></i>
+          <h3>No carrier signal in this window</h3>
+          <p>Deliver a shipment against a booked carrier and the scorecard fills in.</p>
+          <a href="{% url 'scm:carrier_list' %}" class="btn btn-outline"><i data-lucide="truck"></i> Carriers</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Freight cost per unit — every basis</h2>
+      <span class="badge badge-slate">Audited invoices only</span>
+    </div>
+    <div class="card-body">
+      {% if freight_bases %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Basis</th><th style="text-align:end;">Cost per unit</th><th>Applied</th></tr></thead>
+            <tbody>
+              {% for b in freight_bases %}
+                <tr>
+                  <td>{{ b.label }}</td>
+                  <td style="text-align:end;">{{ b.rate|default:"—" }}</td>
+                  <td>{% if b.selected %}<span class="badge badge-info">Shown above</span>{% else %}<span class="badge badge-muted">Available</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if basis_note %}<p class="text-muted" style="margin-top:.75rem;">{{ basis_note }}</p>{% endif %}
+        <p class="text-muted" style="margin-top:.5rem;">
+          Only freight invoices whose match status is {{ audited_statuses|join:", " }} are counted — an unaudited or disputed bill is a claim, not a cost.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="banknote"></i>
+          <h3>No audited freight in this window</h3>
+          <p>Run the freight audit on a carrier invoice and its cost lands here.</p>
+          <a href="{% url 'scm:freightinvoice_list' %}" class="btn btn-outline"><i data-lucide="receipt-text"></i> Freight invoices</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if utilization_rows %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Equipment utilization by load</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Load</th><th>Equipment</th>
+            <th style="text-align:end;">Weight used</th><th style="text-align:end;">Weight capacity</th>
+            <th style="text-align:end;">Utilization</th>
+          </tr></thead>
+          <tbody>
+            {% for r in utilization_rows %}
+              <tr>
+                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.equipment_type|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.weight_kg|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.capacity_kg|default:"—" }}</td>
+                <td style="text-align:end;">
+                  {% if r.utilization_pct is not None %}
+                    <span class="badge {% if r.utilization_pct >= 85 %}badge-green{% elif r.utilization_pct >= 60 %}badge-amber{% else %}badge-red{% endif %}">{{ r.utilization_pct }}%</span>
+                  {% else %}<span class="badge badge-muted">No capacity set</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if otd_rows %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">On-time delivery detail</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Shipment</th><th>Carrier</th><th>Planned</th><th>Actual</th><th style="text-align:end;">Days late</th>
+          </tr></thead>
+          <tbody>
+            {% for r in otd_rows %}
+              <tr>
+                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.carrier|default:"—" }}</td>
+                <td>{{ r.planned|default:"—" }}</td>
+                <td>{{ r.actual|default:"—" }}</td>
+                <td style="text-align:end;">
+                  {% if r.days_late is not None %}
+                    <span class="badge {% if r.days_late > 0 %}badge-red{% else %}badge-green{% endif %}">{{ r.days_late }}</span>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Frozen trend</h2>
+      <span class="badge badge-slate">Captured snapshots, never re-derived</span>
+    </div>
+    <div class="card-body">
+      {% if chart_data.has_data %}
+        <canvas id="logistics-trend-chart" height="120"></canvas>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Each point is one captured period for a target measuring <span class="fw-600">this same subject</span>. Drawn from frozen history rather than re-walked on load.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="line-chart"></i>
+          <h3>No trend yet</h3>
+          <p>{{ chart_data.note }}</p>
+          <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where to act on this</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:shipment_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Shipments</a>
+        <a href="{% url 'scm:load_list' %}" class="btn btn-outline"><i data-lucide="container"></i> Loads</a>
+        <a href="{% url 'scm:freightinvoice_list' %}" class="btn btn-outline"><i data-lucide="receipt-text"></i> Freight invoices</a>
+        <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Supply chain alerts</a>
+        <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Disputing a carrier bill stays 4.6's freight audit, which is where the variance is recovered. This page tells you which carrier to open; it does not re-open it for you.
+      </p>
+    </div>
+  </div>
+
+  {{ chart_data|json_script:"logistics-trend-data" }}
+
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    if (typeof Chart === 'undefined') { return; }
+
+    function payload(id) {
+      var el = document.getElementById(id);
+      if (!el) { return null; }
+      try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+
+    var trendCanvas = document.getElementById('logistics-trend-chart');
+    var trend = payload('logistics-trend-data');
+    if (trendCanvas && trend && trend.labels && trend.labels.length && trend.series && trend.series.length) {
+      var LINES = ['#2563eb', '#7c3aed', '#16a34a', '#d97706', '#dc2626', '#0891b2'];
+      new Chart(trendCanvas, {
+        type: 'line',
+        data: {
+          labels: trend.labels,
+          datasets: trend.series.map(function (s, i) {
+            var colour = LINES[i % LINES.length];
+            return {
+              label: s.label,
+              data: s.values,
+              borderColor: colour,
+              backgroundColor: colour,
+              borderWidth: 2,
+              fill: false,
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 3,
+              pointHoverRadius: 5
+            };
+          })
+        },
+        options: {
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: true, position: 'bottom' } },
+          scales: { y: { beginAtZero: false } }
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}
