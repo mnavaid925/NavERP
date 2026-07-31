@@ -294,7 +294,8 @@ from .ReturnsManagement.Reports import (  # noqa: F401
 )
 
 # 4.11 Supply Chain Analytics
-# 27 callables. A view missing from this block is an AttributeError the MOMENT the URLconf loads —
+# 33 callables (6 target + 5 snapshot + 12 alert + 10 report). A view missing here is an
+# AttributeError the MOMENT the URLconf loads —
 # not at first request — because apps/scm/urls/ resolves every route through ``views.<name>``.
 # ``open_alert_count`` is exported too: the five report pages import it for their header chip.
 from .SupplyChainAnalytics.KpiTargets import (  # noqa: F401
