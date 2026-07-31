@@ -17317,3 +17317,1083 @@ store credit), cash refunds (`Payment(direction="out")` posts to the AP liabilit
 document (`accounting.Bill` has no `kind`), multi-round claim negotiation, and `customer_return` on
 `NonConformance.SOURCE_CHOICES` (priced: `source` is `max_length=14`, the value is 15 chars).
 
+---
+# Sub-module 4.12 — Contract & Compliance Management (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.12.md  (2026-08-01)
+
+**EXTEND run, not a scaffold run.** `apps/scm` exists and ships 4.1–4.11. **No `config/settings.py` and no
+`config/urls.py` change.** New backend sub-package name: **`ContractCompliance/`** in all four layers. New
+template sub-module slug: **`compliance/`** (joining the existing `procurement/ srm/ inventory/ warehouse/
+orders/ transportation/ demandplanning/ manufacturing/ quality/ returns/ analytics/`).
+
+**Shape of the sub-module.** 4 stored models (2 with a child) + 1 computed report + 1 CSV export + ONE thin
+additive extension to a shipped 4.2 model. Nothing here posts a `StockMove` or a `JournalEntry` — 4.12 is
+read-only over 4.1–4.11's ledgers, and money columns FK `accounting.Currency` **by string** (L29).
+
+**Three overrides that supersede the research file** (verified by the user; the research doc is wrong or
+optional on all three — do NOT re-derive them from the research):
+
+1. **The 4.2 contract url names are `scm:contract_list` / `contract_create` / `contract_detail` /
+   `contract_edit` / `contract_delete` / `contract_activate` / `contract_renew` / `contract_terminate`** —
+   NOT `suppliercontract_*`. Verified in `apps/scm/urls/SupplierRelationshipManagement/SupplierContracts.py:8-15`.
+   Its templates live at `templates/scm/srm/contract/{list,detail,form}.html`. Every plan item below uses the
+   real names.
+2. **The `scm.Item` extension (`hs_code` / `country_of_origin` / `is_hazardous` / `un_number`) is DROPPED from
+   this run** — see "Deliberately out of scope" below. `TradeDocumentLine` snapshots its own `hs_code` and
+   `country_of_origin` at issue time, which is the *correct* design for a customs declaration anyway: a filed
+   document must record **what was declared**, not follow a mutable item master. Adding the columns would create
+   a second source of truth for the same fact and invite a future "helpful" default that silently rewrites the
+   snapshot.
+3. **The `SupplierContract` extension is minimal and bullet-justified**: `parent_contract` + `owner` +
+   one `TYPE_CHOICES` value. Nothing else. It is an **additive migration on a shipped 4.2 model and must not
+   change existing behaviour or existing rows** (all-nullable, no backfill, no default that rewrites a row, no
+   change to `refresh_status()` / `AUTO_STATUSES` / the activate-renew-terminate verbs).
+
+---
+
+## Pre-flight (do these BEFORE writing a single file)
+
+- [ ] `grep -n '\.badge-\|detail-item\|detail-label\|stat-icon' static/css/theme.css` — **mandatory pre-write
+      step, not a pre-ship check** (L33, now at four recurrences). Known-good and re-confirmed at plan time:
+      badges are `badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate` **ONLY** —
+      `badge-success` / `badge-warning` / `badge-danger` **DO NOT EXIST**; layout is
+      `<dl class="detail-grid"><div class="detail-item"><dt>Label</dt><dd>Value</dd></div></dl>`
+      (`.detail-label` / `.detail-value` do not exist); `stat-icon` has `blue/green/orange/purple/slate` —
+      no `amber`, no `red`.
+- [ ] Re-run the spine grep before FK-ing anything (L28):
+      `grep -rn "^class SupplierContract\|^class Shipment\|^class Load\|^class Carrier\|^class Item\|^class UOM\|^class Location\|^class PurchaseOrder\|^class SalesOrder\|^class QualityAudit\|^class NonConformance" apps/scm/models/`
+      + `grep -rn "^class Party\|^class OrgUnit\|^class Document\|^class Tenant" apps/core/models/`
+      + `grep -rn "^class Currency\|^class PaymentTerm" apps/accounting/models/`.
+      **All verified present at plan time**, with the exact evidence the FKs below rely on:
+      `scm.SupplierContract` (`SupplierContracts.py:13`, `NUMBER_PREFIX="SC"`, `TYPE_CHOICES` at :26-33,
+      `AUTO_STATUSES` at :35, `refresh_status()` at :78); `scm.Shipment` (`Shipments.py:18`, has `mode`,
+      `weight_kg`, `direction`, `carrier`, `load`); `scm.Load` (`Loads.py:18`, has `distance_km` :47 and `mode`
+      :36); `scm.Carrier` (`Carriers.py:56`, `party` FK PROTECT :71); `scm.Item` / `scm.UOM`
+      (`InventoryManagement/Items.py`); `core.Document` (`core/models/Document.py:5` — tenant-scoped, generic FK,
+      `file`, `classification`, `version`); `core.OrgUnit`; `core.Party`; `accounting.Currency`.
+      **`ComplianceRequirement` / `ComplianceCheck` / `TradeDocument` / `TradeDocumentLine` / `TradeLicense` /
+      `SustainabilityAssessment` verified ABSENT** — all six are new.
+- [ ] Confirm `apps/scm/models/ContractCompliance/` does not exist yet (verified absent at plan time), and that
+      `apps/core/navigation.py` has `"4.11"` as its LAST `LIVE_LINKS` key (verified: `navigation.py:909-915`,
+      block closes at :915, dict closes at :916).
+- [ ] **Auto-number prefix collision check — done, all four are FREE.** `NUMBER_PREFIX` values already used in
+      `scm`: `PR RFQ QT PO GRN SC SCR SRA CAT ADJ TRF LD SHP FRT CAR SO WO WC PRD BOM DF FA DS SEA YRD PUT PIK
+      CC QC QA NCR CAPA RMA WTY ALR KPI`. **`CR`, `TD`, `LIC`, `ESG` do not appear** — no collision, nothing to
+      flag. (`next_number()` in `apps/core/utils.py:34` is scoped by `(model, tenant, prefix)`, so a collision
+      would be a human-readability problem, not a uniqueness bug — but there is none here either way. Note the
+      near-misses that are NOT collisions and must not be "tidied": `SC` ≠ `SCR` ≠ `SRA`, and `CC`
+      (CycleCountTask) ≠ `CR`.)
+
+---
+
+## Models (4 primary + 2 children, in `apps/scm/models/ContractCompliance/`)
+
+Shared conventions for every file below: `from apps.scm.models._base import *` (gives `TenantOwned` /
+`TenantNumbered` / `q2` / `q4` / `MAX_Q2` / `MAX_Q4` / `ZERO` / `settings` / `models` / `ValidationError` /
+`MinValueValidator` / `MaxValueValidator` / `timezone` / `Decimal` / `Sum` / `Q`). **Every FK by string.** Every
+primary model carries a `tenant` FK via the base. Money = `DecimalField(max_digits=14, decimal_places=2)` written
+through `q2()`; quantity = `(14, 4)` through `q4()`. **Every day-count field is capped**
+`validators=[MinValueValidator(0), MaxValueValidator(3650)]` — every one of them is fed to
+`datetime.timedelta(days=…)` or compared against a date, and `PositiveIntegerField` accepts 4294967295 on
+MariaDB, which is an uncaught `OverflowError` (a 500), not a validation error (the 4.10 DoS finding).
+
+**Index names: globally unique AND ≤ 30 chars, pattern `scm_<abbr>_tnt_<x>_idx`.** All 18 names below were
+checked against every existing `scm_*_idx` in `apps/scm/models/` — no `scm_cr_`, `scm_cchk_`, `scm_td_`,
+`scm_tdl_`, `scm_lic_` or `scm_esg_` prefix exists today.
+
+**Colour-named `*_CSS` dicts live ON the model** (the `KpiSnapshot.BAND_CSS` / `SupplyChainAlert.STATUS_CSS`
+precedent) so a badge colour is decided in exactly one place. **Only `badge-green / badge-red / badge-amber /
+badge-info / badge-muted / badge-slate` exist** — L33.
+
+### Model 1 — `ComplianceRequirement` [`CR-`] + child `ComplianceCheck` · `models/ContractCompliance/ComplianceRequirements.py`
+
+*The standing-obligation register.* Drivers: **Intelex Legal Requirements Management** (the canonical shape —
+source · domain · applicability · responsible party · due date · recurrence · workflow status · audit trail);
+**Agiloft's obligation-type library** (Financial, Delivery, Service Levels, Termination, Confidentiality,
+Regulatory, Data, Insurance — this IS the `obligation_category` list); **Icertis Vera Obligations** /
+**Coupa** / **SAP Ariba** / **Docusign CLM** post-signature obligation & milestone tracking; **Sphera**
+(defensible inspection documentation = the check history); COI/ISO-certificate trackers' staged reminders
+(`notice_days`).
+
+- [ ] `class ComplianceRequirement(TenantNumbered)` — `NUMBER_PREFIX = "CR"`
+  - Choice constants (declare on the model, above the fields):
+    - `SOURCE_CHOICES` = `regulation | contract | license | certification | customer_requirement |
+      internal_policy` → `source = CharField(max_length=20, choices=SOURCE_CHOICES, default="regulation")`
+      *(driver: Intelex "regulations, permits, policies and other compliance drivers"; the `contract` value is
+      what makes a CLM obligation a row here rather than a second table — the 4.9 "an audit finding IS a
+      NonConformance with source='audit'" precedent)*
+    - `FRAMEWORK_CHOICES` = `fda_fsma | hazmat_dot_iata_imdg | ghs_clp | data_privacy_gdpr | reach | rohs |
+      prop65_scip | forced_labor_uflpa | conflict_minerals | eudr | csddd_lksg | iso_9001 | iso_14001 |
+      customs_export_control | insurance_coi | other` → `framework = CharField(max_length=24,
+      choices=FRAMEWORK_CHOICES, default="other")` — **max_length 24 is deliberate**: the longest value
+      `customs_export_control` is 22 chars (the 4.10 lesson — `NonConformance.source` is `max_length=14` and a
+      15-char value was a column widen, not "a one-line migration") *(drivers: the NavERP bullet names FDA,
+      HazMat and GDPR; Sphera GHS/CLP; Assent REACH/RoHS/PFAS-TSCA/Prop 65/SCIP/UFLPA/conflict minerals;
+      Sourcemap EUDR; IntegrityNext LkSG/CSDDD; SAP GTS + ONESOURCE customs & export control)*
+    - `OBLIGATION_CATEGORY_CHOICES` = `financial | delivery | service_levels | termination | confidentiality |
+      regulatory | data | insurance | other` → `obligation_category = CharField(max_length=16, blank=True)`
+      *(driver: Agiloft's pre-built obligation-type library, verbatim)*
+    - `SCOPE_CHOICES` = `tenant | org_unit | party | location | item` → `scope = CharField(max_length=10,
+      default="tenant")` *(driver: Intelex "applicability status")*
+    - `FREQUENCY_CHOICES` = `one_time | monthly | quarterly | semi_annual | annual | biennial | on_event` →
+      `frequency = CharField(max_length=12, default="annual")` *(driver: Intelex "recurrence frequency")*
+    - `STATUS_CHOICES` = `applicable | not_applicable | in_progress | compliant | non_compliant | overdue |
+      retired` → `status = CharField(max_length=16, default="applicable")` *(driver: Intelex "workflow status";
+      `not_applicable` is kept-with-a-reason rather than deleted, per Intelex + IntegrityNext)*
+    - `CRITICALITY_CHOICES` = `low | medium | high | critical` → `criticality = CharField(max_length=8,
+      default="medium")`
+    - `STATUS_CSS = {"applicable": "badge-info", "not_applicable": "badge-muted", "in_progress": "badge-amber",
+      "compliant": "badge-green", "non_compliant": "badge-red", "overdue": "badge-red", "retired":
+      "badge-slate"}`
+    - `CRITICALITY_CSS = {"low": "badge-muted", "medium": "badge-info", "high": "badge-amber", "critical":
+      "badge-red"}`
+    - `OPEN_STATUSES = ("applicable", "in_progress", "non_compliant", "overdue")` — the set the "what's due"
+      chips and the seeder guard read; declared once so the list filter and the count can never disagree (the
+      4.10 "bench unposted filter encoded two of three shapes" finding).
+  - Fields:
+    - `title = CharField(max_length=255)`
+    - `description = TextField(blank=True)`
+    - `jurisdiction = CharField(max_length=120, blank=True)` *(driver: Sphera regulatory intelligence by
+      jurisdiction)*
+    - `source_reference = CharField(max_length=500, blank=True, help_text="Citation or URL — 21 CFR 117, REACH
+      Annex XVII, the clause number")` *(driver: Intelex "source"; explicitly typed by a human — subscribed
+      regulatory content feeds are deferred)*
+    - `owner = FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True,
+      related_name="scm_compliance_requirements_owned")` *(driver: Intelex "responsible party"; Agiloft/Coupa/
+      Icertis obligation owner)*
+    - `frequency`, `next_due_date = DateField(null=True, blank=True)`,
+      `notice_days = PositiveIntegerField(default=30, validators=[MinValueValidator(0),
+      MaxValueValidator(3650)])` *(driver: the staged 90/60/30-day reminder pattern in Intelex Permits /
+      Descartes / COI trackers; capped per the 4.10 DoS finding)*
+    - `last_checked_on = DateField(null=True, blank=True, editable=False)` — **system stamp, L22**: written only
+      by `record_check()`, never by a form
+    - Scope FKs — five typed nullable pointers, NOT one untyped `scope_ref` int (the `KpiTarget` §(c) precedent:
+      a bare int carries neither a tenant nor a type, so it happily points at a cross-tenant or deleted row):
+      - `org_unit = FK("core.OrgUnit", SET_NULL, null=True, blank=True,
+        related_name="scm_compliance_requirements")`
+      - `party = FK("core.Party", SET_NULL, null=True, blank=True,
+        related_name="scm_compliance_requirements")`
+      - `location = FK("scm.Location", SET_NULL, null=True, blank=True,
+        related_name="compliance_requirements")`
+      - `item = FK("scm.Item", SET_NULL, null=True, blank=True, related_name="compliance_requirements")`
+      - (`scope="tenant"` uses none of them)
+    - Link-out FKs (the reason this register is not a second contract/licence table):
+      - `contract = FK("scm.SupplierContract", SET_NULL, null=True, blank=True,
+        related_name="compliance_requirements", help_text="The 4.2 agreement this obligation comes out of")`
+        — **SET_NULL, not CASCADE**: deleting a contract must not silently destroy the proof history of an
+        obligation that was met. This also keeps the 4.2 extension behaviour-neutral (no change to
+        `contract_delete`). *(driver: Icertis/Agiloft/Coupa/Ariba/Docusign post-execution obligation tracking)*
+      - `license = FK("scm.TradeLicense", SET_NULL, null=True, blank=True,
+        related_name="compliance_requirements", help_text="Licence proviso/condition needing periodic proof")`
+        *(driver: Descartes provisos / RWA statuses)*
+    - `document = FK("core.Document", SET_NULL, null=True, blank=True,
+      related_name="scm_compliance_requirements")` — **no `FileField` anywhere in 4.12** (Module 13 DMS is
+      unbuilt; `core.Document` is the generic attachment, exactly as `SupplierContract.document` uses it)
+    - `not_applicable_reason = TextField(blank=True)` *(driver: Intelex — a non-applicable row is kept with a
+      reason, not deleted)*
+    - `notes = TextField(blank=True)`
+  - `class Meta`: `ordering = ["next_due_date", "-criticality", "-id"]`;
+    `unique_together = ("tenant", "number")`; indexes —
+    `scm_cr_tnt_status_idx` (tenant, status), `scm_cr_tnt_due_idx` (tenant, next_due_date),
+    `scm_cr_tnt_frame_idx` (tenant, framework), `scm_cr_tnt_src_idx` (tenant, source).
+  - `clean()` — cross-tenant FK guards + the empty-conjunction guard (L39/L40 §3):
+    - exactly the scope FK matching `scope` is set and every other one is blank (the `KpiTarget.clean()` §(b)
+      shape — a scope switched from Party to Location that leaves the old pointer behind is a stale filter);
+    - **every set FK's `tenant_id` must equal `self.tenant_id`** for `org_unit`, `party`, `location`, `item`,
+      `contract`, `license`, `document` — the form's querysets are tenant-scoped, but that is UX and a narrowed
+      dropdown has never held against a crafted POST. Skip the whole block when `self.tenant_id is None`
+      (unsaved instance), and read the relation with a defaulted `getattr(self, name, None)` so a row whose
+      target went away degrades to `None` instead of 500-ing inside validation;
+    - `source="contract"` requires `contract`; `source="license"` requires `license` — otherwise the row is a
+      link-out that links nowhere;
+    - `frequency != "one_time"` requires `next_due_date` — a recurring obligation with no first due date can
+      never surface on the queue that is the point of the register;
+    - `status="not_applicable"` requires `not_applicable_reason`.
+  - Behaviour (the projection idiom — `SupplierContract.refresh_status()` /
+    `Shipment.apply_tracking_event()`):
+    - `refresh_status(today=None, save=True)` — moves **only** within
+      `AUTO_STATUSES = ("applicable", "in_progress", "overdue")`; a `compliant` / `non_compliant` /
+      `not_applicable` / `retired` row is a human decision and is never walked back. `overdue` when
+      `next_due_date < today`.
+    - `record_check(check)` — called by the view after a `ComplianceCheck` is appended: a `fail` sets
+      `status="non_compliant"`; a `pass` sets `status="compliant"`, stamps `last_checked_on` and advances
+      `next_due_date` by `frequency` (`one_time`/`on_event` advance to `None`); `partial` sets `in_progress`.
+      One `save(update_fields=[…])`.
+  - Derived — **never stored** (the 4.9 "`findings_major` must never become a column" rule):
+    `days_to_due` (property, `None` when no due date), `is_overdue`, `is_due_soon` (0 ≤ days ≤ `notice_days`),
+    `compliance_rate` (passes ÷ non-`not_applicable` checks, `None` when there are none — **not `0`**, so an
+    unchecked requirement never renders a confident red zero; the 4.11 `projected_stockout_count` lesson),
+    `status_css` / `criticality_css` (read the dicts above), `scope_label` (`"Supplier: Acme"` /
+    `"Whole workspace"`, and `"Location (removed)"` when a `SET_NULL` pointer is empty but `scope` is not
+    `tenant` — a scoped row whose subject vanished must NOT silently read as workspace-wide).
+  - `__str__` → `f"{self.number or 'CR'} · {self.title}"`
+  - Form excludes: `tenant`, `number` (auto), `last_checked_on` (system stamp, L22), `created_at`,
+    `updated_at`. Everything else is on the form.
+
+- [ ] `class ComplianceCheck(models.Model)` — **tenant-less child, reached via `requirement.tenant`**, the
+      `TrackingEvent` (`Shipments.py:148`) / `InspectionResult` (`QualityInspections.py:330`) /
+      `SupplierCatalogItem` precedent. It is a pure child of one parent, never listed or filtered on its own, so
+      it takes no `tenant` column and no `number`. Views reach it **only** via
+      `get_object_or_404(ComplianceCheck, pk=pk, requirement__tenant=request.tenant)`.
+  - `RESULT_CHOICES` = `pass | fail | partial | not_applicable` → `result = CharField(max_length=14,
+    choices=RESULT_CHOICES, default="pass")`
+  - `RESULT_CSS = {"pass": "badge-green", "fail": "badge-red", "partial": "badge-amber",
+    "not_applicable": "badge-muted"}`
+  - `requirement = FK("scm.ComplianceRequirement", CASCADE, related_name="checks")`
+  - `due_date = DateField(null=True, blank=True)` — the cycle this check answers (snapshotted from the parent's
+    `next_due_date` at creation, so re-scheduling the parent never rewrites what a past cycle was due)
+  - `performed_on = DateField(default=timezone.localdate)`
+  - `performed_by = FK(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False,
+    related_name="scm_compliance_checks_performed")` — **stamped from `request.user`, never typed** (the
+    `ReturnDisposition.received_by` / `SupplierRiskAssessment.assessed_by` posture); "who did it" is an audit
+    fact, not an input *(driver: Sphera "defensible documentation for inspections")*
+  - `finding = TextField(blank=True)`, `corrective_reference = CharField(max_length=120, blank=True,
+    help_text="The 4.9 NCR/CAPA number this failure was escalated to — link out by reference")` — **explicitly
+    a free-text reference, NOT an FK**: adding a `compliance` value to `NonConformance.SOURCE_CHOICES` means
+    editing a shipped sub-module for a convenience link, which is exactly what 4.11 refused to do. Parked below.
+  - `evidence = FK("core.Document", SET_NULL, null=True, blank=True, related_name="scm_compliance_checks")`
+  - `notes = TextField(blank=True)`, `created_at = DateTimeField(auto_now_add=True)`
+  - `class Meta`: `ordering = ["-performed_on", "-id"]`; indexes — `scm_cchk_req_due_idx`
+    (requirement, due_date), `scm_cchk_result_idx` (requirement, result).
+  - `clean()` — `performed_on` may not be in the future (a proof cycle cannot be recorded before it happened).
+  - Form excludes: `requirement` (comes from the URL parent), `performed_by` (system stamp, L22), `created_at`.
+  - **No list page and no detail page for this model** — it is rendered as a timeline on the requirement's
+    detail page, so the CRUD-Completeness rule's "every model that has a list page" clause does not apply. It
+    still gets create / edit / delete.
+
+### Model 2 — `TradeDocument` [`TD-`] + child `TradeDocumentLine` · `models/ContractCompliance/TradeDocuments.py`
+
+*The import/export paperwork register.* Drivers: **Shipping Solutions** (2 dozen+ standard export forms and
+their explicit field lists — commercial invoice carries order/PO references, currency, Incoterms and marine
+insurance; packing list carries net/gross weight and package counts; ocean BoL is a document of title, an AWB
+is a non-negotiable receipt); **e2open** & **ONESOURCE** (documentation generation, centralised broker
+documentation); **SAP GTS** (customs declaration lifecycle).
+
+- [ ] `class TradeDocument(TenantNumbered)` — `NUMBER_PREFIX = "TD"`
+  - `DOC_TYPE_CHOICES` = `commercial_invoice | proforma_invoice | packing_list | certificate_of_origin |
+    bill_of_lading_ocean | bill_of_lading_inland | air_waybill | shippers_letter_of_instruction |
+    dangerous_goods_declaration | export_license_copy | insurance_certificate | customs_declaration | eei_aes`
+    → `doc_type = CharField(max_length=32, choices=DOC_TYPE_CHOICES, default="commercial_invoice")` —
+    **max_length 32**: `shippers_letter_of_instruction` is 30 chars
+  - `DIRECTION_CHOICES` = `export | import` → `direction = CharField(max_length=6, default="export")`
+    (mirrors `Shipment.DIRECTION_CHOICES` semantics without re-declaring outbound/inbound)
+  - `STATUS_CHOICES` = `draft | issued | submitted | accepted | amended | void` →
+    `status = CharField(max_length=10, default="draft", editable=False)` — **workflow-controlled, off the
+    form**, moved only by the issue/submit/accept/void verbs *(driver: SAP GTS / e2open / ONESOURCE customs
+    document lifecycle)*
+  - `INCOTERM_CHOICES` = `EXW FCA FAS FOB CFR CIF CPT CIP DAP DPU DDP` → `incoterm = CharField(max_length=3,
+    blank=True)` *(driver: Shipping Solutions' commercial-invoice + proforma field list)*
+  - `EDITABLE_STATUSES = ("draft", "amended")`, `CHARGING_STATUSES = ("issued", "submitted", "accepted")`
+    (the set that counts against a licence balance — declared once, read by `TradeLicense.recompute_usage()`
+    and by the detail page, so the two can never disagree)
+  - `STATUS_CSS = {"draft": "badge-slate", "issued": "badge-info", "submitted": "badge-amber",
+    "accepted": "badge-green", "amended": "badge-amber", "void": "badge-muted"}`
+  - Fields:
+    - `document_number = CharField(max_length=64, blank=True)` — **the external BoL/invoice/AWB number, distinct
+      from the internal `TD-` `number`** *(driver: every GTM product distinguishes the two)*
+    - `issue_date = DateField(null=True, blank=True)` (the date printed on the form) and
+      `issued_at = DateTimeField(null=True, blank=True, editable=False)` + `issued_by = FK(AUTH_USER_MODEL,
+      SET_NULL, null=True, blank=True, editable=False, related_name="scm_trade_documents_issued")` (system
+      stamps, L22)
+    - `shipment = FK("scm.Shipment", SET_NULL, null=True, blank=True, related_name="trade_documents")` — **4.6
+      owns the consignment; this re-declares no carrier, no addresses, no POD** *(driver: e2open / ONESOURCE /
+      Shipping Solutions "order information imported, then used to create the documents")*
+    - `carrier = FK("scm.Carrier", SET_NULL, null=True, blank=True, related_name="trade_documents")`
+    - `purchase_order = FK("scm.PurchaseOrder", SET_NULL, null=True, blank=True,
+      related_name="trade_documents")`, `sales_order = FK("scm.SalesOrder", SET_NULL, null=True, blank=True,
+      related_name="trade_documents")`
+    - `license = FK("scm.TradeLicense", PROTECT, null=True, blank=True, related_name="trade_documents",
+      help_text="The licence this movement is authorised under — its balance is charged when this is issued")`
+      — **PROTECT is deliberate**: the record of what moved under a licence is the audit trail the whole
+      category exists for, and losing it must not be one click away. **This creates a `ProtectedError` path on
+      `tradelicense_delete` — guard it (see Views).**
+    - `shipper_party = FK("core.Party", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_docs_as_shipper")`,
+      `consignee_party = FK("core.Party", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_docs_as_consignee")`,
+      `notify_party = FK("core.Party", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_docs_as_notify")` *(driver: Shipping Solutions' shipper/consignee/notify triple —
+      all `core.Party`, no new party-like table)*
+    - `country_of_origin = CharField(max_length=64, blank=True)`,
+      `country_of_destination = CharField(max_length=64, blank=True)`
+    - `currency = FK("accounting.Currency", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_documents")`, `declared_value = DecimalField(14, 2, default=0,
+      validators=[MinValueValidator(ZERO)])`, `freight_charges = DecimalField(14, 2, null=True, blank=True,
+      validators=[MinValueValidator(ZERO)])`, `insurance_value = DecimalField(14, 2, null=True, blank=True,
+      validators=[MinValueValidator(ZERO)])` *(driver: Shipping Solutions' marine-insurance + freight fields on
+      the CI)*
+    - `gross_weight_kg` / `net_weight_kg = DecimalField(12, 2, null=True, blank=True,
+      validators=[MinValueValidator(ZERO)])`, `package_count = PositiveIntegerField(null=True, blank=True)`
+      *(driver: Shipping Solutions' packing list)*
+    - `vessel_or_flight = CharField(max_length=120, blank=True)`, `voyage_number = CharField(max_length=64,
+      blank=True)`, `port_of_loading = CharField(max_length=120, blank=True)`,
+      `port_of_discharge = CharField(max_length=120, blank=True)`,
+      `container_numbers = CharField(max_length=255, blank=True)`,
+      `is_negotiable = BooleanField(default=False, help_text="An ocean BoL is a document of title; an air
+      waybill is not")` *(driver: Shipping Solutions' BoL vs AWB distinction)*
+    - `filing_reference = CharField(max_length=64, blank=True, help_text="AES/ITN or broker reference — 4.12
+      stores the reference, it does not file")` *(driver: Shipping Solutions AESDirect, SAP GTS, e2open
+      self-filing — the transmission itself is deferred)*
+    - `document = FK("core.Document", SET_NULL, null=True, blank=True, related_name="scm_trade_documents",
+      help_text="The signed/stamped scan")`, `void_reason = TextField(blank=True, editable=False)`,
+      `notes = TextField(blank=True)`
+  - `class Meta`: `ordering = ["-issue_date", "-id"]`; `unique_together = ("tenant", "number")`; indexes —
+    `scm_td_tnt_status_idx` (tenant, status), `scm_td_tnt_type_idx` (tenant, doc_type),
+    `scm_td_tnt_shp_idx` (tenant, shipment), `scm_td_tnt_issued_idx` (tenant, issue_date).
+  - `clean()` — cross-tenant guard on **`shipment`, `carrier`, `purchase_order`, `sales_order`, `license`,
+    `shipper_party`, `consignee_party`, `notify_party`, `document`** (same defaulted-`getattr`,
+    skip-when-`tenant_id`-is-`None` shape as Model 1); plus `incoterm` must be in `INCOTERM_CHOICES` when set;
+    plus `net_weight_kg <= gross_weight_kg` when both are set.
+  - Derived — never stored: `lines_total` (ONE `Sum` aggregate over the child lines), `declared_value_matches`
+    (`abs(declared_value - lines_total) <= Decimal("0.01")` — the detail page shows an **amber** badge when it
+    is False, because a declared value that silently diverges from the line sum is a customs problem, not a
+    rounding one), `is_editable` (`status in EDITABLE_STATUSES`), `is_charging`, `status_css`.
+  - Form excludes: `tenant`, `number` (auto), `status` (workflow), `issued_at` / `issued_by` (system stamps,
+    L22), `void_reason` (stamped by the void verb), `created_at`, `updated_at`.
+
+- [ ] `class TradeDocumentLine(models.Model)` — **tenant-less child** via `document.tenant`, edited through an
+      inline formset on the document form (the `PurchaseOrderLine` / `InvoiceLine` precedent), so it gets no
+      routes of its own.
+  - `document = FK("scm.TradeDocument", CASCADE, related_name="lines")`
+  - `item = FK("scm.Item", SET_NULL, null=True, blank=True, related_name="trade_document_lines")` — nullable:
+    a customs line legitimately describes something that is not in the item master
+  - **Snapshot columns — the reason the `scm.Item` extension is unnecessary.** `description =
+    CharField(max_length=255)`, `hs_code = CharField(max_length=20, blank=True, help_text="HS/HTS
+    classification AS DECLARED on this document")`, `country_of_origin = CharField(max_length=64, blank=True)`,
+    `uom_text = CharField(max_length=20, blank=True)`. Copied from the item (or typed) at line entry and
+    **frozen** — an issued customs declaration must record what was declared, and editing the item master a year
+    later must never rewrite a filed document *(driver: 4.9's snapshot rule, "editing a plan can never rewrite
+    a past certificate"; Descartes "comprehensive documentation of every action")*
+  - `uom = FK("scm.UOM", SET_NULL, null=True, blank=True, related_name="trade_document_lines")` — the live
+    pointer, kept **alongside** `uom_text` for the same snapshot reason
+  - `quantity = DecimalField(14, 4, default=0, validators=[MinValueValidator(ZERO)])`,
+    `unit_value = DecimalField(14, 2, default=0, validators=[MinValueValidator(ZERO)])`,
+    `net_weight_kg = DecimalField(12, 2, null=True, blank=True, validators=[MinValueValidator(ZERO)])`
+  - **`line_value` is a `@property`** = `q2(quantity * unit_value)` — never a column, never editable *(the "no
+    derived value stored editable" rule)*
+  - `class Meta`: `ordering = ["id"]`; index `scm_tdl_doc_idx` (document, id)
+  - `clean()` — `item`, when set, must belong to `self.document.tenant`; `description` is required (it is what
+    the customs officer reads)
+  - Form excludes: `document` (formset parent). `line_value` does not exist as a field.
+
+### Model 3 — `TradeLicense` [`LIC-`] · `models/ContractCompliance/TradeLicenses.py`
+
+*The licence & permit register with a decrementing balance.* Drivers: **Descartes Export License Manager**
+(multi-authority licences from application → approval → usage → expiration → reporting, **real-time
+decrementing**, expiry alerts + balance summaries, provisos/RWA, sub-licensees); **ONESOURCE Global Trade**
+("decrements the remaining license value or volume for export shipments over time"); **e2open** (licence
+determination + tracking + usage, exemptions, end-user statements); **SAP GTS Legal Control** (checks by
+product × destination × business partner); **Shipping Solutions** (ITAR/EAR determination, BIS-711 end user).
+
+- [ ] `class TradeLicense(TenantNumbered)` — `NUMBER_PREFIX = "LIC"`
+  - `LICENSE_TYPE_CHOICES` = `export_license | import_license | itar_dsp | ear_bis | taa_mla | import_permit |
+    customs_authorization | hazmat_permit | fda_registration | license_exception | general_authorization |
+    other` → `license_type = CharField(max_length=24, default="export_license")` *(driver: Descartes'
+    "multi-authority export licenses **and activities**" — exemptions/exceptions and TAA/MLA agreements sit in
+    the same register, which is why `license_exception` and `taa_mla` are values here and not a second table)*
+  - `STATUS_CHOICES` = `draft | applied | approved | active | expiring | expired | suspended | revoked` →
+    `status = CharField(max_length=10, default="draft", editable=False)` — **off the form**, exactly like
+    `SupplierContract.status`
+  - `AUTO_STATUSES = ("active", "expiring", "expired")` — **copy `SupplierContract`'s contract verbatim**
+    (`SupplierContracts.py:35`): a date-driven refresh may move only within this trio and never overrides
+    `draft` / `applied` / `approved` / `suspended` / `revoked`, which are human decisions
+  - `STATUS_CSS = {"draft": "badge-slate", "applied": "badge-info", "approved": "badge-info",
+    "active": "badge-green", "expiring": "badge-amber", "expired": "badge-red", "suspended": "badge-amber",
+    "revoked": "badge-red"}`
+  - Fields:
+    - `license_number = CharField(max_length=64)` (the authority's own number) — `unique_together =
+      ("tenant", "license_number")` **in addition to** `("tenant", "number")`, so the same licence cannot be
+      registered twice; the form mixes in `TenantUniqueMixin` (`forms/_common.py:81`) so a duplicate is a field
+      error, not an uncaught `IntegrityError` 500
+    - `title = CharField(max_length=255)`, `issuing_authority = CharField(max_length=255)`,
+      `issuing_country = CharField(max_length=64, blank=True)`
+    - `holder_party = FK("core.Party", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_licenses_held", help_text="Normally us — set it when the licence is held by a
+      subsidiary or an agent")`
+    - `end_user_party = FK("core.Party", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_licenses_as_end_user")` *(driver: BIS-711 "identifies the final recipient and
+      intended use"; Descartes sub-licensees)*
+    - `application_date` / `issue_date` / `expiry_date = DateField(null=True, blank=True)`,
+      `renewal_notice_days = PositiveIntegerField(default=60, validators=[MinValueValidator(0),
+      MaxValueValidator(3650)])` *(driver: Descartes expiry alerts, annual status updates, review periods)*
+    - `approved_at = DateTimeField(null=True, blank=True, editable=False)` +
+      `approved_by = FK(AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False,
+      related_name="scm_trade_licenses_approved")`; `revoked_at = DateTimeField(null=True, blank=True,
+      editable=False)` + `revocation_reason = TextField(blank=True, editable=False)` — all four are L22 system
+      stamps written only by the verbs
+    - **The balance — the signature feature of this category.**
+      `authorized_value = DecimalField(14, 2, null=True, blank=True, validators=[MinValueValidator(ZERO)])`,
+      `used_value = DecimalField(14, 2, default=0, editable=False)`,
+      `authorized_quantity = DecimalField(14, 4, null=True, blank=True,
+      validators=[MinValueValidator(ZERO)])`, `used_quantity = DecimalField(14, 4, default=0,
+      editable=False)`, `currency = FK("accounting.Currency", SET_NULL, null=True, blank=True,
+      related_name="scm_trade_licenses")`
+    - `commodity_scope = TextField(blank=True)`, `eccn_or_hs = CharField(max_length=255, blank=True)`,
+      `destination_countries = CharField(max_length=500, blank=True)` — **free text on purpose**: there is no
+      HS/ECCN master and no country-control content in this repo, and inventing one would be a fake data feed
+      *(driver: e2open "licensing logic for all HTS/HS and ECCN/ECN numbers", SAP GTS Legal Control)*
+    - `conditions = TextField(blank=True, help_text="Provisos, RWA statuses, conditions")` *(driver: Descartes
+      provisos — anything needing periodic proof becomes a `ComplianceRequirement` with `source="license"`)*
+    - `document = FK("core.Document", SET_NULL, null=True, blank=True, related_name="scm_trade_licenses")`,
+      `notes = TextField(blank=True)`
+  - `class Meta`: `ordering = ["expiry_date", "-id"]`;
+    `unique_together = (("tenant", "number"), ("tenant", "license_number"))`; indexes —
+    `scm_lic_tnt_status_idx` (tenant, status), `scm_lic_tnt_expiry_idx` (tenant, expiry_date),
+    `scm_lic_tnt_type_idx` (tenant, license_type).
+  - `clean()` — cross-tenant guard on `holder_party`, `end_user_party`, `document`; `expiry_date >= issue_date
+    >= application_date` when set; `used_value`/`used_quantity` are never touched here (they are not on the
+    form).
+  - Behaviour:
+    - `days_to_expiry(today=None)` / `is_expiring_soon(today=None)` / `refresh_status(today=None, save=True)` —
+      **copy `SupplierContract`'s implementations (`SupplierContracts.py:67-94`) rather than inventing a second
+      idiom**, substituting `expiry_date` for `end_date`. `refresh_status` returns early unless
+      `status in AUTO_STATUSES`, and saves with `update_fields=["status", "updated_at"]`.
+    - `recompute_usage(save=True)` — **ONE aggregate**, not a per-document loop:
+      `self.trade_documents.filter(status__in=TradeDocument.CHARGING_STATUSES).aggregate(
+      v=Sum("declared_value"), q=Sum("lines__quantity"))`, written through `q2()` / `q4()` so an over-range
+      figure clamps rather than raising `DataError`. Called by `tradedocument_issue`, `tradedocument_void`,
+      `tradedocument_delete` and the admin `tradelicense_recompute` action. The counters are a **cache with a
+      stated invalidation path**, which is why they are `editable=False` and why re-derivation exists at all —
+      drift can never become permanent.
+    - `can_charge(value, quantity)` → `(bool, reason)` — refuses when the licence is not `active`/`expiring`, or
+      when the addition would exceed `authorized_value` / `authorized_quantity`. **The issue view calls this and
+      refuses with a message; it does not clamp silently** *(driver: Descartes "prevent overuse and maintain
+      accurate balance visibility"; ONESOURCE "checks availability & validity")*
+  - Derived — never stored: `remaining_value` / `remaining_quantity` (`None` when the corresponding
+    `authorized_*` is `None` — an unlimited licence must not read as "0 remaining"),
+    `utilization_pct` (`None`, not `0`, when there is nothing authorised — the 4.11 lesson), `status_css`.
+  - Form excludes: `tenant`, `number` (auto), `status` (workflow), `used_value`, `used_quantity` (system
+    counters), `approved_at` / `approved_by` / `revoked_at` / `revocation_reason` (system stamps, L22),
+    `created_at`, `updated_at`.
+
+### Model 4 — `SustainabilityAssessment` [`ESG-`] · `models/ContractCompliance/SustainabilityAssessments.py`
+
+*Ethical sourcing + supplier-declared carbon.* Drivers: **EcoVadis** (four themes — Environment · Labor & Human
+Rights · Ethics · Sustainable Procurement — plus a separate Carbon scorecard; per-theme score; overall 1–100;
+annually-updated bronze/silver/gold/platinum medal; insufficient→leader maturity; per-theme strengths &
+improvement areas); **IntegrityNext** (self-assessments, certificate collection, audit trail);
+**Assent** (auditable declarations for REACH, RoHS, Prop 65/SCIP, UFLPA/forced labour, conflict minerals);
+**Sourcemap** (corroboration, certification review); **Watershed** & **Persefoni** (supplier engagement for
+Scope 3 collection).
+
+- [ ] `class SustainabilityAssessment(TenantNumbered)` — `NUMBER_PREFIX = "ESG"`
+  - `SOURCE_CHOICES` = `self_assessment | third_party_rating | desk_review | onsite_audit` →
+    `source = CharField(max_length=20, default="self_assessment")` *(driver: the four have different
+    evidentiary weight — IntegrityNext self-assessment vs EcoVadis third-party rating)*
+  - `RATING_CHOICES` = `none | bronze | silver | gold | platinum` → `rating = CharField(max_length=8,
+    default="none", editable=False)` — **DERIVED, never hand-set** *(driver: EcoVadis medals)*
+  - `STATUS_CHOICES` = `draft | submitted | validated | expired` → `status = CharField(max_length=10,
+    default="draft")` — **stays ON the form**: unlike `TradeDocument`/`TradeLicense` there are no verb routes
+    and no system-driven transitions here, so it is the assessor's own record state (the
+    `SupplierRiskAssessment.status` precedent, `SupplierRiskAssessments.py:33`)
+  - `RATING_CSS = {"platinum": "badge-info", "gold": "badge-green", "silver": "badge-slate",
+    "bronze": "badge-amber", "none": "badge-muted"}`;
+    `STATUS_CSS = {"draft": "badge-slate", "submitted": "badge-amber", "validated": "badge-green",
+    "expired": "badge-muted"}`
+  - `THEMES = ("environment_score", "labor_human_rights_score", "ethics_score",
+    "sustainable_procurement_score")` — the four EcoVadis themes; `carbon_score` is deliberately **outside**
+    `THEMES` because EcoVadis scores Carbon on a separate scorecard, so it must not dilute the overall
+  - Fields:
+    - `party = FK("core.Party", CASCADE, related_name="scm_sustainability_assessments")` — the supplier or
+      carrier; **never a new vendor table** (the `SupplierRiskAssessment.party` precedent, incl. `CASCADE`)
+    - `assessment_date = DateField()`, `valid_until = DateField(null=True, blank=True)` *(driver: EcoVadis
+      annual validity)*
+    - `source`, `provider = CharField(max_length=120, blank=True, help_text="EcoVadis, IntegrityNext, our own
+      audit team")`
+    - Theme scores 0–100: `environment_score`, `labor_human_rights_score`, `ethics_score`,
+      `sustainable_procurement_score`, `carbon_score` — each
+      `PositiveSmallIntegerField(null=True, blank=True, validators=[MinValueValidator(0),
+      MaxValueValidator(100)])`. Nullable, because a real scorecard often covers only some themes.
+    - `overall_score = PositiveSmallIntegerField(null=True, blank=True, editable=False)` — **derived**
+    - `rating` — **derived** (see above)
+    - `strengths = TextField(blank=True)`, `improvement_areas = TextField(blank=True)` *(driver: EcoVadis
+      per-theme strengths & improvement areas)*
+    - Declaration flags (all `BooleanField(default=False)`) — `conflict_minerals_declared`, `reach_declared`,
+      `rohs_declared`, `forced_labor_attested`, `deforestation_declared`, `code_of_conduct_signed`
+      *(drivers: Assent REACH/RoHS/UFLPA/conflict minerals; Sourcemap EUDR; IntegrityNext code of conduct.
+      Anything needing a recurring proof cycle becomes a `ComplianceRequirement` row with the matching
+      `framework` — 4.12 does not build a third expiry mechanism)*
+    - Supplier-declared carbon: `scope1_tco2e`, `scope2_tco2e`, `scope3_tco2e` —
+      `DecimalField(14, 3, null=True, blank=True, validators=[MinValueValidator(ZERO)])`; plus
+      `carbon_reporting_year = PositiveIntegerField(null=True, blank=True,
+      validators=[MinValueValidator(2000), MaxValueValidator(2100)])` *(driver: Watershed/Persefoni supplier
+      engagement for Scope 3; EcoVadis' 2021 Carbon scorecard)*
+    - `assessed_by = FK(AUTH_USER_MODEL, SET_NULL, null=True, blank=True, editable=False,
+      related_name="scm_sustainability_assessments_recorded")` — stamped from `request.user`
+    - `document = FK("core.Document", SET_NULL, null=True, blank=True,
+      related_name="scm_sustainability_assessments")`, `notes = TextField(blank=True)`
+  - `class Meta`: `ordering = ["-assessment_date", "-id"]`; `unique_together = ("tenant", "number")`;
+    indexes — `scm_esg_tnt_party_idx` (tenant, party), `scm_esg_tnt_status_idx` (tenant, status),
+    `scm_esg_tnt_rating_idx` (tenant, rating), `scm_esg_tnt_valid_idx` (tenant, valid_until).
+  - `clean()` — cross-tenant guard on `party` and `document`; `valid_until >= assessment_date` when both set;
+    `source="third_party_rating"` requires `provider` (an unattributed third-party rating is not evidence).
+  - `recompute_rating(save=True)` — **the `SupplierRiskAssessment.recompute_risk_level()` posture verbatim**
+    (`SupplierRiskAssessments.py:58-75`): mean of the **set** `THEMES` scores (`None` when none is set — not
+    `0`), rounded; medal bands `>=85 platinum`, `>=65 gold`, `>=45 silver`, `>=25 bronze`, else `none`. Called
+    from `save()` so no path (seeder, shell, test) can store a hand-set headline, and two assessors can never
+    disagree on the medal.
+  - Derived — never stored: `maturity_level` (property → `insufficient | beginner | intermediate | advanced |
+    leader` from `overall_score`, EcoVadis' own ladder), `total_declared_tco2e` (sum of the three scopes that
+    are set, `None` when none is), `is_expired(today)` (`valid_until < today`), `rating_css`, `status_css`.
+  - Form excludes: `tenant`, `number` (auto), `overall_score` (derived), `rating` (derived), `assessed_by`
+    (system stamp, L22), `created_at`, `updated_at`.
+
+### Shared vocabulary module — `models/ContractCompliance/_choices.py`
+
+- [ ] Pure data, **no queries and no model imports** (the 4.11 `SupplyChainAnalytics/_choices.py` precedent, and
+      the reason `apps/scm/analytics.py` stays importable). It holds ONLY the carbon arithmetic's inputs:
+      `EMISSION_FACTORS` — a **closed** dict keyed by 4.6's existing `MODE_CHOICES`
+      (`truckload / ltl / parcel / ocean / air / rail / intermodal`) → gCO2e per tonne-km, plus
+      `EMISSION_FACTOR_SOURCE` (the GLEC Framework v3.2 / ISO 14083 citation string the page prints) and
+      `CARBON_METHOD_NOTE` (the on-screen limitations paragraph). Imported by the report view and by the tests,
+      so the number on the page and the number in the test come from ONE table.
+- [ ] Re-export `EMISSION_FACTORS`, `EMISSION_FACTOR_SOURCE`, `CARBON_METHOD_NOTE` from
+      `apps/scm/models/__init__.py` **before** the entity imports (the `_choices`-first ordering 4.10/4.11 use).
+
+---
+
+## The 4.2 extension — `scm.SupplierContract` (additive, nullable-only, behaviour-neutral)
+
+**Precedent:** 4.4 extended 4.3's `Location` with `capacity` / `pick_sequence` / `abc_class` and pointed its own
+"Bin/Location Management" bullet at `scm:location_list`. 4.12 does exactly that for "Contract Repository".
+
+- [ ] `apps/scm/models/SupplierRelationshipManagement/SupplierContracts.py` — three changes, nothing else:
+  - `parent_contract = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+    related_name="amendments", help_text="The master agreement this amendment / SOW / renewal hangs off")`
+    — **SET_NULL, not CASCADE**: an amendment is a separately-signed instrument and deleting the master must
+    not delete it *(drivers: Docusign CLM "agreement hierarchies"; Icertis version history & relationship
+    tracking; SAP Ariba fixed vs perpetual vs auto-renewing)*
+  - `owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+    related_name="scm_supplier_contracts_owned", help_text="The person renewals and obligations route to")`
+    *(drivers: Agiloft / Coupa / Icertis all route renewals and obligations to a named contract owner)*
+  - `TYPE_CHOICES` gains `("logistics", "Logistics / Carrier Agreement")` — a choice-only change, so the
+    migration operation is an `AlterField` that touches no row. **`contract_type` is already
+    `max_length=12`; `"logistics"` is 9 chars — no widen needed.** *(driver: the NavERP 4.12 bullet names
+    logistics contracts explicitly; 4.6's `Carrier.party` FK makes the counterparty resolve today)*
+  - `clean()` gains ONE guard: `parent_contract` may not be `self`, must be same-tenant, and walking
+    `parent_contract` upward (capped at 10 hops) must not revisit `self` — a cycle would make the detail page's
+    ancestor walk an infinite loop.
+  - **Do not touch** `status`, `AUTO_STATUSES`, `refresh_status()`, `days_to_expiry()`, `is_expiring_soon()`,
+    `Meta.ordering`, either existing index, or any existing column. Verify with a diff before committing.
+- [ ] `apps/scm/forms/SupplierRelationshipManagement/SupplierContracts.py` — add `"parent_contract"` and
+      `"owner"` to the **whitelist** `Meta.fields` (it is already a whitelist — keep it one). In `__init__`:
+      scope `parent_contract` to `SupplierContract.objects.filter(tenant=self.tenant).exclude(
+      pk=self.instance.pk)` (the `exclude` is inert on create, where `pk` is `None`), and `owner` to
+      `get_user_model().objects.filter(Q(is_active=True) | Q(pk=self.instance.owner_id))` — the
+      `KpiTargetForm` idiom, so deactivating a user never silently nulls a stored owner on an unrelated edit.
+- [ ] `apps/scm/views/SupplierRelationshipManagement/SupplierContracts.py` — `contract_list` adds
+      `"parent_contract", "owner"` to its existing `select_related` (it already has `party`, `currency`);
+      `contract_detail` adds `select_related("parent_contract", "owner")` and prefetches `amendments`.
+      **No new filter and no new route** — the change stays display-only, and `contract_type=logistics` is
+      already filterable because the existing `type_choices` context comes straight from `TYPE_CHOICES`.
+- [ ] `templates/scm/srm/contract/list.html` — an "Owner" column and a `badge-info` "Amendment" chip on a row
+      with a `parent_contract`. `templates/scm/srm/contract/detail.html` — an Owner row in the detail grid, a
+      "Master agreement" link when `parent_contract` is set, and an "Amendments" list of `obj.amendments.all`.
+      `templates/scm/srm/contract/form.html` — render the two new fields.
+- [ ] **Deliberately out of scope, and why (record this in the model docstring, not just here):** the
+      `scm.Item` extension (`hs_code` / `country_of_origin` / `is_hazardous` / `un_number`) that the research
+      recommends as *optional*. `TradeDocumentLine` already snapshots `hs_code` and `country_of_origin` at
+      issue time, which is the **correct** design for a customs declaration — a filed document must record what
+      was declared, not follow a mutable master. Adding the columns now would create a second source of truth
+      for the same fact, and the first "helpful" default that copies the master onto an existing line would
+      silently rewrite a filed declaration. Revisit only alongside a real product-classification feature
+      (Descartes Product Trade Manager shape), where the master is the point.
+
+---
+
+## Backend (`apps/scm/{models,forms,views,urls}/ContractCompliance/`)
+
+One file per entity, in all four layers, lining up one-to-one — mirroring
+`apps/scm/{models,forms,views,urls}/SupplyChainAnalytics/KpiTargets.py`. **Absolute imports only**
+(`from apps.scm.models import X`); entity modules pull the toolkit from `_base.py` (models) / `_common.py`
+(forms, views) via `import *`.
+
+### models/
+- [ ] `apps/scm/models/ContractCompliance/__init__.py` (empty — still its own commit)
+- [ ] `apps/scm/models/ContractCompliance/_choices.py` — `EMISSION_FACTORS` + source/method strings
+- [ ] `apps/scm/models/ContractCompliance/TradeLicenses.py` — `TradeLicense`
+- [ ] `apps/scm/models/ContractCompliance/ComplianceRequirements.py` — `ComplianceRequirement` +
+      `ComplianceCheck`
+- [ ] `apps/scm/models/ContractCompliance/TradeDocuments.py` — `TradeDocument` + `TradeDocumentLine`
+- [ ] `apps/scm/models/ContractCompliance/SustainabilityAssessments.py` — `SustainabilityAssessment`
+
+### forms/ — every one a `TenantModelForm` subclass with a **whitelist `Meta.fields`, never `Meta.exclude`**
+- [ ] `apps/scm/forms/ContractCompliance/__init__.py` (empty)
+- [ ] `.../TradeLicenses.py` — `TradeLicenseForm` (+ `TenantUniqueMixin` for
+      `("tenant", "license_number")`; `_active_currencies(self)`; `holder_party` / `end_user_party` scoped with
+      `_supplier_parties(self.tenant)` ∪ `_carrier_parties(self.tenant)`; stamp
+      `self.instance.tenant = self.tenant` in `__init__` so the model's cross-tenant `clean()` actually RUNS on
+      create — `crud_create` assigns the tenant only AFTER `is_valid()`, `apps/core/crud.py:82-84`)
+- [ ] `.../ComplianceRequirements.py` — `ComplianceRequirementForm` + `ComplianceCheckForm`. The five scope FKs
+      are **NOT** narrowed by the chosen `scope` (the `KpiTargetForm` L39 §2 rule: an unbound create form has no
+      scope yet, so narrowing renders permanently-empty selects and the screen can never be completed — the 4.5
+      `ship_to_address` failure). `clean()` on the model rejects the wrong combination, and that holds against a
+      crafted POST as a narrowed dropdown never did.
+- [ ] `.../TradeDocuments.py` — `TradeDocumentForm` + `TradeDocumentLineFormSet =
+      inlineformset_factory(TradeDocument, TradeDocumentLine, form=TradeDocumentLineForm, extra=1,
+      can_delete=True)`. Child dropdowns (`item`, `uom`) are scoped by hand via `_scope_to_parent` /
+      an explicit tenant filter — `TradeDocumentLine` has no `tenant`, so `TenantModelForm` cannot scope it and
+      the select would otherwise list every tenant's items (`forms/_common.py:7-11`).
+- [ ] `.../SustainabilityAssessments.py` — `SustainabilityAssessmentForm` (`party` scoped to
+      `_supplier_parties(self.tenant)` ∪ `_carrier_parties(self.tenant)`; tenant stamped in `__init__`)
+
+### views/ — function-based, `@login_required`, tenant-scoped, `crud_*` from `apps.core.crud`
+Every list gets **search + filters + pagination**; every model with a list gets the full five. Deletes are
+`@tenant_admin_required` + `@require_POST`. `crud_*` writes the audit log automatically
+(`apps/core/crud.py` → `write_audit_log`); **every hand-rolled save path below must call `write_audit_log`
+itself** — that is the formset commits and every verb route.
+- [ ] `apps/scm/views/ContractCompliance/__init__.py` (empty)
+- [ ] `.../TradeLicenses.py` — `tradelicense_list` (search `number` / `license_number` / `title` /
+      `issuing_authority`; filters `status`, `license_type`, `issuing_country`; `select_related("holder_party",
+      "end_user_party", "currency")`; rolls `refresh_status()` for the crossed rows in **ONE `bulk_update`**,
+      the `_roll_contract_statuses` precedent — never a `save()` per row on an unpaginated scan; extra_context
+      `status_choices`, `type_choices` **and** an `expiring_count` chip),
+      `tradelicense_create`, `tradelicense_detail` (the balance card + the documents charged to it + its
+      `compliance_requirements`), `tradelicense_edit`, `tradelicense_delete`
+      (**`@tenant_admin_required` + `@require_POST`, and it MUST pre-check
+      `obj.trade_documents.exists()` and refuse with a message** — `TradeDocument.license` is `PROTECT`, so
+      without the guard an ordinary delete is an uncaught `ProtectedError` 500; this is the 4.10
+      `currency_delete` finding, priced in advance), plus verbs `tradelicense_submit`,
+      `tradelicense_approve`, `tradelicense_revoke`, `tradelicense_recompute` — all `@require_POST`, the last
+      three `@tenant_admin_required`
+- [ ] `.../ComplianceRequirements.py` — `compliancerequirement_list` (search `number` / `title` /
+      `source_reference`; filters `status`, `framework`, `source`, `criticality`, `owner` (int),
+      `due` (`overdue` / `due_soon` / `open` — computed against `next_due_date`, applied **before**
+      `crud_list` paginates); `select_related("owner", "party", "org_unit", "location", "item", "contract",
+      "license")` because the list renders `scope_label`, which walks whichever pointer the scope names;
+      extra_context `status_choices`, `framework_choices`, `source_choices`, `criticality_choices`, `owners`,
+      plus `overdue_count` / `due_soon_count` header chips computed in ONE aggregate),
+      `compliancerequirement_create`, `_detail` (the check timeline + `compliance_rate` + the linked
+      contract/licence), `_edit`, `_delete`; plus `compliancerequirement_record_check` (`@require_POST`,
+      stamps `performed_by=request.user`, snapshots `due_date` from the parent, then calls
+      `requirement.record_check(check)` inside `transaction.atomic()` and writes the audit log),
+      `compliancecheck_edit`, `compliancecheck_delete` (both resolve the row **only** via
+      `requirement__tenant=request.tenant` — the child has no `tenant` column of its own)
+- [ ] `.../TradeDocuments.py` — `tradedocument_list` (search `number` / `document_number` /
+      `consignee_party__name`; filters `status`, `doc_type`, `direction`, `shipment` (int), `license` (int);
+      `select_related("shipment", "carrier", "license", "consignee_party", "currency")`;
+      extra_context `status_choices`, `doctype_choices`, `direction_choices`, `shipments`, `licenses`),
+      `tradedocument_create` / `_edit` (**parent + inline formset committed in ONE
+      `transaction.atomic()`**, with `_changed`-based `write_audit_log` hand-rolled because that path bypasses
+      `crud_edit` — the documented scm idiom, `views/_common.py:34-38`; edit refuses unless
+      `obj.is_editable`), `tradedocument_detail` (lines + `lines_total` vs `declared_value` with the amber
+      divergence badge + the licence balance it charged), `tradedocument_delete`
+      (`@tenant_admin_required` + `@require_POST`; calls `license.recompute_usage()` afterwards),
+      `tradedocument_issue` (`@require_POST`: refuses unless `status` is `draft`/`amended`; when a `license`
+      is set, calls `license.can_charge(...)` and **refuses with a message rather than clamping**; stamps
+      `status="issued"`, `issued_at`, `issued_by`; calls `license.recompute_usage()`; all inside
+      `transaction.atomic()`), `tradedocument_submit`, `tradedocument_accept`, `tradedocument_void`
+      (`@tenant_admin_required` + `@require_POST`, records `void_reason`, then `recompute_usage()`),
+      `tradedocument_print` (`@login_required`, renders the generic print template)
+- [ ] `.../SustainabilityAssessments.py` — `sustainabilityassessment_list` (search `number` / `party__name` /
+      `provider`; filters `status`, `rating`, `source`, `party` (int); `select_related("party", "assessed_by")`;
+      extra_context `status_choices`, `rating_choices`, `source_choices`, `parties`), `_create` (stamps
+      `assessed_by=request.user`), `_detail` (the four themes + carbon + declarations + a link to the party's
+      4.2 `SupplierRiskAssessment` so *sustainability* and *risk* sit side by side and are visibly not the same
+      thing), `_edit`, `_delete`
+- [ ] `.../Reports.py` — `carbon_footprint_report` + `carbon_footprint_report_export` (see below)
+
+### urls/ — literal routes BEFORE `<int:pk>`, first-match-wins
+- [ ] `apps/scm/urls/ContractCompliance/__init__.py` (empty)
+- [ ] `.../TradeLicenses.py` — prefix `trade-licenses/`: `""` list, `add/`, `<int:pk>/`, `<int:pk>/edit/`,
+      `<int:pk>/delete/`, `<int:pk>/submit/`, `<int:pk>/approve/`, `<int:pk>/revoke/`, `<int:pk>/recompute/`
+      → names `tradelicense_list|_create|_detail|_edit|_delete|_submit|_approve|_revoke|_recompute`
+- [ ] `.../ComplianceRequirements.py` — prefix `compliance-requirements/` (+ `compliance-checks/` for the two
+      child routes): `compliancerequirement_list|_create|_detail|_edit|_delete`,
+      `compliancerequirement_record_check` (`compliance-requirements/<int:pk>/checks/add/`),
+      `compliancecheck_edit` (`compliance-checks/<int:pk>/edit/`), `compliancecheck_delete`
+      (`compliance-checks/<int:pk>/delete/`)
+- [ ] `.../TradeDocuments.py` — prefix `trade-documents/`: `tradedocument_list|_create|_detail|_edit|_delete`
+      + `<int:pk>/issue/`, `<int:pk>/submit/`, `<int:pk>/accept/`, `<int:pk>/void/`, `<int:pk>/print/`
+- [ ] `.../SustainabilityAssessments.py` — prefix `sustainability-assessments/`:
+      `sustainabilityassessment_list|_create|_detail|_edit|_delete`
+- [ ] `.../Reports.py` — `carbon-footprint/` → `carbon_footprint_report`; `carbon-footprint/export/` →
+      `carbon_footprint_report_export` (the `inventory_analytics` / `inventory_analytics_export` shape,
+      `urls/SupplyChainAnalytics/Reports.py:29-31`)
+
+### Re-export blocks — **all four `__init__.py`. Forgetting one is an ImportError/AttributeError at runtime.**
+- [ ] `apps/scm/models/__init__.py` — a `# 4.12 Contract & Compliance Management` block at the foot, in
+      **dependency order**: `_choices` FIRST (pure data), then `.ContractCompliance.TradeLicenses import
+      (TradeLicense)` **before** `.ComplianceRequirements import (ComplianceRequirement, ComplianceCheck)` and
+      `.TradeDocuments import (TradeDocument, TradeDocumentLine)` (both FK `TradeLicense`), then
+      `.SustainabilityAssessments import (SustainabilityAssessment)` — the 4.10/4.11 ordering convention. FKs
+      are by string so Django would not care; the ordering is for the reader.
+- [ ] `apps/scm/forms/__init__.py` — `TradeLicenseForm`, `ComplianceRequirementForm`, `ComplianceCheckForm`,
+      `TradeDocumentForm`, `TradeDocumentLineForm`, `TradeDocumentLineFormSet`,
+      `SustainabilityAssessmentForm`
+- [ ] `apps/scm/views/__init__.py` — every view name listed under views/ above (30 names). Miss one and
+      `apps/scm/urls/` raises `AttributeError: module 'apps.scm.views' has no attribute '…'` at import.
+- [ ] `apps/scm/urls/__init__.py` — four `from .ContractCompliance.<Entity> import urlpatterns as
+      _cc_<entity>` imports + four `*_cc_<entity>` entries at the END of `urlpatterns`, with a
+      **`# 4.12 COLLISION CHECK`** comment block in the style of 4.10's and 4.11's:
+  - `compliance-requirements/` · `compliance-checks/` — nothing anywhere in `scm` starts with `compliance`.
+    Two distinct whole components; Django matches whole path components and never splits at the hyphen, so
+    neither can shadow the other.
+  - `trade-documents/` · `trade-licenses/` — nothing anywhere starts with `trade`. Distinct whole components.
+  - `sustainability-assessments/` — nothing starts with `sustainability`. Note 4.2 owns `risk-assessments/`;
+    these are unrelated first components, not `…/assessments`.
+  - `carbon-footprint/` — nothing starts with `carbon`.
+  - `carbon-footprint/export/` is a literal sub-route of a segment claimed above: **zero new first segments.**
+  - **4.12 adds NO new first segment `contracts/`** — 4.2 already owns it and the sidebar points at 4.2's list.
+  - **4.12 introduces NO greedy `<str:…>` converter**; 4.10's `return-tracking/<str:token>/` remains the app's
+    only one and sits alone on its own first segment.
+
+### Flat app-root modules
+- [ ] `apps/scm/admin.py` — a `# 4.12 Contract & Compliance Management` import block + `@admin.register` for
+      `ComplianceRequirement` (inline `ComplianceCheck`), `TradeDocument` (inline `TradeDocumentLine`),
+      `TradeLicense`, `SustainabilityAssessment`. `list_display` / `list_filter` include `tenant`, matching the
+      existing registrations.
+- [ ] `apps/scm/migrations/0020_*.py` — `makemigrations scm`. **Additive only**: 6 `CreateModel`, 2 `AddField`
+      on `suppliercontract`, 1 `AlterField` on `suppliercontract.contract_type` (choices only). Read the
+      generated file before committing and confirm there is **no `RemoveField`, no `AlterModelOptions` on a
+      4.1–4.11 model, and no data migration**.
+
+---
+
+## Wire-up — `apps/core/navigation.py`
+
+- [ ] Insert a `"4.12"` block **immediately after the `"4.11"` block** (which closes at `navigation.py:915`;
+      the `LIVE_LINKS` dict closes at `:916`). Keys must match the NavERP.md 4.12 bullet names **EXACTLY** —
+      `NavERP.md:811-815`, verified verbatim:
+
+```python
+    # 4.12 Contract & Compliance Management. "Contract Repository" points at 4.2's EXISTING
+    # scm:contract_list rather than a second contract table: SupplierContract already carries party,
+    # type (incl. nda/sla and now logistics), status, dates, value, currency, terms and the renewal
+    # window, and 4.12 adds only the amendment hierarchy + owner it was missing. Same precedent as
+    # 4.4 pointing its "Bin/Location Management" bullet at 4.3's scm:location_list.
+    #
+    # The carbon report is reached from a chip in the Sustainability list header, not from a sixth
+    # key — 4.12 has five bullets and the sidebar mirrors NavERP.md exactly.
+    "4.12": {
+        "Contract Repository":     "scm:contract_list",                  # bullet (4.2's list, extended)
+        "Compliance Tracking":     "scm:compliancerequirement_list",     # bullet (the obligation register)
+        "Trade Documentation":     "scm:tradedocument_list",             # bullet (BoL / CI / packing list)
+        "License Management":      "scm:tradelicense_list",              # bullet (register + balance + expiry)
+        "Sustainability Tracking": "scm:sustainabilityassessment_list",  # bullet (ESG + carbon report chip)
+    },
+```
+
+- [ ] **No `config/settings.py` change and no `config/urls.py` change** — `apps.scm` is already installed and
+      `include("apps.scm.urls")` is already wired. Confirm with `git diff --stat config/` before committing
+      (it must be empty).
+- [ ] None of the five targets is a login-gated portal view (L32) — all five are staff-facing management pages.
+
+---
+
+## Templates — `templates/scm/compliance/`
+
+Sub-module folder `compliance/`, then one folder per entity, bare page filenames. **Never** a flat
+`<entity>_<page>.html`. Every list = filter bar reflecting `request.GET` + Actions column
+(view / edit / delete-POST + `confirm()` + `{% csrf_token %}`) + pagination with `has_previous` / `has_next`
+guards (L9) + an empty state. FK filter comparisons use `|stringformat:"d"`, **never `|slugify`**. Badge
+conditions use exact model choice values with an `{% else %}{{ obj.get_<field>_display }}` fallback, and the
+colour comes from the model's `*_CSS` property — `badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate` are the **only** classes that exist (L33).
+
+- [ ] `compliance/compliancerequirement/list.html` (filters: q, status, framework, source, criticality, owner,
+      due; header chips Overdue / Due soon)
+- [ ] `compliance/compliancerequirement/detail.html` (detail grid + scope label + linked contract/licence + the
+      `ComplianceCheck` timeline with `RESULT_CSS` badges + the inline "Record check" form + `compliance_rate`,
+      rendered as "—" not "0%" when there are no checks)
+- [ ] `compliance/compliancerequirement/form.html`
+- [ ] `compliance/compliancecheck/form.html` (edit page for a recorded check)
+- [ ] `compliance/tradedocument/list.html` (filters: q, status, doc_type, direction, shipment, license)
+- [ ] `compliance/tradedocument/detail.html` (header + parties + transport block + lines table with
+      `line_value` + `lines_total` vs `declared_value` divergence badge + the licence charged + Issue / Submit /
+      Accept / Void / Print actions, each gated on `status`)
+- [ ] `compliance/tradedocument/form.html` (parent + inline line formset)
+- [ ] `compliance/tradedocument/print.html` (ONE generic print layout for all 13 doc types — the HRM
+      `relieving_letter.html` precedent; per-form official layouts are deferred)
+- [ ] `compliance/tradelicense/list.html` (filters: q, status, license_type, issuing_country; header chip
+      "Expiring in N days"; a utilisation bar column reading `utilization_pct`, rendered "—" when `None`)
+- [ ] `compliance/tradelicense/detail.html` (balance card: authorised / used / remaining / utilisation, with
+      "Unlimited" where `authorized_*` is `None`; the charged documents; the linked
+      `compliance_requirements`; Submit / Approve / Revoke / Recompute actions)
+- [ ] `compliance/tradelicense/form.html`
+- [ ] `compliance/sustainabilityassessment/list.html` (filters: q, status, rating, source, party; **the carbon
+      report chip lives in this header** — `{% url 'scm:carbon_footprint_report' %}`)
+- [ ] `compliance/sustainabilityassessment/detail.html` (four theme bars + carbon scorecard + overall + medal +
+      maturity + declarations checklist + scopes 1/2/3 + a link to the party's 4.2 risk assessment)
+- [ ] `compliance/sustainabilityassessment/form.html`
+- [ ] `compliance/carbon_footprint.html` — **standalone page at the sub-module root** (template rule 6, the
+      `accounting/reports/*` precedent), not inside an entity folder
+
+---
+
+## The computed report — `scm:carbon_footprint_report` (NO new table)
+
+- [ ] GLEC Framework v3.2 / **ISO 14083** freight emissions over the **verified** 4.6 rows: tonne-km =
+      `(Shipment.weight_kg / 1000) * Load.distance_km`, multiplied by `EMISSION_FACTORS[mode]` (gCO2e per
+      tonne-km) where `mode` is `Shipment.mode` falling back to `Load.mode`. 4.6 stored `distance_km` and
+      `weight_kg` expressly for this (`Loads.py:47`, `Shipments.py:60`).
+- [ ] **Report unavailable, never a confident zero** (the 4.11 `projected_stockout_count` lesson): a shipment
+      with no load, a load with no `distance_km`, or a shipment with no `weight_kg` **cannot** be computed. Count
+      those rows and print "N of M shipments could not be measured (no distance and/or no weight)" on the page.
+      An empty tenant renders the same shape with zeros in the coverage line and `None` in the totals — it must
+      not 500 and it must not claim a green zero (the 4.11 `supplier_disruption_score` first-run 500).
+- [ ] Aggregations, each ONE query — by **month**, by **mode**, by **carrier** — plus the supplier-declared
+      Scope 1/2/3 totals from `SustainabilityAssessment` for the same window shown alongside (clearly labelled
+      *supplier-declared*, not ours).
+- [ ] Date-window filter (`from` / `to`, defaulting to the last 12 months) parsed defensively — a hand-typed
+      junk date leaves the filter off, never 500s.
+- [ ] The page **states its method, its factor source and its limitations on screen** and **never says "AI"**
+      (the 4.11 precedent): an operational estimate, a small closed factor table, well-to-wheel not
+      well-to-tank, no allocation for empty running, statutory ESG/CSRD disclosure belongs to
+      `apps/accounting` (L29).
+- [ ] `carbon_footprint_report_export` — CSV at `carbon-footprint/export/`, matching the 4.11 report precedent
+      (`inventory_analytics_export` … `disruption_risk_export`, five of five). Same querysets, same window
+      params, `@login_required`, tenant-scoped.
+- [ ] Reached from a chip in the Sustainability list header — **not** a sixth `LIVE_LINKS` key.
+
+---
+
+## Seeder — `apps/scm/management/commands/seed_scm.py`
+
+- [ ] `_seed_compliance_tenant(self, tenant)` — added at the **end** of the per-tenant loop in `handle()`
+      (after `self._seed_analytics_tenant(tenant)`), with a one-line comment saying why it runs last: it hangs
+      obligations off 4.2's contracts, trade documents off 4.6's shipments and carriers, and a carbon story off
+      4.6's loads, so all of those must already exist.
+- [ ] **Its own idempotency guard**, independent of every earlier sub-module (the 4.2/4.3 posture):
+      `if ComplianceRequirement.objects.filter(tenant=tenant).exists(): self.stdout.write(f"{tenant.name}:
+      compliance data already exists — skipping."); return`
+- [ ] **Refuse rather than half-seed** (the 4.10/4.11 posture): if there is no `SupplierContract` and no
+      `Shipment` for the tenant, print a `WARNING` and return.
+- [ ] **Reuse, never re-create** — `self._supplier(tenant, name, kind)` for every supplier Party;
+      `SupplierContract.objects.filter(tenant=tenant).first()` for the obligation link;
+      `Shipment` / `Load` / `Carrier` rows already seeded by `_seed_tms_tenant`;
+      `Currency.objects.filter(code="USD").first()`; `Item` / `UOM` from `_seed_inventory_tenant`;
+      `self._org_unit(tenant)`; the tenant admin via the existing `_admin(tenant)` helper.
+- [ ] Rows to create (small, and every one demonstrates a specific researched feature):
+  - **2 `TradeLicense`** — one `active` export licence with `authorized_value` set and real headroom, one
+    deliberately inside its `renewal_notice_days` window so the list's expiring chip and the `badge-amber`
+    "Expiring" state are visible on first login. Created with `number` left blank so `TenantNumbered.save()`
+    mints `LIC-00001`/`LIC-00002`; guarded by an existence check on `(tenant, license_number)`, never a bare
+    `.create()` on a `unique_together` model.
+  - **1 `TradeDocument`** (`commercial_invoice`, `export`) with **2 `TradeDocumentLine`s** carrying snapshotted
+    `hs_code` / `country_of_origin`, linked to a seeded `Shipment` and charged to the active licence — then
+    **issued through the real `issue` path's logic** (`can_charge` → stamp → `license.recompute_usage()`), so
+    the licence detail page shows a genuine non-zero balance that a human can reproduce by pressing the button.
+    Never hand-write `used_value`.
+  - **3 `ComplianceRequirement`** — one `source="contract"` linked to the seeded `SupplierContract`
+    (`obligation_category="insurance"`, the Agiloft category), one `source="regulation"`
+    (`framework="hazmat_dot_iata_imdg"`, `scope="item"`), one `source="license"` linked to the expiring licence
+    (a proviso). All three go through `full_clean()` so the seed **proves** the scope/FK validation rather than
+    side-stepping it (the 4.11 seeder posture).
+  - **2 `ComplianceCheck`** — one `pass` (which advances the parent's `next_due_date` via `record_check`) and
+    one `fail` (which flips its parent to `non_compliant`, so the red badge and the `corrective_reference`
+    field are both exercised).
+  - **1 `SustainabilityAssessment`** on the main supplier with all four themes + `carbon_score` + Scope 1/2/3
+    set, so `recompute_rating()` produces a real medal and the carbon page has a supplier-declared column.
+- [ ] Update the `Command.help` string and the closing `SUCCESS` message to include `+ 4.12 compliance`.
+- [ ] `_flush()` — the 4.12 block goes at the **TOP** of the method (newest sub-module first, the 4.11
+      precedent), **above** the 4.11 `KpiSnapshot`/`SupplyChainAlert`/`KpiTarget` block. Internal order is
+      forced by `PROTECT`:
+      `ComplianceCheck` → `ComplianceRequirement` (its `license`/`contract` are `SET_NULL`, so it cannot block
+      anything, but it goes first so the intent reads top-down) → `TradeDocumentLine` → `TradeDocument` →
+      **`TradeLicense` LAST of the four, because `TradeDocument.license` is `PROTECT`** →
+      `SustainabilityAssessment`. Add the comment explaining the PROTECT edge, in the style of the existing
+      4.10 block.
+- [ ] Run `python manage.py seed_scm` **twice** on a clean DB and confirm the second run prints the skip line
+      and creates nothing.
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` → produces `0020_*`; **read it**; confirm additive-only (see above)
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py makemigrations --check --dry-run` → "No changes detected"
+- [ ] `python manage.py check` → 0 issues. **Watch specifically for `SystemCheckError: fields.E304/E305`
+      (reverse accessor clash)** — every new `related_name` below was checked against the as-built set at plan
+      time and is fresh:
+  - on `core.Party`: `scm_compliance_requirements`, `scm_trade_docs_as_shipper`,
+    `scm_trade_docs_as_consignee`, `scm_trade_docs_as_notify`, `scm_trade_licenses_held`,
+    `scm_trade_licenses_as_end_user`, `scm_sustainability_assessments` — none collides with the taken set
+    (`scm_supplier_contracts`, `scm_quality_audits`†, `scm_led_audits`†, `scm_kpi_targets`,
+    `scm_supply_alerts`, `scm_scorecards`, `scm_risk_assessments`, `scm_supplier_profile`, `scm_catalogs`,
+    `scm_carriers`, `scm_rfq_invites`, `scm_quotes`, `scm_purchase_orders`, `sales_orders`,
+    `scm_warranty_claims`, `scm_return_authorizations`, `scm_return_approvals`, `scm_returns_received`,
+    `scm_return_decisions`, `scm_supervised_work_centers`, `scm_production_time_logs`,
+    `scm_capa_verifications`, `accounting_invoices`, `accounting_bills`, `accounting_payments`,
+    `demand_signals`, `demand_forecasts`, `crm_*`, `users`, `roles`, `addresses`, …)
+    †`scm_quality_audits` is on `core.OrgUnit`, not `core.Party` (`QualityAudits.py:65-66`) — both are avoided
+    either way.
+  - on `core.Document`: `scm_compliance_requirements`, `scm_compliance_checks`, `scm_trade_documents`,
+    `scm_trade_licenses`, `scm_sustainability_assessments` (taken: `accounting_bills`,
+    `scm_supplier_contracts`, `scm_return_lines`)
+  - on `core.OrgUnit`: `scm_compliance_requirements` (taken: `scm_quality_audits`, `costing_projects`,
+    `accounting_je_lines`, `located_assets`, `cost_allocations`, `budget_lines`, `ic_transactions_from/to`)
+  - on `scm.Location`: `compliance_requirements` (taken: `yard_visits`, `putaways_out/in`, `pick_tasks`,
+    `pick_lines`, `cycle_counts`, `kpi_targets`, `scm_alerts`, `quality_inspections`, `nonconformances`,
+    `scm_return_dispositions`, `scm_return_restocks`, `scm_return_dropoffs`)
+  - on `scm.Item`: `compliance_requirements`, `trade_document_lines` (taken: `stock_moves`, `reorder_rules`,
+    `lot_serials`, `boms`, `bom_lines`, `work_orders`, `work_order_components`, `sales_order_lines`,
+    `transfer_lines`, `adjustment_lines`, `putaway_tasks`, `pick_lines`, `cycle_count_lines`,
+    `quality_inspections`, `inspection_plans`, `nonconformances`, `capa_actions`, `demand_forecasts`,
+    `forecast_references`, `demand_signals`, `seasonality_profiles`, `scm_alerts`, `scm_warranty_claims`,
+    `scm_return_lines`)
+  - on `scm.UOM`: `trade_document_lines` (taken: `items`, `boms`, `work_orders`)
+  - on `scm.Shipment`: `trade_documents` (taken: `events`, `freight_invoices`, `scm_alerts`,
+    `quality_inspections`, `nonconformances`)
+  - on `scm.Carrier`: `trade_documents` (taken: `shipments`, `loads`, `rate_cards`, `freight_invoices`,
+    `kpi_targets`, `scm_alerts`, `scm_return_authorizations`)
+  - on `scm.PurchaseOrder` / `scm.SalesOrder`: `trade_documents` on each (taken on PO: `lines`, `receipts`,
+    `shipments`, `yard_visits`, `scm_alerts`; on SO: `lines`, `shipments`, `work_orders`,
+    `scm_return_authorizations`, `scm_replacement_for_returns`)
+  - on `scm.SupplierContract`: `amendments` (self-FK) and `compliance_requirements` — **nothing points at this
+    model today**, so both are free
+  - on `accounting.Currency`: `scm_trade_documents`, `scm_trade_licenses` (taken from scm: `scm_rfqs`,
+    `scm_requisitions`, `scm_purchase_orders`, `scm_sales_orders`, `scm_supplier_contracts`, `scm_catalogs`,
+    `scm_demand_forecasts`, `scm_freight_invoices`, `scm_rate_cards`, `scm_return_authorizations`)
+  - on `AUTH_USER_MODEL`: `scm_compliance_requirements_owned`, `scm_compliance_checks_performed`,
+    `scm_trade_documents_issued`, `scm_trade_licenses_approved`,
+    `scm_sustainability_assessments_recorded`, `scm_supplier_contracts_owned` (taken:
+    `scm_requisitions`, `scm_requisitions_approved`, `scm_purchase_orders_approved`, `scm_goods_receipts`,
+    `scm_supplier_approvals`, `scm_risk_assessments`, `scm_putaway_tasks`, `scm_pick_tasks`,
+    `scm_cycle_counts`, `scm_tracking_events`, `scm_freight_approvals`, `scm_forecast_adjustments`,
+    `scm_forecast_adjustments_reviewed`, `scm_demand_signals_reviewed`, `scm_forecasts_approved`,
+    `scm_kpi_snapshots`, `scm_kpi_targets_owned`)
+- [ ] `python manage.py seed_scm` ×2 — idempotent (second run prints the skip line, creates nothing)
+- [ ] A `temp/` smoke sweep as **`admin_acme` / `password`**:
+  - every new `scm:*` url resolves and returns **200** (GET) / **302** (POST verbs)
+  - content assertions: **no `{#` and no `{% comment` leaks**; each page's `<title>` / `<h1>`; a seeded record
+    number visible on each list (`CR-00001`, `TD-00001`, `LIC-00001`, `ESG-00001`); the licence balance card
+    shows a non-zero used value; the carbon page prints its method note and its coverage line
+  - **cross-tenant IDOR → 404** for every `<int:pk>` route including the two `compliance-checks/` child routes
+    (which resolve via `requirement__tenant`, the path most likely to be got wrong)
+  - **member (non-admin) POST to each of the five delete routes → 403**, and the corresponding button is not
+    rendered for a member (offering a one-click 403 is worse than not offering it — the 4.11 finding)
+  - `tradelicense_delete` on a licence that has an issued document → **redirect + error message, not a 500**
+    (the `PROTECT` guard)
+  - the 4.2 pages still work unchanged: `scm:contract_list`, `contract_detail`, `contract_edit`,
+    `contract_activate`, `contract_renew`, `contract_terminate`
+- [ ] Sidebar: `4.12 Contract & Compliance Management` shows **five Live bullets**, and "Contract Repository"
+      lands on 4.2's contract list
+- [ ] `pytest apps/scm -q` still green **before** the new tests are added (the 4.2 extension must not have
+      broken a shipped test)
+
+---
+
+## Tests — `apps/scm/tests/`
+
+- [ ] **Append** `<entity>_a` / `<entity>_b` fixtures to `apps/scm/tests/conftest.py` (never rewrite it) —
+      the cross-tenant twin exists so every isolation assertion has a real foreign row to fail against rather
+      than an empty queryset that passes vacuously (the 4.11 conftest lesson):
+      `trade_license_a` / `_b`, `trade_license_expiring_a`, `compliance_requirement_a` / `_b`,
+      `compliance_requirement_contract_a` (linked to the existing `contract_a`),
+      `compliance_check_a`, `trade_document_a` / `_b` (linked to the existing `shipment_a` / `shipment_b`),
+      `trade_document_line_a`, `trade_document_issued_a`,
+      `sustainability_assessment_a` / `_b`. Reuse the existing `tenant_a`/`tenant_b`, `supplier_a`/`supplier_b`,
+      `carrier_a`/`carrier_b`, `shipment_a`/`shipment_b`, `load_a`, `item_a`, `uom_each_a`, `usd`,
+      `contract_a`, `admin_user`, `client_a`, `client_b`, `member_client`.
+- [ ] Model tests: `LIC-`/`CR-`/`TD-`/`ESG-` numbering; `TradeLicense.refresh_status()` moves only within
+      `AUTO_STATUSES` and never overrides `revoked`; `days_to_expiry`/`is_expiring_soon` boundary cases;
+      `remaining_value`/`utilization_pct` return **`None`** (not `0`) on an unlimited licence;
+      `can_charge` refuses at the ceiling and does not clamp; `recompute_usage()` counts only
+      `CHARGING_STATUSES` and is **idempotent** (calling it twice does not double); `record_check()` advances
+      `next_due_date` on a pass and flips to `non_compliant` on a fail; `compliance_rate` is `None` with no
+      checks; `recompute_rating()` bands and ignores unset themes; `TradeDocumentLine.line_value` is a property
+      and cannot be written; `SupplierContract.clean()` rejects a self-parent and a 2-hop cycle.
+- [ ] Form tests: every `Meta.fields` is a **whitelist** and each excluded field is genuinely absent from
+      `form.fields` (`tenant`, `number`, `status` where applicable, `used_value`, `used_quantity`,
+      `overall_score`, `rating`, `last_checked_on`, `performed_by`, `assessed_by`, `issued_at`, `issued_by`);
+      every FK dropdown queryset contains only tenant_a's rows and **excludes tenant_b's twin**; the licence
+      duplicate `license_number` is a field error, not an `IntegrityError`.
+- [ ] View tests: all five list pages 200 with and without each filter (including a junk filter value, which
+      must leave the filter OFF, not 500 — L11); the create→detail→edit→delete round trip for each model;
+      the formset commits parent + lines in one transaction and writes an audit log; the issue verb charges the
+      licence and refuses over the ceiling; the void verb re-derives the balance downward;
+      `carbon_footprint_report` renders on an **empty** tenant without a 500 and reports coverage rather than a
+      confident zero; the CSV export returns `text/csv` with the same figures as the page.
+- [ ] Security tests: cross-tenant `pk` → 404 on **every** detail/edit/delete/verb route (both
+      `compliance-checks/` routes included); anonymous → redirect to login; member → 403 on all five deletes and
+      on `tradelicense_approve`/`_revoke`/`tradedocument_void`; a crafted POST setting a cross-tenant FK is
+      rejected by `clean()` even though the dropdown never offered it (the guard that a narrowed dropdown never
+      provided).
+- [ ] Parity test: `TradeLicense.used_value` after `recompute_usage()` equals the sum of the same tenant's
+      `CHARGING_STATUSES` documents computed independently in the test — the counter is a cache, and a test is
+      what keeps it honest.
+
+---
+
+## Close-out
+
+- [ ] `code-reviewer` → apply → commit (one file per commit)
+- [ ] `explorer` → apply → commit
+- [ ] `frontend-reviewer` → apply → commit
+- [ ] `performance-reviewer` → apply → commit
+- [ ] `qa-smoke-tester` → apply → commit
+- [ ] `security-reviewer` → apply → commit
+- [ ] `test-writer` → apply → commit
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — create it if it does not exist yet (4.1 shipped without one;
+      check before assuming). It must document 4.12's models, the `scm:*` url names (including the 4.12 verbs
+      **and** the correct 4.2 `contract_*` names), the `templates/scm/compliance/` tree, the
+      `_seed_compliance_tenant` rows, and the `LIVE_LINKS["4.12"]` block.
+- [ ] `README` — add 4.12 to the SCM feature list
+- [ ] **One file per commit, PowerShell-safe (`;` not `&&`). Never `git push`.**
+
+---
+
+## Later passes / deferred
+
+Carried over from `research-scm-4.12.md` so nothing is lost, plus what this plan itself cut:
+
+**Cut by this plan (with the reason, so it is a decision and not an omission):**
+- **`scm.Item` trade-classification columns** (`hs_code` / `country_of_origin` / `is_hazardous` / `un_number`)
+  — `TradeDocumentLine` snapshots what was declared, which is the correct customs posture; a master would be a
+  second source of truth for the same fact. Revisit only with a real product-classification feature.
+- **A hard FK from a failed `ComplianceCheck` to `scm.NonConformance`** (adding `compliance` to
+  `SOURCE_CHOICES`) — refactoring a shipped sub-module for a convenience link is what 4.11 refused to do.
+  `corrective_reference` is free text this pass. Price it first: `NonConformance.source` is `max_length=14`.
+
+**Deferred from the research:**
+- Restricted/denied-party & sanctions screening lists (Descartes / e2open 900+ / ONESOURCE 750+) — model the
+  *outcome* later; the lists are a licensed data feed and must never be faked.
+- Licence determination and document determination from regulatory content (SAP GTS Legal Control, e2open,
+  Shipping Solutions) — needs HS/ECCN × destination × party rule content. v1 links a document to a licence by
+  hand.
+- Direct customs / AES-EEI / TRACES filing and broker/EDI connectivity — 4.12 stores `filing_reference` and
+  `status` only. (EDI itself → 4.19.)
+- Per-form official PDF layouts for each of the 13 document types — one generic print view this pass.
+- Clause library, template authoring, redlining and supplier-side e-signature — NavERP has the shape on the
+  sales side (`crm.DocTemplate` + `crm.ContractDocument` + `SignerRecord`); a supplier-side equivalent is its
+  own build, as 4.2 already concluded.
+- AI clause/obligation extraction, contract Q&A, adverse-media monitoring, AI-assisted screening — no LLM in
+  this repo, and 4.11 set the precedent that a page must not claim "AI".
+- A frozen assurance-grade emissions ledger (`CarbonFootprintEntry`, the Persefoni Footprint Ledger shape) and
+  a large emission-factor library (Watershed's 500k) — this pass computes from 4.6 rows against a small closed
+  table; 4.11's `KpiSnapshot` is the existing freezing mechanism if a figure must be locked.
+- Multi-tier supplier mapping / sub-supplier discovery / chain-of-custody transactions (Sourcemap) — needs a
+  cascading supplier portal.
+- SDS/GHS chemical library, label generation, cradle-to-grave substance tracking (Sphera) — a
+  product-stewardship module; 4.12 gets HazMat requirement rows only.
+- Duplicate-contract detection (SAP Ariba) and contract-value benchmarking (Icertis).
+- A supplier-facing self-service portal for questionnaires and declarations (IntegrityNext, Assent, EcoVadis,
+  Sourcemap) — 4.1 and 4.2 both parked the vendor portal for the same L32 reason; staff record the assessment
+  on the supplier's behalf.
+
+**Parked for a named sibling sub-module (not this one):**
+- Duty / tariff calculation, landed cost, customs duty & VAT → **4.18** ("Landed Cost Calculation",
+  "Tax Management" are its bullets). `TradeDocument.declared_value` is the input.
+- Contract & compliance dashboards / expiring-licence KPI tiles → **4.11**, which is built and owns
+  `KpiTarget` / `KpiSnapshot` / `SupplyChainAlert`. (A `compliance_*` metric key is a 4.11 edit, not a 4.12
+  dashboard.)
+- Supplier ESG *risk* scoring as a risk register → **4.2**'s `SupplierRiskAssessment`, which already scores
+  compliance risk. 4.12 scores sustainability *performance*, and the detail page links the two side by side.
+- Certification audits, non-conformances and CAPA → **4.9 QMS**, which already ships
+  `QualityAudit(audit_type="certification")`, the one `NonConformance` register and `CapaAction`.
+- SLA monitoring against a logistics contract → **4.17** ("SLA Management"). 4.12 stores the obligation; 4.17
+  measures the performance.
+- EDI transmission of trade documents → **4.19** ("EDI Management").
+- Cold-chain / temperature-excursion compliance reporting → **4.15** ("Compliance Reporting").
+- GDPR data-subject requests, consent and retention → **Module 13 (DMS)** + Module 0 policy; 4.12 tracks GDPR
+  only as a requirement row with a proof cycle.
+- Statutory ESG/CSRD disclosure filing and the P&L impact of carbon → **apps/accounting** owns statutory
+  reporting (L29); 4.12's carbon page says "operational estimate" on screen, as 4.11's margin page does.
+
+---
+
+## Review notes
+
+(filled in at the end)
+
