@@ -52,7 +52,12 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
         if not val:
             continue
         if is_int:
-            if val.isdigit():  # L11: never pass non-numeric to an int FK filter
+            # isdecimal(), NOT isdigit() — the two differ exactly where it matters here. isdigit()
+            # is True for Unicode category-No characters (superscripts: '²', '³'), but int() accepts
+            # only category Nd, so `?vendor=²` passed this guard and then raised ValueError from
+            # inside .filter() — an uncaught 500 on a value anyone can type into the address bar.
+            # isdecimal() is precisely int()'s accepted set. ASCII digits are unaffected.
+            if val.isdecimal():  # L11: never pass non-numeric to an int FK filter
                 qs = qs.filter(**{lookup: int(val)})
         else:
             # Map stringified booleans so BooleanField filters work — `.filter(x="False")` would
