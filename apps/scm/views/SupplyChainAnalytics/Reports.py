@@ -342,7 +342,10 @@ def _resolve_scope(tenant, data, kinds):
         if chosen is not analytics.NETWORK:
             ignored.append(kind)
             continue
-        if not raw.isdigit():
+        # isdecimal(), not isdigit(): '²'.isdigit() is True but int('²') raises, so a superscript in
+        # ?category= / ?vendor= / ?carrier= slipped past this guard and 500'd out of the .filter()
+        # below instead of landing in the scope_invalid state this branch exists to produce.
+        if not raw.isdecimal():
             invalid = True
             continue
         subject = _SCOPE_QUERYSETS[kind](tenant).filter(pk=int(raw)).first()
