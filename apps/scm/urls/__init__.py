@@ -56,6 +56,10 @@ from .ReturnsManagement.ReturnAuthorizations import urlpatterns as _rma_authoriz
 from .ReturnsManagement.ReturnDispositions import urlpatterns as _rma_dispositions
 from .ReturnsManagement.WarrantyClaims import urlpatterns as _rma_warranty
 from .ReturnsManagement.Reports import urlpatterns as _rma_reports
+from .SupplyChainAnalytics.KpiTargets import urlpatterns as _sca_kpitargets
+from .SupplyChainAnalytics.KpiSnapshots import urlpatterns as _sca_kpisnapshots
+from .SupplyChainAnalytics.SupplyChainAlerts import urlpatterns as _sca_alerts
+from .SupplyChainAnalytics.Reports import urlpatterns as _sca_reports
 
 
 app_name = "scm"
@@ -148,4 +152,29 @@ urlpatterns = [
     *_rma_dispositions,                  # ReturnsManagement/ReturnDispositions (the bench)
     *_rma_warranty,                      # ReturnsManagement/WarrantyClaims
     *_rma_reports,                       # ReturnsManagement/Reports (queues + portal + public)
+    # ---------------------------------------------------------------------------------------
+    # 4.11 COLLISION CHECK — eight new first segments, each checked against the WHOLE list above
+    # and not merely against this block:
+    #
+    #   kpi-targets/ · kpi-snapshots/  — nothing anywhere in the app starts with `kpi`. Both are
+    #                           distinct whole components, so neither can swallow the other.
+    #   alerts/               — 4.3 owns `reorder-alerts/`. Django matches WHOLE path components
+    #                           and never splits at a hyphen, so `alerts` and `reorder-alerts` are
+    #                           unrelated segments and neither shadows the other. Do NOT "tidy"
+    #                           either one to match the other.
+    #   disruption-risk/      — 4.2 owns `risk-assessments/`. Again a distinct first component;
+    #                           `disruption-risk` is one component, not `disruption` + `risk`.
+    #   inventory-analytics/ · spend-analytics/ · logistics-kpis/ · margin-analytics/
+    #                         — nothing existing starts with inventory, spend, logistics or margin.
+    #
+    # The CSV exports are literal `export/` sub-routes under segments already claimed above, so
+    # they add ZERO new first segments and zero new collision surface.
+    #
+    # 4.11 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` remains
+    # the module's only one, and it sits alone on its own first segment. Within each module below,
+    # literal routes (`add/`, `export/`, `capture/`, `detect/`) precede every `<int:pk>/` one.
+    *_sca_kpitargets,                    # SupplyChainAnalytics/KpiTargets (the target master)
+    *_sca_kpisnapshots,                  # SupplyChainAnalytics/KpiSnapshots (frozen history)
+    *_sca_alerts,                        # SupplyChainAnalytics/SupplyChainAlerts (the inbox)
+    *_sca_reports,                       # SupplyChainAnalytics/Reports (the five bullet pages)
 ]
