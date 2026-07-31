@@ -69,16 +69,16 @@
             </select>
           </div>
           <div class="form-group">
-            <input type="date" name="date_from" value="{{ request.GET.date_from|default:'' }}" aria-label="From" class="form-input">
+            <input type="date" name="date_from" value="{{ params.date_from }}" aria-label="From" class="form-input">
           </div>
           <div class="form-group">
-            <input type="date" name="date_to" value="{{ request.GET.date_to|default:'' }}" aria-label="To" class="form-input">
+            <input type="date" name="date_to" value="{{ params.date_to }}" aria-label="To" class="form-input">
           </div>
           <div class="form-group">
             <select name="vendor" aria-label="Supplier" class="form-select">
               <option value="">All suppliers</option>
               {% for v in vendors %}
-                <option value="{{ v.pk }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
+                <option value="{{ v.pk }}" {% if params.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
               {% endfor %}
             </select>
           </div>
@@ -86,7 +86,7 @@
             <select name="gl_account" aria-label="GL account" class="form-select">
               <option value="">All GL accounts</option>
               {% for acc in gl_account_options %}
-                <option value="{{ acc }}" {% if request.GET.gl_account == acc %}selected{% endif %}>{{ acc }}</option>
+                <option value="{{ acc }}" {% if params.gl_account == acc %}selected{% endif %}>{{ acc }}</option>
               {% endfor %}
             </select>
           </div>
@@ -94,7 +94,7 @@
             <select name="org_unit" aria-label="Business unit" class="form-select">
               <option value="">All business units</option>
               {% for unit in org_unit_options %}
-                <option value="{{ unit }}" {% if request.GET.org_unit == unit %}selected{% endif %}>{{ unit }}</option>
+                <option value="{{ unit }}" {% if params.org_unit == unit %}selected{% endif %}>{{ unit }}</option>
               {% endfor %}
             </select>
           </div>
@@ -297,7 +297,7 @@
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Spend cube · by GL account</h2>
-        {% if request.GET.gl_account %}<span class="badge badge-info">Narrowed to {{ request.GET.gl_account }}</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_account|length }} account{{ spend_cube.by_account|length|pluralize }}</span>{% endif %}
+        {% if params.gl_account %}<span class="badge badge-info">Narrowed to {{ params.gl_account }}</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_account|length }} account{{ spend_cube.by_account|length|pluralize }}</span>{% endif %}
       </div>
       <div class="card-body">
         <p class="text-muted">
@@ -328,7 +328,7 @@
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Spend cube · by business unit</h2>
-        {% if request.GET.org_unit %}<span class="badge badge-info">Narrowed to {{ request.GET.org_unit }}</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_business_unit|length }} unit{{ spend_cube.by_business_unit|length|pluralize }}</span>{% endif %}
+        {% if params.org_unit %}<span class="badge badge-info">Narrowed to {{ params.org_unit }}</span>{% else %}<span class="badge badge-slate">{{ spend_cube.by_business_unit|length }} unit{{ spend_cube.by_business_unit|length|pluralize }}</span>{% endif %}
       </div>
       <div class="table-wrap">
         <table class="table">
