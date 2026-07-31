@@ -1057,11 +1057,13 @@ def _r_inv_aging_over_days_value(tenant, start, end, scope, params=DEFAULT_PARAM
                    .values_list("item_id", "quantity", "unit_cost", "moved_at")[:MAX_LEDGER_ROWS + 1])
     truncated = len(fetched) > MAX_LEDGER_ROWS or len(ranked) > MAX_AGING_ITEMS
     if len(fetched) > MAX_LEDGER_ROWS:
-        fetched = fetched[:MAX_LEDGER_ROWS]
-        # The last item in the slice is only partially fetched, so its layer walk would be wrong.
-        # Drop it rather than report a confidently incorrect number for it.
-        partial = fetched[-1][0]
-        fetched = [row for row in fetched if row[0] != partial]
+        # Read the partial item off the PROBE row (index MAX_LEDGER_ROWS) before slicing it away —
+        # not off the last kept row. Rows are ordered by item_id, so when the probe belongs to a new
+        # item the last kept item was fetched COMPLETELY and dropping it threw away a correct walk;
+        # the item actually cut in half is always the probe's. When the probe's item has no rows
+        # inside the slice the filter simply matches nothing, which is the right no-op.
+        partial = fetched[MAX_LEDGER_ROWS][0]
+        fetched = [row for row in fetched[:MAX_LEDGER_ROWS] if row[0] != partial]
 
     ledger = {}
     for item_id, quantity, unit_cost, moved_at in fetched:
@@ -2117,6 +2119,10 @@ def _r_freight_cost_per_unit(tenant, start, end, scope, params=DEFAULT_PARAMS):
         weight=Sum("shipment__weight_kg"), volume=Sum("shipment__volume_cbm"),
         packages=Sum("shipment__package_count"),
         shipments=Count("shipment", distinct=True),
+        # Counted directly, not as bills - shipments: `shipments` is DISTINCT, so two bills against
+        # the same shipment made that subtraction claim a bill had no shipment when it did — and the
+        # note below tells the reader to trust this number before trusting the per-kilogram figure.
+        bills_no_shipment=Count("id", filter=Q(shipment__isnull=True)),
         distance=Sum("load__distance_km"), loads=Count("load", distinct=True))
     if not totals["bills"]:
         return _unavailable("freight_cost_per_unit",
@@ -2153,7 +2159,7 @@ def _r_freight_cost_per_unit(tenant, start, end, scope, params=DEFAULT_PARAMS):
         "bills": totals["bills"],
         "shipments": totals["shipments"],
         "loads": totals["loads"],
-        "bills_without_shipment": totals["bills"] - totals["shipments"],
+        "bills_without_shipment": totals["bills_no_shipment"],
         "rates": rates,
         "mixed_currency": mixed,
         "currencies": codes,
@@ -3682,6 +3688,17 @@ def _r_projected_stockout_count(tenant, start, end, scope, params=DEFAULT_PARAMS
                        "shortfall_days": _f(lead - cover_days),
                        "stockout_on": _iso(end + timedelta(days=int(max(cover_days, ZERO))))})
     detail.sort(key=lambda row: -(row["shortfall_days"] or 0))
+    # Every rule skipped for a missing demand rate means NOTHING was measurable — report that rather
+    # than a confident green "0 projected stockouts". avg_daily_demand is editable=False and written
+    # only by 4.7's calculate, so a tenant that has never run it would otherwise see a reassuring
+    # zero computed from zero measurable rules. Same posture the dead-stock and turnover resolvers
+    # already take when their denominator is empty.
+    if rules and no_demand == len(rules):
+        return _unavailable(
+            "projected_stockout_count",
+            "No reorder rule has a demand rate yet — run 4.7's safety-stock recalculation and this "
+            "becomes measurable.",
+            rules_checked=len(rules), rules_without_demand_rate=no_demand)
     return _result("projected_stockout_count", Decimal(at_risk), breakdown={
         "rules_checked": len(rules),
         "rules_at_risk": at_risk,
@@ -3970,9 +3987,14 @@ _SCOPE_SELECT = ("scope_category", "scope_location", "scope_carrier", "scope_ven
 #: metric. Ordered from most specific to most general, and every key is one a resolver above
 #: actually emits — an impact figure invented from a metric that has no money behind it would rank
 #: the alert queue by a number nobody could act on.
-IMPACT_KEYS = ("impact_value", "off_contract_spend", "dead_share_value", "stock_value",
-               "excess_value", "billed", "variance", "cost_to_serve", "total_spend", "revenue",
-               "total")
+# `variance` BEFORE `billed`: on a freight-variance breach the money at risk is the overage, not the
+# whole freight bill. Ranking by `billed` put a large invoice with a trivial variance above a small
+# one with a huge variance — the opposite of what a queue ordered by value at risk is for.
+#: Every key here is one a resolver above ACTUALLY emits — checked, not assumed. `dead_share_value`
+#: and `excess_value` were listed and emitted by nothing, which reads as coverage while providing
+#: none: a metric whose impact key is imaginary silently ranks at zero forever.
+IMPACT_KEYS = ("impact_value", "off_contract_spend", "stock_value", "variance", "billed",
+               "cost_to_serve", "total_spend", "revenue", "total")
 
 #: The window rule-based exceptions are detected over. Position-style rules (dead stock, expiry,
 #: projected stockouts, shipments in flight) read as-of today whatever this says; the rules that ARE
@@ -4122,8 +4144,17 @@ def _impact_of(result, meta):
 
     A money metric IS its own impact. Everything else looks for a figure the resolver already put in
     its breakdown (:data:`IMPACT_KEYS`) — the off-contract spend behind an off-contract percentage,
-    the stock value behind a turnover figure. When there is none the impact is zero, which sorts the
-    alert to the bottom of a queue ordered by ``-impact_value`` rather than pretending to a number.
+    the freight overage behind a variance percentage.
+
+    **Returns ``None``, not ``ZERO``, when the metric has no money behind it at all**, and the two
+    mean different things. Most of the catalog — ``otd_pct``, ``otif_pct``, ``inv_turnover``,
+    ``supplier_otd_pct``, ``supplier_disruption_score``, ``projected_stockout_count`` and others —
+    emits no ``IMPACT_KEYS`` figure, so collapsing "unmeasurable" into "zero" made
+    ``impact < min_impact_value`` true forever: any operator who set a floor on one of those targets
+    silently stopped receiving its alerts. That is the same never-fires conjunction
+    ``KpiTarget.clean()`` rejects for a missing threshold, arrived at from the other direction.
+    Callers rank with ``impact or ZERO`` and apply the floor only when the figure is real, so an
+    unmeasurable impact fails OPEN (the alert fires) rather than closed.
     """
     value = result.get("value")
     if meta.get("unit") == "money" and value is not None:
@@ -4137,7 +4168,7 @@ def _impact_of(result, meta):
             continue
         if candidate:
             return abs(Decimal(str(candidate)))
-    return ZERO
+    return None
 
 
 def _candidate(alert_type, dedupe_key, title, *, severity="warning", metric="", target=None,
@@ -4244,7 +4275,10 @@ def detect_alerts(tenant, user=None):
         meta = METRIC_META.get(target.metric) or {}
         impact = _impact_of(result, meta)
         floor = target.min_impact_value or ZERO
-        if floor > ZERO and impact < floor:
+        # `impact is not None` matters: a metric with no money behind it (most of the catalog) is
+        # UNMEASURABLE, not worth zero, and suppressing it against a floor would mute the target
+        # permanently. An unmeasurable impact fails OPEN — see _impact_of.
+        if floor > ZERO and impact is not None and impact < floor:
             # The alert-fatigue floor the operator set. Counted and RETURNED rather than silently
             # dropped, so the POST action can say "3 breaches were below their impact floor" — a
             # suppression nobody can see is how a floor becomes a blindfold.
@@ -4265,7 +4299,9 @@ def detect_alerts(tenant, user=None):
             f"{target.name} is {result.get('display')} ({band})",
             severity="critical" if band == "critical" else target.severity,
             metric=target.metric, target=target,
-            observed=result.get("value"), threshold=threshold, impact=impact,
+            # `impact or ZERO`: SupplyChainAlert.impact_value is a non-null column and the queue is
+            # ordered by it, so an unmeasurable impact sorts to the bottom rather than erroring.
+            observed=result.get("value"), threshold=threshold, impact=impact or ZERO,
             dimension_key=dimension_key,
             dimension_label=dimension_label or target.scope_label,
             detail={"band": band, "display": result.get("display"),
@@ -4299,9 +4335,17 @@ def detect_alerts(tenant, user=None):
         keys = [candidate["dedupe_key"] for candidate in candidates if candidate["dedupe_key"]]
         open_rows = {}
         if keys:
-            for alert in SupplyChainAlert.objects.filter(tenant=tenant,
-                                                         status__in=OPEN_ALERT_STATUSES,
-                                                         dedupe_key__in=keys):
+            # select_for_update(), not a bare read. transaction.atomic() bounds the write but grants
+            # no mutual exclusion, and de-dupe here is deliberately NOT backed by a unique constraint
+            # (MariaDB has no partial indexes, so a conditional one is silently dropped). Without the
+            # lock, two concurrent runs — two admins pressing Run detection, or one double-submit —
+            # both read an empty open set and both create, producing exactly the duplicate this
+            # whole block exists to prevent. SupplyChainAlerts.py:464 already takes this lock for a
+            # strictly weaker reason.
+            for alert in (SupplyChainAlert.objects
+                          .select_for_update()
+                          .filter(tenant=tenant, status__in=OPEN_ALERT_STATUSES,
+                                  dedupe_key__in=keys)):
                 open_rows.setdefault(alert.dedupe_key, alert)
         now = timezone.now()
         for candidate in candidates:
