@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}KPI Targets{% endblock %}
+{% block content %}
+  {% comment %}
+    Context contract — apps/scm/views/SupplyChainAnalytics/KpiTargets.py::kpitarget_list, which returns
+    crud_list(...). Everything this page may read, and nothing else:
+      object_list / page_obj / q  (from crud_list)
+      metric_choices  GROUPED: [(group label, [(key, label), …]), …]  -> needs <optgroup>
+      group_choices / scope_choices / severity_choices  flat [(value, label), …]
+    There is deliberately no `stats` in that dict, so this page renders no stat tiles — a tile bound to
+    a key the view does not pass renders blank with no error anywhere, which is this codebase's most
+    repeated frontend bug. The one count shown below comes from page_obj.paginator, which crud_list
+    really does provide.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">KPI Targets</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>KPI Targets</span></div>
+      <p class="text-muted">The one table in Analytics a <span class="fw-600">human writes</span>. Every other figure in this module is computed live out of procurement, inventory, warehouse, order, transport and returns rows — but nothing in those rows says “six turns is the goal”, “dead means ninety days without a movement”, or “tell me when this slips and tell <em>her</em>”. That intent lives here, and it is what turns a measurement into a target, a tile and an alert.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:kpisnapshot_list' %}" class="btn btn-outline"><i data-lucide="camera"></i> Snapshots</a>
+      <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="siren"></i> Alerts</a>
+      <a href="{% url 'scm:kpitarget_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New KPI Target</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Targets</h2>
+      <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, name or metric key (e.g. inv_turnover)…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            metric_choices arrives grouped by report page — the same five groups the sidebar reads —
+            so it renders as <optgroup>, not a flat list. Flattening it here would be a second
+            vocabulary to keep in step with _choices.py.
+          {% endcomment %}
+          <select name="metric" aria-label="Metric" class="form-select">
+            <option value="">All metrics</option>
+            {% for group_label, group_metrics in metric_choices %}
+              <optgroup label="{{ group_label }}">
+                {% for val, label in group_metrics %}
+                  <option value="{{ val }}" {% if request.GET.metric == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </optgroup>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="group" aria-label="Metric group" class="form-select">
+            <option value="">All groups</option>
+            {% for val, label in group_choices %}
+              <option value="{{ val }}" {% if request.GET.group == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="scope" aria-label="Scope" class="form-select">
+            <option value="">All scopes</option>
+            {% for val, label in scope_choices %}
+              <option value="{{ val }}" {% if request.GET.scope == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Alert severity" class="form-select">
+            <option value="">Any severity</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_alerting" aria-label="Alerting" class="form-select">
+            <option value="">Alerting &amp; silent</option>
+            <option value="True" {% if request.GET.is_alerting == "True" %}selected{% endif %}>Alerting</option>
+            <option value="False" {% if request.GET.is_alerting == "False" %}selected{% endif %}>Silent</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All statuses</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">Group and Metric are ANDed, not merged: picking <span class="fw-600">Logistics</span> together with an inventory metric asks for something no row can be, and returns nothing.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Target</th>
+            <th>Metric</th>
+            <th>Scope</th>
+            <th>Window</th>
+            <th>Goal / warn / critical</th>
+            <th>Alerting</th>
+            <th>Owner</th>
+            <th>Status</th>
+            <th>Last measured</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:kpitarget_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+              </td>
+              <td>
+                {{ obj.get_metric_display }}
+                <div class="form-help">
+                  {% if obj.direction == 'lower_is_better' %}<i data-lucide="arrow-down-right"></i> Lower is better{% elif obj.direction == 'higher_is_better' %}<i data-lucide="arrow-up-right"></i> Higher is better{% else %}{{ obj.get_direction_display }}{% endif %}
+                  {% if obj.parameter_days %} · N = {{ obj.parameter_days }} day{{ obj.parameter_days|pluralize }}{% endif %}
+                  {% if obj.parameter_pct is not None %} · {{ obj.parameter_pct|floatformat:2 }}%{% endif %}
+                </div>
+              </td>
+              {% comment %}
+                resolved_scope() returns (scope value, the object it narrows to or None). None on a
+                NARROWED scope means the subject was deleted — the scope FKs are SET_NULL — and the
+                model's contract is that such a target is then SKIPPED, never quietly widened to the
+                whole network, because it would otherwise report a completely different number under
+                the same name. So it is flagged amber here: it looks like it is being measured and
+                it is not. The tint is on the badge and not on the whole row, because .row-warn and
+                .badge-amber share --warn-bg and an amber pill on an amber row is an invisible pill.
+              {% endcomment %}
+              <td>
+                {% if obj.scope == 'all' %}
+                  <span class="text-muted">{{ obj.get_scope_display }}</span>
+                {% elif obj.resolved_scope.1 %}
+                  <span class="badge badge-slate">{{ obj.scope_label }}</span>
+                {% else %}
+                  <span class="badge badge-amber">{{ obj.scope_label }}</span>
+                  <div class="form-help">The subject was deleted, so this target measures nothing until it is re-pointed.</div>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {{ obj.get_date_range_display }}
+                <div class="form-help">{{ obj.get_period_grain_display }} trend points</div>
+              </td>
+              {% comment %}
+                All three bands are optional, and 0 is a perfectly ordinary goal — so each is tested
+                with `is not None`, never for truthiness, which would print a dash over a real zero.
+                A row with none of the three still snapshots and trends its metric; it simply has
+                nothing to band the value against, which is the BAND_CHOICES value "No target".
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if obj.target_value is None and obj.warning_threshold is None and obj.critical_threshold is None %}
+                  <span class="badge badge-muted">No goal</span>
+                {% else %}
+                  {% if obj.target_value is not None %}{{ obj.target_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  <span class="text-muted">/</span>
+                  {% if obj.warning_threshold is not None %}{{ obj.warning_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  <span class="text-muted">/</span>
+                  {% if obj.critical_threshold is not None %}{{ obj.critical_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% endif %}
+              </td>
+              {% comment %}
+                One badge, not a pile of them. An inactive target is skipped by the detector, so its
+                severity is dormant — dressing a dormant severity in its live colour, next to the
+                amber that says it is not firing, is two ambers competing on one row and it trains
+                people to stop reading amber. The severity is still stated, in words, on that path.
+                theme.css badge classes are COLOUR-named: badge-success / badge-warning /
+                badge-danger do not exist and render as an unstyled pill with no error anywhere
+                (L33), so severity is mapped by hand, with an else onto the field's own display.
+              {% endcomment %}
+              <td>
+                {% if not obj.is_alerting %}
+                  <span class="badge badge-muted">Off</span>
+                {% elif not obj.is_active %}
+                  <span class="badge badge-amber">Not firing</span>
+                  <div class="form-help">Set to raise a <span class="fw-600">{{ obj.get_severity_display|lower }}</span> alert, but the detector only walks active targets — this one raises nothing while it is switched off.</div>
+                {% else %}
+                  {% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>
+                  {% elif obj.severity == 'warning' %}<span class="badge badge-amber">Warning</span>
+                  {% elif obj.severity == 'info' %}<span class="badge badge-info">Info</span>
+                  {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+                  {% if obj.min_impact_value %}
+                    <div class="form-help">Ignores breaches worth under {{ obj.min_impact_value|floatformat:2 }}</div>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.get_username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>
+                <div class="badge-group">
+                  {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+                  {% if obj.is_pinned %}<span class="badge badge-info">Tile #{{ obj.display_order }}</span>{% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {% if obj.last_evaluated_at %}{{ obj.last_evaluated_at|date:"M d, Y H:i" }}{% else %}<span class="badge badge-slate">Never</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:kpitarget_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:kpitarget_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Only the system-generated number goes into the confirm string — never the name.
+                    An apostrophe in a user-typed name would be escaped to &#x27;, which the HTML
+                    parser hands to JavaScript as a bare quote and the dialog breaks.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'scm:kpitarget_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its frozen trend points go with it and cannot be re-derived — the ledger they were measured from has moved on since. Alerts already raised from it survive.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="target"></i>
+                  <h3>No KPI targets</h3>
+                  <p>Nothing is being watched yet. A target names one metric from the closed supply-chain registry, says what good looks like, and decides whether slipping past it should raise an exception — after that the tiles, the trend and the alert queue all follow from it. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">tile order, then name</span> — the same order the pinned targets appear in on the control tower, so what you re-order here is what moves there. The metric list is <span class="fw-600">closed</span>: each key is a promise that a reviewed calculation exists for it, which is what lets a target be validated against the metric's own definition — its legal scopes, which way “good” runs, the parameters it needs — rather than against whatever was typed. Authoring your own formula is Module 10's job, not this one's. The <span class="fw-600">live figure and its band</span> are on each target's own page, not in this table: banding a row means running its whole calculation, and doing that once per row would turn one page of fifteen into fifteen sets of aggregates. Nothing on this screen writes a stock movement or a journal entry — Analytics only ever reads what the rest of the supply chain recorded.
+    </div>
+  </div>
+{% endblock %}
