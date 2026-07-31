@@ -148,19 +148,62 @@
     <div class="stat-card">
       <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
       <div class="stat-value">{% if tile.demand_spike_count.value is not None %}{{ tile.demand_spike_count.display }}{% else %}—{% endif %}</div>
-      <div class="stat-label">Demand spikes detected <span class="text-muted">over {{ spike_threshold_pct }}% deviation</span></div>
+      <div class="stat-label">
+        Demand spikes detected <span class="text-muted">over {{ spike_threshold_pct }}% deviation</span>
+        <span class="badge {{ tile.demand_spike_count.band_css }}">
+          {% if tile.demand_spike_count.value is None %}Not computed
+          {% elif tile.demand_spike_count.band == 'ok' %}On target
+          {% elif tile.demand_spike_count.band == 'warning' %}Warning
+          {% elif tile.demand_spike_count.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+        {% if tile.demand_spike_count.unavailable %}<div class="form-help">{{ tile.demand_spike_count.unavailable }}</div>{% endif %}
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon blue"><i data-lucide="package-x"></i></div>
       <div class="stat-value">{% if tile.projected_stockout_count.value is not None %}{{ tile.projected_stockout_count.display }}{% else %}—{% endif %}</div>
-      <div class="stat-label">Projected stockouts <span class="text-muted">within lead time</span></div>
+      <div class="stat-label">
+        Projected stockouts <span class="text-muted">within lead time</span>
+        <span class="badge {{ tile.projected_stockout_count.band_css }}">
+          {% if tile.projected_stockout_count.value is None %}Not computed
+          {% elif tile.projected_stockout_count.band == 'ok' %}On target
+          {% elif tile.projected_stockout_count.band == 'warning' %}Warning
+          {% elif tile.projected_stockout_count.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+        {% if tile.projected_stockout_count.unavailable %}<div class="form-help">{{ tile.projected_stockout_count.unavailable }}</div>{% endif %}
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon slate"><i data-lucide="truck"></i></div>
       <div class="stat-value">{% if tile.shipments_at_risk_count.value is not None %}{{ tile.shipments_at_risk_count.display }}{% else %}—{% endif %}</div>
-      <div class="stat-label">Shipments at risk</div>
+      <div class="stat-label">
+        Shipments at risk
+        <span class="badge {{ tile.shipments_at_risk_count.band_css }}">
+          {% if tile.shipments_at_risk_count.value is None %}Not computed
+          {% elif tile.shipments_at_risk_count.band == 'ok' %}On target
+          {% elif tile.shipments_at_risk_count.band == 'warning' %}Warning
+          {% elif tile.shipments_at_risk_count.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+        {% if tile.shipments_at_risk_count.unavailable %}<div class="form-help">{{ tile.shipments_at_risk_count.unavailable }}</div>{% endif %}
+      </div>
     </div>
   </div>
+
+  {% if not has_data %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="database"></i>
+          <h3>Nothing measurable in this window</h3>
+          <p>No metric on this page could be computed for {{ scope_label }} between {{ start|date:"M d, Y"|default:"the earliest record" }} and {{ end|date:"M d, Y" }}. Widen the window or clear the supplier filter. Each tile above carries its own reason — none of them is an error, and none of them is a zero.</p>
+          <a href="{% url 'scm:supplierprofile_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Suppliers</a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
 
   <div class="card">
     <div class="card-header">
@@ -173,9 +216,9 @@
           <table class="table">
             <thead><tr>
               <th>Component</th>
-              <th style="text-align:end;">Points</th>
-              <th style="text-align:end;">Weight</th>
-              <th style="text-align:end;">Contribution</th>
+              <th class="text-right">Points</th>
+              <th class="text-right">Weight</th>
+              <th class="text-right">Contribution</th>
               <th>What it measured</th>
             </tr></thead>
             <tbody>
@@ -185,9 +228,9 @@
                     {{ c.label }}
                     {% if not c.scored %}<span class="badge badge-muted">No signal</span>{% endif %}
                   </td>
-                  <td style="text-align:end;">{% if c.points is not None %}{{ c.points }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{{ c.weight|default:"—" }}</td>
-                  <td style="text-align:end;">{% if c.contribution is not None %}{{ c.contribution }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if c.points is not None %}{{ c.points }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{{ c.weight|default:"—" }}</td>
+                  <td class="text-right">{% if c.contribution is not None %}{{ c.contribution }}{% else %}—{% endif %}</td>
                   <td>
                     <span class="text-muted">{{ c.explanation|default:"Not scored in this window." }}</span>
                     {% if c.evidence %}
@@ -227,28 +270,28 @@
         <table class="table">
           <thead><tr>
             <th>Supplier</th>
-            <th style="text-align:end;">Receipts</th>
-            <th style="text-align:end;">On-time %</th>
-            <th style="text-align:end;">Reject %</th>
-            <th style="text-align:end;">NCRs</th>
-            <th style="text-align:end;">Open CAPAs</th>
-            <th style="text-align:end;">4.2 risk index</th>
+            <th class="text-right">Receipts</th>
+            <th class="text-right">On-time %</th>
+            <th class="text-right">Reject %</th>
+            <th class="text-right">NCRs</th>
+            <th class="text-right">Open CAPAs</th>
+            <th class="text-right">4.2 risk index</th>
             <th>Contract</th>
           </tr></thead>
           <tbody>
             {% for r in supplier_league %}
               <tr>
                 <td>{{ r.vendor|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.receipts|default:"0" }}</td>
-                <td style="text-align:end;">
+                <td class="text-right">{{ r.receipts|default:"0" }}</td>
+                <td class="text-right">
                   {% if r.otd_pct is not None %}
                     <span class="badge {% if r.otd_pct >= 95 %}badge-green{% elif r.otd_pct >= 85 %}badge-amber{% else %}badge-red{% endif %}">{{ r.otd_pct }}%</span>
                   {% else %}<span class="badge badge-muted">No datable receipt</span>{% endif %}
                 </td>
-                <td style="text-align:end;">{% if r.reject_pct is not None %}{{ r.reject_pct }}%{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{{ r.nonconformances|default:"0" }}</td>
-                <td style="text-align:end;">{{ r.open_capa|default:"0" }}</td>
-                <td style="text-align:end;">
+                <td class="text-right">{% if r.reject_pct is not None %}{{ r.reject_pct }}%{% else %}—{% endif %}</td>
+                <td class="text-right">{{ r.nonconformances|default:"0" }}</td>
+                <td class="text-right">{{ r.open_capa|default:"0" }}</td>
+                <td class="text-right">
                   {% if r.risk_index is not None %}{{ r.risk_index }}{% if r.risk_level %} <span class="text-muted">{{ r.risk_level }}</span>{% endif %}
                   {% else %}<span class="badge badge-muted">Not assessed</span>{% endif %}
                 </td>
@@ -280,27 +323,27 @@
           <table class="table">
             <thead><tr>
               <th>Item</th>
-              <th style="text-align:end;">Recent {{ spike_window_days }}d / day</th>
-              <th style="text-align:end;">Baseline / day</th>
-              <th style="text-align:end;">Increase</th>
-              <th style="text-align:end;">Recent units</th>
-              <th style="text-align:end;">Window units</th>
-              <th style="text-align:end;">Of which returned</th>
+              <th class="text-right">Recent {{ spike_window_days }}d / day</th>
+              <th class="text-right">Baseline / day</th>
+              <th class="text-right">Increase</th>
+              <th class="text-right">Recent units</th>
+              <th class="text-right">Window units</th>
+              <th class="text-right">Of which returned</th>
             </tr></thead>
             <tbody>
               {% for r in spike_rows %}
                 <tr>
                   <td>{{ r.sku|default:"—" }}{% if r.name %} <span class="text-muted">{{ r.name }}</span>{% endif %}</td>
-                  <td style="text-align:end;">{% if r.recent_daily is not None %}{{ r.recent_daily }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{% if r.baseline_daily is not None %}{{ r.baseline_daily }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">
+                  <td class="text-right">{% if r.recent_daily is not None %}{{ r.recent_daily }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.baseline_daily is not None %}{{ r.baseline_daily }}{% else %}—{% endif %}</td>
+                  <td class="text-right">
                     {% if r.increase_pct is not None %}
                       <span class="badge {% if r.increase_pct >= 100 %}badge-red{% else %}badge-amber{% endif %}">+{{ r.increase_pct }}%</span>
                     {% else %}—{% endif %}
                   </td>
-                  <td style="text-align:end;">{% if r.recent_units is not None %}{{ r.recent_units }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{% if r.window_units is not None %}{{ r.window_units }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{% if r.returned_units is not None %}{{ r.returned_units }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.recent_units is not None %}{{ r.recent_units }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.window_units is not None %}{{ r.window_units }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.returned_units is not None %}{{ r.returned_units }}{% else %}—{% endif %}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -326,9 +369,9 @@
         <table class="table">
           <thead><tr>
             <th>Item</th><th>Location</th>
-            <th style="text-align:end;">On hand</th><th style="text-align:end;">Reserved</th>
-            <th style="text-align:end;">Inbound</th><th style="text-align:end;">Available</th>
-            <th style="text-align:end;">Days of cover</th><th style="text-align:end;">Lead time</th>
+            <th class="text-right">On hand</th><th class="text-right">Reserved</th>
+            <th class="text-right">Inbound</th><th class="text-right">Available</th>
+            <th class="text-right">Days of cover</th><th class="text-right">Lead time</th>
             <th>Runs out</th>
           </tr></thead>
           <tbody>
@@ -336,16 +379,16 @@
               <tr>
                 <td>{{ r.sku|default:"—" }}{% if r.name %} <span class="text-muted">{{ r.name }}</span>{% endif %}</td>
                 <td>{{ r.location|default:"—" }}</td>
-                <td style="text-align:end;">{% if r.on_hand is not None %}{{ r.on_hand }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.reserved is not None %}{{ r.reserved }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.inbound is not None %}{{ r.inbound }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.available is not None %}{{ r.available }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">
+                <td class="text-right">{% if r.on_hand is not None %}{{ r.on_hand }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.reserved is not None %}{{ r.reserved }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.inbound is not None %}{{ r.inbound }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.available is not None %}{{ r.available }}{% else %}—{% endif %}</td>
+                <td class="text-right">
                   {% if r.days_of_cover is not None %}
                     <span class="badge {% if r.shortfall_days and r.shortfall_days > 0 %}badge-red{% else %}badge-amber{% endif %}">{{ r.days_of_cover }}</span>
                   {% else %}<span class="badge badge-muted">No demand rate</span>{% endif %}
                 </td>
-                <td style="text-align:end;">{{ r.lead_time_days|default:"—" }}</td>
+                <td class="text-right">{{ r.lead_time_days|default:"—" }}</td>
                 <td>{{ r.stockout_on|default:"—" }}</td>
               </tr>
             {% endfor %}
@@ -368,7 +411,7 @@
           <thead><tr>
             <th>Shipment</th><th>Carrier</th><th>Destination</th>
             <th>Promised</th><th>ETA</th>
-            <th style="text-align:end;">Days late</th><th style="text-align:end;">Days silent</th>
+            <th class="text-right">Days late</th><th class="text-right">Days silent</th>
             <th>Why flagged</th>
           </tr></thead>
           <tbody>
@@ -379,8 +422,8 @@
                 <td>{{ r.destination|default:"—" }}</td>
                 <td>{{ r.promised|default:"—" }}</td>
                 <td>{{ r.eta|default:"—" }}</td>
-                <td style="text-align:end;">{% if r.days_late is not None %}{{ r.days_late }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.days_silent is not None %}{{ r.days_silent }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.days_late is not None %}{{ r.days_late }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.days_silent is not None %}{{ r.days_silent }}{% else %}—{% endif %}</td>
                 <td>
                   {% comment %}
                     `reasons` is a LIST — a shipment can be both late and silent, and rendering the
@@ -408,8 +451,8 @@
           <table class="table">
             <thead><tr>
               <th>Alert</th><th>Severity</th><th>Type</th><th>Subject</th>
-              <th style="text-align:end;">Observed</th><th style="text-align:end;">Threshold</th>
-              <th style="text-align:end;">Value at risk</th><th>Status</th><th>Raised</th><th></th>
+              <th class="text-right">Observed</th><th class="text-right">Threshold</th>
+              <th class="text-right">Value at risk</th><th>Status</th><th>Raised</th><th></th>
             </tr></thead>
             <tbody>
               {% for a in open_alerts %}
@@ -418,9 +461,9 @@
                   <td><span class="badge {{ a.severity_css }}">{{ a.get_severity_display }}</span></td>
                   <td>{{ a.get_alert_type_display }}</td>
                   <td>{{ a.subject_label|default:"Network" }}</td>
-                  <td style="text-align:end;">{{ a.observed_value|default:"—" }}</td>
-                  <td style="text-align:end;">{{ a.threshold_value|default:"—" }}</td>
-                  <td style="text-align:end;">{{ a.impact_value }}</td>
+                  <td class="text-right">{{ a.observed_value|default:"—" }}</td>
+                  <td class="text-right">{{ a.threshold_value|default:"—" }}</td>
+                  <td class="text-right">{{ a.impact_value }}</td>
                   <td><span class="badge {{ a.status_css }}">{{ a.get_status_display }}</span></td>
                   <td>{{ a.raised_at|date:"M d, Y" }}</td>
                   <td class="table-actions">
