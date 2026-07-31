@@ -1750,3 +1750,328 @@ def portal_client_a(db, portal_access_a, portal_user_a):
     c = Client()
     c.force_login(portal_user_a)
     return c
+
+
+# ------------------------------------------------------------------ SCM 4.11 Supply Chain Analytics
+# EVERY window below is derived from ``timezone.localdate()`` / ``timezone.now()`` — the SAME basis
+# ``analytics.range_bounds``, ``period_windows`` and every resolver read (lesson L16). The five report
+# pages open on ``last_90`` and a ``KpiTarget`` defaults to ``last_30``, so a literal 2026 date would
+# drift out of both windows the moment the clock passed it and every tile would quietly go blank.
+#
+# The three 4.11 tables are: KpiTarget (the ONE row a human authors), KpiSnapshot (system-written by
+# ``capture_snapshots``) and SupplyChainAlert (system-written by ``detect_alerts``, plus a hand-raise
+# form). ``analytics_history_a`` below is the 4.1-4.10 SIGNAL the resolvers read — nothing in 4.11
+# stores a measurement of its own.
+def _days_ago(days):
+    """A date ``days`` before today, on the tz-aware basis the resolvers window against."""
+    from django.utils import timezone
+    return timezone.localdate() - datetime.timedelta(days=days)
+
+
+def _moments_ago(days):
+    """A tz-aware datetime ``days`` before now — for the DateTimeField windows (moved_at, event_at)."""
+    from django.utils import timezone
+    return timezone.now() - datetime.timedelta(days=days)
+
+
+@pytest.fixture
+def kpi_target_a(db, tenant_a):
+    """A NETWORK-scope turnover target with both bands set and alerting OFF.
+
+    ``inv_turnover`` is ``higher_is_better`` in the registry, so ``clean()`` requires the bands to
+    run target >= warning >= critical (6 >= 4 >= 2).
+    """
+    from apps.scm.models import KpiTarget
+    return KpiTarget.objects.create(
+        tenant=tenant_a, metric="inv_turnover", name="Turnover goal", scope="all",
+        period_grain="month", date_range="last_90",
+        target_value=Decimal("6.00"), warning_threshold=Decimal("4.00"),
+        critical_threshold=Decimal("2.00"),
+    )
+
+
+@pytest.fixture
+def kpi_target_b(db, tenant_b):
+    """The tenant_b target every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import KpiTarget
+    return KpiTarget.objects.create(
+        tenant=tenant_b, metric="inv_turnover", name="Globex turnover goal", scope="all",
+        date_range="last_90", target_value=Decimal("6.00"), warning_threshold=Decimal("4.00"),
+    )
+
+
+@pytest.fixture
+def alerting_target_a(db, tenant_a):
+    """An OTD target with an impact FLOOR and thresholds a 0 % on-time reading crosses.
+
+    This is the fixture behind the "``_impact_of`` returns None, not ZERO" regression:
+    ``_r_otd_pct`` emits no money figure at all, so a ``min_impact_value`` floor must NOT be able to
+    mute it. ``otd_pct`` is higher_is_better, so the bands run 98 >= 95 >= 90 and a 0 % reading has
+    crossed the critical one.
+    """
+    from apps.scm.models import KpiTarget
+    return KpiTarget.objects.create(
+        tenant=tenant_a, metric="otd_pct", name="Carrier on-time delivery", scope="all",
+        period_grain="month", date_range="last_90",
+        target_value=Decimal("98.00"), warning_threshold=Decimal("95.00"),
+        critical_threshold=Decimal("90.00"),
+        is_alerting=True, min_impact_value=Decimal("1.00"), severity="warning",
+    )
+
+
+@pytest.fixture
+def late_shipment_a(db, tenant_a, carrier_a):
+    """One shipment DELIVERED LATE inside the last-90 window — the OTD breach the alert tests use.
+
+    ``status`` / ``actual_delivery_at`` / ``actual_pickup_at`` are ``editable=False`` (4.6 moves them
+    through its own actions), so they are written straight onto the row here: the point of this
+    fixture is the analytics READING, and 4.6's own transitions have their own tests.
+    """
+    from apps.scm.models import Shipment
+    ship = Shipment.objects.create(
+        tenant=tenant_a, carrier=carrier_a, direction="outbound",
+        origin_text="Chicago, IL", destination_text="Dallas, TX",
+        planned_delivery_date=_days_ago(20), carrier_tracking_number="TRK-LATE-1",
+        weight_kg=Decimal("1000.00"), volume_cbm=Decimal("4.000"), package_count=10,
+    )
+    ship.status = "delivered"
+    ship.actual_pickup_at = _moments_ago(13)
+    ship.actual_delivery_at = _moments_ago(10)
+    ship.save(update_fields=["status", "actual_pickup_at", "actual_delivery_at", "updated_at"])
+    return ship
+
+
+@pytest.fixture
+def kpi_snapshot_a(db, tenant_a, kpi_target_a):
+    """One frozen point for kpi_target_a — the roll-up dimension (``dimension_key=""``)."""
+    from apps.scm.models import KpiSnapshot
+    return KpiSnapshot.objects.create(
+        tenant=tenant_a, kpi_target=kpi_target_a, metric=kpi_target_a.metric,
+        period_start=_days_ago(30), period_end=_days_ago(1),
+        value=Decimal("3.5000"), target_value_at_time=Decimal("6.00"), status_band="warning",
+        breakdown={"cost_issued": 100.0, "rows": [{"sku": "WIDGET-1", "cost_issued": 100.0}]},
+    )
+
+
+@pytest.fixture
+def kpi_snapshot_b(db, tenant_b, kpi_target_b):
+    from apps.scm.models import KpiSnapshot
+    return KpiSnapshot.objects.create(
+        tenant=tenant_b, kpi_target=kpi_target_b, metric=kpi_target_b.metric,
+        period_start=_days_ago(30), period_end=_days_ago(1),
+        value=Decimal("2.0000"), status_band="critical",
+    )
+
+
+@pytest.fixture
+def alert_a(db, tenant_a, item_a):
+    """An OPEN, detector-shaped exception for tenant_a — the triage fixture."""
+    from apps.scm.models import SupplyChainAlert
+    return SupplyChainAlert.objects.create(
+        tenant=tenant_a, alert_type="dead_stock", title="Dead stock: WIDGET-1",
+        severity="warning", item=item_a, impact_value=Decimal("800.00"),
+        dimension_key=f"item:{item_a.pk}", dimension_label="Widget",
+        dedupe_key=f"dead_stock:item:{item_a.pk}",
+    )
+
+
+@pytest.fixture
+def alert_b(db, tenant_b, item_b):
+    from apps.scm.models import SupplyChainAlert
+    return SupplyChainAlert.objects.create(
+        tenant=tenant_b, alert_type="dead_stock", title="Globex dead stock",
+        severity="warning", item=item_b, impact_value=Decimal("100.00"),
+        dedupe_key=f"dead_stock:item:{item_b.pk}",
+    )
+
+
+@pytest.fixture
+def analytics_history_a(db, tenant_a, usd, supplier_a, vendor_a, customer_a, carrier_a,
+                        item_a, category_a, location_a, location_a2, rfq_sent_a, quote_a,
+                        employee_party_a):
+    """The 4.1-4.10 SIGNAL every 4.11 resolver reads, on ONE tenant, inside the last-90 window.
+
+    4.11 stores no measurement of its own — a report page with nothing behind it renders its empty
+    state, which is correct and is tested separately. This fixture is what lets the supporting TABLES
+    on the five pages have real rows, which is the only way the row-key contract (the resolver's keys
+    vs the template's) can be asserted at all: a status-code assertion cannot tell a populated table
+    from a grid of em-dashes.
+
+    Returns a dict of the rows other tests need to point at.
+    """
+    from django.utils import timezone
+    from apps.scm.models import (CapaAction, FreightInvoice, FreightInvoiceLine, GoodsReceiptLine,
+                                 GoodsReceiptNote, Load, NonConformance, PurchaseOrder,
+                                 PurchaseOrderLine, ReorderRule, RFQQuote, RFQQuoteLine,
+                                 SalesOrder, SalesOrderAllocation, SalesOrderLine, Shipment,
+                                 SupplierContract, SupplierRiskAssessment, SupplierScorecard,
+                                 TrackingEvent, YardVisit)
+    from apps.scm.tests._helpers import seed_stock
+    from apps.scm.views._helpers import _post_stock_move
+
+    today = timezone.localdate()
+
+    # --- 4.1 procurement: two suppliers, one on time and clean, one late and rejecting -----------
+    po_on_time = PurchaseOrder.objects.create(
+        tenant=tenant_a, vendor=supplier_a, currency=usd, order_date=_days_ago(45),
+        expected_date=_days_ago(35), status="received")
+    po_on_time.acknowledged_at = _moments_ago(44)
+    po_on_time.save(update_fields=["acknowledged_at", "updated_at"])
+    PurchaseOrderLine.objects.create(
+        purchase_order=po_on_time, item_description="Printer paper", sku_hint=item_a.sku,
+        quantity=Decimal("10"), unit_price=Decimal("15.00"))
+    po_on_time.recalc_totals()
+
+    po_late = PurchaseOrder.objects.create(
+        tenant=tenant_a, vendor=vendor_a, currency=usd, order_date=_days_ago(40),
+        expected_date=_days_ago(30), status="received")
+    PurchaseOrderLine.objects.create(
+        purchase_order=po_late, item_description="Printer paper", sku_hint=item_a.sku,
+        quantity=Decimal("10"), unit_price=Decimal("18.00"))
+    po_late.recalc_totals()
+
+    grn_on_time = GoodsReceiptNote.objects.create(
+        tenant=tenant_a, purchase_order=po_on_time, receipt_date=_days_ago(36), status="received")
+    GoodsReceiptLine.objects.create(
+        goods_receipt=grn_on_time, po_line=po_on_time.lines.first(),
+        quantity_received=Decimal("10"), quantity_rejected=Decimal("0"))
+    grn_late = GoodsReceiptNote.objects.create(
+        tenant=tenant_a, purchase_order=po_late, receipt_date=_days_ago(20), status="received")
+    GoodsReceiptLine.objects.create(
+        goods_receipt=grn_late, po_line=po_late.lines.first(),
+        quantity_received=Decimal("8"), quantity_rejected=Decimal("2"))
+
+    # A SECOND quote on the seeded RFQ, so `savings_negotiated` has a competing price to take the
+    # median of — an award with no competition is skipped rather than scored as zero savings.
+    rival = RFQQuote.objects.create(tenant=tenant_a, rfq=rfq_sent_a, party=vendor_a,
+                                    status="received")
+    RFQQuoteLine.objects.create(quote=rival, rfq_line=rfq_sent_a.lines.first(),
+                                quantity=Decimal("10"), unit_price=Decimal("18.00"))
+    rival.recalc_totals()
+    po_awarded = PurchaseOrder.objects.create(
+        tenant=tenant_a, vendor=supplier_a, currency=usd, order_date=_days_ago(25),
+        expected_date=_days_ago(10), status="approved", quote=quote_a)
+    PurchaseOrderLine.objects.create(
+        purchase_order=po_awarded, item_description="Printer paper", sku_hint=item_a.sku,
+        quantity=Decimal("5"), unit_price=Decimal("12.00"))
+    po_awarded.recalc_totals()
+
+    # --- 4.2 supplier relationship: contract cover, a published scorecard, a risk assessment -----
+    contract = SupplierContract.objects.create(
+        tenant=tenant_a, party=supplier_a, title="Master Supply Agreement", status="active",
+        start_date=_days_ago(200), end_date=today + datetime.timedelta(days=30))
+    scorecard = SupplierScorecard.objects.create(
+        tenant=tenant_a, party=supplier_a, period_start=_days_ago(60), period_end=_days_ago(10),
+        status="published", delivery_score=Decimal("90.00"), quality_score=Decimal("95.00"),
+        price_score=Decimal("80.00"), responsiveness_score=Decimal("85.00"))
+    scorecard.recompute_overall()
+    assessment = SupplierRiskAssessment.objects.create(
+        tenant=tenant_a, party=supplier_a, assessment_date=_days_ago(15), status="submitted",
+        financial_score=3, geopolitical_score=2, compliance_score=3, operational_score=4)
+    assessment.recompute_risk_level()
+
+    # --- 4.3 inventory: real on-hand, real issues, one dead line ---------------------------------
+    seed_stock(tenant_a, item_a, location_a, "200", "8.0000")
+    _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("-40"),
+                     move_type="issue", unit_cost=Decimal("8.0000"), reference="SO-00001",
+                     moved_at=_moments_ago(45))
+    _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("-30"),
+                     move_type="issue", unit_cost=Decimal("8.0000"), reference="SO-00002",
+                     moved_at=_moments_ago(3))
+    # A returned-to-stock receipt, so the NETTED demand series has something to net.
+    _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("2"),
+                     move_type="receipt", unit_cost=Decimal("8.0000"), reference="RMA-00001",
+                     moved_at=_moments_ago(2))
+    # A quality write-off — a NEGATIVE 'adjustment' carrying the NCR number, which is the ONLY thing
+    # that lets `scrap_value` split the loss by what caused it.
+    _post_stock_move(tenant_a, item=item_a, location=location_a, quantity=Decimal("-2"),
+                     move_type="adjustment", unit_cost=Decimal("8.0000"), reference="NCR-00001",
+                     moved_at=_moments_ago(18))
+
+    rule = ReorderRule.objects.create(
+        tenant=tenant_a, item=item_a, location=location_a2, reorder_point=Decimal("50"),
+        safety_stock=Decimal("10"), reorder_quantity=Decimal("100"), lead_time_days=14)
+    # avg_daily_demand is editable=False and written only by 4.7's calculate — set here so the
+    # projected-stockout resolver has a runway to measure (a rule without one is REPORTED as
+    # unmeasurable, which is its own regression test).
+    rule.avg_daily_demand = Decimal("5.0000")
+    rule.save(update_fields=["avg_daily_demand"])
+
+    # --- 4.5/4.6 order + transport: one on-time delivery, one late, one silent in flight ---------
+    order = SalesOrder.objects.create(tenant=tenant_a, customer=customer_a, currency=usd,
+                                      order_date=_days_ago(30), status="submitted")
+    line = SalesOrderLine.objects.create(sales_order=order, item=item_a,
+                                         quantity_ordered=Decimal("10"),
+                                         unit_price=Decimal("25.00"))
+    order.recalc_totals()
+    SalesOrderAllocation.objects.create(tenant=tenant_a, sales_order_line=line,
+                                        location=location_a, quantity=Decimal("6"))
+
+    load = Load.objects.create(
+        tenant=tenant_a, carrier=carrier_a, origin_text="Chicago, IL",
+        destination_text="Dallas, TX", distance_km=Decimal("1500.00"),
+        planned_departure=_moments_ago(34), planned_arrival=_moments_ago(31),
+        equipment_capacity_weight_kg=Decimal("20000.00"),
+        equipment_capacity_volume_cbm=Decimal("80.000"))
+    on_time = Shipment.objects.create(
+        tenant=tenant_a, carrier=carrier_a, load=load, sales_order=order, direction="outbound",
+        origin_text="Chicago, IL", destination_text="Dallas, TX",
+        planned_delivery_date=_days_ago(30), weight_kg=Decimal("8000.00"),
+        volume_cbm=Decimal("30.000"), package_count=40, carrier_tracking_number="TRK-1")
+    on_time.status = "delivered"
+    on_time.actual_pickup_at = _moments_ago(34)
+    on_time.actual_delivery_at = _moments_ago(31)
+    on_time.save(update_fields=["status", "actual_pickup_at", "actual_delivery_at", "updated_at"])
+    TrackingEvent.objects.create(shipment=on_time, event_type="delivered",
+                                 event_at=_moments_ago(31), location_text="Dallas, TX")
+
+    in_flight = Shipment.objects.create(
+        tenant=tenant_a, carrier=carrier_a, direction="outbound", origin_text="Chicago, IL",
+        destination_text="Denver, CO", planned_delivery_date=_days_ago(2),
+        carrier_tracking_number="TRK-SILENT")
+    in_flight.status = "in_transit"
+    in_flight.eta = _moments_ago(-3)
+    in_flight.save(update_fields=["status", "eta", "updated_at"])
+
+    invoice = FreightInvoice.objects.create(
+        tenant=tenant_a, carrier=carrier_a, shipment=on_time, load=load, currency=usd,
+        carrier_invoice_number="CI-001", invoice_date=_days_ago(28))
+    FreightInvoiceLine.objects.create(freight_invoice=invoice, charge_type="linehaul",
+                                      description="Linehaul", billed_amount=Decimal("2200.00"),
+                                      contract_amount=Decimal("2000.00"))
+    invoice.recalc_amounts()
+    invoice.match_status = "price_variance"
+    invoice.save(update_fields=["match_status", "updated_at"])
+
+    yard = YardVisit.objects.create(tenant=tenant_a, carrier_name=carrier_a.party.name,
+                                    direction="inbound", dock_door=location_a, status="departed")
+    yard.arrived_at = _moments_ago(20)
+    yard.docked_at = _moments_ago(20) + datetime.timedelta(hours=1)
+    yard.departed_at = _moments_ago(20) + datetime.timedelta(hours=4)
+    yard.save(update_fields=["arrived_at", "docked_at", "departed_at", "updated_at"])
+
+    # --- 4.9 quality: one nonconformance and one open corrective action against a supplier -------
+    ncr = NonConformance.objects.create(
+        tenant=tenant_a, source="goods_receipt", item=item_a, location=location_a, supplier=vendor_a,
+        quantity_affected=Decimal("2"), defect_category="dimensional", severity="major",
+        title="Two units out of tolerance", description="Rejected at goods-in.",
+        detected_by=employee_party_a, detected_on=_days_ago(19),
+        cost_of_quality=Decimal("40.00"))
+    capa = CapaAction.objects.create(
+        tenant=tenant_a, action_type="corrective", source="supplier",
+        title="Supplier to re-qualify the gauge", supplier=vendor_a,
+        problem_statement="Two units rejected at goods-in.", owner=employee_party_a,
+        due_date=today + datetime.timedelta(days=10))
+
+    # 4.6 STORES the carrier's on-time percentage; 4.11 trends that column and never restates it, so
+    # the carrier scorecard table is empty until the stored figure exists.
+    carrier_a.recompute_scorecard()
+
+    return {
+        "po_on_time": po_on_time, "po_late": po_late, "po_awarded": po_awarded,
+        "grn_on_time": grn_on_time, "grn_late": grn_late, "rival_quote": rival,
+        "contract": contract, "scorecard": scorecard, "assessment": assessment,
+        "rule": rule, "sales_order": order, "sales_order_line": line, "load": load,
+        "shipment_on_time": on_time, "shipment_in_flight": in_flight, "freight_invoice": invoice,
+        "yard_visit": yard, "nonconformance": ncr, "capa": capa,
+    }
