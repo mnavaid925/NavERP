@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.metric_label }} · {{ obj.period_end|date:"M d, Y" }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.metric_label }}
+        <span class="badge {{ obj.band_css }}">{{ obj.get_status_band_display }}</span>
+        {% if group_title %}<span class="badge badge-slate">{{ group_title }}</span>{% endif %}
+        {% if obj.dimension_label %}<span class="badge badge-info">{{ obj.dimension_label }}</span>{% endif %}
+        {% if breakdown_truncated %}<span class="badge badge-amber">Capped scan</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:kpisnapshot_list' %}">KPI Snapshots</a><span class="sep">›</span><span>{{ obj.period_start|date:"M d" }} → {{ obj.period_end|date:"M d, Y" }}</span></div>
+      <p class="text-muted">Measured over {{ obj.period_start|date:"M d, Y" }} – {{ obj.period_end|date:"M d, Y" }} and frozen on {{ obj.computed_at|date:"M d, Y H:i" }}. This page re-renders what was stored; it does not re-compute anything.</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.kpi_target %}<a href="{% url 'scm:kpitarget_detail' obj.kpi_target.pk %}" class="btn btn-outline"><i data-lucide="target"></i> {{ obj.kpi_target.number }}</a>{% endif %}
+      {% if group_url %}<a href="{{ group_url }}" class="btn btn-outline"><i data-lucide="line-chart"></i> {{ group_title }}</a>{% endif %}
+      <a href="{{ list_url }}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{{ obj.display }}</div>
+      <div class="stat-label">Measured value</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="target"></i></div>
+      <div class="stat-value">{% if obj.target_value_at_time is not None %}{{ obj.target_value_at_time|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Target as it stood then</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="arrow-up-down"></i></div>
+      <div class="stat-value">{% if delta_display %}{{ delta_display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if previous %}
+          vs {{ previous.period_end|date:"M d, Y" }}
+          {% if improved is True %}<span class="badge badge-green">Improved</span>
+          {% elif improved is False %}<span class="badge badge-red">Worse</span>
+          {% else %}<span class="badge badge-muted">Unchanged</span>{% endif %}
+        {% else %}
+          First point in this series
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ obj.computed_at|date:"M d, H:i" }}</div>
+      <div class="stat-label">Frozen{% if obj.computed_by %} by {{ obj.computed_by.get_username }}{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The measurement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>KPI target</dt><dd>{% if obj.kpi_target %}<a href="{% url 'scm:kpitarget_detail' obj.kpi_target.pk %}" class="fw-600">{{ obj.kpi_target.number }}</a> · {{ obj.kpi_target.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Metric</dt><dd>{{ obj.metric_label }} <span class="text-muted">({{ obj.metric }})</span></dd></div>
+        <div class="detail-item"><dt>Report page</dt><dd>{% if group_url %}<a href="{{ group_url }}">{{ group_title }}</a>{% elif group_title %}{{ group_title }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Dimension</dt><dd>{{ obj.dimension_display }}{% if obj.dimension_key %} <span class="text-muted">({{ obj.dimension_key }})</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Period start</dt><dd>{{ obj.period_start|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Period end</dt><dd>{{ obj.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Value</dt><dd class="fw-600">{{ obj.display }} <span class="text-muted">({{ obj.value }})</span></dd></div>
+        <div class="detail-item"><dt>Target at capture</dt><dd>{% if obj.target_value_at_time is not None %}{{ obj.target_value_at_time|floatformat:2 }}{% else %}<span class="badge badge-muted">No target set</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Band</dt><dd><span class="badge {{ obj.band_css }}">{{ obj.get_status_band_display }}</span></dd></div>
+        <div class="detail-item"><dt>Unit</dt><dd>{{ unit|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Which way good runs</dt>
+          <dd>
+            {% if obj.kpi_target.direction %}{{ obj.kpi_target.get_direction_display }} <span class="text-muted">(set on the target)</span>
+            {% elif meta.direction == 'higher_is_better' %}Higher is better <span class="text-muted">(the metric's own)</span>
+            {% elif meta.direction == 'lower_is_better' %}Lower is better <span class="text-muted">(the metric's own)</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Metric kind</dt><dd>{% if meta.kind == 'table' %}Table — the supporting rows <span class="fw-600">are</span> the result{% elif meta.kind == 'scalar' %}Scalar — one number, with rows as evidence{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Metric parameter (days)</dt><dd>{% if parameter_days %}{{ parameter_days }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Metric parameter (%)</dt><dd>{% if parameter_pct %}{{ parameter_pct }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Captured at</dt><dd>{{ obj.computed_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Captured by</dt><dd>{% if obj.computed_by %}{{ obj.computed_by.get_username }}{% else %}<span class="text-muted">System</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        The dimension label and the target value are frozen copies, not live lookups — a supplier renamed next month, or a target retuned next quarter, must not be able to rewrite what this point said when it was measured. The band was decided at capture, against the thresholds in force then.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What produced this number</h2>
+      {% if breakdown_truncated %}<span class="badge badge-amber">A row cap bit — this figure may understate</span>{% endif %}
+    </div>
+    {% if breakdown_facts %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Component</th><th>Value</th></tr></thead>
+          <tbody>
+            {% for label, value in breakdown_facts %}
+              <tr>
+                <td class="fw-600">{{ label }}</td>
+                <td>{% if value != "" %}{{ value }}{% else %}<span class="text-muted">none</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="margin-top:0;">
+          Composite scores in this module are <span class="fw-600">deterministic and explainable</span> — the components above are the arithmetic that produced the value, not a model's opinion of it. Nothing here is machine learning. They were frozen with the number, so they still describe this period even after the underlying records move on.
+          {% if breakdown_truncated %}
+            One of the caps that bound the query hit its limit while this was computed, so the value was measured over a capped population rather than all of it — read it as a floor, not as the whole picture.
+          {% endif %}
+        </p>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="calculator"></i>
+          <h3>No component detail</h3>
+          <p>This metric froze its value without a component breakdown, or the payload was written by a resolver that has since been retired. The value itself is unaffected.</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if breakdown_headers %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Supporting rows</h2>
+        <span class="badge badge-slate">{{ breakdown_rows|length }} row{{ breakdown_rows|length|pluralize }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>{% for header in breakdown_headers %}<th>{{ header }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in breakdown_rows %}
+              <tr>{% for cell in row %}<td>{% if cell is not None %}{{ cell }}{% else %}<span class="text-muted">—</span>{% endif %}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="margin-top:0;">
+          The evidence the resolver captured alongside the number — the biggest contributors, capped at capture time. Every column here was read off the stored rows themselves, because each metric freezes its own row shape. This is a frozen copy, so a row may name a record that has since been renamed or deleted.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Trend for this target</h2>
+      <span class="badge badge-slate">{{ obj.dimension_display }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Period</th><th>Value</th><th>Target then</th><th>Band</th><th>Captured</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for point in history %}
+            <tr>
+              <td>{{ point.period_start|date:"M d" }} → {{ point.period_end|date:"M d, Y" }}{% if point.pk == obj.pk %} <span class="badge badge-info">This point</span>{% endif %}</td>
+              <td class="fw-600">{{ point.display }}</td>
+              <td>{% if point.target_value_at_time is not None %}{{ point.target_value_at_time|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {{ point.band_css }}">{{ point.get_status_band_display }}</span></td>
+              <td>{{ point.computed_at|date:"M d, Y H:i" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:kpisnapshot_detail' point.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="line-chart"></i><h3>No series yet</h3><p>Capture more periods for this target to build a trend.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin-top:0;">
+        Only points for <span class="fw-600">this same target and this same dimension</span> are listed — a target's whole-network roll-up and its per-supplier rows answer different questions, and drawing them as one line would compare two of them. Most recent period first, newest {{ history|length }} shown.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          There is deliberately no Edit button on this page. KpiSnapshot is system-written: it has no
+          ModelForm and no edit view, and its create path is the Capture action on the list page. A
+          hand-typed value would be a fabricated measurement wearing the same badge as a computed one.
+        {% endcomment %}
+        <form method="post" action="{% url 'scm:kpisnapshot_delete' obj.pk %}" onsubmit="return confirm('Delete this frozen point? Re-capturing the same period re-reads the underlying ledger, which may have moved since — so this exact number will not necessarily come back.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete snapshot</button>
+        </form>
+        <a href="{{ list_url }}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        There is no edit form for a snapshot. Correcting a number means fixing the records it was measured from and capturing the period again — a re-run <span class="fw-600">updates</span> this row and re-stamps its capture time rather than adding a second one. Delete is here for the one case a re-run cannot fix: a capture that should never have happened.
+      </p>
+    </div>
+  </div>
+{% endblock %}
