@@ -60,8 +60,8 @@ REQUISITION_LINES = [
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns demo data — idempotent (skips a tenant that already has the rows each "
-            "pass creates).")
+            "4.10 returns + 4.11 analytics demo data — idempotent (skips a tenant that already "
+            "has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -112,11 +112,17 @@ class Command(BaseCommand):
             # ledger write), drafts a credit note against 4.2's accounting spine and raises a
             # warranty claim on a 4.1 supplier — so every one of those must already exist.
             self._seed_returns_tenant(tenant)
+            # 4.11 LAST OF ALL, and this one genuinely has to be: it MEASURES every sub-module
+            # above. It reads the stock ledger, the purchase orders and receipts, the shipments and
+            # freight invoices, the sales orders, the quality findings and the returns — so each of
+            # those must already be seeded or the snapshots freeze a network that is still empty.
+            # It writes nothing back: no StockMove, no JournalEntry, no change to any 4.1-4.10 row.
+            self._seed_analytics_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns seed complete."))
+            "4.10 returns + 4.11 analytics seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -889,7 +895,19 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.10 Returns FIRST (newest sub-module), and the ORDER inside it is forced by PROTECT:
+        # 4.11 Analytics FIRST (newest sub-module). Unlike every block below it, NOTHING here is
+        # PROTECT — KpiSnapshot.kpi_target is CASCADE and all six of SupplyChainAlert's subject FKs
+        # plus KpiTarget's four scope FKs are SET_NULL — so these rows could not block any deletion
+        # further down. They still go first, because a snapshot or alert left pointing at a deleted
+        # item reads as a measurement of something that no longer exists, and 4.11 is the one
+        # sub-module whose whole value is that its numbers are traceable. Snapshots before targets
+        # so the intent reads top-down even though the cascade would handle it.
+        from apps.scm.models import KpiSnapshot, KpiTarget, SupplyChainAlert
+        KpiSnapshot.objects.all().delete()
+        SupplyChainAlert.objects.all().delete()
+        KpiTarget.objects.all().delete()
+
+        # 4.10 Returns next, and the ORDER inside it is forced by PROTECT:
         #
         #   WarrantyClaim.supplier/item are PROTECT onto core.Party and 4.3's Item, and
         #   WarrantyClaim.return_authorization is SET_NULL onto the RMA — so claims go before both
@@ -2163,3 +2181,132 @@ class Command(BaseCommand):
             )
         bill.recalc_totals()
         return bill
+
+    # ------------------------------------------------------------------ 4.11 Supply Chain Analytics
+    def _seed_analytics_tenant(self, tenant):
+        """4.11 demo rows: a spread of KPI targets, then REAL snapshots and REAL alerts.
+
+        Two rules shape this method.
+
+        **It hand-writes no measurement.** The targets are human intent, so those are typed here.
+        Every number under them is produced by calling the same ``analytics.capture_snapshots`` and
+        ``analytics.detect_alerts`` the Capture and Detect buttons call. A seeder that invented
+        plausible-looking values would demo a page nobody can reproduce by pressing the button on
+        it — and would hide exactly the bugs a seeded workspace exists to surface.
+
+        **It refuses rather than half-seeds.** 4.11 measures 4.1-4.10, so with no stock ledger and
+        no purchase history there is nothing to measure: it says so and returns, instead of leaving
+        a workspace full of targets that all read "no data".
+        """
+        from apps.scm import analytics
+        from apps.scm.models import KpiTarget, PurchaseOrder, StockMove, SupplyChainAlert
+
+        if KpiTarget.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: analytics data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10 posture) -------------
+        if not StockMove.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no stock ledger — skipping 4.11 analytics (it measures 4.1-4.10)."))
+            return
+        if not PurchaseOrder.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no purchase history — skipping 4.11 analytics."))
+            return
+
+        admin_user = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                      or User.objects.filter(tenant=tenant).first())
+
+        # ---- 1. the targets — spread across all five bullets so every page has a banded tile -----
+        # Each carries the parameter its own metric declares (dead stock needs a window, carrying
+        # cost needs a rate, the spike band needs a deviation %), because KpiTarget.clean() rejects
+        # a target missing the parameter its metric requires — these rows go through full_clean()
+        # below precisely so the seed proves that validation rather than side-stepping it.
+        specs = [
+            # metric, name, direction, target, warning, critical, days, pct, alerting, severity, pinned
+            ("inv_turnover", "Inventory turnover", "higher_is_better",
+             Decimal("6.00"), Decimal("4.00"), Decimal("2.00"), None, None, True, "warning", True),
+            ("inv_dead_stock_value", "Dead stock exposure", "lower_is_better",
+             Decimal("2000.00"), Decimal("5000.00"), Decimal("10000.00"), 90, None,
+             True, "warning", True),
+            ("inv_carrying_cost", "Cost of holding stock", "lower_is_better",
+             Decimal("1500.00"), Decimal("3000.00"), Decimal("6000.00"), None, Decimal("25.00"),
+             False, "info", False),
+            ("spend_off_contract_pct", "Off-contract spend", "lower_is_better",
+             Decimal("10.00"), Decimal("25.00"), Decimal("40.00"), None, None,
+             True, "critical", True),
+            ("supplier_otd_pct", "Supplier on-time delivery", "higher_is_better",
+             Decimal("95.00"), Decimal("90.00"), Decimal("80.00"), None, None,
+             True, "warning", True),
+            ("otd_pct", "Customer on-time delivery", "higher_is_better",
+             Decimal("97.00"), Decimal("92.00"), Decimal("85.00"), None, None,
+             True, "critical", True),
+            ("freight_cost_per_unit", "Freight cost per unit", "lower_is_better",
+             Decimal("2.50"), Decimal("4.00"), Decimal("6.00"), None, None, False, "info", False),
+            ("gross_margin_pct", "Gross margin", "higher_is_better",
+             Decimal("35.00"), Decimal("25.00"), Decimal("15.00"), None, None,
+             True, "warning", True),
+            ("supplier_disruption_score", "Supplier disruption risk", "lower_is_better",
+             Decimal("25.00"), Decimal("50.00"), Decimal("70.00"), 60, None,
+             True, "critical", True),
+            ("demand_spike_count", "Demand spikes", "lower_is_better",
+             Decimal("0"), Decimal("2"), Decimal("5"), None, Decimal("50.00"),
+             True, "warning", False),
+        ]
+        created = []
+        for order, spec in enumerate(specs, start=1):
+            (metric, name, direction, target, warn, crit, days, pct,
+             alerting, severity, pinned) = spec
+            kpi = KpiTarget(
+                tenant=tenant, metric=metric, name=name, scope="all",
+                period_grain="month", date_range="last_90", direction=direction,
+                target_value=target, warning_threshold=warn, critical_threshold=crit,
+                parameter_days=days, parameter_pct=pct,
+                is_alerting=alerting, severity=severity,
+                # A floor of zero on the demo rows: the point of a seeded workspace is that the
+                # queue is populated enough to look at. Tuning min_impact_value UP is the first
+                # thing a real operator does, and the field is on the form for exactly that.
+                min_impact_value=Decimal("0"),
+                owner=admin_user, is_pinned=pinned, display_order=order, is_active=True,
+            )
+            kpi.full_clean(exclude=["number"])  # the seeded rows satisfy the REAL validation
+            kpi.save()
+            created.append(kpi)
+
+        # ---- 2. the frozen history — through the REAL service, three periods back ----------------
+        # Three months rather than one, so every trend line has something to draw and the "captured,
+        # never re-derived" claim is visible rather than merely asserted. capture_snapshots is
+        # idempotent on (tenant, target, period_start, dimension_key), so a second seeder run
+        # updates these points instead of stacking duplicates.
+        today = timezone.localdate()
+        periods = 0
+        for months_back in (2, 1, 0):
+            analytics.capture_snapshots(tenant, created,
+                                        period_end=today - datetime.timedelta(days=30 * months_back),
+                                        user=admin_user)
+            periods += 1
+
+        # ---- 3. the exception queue — also through the REAL detector -----------------------------
+        summary = analytics.detect_alerts(tenant, user=admin_user) or {}
+
+        # ---- 4. some human state, so the lifecycle is visible on a fresh seed --------------------
+        # Without this every alert reads "open" and the acknowledge/assign/resolve UI has nothing to
+        # show. Driven through the MODEL METHODS rather than by writing the columns, so a seeded row
+        # is indistinguishable from one a person clicked through.
+        open_alerts = list(SupplyChainAlert.objects.filter(tenant=tenant, status="open")
+                           .order_by("-impact_value")[:3])
+        if admin_user:
+            if len(open_alerts) >= 1:
+                open_alerts[0].acknowledge(admin_user)
+            if len(open_alerts) >= 2:
+                open_alerts[1].acknowledge(admin_user)
+                open_alerts[1].assign(admin_user)
+            if len(open_alerts) >= 3:
+                open_alerts[2].resolve(admin_user,
+                                       "Confirmed with the supplier; shipment re-booked.")
+
+        self.stdout.write(
+            f"{tenant.name}: 4.11 analytics — {len(created)} KPI targets, {periods} periods "
+            f"captured, {summary.get('created', 0)} alerts raised, "
+            f"{summary.get('updated', 0)} re-fired, {summary.get('skipped', 0)} below the floor.")
