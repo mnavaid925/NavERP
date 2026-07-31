@@ -38,7 +38,20 @@ class KpiTargetForm(TenantModelForm):
         # a system stamp written only by capture_snapshots/detect_alerts (L22); the two timestamps
         # are automatic. All five are already non-editable, so listing them is documentation of the
         # boundary rather than the mechanism enforcing it.
-        exclude = ["tenant", "number", "last_evaluated_at", "created_at", "updated_at"]
+        # A WHITELIST, not `exclude`. The excluded set was correct and every omitted column is
+        # already `editable=False`, so nothing was reachable — but a blacklist means the next column
+        # added to KpiTarget joins this form silently, and this was the only Meta.exclude on any
+        # ModelForm in apps/ (the sibling SupplyChainAlertForm's docstring asserts as much). The
+        # field list is verified equal to the model's editable set, so this is the same form.
+        #
+        # Still excluded, and why: `tenant` is stamped by crud_create; `number` is auto-assigned in
+        # TenantNumbered.save(); `last_evaluated_at` is a system stamp written only by
+        # capture_snapshots/detect_alerts (L22); the two timestamps are automatic.
+        fields = ["metric", "name", "scope", "scope_category", "scope_location", "scope_carrier",
+                  "scope_vendor", "period_grain", "date_range", "direction", "target_value",
+                  "warning_threshold", "critical_threshold", "parameter_days", "parameter_pct",
+                  "is_alerting", "min_impact_value", "severity", "owner", "is_pinned",
+                  "display_order", "is_active", "notes"]
         widgets = {"notes": forms.Textarea(attrs={"rows": 3})}
 
     def __init__(self, *args, **kwargs):
