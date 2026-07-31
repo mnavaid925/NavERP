@@ -2279,13 +2279,17 @@ class Command(BaseCommand):
         # never re-derived" claim is visible rather than merely asserted. capture_snapshots is
         # idempotent on (tenant, target, period_start, dimension_key), so a second seeder run
         # updates these points instead of stacking duplicates.
-        today = timezone.localdate()
-        periods = 0
-        for months_back in (2, 1, 0):
-            analytics.capture_snapshots(tenant, created,
-                                        period_end=today - datetime.timedelta(days=30 * months_back),
-                                        user=admin_user)
-            periods += 1
+        # period_windows(), not `today - timedelta(days=30 * n)`. Thirty-day steps are not month
+        # arithmetic: from 31 July they land on 1 June / 1 July / 31 July — June and July, with the
+        # third capture merely updating the second — and from 1 March they skip February entirely.
+        # period_windows returns the real month buckets, which is also exactly what
+        # capture_snapshots derives internally, so the seeded points line up with the trend the
+        # pages draw.
+        points = 0
+        for _start, stop in analytics.period_windows("month", 3):
+            captured = analytics.capture_snapshots(tenant, created, period_end=stop,
+                                                   user=admin_user) or {}
+            points += captured.get("created", 0) + captured.get("updated", 0)
 
         # ---- 3. the exception queue — also through the REAL detector -----------------------------
         summary = analytics.detect_alerts(tenant, user=admin_user) or {}
@@ -2306,7 +2310,13 @@ class Command(BaseCommand):
                 open_alerts[2].resolve(admin_user,
                                        "Confirmed with the supplier; shipment re-booked.")
 
+        # `points` is snapshots actually written, not loop turns — a counter that increments once
+        # per iteration reports "3 periods" even when two collided or every target was skipped.
+        # `below_impact`, not `skipped`: in detect_alerts, `skipped` counts targets whose metric
+        # RAISED, and reporting those as "below the floor" hides a broken metric as a tuning choice.
         self.stdout.write(
-            f"{tenant.name}: 4.11 analytics — {len(created)} KPI targets, {periods} periods "
+            f"{tenant.name}: 4.11 analytics — {len(created)} KPI targets, {points} snapshots "
             f"captured, {summary.get('created', 0)} alerts raised, "
-            f"{summary.get('updated', 0)} re-fired, {summary.get('skipped', 0)} below the floor.")
+            f"{summary.get('updated', 0)} re-fired, "
+            f"{summary.get('below_impact', 0)} below the impact floor, "
+            f"{summary.get('skipped', 0)} metric errors.")
