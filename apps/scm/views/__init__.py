@@ -292,3 +292,29 @@ from .ReturnsManagement.Reports import (  # noqa: F401
     refund_queue, returns_awaiting_disposition, advance_refund_exposure, return_portal,
     portal_return_create, returnauthorization_public, returnauthorization_label,
 )
+
+# 4.11 Supply Chain Analytics
+# 27 callables. A view missing from this block is an AttributeError the MOMENT the URLconf loads —
+# not at first request — because apps/scm/urls/ resolves every route through ``views.<name>``.
+# ``open_alert_count`` is exported too: the five report pages import it for their header chip.
+from .SupplyChainAnalytics.KpiTargets import (  # noqa: F401
+    kpitarget_list, kpitarget_create, kpitarget_detail, kpitarget_edit, kpitarget_delete,
+    kpitarget_snapshot,
+)
+from .SupplyChainAnalytics.KpiSnapshots import (  # noqa: F401
+    kpisnapshot_list, kpisnapshot_detail, kpisnapshot_delete, kpisnapshot_capture,
+    kpisnapshot_export,
+)
+from .SupplyChainAnalytics.SupplyChainAlerts import (  # noqa: F401
+    supplychainalert_list, supplychainalert_create, supplychainalert_detail,
+    supplychainalert_edit, supplychainalert_delete, supplychainalert_acknowledge,
+    supplychainalert_assign, supplychainalert_snooze, supplychainalert_resolve,
+    supplychainalert_dismiss, supplychainalert_detect, open_alert_count,
+)
+from .SupplyChainAnalytics.Reports import (  # noqa: F401
+    inventory_analytics, inventory_analytics_export,
+    spend_analytics, spend_analytics_export,
+    logistics_kpis, logistics_kpis_export,
+    margin_analytics, margin_analytics_export,
+    disruption_risk, disruption_risk_export,
+)
