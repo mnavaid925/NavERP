@@ -102,7 +102,13 @@
           <p><span class="badge badge-amber">Mixed currency</span> {{ currency_notice.note }} Currencies in this window: {{ currency_notice.codes|join:", " }}. Affected: {{ currency_notice.metrics|join:", " }}.</p>
         {% endif %}
         {% if display_only_filters %}
-          <p><span class="badge badge-info">Table filter</span> {{ display_only_filters|join:", " }} narrows the tables below, not the headline figures.</p>
+          {% comment %}
+            Worded for THIS page specifically. On the other four report pages the display-only
+            filter narrows the supporting tables; here the only one is `basis`, which selects which
+            freight rate the headline tile shows and narrows no table at all — every basis is listed
+            below regardless. The generic sentence was simply false here.
+          {% endcomment %}
+          <p><span class="badge badge-info">Display filter</span> Basis selects which freight rate the headline tile shows. It narrows no table — every basis is listed below.</p>
         {% endif %}
       </div>
     </div>
@@ -139,16 +145,29 @@
     </div>
     <div class="stat-card">
       <div class="stat-icon orange"><i data-lucide="banknote"></i></div>
-      <div class="stat-value">{% if tile.freight_cost_per_unit.value is not None %}{{ tile.freight_cost_per_unit.display }}{% else %}—{% endif %}</div>
+      {% comment %}
+        Shows basis_rate, the rate for the basis the operator CHOSE — not tile.value, which is the
+        resolver's own first-populated basis (kg, then cbm, package, shipment, km). Picking "per
+        shipment" used to change this label while the number stayed per-kilogram.
+
+        The band travels with the number it was computed against, so it is only shown when the
+        chosen basis IS the one the target was banded on. A green badge beside a different basis's
+        rate is a worse lie than no badge.
+      {% endcomment %}
+      <div class="stat-value">{% if basis_rate is not None %}{{ basis_rate }}{% else %}—{% endif %}</div>
       <div class="stat-label">
         Freight cost <span class="text-muted">{{ basis_label|default:"per unit" }}</span>
-        <span class="badge {{ tile.freight_cost_per_unit.band_css }}">
-          {% if tile.freight_cost_per_unit.value is None %}Not computed
-          {% elif tile.freight_cost_per_unit.band == 'ok' %}On target
-          {% elif tile.freight_cost_per_unit.band == 'warning' %}Warning
-          {% elif tile.freight_cost_per_unit.band == 'critical' %}Critical
-          {% else %}No target{% endif %}
-        </span>
+        {% if basis == tile.freight_cost_per_unit.breakdown.basis_key %}
+          <span class="badge {{ tile.freight_cost_per_unit.band_css }}">
+            {% if tile.freight_cost_per_unit.value is None %}Not computed
+            {% elif tile.freight_cost_per_unit.band == 'ok' %}On target
+            {% elif tile.freight_cost_per_unit.band == 'warning' %}Warning
+            {% elif tile.freight_cost_per_unit.band == 'critical' %}Critical
+            {% else %}No target{% endif %}
+          </span>
+        {% else %}
+          <span class="badge badge-muted">Not the banded basis</span>
+        {% endif %}
       </div>
     </div>
     <div class="stat-card">
@@ -168,14 +187,47 @@
     <div class="stat-card">
       <div class="stat-icon slate"><i data-lucide="receipt-text"></i></div>
       <div class="stat-value">{% if tile.freight_variance_pct.value is not None %}{{ tile.freight_variance_pct.display }}{% else %}—{% endif %}</div>
-      <div class="stat-label">Freight billing variance <span class="text-muted">audited invoices</span></div>
+      <div class="stat-label">
+        Freight billing variance <span class="text-muted">audited invoices</span>
+        <span class="badge {{ tile.freight_variance_pct.band_css }}">
+          {% if tile.freight_variance_pct.value is None %}Not computed
+          {% elif tile.freight_variance_pct.band == 'ok' %}On target
+          {% elif tile.freight_variance_pct.band == 'warning' %}Warning
+          {% elif tile.freight_variance_pct.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+        {% if tile.freight_variance_pct.unavailable %}<div class="form-help">{{ tile.freight_variance_pct.unavailable }}</div>{% endif %}
+      </div>
     </div>
     <div class="stat-card">
       <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
       <div class="stat-value">{% if tile.dwell_hours_avg.value is not None %}{{ tile.dwell_hours_avg.display }}{% else %}—{% endif %}</div>
-      <div class="stat-label">Average yard / dock dwell</div>
+      <div class="stat-label">
+        Average yard / dock dwell
+        <span class="badge {{ tile.dwell_hours_avg.band_css }}">
+          {% if tile.dwell_hours_avg.value is None %}Not computed
+          {% elif tile.dwell_hours_avg.band == 'ok' %}On target
+          {% elif tile.dwell_hours_avg.band == 'warning' %}Warning
+          {% elif tile.dwell_hours_avg.band == 'critical' %}Critical
+          {% else %}No target{% endif %}
+        </span>
+        {% if tile.dwell_hours_avg.unavailable %}<div class="form-help">{{ tile.dwell_hours_avg.unavailable }}</div>{% endif %}
+      </div>
     </div>
   </div>
+
+  {% if not has_data %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="database"></i>
+          <h3>Nothing measurable in this window</h3>
+          <p>No metric on this page could be computed for {{ scope_label }} between {{ start|date:"M d, Y"|default:"the earliest record" }} and {{ end|date:"M d, Y" }}. Widen the window or clear the carrier filter. Each tile above carries its own reason — none of them is an error, and none of them is a zero.</p>
+          <a href="{% url 'scm:shipment_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Shipments</a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
 
   {% comment %}
     The "in full" definition is printed rather than assumed. SalesOrderLine has no quantity_shipped
@@ -203,7 +255,7 @@
         <table class="table">
           <thead><tr>
             <th>Shipment</th><th>Order</th><th>Customer</th><th>Carrier</th>
-            <th>Missed</th><th style="text-align:end;">Days late</th>
+            <th>Missed</th><th class="text-right">Days late</th>
           </tr></thead>
           <tbody>
             {% for r in otif_failures %}
@@ -218,7 +270,7 @@
                   {% elif r.failed == 'short' %}<span class="badge badge-amber">Short</span>
                   {% else %}<span class="badge badge-muted">{{ r.failed|default:"—" }}</span>{% endif %}
                 </td>
-                <td style="text-align:end;">{% if r.days_late is not None %}{{ r.days_late }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.days_late is not None %}{{ r.days_late }}{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -239,30 +291,30 @@
             <thead><tr>
               <th>Carrier</th>
               <th>Mode</th>
-              <th style="text-align:end;">On-time %</th>
-              <th style="text-align:end;">Avg transit</th>
-              <th style="text-align:end;">Rate card</th>
-              <th style="text-align:end;">Cost / kg</th>
-              <th style="text-align:end;">Variance %</th>
-              <th style="text-align:end;">Exceptions</th>
-              <th style="text-align:end;">Sampled</th>
+              <th class="text-right">On-time %</th>
+              <th class="text-right">Avg transit</th>
+              <th class="text-right">Rate card</th>
+              <th class="text-right">Cost / kg</th>
+              <th class="text-right">Variance %</th>
+              <th class="text-right">Exceptions</th>
+              <th class="text-right">Sampled</th>
             </tr></thead>
             <tbody>
               {% for r in carrier_scorecard %}
                 <tr>
                   <td>{{ r.carrier|default:r.number|default:"—" }}</td>
                   <td>{{ r.mode|default:"—" }}{% if r.service_level %} <span class="text-muted">{{ r.service_level }}</span>{% endif %}</td>
-                  <td style="text-align:end;">
+                  <td class="text-right">
                     {% if r.otd_pct is not None %}
                       <span class="badge {% if r.otd_pct >= 95 %}badge-green{% elif r.otd_pct >= 85 %}badge-amber{% else %}badge-red{% endif %}">{{ r.otd_pct }}%</span>
                     {% else %}<span class="badge badge-muted">No signal</span>{% endif %}
                   </td>
-                  <td style="text-align:end;">{% if r.avg_transit_days is not None %}{{ r.avg_transit_days }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{% if r.rate_card_transit_days is not None %}{{ r.rate_card_transit_days }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{% if r.cost_per_kg is not None %}{{ r.cost_per_kg }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{% if r.variance_pct is not None %}{{ r.variance_pct }}{% else %}—{% endif %}</td>
-                  <td style="text-align:end;">{{ r.exceptions|default:"0" }}</td>
-                  <td style="text-align:end;">{{ r.deliveries_sampled|default:"0" }}</td>
+                  <td class="text-right">{% if r.avg_transit_days is not None %}{{ r.avg_transit_days }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.rate_card_transit_days is not None %}{{ r.rate_card_transit_days }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.cost_per_kg is not None %}{{ r.cost_per_kg }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{% if r.variance_pct is not None %}{{ r.variance_pct }}{% else %}—{% endif %}</td>
+                  <td class="text-right">{{ r.exceptions|default:"0" }}</td>
+                  <td class="text-right">{{ r.deliveries_sampled|default:"0" }}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -292,13 +344,17 @@
       {% if freight_bases %}
         <div class="table-wrap">
           <table class="table">
-            <thead><tr><th>Basis</th><th style="text-align:end;">Cost per unit</th><th>Applied</th></tr></thead>
+            <thead><tr><th>Basis</th><th class="text-right">Cost per unit</th><th>Applied</th></tr></thead>
             <tbody>
               {% for b in freight_bases %}
                 <tr>
                   <td>{{ b.label }}</td>
-                  <td style="text-align:end;">{{ b.rate|default:"—" }}</td>
-                  <td>{% if b.selected %}<span class="badge badge-info">Shown above</span>{% else %}<span class="badge badge-muted">Available</span>{% endif %}</td>
+                  <td class="text-right">{{ b.rate|default:"—" }}</td>
+                  <td>
+                    {% if b.selected %}<span class="badge badge-info">Shown above</span>
+                    {% elif b.key == tile.freight_cost_per_unit.breakdown.basis_key %}<span class="badge badge-slate">Banded basis</span>
+                    {% else %}<span class="badge badge-muted">Available</span>{% endif %}
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -329,20 +385,20 @@
         <table class="table">
           <thead><tr>
             <th>Carrier</th>
-            <th style="text-align:end;">Bills</th><th style="text-align:end;">Shipments</th>
-            <th style="text-align:end;">Billed</th><th style="text-align:end;">Weight (kg)</th>
-            <th style="text-align:end;">Per kg</th><th style="text-align:end;">Per shipment</th>
+            <th class="text-right">Bills</th><th class="text-right">Shipments</th>
+            <th class="text-right">Billed</th><th class="text-right">Weight (kg)</th>
+            <th class="text-right">Per kg</th><th class="text-right">Per shipment</th>
           </tr></thead>
           <tbody>
             {% for r in freight_league %}
               <tr>
                 <td>{{ r.carrier|default:"(unassigned)" }}</td>
-                <td style="text-align:end;">{{ r.bills|default:"0" }}</td>
-                <td style="text-align:end;">{{ r.shipments|default:"0" }}</td>
-                <td style="text-align:end;">{% if r.billed is not None %}{{ r.billed }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.weight_kg is not None %}{{ r.weight_kg }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.per_kg is not None %}{{ r.per_kg }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.per_shipment is not None %}{{ r.per_shipment }}{% else %}—{% endif %}</td>
+                <td class="text-right">{{ r.bills|default:"0" }}</td>
+                <td class="text-right">{{ r.shipments|default:"0" }}</td>
+                <td class="text-right">{% if r.billed is not None %}{{ r.billed }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.weight_kg is not None %}{{ r.weight_kg }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.per_kg is not None %}{{ r.per_kg }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.per_shipment is not None %}{{ r.per_shipment }}{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -358,9 +414,9 @@
         <table class="table">
           <thead><tr>
             <th>Load</th><th>Carrier</th><th>Equipment</th>
-            <th style="text-align:end;">Shipments</th>
-            <th style="text-align:end;">Weight used</th><th style="text-align:end;">Capacity</th>
-            <th style="text-align:end;">Weight %</th><th style="text-align:end;">Volume %</th>
+            <th class="text-right">Shipments</th>
+            <th class="text-right">Weight used</th><th class="text-right">Capacity</th>
+            <th class="text-right">Weight %</th><th class="text-right">Volume %</th>
           </tr></thead>
           <tbody>
             {% for r in utilization_rows %}
@@ -368,15 +424,15 @@
                 <td>{{ r.load|default:"—" }}</td>
                 <td>{{ r.carrier|default:"—" }}</td>
                 <td>{{ r.equipment|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.shipments|default:"0" }}</td>
-                <td style="text-align:end;">{% if r.weight_kg is not None %}{{ r.weight_kg }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{% if r.capacity_kg is not None %}{{ r.capacity_kg }}{% else %}—{% endif %}</td>
-                <td style="text-align:end;">
+                <td class="text-right">{{ r.shipments|default:"0" }}</td>
+                <td class="text-right">{% if r.weight_kg is not None %}{{ r.weight_kg }}{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.capacity_kg is not None %}{{ r.capacity_kg }}{% else %}—{% endif %}</td>
+                <td class="text-right">
                   {% if r.weight_utilization_pct is not None %}
                     <span class="badge {% if r.weight_utilization_pct >= 85 %}badge-green{% elif r.weight_utilization_pct >= 60 %}badge-amber{% else %}badge-red{% endif %}">{{ r.weight_utilization_pct }}%</span>
                   {% else %}<span class="badge badge-muted">No capacity set</span>{% endif %}
                 </td>
-                <td style="text-align:end;">{% if r.volume_utilization_pct is not None %}{{ r.volume_utilization_pct }}%{% else %}—{% endif %}</td>
+                <td class="text-right">{% if r.volume_utilization_pct is not None %}{{ r.volume_utilization_pct }}%{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -392,7 +448,7 @@
         <table class="table">
           <thead><tr>
             <th>Shipment</th><th>Carrier</th><th>Lane</th><th>Customer</th>
-            <th>Promised</th><th>Delivered</th><th style="text-align:end;">Days late</th>
+            <th>Promised</th><th>Delivered</th><th class="text-right">Days late</th>
           </tr></thead>
           <tbody>
             {% for r in otd_rows %}
@@ -403,7 +459,7 @@
                 <td>{{ r.customer|default:"—" }}</td>
                 <td>{{ r.promised|default:"—" }}</td>
                 <td>{{ r.delivered_on|default:"—" }}</td>
-                <td style="text-align:end;">
+                <td class="text-right">
                   {% if r.days_late is not None %}
                     <span class="badge {% if r.days_late > 0 %}badge-red{% else %}badge-green{% endif %}">{{ r.days_late }}</span>
                   {% else %}—{% endif %}
