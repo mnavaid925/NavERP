@@ -123,7 +123,7 @@
           {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
         </dd></div>
         <div class="detail-item"><dt>Alert-fatigue floor</dt><dd>{{ obj.min_impact_value|floatformat:2 }} <span class="text-muted">a breach worth less raises nothing</span></dd></div>
-        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Nobody answerable</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.get_username }}{% else %}<span class="text-muted">Nobody answerable</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Control-tower tile</dt><dd>{% if obj.is_pinned %}<span class="badge badge-info">Pinned</span> position {{ obj.display_order }}{% else %}<span class="text-muted">Not pinned</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Last evaluated</dt><dd>{{ obj.last_evaluated_at|date:"M d, Y H:i"|default:"Never captured" }}</dd></div>
