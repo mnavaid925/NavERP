@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.11 — shared create/edit form for KpiTarget.
+
+Context (apps/core/crud.py crud_create / crud_edit, called from
+apps/scm/views/SupplyChainAnalytics/KpiTargets.py):
+  * form     — KpiTargetForm (bound on POST)
+  * is_edit  — False on create, True on edit
+  * obj      — the KpiTarget, ON THE EDIT PATH ONLY
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to KpiTargetForm's
+field set: the form is `exclude = [tenant, number, last_evaluated_at, created_at, updated_at]`, so
+the 23 names below are all of it. A field added to the model and not added to a group here would
+never reach the POST and would fail validation with no visible cause.
+
+Every rule stated in the operator notes is enforced by KpiTarget.clean(), never by this template —
+so the words somebody reads and the validation that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} KPI Target{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} KPI Target</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:kpitarget_list' %}">KPI Targets</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Definition</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The metric list is closed — every key on it has a reviewed resolver behind it, and each one is only computable at certain scopes. Pick the scope first, then name the one subject it narrows to; the other three pointers must stay empty or they would quietly filter somebody else's number months from now.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.metric %}
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.scope %}
+          <div data-scope-for="category"{% if form.scope_category.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.scope_category %}
+          </div>
+          <div data-scope-for="location"{% if form.scope_location.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.scope_location %}
+          </div>
+          <div data-scope-for="carrier"{% if form.scope_carrier.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.scope_carrier %}
+          </div>
+          <div data-scope-for="vendor"{% if form.scope_vendor.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.scope_vendor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Window</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Two different windows, on purpose. The <span class="fw-600">date range</span> is the rolling window the live figure on the detail page and the control-tower tile are measured over. The <span class="fw-600">period grain</span> is the bucket ONE frozen trend point covers — rolling windows overlap, so a trend built from them would be meaningless.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.period_grain %}
+          {% include "partials/form_field.html" with field=form.date_range %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Bands</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">All three bands are optional — a target with none still snapshots and trends its metric, it just cannot be banded. Whichever ones you set have to run the way the metric runs: lower-is-better climbs away from the goal (target, then warning, then critical), higher-is-better falls away from it. Leave <span class="fw-600">direction</span> blank to inherit the metric's own; set it only for a deliberately inverted goal.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.direction %}
+          {% include "partials/form_field.html" with field=form.target_value %}
+          {% include "partials/form_field.html" with field=form.warning_threshold %}
+          {% include "partials/form_field.html" with field=form.critical_threshold %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Parameters</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Some metrics are defined in terms of a number, and are not smaller without it — they are not a number at all. Dead stock, aging stock, expiry risk, supplier disruption and shipments-at-risk each need a <span class="fw-600">days</span> figure; carrying cost and demand-spike detection each need a <span class="fw-600">percentage</span>. The save is refused if the metric you chose needs one and it is blank.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.parameter_days %}
+          {% include "partials/form_field.html" with field=form.parameter_pct %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Alerting</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Alerting fires off the two thresholds, so turning it on with neither one set is refused rather than accepted — a tick-box that can never fire is worse than no tick-box, because you would believe you were covered. The <span class="fw-600">minimum impact</span> is the alert-fatigue floor: a breach worth less than it raises nothing.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.is_alerting %}
+          {% include "partials/form_field.html" with field=form.severity %}
+          {% include "partials/form_field.html" with field=form.min_impact_value %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Display</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Pinned targets become tiles on the analytics control tower, lowest display order first. Deactivating a target keeps it and its frozen history — the batch capture and the alert detector both skip it, so it simply stops accruing new points.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.owner %}
+          {% include "partials/form_field.html" with field=form.is_pinned %}
+          {% include "partials/form_field.html" with field=form.display_order %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:kpitarget_detail' obj.pk %}{% else %}{% url 'scm:kpitarget_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    // Progressive enhancement ONLY. With scripting off all four scope pointers render, the form
+    // still submits, and KpiTarget.clean() still refuses the wrong combination — a narrowed
+    // dropdown was never the guard (L39 §2), it is the courtesy.
+    var scopeSelect = document.getElementById("{{ form.scope.id_for_label }}");
+    var groups = Array.prototype.slice.call(document.querySelectorAll("[data-scope-for]"));
+    if (!scopeSelect || !groups.length) { return; }
+
+    function sync() {
+      var chosen = scopeSelect.value;
+      groups.forEach(function (group) {
+        // A group carrying a server-side error stays on screen whatever the scope now says —
+        // hiding it would hide the message that explains why the save was refused.
+        var keep = group.getAttribute("data-scope-for") === chosen
+          || group.hasAttribute("data-has-error");
+        group.style.display = keep ? "" : "none";
+        if (!keep) {
+          // Cleared, not merely hidden: clean() refuses a pointer that does not match the scope,
+          // so a display:none select still POSTing its old value would refuse the save on a field
+          // the operator cannot see.
+          var input = group.querySelector("select");
+          if (input) { input.value = ""; }
+        }
+      });
+    }
+
+    scopeSelect.addEventListener("change", function () {
+      // The scope has now been chosen by hand, so last attempt's errors no longer describe this
+      // form — stop pinning those groups open.
+      groups.forEach(function (group) { group.removeAttribute("data-has-error"); });
+      sync();
+    });
+    sync();
+  })();
+</script>
+{% endblock %}
