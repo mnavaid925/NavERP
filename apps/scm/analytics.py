@@ -4047,6 +4047,17 @@ def capture_snapshots(tenant, targets=None, period_end=None, user=None):
     unique key — so pressing Capture twice updates the period rather than stacking a second row, and
     ``computed_at`` is re-stamped so "this figure is three minutes old" stays true.
 
+    **Cost, measured rather than guessed:** ~8.5 queries per target (85 for the seeded 10), and it is
+    LINEAR in targets by nature — each target names a different metric over different tables, so
+    there is no shared queryset to batch across them. It is bounded two ways: by
+    :data:`MAX_SNAPSHOT_TARGETS` (200, so ~1700 queries worst case) and by being an explicit
+    tenant-admin POST rather than anything on a page load. Deliberately NOT memoised on
+    ``(metric, scope, period)``: ``compute_metric`` receives the target itself and reads its
+    ``parameter_days``/``parameter_pct`` and its bands, so two targets that merely share a metric can
+    legitimately produce different numbers and different bands — a cache keyed on the metric alone
+    would hand the second target the first one's answer. The five report PAGES, which do run on every
+    load, are all flat: 28-36 queries each, unchanged when the row count is multiplied.
+
     Three things it refuses to write, each counted in ``skipped`` rather than guessed at:
 
     * a metric that came back with **no value** (``KpiSnapshot.value`` is non-null, and a
