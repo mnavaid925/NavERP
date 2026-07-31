@@ -27,6 +27,13 @@ from apps.scm.models import (
     SupplierRiskAssessment,
     SupplierScorecard,
 )
+# 4.11 Supply Chain Analytics (registrations at the foot of this module, following the per-sub-module
+# import blocks 4.3 onwards already use).
+from apps.scm.models import (
+    KpiSnapshot,
+    KpiTarget,
+    SupplyChainAlert,
+)
 
 
 class PurchaseRequisitionLineInline(admin.TabularInline):
@@ -686,3 +693,64 @@ class WarrantyClaimAdmin(admin.ModelAdmin):
                        "supplier_response_notes", "amount_approved", "amount_credited",
                        "credit_reference", "credit_received_on")
     inlines = [WarrantyClaimCostInline]
+
+
+# =================================================================================================
+# 4.11 Supply Chain Analytics
+#
+# Every editable=False column is listed in readonly_fields. That is not decoration: the admin is the
+# one surface that bypasses the forms, so a workflow column left editable here is a column any staff
+# user can set by hand — which for these three models means hand-typing a "measured" figure, a
+# frozen history point, or an acknowledgement nobody actually made.
+# =================================================================================================
+
+
+@admin.register(KpiTarget)
+class KpiTargetAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "name", "metric", "scope", "direction", "target_value",
+                    "warning_threshold", "critical_threshold", "is_alerting", "severity",
+                    "is_active", "last_evaluated_at")
+    list_filter = ("tenant", "metric", "scope", "direction", "severity", "is_alerting",
+                   "is_active", "period_grain", "date_range")
+    search_fields = ("number", "name", "notes", "scope_category__name", "scope_location__code",
+                     "scope_vendor__name")
+    # number is assigned once in save(); last_evaluated_at is stamped by capture_snapshots /
+    # detect_alerts and means "when this target was last measured" — typing it would be a lie about
+    # data freshness, which is the one thing a target's staleness badge relies on.
+    readonly_fields = ("number", "last_evaluated_at", "created_at", "updated_at")
+
+
+@admin.register(KpiSnapshot)
+class KpiSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("kpi_target", "tenant", "metric", "period_start", "period_end",
+                    "dimension_label", "value", "target_value_at_time", "status_band",
+                    "computed_at", "computed_by")
+    list_filter = ("tenant", "metric", "status_band", "period_end")
+    search_fields = ("dimension_label", "dimension_key", "kpi_target__number",
+                     "kpi_target__name")
+    date_hierarchy = "period_end"
+    # A snapshot is a MEASUREMENT: the whole reason it is stored is that re-deriving it later would
+    # give a different answer (average cost is recomputed on every receipt, back-dated moves are
+    # legal). Everything that says what was measured, when, and by whom is therefore read-only —
+    # an editable value column would make the frozen history editable, which defeats freezing it.
+    readonly_fields = ("kpi_target", "metric", "period_start", "period_end", "dimension_key",
+                       "dimension_label", "value", "target_value_at_time", "status_band",
+                       "breakdown", "computed_at", "computed_by", "created_at", "updated_at")
+
+
+@admin.register(SupplyChainAlert)
+class SupplyChainAlertAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "severity", "alert_type", "title", "dimension_label",
+                    "observed_value", "threshold_value", "impact_value", "status", "assigned_to",
+                    "raised_at", "last_seen_at")
+    list_filter = ("tenant", "status", "severity", "alert_type", "assigned_to")
+    search_fields = ("number", "title", "dimension_label", "dedupe_key", "notes",
+                     "resolution_note", "party__name", "item__sku", "item__name")
+    date_hierarchy = "raised_at"
+    # The lifecycle block. status moves only through the five action views; dedupe_key is the
+    # detector's own bookkeeping and editing it would either orphan an open alert (so the next sweep
+    # raises a duplicate) or collide it with an unrelated one (so a real breach silently updates the
+    # wrong row). raised_at/last_seen_at are what "still breaching" is read from.
+    readonly_fields = ("number", "status", "dedupe_key", "acknowledged_by", "acknowledged_at",
+                       "snoozed_until", "resolved_by", "resolved_at", "raised_at", "last_seen_at",
+                       "created_at", "updated_at")
