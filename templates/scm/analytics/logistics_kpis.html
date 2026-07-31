@@ -202,18 +202,23 @@
       <div class="table-wrap">
         <table class="table">
           <thead><tr>
-            <th>Order</th><th>Customer</th><th>Carrier</th><th>Reason</th>
-            <th style="text-align:end;">Ordered</th><th style="text-align:end;">Delivered</th>
+            <th>Shipment</th><th>Order</th><th>Customer</th><th>Carrier</th>
+            <th>Missed</th><th style="text-align:end;">Days late</th>
           </tr></thead>
           <tbody>
             {% for r in otif_failures %}
               <tr>
-                <td>{{ r.order|default:"—" }}</td>
+                <td>{{ r.shipment|default:"—" }}</td>
+                <td>{{ r.sales_order|default:"—" }}</td>
                 <td>{{ r.customer|default:"—" }}</td>
                 <td>{{ r.carrier|default:"—" }}</td>
-                <td>{% if r.reason %}<span class="badge badge-amber">{{ r.reason }}</span>{% else %}—{% endif %}</td>
-                <td style="text-align:end;">{{ r.quantity_ordered|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.quantity_delivered|default:"—" }}</td>
+                <td>
+                  {% if r.failed == 'late and short' %}<span class="badge badge-red">Late and short</span>
+                  {% elif r.failed == 'late' %}<span class="badge badge-amber">Late</span>
+                  {% elif r.failed == 'short' %}<span class="badge badge-amber">Short</span>
+                  {% else %}<span class="badge badge-muted">{{ r.failed|default:"—" }}</span>{% endif %}
+                </td>
+                <td style="text-align:end;">{% if r.days_late is not None %}{{ r.days_late }}{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -233,27 +238,31 @@
           <table class="table">
             <thead><tr>
               <th>Carrier</th>
+              <th>Mode</th>
               <th style="text-align:end;">On-time %</th>
               <th style="text-align:end;">Avg transit</th>
-              <th style="text-align:end;">Promised</th>
-              <th style="text-align:end;">Cost / {{ basis_label|default:"unit" }}</th>
+              <th style="text-align:end;">Rate card</th>
+              <th style="text-align:end;">Cost / kg</th>
               <th style="text-align:end;">Variance %</th>
               <th style="text-align:end;">Exceptions</th>
+              <th style="text-align:end;">Sampled</th>
             </tr></thead>
             <tbody>
               {% for r in carrier_scorecard %}
                 <tr>
-                  <td>{{ r.label|default:r.carrier|default:"—" }}</td>
+                  <td>{{ r.carrier|default:r.number|default:"—" }}</td>
+                  <td>{{ r.mode|default:"—" }}{% if r.service_level %} <span class="text-muted">{{ r.service_level }}</span>{% endif %}</td>
                   <td style="text-align:end;">
-                    {% if r.on_time_pct is not None %}
-                      <span class="badge {% if r.on_time_pct >= 95 %}badge-green{% elif r.on_time_pct >= 85 %}badge-amber{% else %}badge-red{% endif %}">{{ r.on_time_pct }}%</span>
+                    {% if r.otd_pct is not None %}
+                      <span class="badge {% if r.otd_pct >= 95 %}badge-green{% elif r.otd_pct >= 85 %}badge-amber{% else %}badge-red{% endif %}">{{ r.otd_pct }}%</span>
                     {% else %}<span class="badge badge-muted">No signal</span>{% endif %}
                   </td>
-                  <td style="text-align:end;">{{ r.avg_transit_days|default:"—" }}</td>
-                  <td style="text-align:end;">{{ r.promised_transit_days|default:"—" }}</td>
-                  <td style="text-align:end;">{{ r.cost_per_unit|default:"—" }}</td>
-                  <td style="text-align:end;">{{ r.variance_pct|default:"—" }}</td>
-                  <td style="text-align:end;">{{ r.exception_count|default:"0" }}</td>
+                  <td style="text-align:end;">{% if r.avg_transit_days is not None %}{{ r.avg_transit_days }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{% if r.rate_card_transit_days is not None %}{{ r.rate_card_transit_days }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{% if r.cost_per_kg is not None %}{{ r.cost_per_kg }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{% if r.variance_pct is not None %}{{ r.variance_pct }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{{ r.exceptions|default:"0" }}</td>
+                  <td style="text-align:end;">{{ r.deliveries_sampled|default:"0" }}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -310,28 +319,64 @@
     </div>
   </div>
 
+  {% if freight_league %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Freight cost by carrier</h2>
+        <span class="badge badge-slate">Audited bills only</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Carrier</th>
+            <th style="text-align:end;">Bills</th><th style="text-align:end;">Shipments</th>
+            <th style="text-align:end;">Billed</th><th style="text-align:end;">Weight (kg)</th>
+            <th style="text-align:end;">Per kg</th><th style="text-align:end;">Per shipment</th>
+          </tr></thead>
+          <tbody>
+            {% for r in freight_league %}
+              <tr>
+                <td>{{ r.carrier|default:"(unassigned)" }}</td>
+                <td style="text-align:end;">{{ r.bills|default:"0" }}</td>
+                <td style="text-align:end;">{{ r.shipments|default:"0" }}</td>
+                <td style="text-align:end;">{% if r.billed is not None %}{{ r.billed }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.weight_kg is not None %}{{ r.weight_kg }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.per_kg is not None %}{{ r.per_kg }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.per_shipment is not None %}{{ r.per_shipment }}{% else %}—{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
   {% if utilization_rows %}
     <div class="card">
       <div class="card-header"><h2 class="card-title">Equipment utilization by load</h2></div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr>
-            <th>Load</th><th>Equipment</th>
-            <th style="text-align:end;">Weight used</th><th style="text-align:end;">Weight capacity</th>
-            <th style="text-align:end;">Utilization</th>
+            <th>Load</th><th>Carrier</th><th>Equipment</th>
+            <th style="text-align:end;">Shipments</th>
+            <th style="text-align:end;">Weight used</th><th style="text-align:end;">Capacity</th>
+            <th style="text-align:end;">Weight %</th><th style="text-align:end;">Volume %</th>
           </tr></thead>
           <tbody>
             {% for r in utilization_rows %}
               <tr>
-                <td>{{ r.label|default:"—" }}</td>
-                <td>{{ r.equipment_type|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.weight_kg|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.capacity_kg|default:"—" }}</td>
+                <td>{{ r.load|default:"—" }}</td>
+                <td>{{ r.carrier|default:"—" }}</td>
+                <td>{{ r.equipment|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.shipments|default:"0" }}</td>
+                <td style="text-align:end;">{% if r.weight_kg is not None %}{{ r.weight_kg }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.capacity_kg is not None %}{{ r.capacity_kg }}{% else %}—{% endif %}</td>
                 <td style="text-align:end;">
-                  {% if r.utilization_pct is not None %}
-                    <span class="badge {% if r.utilization_pct >= 85 %}badge-green{% elif r.utilization_pct >= 60 %}badge-amber{% else %}badge-red{% endif %}">{{ r.utilization_pct }}%</span>
+                  {% if r.weight_utilization_pct is not None %}
+                    <span class="badge {% if r.weight_utilization_pct >= 85 %}badge-green{% elif r.weight_utilization_pct >= 60 %}badge-amber{% else %}badge-red{% endif %}">{{ r.weight_utilization_pct }}%</span>
                   {% else %}<span class="badge badge-muted">No capacity set</span>{% endif %}
                 </td>
+                <td style="text-align:end;">{% if r.volume_utilization_pct is not None %}{{ r.volume_utilization_pct }}%{% else %}—{% endif %}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -346,15 +391,18 @@
       <div class="table-wrap">
         <table class="table">
           <thead><tr>
-            <th>Shipment</th><th>Carrier</th><th>Planned</th><th>Actual</th><th style="text-align:end;">Days late</th>
+            <th>Shipment</th><th>Carrier</th><th>Lane</th><th>Customer</th>
+            <th>Promised</th><th>Delivered</th><th style="text-align:end;">Days late</th>
           </tr></thead>
           <tbody>
             {% for r in otd_rows %}
               <tr>
-                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.shipment|default:"—" }}</td>
                 <td>{{ r.carrier|default:"—" }}</td>
-                <td>{{ r.planned|default:"—" }}</td>
-                <td>{{ r.actual|default:"—" }}</td>
+                <td>{{ r.lane|default:"—" }}</td>
+                <td>{{ r.customer|default:"—" }}</td>
+                <td>{{ r.promised|default:"—" }}</td>
+                <td>{{ r.delivered_on|default:"—" }}</td>
                 <td style="text-align:end;">
                   {% if r.days_late is not None %}
                     <span class="badge {% if r.days_late > 0 %}badge-red{% else %}badge-green{% endif %}">{{ r.days_late }}</span>
