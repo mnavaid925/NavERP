@@ -220,43 +220,53 @@
   {% if supplier_league %}
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">Suppliers by disruption risk</h2>
-        <span class="badge badge-slate">Highest risk first</span>
+        <h2 class="card-title">Suppliers by disruption signal</h2>
+        <span class="badge badge-slate">Weakest on-time first</span>
       </div>
       <div class="table-wrap">
         <table class="table">
           <thead><tr>
             <th>Supplier</th>
-            <th style="text-align:end;">Score</th>
-            <th style="text-align:end;">Late %</th>
+            <th style="text-align:end;">Receipts</th>
+            <th style="text-align:end;">On-time %</th>
             <th style="text-align:end;">Reject %</th>
+            <th style="text-align:end;">NCRs</th>
             <th style="text-align:end;">Open CAPAs</th>
+            <th style="text-align:end;">4.2 risk index</th>
             <th>Contract</th>
-            <th style="text-align:end;">Spend at risk</th>
           </tr></thead>
           <tbody>
             {% for r in supplier_league %}
               <tr>
-                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.vendor|default:"—" }}</td>
+                <td style="text-align:end;">{{ r.receipts|default:"0" }}</td>
                 <td style="text-align:end;">
-                  {% if r.value is not None %}
-                    <span class="badge {% if r.value >= 60 %}badge-red{% elif r.value >= 30 %}badge-amber{% else %}badge-green{% endif %}">{{ r.value }}</span>
-                  {% else %}<span class="badge badge-muted">Not scored</span>{% endif %}
+                  {% if r.otd_pct is not None %}
+                    <span class="badge {% if r.otd_pct >= 95 %}badge-green{% elif r.otd_pct >= 85 %}badge-amber{% else %}badge-red{% endif %}">{{ r.otd_pct }}%</span>
+                  {% else %}<span class="badge badge-muted">No datable receipt</span>{% endif %}
                 </td>
-                <td style="text-align:end;">{{ r.late_pct|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.reject_pct|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.open_capas|default:"0" }}</td>
+                <td style="text-align:end;">{% if r.reject_pct is not None %}{{ r.reject_pct }}%{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{{ r.nonconformances|default:"0" }}</td>
+                <td style="text-align:end;">{{ r.open_capa|default:"0" }}</td>
+                <td style="text-align:end;">
+                  {% if r.risk_index is not None %}{{ r.risk_index }}{% if r.risk_level %} <span class="text-muted">{{ r.risk_level }}</span>{% endif %}
+                  {% else %}<span class="badge badge-muted">Not assessed</span>{% endif %}
+                </td>
                 <td>
-                  {% if r.contract_status == 'expiring' %}<span class="badge badge-amber">Expiring</span>
-                  {% elif r.contract_status == 'none' %}<span class="badge badge-red">No active contract</span>
-                  {% elif r.contract_status == 'active' %}<span class="badge badge-green">Active</span>
-                  {% else %}<span class="badge badge-muted">{{ r.contract_status|default:"Unknown" }}</span>{% endif %}
+                  {% if r.contract_cover == 'expiring' %}<span class="badge badge-amber">Expiring</span>
+                  {% elif r.contract_cover == 'none' %}<span class="badge badge-red">No active contract</span>
+                  {% elif r.contract_cover == 'covered' %}<span class="badge badge-green">Covered</span>
+                  {% else %}<span class="badge badge-muted">Unknown</span>{% endif %}
                 </td>
-                <td style="text-align:end;">{{ r.spend|default:"—" }}</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">
+          These are the raw per-supplier signals the composite is built from, not a composite per supplier — scoring every supplier individually would be one full pass each, which is the query explosion this page is written to avoid. Narrow to a single supplier above to see that supplier's own weighted breakdown.
+        </p>
       </div>
     </div>
   {% endif %}
@@ -270,21 +280,27 @@
           <table class="table">
             <thead><tr>
               <th>Item</th>
-              <th style="text-align:end;">Recent {{ spike_window_days }}d</th>
-              <th style="text-align:end;">Baseline</th>
-              <th style="text-align:end;">Deviation</th>
+              <th style="text-align:end;">Recent {{ spike_window_days }}d / day</th>
+              <th style="text-align:end;">Baseline / day</th>
+              <th style="text-align:end;">Increase</th>
+              <th style="text-align:end;">Recent units</th>
+              <th style="text-align:end;">Window units</th>
+              <th style="text-align:end;">Of which returned</th>
             </tr></thead>
             <tbody>
               {% for r in spike_rows %}
                 <tr>
-                  <td>{{ r.label|default:"—" }}</td>
-                  <td style="text-align:end;">{{ r.recent|default:"—" }}</td>
-                  <td style="text-align:end;">{{ r.baseline|default:"—" }}</td>
+                  <td>{{ r.sku|default:"—" }}{% if r.name %} <span class="text-muted">{{ r.name }}</span>{% endif %}</td>
+                  <td style="text-align:end;">{% if r.recent_daily is not None %}{{ r.recent_daily }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{% if r.baseline_daily is not None %}{{ r.baseline_daily }}{% else %}—{% endif %}</td>
                   <td style="text-align:end;">
-                    {% if r.deviation_pct is not None %}
-                      <span class="badge {% if r.deviation_pct >= 100 %}badge-red{% else %}badge-amber{% endif %}">+{{ r.deviation_pct }}%</span>
+                    {% if r.increase_pct is not None %}
+                      <span class="badge {% if r.increase_pct >= 100 %}badge-red{% else %}badge-amber{% endif %}">+{{ r.increase_pct }}%</span>
                     {% else %}—{% endif %}
                   </td>
+                  <td style="text-align:end;">{% if r.recent_units is not None %}{{ r.recent_units }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{% if r.window_units is not None %}{{ r.window_units }}{% else %}—{% endif %}</td>
+                  <td style="text-align:end;">{% if r.returned_units is not None %}{{ r.returned_units }}{% else %}—{% endif %}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -310,24 +326,27 @@
         <table class="table">
           <thead><tr>
             <th>Item</th><th>Location</th>
-            <th style="text-align:end;">On hand</th><th style="text-align:end;">Committed</th>
-            <th style="text-align:end;">Incoming</th><th style="text-align:end;">Days of cover</th>
-            <th style="text-align:end;">Lead time</th>
+            <th style="text-align:end;">On hand</th><th style="text-align:end;">Reserved</th>
+            <th style="text-align:end;">Inbound</th><th style="text-align:end;">Available</th>
+            <th style="text-align:end;">Days of cover</th><th style="text-align:end;">Lead time</th>
+            <th>Runs out</th>
           </tr></thead>
           <tbody>
             {% for r in stockout_rows %}
               <tr>
-                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.sku|default:"—" }}{% if r.name %} <span class="text-muted">{{ r.name }}</span>{% endif %}</td>
                 <td>{{ r.location|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.on_hand|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.committed|default:"—" }}</td>
-                <td style="text-align:end;">{{ r.incoming|default:"—" }}</td>
+                <td style="text-align:end;">{% if r.on_hand is not None %}{{ r.on_hand }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.reserved is not None %}{{ r.reserved }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.inbound is not None %}{{ r.inbound }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.available is not None %}{{ r.available }}{% else %}—{% endif %}</td>
                 <td style="text-align:end;">
                   {% if r.days_of_cover is not None %}
-                    <span class="badge {% if r.shortfall %}badge-red{% else %}badge-amber{% endif %}">{{ r.days_of_cover }}</span>
+                    <span class="badge {% if r.shortfall_days and r.shortfall_days > 0 %}badge-red{% else %}badge-amber{% endif %}">{{ r.days_of_cover }}</span>
                   {% else %}<span class="badge badge-muted">No demand rate</span>{% endif %}
                 </td>
                 <td style="text-align:end;">{{ r.lead_time_days|default:"—" }}</td>
+                <td>{{ r.stockout_on|default:"—" }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -347,16 +366,28 @@
       <div class="table-wrap">
         <table class="table">
           <thead><tr>
-            <th>Shipment</th><th>Carrier</th><th>Planned</th><th>ETA</th><th>Why flagged</th>
+            <th>Shipment</th><th>Carrier</th><th>Destination</th>
+            <th>Promised</th><th>ETA</th>
+            <th style="text-align:end;">Days late</th><th style="text-align:end;">Days silent</th>
+            <th>Why flagged</th>
           </tr></thead>
           <tbody>
             {% for r in shipments_at_risk_rows %}
               <tr>
-                <td>{{ r.label|default:"—" }}</td>
+                <td>{{ r.shipment|default:"—" }}{% if r.tracking %}<div class="text-muted">{{ r.tracking }}</div>{% endif %}</td>
                 <td>{{ r.carrier|default:"—" }}</td>
-                <td>{{ r.planned|default:"—" }}</td>
+                <td>{{ r.destination|default:"—" }}</td>
+                <td>{{ r.promised|default:"—" }}</td>
                 <td>{{ r.eta|default:"—" }}</td>
-                <td>{% if r.reason %}<span class="badge badge-amber">{{ r.reason }}</span>{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.days_late is not None %}{{ r.days_late }}{% else %}—{% endif %}</td>
+                <td style="text-align:end;">{% if r.days_silent is not None %}{{ r.days_silent }}{% else %}—{% endif %}</td>
+                <td>
+                  {% comment %}
+                    `reasons` is a LIST — a shipment can be both late and silent, and rendering the
+                    list object directly would print Python repr onto the page.
+                  {% endcomment %}
+                  {% for reason in r.reasons %}<span class="badge badge-amber">{{ reason }}</span> {% empty %}—{% endfor %}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
