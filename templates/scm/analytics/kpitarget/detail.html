@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+        {% if obj.is_pinned %}<span class="badge badge-info">Pinned</span>{% endif %}
+        {% if obj.is_alerting %}
+          {% if obj.severity == 'critical' %}<span class="badge badge-red">Alerts · Critical</span>
+          {% elif obj.severity == 'warning' %}<span class="badge badge-amber">Alerts · Warning</span>
+          {% elif obj.severity == 'info' %}<span class="badge badge-info">Alerts · Info</span>
+          {% else %}<span class="badge badge-slate">Alerts · {{ obj.get_severity_display }}</span>{% endif %}
+        {% else %}<span class="badge badge-muted">No alerting</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:kpitarget_list' %}">KPI Targets</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">A target is the one row in this module a person writes — the goal, the bands and the metric knobs. Everything measured against it is computed from the transactional records in 4.1–4.10; nothing on this page writes a stock move or a journal entry.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:kpisnapshot_list' %}?kpi_target={{ obj.pk }}" class="btn btn-outline"><i data-lucide="history"></i> All snapshots</a>
+      <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{% if result.value is not None %}{{ result.display }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Live figure
+        <span class="badge {{ band_css }}">
+          {% if result.band == 'ok' %}On target
+          {% elif result.band == 'warning' %}Warning
+          {% elif result.band == 'critical' %}Critical
+          {% elif result.band == 'unknown' %}No target
+          {% else %}Not computed{% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="target"></i></div>
+      <div class="stat-value">{% if obj.target_value is not None %}{{ obj.target_value|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Goal · {{ obj.get_direction_display|default:"direction not set" }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{% if obj.warning_threshold is not None %}{{ obj.warning_threshold|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Warning band{% if obj.critical_threshold is not None %} · critical at {{ obj.critical_threshold|floatformat:2 }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="line-chart"></i></div>
+      <div class="stat-value">{{ trend|length }}</div>
+      <div class="stat-label">Frozen point{{ trend|length|pluralize }} shown{% if obj.last_evaluated_at %} · last run {{ obj.last_evaluated_at|date:"M d, H:i" }}{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The figure right now</h2>
+      <span class="badge badge-slate">{{ obj.get_date_range_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if result_error %}
+        <div class="empty-state">
+          <i data-lucide="alert-triangle"></i>
+          <h3>This target names a metric this build cannot compute</h3>
+          <p>{{ result_error }}</p>
+          <p>The metric set is closed. Edit the target and pick a metric that still exists — its frozen history below is untouched and keeps saying what it actually measured.</p>
+        </div>
+      {% else %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Value</dt><dd class="fw-600">{% if result.value is not None %}{{ result.display }}{% else %}<span class="text-muted">Not computable</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Band</dt><dd>
+            <span class="badge {{ band_css }}">
+              {% if result.band == 'ok' %}On target
+              {% elif result.band == 'warning' %}Warning
+              {% elif result.band == 'critical' %}Critical
+              {% elif result.band == 'unknown' %}No target
+              {% else %}Not computed{% endif %}
+            </span>
+          </dd></div>
+          <div class="detail-item"><dt>Measured over</dt><dd>{{ window_start|date:"M d, Y"|default:"Earliest record" }} – {{ window_end|date:"M d, Y" }}</dd></div>
+          <div class="detail-item"><dt>Narrowed to</dt><dd>{{ result.scope_label|default:obj.scope_label }}</dd></div>
+          <div class="detail-item"><dt>Unit</dt><dd>{{ result.unit|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Goal</dt><dd>{% if obj.target_value is not None %}{{ obj.target_value|floatformat:2 }}{% else %}<span class="badge badge-muted">No goal set</span>{% endif %}</dd></div>
+        </dl>
+        {% if result.breakdown.unavailable %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Deliberately not computed</span> {{ result.breakdown.unavailable }}
+          </p>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          This number is computed <span class="fw-600">now</span>, over the rolling window above. The points in the trend below are a different measurement — each one covers one whole {{ obj.get_period_grain_display|lower }} bucket and was frozen when it was captured. They are not expected to agree, and neither is wrong: rolling windows overlap, which is exactly why a trend is never drawn from them.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How this target is defined</h2>
+      <span class="badge badge-slate">{{ obj.get_period_grain_display }} buckets</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Metric</dt><dd class="fw-600">{{ obj.get_metric_display }} <span class="text-muted">({{ obj.metric }})</span></dd></div>
+        <div class="detail-item"><dt>Scope</dt><dd>{{ obj.scope_label }}</dd></div>
+        <div class="detail-item"><dt>Rolling window</dt><dd>{{ obj.get_date_range_display }}</dd></div>
+        <div class="detail-item"><dt>Trend bucket</dt><dd><span class="badge badge-slate">{{ obj.get_period_grain_display }}</span></dd></div>
+        <div class="detail-item"><dt>Which way good runs</dt><dd><span class="badge badge-slate">{{ obj.get_direction_display|default:"—" }}</span></dd></div>
+        <div class="detail-item"><dt>Target</dt><dd>{% if obj.target_value is not None %}{{ obj.target_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Warning threshold</dt><dd>{% if obj.warning_threshold is not None %}{{ obj.warning_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Critical threshold</dt><dd>{% if obj.critical_threshold is not None %}{{ obj.critical_threshold|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Metric parameter (days)</dt><dd>{% if obj.parameter_days is not None %}{{ obj.parameter_days }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Metric parameter (%)</dt><dd>{% if obj.parameter_pct is not None %}{{ obj.parameter_pct|floatformat:2 }}%{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Alerting</dt><dd>
+          {% if obj.is_alerting %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-muted">Off</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Alert severity</dt><dd>
+          {% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>
+          {% elif obj.severity == 'warning' %}<span class="badge badge-amber">Warning</span>
+          {% elif obj.severity == 'info' %}<span class="badge badge-info">Info</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_severity_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Alert-fatigue floor</dt><dd>{{ obj.min_impact_value|floatformat:2 }} <span class="text-muted">a breach worth less raises nothing</span></dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_username }}{% else %}<span class="text-muted">Nobody answerable</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Control-tower tile</dt><dd>{% if obj.is_pinned %}<span class="badge badge-info">Pinned</span> position {{ obj.display_order }}{% else %}<span class="text-muted">Not pinned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last evaluated</dt><dd>{{ obj.last_evaluated_at|date:"M d, Y H:i"|default:"Never captured" }}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Frozen trend</h2>
+      <span class="badge badge-slate">{{ obj.get_period_grain_display }} · newest {{ trend|length }}</span>
+    </div>
+    <div class="card-body">
+      {% if trend %}
+        <canvas id="kpi-trend-chart" height="120" data-series="{{ obj.name }}"></canvas>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Each dot is one captured period, coloured by the band it was in <span class="fw-600">at capture</span>. The dashed lines are this target's goal and its warning and critical thresholds <span class="fw-600">as they stand today</span> — retune them and the lines move, but the dots do not, because a frozen point is never re-derived.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="line-chart"></i>
+          <h3>No frozen points yet</h3>
+          <p>Capture a snapshot to start the trend. Until then the live figure above is all there is — and a single live figure cannot tell you which way this metric is moving.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Snapshot history</h2>
+      <a href="{% url 'scm:kpisnapshot_list' %}?kpi_target={{ obj.pk }}" class="btn btn-outline"><i data-lucide="history"></i> Open in snapshots</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Period</th><th>Metric measured</th><th>Dimension</th><th>Value</th><th>Target then</th><th>Band</th><th>Captured</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for point in trend %}
+            <tr>
+              <td class="fw-600">{{ point.period_start|date:"M d" }} → {{ point.period_end|date:"M d, Y" }}</td>
+              <td>{{ point.metric_label }}{% if point.metric != obj.metric %} <span class="badge badge-amber">Measured before a repoint</span>{% endif %}</td>
+              <td>{{ point.dimension_display }}</td>
+              <td class="fw-600">{{ point.display }}</td>
+              <td>{% if point.target_value_at_time is not None %}{{ point.target_value_at_time|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if point.status_band == 'ok' %}<span class="badge badge-green">On target</span>
+                {% elif point.status_band == 'warning' %}<span class="badge badge-amber">Warning</span>
+                {% elif point.status_band == 'critical' %}<span class="badge badge-red">Critical</span>
+                {% elif point.status_band == 'unknown' %}<span class="badge badge-muted">No target</span>
+                {% else %}<span class="badge badge-slate">{{ point.get_status_band_display }}</span>{% endif %}
+              </td>
+              <td>{{ point.computed_at|date:"M d, Y H:i" }}{% if point.computed_by %} <span class="text-muted">· {{ point.computed_by.get_username }}</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:kpisnapshot_detail' point.pk %}" class="btn-icon" title="View this frozen point"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="camera"></i><h3>Nothing captured under this target</h3><p>Use Capture snapshot now below, or run the workspace-wide capture from the snapshots page.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Oldest first, capped at the newest {{ trend|length }} point{{ trend|length|pluralize }} — the cap is applied by the database, not by trimming a list after building it. Points captured under an <span class="fw-600">older scope or metric</span> are listed too rather than hidden: each row carries the label frozen at capture, so it tells the truth about a target that was later repointed. A snapshot has no edit form anywhere — correcting a number means fixing the records it was measured from and capturing the period again.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if obj.is_active %}
+          <form method="post" action="{% url 'scm:kpitarget_snapshot' obj.pk %}" onsubmit="return confirm('Capture this period now? A snapshot is frozen history and is never recomputed, so whatever the underlying records say at this moment is what the trend will keep saying.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="camera"></i> Capture snapshot now</button>
+            <div class="form-help">Freezes the whole {{ obj.get_period_grain_display|lower }} bucket this target is in — not the rolling window the live figure reads. Re-capturing a period that already exists <span class="fw-600">updates</span> that row and re-stamps its capture time rather than stacking a second one, so this is safe to press twice.</div>
+          </form>
+        {% else %}
+          <p class="text-muted">
+            <span class="badge badge-muted">Inactive</span> The workspace-wide capture skips an inactive target, so capturing this one by hand would give it points only where somebody pressed a button — a trend with holes nobody can explain. Reactivate the target first.
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">Capturing writes the frozen history every trend line, tile arrow and alert comparison in this module reads, so it is a workspace-administrator action. Ask an administrator to capture this target, or read the live figure above.</p>
+      {% endif %}
+      <div class="form-actions">
+        <a href="{% url 'scm:kpitarget_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:kpitarget_delete' obj.pk %}" onsubmit="return confirm('Delete this KPI target? Every frozen trend point captured under it is deleted with it, and those figures cannot be re-derived. Alerts already raised from it are kept.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        A target is intent, so it stays editable — repointing one at another metric does not relabel the numbers already captured under the old one. Deleting it is the larger act: the snapshots are its children and go with it.
+      </p>
+    </div>
+  </div>
+
+  {% if trend %}
+    {% comment %}
+      Why this payload is written out here instead of through the json_script filter: the view hands
+      this page KpiSnapshot MODEL INSTANCES (`trend`), and json_script serialises data, not models —
+      there is no JSON-serialisable trend in the context to hand it, and the view is not this
+      template's to change. What json_script is a rule FOR still holds, mechanically: nothing
+      user-controlled reaches this script body. Every entry below is a date rendered by the `date`
+      filter, a stored Decimal, or one of the four closed `status_band` keys emitted as a literal by
+      an if-chain — no SKU, no supplier or carrier name, no target name, and no `safe` filter
+      anywhere. The one user-controlled string the chart uses (the series name) is carried on the
+      canvas element's data-series attribute, where autoescaping covers it, and is read with
+      getAttribute. JSON.parse is wrapped in a try/catch, so a malformed payload drops the chart
+      rather than the page.
+    {% endcomment %}
+    <script id="kpi-trend-data" type="application/json">{"labels": [{% for point in trend %}"{{ point.period_end|date:"Y-m-d" }}"{% if not forloop.last %},{% endif %}{% endfor %}], "values": [{% for point in trend %}{{ point.value|stringformat:"s" }}{% if not forloop.last %},{% endif %}{% endfor %}], "bands": [{% for point in trend %}{% if point.status_band == 'ok' %}"ok"{% elif point.status_band == 'warning' %}"warning"{% elif point.status_band == 'critical' %}"critical"{% else %}"unknown"{% endif %}{% if not forloop.last %},{% endif %}{% endfor %}], "target": {% if obj.target_value is not None %}{{ obj.target_value|stringformat:"s" }}{% else %}null{% endif %}, "warning": {% if obj.warning_threshold is not None %}{{ obj.warning_threshold|stringformat:"s" }}{% else %}null{% endif %}, "critical": {% if obj.critical_threshold is not None %}{{ obj.critical_threshold|stringformat:"s" }}{% else %}null{% endif %}}</script>
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var canvas = document.getElementById('kpi-trend-chart');
+    var payload = document.getElementById('kpi-trend-data');
+    if (!canvas || !payload || typeof Chart === 'undefined') { return; }
+
+    var data;
+    try { data = JSON.parse(payload.textContent); } catch (e) { return; }
+    if (!data || !data.labels || !data.labels.length) { return; }
+
+    var BAND = { ok: '#16a34a', warning: '#d97706', critical: '#dc2626', unknown: '#94a3b8' };
+    var bands = data.bands || [];
+    var dotColours = data.labels.map(function (_, i) { return BAND[bands[i]] || BAND.unknown; });
+
+    function bandLine(value, colour, label) {
+      return {
+        label: label,
+        data: data.labels.map(function () { return value; }),
+        borderColor: colour, borderDash: [6, 4], borderWidth: 1.5,
+        pointRadius: 0, pointHitRadius: 0, fill: false, tension: 0
+      };
+    }
+
+    var datasets = [{
+      label: canvas.getAttribute('data-series') || 'Captured value',
+      data: data.values,
+      borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.12)',
+      borderWidth: 2, fill: true, tension: 0.3,
+      pointRadius: 4, pointHoverRadius: 6,
+      pointBackgroundColor: dotColours, pointBorderColor: dotColours
+    }];
+    if (data.target !== null && data.target !== undefined) { datasets.push(bandLine(data.target, '#7c3aed', 'Target')); }
+    if (data.warning !== null && data.warning !== undefined) { datasets.push(bandLine(data.warning, '#d97706', 'Warning')); }
+    if (data.critical !== null && data.critical !== undefined) { datasets.push(bandLine(data.critical, '#dc2626', 'Critical')); }
+
+    new Chart(canvas, {
+      type: 'line',
+      data: { labels: data.labels, datasets: datasets },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: true, position: 'bottom' } },
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+  })();
+</script>
+{% endblock %}
