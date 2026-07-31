@@ -241,3 +241,18 @@ from .ReturnsManagement.WarrantyClaims import (  # noqa: F401
     WarrantyClaimResponseForm,
     WarrantyClaimCreditForm,
 )
+
+# 4.11 Supply Chain Analytics
+# There is deliberately NO KpiSnapshots form module: a snapshot is system-written by
+# ``analytics.capture_snapshots`` and its create path is the ``kpisnapshot_capture`` POST action, so
+# a ModelForm for it would be a way to hand-type a "measured" figure. That is the CRM ReportSnapshot
+# rule, and it is a decision rather than an omission (see the model docstring).
+from .SupplyChainAnalytics.KpiTargets import (  # noqa: F401
+    KpiTargetForm,
+)
+from .SupplyChainAnalytics.SupplyChainAlerts import (  # noqa: F401
+    SupplyChainAlertForm,
+    AlertAssignForm,
+    AlertSnoozeForm,
+    AlertResolveForm,
+)
