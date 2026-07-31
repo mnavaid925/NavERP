@@ -2075,3 +2075,44 @@ def analytics_history_a(db, tenant_a, usd, supplier_a, vendor_a, customer_a, car
         "shipment_on_time": on_time, "shipment_in_flight": in_flight, "freight_invoice": invoice,
         "yard_visit": yard, "nonconformance": ncr, "capa": capa,
     }
+
+
+@pytest.fixture
+def dead_stock_item_a(db, tenant_a, category_a, uom_each_a, location_a):
+    """A tenant_a item received 120 days ago and NEVER issued — the inventory page's two aged tables.
+
+    ``analytics_history_a`` deliberately keeps ``item_a`` moving (its newest issue is three days
+    old), so both the dead-stock table and the FIFO age table are legitimately EMPTY on it and the
+    row-key contract there cannot be asserted at all: an empty table and a table of em-dashes render
+    identically. One dormant layer fills both — dead (nothing outbound inside the 90-day tail) and
+    aged (a remaining FIFO layer 120 days old, i.e. the ``91-180`` bucket).
+    """
+    from apps.scm.models import Item
+    from apps.scm.views._helpers import _post_stock_move
+    item = Item.objects.create(
+        tenant=tenant_a, sku="DORMANT-1", name="Dormant Widget", category=category_a,
+        uom=uom_each_a, item_type="stock", tracking="none", costing_method="weighted_avg",
+        standard_cost=Decimal("12.00"),
+    )
+    _post_stock_move(tenant_a, item=item, location=location_a, quantity=Decimal("20"),
+                     move_type="receipt", unit_cost=Decimal("12.0000"),
+                     reference="OPENING", moved_at=_moments_ago(120))
+    return item
+
+
+@pytest.fixture
+def snoozed_alert_a(db, alert_a):
+    """``alert_a`` with a LIVE suppression window — the state the no-op guards are asserted against.
+
+    ``status`` / ``snoozed_until`` are ``editable=False`` and move only through ``snooze()``, so the
+    model's own method is what puts the row here rather than a hand write.
+    """
+    alert_a.snooze(14)
+    return alert_a
+
+
+@pytest.fixture
+def resolved_alert_a(db, alert_a, admin_user):
+    """A CLOSED alert carrying its original resolver and note — the re-resolve no-op fixture."""
+    alert_a.resolve(admin_user, "Wrote the stock off against the quarantine bin.")
+    return alert_a
