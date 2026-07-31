@@ -68,6 +68,9 @@ from django.utils.dateparse import parse_date
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import (_location_qs, _supplier_parties, _tms_carrier_qs)
+# The inbox's own "still needs somebody" predicate. Imported rather than restated so the header chip
+# and the page it links to can never drift apart (see _alert_chip).
+from apps.scm.views.SupplyChainAnalytics.SupplyChainAlerts import _needs_attention_q
 from apps.scm.models import (DATE_RANGE_CHOICES, ItemCategory, KpiSnapshot, KpiTarget,
                              OPEN_ALERT_STATUSES, SCOPE_FIELDS, SEVERITY_CHOICES,
                              SupplyChainAlert)
@@ -571,13 +574,22 @@ def _jsonable(value):
 
 
 def _alert_chip(tenant):
-    """``(open, critical)`` in ONE aggregate — the chip every analytics page header carries."""
+    """``(open, critical)`` in ONE aggregate — the chip every analytics page header carries.
+
+    Counted with ``_needs_attention_q()``, the SAME predicate ``supplychainalert_list`` filters by
+    default — **not** ``status__in=OPEN_ALERT_STATUSES``. The two differ by exactly one case: a live
+    snooze is an "open" status but is deliberately not demanding attention yet. Counting the wider
+    set here made the chip read "5 open alerts" and land on an inbox showing 3, and made snoozing an
+    alert leave the chip unchanged — which is the disagreement ``open_alert_count``'s own docstring
+    promises cannot happen. A count that disagrees with its own destination is worse than no count.
+    """
     if tenant is None:
         return 0, 0
+    attention = _needs_attention_q()
     totals = (SupplyChainAlert.objects
-              .filter(tenant=tenant, status__in=OPEN_ALERT_STATUSES)
-              .aggregate(open=Count("id"),
-                         critical=Count("id", filter=Q(severity="critical"))))
+              .filter(tenant=tenant)
+              .aggregate(open=Count("id", filter=attention),
+                         critical=Count("id", filter=attention & Q(severity="critical"))))
     return totals["open"] or 0, totals["critical"] or 0
 
 
