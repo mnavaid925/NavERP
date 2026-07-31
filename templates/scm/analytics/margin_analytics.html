@@ -1,0 +1,654 @@
+{% extends "base.html" %}
+{% block title %}Financial Reporting{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ page.title }}
+        <span class="badge badge-amber">Operational estimate</span>
+        {% if critical_alert_count %}
+          <a href="{% url 'scm:supplychainalert_list' %}?severity=critical" class="badge badge-red">{{ critical_alert_count }} critical exception{{ critical_alert_count|pluralize }}</a>
+        {% elif alerts_are_open %}
+          <a href="{% url 'scm:supplychainalert_list' %}" class="badge badge-amber">{{ open_alert_count }} open exception{{ open_alert_count|pluralize }}</a>
+        {% else %}
+          <a href="{% url 'scm:supplychainalert_list' %}" class="badge badge-green">No open exceptions</a>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>{{ page.title }}</span></div>
+      <p class="text-muted">
+        {{ page.bullet }} — gross margin, margin after what it actually cost to serve the order, and the supply
+        chain's cost stack leg by leg. Every figure is computed live over 4.1–4.10 records; this page writes
+        nothing at all — no stock move, no journal entry.
+      </p>
+      <p class="text-muted">
+        <span class="badge badge-slate">As of {{ generated_at|date:"M d, Y H:i" }}</span>
+        <span class="badge badge-slate">{{ start|date:"M d, Y"|default:"Earliest record" }} – {{ end|date:"M d, Y"|default:"today" }}</span>
+        <span class="badge badge-slate">{{ spec.window_days }} day{{ spec.window_days|pluralize }}</span>
+        <span class="badge badge-slate">{{ scope_label }}</span>
+        {% if spec.custom_window %}<span class="badge badge-info">Custom dates</span>{% endif %}
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{{ export_url }}" class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <a href="{% url 'scm:kpitarget_list' %}?metric=gross_margin_pct" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+      <a href="{% url 'scm:overview' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Supply chain</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">This is not the statutory P&amp;L</h2>
+      <span class="badge badge-amber">Read this before quoting a number off this page</span>
+    </div>
+    <div class="card-body">
+      <p class="fw-600">{{ operational_estimate_note }}</p>
+      <p class="text-muted">
+        Supply chain posts no journal entry, here or anywhere else. The ledger belongs to Accounting: its Balance
+        Sheet and its Profit &amp; Loss are the reportable figures, they are the ones built from posted journal
+        entries inside closed fiscal periods, and they are what gets filed. Nothing on this page is a substitute
+        for either of them, and no total below has been reconciled to one.
+      </p>
+      <p class="text-muted">
+        What this page has that the ledger cannot is the <span class="fw-600">operational cut</span> — which item,
+        which customer, which lane, which leg of the cost stack. The ledger books a sale; it does not book the pick
+        line, the freight bill and the return write-down behind that sale. That is the question this page answers,
+        and it is an operating question, not a reporting one.
+      </p>
+      <div class="form-actions">
+        <a href="{{ balance_sheet_url }}" class="btn btn-primary"><i data-lucide="scale"></i> Accounting · Balance Sheet</a>
+        <a href="{{ profit_loss_url }}" class="btn btn-primary"><i data-lucide="book-open"></i> Accounting · Profit &amp; Loss</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" action="{% url 'scm:margin_analytics' %}" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="filter-range">Window</label>
+          <select id="filter-range" name="date_range" class="form-select">
+            {% for key, label in range_choices %}
+              <option value="{{ key }}" {% if date_range == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-from">From</label>
+          <input id="filter-from" type="date" name="date_from" value="{{ params.date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-to">To</label>
+          <input id="filter-to" type="date" name="date_to" value="{{ params.date_to }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-category">Item category</label>
+          <select id="filter-category" name="category" class="form-select">
+            <option value="">All categories</option>
+            {% for c in categories %}
+              <option value="{{ c.pk }}" {% if params.category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-customer">Customer</label>
+          <select id="filter-customer" name="customer" class="form-select">
+            <option value="">All customers</option>
+            {% for name in customer_options %}
+              <option value="{{ name }}" {% if params.customer == name %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-channel">Channel</label>
+          <select id="filter-channel" name="channel" class="form-select">
+            <option value="">All channels</option>
+            {% for name in channel_options %}
+              <option value="{{ name }}" {% if params.channel == name %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'scm:margin_analytics' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <p class="form-help" style="margin-top:.6rem;">
+        <span class="fw-600">Item category</span> narrows the measurement itself — revenue, cost of goods and every
+        headline below are recomputed for that category only.
+        {% if display_only_filters %}
+          <span class="fw-600">Customer</span> and <span class="fw-600">channel</span> narrow the
+          <span class="fw-600">tables</span> and not the headline tiles: a margin metric narrows to one subject, and
+          inventing a second narrowing here would mean recomputing the figure a different way under the same name.
+          Their options are drawn from the rows already computed, so no option is offered that has no data behind it.
+        {% endif %}
+      </p>
+      {% if scope_invalid %}
+        <p class="text-muted" style="margin-top:.6rem;">
+          <span class="badge badge-amber">Filter dropped</span>
+          A category was requested that does not resolve inside this workspace. The figures below are
+          <span class="fw-600">network-wide</span> — deliberately not silently narrowed to something else, and
+          deliberately not labelled with a filter that was never applied.
+        </p>
+      {% endif %}
+      {% if scope_ignored %}
+        <p class="text-muted" style="margin-top:.6rem;">
+          <span class="badge badge-amber">More than one scope set</span>
+          A figure narrows to exactly one subject, so the first one set wins and these were ignored:
+          {% for name in scope_ignored %}<span class="badge badge-slate">{{ name }}</span>{% endfor %}
+          Everything below is measured at <span class="fw-600">{{ scope_label }}</span>.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building-2"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+
+    {% if currency_notice.mixed %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Mixed currency in this window</h2>
+          <span class="badge badge-amber">{{ currency_notice.codes|join:" · " }}</span>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">{{ currency_notice.note }}</p>
+          <p class="text-muted">
+            Affected:
+            {% for label in currency_notice.metrics %}<span class="badge badge-slate">{{ label }}</span>{% endfor %}
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="percent"></i></div>
+        <div class="stat-value">{{ tile.gross_margin_pct.display|default:"—" }}</div>
+        <div class="stat-label">
+          Gross margin
+          {% if tile.gross_margin_pct %}<span class="badge {{ tile.gross_margin_pct.band_css }}">
+            {% if tile.gross_margin_pct.band == 'ok' %}On target
+            {% elif tile.gross_margin_pct.band == 'warning' %}Warning
+            {% elif tile.gross_margin_pct.band == 'critical' %}Critical
+            {% elif tile.gross_margin_pct.band == 'unknown' %}No target
+            {% else %}Not computed{% endif %}
+          </span>{% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="wallet"></i></div>
+        <div class="stat-value">{{ tile.margin_after_cost_to_serve_pct.display|default:"—" }}</div>
+        <div class="stat-label">
+          Margin after cost-to-serve
+          {% if tile.margin_after_cost_to_serve_pct %}<span class="badge {{ tile.margin_after_cost_to_serve_pct.band_css }}">
+            {% if tile.margin_after_cost_to_serve_pct.band == 'ok' %}On target
+            {% elif tile.margin_after_cost_to_serve_pct.band == 'warning' %}Warning
+            {% elif tile.margin_after_cost_to_serve_pct.band == 'critical' %}Critical
+            {% elif tile.margin_after_cost_to_serve_pct.band == 'unknown' %}No target
+            {% else %}Not computed{% endif %}
+          </span>{% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="layers"></i></div>
+        <div class="stat-value">{{ tile.supply_cost_stack.display|default:"—" }}</div>
+        <div class="stat-label">Supply chain cost stack · {{ cost_stack|length }} leg{{ cost_stack|length|pluralize }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="truck"></i></div>
+        <div class="stat-value">
+          {% if tile.margin_after_cost_to_serve_pct.breakdown.cost_to_serve is not None %}
+            {{ tile.margin_after_cost_to_serve_pct.breakdown.cost_to_serve|floatformat:2 }}
+          {% else %}—{% endif %}
+        </div>
+        <div class="stat-label">
+          Cost to serve
+          {% if tile.margin_after_cost_to_serve_pct.breakdown.cost_to_serve_pct_of_revenue is not None %}
+            · {{ tile.margin_after_cost_to_serve_pct.breakdown.cost_to_serve_pct_of_revenue|floatformat:1 }}% of revenue
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if not has_data %}
+      <div class="card">
+        <div class="card-body">
+          <div class="empty-state">
+            <i data-lucide="calculator"></i>
+            <h3>Nothing to measure a margin on in this window</h3>
+            <p>
+              Margin is measured on sales orders that are neither draft nor cancelled — a draft is not revenue and a
+              cancellation never was. Widen the window, clear the category filter, or confirm some orders first.
+            </p>
+            <a href="{% url 'scm:salesorder_list' %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Sales orders</a>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The supply chain cost stack</h2>
+        <span class="badge badge-slate">Total {{ tile.supply_cost_stack.display|default:"—" }}</span>
+      </div>
+      {% if cost_stack %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Leg</th><th class="text-right">Amount</th><th class="text-right">Share</th><th style="min-width:160px;">Of the stack</th><th>Where the number comes from</th></tr>
+            </thead>
+            <tbody>
+              {% for row in cost_stack %}
+                <tr>
+                  <td class="fw-600 nowrap">{{ row.leg }}</td>
+                  <td class="text-right fw-600">{% if row.amount is not None %}{{ row.amount|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td class="text-right">{% if row.share_pct is not None %}{{ row.share_pct|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>
+                    <div class="progress" title="{{ row.share_pct|floatformat:1 }}% of the stack">
+                      <div class="progress-bar" style="width:{% if row.share_pct %}{{ row.share_pct|floatformat:0 }}{% else %}0{% endif %}%;"></div>
+                    </div>
+                  </td>
+                  <td class="text-muted">{{ row.source }}</td>
+                </tr>
+              {% endfor %}
+              <tr>
+                <td class="fw-600">Total supply chain cost</td>
+                <td class="text-right fw-600">{% if cost_stack_total is not None %}{{ cost_stack_total|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="text-right fw-600">100.0%</td>
+                <td></td>
+                <td class="text-muted">The seven legs above, summed. Nothing else is added to it.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body">
+          <canvas id="margin-cost-stack-chart" height="130"></canvas>
+        </div>
+      {% else %}
+        <div class="card-body">
+          <div class="empty-state">
+            <i data-lucide="layers"></i>
+            <h3>No cost stack for this window</h3>
+            <p>{{ tile.supply_cost_stack.unavailable|default:"No purchasing, freight, picking, production, quality or returns activity in this window to build a cost stack from." }}</p>
+          </div>
+        </div>
+      {% endif %}
+      <div class="card-body text-muted">
+        {% if double_count_guard %}<p>{{ double_count_guard }}</p>{% endif %}
+        <p>
+          <span class="badge badge-amber">Planning conventions</span>
+          The warehousing leg is picked lines and picked units priced at
+          <span class="fw-600 mono">{{ handling_rate_per_line|floatformat:2 }}</span> per line and
+          <span class="fw-600 mono">{{ handling_rate_per_unit|floatformat:2 }}</span> per unit. Neither rate is
+          derived from anything: no row in 4.1–4.10 records what a pick costs, so these are stated assumptions,
+          shown here as their own leg precisely so a reader can subtract them back out and substitute their own.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Customer profitability after cost-to-serve</h2>
+        <span class="badge badge-slate">Least profitable first · {{ customer_ranking|length }} shown</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Customer</th><th class="text-right">Revenue</th><th class="text-right">Share</th>
+              <th class="text-right">COGS</th><th class="text-right">Gross profit</th><th class="text-right">Freight</th>
+              <th class="text-right">Returns</th><th class="text-right">Allocated overhead</th>
+              <th class="text-right">Net profit</th><th class="text-right">Net margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in customer_ranking %}
+              <tr>
+                <td class="fw-600">{{ row.customer }}</td>
+                <td class="text-right">{{ row.revenue|floatformat:2 }}</td>
+                <td class="text-right">{% if row.revenue_share_pct is not None %}{{ row.revenue_share_pct|floatformat:1 }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="text-right">{{ row.cogs|floatformat:2 }}</td>
+                <td class="text-right">{{ row.gross_profit|floatformat:2 }}</td>
+                <td class="text-right">{{ row.freight|floatformat:2 }}</td>
+                <td class="text-right">{{ row.returns|floatformat:2 }}</td>
+                <td class="text-right">{{ row.allocated_overhead|floatformat:2 }}</td>
+                <td class="text-right fw-600">
+                  {% if row.net_profit is None %}<span class="text-muted">—</span>
+                  {% elif row.net_profit < 0 %}<span class="text-red">{{ row.net_profit|floatformat:2 }}</span>
+                  {% else %}{{ row.net_profit|floatformat:2 }}{% endif %}
+                </td>
+                <td class="text-right">
+                  {% if row.net_margin_pct is None %}<span class="text-muted">—</span>
+                  {% elif row.net_margin_pct < 0 %}<span class="badge badge-red">{{ row.net_margin_pct|floatformat:1 }}%</span>
+                  {% else %}<span class="fw-600">{{ row.net_margin_pct|floatformat:1 }}%</span>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="users"></i>
+                  <h3>No customer ranking for this window</h3>
+                  <p>{{ tile.margin_after_cost_to_serve_pct.unavailable|default:"There is no confirmed sales-order value in this window, so there is nothing to rank." }}{% if params.customer %} The customer filter is set to <span class="fw-600">{{ params.customer }}</span> — clear it to see the rest.{% endif %}</p>
+                </div>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        {% if allocation_note %}<p>{{ allocation_note }}</p>{% endif %}
+        <p>
+          Sorted least profitable first, because the row worth acting on is the customer quietly losing money, not
+          the one at the top. A negative net margin here means the freight, returns and handling behind that
+          customer's orders ate the gross margin on them — it does not mean the account is unprofitable in the
+          ledger, which books neither the pick line nor the freight bill against a customer at all.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Margin by item</h2>
+        <span class="badge badge-slate">Richest revenue first · {{ item_margins|length }} shown</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>SKU</th><th>Item</th><th class="text-right">Quantity</th><th class="text-right">Revenue</th><th class="text-right">COGS</th><th class="text-right">Gross profit</th><th class="text-right">Margin</th></tr>
+          </thead>
+          <tbody>
+            {% for row in item_margins %}
+              <tr>
+                <td class="nowrap"><a href="{% url 'scm:item_list' %}?q={{ row.label|urlencode }}" class="fw-600">{{ row.label }}</a></td>
+                <td>{{ row.name|default:"—" }}</td>
+                <td class="text-right">{{ row.quantity|floatformat:2 }}</td>
+                <td class="text-right">{{ row.revenue|floatformat:2 }}</td>
+                <td class="text-right">{{ row.cogs|floatformat:2 }}</td>
+                <td class="text-right">{{ row.gross_profit|floatformat:2 }}</td>
+                <td class="text-right">
+                  {% if row.margin_pct is None %}<span class="text-muted">—</span>
+                  {% elif row.margin_pct < 0 %}<span class="badge badge-red">{{ row.margin_pct|floatformat:1 }}%</span>
+                  {% else %}<span class="fw-600">{{ row.margin_pct|floatformat:1 }}%</span>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="package"></i>
+                  <h3>No item-level margin in this window</h3>
+                  <p>{{ tile.gross_margin_pct.unavailable|default:"No sales-order value in this window to measure a margin on." }}</p>
+                </div>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        The SKU links through to the item list filtered to that SKU — a headline figure is only useful if you can
+        get from it to the row that caused it. Rows are capped at the report's detail limit and the cap is applied
+        by the database, not by trimming a list after building it.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Margin by category and by channel</h2>
+        {% if params.channel %}<span class="badge badge-info">Channel filter: {{ params.channel }}</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Cut</th><th>Name</th><th class="text-right">Gross margin</th></tr></thead>
+          <tbody>
+            {% for row in by_category %}
+              <tr>
+                <td><span class="badge badge-slate">Category</span></td>
+                <td class="fw-600">{{ row.category }}</td>
+                <td class="text-right">
+                  {% if row.margin_pct is None %}<span class="text-muted">—</span>
+                  {% elif row.margin_pct < 0 %}<span class="badge badge-red">{{ row.margin_pct|floatformat:1 }}%</span>
+                  {% else %}<span class="fw-600">{{ row.margin_pct|floatformat:1 }}%</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            {% for row in by_channel %}
+              <tr>
+                <td><span class="badge badge-slate">Channel</span></td>
+                <td class="fw-600">{{ row.channel }}</td>
+                <td class="text-right">
+                  {% if row.margin_pct is None %}<span class="text-muted">—</span>
+                  {% elif row.margin_pct < 0 %}<span class="badge badge-red">{{ row.margin_pct|floatformat:1 }}%</span>
+                  {% else %}<span class="fw-600">{{ row.margin_pct|floatformat:1 }}%</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            {% if not by_category and not by_channel %}
+              <tr><td colspan="3">
+                <div class="empty-state">
+                  <i data-lucide="split"></i>
+                  <h3>No cuts to show</h3>
+                  <p>Gross margin could not be computed for this window, so there is nothing to cut by category or channel.</p>
+                </div>
+              </td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Every margin figure on this page</h2>
+        <span class="badge badge-slate">{{ tiles|length }} metric{{ tiles|length|pluralize }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Metric</th><th class="text-right">Value</th><th>Band</th><th>Target</th><th>Which way good runs</th><th>Narrowed to</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            {% for m in tiles %}
+              <tr>
+                <td class="fw-600">{{ m.label }}{% if m.primary %} <span class="badge badge-info">Headline</span>{% endif %}</td>
+                <td class="text-right fw-600">{{ m.display }}</td>
+                <td>
+                  <span class="badge {{ m.band_css }}">
+                    {% if m.band == 'ok' %}On target
+                    {% elif m.band == 'warning' %}Warning
+                    {% elif m.band == 'critical' %}Critical
+                    {% elif m.band == 'unknown' %}No target
+                    {% else %}Not computed{% endif %}
+                  </span>
+                </td>
+                <td>
+                  {% if m.target %}
+                    <a href="{% url 'scm:kpitarget_detail' m.target.pk %}">{{ m.target.number }}</a>
+                    {% if m.target.target_value is not None %}<span class="text-muted">· goal {{ m.target.target_value|floatformat:2 }}</span>{% endif %}
+                  {% else %}
+                    <span class="text-muted">Nobody has set one</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if m.direction == 'higher_is_better' %}<span class="badge badge-slate">Higher is better</span>
+                  {% elif m.direction == 'lower_is_better' %}<span class="badge badge-slate">Lower is better</span>
+                  {% else %}<span class="badge badge-muted">—</span>{% endif %}
+                </td>
+                <td>{{ m.scope_label }}</td>
+                <td class="text-muted">
+                  {% if m.unavailable %}<span class="badge badge-amber">Deliberately not computed</span> {{ m.unavailable }}
+                  {% elif m.breakdown.mixed_currency %}<span class="badge badge-amber">Mixed currency</span> face values summed across {{ m.breakdown.currencies|join:", " }}
+                  {% elif m.breakdown.truncated %}<span class="badge badge-amber">Capped</span> more rows matched than the report shows
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>Nothing computed</h3>
+                  <p>{{ no_tenant_note }}</p>
+                </div>
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        A band is set by a KPI target that measures <span class="fw-600">this same subject</span>, never by one set
+        for a different warehouse or supplier — a red tile on a number its target has never measured is worse than
+        no tile at all. Where a row says <span class="fw-600">No target</span>, the figure is real and simply has
+        nothing to be judged against yet.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Frozen trend</h2>
+        <span class="badge badge-slate">Captured snapshots, never re-derived</span>
+      </div>
+      <div class="card-body">
+        {% if chart_data.has_data %}
+          <canvas id="margin-trend-chart" height="130"></canvas>
+          <p class="text-muted" style="margin-top:.75rem;">
+            Each point is a captured snapshot of one whole period, frozen at the moment it was taken. It is
+            deliberately not recomputed: an item's average cost is rewritten by every receipt and a back-dated stock
+            move is legal, so re-deriving last quarter would silently rewrite the past. The tiles above are a
+            different measurement — a rolling window computed right now — and the two are not expected to agree.
+          </p>
+        {% else %}
+          <div class="empty-state">
+            <i data-lucide="line-chart"></i>
+            <h3>No frozen history yet</h3>
+            <p>{{ chart_data.note }}</p>
+            <a href="{% url 'scm:kpitarget_list' %}" class="btn btn-outline"><i data-lucide="target"></i> KPI targets</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How every number above was built</h2></div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Revenue basis</dt><dd>{{ revenue_basis|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Cost of goods basis</dt><dd>{{ cogs_basis|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Window measured</dt><dd>{{ start|date:"M d, Y"|default:"Earliest record" }} – {{ end|date:"M d, Y"|default:"today" }} ({{ spec.window_days }} day{{ spec.window_days|pluralize }})</dd></div>
+          <div class="detail-item"><dt>Narrowed to</dt><dd>{{ scope_label }}</dd></div>
+          <div class="detail-item"><dt>Order lines measured</dt><dd>{{ tile.gross_margin_pct.breakdown.order_lines|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Cost from the stock ledger</dt><dd>{{ tile.gross_margin_pct.breakdown.cogs_from_issue_ledger|default:"0" }} group{{ tile.gross_margin_pct.breakdown.cogs_from_issue_ledger|pluralize }}</dd></div>
+          <div class="detail-item"><dt>Cost from cached average</dt><dd>{{ tile.gross_margin_pct.breakdown.cogs_from_average_cost|default:"0" }} group{{ tile.gross_margin_pct.breakdown.cogs_from_average_cost|pluralize }}</dd></div>
+          <div class="detail-item"><dt>Freight billed</dt><dd>{% if tile.margin_after_cost_to_serve_pct.breakdown.freight_cost is not None %}{{ tile.margin_after_cost_to_serve_pct.breakdown.freight_cost|floatformat:2 }} over {{ tile.margin_after_cost_to_serve_pct.breakdown.freight_bills|default:"0" }} audited bill{{ tile.margin_after_cost_to_serve_pct.breakdown.freight_bills|pluralize }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Returns write-down</dt><dd>{% if tile.margin_after_cost_to_serve_pct.breakdown.returns_cost is not None %}{{ tile.margin_after_cost_to_serve_pct.breakdown.returns_cost|floatformat:2 }} over {{ tile.margin_after_cost_to_serve_pct.breakdown.returns_dispositions|default:"0" }} disposition{{ tile.margin_after_cost_to_serve_pct.breakdown.returns_dispositions|pluralize }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Cost of quality</dt><dd>{% if tile.margin_after_cost_to_serve_pct.breakdown.quality_cost is not None %}{{ tile.margin_after_cost_to_serve_pct.breakdown.quality_cost|floatformat:2 }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Warehouse handling</dt><dd>{% if tile.margin_after_cost_to_serve_pct.breakdown.handling_cost is not None %}{{ tile.margin_after_cost_to_serve_pct.breakdown.handling_cost|floatformat:2 }} over {{ tile.margin_after_cost_to_serve_pct.breakdown.handling_pick_lines|default:"0" }} pick line{{ tile.margin_after_cost_to_serve_pct.breakdown.handling_pick_lines|pluralize }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Unmapped order lines</dt><dd>{{ tile.gross_margin_pct.breakdown.unmapped_lines|default:"0" }}</dd></div>
+        </dl>
+        {% if unmapped_note %}<p class="text-muted" style="margin-top:.75rem;">{{ unmapped_note }}</p>{% endif %}
+        {% if tile.margin_after_cost_to_serve_pct.breakdown.returns_basis %}
+          <p class="text-muted" style="margin-top:.75rem;"><span class="fw-600">Returns:</span> {{ tile.margin_after_cost_to_serve_pct.breakdown.returns_basis }}</p>
+        {% endif %}
+        {% if tile.margin_after_cost_to_serve_pct.breakdown.warranty_note %}
+          <p class="text-muted"><span class="fw-600">Warranty:</span> {{ tile.margin_after_cost_to_serve_pct.breakdown.warranty_note }}</p>
+        {% endif %}
+        {% if tile.margin_after_cost_to_serve_pct.breakdown.handling_basis %}
+          <p class="text-muted"><span class="fw-600">Handling:</span> {{ tile.margin_after_cost_to_serve_pct.breakdown.handling_basis }}</p>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Operational estimate</span> {{ operational_estimate_note }}
+          The filed figures live in Accounting: <a href="{{ balance_sheet_url }}">Balance Sheet</a> ·
+          <a href="{{ profit_loss_url }}">Profit &amp; Loss</a>.
+        </p>
+      </div>
+    </div>
+
+    {% if cost_stack %}{{ cost_stack|json_script:"margin-cost-stack-data" }}{% endif %}
+    {% if chart_data.has_data %}{{ chart_data|json_script:"margin-trend-data" }}{% endif %}
+  {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    if (typeof Chart === 'undefined') { return; }
+
+    function payload(id) {
+      var node = document.getElementById(id);
+      if (!node) { return null; }
+      try { return JSON.parse(node.textContent); } catch (e) { return null; }
+    }
+
+    var LEG_COLOURS = ['#2563eb', '#0891b2', '#7c3aed', '#d97706', '#0d9488', '#dc2626', '#64748b'];
+
+    var stackCanvas = document.getElementById('margin-cost-stack-chart');
+    var stack = payload('margin-cost-stack-data');
+    if (stackCanvas && stack && stack.length) {
+      var shares = stack.map(function (row) { return row.share_pct; });
+      new Chart(stackCanvas, {
+        type: 'bar',
+        data: {
+          labels: stack.map(function (row) { return row.leg; }),
+          datasets: [{
+            label: 'Cost',
+            data: stack.map(function (row) { return row.amount; }),
+            backgroundColor: stack.map(function (_, i) { return LEG_COLOURS[i % LEG_COLOURS.length]; }),
+            borderWidth: 0
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  var share = shares[ctx.dataIndex];
+                  var amount = ctx.parsed.x;
+                  if (share === null || share === undefined) { return String(amount); }
+                  return amount + '  (' + share + '% of the stack)';
+                }
+              }
+            }
+          },
+          scales: { x: { beginAtZero: true } }
+        }
+      });
+    }
+
+    var trendCanvas = document.getElementById('margin-trend-chart');
+    var trend = payload('margin-trend-data');
+    if (trendCanvas && trend && trend.labels && trend.labels.length && trend.series && trend.series.length) {
+      new Chart(trendCanvas, {
+        type: 'line',
+        data: {
+          labels: trend.labels,
+          datasets: trend.series.map(function (series, i) {
+            var colour = LEG_COLOURS[i % LEG_COLOURS.length];
+            return {
+              label: series.label,
+              data: series.values,
+              borderColor: colour,
+              backgroundColor: colour,
+              borderWidth: 2,
+              fill: false,
+              tension: 0.3,
+              spanGaps: true,
+              pointRadius: 3,
+              pointHoverRadius: 5
+            };
+          })
+        },
+        options: {
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: true, position: 'bottom' } },
+          scales: { y: { beginAtZero: false } }
+        }
+      });
+    }
+  })();
+</script>
+{% endblock %}
