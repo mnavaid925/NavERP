@@ -36,6 +36,11 @@ from django.urls import NoReverseMatch, reverse
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _date_window, _need_tenant
+# The formula-injection escape the five report exports already use. Imported rather than reimplemented
+# so there is ONE definition of "safe cell" across 4.11 — this file writes a KpiTarget.name and a
+# dimension label, both of which carry free text a user typed or a party is named after.
+# (Reports.py does not import this module, so there is no cycle.)
+from apps.scm.views.SupplyChainAnalytics.Reports import _csv_safe
 
 from apps.scm import analytics
 from apps.scm.models import (BAND_CHOICES, KpiSnapshot, KpiTarget, METRIC_CHOICES,
@@ -445,7 +450,10 @@ def kpisnapshot_export(request):
     writer.writerow(_EXPORT_HEADER)
     for obj in rows:
         target = obj.kpi_target if obj.kpi_target_id else None
-        writer.writerow([
+        # Every cell through _csv_safe. target.name is free text off the KpiTarget form and
+        # dimension_display carries a party or carrier name, so a target called
+        # `=cmd|'/c calc'!A0` would otherwise execute on the machine of whoever opens the file.
+        writer.writerow([_csv_safe(cell) for cell in (
             obj.period_start.isoformat() if obj.period_start else "",
             obj.period_end.isoformat() if obj.period_end else "",
             obj.metric,
@@ -459,7 +467,7 @@ def kpisnapshot_export(request):
             obj.get_status_band_display(),
             timezone.localtime(obj.computed_at).strftime("%Y-%m-%d %H:%M") if obj.computed_at else "",
             obj.computed_by.get_username() if obj.computed_by_id else "",
-        ])
+        )])
     if truncated:
         writer.writerow([])
         writer.writerow([f"TRUNCATED: this file holds the first {MAX_EXPORT_ROWS} of {total} "
