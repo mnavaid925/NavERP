@@ -811,7 +811,8 @@ class TradeDocumentAdmin(admin.ModelAdmin):
     # status is editable=False on the model and moves only through issue/submit/accept/void, each of
     # which is what charges or refunds the licence balance. An editable status column here would let
     # a document be marked issued without ever touching the licence it was issued under.
-    readonly_fields = ("number", "status", "created_at", "updated_at")
+    readonly_fields = ("number", "status", "issued_at", "issued_by", "void_reason",
+                       "created_at", "updated_at")
 
 
 @admin.register(TradeLicense)
@@ -821,7 +822,27 @@ class TradeLicenseAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status", "license_type", "expiry_date")
     search_fields = ("number", "license_number", "title", "issuing_authority")
     date_hierarchy = "expiry_date"
-    readonly_fields = ("number", "status", "created_at", "updated_at")
+    # used_value/used_quantity are DERIVED from the documents issued under this licence -
+    # recompute_usage() is their only writer. approved_*/revoked_*/revocation_reason are the
+    # lifecycle stamps. All are editable=False on the model, so listing them here is what makes
+    # them VISIBLE in the admin at all rather than silently absent from the form.
+    readonly_fields = ("number", "status", "used_value", "used_quantity", "approved_at",
+                       "approved_by", "revoked_at", "revocation_reason", "created_at",
+                       "updated_at")
+    actions = ["recompute_usage"]
+
+    @admin.action(description="Re-derive consumed balance from issued documents")
+    def recompute_usage(self, request, queryset):
+        """The admin-side remedy for a stale balance.
+
+        Deleting a TradeDocument, or editing its lines through TradeDocumentLineInline, bypasses the
+        issue/void views that maintain used_value — so the admin needs its own way back to a correct
+        figure, or an admin edit silently leaves the licence over- or under-drawn with no route to
+        fix it but the tenant-admin button on the front end.
+        """
+        for licence in queryset:
+            licence.recompute_usage(save=True)
+        self.message_user(request, f"Re-derived {queryset.count()} licence(s) from their documents.")
 
 
 @admin.register(SustainabilityAssessment)
@@ -833,4 +854,5 @@ class SustainabilityAssessmentAdmin(admin.ModelAdmin):
     date_hierarchy = "assessment_date"
     # overall_score is DERIVED from the theme scores — it is editable=False on the model precisely so
     # the headline number can never disagree with the components it is computed from.
-    readonly_fields = ("number", "overall_score", "created_at", "updated_at")
+    readonly_fields = ("number", "overall_score", "rating", "assessed_by", "created_at",
+                       "updated_at")
