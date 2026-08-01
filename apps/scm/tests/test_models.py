@@ -8001,3 +8001,1430 @@ class TestReturnsNothingIsStored:
             .aggregate(s=Sum("amount_claimed"))["s"])
         assert "amount_claimed_total" not in {f.name
                                               for f in type(warranty_claim_a)._meta.get_fields()}
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.12 shared date basis. timezone.localdate(), NEVER datetime.date.today(): the project
+# is TZ-aware and every 4.12 date reader (days_to_expiry, refresh_status, record_check,
+# the carbon window) reads the LOCAL date, so an exact-date assertion built on the other basis flakes
+# for the hours after local midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _localdate(days=0):
+    """Today (or days from it) on the same basis the 4.12 models measure against."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+
+# =================================================================================================
+# SCM 4.12 Contract & Compliance Management — models
+#
+# Four registers and one 4.2 extension. The priorities, in the order they are tested below:
+#
+#   1. The LICENCE BALANCE. ``used_value`` / ``used_quantity`` are the only stored derived figures in
+#      the sub-module, and they are a cache with a stated invalidation path. The headline case is
+#      ``recompute_usage()`` running TWO single-grain aggregates: ``declared_value`` lives on the
+#      document and ``quantity`` on its lines, so asking for both at once JOINS the lines in, fans
+#      the document row out per line, and charges a two-line invoice twice its face value. A single
+#      assertion on a two-line document is what pins that.
+#   2. ``record_check()`` — the projection that turns a performed proof cycle into a standing.
+#   3. ``SupplierContract.clean()`` — the amendment hierarchy 4.12 added to 4.2, whose cycle guard
+#      exists because the contract detail page WALKS ``parent_contract`` upward.
+#
+# Every date is derived from ``timezone.localdate()``, the same basis the models read (L16).
+# =================================================================================================
+class TestTradeLicenseIdentity:
+    def test_licence_numbers_are_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import TradeLicense
+        a1 = TradeLicense.objects.create(tenant=tenant_a, license_number="A-1", title="One",
+                                         issuing_authority="BIS")
+        a2 = TradeLicense.objects.create(tenant=tenant_a, license_number="A-2", title="Two",
+                                         issuing_authority="BIS")
+        b1 = TradeLicense.objects.create(tenant=tenant_b, license_number="B-1", title="Globex",
+                                         issuing_authority="Globex")
+        assert (a1.number, a2.number) == ("LIC-00001", "LIC-00002")
+        assert b1.number == "LIC-00001"
+
+    def test_str_is_the_number_and_the_title(self, trade_license_a):
+        assert str(trade_license_a) == f"{trade_license_a.number} · {trade_license_a.title}"
+
+    def test_the_defaults_a_fresh_licence_carries(self, tenant_a):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense.objects.create(tenant=tenant_a, license_number="D-1", title="Fresh",
+                                          issuing_authority="BIS")
+        assert lic.status == "draft"
+        assert lic.license_type == "export_license"
+        assert lic.renewal_notice_days == 60
+        assert lic.used_value == Decimal("0.00")
+        assert lic.used_quantity == Decimal("0.0000")
+        # NULL, not zero: an unlimited licence is unlimited, not exhausted.
+        assert lic.authorized_value is None and lic.authorized_quantity is None
+
+    def test_the_authoritys_own_number_is_unique_per_tenant(self, tenant_a, tenant_b,
+                                                            trade_license_a):
+        """The whole reason it is unique: one licence registered twice would have its balance drawn
+        down in two places, and neither copy would show the real remaining authority."""
+        from apps.scm.models import TradeLicense
+        with pytest.raises(IntegrityError):
+            TradeLicense.objects.create(tenant=tenant_a,
+                                        license_number=trade_license_a.license_number,
+                                        title="Duplicate", issuing_authority="BIS")
+
+    def test_the_same_authority_number_is_free_in_another_workspace(self, tenant_b,
+                                                                    trade_license_a):
+        from apps.scm.models import TradeLicense
+        twin = TradeLicense.objects.create(tenant=tenant_b,
+                                           license_number=trade_license_a.license_number,
+                                           title="Globex has one too", issuing_authority="BIS")
+        assert twin.pk != trade_license_a.pk
+
+    def test_the_internal_number_is_unique_per_tenant_too(self, tenant_a, trade_license_a):
+        from apps.scm.models import TradeLicense
+        with pytest.raises(IntegrityError):
+            TradeLicense.objects.create(tenant=tenant_a, license_number="OTHER-1", title="Dup",
+                                        issuing_authority="BIS", number=trade_license_a.number)
+
+    def test_every_status_has_a_colour_named_badge_class(self):
+        """theme.css ships colour-named badges ONLY — badge-success / -warning / -danger do not
+        exist and render as unstyled text (L33)."""
+        from apps.scm.models import TradeLicense
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        for value, _label in TradeLicense.STATUS_CHOICES:
+            assert TradeLicense.STATUS_CSS[value] in allowed, value
+
+    def test_the_declared_status_sets_are_subsets_of_the_choices(self):
+        from apps.scm.models import TradeLicense
+        values = {value for value, _ in TradeLicense.STATUS_CHOICES}
+        assert set(TradeLicense.AUTO_STATUSES) <= values
+        assert set(TradeLicense.CHARGEABLE_STATUSES) <= values
+        # ``approved`` is deliberately NOT chargeable — a licence parked there authorises nothing.
+        assert "approved" not in TradeLicense.CHARGEABLE_STATUSES
+
+    def test_status_css_falls_back_rather_than_rendering_an_unknown_class(self, trade_license_a):
+        trade_license_a.status = "not_a_status"
+        assert trade_license_a.status_css == "badge-muted"
+
+    def test_the_renewal_window_is_capped_at_ten_years(self, tenant_a):
+        """A ``PositiveIntegerField`` accepts 4294967295 on MariaDB and this number is fed to date
+        arithmetic — an absurd value is an uncaught OverflowError, i.e. a 500 (the 4.10 finding)."""
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="CAP-1", title="Capped",
+                           issuing_authority="BIS", renewal_notice_days=4294967295)
+        with pytest.raises(ValidationError) as exc:
+            lic.full_clean(exclude=["number"])
+        assert "renewal_notice_days" in exc.value.error_dict
+
+
+class TestTradeLicenseValidation:
+    def test_a_licence_cannot_be_issued_before_it_was_applied_for(self, tenant_a):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="L-1", title="Ladder",
+                           issuing_authority="BIS",
+                           application_date=_localdate() , issue_date=_localdate(-1))
+        with pytest.raises(ValidationError) as exc:
+            lic.clean()
+        assert "issue_date" in exc.value.error_dict
+
+    def test_a_licence_cannot_expire_before_it_was_issued(self, tenant_a):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="L-2", title="Ladder",
+                           issuing_authority="BIS", issue_date=_localdate(),
+                           expiry_date=_localdate(-1))
+        with pytest.raises(ValidationError) as exc:
+            lic.clean()
+        assert "expiry_date" in exc.value.error_dict
+
+    def test_the_outer_rung_is_checked_separately_when_there_is_no_issue_date(self, tenant_a):
+        """With no issue date the two inner guards both pass, and a licence could still expire
+        before it was applied for."""
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="L-3", title="Ladder",
+                           issuing_authority="BIS", application_date=_localdate(),
+                           expiry_date=_localdate(-5))
+        with pytest.raises(ValidationError) as exc:
+            lic.clean()
+        assert "expiry_date" in exc.value.error_dict
+
+    @pytest.mark.parametrize("field", ["holder_party", "end_user_party"])
+    def test_a_cross_tenant_party_is_refused(self, tenant_a, supplier_b, field):
+        """The form's dropdowns are tenant-scoped, but that is UX — a narrowed select has never held
+        against a crafted POST (L39 §2)."""
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="X-1", title="Crafted",
+                           issuing_authority="BIS", **{field: supplier_b})
+        with pytest.raises(ValidationError) as exc:
+            lic.clean()
+        assert field in exc.value.error_dict
+
+    def test_a_cross_tenant_evidence_document_is_refused(self, tenant_a, evidence_document_b):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="X-2", title="Crafted",
+                           issuing_authority="BIS", document=evidence_document_b)
+        with pytest.raises(ValidationError) as exc:
+            lic.clean()
+        assert "document" in exc.value.error_dict
+
+    def test_the_tenant_guard_is_skipped_on_an_unsaved_tenant_less_instance(self, supplier_b):
+        """``self.tenant`` on a non-nullable FK raises RelatedObjectDoesNotExist rather than
+        returning None, so the guard has to skip rather than 500 inside validation."""
+        from apps.scm.models import TradeLicense
+        TradeLicense(license_number="X-3", title="Shell", issuing_authority="BIS",
+                     holder_party=supplier_b).clean()
+
+    def test_a_same_tenant_licence_validates_cleanly(self, tenant_a, supplier_a, usd):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense(tenant=tenant_a, license_number="OK-1", title="Fine",
+                           issuing_authority="BIS", holder_party=supplier_a, currency=usd,
+                           application_date=_localdate(-10), issue_date=_localdate(-5),
+                           expiry_date=_localdate(100))
+        lic.full_clean(exclude=["number"])
+
+
+class TestTradeLicenseExpiry:
+    def test_days_to_expiry_is_none_without_an_expiry_date(self, uncapped_license_a):
+        uncapped_license_a.expiry_date = None
+        assert uncapped_license_a.days_to_expiry() is None
+        assert uncapped_license_a.is_expiring_soon() is False
+
+    def test_days_to_expiry_counts_down_and_then_goes_negative(self, trade_license_a):
+        assert trade_license_a.days_to_expiry() == 300
+        trade_license_a.expiry_date = _localdate(-3)
+        assert trade_license_a.days_to_expiry() == -3
+
+    def test_expiring_soon_is_inside_the_notice_window_and_not_yet_lapsed(self,
+                                                                          expiring_license_a):
+        assert expiring_license_a.is_expiring_soon() is True
+        expiring_license_a.expiry_date = _localdate(-1)
+        assert expiring_license_a.is_expiring_soon() is False
+
+    def test_the_seeded_expiring_licence_already_rolled_to_amber(self, expiring_license_a):
+        assert expiring_license_a.status == "expiring"
+
+    def test_refresh_status_walks_active_to_expiring_to_expired(self, trade_license_a):
+        assert trade_license_a.status == "active"
+        trade_license_a.expiry_date = _localdate(10)
+        trade_license_a.refresh_status()
+        assert trade_license_a.status == "expiring"
+        trade_license_a.expiry_date = _localdate(-1)
+        trade_license_a.refresh_status()
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "expired"
+
+    def test_refresh_status_never_walks_back_a_human_decision(self, trade_license_a):
+        """A date roll is bookkeeping; a draft / applied / approved / suspended / revoked licence is
+        somebody's decision, and ``AUTO_STATUSES`` is what keeps the two apart."""
+        from apps.scm.models import TradeLicense
+        for parked in ("draft", "applied", "approved", "suspended", "revoked"):
+            trade_license_a.status = parked
+            trade_license_a.expiry_date = _localdate(-500)
+            trade_license_a.refresh_status()
+            assert trade_license_a.status == parked
+        assert set(TradeLicense.AUTO_STATUSES) == {"active", "expiring", "expired"}
+
+    def test_refresh_status_can_leave_the_new_value_unsaved_for_a_bulk_update(self,
+                                                                              trade_license_a):
+        """``save=False`` is what lets the list view roll a whole page in ONE ``bulk_update``."""
+        trade_license_a.expiry_date = _localdate(-1)
+        trade_license_a.refresh_status(save=False)
+        assert trade_license_a.status == "expired"
+        from apps.scm.models import TradeLicense
+        assert TradeLicense.objects.get(pk=trade_license_a.pk).status == "active"
+
+    def test_an_injected_today_drives_the_roll(self, trade_license_a):
+        """The parameter exists so a test can ask about a date that is not today — no clock
+        dependence, no flake in the hours after local midnight (L16)."""
+        trade_license_a.refresh_status(today=_localdate(301), save=False)
+        assert trade_license_a.status == "expired"
+
+
+class TestTradeLicenseBalance:
+    """The sub-module's one real invariant: what a licence has authorised, and how much is left."""
+
+    def test_a_two_line_document_charges_its_face_value_ONCE(self, trade_license_a,
+                                                              issued_document_a):
+        """THE regression this method's two-aggregate shape exists to prevent.
+
+        ``declared_value`` is on the document and ``quantity`` on its lines. Summing both in one
+        ``aggregate()`` joins the lines in, which fans the document row out per line and multiplies
+        every declared value by that document's line count — a two-line invoice would charge twice
+        its face value, silently, forever.
+        """
+        trade_license_a.refresh_from_db()
+        assert issued_document_a.lines.count() == 2
+        assert trade_license_a.used_value == Decimal("1200.00")
+        assert trade_license_a.used_value != Decimal("2400.00")
+        # The quantity grain is the LINES, so it is the sum of both of them.
+        assert trade_license_a.used_quantity == Decimal("7.0000")
+
+    def test_the_counters_are_re_derived_not_incremented(self, trade_license_a, issued_document_a):
+        """Running it twice must land on the same figure — ``+=`` on a cached counter is how a
+        balance drifts permanently."""
+        trade_license_a.recompute_usage()
+        trade_license_a.recompute_usage()
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("1200.00")
+        assert trade_license_a.used_quantity == Decimal("7.0000")
+
+    def test_only_charging_statuses_count_against_the_balance(self, trade_license_a,
+                                                              trade_document_a):
+        """A draft document is paperwork somebody is still writing — it has authorised nothing."""
+        from apps.scm.models import TradeDocument
+        assert trade_document_a.status == "draft"
+        trade_license_a.recompute_usage()
+        assert trade_license_a.used_value == Decimal("0.00")
+        assert set(TradeDocument.CHARGING_STATUSES) == {"issued", "submitted", "accepted"}
+
+    def test_the_issue_to_void_round_trip_returns_the_balance(self, trade_license_a,
+                                                              issued_document_a):
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("1200.00")
+        issued_document_a.status = "void"
+        issued_document_a.save(update_fields=["status", "updated_at"])
+        trade_license_a.recompute_usage()
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("0.00")
+        assert trade_license_a.used_quantity == Decimal("0.0000")
+        assert trade_license_a.remaining_value == trade_license_a.authorized_value
+
+    def test_an_empty_licence_re_derives_to_a_clean_zero_not_to_none(self, trade_license_a):
+        """``Sum`` over an empty queryset is ``None``; ``q2``/``q4`` are what turn that into 0."""
+        trade_license_a.recompute_usage()
+        assert trade_license_a.used_value == Decimal("0.00")
+        assert trade_license_a.used_quantity == Decimal("0.0000")
+
+    def test_can_charge_refuses_at_the_value_ceiling_and_names_the_headroom(self, trade_license_a):
+        allowed, reason = trade_license_a.can_charge(Decimal("10000.01"), Decimal("0"))
+        assert allowed is False
+        assert "exceed the authorised value" in reason
+        assert "10000.00" in reason
+
+    def test_can_charge_allows_a_charge_exactly_at_the_ceiling(self, trade_license_a):
+        """The ceiling is inclusive: a licence authorised for 10 000 may be drawn down to zero."""
+        allowed, reason = trade_license_a.can_charge(Decimal("10000.00"), Decimal("500.0000"))
+        assert allowed is True and reason == ""
+
+    def test_can_charge_refuses_at_the_quantity_ceiling(self, trade_license_a):
+        allowed, reason = trade_license_a.can_charge(Decimal("0"), Decimal("500.0001"))
+        assert allowed is False
+        assert "exceed the authorised quantity" in reason
+
+    def test_can_charge_measures_the_ceiling_against_what_is_already_used(self, trade_license_a,
+                                                                          issued_document_a):
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.can_charge(Decimal("8800.00"), Decimal("1"))[0] is True
+        allowed, reason = trade_license_a.can_charge(Decimal("8800.01"), Decimal("1"))
+        assert allowed is False
+        assert "8800.00 of 10000.00 is left" in reason
+
+    def test_can_charge_refuses_on_a_status_that_authorises_nothing(self, draft_license_a):
+        allowed, reason = draft_license_a.can_charge(Decimal("1"), Decimal("1"))
+        assert allowed is False
+        assert "only an active or expiring licence" in reason
+
+    def test_can_charge_reads_the_DATES_not_the_cached_word(self, trade_license_a):
+        """The status column is rolled forward lazily by the list page, so a licence that lapsed
+        since anyone last looked is still sitting at 'active' in the database."""
+        trade_license_a.expiry_date = _localdate(-1)
+        trade_license_a.save(update_fields=["expiry_date", "updated_at"])
+        assert trade_license_a.status == "active"
+        allowed, reason = trade_license_a.can_charge(Decimal("1"), Decimal("1"))
+        assert allowed is False
+        assert "expired on" in reason
+
+    def test_an_uncapped_licence_charges_anything(self, uncapped_license_a):
+        allowed, reason = uncapped_license_a.can_charge(Decimal("9999999.99"),
+                                                        Decimal("9999999.9999"))
+        assert allowed is True and reason == ""
+
+    def test_can_charge_refuses_rather_than_clamping(self, trade_license_a):
+        """The caller does not charge what fits and let the rest go out unauthorised — that is
+        precisely the failure a licence balance exists to prevent."""
+        allowed, _ = trade_license_a.can_charge(Decimal("99999.99"), Decimal("0"))
+        assert allowed is False
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("0.00")
+
+    def test_remaining_and_utilization_answer_None_not_zero_on_an_uncapped_licence(
+        self, uncapped_license_a,
+    ):
+        """A confident 0 in a balance card is worse than an honest blank — the blank is what makes
+        somebody go and look (the 4.11 lesson)."""
+        assert uncapped_license_a.remaining_value is None
+        assert uncapped_license_a.remaining_quantity is None
+        assert uncapped_license_a.utilization_pct is None
+
+    def test_remaining_is_authorised_minus_used(self, trade_license_a, issued_document_a):
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.remaining_value == Decimal("8800.00")
+        assert trade_license_a.remaining_quantity == Decimal("493.0000")
+        assert trade_license_a.utilization_pct == Decimal("12.00")
+
+    def test_utilization_reads_value_first_then_quantity(self, expiring_license_a):
+        """Value first because a licence capped both ways is understood in money by everyone who
+        reads the page; this one has only a quantity cap, so quantity is what answers."""
+        expiring_license_a.used_quantity = Decimal("2500.0000")
+        assert expiring_license_a.authorized_value is None
+        assert expiring_license_a.utilization_pct == Decimal("25.00")
+
+    def test_an_over_drawn_licence_reads_as_over_drawn(self, trade_license_a):
+        """Deliberately NOT floored: a tidy 0.00 would look like it merely ran out."""
+        trade_license_a.used_value = Decimal("12000.00")
+        assert trade_license_a.remaining_value == Decimal("-2000.00")
+        assert trade_license_a.utilization_pct == Decimal("120.00")
+
+    def test_a_zero_ceiling_is_unrated_rather_than_infinite_percent(self, trade_license_a):
+        trade_license_a.authorized_value = Decimal("0.00")
+        trade_license_a.authorized_quantity = None
+        assert trade_license_a.utilization_pct is None
+
+
+class TestTradeDocumentModel:
+    def test_document_numbers_are_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import TradeDocument
+        a1 = TradeDocument.objects.create(tenant=tenant_a)
+        a2 = TradeDocument.objects.create(tenant=tenant_a)
+        b1 = TradeDocument.objects.create(tenant=tenant_b)
+        assert (a1.number, a2.number, b1.number) == ("TD-00001", "TD-00002", "TD-00001")
+
+    def test_str_is_the_number_and_the_paper_type(self, trade_document_a):
+        assert str(trade_document_a) == f"{trade_document_a.number} · Commercial Invoice"
+
+    def test_the_defaults_a_fresh_document_carries(self, tenant_a):
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a)
+        assert doc.status == "draft"
+        assert doc.doc_type == "commercial_invoice"
+        assert doc.direction == "export"
+        assert doc.declared_value == Decimal("0")
+        assert doc.is_negotiable is False
+
+    def test_lines_total_is_one_aggregate_over_the_children(self, trade_document_a,
+                                                            django_assert_max_num_queries):
+        """Pushed into SQL rather than summed in Python over ``line_value``: a 500-line customs
+        invoice would otherwise cost 500 model instantiations."""
+        with django_assert_max_num_queries(1):
+            assert trade_document_a.lines_total == Decimal("1200.00")
+
+    def test_lines_total_is_memoised_so_the_divergence_badge_costs_nothing(
+        self, trade_document_a, django_assert_max_num_queries,
+    ):
+        with django_assert_max_num_queries(1):
+            trade_document_a.lines_total
+            assert trade_document_a.declared_value_matches is True
+
+    def test_an_unsaved_document_reports_a_zero_line_total_rather_than_raising(self, tenant_a):
+        from apps.scm.models import TradeDocument
+        assert TradeDocument(tenant=tenant_a).lines_total == Decimal("0")
+
+    def test_the_divergence_tolerance_is_one_cent_not_zero(self, trade_document_a):
+        """``declared_value`` is 2dp and the line arithmetic is 4dp x 2dp, so exact equality would
+        flag ordinary rounding."""
+        trade_document_a.declared_value = Decimal("1200.01")
+        assert trade_document_a.declared_value_matches is True
+        del trade_document_a.__dict__["lines_total"]
+        trade_document_a.declared_value = Decimal("1200.02")
+        assert trade_document_a.declared_value_matches is False
+
+    def test_a_declared_value_that_disagrees_with_the_goods_is_flagged(self, trade_document_a):
+        trade_document_a.declared_value = Decimal("50.00")
+        assert trade_document_a.declared_value_matches is False
+
+    def test_is_editable_is_draft_or_amended_only(self, trade_document_a):
+        from apps.scm.models import TradeDocument
+        assert trade_document_a.is_editable is True
+        for status, editable in (("amended", True), ("issued", False), ("submitted", False),
+                                 ("accepted", False), ("void", False)):
+            trade_document_a.status = status
+            assert trade_document_a.is_editable is editable, status
+        assert set(TradeDocument.EDITABLE_STATUSES) == {"draft", "amended"}
+
+    def test_is_charging_matches_the_declared_charging_set(self, trade_document_a):
+        from apps.scm.models import TradeDocument
+        for value, _label in TradeDocument.STATUS_CHOICES:
+            trade_document_a.status = value
+            assert trade_document_a.is_charging is (value in TradeDocument.CHARGING_STATUSES)
+
+    def test_every_status_has_a_colour_named_badge_class(self):
+        from apps.scm.models import TradeDocument
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        for value, _label in TradeDocument.STATUS_CHOICES:
+            assert TradeDocument.STATUS_CSS[value] in allowed, value
+
+    def test_an_incoterm_typed_in_lower_case_is_corrected_not_refused(self, tenant_a):
+        """Typing 'fob' into a text input is a formatting slip, not a different term."""
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument(tenant=tenant_a, incoterm="fob")
+        doc.clean()
+        assert doc.incoterm == "FOB"
+
+    def test_an_invented_incoterm_is_refused(self, tenant_a):
+        """An Incoterm is a legal allocation of cost and risk; a free-text one means nothing to the
+        counterparty reading the form."""
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument(tenant=tenant_a, incoterm="XYZ")
+        with pytest.raises(ValidationError) as exc:
+            doc.clean()
+        assert "incoterm" in exc.value.error_dict
+        assert "Incoterms 2020" in str(exc.value.error_dict["incoterm"][0].message)
+
+    def test_the_incoterm_vocabulary_is_derived_from_the_labelled_pairs(self):
+        """One constant, read by the model's clean() and by the form's ChoiceField — so the
+        vocabulary enforced and the vocabulary offered cannot disagree."""
+        from apps.scm.models import TradeDocument
+        from apps.scm.models.ContractCompliance.TradeDocuments import _INCOTERM_VALUES
+        assert _INCOTERM_VALUES == tuple(v for v, _ in TradeDocument.INCOTERM_CHOICES)
+        assert "DDP" in _INCOTERM_VALUES and len(_INCOTERM_VALUES) == 11
+
+    def test_net_weight_cannot_exceed_gross_weight(self, tenant_a):
+        """Net is the goods, gross is the goods plus the packaging. The reverse is a packing list
+        that will be rejected at the border."""
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument(tenant=tenant_a, gross_weight_kg=Decimal("100.00"),
+                            net_weight_kg=Decimal("101.00"))
+        with pytest.raises(ValidationError) as exc:
+            doc.clean()
+        assert "net_weight_kg" in exc.value.error_dict
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("shipment", "shipment_b"), ("carrier", "carrier_b"), ("license", "trade_license_b"),
+        ("shipper_party", "supplier_b"), ("consignee_party", "customer_b"),
+        ("notify_party", "supplier_b"), ("document", "evidence_document_b"),
+    ])
+    def test_every_cross_tenant_pointer_is_refused(self, request, tenant_a, field, fixture_name):
+        from apps.scm.models import TradeDocument
+        other = request.getfixturevalue(fixture_name)
+        doc = TradeDocument(tenant=tenant_a, **{field: other})
+        with pytest.raises(ValidationError) as exc:
+            doc.clean()
+        assert field in exc.value.error_dict
+
+    def test_the_tenant_guard_is_skipped_on_a_tenant_less_shell(self, shipment_b):
+        from apps.scm.models import TradeDocument
+        TradeDocument(shipment=shipment_b).clean()
+
+    def test_a_same_tenant_document_validates_cleanly(self, trade_document_a):
+        trade_document_a.full_clean(exclude=["number"])
+
+    def test_the_licence_pointer_PROTECTS_the_licence(self, trade_license_a, trade_document_a):
+        """The record of what moved under a licence IS its audit trail — losing it must not be one
+        click away."""
+        from django.db.models import ProtectedError
+        with pytest.raises(ProtectedError):
+            trade_license_a.delete()
+
+    def test_deleting_a_document_leaves_its_shipment_alone(self, trade_document_a, shipment_a):
+        """Every link-out is SET_NULL: a filed declaration outlives the movement it papers."""
+        from apps.scm.models import Shipment, TradeDocument
+        shipment_a.delete()
+        trade_document_a.refresh_from_db()
+        assert trade_document_a.shipment_id is None
+        assert TradeDocument.objects.filter(pk=trade_document_a.pk).exists()
+
+
+class TestTradeDocumentLineModel:
+    def test_str_is_the_description_and_the_quantity(self, trade_document_a):
+        line = trade_document_a.lines.first()
+        assert str(line) == f"{line.description} ×{line.quantity}"
+
+    def test_line_value_multiplies_out_and_is_never_a_column(self, trade_document_a):
+        from apps.scm.models import TradeDocumentLine
+        line = trade_document_a.lines.first()
+        assert line.line_value == Decimal("200.00")
+        assert "line_value" not in {f.name for f in TradeDocumentLine._meta.get_fields()}
+
+    def test_line_value_is_clamped_to_what_the_column_holds(self, trade_document_a):
+        """A poisoned line can only distort its own figure, never raise DataError from the driver."""
+        line = trade_document_a.lines.first()
+        line.quantity = Decimal("9999999999.9999")
+        line.unit_value = Decimal("9999999999.99")
+        assert line.line_value == Decimal("9999999999.99")
+
+    def test_a_whitespace_only_description_is_refused(self, trade_document_a):
+        """Field-level blank=False passes a space; this is what catches the line that prints empty
+        on a customs form."""
+        from apps.scm.models import TradeDocumentLine
+        line = TradeDocumentLine(document=trade_document_a, description="   ")
+        with pytest.raises(ValidationError) as exc:
+            line.clean()
+        assert "description" in exc.value.error_dict
+
+    @pytest.mark.parametrize("field,fixture_name", [("item", "item_b"), ("uom", "uom_each_b")])
+    def test_a_cross_tenant_line_pointer_is_refused_through_the_parent(self, request,
+                                                                       trade_document_a, field,
+                                                                       fixture_name):
+        """The child has no tenant of its own, so the tenancy question is asked of its parent."""
+        from apps.scm.models import TradeDocumentLine
+        other = request.getfixturevalue(fixture_name)
+        line = TradeDocumentLine(document=trade_document_a, description="Crafted",
+                                 **{field: other})
+        with pytest.raises(ValidationError) as exc:
+            line.clean()
+        assert field in exc.value.error_dict
+
+    def test_a_parentless_line_does_not_raise_from_inside_validation(self):
+        """The formset builds a line before its parent exists; ``document`` is non-nullable, so a
+        bare attribute read would raise RelatedObjectDoesNotExist here."""
+        from apps.scm.models import TradeDocumentLine
+        TradeDocumentLine(description="Orphan").clean()
+
+    def test_the_line_carries_no_tenant_column_of_its_own(self):
+        from apps.scm.models import TradeDocumentLine
+        assert "tenant" not in {f.name for f in TradeDocumentLine._meta.get_fields()}
+
+    def test_the_snapshot_columns_are_never_back_filled_from_the_item(self, tenant_a,
+                                                                      trade_document_a, item_a):
+        """A filed declaration records what was DECLARED. Re-classifying an item a year later must
+        not rewrite a document already submitted to an authority — which is why there is
+        deliberately no ``save()`` override on this model."""
+        from apps.scm.models import TradeDocumentLine
+        line = TradeDocumentLine.objects.create(document=trade_document_a, item=item_a,
+                                                description="Typed, not copied",
+                                                quantity=Decimal("1"), unit_value=Decimal("1.00"))
+        line.refresh_from_db()
+        assert line.description == "Typed, not copied"
+        assert line.hs_code == "" and line.uom_text == ""
+
+
+class TestComplianceRequirementModel:
+    def test_requirement_numbers_are_sequential_per_tenant(self, tenant_a, tenant_b):
+        from apps.scm.models import ComplianceRequirement
+        a1 = ComplianceRequirement.objects.create(tenant=tenant_a, title="One", frequency="on_event")
+        b1 = ComplianceRequirement.objects.create(tenant=tenant_b, title="Globex",
+                                                  frequency="on_event")
+        assert a1.number == "CR-00001" and b1.number == "CR-00001"
+
+    def test_str_is_the_number_and_the_title(self, compliance_requirement_a):
+        assert str(compliance_requirement_a) == (
+            f"{compliance_requirement_a.number} · {compliance_requirement_a.title}")
+
+    def test_the_defaults_a_fresh_obligation_carries(self, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement.objects.create(tenant=tenant_a, title="Fresh",
+                                                   frequency="on_event")
+        assert row.source == "regulation"
+        assert row.framework == "other"
+        assert row.scope == "tenant"
+        assert row.status == "applicable"
+        assert row.criticality == "medium"
+        assert row.notice_days == 30
+        assert row.last_checked_on is None
+
+    def test_every_status_and_criticality_has_a_colour_named_badge_class(self):
+        from apps.scm.models import ComplianceRequirement
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        for value, _label in ComplianceRequirement.STATUS_CHOICES:
+            assert ComplianceRequirement.STATUS_CSS[value] in allowed, value
+        for value, _label in ComplianceRequirement.CRITICALITY_CHOICES:
+            assert ComplianceRequirement.CRITICALITY_CSS[value] in allowed, value
+
+    def test_the_declared_status_sets_are_subsets_of_the_choices(self):
+        from apps.scm.models import ComplianceRequirement
+        values = {value for value, _ in ComplianceRequirement.STATUS_CHOICES}
+        assert set(ComplianceRequirement.AUTO_STATUSES) <= values
+        assert set(ComplianceRequirement.OPEN_STATUSES) <= values
+        assert "compliant" not in ComplianceRequirement.OPEN_STATUSES
+
+    def test_the_notice_window_is_capped_at_ten_years(self, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Capped", frequency="on_event",
+                                    notice_days=4294967295)
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean(exclude=["number"])
+        assert "notice_days" in exc.value.error_dict
+
+    def test_a_scoped_requirement_has_to_say_which_one(self, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Scoped nowhere", scope="party",
+                                    frequency="on_event")
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "party" in exc.value.error_dict
+
+    def test_a_pointer_the_scope_would_never_read_is_refused(self, tenant_a, supplier_a):
+        """A scope switched from Supplier to Location that leaves the old party pointer behind is a
+        stale filter quietly narrowing somebody else's register months later."""
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Stale pointer", scope="tenant",
+                                    party=supplier_a, frequency="on_event")
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "party" in exc.value.error_dict
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("party", "supplier_b"), ("location", "location_b"), ("item", "item_b"),
+        ("contract", "contract_b"), ("license", "trade_license_b"),
+        ("document", "evidence_document_b"),
+    ])
+    def test_every_cross_tenant_pointer_is_refused(self, request, tenant_a, field, fixture_name):
+        from apps.scm.models import ComplianceRequirement
+        other = request.getfixturevalue(fixture_name)
+        kwargs = {field: other, "frequency": "on_event"}
+        if field in ("party", "location", "item"):
+            kwargs["scope"] = field
+        if field == "contract":
+            kwargs["source"] = "contract"
+        if field == "license":
+            kwargs["source"] = "license"
+        row = ComplianceRequirement(tenant=tenant_a, title="Crafted", **kwargs)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert field in exc.value.error_dict
+
+    def test_a_contract_obligation_has_to_name_its_contract(self, tenant_a):
+        """Saying the duty comes out of a contract and then not naming it is the same empty claim as
+        an alert with no threshold."""
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Nowhere", source="contract",
+                                    frequency="on_event")
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "contract" in exc.value.error_dict
+
+    def test_a_licence_obligation_has_to_name_its_licence(self, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Nowhere", source="license",
+                                    frequency="on_event")
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "license" in exc.value.error_dict
+
+    @pytest.mark.parametrize("frequency", ["monthly", "quarterly", "semi_annual", "annual",
+                                            "biennial"])
+    def test_a_scheduled_obligation_needs_a_first_due_date(self, tenant_a, frequency):
+        """Without one it can never surface on the queue that is the entire point of the register —
+        it would sit invisible until an auditor found it."""
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Unscheduled", frequency=frequency)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "next_due_date" in exc.value.error_dict
+
+    @pytest.mark.parametrize("frequency", ["one_time", "on_event"])
+    def test_a_cadence_with_no_schedule_needs_no_due_date(self, tenant_a, frequency):
+        """``record_check()`` CLEARS the due date on both, so requiring one would make a passed
+        on_event row un-editable by its own form."""
+        from apps.scm.models import ComplianceRequirement
+        ComplianceRequirement(tenant=tenant_a, title="Ad hoc", frequency=frequency).clean()
+
+    def test_not_applicable_needs_a_reason(self, tenant_a):
+        """"Not applicable" is an assertion, and an unexplained assertion is not auditable."""
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Says no", frequency="on_event",
+                                    status="not_applicable")
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "not_applicable_reason" in exc.value.error_dict
+        row.not_applicable_reason = "We ship domestically only."
+        row.clean()
+
+    def test_refresh_status_moves_applicable_to_overdue_from_the_date_alone(self,
+                                                                            overdue_requirement_a):
+        assert overdue_requirement_a.status == "applicable"
+        overdue_requirement_a.refresh_status()
+        overdue_requirement_a.refresh_from_db()
+        assert overdue_requirement_a.status == "overdue"
+
+    def test_refresh_status_never_walks_back_a_human_decision(self, overdue_requirement_a):
+        for parked in ("compliant", "non_compliant", "not_applicable", "retired"):
+            overdue_requirement_a.status = parked
+            overdue_requirement_a.refresh_status()
+            assert overdue_requirement_a.status == parked
+
+    def test_an_overdue_row_whose_date_moved_out_falls_back_to_the_neutral_open_state(
+        self, overdue_requirement_a,
+    ):
+        overdue_requirement_a.refresh_status()
+        assert overdue_requirement_a.status == "overdue"
+        overdue_requirement_a.next_due_date = _localdate(30)
+        overdue_requirement_a.refresh_status()
+        assert overdue_requirement_a.status == "applicable"
+
+    def test_in_progress_survives_while_the_date_is_still_ahead(self, compliance_requirement_a):
+        """"Somebody is working on it" is a fact no date can tell you — but it DOES go overdue when
+        the date passes."""
+        compliance_requirement_a.status = "in_progress"
+        compliance_requirement_a.refresh_status()
+        assert compliance_requirement_a.status == "in_progress"
+        compliance_requirement_a.next_due_date = _localdate(-1)
+        compliance_requirement_a.refresh_status()
+        assert compliance_requirement_a.status == "overdue"
+
+    def test_days_to_due_and_the_two_window_flags(self, compliance_requirement_a):
+        assert compliance_requirement_a.days_to_due == 10
+        assert compliance_requirement_a.is_overdue is False
+        assert compliance_requirement_a.is_due_soon is True
+        compliance_requirement_a.next_due_date = _localdate(-1)
+        assert compliance_requirement_a.is_overdue is True
+        assert compliance_requirement_a.is_due_soon is False
+        compliance_requirement_a.next_due_date = None
+        assert compliance_requirement_a.days_to_due is None
+        assert compliance_requirement_a.is_overdue is False
+        assert compliance_requirement_a.is_due_soon is False
+
+    def test_scope_label_names_the_subject(self, compliance_requirement_a, supplier_a):
+        assert compliance_requirement_a.scope_label == f"Supplier: {supplier_a}"
+
+    def test_scope_label_says_whole_workspace_for_the_pointer_less_scope(self,
+                                                                         one_time_requirement_a):
+        assert one_time_requirement_a.scope_label == "Whole workspace"
+
+    def test_a_scoped_row_whose_subject_vanished_says_removed_not_workspace_wide(self, tenant_a,
+                                                                                  vendor_a):
+        """The pointers are SET_NULL. A scoped obligation whose subject was deleted must NOT start
+        reading as binding everything.
+
+        Scoped to ``vendor_a`` rather than to the fixture's supplier because ``SupplierContract.party``
+        is PROTECT — the party the contract fixture names cannot be deleted at all, which would make
+        this test measure 4.2's on_delete rather than 4.12's SET_NULL.
+        """
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Vendor-scoped duty", scope="party", party=vendor_a,
+            frequency="on_event")
+        vendor_a.delete()
+        row.refresh_from_db()
+        assert row.party_id is None
+        assert row.scope_label == "Supplier (removed)"
+        assert row.resolved_scope() == ("party", None)
+
+    def test_deleting_the_source_contract_keeps_the_obligation_and_its_history(
+        self, compliance_requirement_a, compliance_check_a, contract_a,
+    ):
+        """SET_NULL, emphatically not CASCADE: the evidence that we WERE compliant outlives the
+        paper that created the duty."""
+        from apps.scm.models import ComplianceCheck, ComplianceRequirement
+        contract_a.delete()
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.contract_id is None
+        assert ComplianceRequirement.objects.filter(pk=compliance_requirement_a.pk).exists()
+        assert ComplianceCheck.objects.filter(pk=compliance_check_a.pk).exists()
+
+
+class TestComplianceRequirementRecordCheck:
+    """The projection: one performed cycle folded into the obligation's standing."""
+
+    @staticmethod
+    def _check(requirement, **fields):
+        from apps.scm.models import ComplianceCheck
+        fields.setdefault("due_date", requirement.next_due_date)
+        fields.setdefault("performed_on", _localdate())
+        return ComplianceCheck.objects.create(requirement=requirement, **fields)
+
+    def test_a_pass_advances_the_due_date_by_one_frequency_step_and_stamps_the_proof_date(
+        self, compliance_requirement_a,
+    ):
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        cycle = compliance_requirement_a.next_due_date
+        check = self._check(compliance_requirement_a, result="pass")
+        compliance_requirement_a.record_check(check)
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.status == "compliant"
+        assert compliance_requirement_a.last_checked_on == _localdate()
+        # Anchored on the cycle the check ANSWERS, not on the day it happened.
+        assert compliance_requirement_a.next_due_date == _add_months(cycle, 3)
+
+    def test_a_late_proof_does_not_drag_the_whole_schedule_later(self, overdue_requirement_a):
+        """Anchored on ``check.due_date``: a proof done three weeks late must not push every future
+        cycle three weeks out."""
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        cycle = overdue_requirement_a.next_due_date
+        check = self._check(overdue_requirement_a, result="pass", due_date=cycle,
+                            performed_on=_localdate())
+        overdue_requirement_a.record_check(check)
+        assert overdue_requirement_a.next_due_date == _add_months(cycle, 12)
+        assert overdue_requirement_a.next_due_date != _add_months(_localdate(), 12)
+
+    def test_a_pass_advances_exactly_ONE_cycle_even_when_several_were_missed(self, tenant_a):
+        """Skipping the gap would erase the fact that cycles were missed; ``refresh_status`` will
+        correctly re-flag the row as overdue on the next roll."""
+        from apps.scm.models import ComplianceRequirement
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        row = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Long overdue", frequency="monthly",
+            next_due_date=_localdate(-200))
+        check = self._check(row, result="pass", due_date=row.next_due_date)
+        cycle = row.next_due_date
+        row.record_check(check)
+        assert row.next_due_date == _add_months(cycle, 1)
+        row.refresh_status()
+        assert row.status == "compliant"  # a clock never walks back a recorded decision
+
+    def test_a_fail_sets_non_compliant_and_leaves_the_cycle_owed(self, compliance_requirement_a):
+        cycle = compliance_requirement_a.next_due_date
+        check = self._check(compliance_requirement_a, result="fail",
+                            finding="Two sub-tier smelters could not be evidenced.")
+        compliance_requirement_a.record_check(check)
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.status == "non_compliant"
+        assert compliance_requirement_a.next_due_date == cycle
+        assert compliance_requirement_a.last_checked_on is None
+
+    def test_a_partial_sets_in_progress_and_leaves_the_cycle_owed(self, compliance_requirement_a):
+        cycle = compliance_requirement_a.next_due_date
+        check = self._check(compliance_requirement_a, result="partial")
+        compliance_requirement_a.record_check(check)
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.status == "in_progress"
+        assert compliance_requirement_a.next_due_date == cycle
+        assert compliance_requirement_a.last_checked_on is None
+
+    def test_a_not_applicable_cycle_changes_nothing_at_all(self, compliance_requirement_a):
+        """It is evidence of neither compliance nor breach, and it must not stamp
+        ``last_checked_on`` — that would claim proof that was never obtained."""
+        before = (compliance_requirement_a.status, compliance_requirement_a.next_due_date,
+                  compliance_requirement_a.last_checked_on)
+        check = self._check(compliance_requirement_a, result="not_applicable")
+        compliance_requirement_a.record_check(check)
+        compliance_requirement_a.refresh_from_db()
+        assert (compliance_requirement_a.status, compliance_requirement_a.next_due_date,
+                compliance_requirement_a.last_checked_on) == before
+
+    @pytest.mark.parametrize("frequency", ["one_time", "on_event"])
+    def test_a_cadence_with_no_next_cycle_clears_the_due_date_instead_of_inventing_one(
+        self, tenant_a, frequency,
+    ):
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement.objects.create(tenant=tenant_a, title="Once",
+                                                   frequency=frequency,
+                                                   next_due_date=_localdate(5))
+        check = self._check(row, result="pass")
+        row.record_check(check)
+        row.refresh_from_db()
+        assert row.status == "compliant"
+        assert row.next_due_date is None
+
+    @pytest.mark.parametrize("frequency,months", [("monthly", 1), ("quarterly", 3),
+                                                   ("semi_annual", 6), ("annual", 12),
+                                                   ("biennial", 24)])
+    def test_advance_due_date_walks_exactly_one_step_of_its_own_cadence(self, tenant_a, frequency,
+                                                                        months):
+        from apps.scm.models import ComplianceRequirement
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        row = ComplianceRequirement(tenant=tenant_a, frequency=frequency)
+        anchor = datetime.date(2026, 1, 15)
+        assert row.advance_due_date(anchor) == _add_months(anchor, months)
+
+    def test_the_month_walk_clamps_to_the_target_months_last_day(self, tenant_a):
+        """An annual obligation due on 31 January must land on 31 January, and a quarterly one due
+        on 31 March must land on 30 June — never silently roll into July."""
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        assert _add_months(datetime.date(2026, 1, 31), 1) == datetime.date(2026, 2, 28)
+        assert _add_months(datetime.date(2024, 1, 31), 1) == datetime.date(2024, 2, 29)
+        assert _add_months(datetime.date(2026, 3, 31), 3) == datetime.date(2026, 6, 30)
+        assert _add_months(datetime.date(2026, 1, 31), 12) == datetime.date(2027, 1, 31)
+
+    def test_compliance_rate_is_None_not_zero_when_nothing_has_been_checked(
+        self, compliance_requirement_a,
+    ):
+        """A never-checked requirement renders "—", not a confident red 0% that reads as FAILING
+        when the truth is UNKNOWN."""
+        assert compliance_requirement_a.checks.count() == 0
+        assert compliance_requirement_a.compliance_rate is None
+
+    def test_compliance_rate_is_a_percentage_of_the_checks_that_count(self,
+                                                                       compliance_requirement_a):
+        self._check(compliance_requirement_a, result="pass")
+        self._check(compliance_requirement_a, result="fail")
+        assert compliance_requirement_a.compliance_rate == Decimal("50.00")
+
+    def test_a_not_applicable_cycle_is_excluded_from_BOTH_halves_of_the_rate(
+        self, compliance_requirement_a,
+    ):
+        """A cycle that did not apply is not a pass and not a failure, and counting it either way
+        misstates the record."""
+        self._check(compliance_requirement_a, result="pass")
+        self._check(compliance_requirement_a, result="not_applicable")
+        assert compliance_requirement_a.compliance_rate == Decimal("100.00")
+
+    def test_a_requirement_whose_only_check_did_not_apply_still_reads_unknown(
+        self, compliance_requirement_a,
+    ):
+        self._check(compliance_requirement_a, result="not_applicable")
+        assert compliance_requirement_a.checks.count() == 1
+        assert compliance_requirement_a.compliance_rate is None
+
+    def test_an_unsaved_requirement_reports_no_rate_rather_than_querying(self, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        assert ComplianceRequirement(tenant=tenant_a).compliance_rate is None
+
+    def test_the_rate_is_derived_on_read_so_it_can_never_be_stale(self, compliance_requirement_a):
+        """A stored pass-rate goes stale the instant a check is edited or deleted and nothing
+        recomputes it — which is why it is a property."""
+        from apps.scm.models import ComplianceRequirement
+        fail = self._check(compliance_requirement_a, result="fail")
+        self._check(compliance_requirement_a, result="pass")
+        assert compliance_requirement_a.compliance_rate == Decimal("50.00")
+        fail.delete()
+        assert compliance_requirement_a.compliance_rate == Decimal("100.00")
+        assert "compliance_rate" not in {f.name
+                                          for f in ComplianceRequirement._meta.get_fields()}
+
+
+class TestComplianceCheckModel:
+    def test_str_is_the_result_and_the_date(self, compliance_check_a):
+        assert str(compliance_check_a) == (
+            f"Partial · {compliance_check_a.performed_on.isoformat()}")
+
+    def test_the_defaults_a_fresh_check_carries(self, compliance_requirement_a):
+        from apps.scm.models import ComplianceCheck
+        check = ComplianceCheck.objects.create(requirement=compliance_requirement_a)
+        assert check.result == "pass"
+        assert check.performed_on == _localdate()
+        assert check.due_date is None
+
+    def test_a_check_cannot_be_dated_in_the_future(self, compliance_requirement_a):
+        """Post-dating one would let an unperformed inspection mark a requirement compliant today."""
+        from apps.scm.models import ComplianceCheck
+        check = ComplianceCheck(requirement=compliance_requirement_a, performed_on=_localdate(1))
+        with pytest.raises(ValidationError) as exc:
+            check.clean()
+        assert "performed_on" in exc.value.error_dict
+
+    def test_a_cross_tenant_evidence_document_is_refused_through_the_parent(
+        self, compliance_requirement_a, evidence_document_b,
+    ):
+        """This model has no tenant column, so ``TenantModelForm`` cannot scope the dropdown for it
+        and the ordinary guard does not apply automatically."""
+        from apps.scm.models import ComplianceCheck
+        check = ComplianceCheck(requirement=compliance_requirement_a,
+                                evidence=evidence_document_b)
+        with pytest.raises(ValidationError) as exc:
+            check.clean()
+        assert "evidence" in exc.value.error_dict
+
+    def test_a_same_tenant_evidence_document_is_accepted(self, compliance_requirement_a,
+                                                          evidence_document_a):
+        from apps.scm.models import ComplianceCheck
+        ComplianceCheck(requirement=compliance_requirement_a,
+                        evidence=evidence_document_a).clean()
+
+    def test_a_parentless_check_does_not_raise_from_inside_validation(self):
+        from apps.scm.models import ComplianceCheck
+        ComplianceCheck().clean()
+
+    def test_the_check_carries_no_tenant_column_of_its_own(self):
+        """A pure child of one parent, reached through ``requirement.tenant`` — the ``TrackingEvent``
+        / ``InspectionResult`` precedent."""
+        from apps.scm.models import ComplianceCheck
+        names = {f.name for f in ComplianceCheck._meta.get_fields()}
+        assert "tenant" not in names and "number" not in names
+
+    def test_every_result_has_a_colour_named_badge_class(self):
+        from apps.scm.models import ComplianceCheck
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        for value, _label in ComplianceCheck.RESULT_CHOICES:
+            assert ComplianceCheck.RESULT_CSS[value] in allowed, value
+
+    def test_deleting_the_requirement_takes_its_proof_history_with_it(self,
+                                                                      compliance_requirement_a,
+                                                                      compliance_check_a):
+        """CASCADE, because a check's meaning IS its requirement's — which is exactly why the delete
+        route is admin-gated and says so."""
+        from apps.scm.models import ComplianceCheck
+        compliance_requirement_a.delete()
+        assert not ComplianceCheck.objects.filter(pk=compliance_check_a.pk).exists()
+
+    def test_deleting_the_evidence_file_keeps_the_recorded_cycle(self, compliance_requirement_a,
+                                                                  evidence_document_a):
+        from apps.scm.models import ComplianceCheck
+        check = ComplianceCheck.objects.create(requirement=compliance_requirement_a,
+                                               evidence=evidence_document_a)
+        evidence_document_a.delete()
+        check.refresh_from_db()
+        assert check.evidence_id is None
+
+
+class TestSustainabilityAssessmentModel:
+    def test_assessment_numbers_are_sequential_per_tenant(self, tenant_a, supplier_a, vendor_a):
+        from apps.scm.models import SustainabilityAssessment
+        a1 = SustainabilityAssessment.objects.create(tenant=tenant_a, party=supplier_a,
+                                                     assessment_date=_localdate())
+        a2 = SustainabilityAssessment.objects.create(tenant=tenant_a, party=vendor_a,
+                                                     assessment_date=_localdate())
+        assert (a1.number, a2.number) == ("ESG-00001", "ESG-00002")
+
+    def test_str_carries_the_party_and_the_derived_medal(self, sustainability_assessment_a,
+                                                          supplier_a):
+        assert str(sustainability_assessment_a) == (
+            f"{sustainability_assessment_a.number} · {supplier_a.name} (Gold)")
+
+    def test_the_medal_is_the_mean_of_the_themes_that_were_scored(self,
+                                                                   sustainability_assessment_a):
+        # (72 + 68 + 75 + 61) / 4 = 69 -> gold (the 65 band).
+        assert sustainability_assessment_a.overall_score == 69
+        assert sustainability_assessment_a.rating == "gold"
+        assert sustainability_assessment_a.maturity_level == "advanced"
+
+    def test_the_carbon_score_does_NOT_vote_on_the_medal(self, sustainability_assessment_a):
+        """EcoVadis scores Carbon on a separate scorecard, and so does this model: a strong carbon
+        page must not lift a supplier's medal over a weak labour theme."""
+        from apps.scm.models import SustainabilityAssessment
+        assert "carbon_score" not in SustainabilityAssessment.THEMES
+        sustainability_assessment_a.carbon_score = 100
+        sustainability_assessment_a.save()
+        assert sustainability_assessment_a.overall_score == 69
+        sustainability_assessment_a.carbon_score = 0
+        sustainability_assessment_a.save()
+        assert sustainability_assessment_a.overall_score == 69
+
+    def test_an_unanswered_theme_is_not_averaged_in_as_a_zero(self, tenant_a, supplier_a):
+        """Counting it as 0 would quietly convert "we did not ask" into "they failed"."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate(),
+            environment_score=80, ethics_score=90)
+        assert row.overall_score == 85
+        assert row.rating == "platinum"
+
+    def test_a_scorecard_with_nothing_scored_answers_None_not_zero(self, unscored_assessment_a):
+        assert unscored_assessment_a.overall_score is None
+        assert unscored_assessment_a.rating == "none"
+        # "Insufficient" is a VERDICT (the bottom rung); an assessment that measured nothing has not
+        # earned one, so the page prints an em dash instead.
+        assert unscored_assessment_a.maturity_level is None
+
+    @pytest.mark.parametrize("score,medal,maturity", [
+        (100, "platinum", "leader"), (85, "platinum", "leader"), (84, "gold", "advanced"),
+        (65, "gold", "advanced"), (64, "silver", "intermediate"), (45, "silver", "intermediate"),
+        (44, "bronze", "beginner"), (25, "bronze", "beginner"), (24, "none", "insufficient"),
+        (0, "none", "insufficient"),
+    ])
+    def test_every_band_boundary_lands_on_the_right_rung(self, tenant_a, supplier_a, score, medal,
+                                                          maturity):
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate(),
+            environment_score=score)
+        assert (row.rating, row.maturity_level) == (medal, maturity)
+
+    def test_the_rounding_is_half_UP_because_the_cut_offs_are_hard_edges(self, tenant_a,
+                                                                         supplier_a):
+        """With banker's rounding a mean of 84.5 quietly does NOT become platinum. Half-up makes the
+        boundary one rule the whole way up the ladder."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate(),
+            environment_score=84, ethics_score=85)
+        assert row.overall_score == 85
+        assert row.rating == "platinum"
+
+    def test_the_derived_pair_cannot_be_hand_set_from_a_shell_a_seeder_or_a_test(
+        self, tenant_a, supplier_a,
+    ):
+        """``save()`` calls ``recompute_rating()`` on EVERY path, so no writer can store a headline
+        that disagrees with the themes under it."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate(),
+            environment_score=10, overall_score=99, rating="platinum")
+        row.refresh_from_db()
+        assert row.overall_score == 10
+        assert row.rating == "none"
+
+    def test_a_narrow_update_fields_save_carries_the_derived_pair_along(self, tenant_a,
+                                                                        supplier_a):
+        """A caller passing ``update_fields=["environment_score"]`` would otherwise persist the new
+        theme and leave the stale medal behind."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate(),
+            environment_score=10)
+        assert row.rating == "none"
+        row.environment_score = 90
+        row.save(update_fields=["environment_score"])
+        row.refresh_from_db()
+        assert row.overall_score == 90 and row.rating == "platinum"
+
+    def test_an_EMPTY_update_fields_stays_empty_so_a_cancelled_save_is_not_resurrected(
+        self, sustainability_assessment_a,
+    ):
+        """Django reads an empty list as "skip the write entirely"; widening it would resurrect a
+        save the caller deliberately cancelled."""
+        sustainability_assessment_a.environment_score = 5
+        sustainability_assessment_a.save(update_fields=[])
+        sustainability_assessment_a.refresh_from_db()
+        assert sustainability_assessment_a.environment_score == 72
+
+    def test_total_declared_tco2e_is_None_when_the_supplier_reported_nothing(self,
+                                                                              unscored_assessment_a):
+        """"Reported nothing" and "reported zero emissions" are different facts, and a carbon page
+        cannot afford to lose that distinction."""
+        assert unscored_assessment_a.total_declared_tco2e is None
+
+    def test_total_declared_tco2e_adds_only_the_scopes_that_are_set(self,
+                                                                     sustainability_assessment_a):
+        assert sustainability_assessment_a.total_declared_tco2e == Decimal("23060.750")
+        sustainability_assessment_a.scope3_tco2e = None
+        assert sustainability_assessment_a.total_declared_tco2e == Decimal("4420.750")
+
+    def test_is_expired_reads_the_validity_date_and_takes_an_injected_today(
+        self, sustainability_assessment_a,
+    ):
+        assert sustainability_assessment_a.is_expired() is False
+        assert sustainability_assessment_a.is_expired(today=_localdate(400)) is True
+
+    def test_a_rating_with_no_stated_validity_never_expires(self, unscored_assessment_a):
+        assert unscored_assessment_a.valid_until is None
+        assert unscored_assessment_a.is_expired(today=_localdate(9000)) is False
+
+    def test_the_status_may_legitimately_disagree_with_the_validity_date(self,
+                                                                         sustainability_assessment_a):
+        """Nothing rolls this status, so a row can read "validated" while ``is_expired()`` is already
+        True: the date is the truth, the status is the human's note about their own work."""
+        sustainability_assessment_a.valid_until = _localdate(-1)
+        sustainability_assessment_a.save()
+        assert sustainability_assessment_a.status == "validated"
+        assert sustainability_assessment_a.is_expired() is True
+
+    def test_a_validity_window_cannot_close_before_it_opens(self, tenant_a, supplier_a):
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment(tenant=tenant_a, party=supplier_a,
+                                       assessment_date=_localdate(),
+                                       valid_until=_localdate(-1))
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "valid_until" in exc.value.error_dict
+
+    def test_a_third_party_rating_has_to_name_its_provider(self, tenant_a, supplier_a):
+        """The whole reason that source outranks a self-assessment is that somebody independent put
+        their name to it."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment(tenant=tenant_a, party=supplier_a,
+                                       assessment_date=_localdate(),
+                                       source="third_party_rating", provider="   ")
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert "provider" in exc.value.error_dict
+
+    @pytest.mark.parametrize("field,fixture_name", [("party", "supplier_b"),
+                                                     ("document", "evidence_document_b")])
+    def test_a_cross_tenant_pointer_is_refused(self, request, tenant_a, field, fixture_name):
+        from apps.scm.models import SustainabilityAssessment
+        other = request.getfixturevalue(fixture_name)
+        kwargs = {"party": request.getfixturevalue("supplier_a")} if field != "party" else {}
+        kwargs[field] = other
+        row = SustainabilityAssessment(tenant=tenant_a, assessment_date=_localdate(), **kwargs)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert field in exc.value.error_dict
+
+    def test_a_theme_is_bounded_zero_to_one_hundred_at_the_field(self, tenant_a, supplier_a):
+        """Bounded so a crafted POST cannot store a 900-point theme that would drag the derived
+        medal off the ladder."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment(tenant=tenant_a, party=supplier_a,
+                                       assessment_date=_localdate(), environment_score=900)
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean(exclude=["number"])
+        assert "environment_score" in exc.value.error_dict
+
+    def test_the_carbon_reporting_year_is_capped(self, tenant_a, supplier_a):
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment(tenant=tenant_a, party=supplier_a,
+                                       assessment_date=_localdate(),
+                                       carbon_reporting_year=4294967295)
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean(exclude=["number"])
+        assert "carbon_reporting_year" in exc.value.error_dict
+
+    def test_the_assessment_goes_with_the_party_it_is_about(self, sustainability_assessment_a,
+                                                             supplier_a):
+        """A scorecard for a supplier that no longer exists is an orphan nobody can act on."""
+        from apps.scm.models import SustainabilityAssessment
+        supplier_a.delete()
+        assert not SustainabilityAssessment.objects.filter(
+            pk=sustainability_assessment_a.pk).exists()
+
+    def test_recompute_rating_can_write_the_derived_pair_on_its_own(self, tenant_a, supplier_a):
+        """save=True is the standalone re-derivation path — the admin action and any repair
+        script call it directly rather than round-tripping the whole row through a form."""
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate(),
+            environment_score=10)
+        assert row.rating == "none"
+        SustainabilityAssessment.objects.filter(pk=row.pk).update(environment_score=95)
+        row.refresh_from_db()
+        row.recompute_rating(save=True)
+        row.refresh_from_db()
+        assert row.overall_score == 95 and row.rating == "platinum"
+
+    def test_every_rating_and_status_has_a_colour_named_badge_class(self):
+        from apps.scm.models import SustainabilityAssessment
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        for value, _label in SustainabilityAssessment.RATING_CHOICES:
+            assert SustainabilityAssessment.RATING_CSS[value] in allowed, value
+        for value, _label in SustainabilityAssessment.STATUS_CHOICES:
+            assert SustainabilityAssessment.STATUS_CSS[value] in allowed, value
+
+
+class TestSupplierContractAmendmentHierarchy:
+    """The 4.2 extension 4.12 added: ``parent_contract`` + ``owner``, and the guards on the walk.
+
+    The cycle check is not defensive padding — the contract detail page WALKS ``parent_contract``
+    upward to render the agreement's ancestry, and a cycle turns that walk into a hung worker.
+    """
+
+    def test_a_contract_cannot_be_its_own_master_agreement(self, contract_a):
+        contract_a.parent_contract = contract_a
+        with pytest.raises(ValidationError) as exc:
+            contract_a.clean()
+        assert "parent_contract" in exc.value.error_dict
+        assert "its own master" in str(exc.value.error_dict["parent_contract"][0].message)
+
+    def test_a_master_agreement_in_another_workspace_is_refused(self, contract_a, contract_b):
+        contract_a.parent_contract = contract_b
+        with pytest.raises(ValidationError) as exc:
+            contract_a.clean()
+        assert "parent_contract" in exc.value.error_dict
+        assert "another workspace" in str(exc.value.error_dict["parent_contract"][0].message)
+
+    def test_a_three_node_cycle_is_refused(self, tenant_a, supplier_a, contract_a):
+        """A -> B -> C, then pointing A at C. The seen-set catches the loop the hop cap would not
+        notice until it had already walked ten pointless levels."""
+        from apps.scm.models import SupplierContract
+        b = SupplierContract.objects.create(tenant=tenant_a, party=supplier_a, title="Amendment 1",
+                                            parent_contract=contract_a)
+        c = SupplierContract.objects.create(tenant=tenant_a, party=supplier_a, title="Amendment 2",
+                                            parent_contract=b)
+        contract_a.parent_contract = c
+        with pytest.raises(ValidationError) as exc:
+            contract_a.clean()
+        assert "part of a cycle" in str(exc.value.error_dict["parent_contract"][0].message)
+
+    def test_an_ordinary_amendment_validates_and_is_reachable_from_its_master(self, tenant_a,
+                                                                              supplier_a,
+                                                                              contract_a,
+                                                                              admin_user):
+        from apps.scm.models import SupplierContract
+        amendment = SupplierContract(tenant=tenant_a, party=supplier_a,
+                                     title="Amendment 1 — 2026 price schedule",
+                                     parent_contract=contract_a, owner=admin_user)
+        amendment.full_clean(exclude=["number"])
+        amendment.save()
+        assert list(contract_a.amendments.all()) == [amendment]
+
+    def test_deleting_the_master_orphans_the_amendment_rather_than_destroying_it(self, tenant_a,
+                                                                                  supplier_a,
+                                                                                  contract_a):
+        """An amendment / SOW / renewal is a separately-signed instrument."""
+        from apps.scm.models import SupplierContract
+        amendment = SupplierContract.objects.create(tenant=tenant_a, party=supplier_a,
+                                                    title="Amendment 1",
+                                                    parent_contract=contract_a)
+        contract_a.delete()
+        amendment.refresh_from_db()
+        assert amendment.parent_contract_id is None
+
+    def test_deactivating_the_owner_does_not_delete_the_contract(self, tenant_a, supplier_a,
+                                                                  contract_a, member_user):
+        from apps.scm.models import SupplierContract
+        contract_a.owner = member_user
+        contract_a.save(update_fields=["owner"])
+        member_user.delete()
+        contract_a.refresh_from_db()
+        assert contract_a.owner_id is None
+        assert SupplierContract.objects.filter(pk=contract_a.pk).exists()
+
+    def test_the_logistics_contract_type_the_contract_repository_bullet_needs_exists(self):
+        from apps.scm.models import SupplierContract
+        assert ("logistics", "Logistics / Carrier Agreement") in SupplierContract.TYPE_CHOICES
+
+    def test_every_contract_status_has_a_colour_named_badge_class(self):
+        from apps.scm.models import SupplierContract
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        for value, _label in SupplierContract.STATUS_CHOICES:
+            assert SupplierContract.STATUS_CSS[value] in allowed, value
+
+
+class TestComplianceNothingIsStored:
+    """Ledger-adjacent code: every figure a human can compute two ways has ONE place it comes from.
+
+    A number that is a column AND arithmetic is a number that can disagree with itself.
+    """
+
+    def test_the_licence_holds_no_remaining_or_utilization_columns(self):
+        from apps.scm.models import TradeLicense
+        columns = {f.name for f in TradeLicense._meta.get_fields()}
+        for derived in ("remaining_value", "remaining_quantity", "utilization_pct", "status_css",
+                        "days_to_expiry"):
+            assert derived not in columns, derived
+
+    def test_the_licences_stored_derivations_and_stamps_are_all_editable_False(self):
+        """``used_value`` / ``used_quantity`` ARE columns — a cache with a stated invalidation path —
+        but no form may type one."""
+        from apps.scm.models import TradeLicense
+        for name in ("number", "status", "used_value", "used_quantity", "approved_at",
+                     "approved_by", "revoked_at", "revocation_reason"):
+            assert TradeLicense._meta.get_field(name).editable is False, name
+
+    def test_the_document_holds_no_total_columns(self):
+        from apps.scm.models import TradeDocument
+        columns = {f.name for f in TradeDocument._meta.get_fields()}
+        for derived in ("lines_total", "declared_value_matches", "is_charging", "is_editable"):
+            assert derived not in columns, derived
+
+    def test_the_documents_lifecycle_columns_are_all_editable_False(self):
+        from apps.scm.models import TradeDocument
+        for name in ("number", "status", "issued_at", "issued_by", "void_reason"):
+            assert TradeDocument._meta.get_field(name).editable is False, name
+
+    def test_the_requirement_holds_no_rate_or_window_columns(self):
+        from apps.scm.models import ComplianceRequirement
+        columns = {f.name for f in ComplianceRequirement._meta.get_fields()}
+        for derived in ("compliance_rate", "days_to_due", "is_overdue", "is_due_soon",
+                        "scope_label"):
+            assert derived not in columns, derived
+
+    def test_the_requirements_proof_stamp_is_editable_False(self):
+        """``last_checked_on`` is a record of an EVENT, written only by ``record_check()`` — which is
+        why it is a column while ``compliance_rate`` is not (L22: a proof date somebody can type is
+        not proof)."""
+        from apps.scm.models import ComplianceRequirement
+        for name in ("number", "last_checked_on"):
+            assert ComplianceRequirement._meta.get_field(name).editable is False, name
+
+    def test_who_performed_a_check_is_stamped_not_typed(self):
+        from apps.scm.models import ComplianceCheck
+        assert ComplianceCheck._meta.get_field("performed_by").editable is False
+
+    def test_the_assessment_holds_no_maturity_or_carbon_total_columns(self):
+        from apps.scm.models import SustainabilityAssessment
+        columns = {f.name for f in SustainabilityAssessment._meta.get_fields()}
+        for derived in ("maturity_level", "total_declared_tco2e", "rating_css"):
+            assert derived not in columns, derived
+
+    def test_the_assessments_derived_headline_is_editable_False(self):
+        """``overall_score`` / ``rating`` earn columns because the list page FILTERS and ORDERS on
+        the medal and there is an index behind it — you cannot index a property."""
+        from apps.scm.models import SustainabilityAssessment
+        for name in ("number", "overall_score", "rating", "assessed_by"):
+            assert SustainabilityAssessment._meta.get_field(name).editable is False, name
+
+    def test_the_carbon_report_stores_nothing_at_all(self):
+        """The freight-emissions report is COMPUTED over 4.6's rows — 4.12 adds no emissions table,
+        and nothing in the sub-module writes a StockMove or a JournalEntry (L29)."""
+        from django.apps import apps as django_apps
+        names = {model.__name__ for model in django_apps.get_app_config("scm").get_models()}
+        for invented in ("CarbonFootprint", "EmissionRecord", "FreightEmission"):
+            assert invented not in names, invented
+
+    def test_the_emission_factors_are_one_table_with_two_readers(self):
+        """The report multiplies them out to draw the page and the tests multiply them out to assert
+        the page is right. A second copy drifted within one build — four of seven values disagreed."""
+        from apps.scm.models.ContractCompliance._choices import (CARBON_METHOD_NOTE,
+                                                                 EMISSION_FACTORS,
+                                                                 EMISSION_FACTOR_SOURCE)
+        from apps.scm.models.TransportationManagement.Carriers import MODE_CHOICES
+        assert set(EMISSION_FACTORS) <= {value for value, _ in MODE_CHOICES}
+        assert all(factor > 0 for factor in EMISSION_FACTORS.values())
+        # The decision-grade signal is the GAP between modes, not the second digit of any one factor.
+        assert EMISSION_FACTORS["air"] > EMISSION_FACTORS["truckload"] > EMISSION_FACTORS["ocean"]
+        assert "GLEC" in EMISSION_FACTOR_SOURCE
+        assert "Screening estimate only" in CARBON_METHOD_NOTE
