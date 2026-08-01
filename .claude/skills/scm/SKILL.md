@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). and 4.12 Contract & Compliance Management (a standing-obligation register whose CLM obligations point back at 4.2's contracts rather than duplicating them, import/export licences that decrement as documents are issued under them, trade paperwork hung off 4.6's shipments with HS codes snapshotted at issue, supplier ESG scorecards, and a GLEC/ISO-14083 freight-emissions estimate that reports its coverage gaps instead of a confident zero). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,8 +9,8 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics.** 4.12–4.19 are
-roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management.**
+4.13–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -785,6 +785,92 @@ re-measuring — identical). List pages 9–12. `capture_snapshots` is ~8.5 quer
 an explicit tenant-admin POST. Deliberately **not** memoised on `(metric, scope, period)`: `compute_metric` reads
 the target's own parameters and bands, so two targets sharing a metric can legitimately differ.
 
+## 4.12 Contract & Compliance Management  (`apps/scm/*/ContractCompliance/`, templates `templates/scm/compliance/`)
+
+**Built by SUBTRACTION as much as addition.** 4.2's `SupplierContract` already WAS the contract repository
+(party, NDAs/SLAs/master agreements, dates, value, terms, renewal window, a `core.Document` FK), 4.9 already
+owned audit -> finding -> CAPA, and Module 13 owns folders/versioning/retention. So the **Contract Repository
+bullet points at the EXISTING `scm:contract_list`** - the same call 4.4 made pointing its Bin/Location bullet
+at 4.3's `scm:location_list` - and 4.12 builds only what had no home.
+
+**The 4.2 extension (additive, nullable, behaviour-neutral).** `SupplierContract` gains exactly three things:
+`parent_contract` (self-FK, **SET_NULL** - an amendment is a separately-signed instrument, so deleting the
+master must orphan it, never destroy it), `owner`, and a `logistics` entry in `TYPE_CHOICES`. `clean()` refuses
+a self-parent, a cross-tenant parent and a **cycle** (10-hop cap + a seen-set) - the detail page walks that
+chain to render ancestry, and a cycle there is a hung worker, not a caught error. It also gained `STATUS_CSS` +
+`status_css`, which replaced three hand-written colour ladders.
+
+**Models** (`models/ContractCompliance/`; choices + the emission-factor table live in `_choices.py`):
+
+* **`ComplianceRequirement`** [`CR-`] + child **`ComplianceCheck`** (`ComplianceRequirements.py`) - the
+  standing-obligation register (Intelex shape: source, framework, jurisdiction, applicability, owner,
+  recurrence, next due, workflow status). **A CLM contract obligation is `source="contract"` with an FK to
+  4.2's contract, not a second obligation table** - the same call 4.9 made when an audit finding became a
+  `NonConformance`. Scope is **five TYPED nullable FKs** (`org_unit`/`party`/`location`/`item`, or none for
+  tenant-wide), never one untyped int: a bare id carries neither a tenant nor a type. `record_check()` is the
+  only writer of `compliant`/`non_compliant` and of `last_checked_on`, and advances `next_due_date` by
+  `frequency` **anchored on the check's `due_date`**, so a late proof does not drag the schedule forward.
+  `compliance_rate` returns **`None`, not 0**, with no checks. `ComplianceCheck` is **tenant-less** - reached
+  only via `requirement__tenant` - has no list/detail page (it is a timeline on the parent), and stamps
+  `performed_by` from `request.user`.
+* **`TradeDocument`** [`TD-`] + child **`TradeDocumentLine`** (`TradeDocuments.py`) - import/export paperwork
+  FK'd to **4.6's `Shipment`**, never a second consignment. Lines **snapshot `hs_code`/`country_of_origin` at
+  issue**: a filed declaration records what was declared, not whatever the master says later. `license` is
+  **`PROTECT`**. `CHARGING_STATUSES = ("issued", "submitted", "accepted")`.
+* **`TradeLicense`** [`LIC-`] (`TradeLicenses.py`) - the category's signature feature, **real-time
+  decrementing**: issuing a document charges `used_value`/`used_quantity`, voiding refunds them.
+  `recompute_usage()` runs **TWO single-grain aggregates on purpose** - summing `declared_value` and
+  `lines__quantity` together would fan the document row out per line and charge a two-line invoice twice its
+  face value. `status` is `editable=False` (draft -> applied -> active -> revoked).
+* **`SustainabilityAssessment`** [`ESG-`] (`SustainabilityAssessments.py`) - EcoVadis four-theme scorecard on
+  `core.Party` with a **derived** `overall_score`/`rating` (`editable=False`, so the headline cannot disagree
+  with its components), Assent-style declaration flags, and supplier-declared Scope 1/2/3.
+
+**The computed report - `scm:carbon_footprint_report` (+ `_export`), NO table.** GLEC v3.2 / ISO 14083 tonne-km
+= `(weight_kg / 1000) x Load.distance_km x EMISSION_FACTORS[mode]`; 4.6 stored `distance_km`/`weight_kg`
+expressly for this. The factor table lives **once**, in `_choices.py`, and is a **CLOSED set**: a shipment with
+no load, no distance, no weight, or a mode with no factor is **counted as EXCLUDED and reported**, never scored
+as zero - a green zero meaning "we had no data" is the 4.11 `projected_stockout_count` defect, and worse here
+because it looks like an environmental result. Totals are `None`, not 0, when nothing is measurable. The page
+renders its own arithmetic, its factor provenance and its limitations, and never says "AI"; statutory CSRD
+disclosure is `apps/accounting`'s (L29). The date window is applied in **SQL**, not just in the Python loop.
+
+**Routes** - `compliance-requirements/` (+ `<pk>/checks/add/`), `compliance-checks/<pk>/edit|delete/`,
+`trade-licenses/` (+ `submit`/`approve`/`revoke`/`recompute`), `trade-documents/` (+ `issue`/`submit`/
+`accept`/`void`/`print`), `sustainability-assessments/`, `carbon-footprint/` (+ `export/`). Verbs are POST-only
+(405 on GET) and take the lock-apply-audit shape; an empty diff is `messages.info` and **no audit row**.
+`tradelicense_delete` catches `ProtectedError` because of the PROTECT FK above.
+
+**Security posture worth keeping** (each was a real finding; each is now regression-locked in the suite):
+
+* `get_object_or_404` runs **before** any guard that can return - a reasonless `revoke`/`void` POST to a
+  foreign pk must 404, not 302. An invariant with a precondition is not one.
+* `ComplianceRequirementForm.status` choices are narrowed to `applicable`/`in_progress`/`not_applicable`/
+  `retired` (+ the stored value). Narrowing `.choices` is **enforcement** - `ChoiceField.validate` refuses a
+  crafted POST - and without it any member could mark an overdue obligation compliant with zero evidence.
+* `TradeLicenseForm(may_edit_controls=False)` **pops** `authorized_value`/`authorized_quantity`/`expiry_date`
+  once a licence is in force (popped => absent from `cleaned_data`, so a crafted POST cannot set them either).
+  Approving is admin-gated, so widening the ceiling must be too.
+* The CSV export routes **every** cell through 4.11's `_csv_safe` - carrier labels are `Party.name`, free text.
+* `?date_to=0001-01-01` is clamped (the `-365 days` default would `OverflowError`) and `?carrier=` goes through
+  `as_db_int`, not `isdecimal()`.
+
+**Seeder** - `_seed_compliance_tenant()`: 2 licences (one active at ~5% drawn, one 21 days from expiry against
+a 60-day notice window so it lands on *Expiring Soon*), 2 trade documents + 4 HS-coded lines, 6 requirements
+across every `source` and 5 scopes (one overdue, one due-soon, one not-applicable-with-reason), 3 checks, 2 ESG
+assessments, plus `owner` back-filled and one amendment on 4.2's contracts. **Statuses are never typed** -
+licences walk the real ladder and requirements move only through `record_check()`. Its deletes go at the TOP of
+`_flush()`, licences LAST (the PROTECT FK). Carbon coverage seeds at 50% on purpose: `SHP-00002` has a weight
+but no load, a genuine gap the page is supposed to report.
+
+**Deliberately out of scope** (recorded in the model docstrings): the `scm.Item` trade-classification columns
+(`hs_code`/`country_of_origin`/hazmat) - the line already snapshots them, and a master would be a second source
+of truth whose first "helpful" default would silently rewrite a filed declaration; denied-party/sanctions
+screening; licence and document determination; AES/EDI/TRACES filing; per-form PDF layouts; clause library;
+supplier e-sign; AI extraction; a frozen carbon ledger; multi-tier mapping; SDS/GHS library. Parked to named
+siblings: landed cost -> 4.18, compliance dashboards -> 4.11, ESG *risk* -> 4.2, audits/CAPA -> 4.9, EDI ->
+4.19, GDPR engine -> Module 13, statutory CSRD -> `apps/accounting`.
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -839,4 +925,10 @@ Logistics KPIs `scm:logistics_kpis`, Financial Reporting `scm:margin_analytics` 
 Predictive Analytics `scm:disruption_risk`. **None of 4.11's three models takes a sidebar key** — `KpiTarget`
 and `KpiSnapshot` are masters reached from the analytics pages (the `InspectionPlan`/`WorkCenter`/`ReorderRule`/
 `ReturnReason` precedent) and the alert inbox is reached from the open-count chip every report page carries.
+**`LIVE_LINKS["4.12"]`** -> Contract Repository **`scm:contract_list`** (4.2's EXISTING list, extended - the
+4.4->4.3 `scm:location_list` precedent, NOT a second contract table), Compliance Tracking
+`scm:compliancerequirement_list`, Trade Documentation `scm:tradedocument_list`, License Management
+`scm:tradelicense_list`, Sustainability Tracking `scm:sustainabilityassessment_list`. The **carbon report is
+NOT a sixth key** - 4.12 has five NavERP.md bullets and the sidebar mirrors that file exactly, so
+`scm:carbon_footprint_report` is reached from a chip in the Sustainability list header.
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
