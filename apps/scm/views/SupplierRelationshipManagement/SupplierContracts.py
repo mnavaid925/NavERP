@@ -26,7 +26,8 @@ def _roll_contract_statuses(request, qs):
 
 @login_required
 def contract_list(request):
-    qs = SupplierContract.objects.filter(tenant=request.tenant).select_related("party", "currency")
+    qs = SupplierContract.objects.filter(tenant=request.tenant).select_related(
+        "party", "currency", "parent_contract", "owner")
     _roll_contract_statuses(request, qs)
     return crud_list(
         request, qs, "scm/srm/contract/list.html",
@@ -68,13 +69,18 @@ def contract_edit(request, pk):
 @login_required
 def contract_detail(request, pk):
     obj = get_object_or_404(
-        SupplierContract.objects.select_related("party", "currency", "payment_terms", "document"),
+        SupplierContract.objects.select_related(
+            "party", "currency", "payment_terms", "document", "parent_contract", "owner"
+        ).prefetch_related("amendments"),
         pk=pk, tenant=request.tenant)
     obj.refresh_status()
     return render(request, "scm/srm/contract/detail.html", {
         "obj": obj,
         "days_to_expiry": obj.days_to_expiry(),
         "expiring_soon": obj.is_expiring_soon(),
+        # 4.12: the amendment hierarchy. `amendments` is prefetched above so the detail page's
+        # child list costs one extra query rather than one per row.
+        "amendments": obj.amendments.all(),
     })
 
 
