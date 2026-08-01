@@ -60,8 +60,8 @@ REQUISITION_LINES = [
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns + 4.11 analytics demo data — idempotent (skips a tenant that already "
-            "has the rows each pass creates).")
+            "4.10 returns + 4.11 analytics + 4.12 contract & compliance demo data — idempotent "
+            "(skips a tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -118,11 +118,18 @@ class Command(BaseCommand):
             # those must already be seeded or the snapshots freeze a network that is still empty.
             # It writes nothing back: no StockMove, no JournalEntry, no change to any 4.1-4.10 row.
             self._seed_analytics_tenant(tenant)
+            # 4.12 AFTER 4.11, and after everything it points at: it hangs standing obligations off
+            # 4.2's SupplierContract, raises trade documents against 4.6's shipments and carriers,
+            # and its carbon report is computed over 4.6's Load.distance_km x Shipment.weight_kg —
+            # which 4.6 stored expressly for this. It also back-fills the two columns 4.12 added to
+            # 4.2's contracts (`owner` and the `parent_contract` amendment link), so those contracts
+            # have to exist first. Like 4.11 it writes no StockMove and no JournalEntry.
+            self._seed_compliance_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns + 4.11 analytics seed complete."))
+            "4.10 returns + 4.11 analytics + 4.12 contract & compliance seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -895,10 +902,35 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.11 Analytics FIRST (newest sub-module). Unlike every block below it, NOTHING here is
+        # 4.12 Contract & Compliance FIRST (newest sub-module). Exactly ONE edge inside it is
+        # PROTECT and it decides the whole order: TradeDocument.license is PROTECT onto TradeLicense,
+        # because the record of what actually moved under a licence IS that licence's audit trail and
+        # its consumed balance, so losing it must never be one click away. That puts the licences
+        # LAST of the four models — documents and their lines have to clear first or every --flush
+        # raises ProtectedError. Everything else here either CASCADEs from its own parent (checks
+        # from their requirement, lines from their document) or is SET_NULL (a requirement's
+        # contract/license/document pointers, a document's shipment/carrier/order/party pointers), so
+        # nothing else in 4.12 can block a deletion further down.
+        #
+        # The two COLUMNS 4.12 added to 4.2's SupplierContract are deliberately not unwound here:
+        # `owner` is SET_NULL onto a user this seeder never created, `parent_contract` is SET_NULL
+        # onto another contract, and the whole SupplierContract table is deleted in the 4.2 block
+        # below anyway — a hand-written UPDATE first would only be a slower way to reach the same
+        # empty table.
+        from apps.scm.models import (ComplianceCheck, ComplianceRequirement,
+                                     SustainabilityAssessment, TradeDocument, TradeDocumentLine,
+                                     TradeLicense)
+        ComplianceCheck.objects.all().delete()
+        ComplianceRequirement.objects.all().delete()
+        TradeDocumentLine.objects.all().delete()
+        TradeDocument.objects.all().delete()
+        TradeLicense.objects.all().delete()
+        SustainabilityAssessment.objects.all().delete()
+
+        # 4.11 Analytics NEXT. Unlike every block below it, NOTHING here is
         # PROTECT — KpiSnapshot.kpi_target is CASCADE and all six of SupplyChainAlert's subject FKs
         # plus KpiTarget's four scope FKs are SET_NULL — so these rows could not block any deletion
-        # further down. They still go first, because a snapshot or alert left pointing at a deleted
+        # further down. They still go this early, because a snapshot or alert left pointing at a deleted
         # item reads as a measurement of something that no longer exists, and 4.11 is the one
         # sub-module whose whole value is that its numbers are traceable. Snapshots before targets
         # so the intent reads top-down even though the cascade would handle it.
@@ -1068,7 +1100,7 @@ class Command(BaseCommand):
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
-            f"demand planning + manufacturing + quality + returns rows "
+            f"demand planning + manufacturing + quality + returns + analytics + compliance rows "
             f"(+{bill_count + freight_bill_count} linked accounting bill(s), "
             f"+{return_credit_count} linked credit note(s))."))
 
@@ -2320,3 +2352,412 @@ class Command(BaseCommand):
             f"{summary.get('updated', 0)} re-fired, "
             f"{summary.get('below_impact', 0)} below the impact floor, "
             f"{summary.get('skipped', 0)} metric errors.")
+
+    # ------------------------------------------------------------ 4.12 Contract & Compliance Mgmt
+    def _seed_compliance_tenant(self, tenant):
+        """4.12 demo rows: the licence register, the paperwork issued under it, the standing-
+        obligation register with its proof history, two ESG scorecards — plus the two columns 4.12
+        added to 4.2's ``SupplierContract`` (a named ``owner``, and one real amendment hanging off
+        the master agreement through ``parent_contract``).
+
+        Idempotent via a ``ComplianceRequirement`` guard. Runs LAST: obligations point at 4.2's
+        contracts, trade documents at 4.6's shipments and carriers, and the carbon report multiplies
+        4.6's ``Load.distance_km`` by ``Shipment.weight_kg`` — so every one of those must already
+        exist. It REFUSES rather than half-seeds when they do not (the 4.10/4.11 posture).
+
+        **Nothing here hand-sets a workflow status.** ``TradeLicense.status`` and
+        ``TradeDocument.status`` are ``editable=False``, so they are moved along exactly the path the
+        verb routes take: draft -> applied -> active, and then ``refresh_status()`` lets the dates
+        have the last word (which is why one of the two licences comes out amber rather than green);
+        a document reaches ``issued`` only after ``can_charge()`` says yes, with ``recompute_usage()``
+        re-deriving the balance afterwards rather than a ``+=``. A requirement's standing is moved
+        only by ``record_check()``. So ``used_value``, ``used_quantity``, ``overall_score`` and
+        ``rating`` on the seeded rows are what the app itself derived — a human can reproduce every
+        one of them by pressing the button on the page, which is the whole point of a seeded
+        workspace.
+
+        Every row goes through ``full_clean()``, so the seed PROVES the scope / date-ladder /
+        cross-tenant validation instead of side-stepping it (the 4.11 seeder posture). ``number`` is
+        the one exclusion: ``TenantNumbered.save()`` mints it and it is blank until then.
+
+        4.12 is read-only over 4.1-4.11 — no ``StockMove``, no ``JournalEntry`` (L29).
+        """
+        from django.db.models import Sum
+        from apps.scm.models import (
+            ComplianceCheck, ComplianceRequirement, Item, Location, Shipment, SupplierContract,
+            SustainabilityAssessment, TradeDocument, TradeDocumentLine, TradeLicense,
+        )
+        from apps.scm.models._base import q2, q4
+
+        if ComplianceRequirement.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: compliance data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10/4.11 posture) --------
+        contract = (SupplierContract.objects.filter(tenant=tenant)
+                    .select_related("party").order_by("id").first())
+        shipment = (Shipment.objects.filter(tenant=tenant, direction="outbound")
+                    .select_related("carrier", "load", "sales_order").order_by("id").first())
+        if contract is None or shipment is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no 4.2 supplier contract or no 4.6 outbound shipment — skipping "
+                "4.12 compliance (its obligations hang off contracts and its paperwork off "
+                "shipments)."))
+            return
+
+        admin = self._admin(tenant)
+        today = timezone.localdate()
+        usd = Currency.objects.filter(code="USD").first()
+        org_unit = self._org_unit(tenant)
+        northwind = self._supplier(tenant, *SUPPLIERS[0])
+        cascade = self._supplier(tenant, *SUPPLIERS[1])
+        buyer = self._customer(tenant, "Fabrikam Retail Group", "organization")
+        ws16 = Item.objects.filter(tenant=tenant, sku="WS-16").first()
+        mon27 = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        dock = Item.objects.filter(tenant=tenant, sku="DOCK-C").first()
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+
+        # ---- 1. the 4.2 additions: a named owner, and a real amendment hierarchy -----------------
+        # `owner` is back-filled onto the contracts 4.2 already seeded — that is the column's whole
+        # point (renewals and 4.12 obligations route to a named person, not to whoever last edited).
+        # The amendment is a NEW row rather than a re-pointing of 4.2's second contract, because
+        # those two are with DIFFERENT suppliers: making one the master of the other would render an
+        # ancestry line on the detail page that is simply untrue. An amendment amends its own master
+        # and is signed with the same party.
+        owned = list(SupplierContract.objects.filter(tenant=tenant))
+        if admin is not None and owned:
+            for row in owned:
+                row.owner = admin
+            SupplierContract.objects.bulk_update(owned, ["owner"])
+
+        amendment_title = f"{contract.title} — amendment 1 (2026 price schedule)"
+        amendment = SupplierContract.objects.filter(tenant=tenant, title=amendment_title).first()
+        if amendment is None:
+            amendment = SupplierContract(
+                tenant=tenant, party=contract.party, title=amendment_title,
+                parent_contract=contract, owner=admin, contract_type="purchase", status="active",
+                start_date=today - datetime.timedelta(days=30), end_date=contract.end_date,
+                contract_value=Decimal("12000.00"), currency=usd,
+                payment_terms=contract.payment_terms, auto_renew=False, renewal_notice_days=30,
+                terms_summary="Amends the price schedule of the master agreement for calendar 2026. "
+                              "All other terms unchanged.",
+                notes="Seeded 4.12 amendment — it hangs off the master through parent_contract, so "
+                      "the contract page has a real ancestry to walk.")
+            amendment.full_clean(exclude=["number"])
+            amendment.save()
+            amendment.refresh_status()
+
+        # ---- 2. two licences, driven through the REAL submit -> approve path ---------------------
+        def _license(license_number, **fields):
+            """Existence-checked on (tenant, license_number) — never a bare create on a unique_together."""
+            existing = TradeLicense.objects.filter(
+                tenant=tenant, license_number=license_number).first()
+            if existing is not None:
+                return existing
+            obj = TradeLicense(tenant=tenant, license_number=license_number, **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            return obj
+
+        def _grant(licence, issue_date):
+            """``tradelicense_submit`` followed by ``tradelicense_approve``, in effect verbatim.
+
+            ``status`` is ``editable=False``, so this is the only honest way to land a licence in
+            force: lodge the application, record the grant with a real approver stamp, then let
+            ``refresh_status()`` correct ``active`` to ``expiring`` / ``expired`` from the dates —
+            exactly what the approve verb does, and why the permit below comes out amber.
+            """
+            licence.status = "applied"
+            licence.save(update_fields=["status", "updated_at"])
+            licence.status = "active"
+            licence.issue_date = issue_date
+            licence.approved_at = timezone.now()
+            licence.approved_by = admin
+            licence.save(update_fields=["status", "issue_date", "approved_at", "approved_by",
+                                        "updated_at"])
+            licence.refresh_status()
+
+        export_lic = _license(
+            "BIS-2026-114872",
+            title="Export licence — workstation hardware, US to Canada",
+            license_type="export_license",
+            issuing_authority="US Bureau of Industry and Security (BIS)",
+            issuing_country="United States", end_user_party=buyer,
+            application_date=today - datetime.timedelta(days=120),
+            expiry_date=today + datetime.timedelta(days=300), renewal_notice_days=60,
+            authorized_value=Decimal("250000.00"), authorized_quantity=Decimal("500"),
+            currency=usd,
+            commodity_scope="Laptop workstations, 27-inch monitors and USB-C docking stations.",
+            eccn_or_hs="EAR99 / HS 8471.30", destination_countries="Canada, Mexico",
+            conditions="Annual end-use statement due to BIS. No re-export without prior written "
+                       "approval.",
+            notes="Seeded 4.12 licence — in force, capped in BOTH dimensions, and drawn down by a "
+                  "genuinely issued document so its balance is reproducible.")
+        _grant(export_lic, today - datetime.timedelta(days=110))
+
+        permit_lic = _license(
+            "CBP-IMP-2025-0043",
+            title="Import permit — lithium cells packed with equipment",
+            license_type="import_permit",
+            issuing_authority="US Customs and Border Protection", issuing_country="United States",
+            application_date=today - datetime.timedelta(days=400),
+            expiry_date=today + datetime.timedelta(days=21), renewal_notice_days=60,
+            authorized_quantity=Decimal("10000"), currency=usd,
+            commodity_scope="Lithium-ion cells packed with equipment (UN3481).",
+            eccn_or_hs="HS 8507.60", destination_countries="United States",
+            conditions="Hazmat training records retained for two years and produced on request.",
+            notes="Seeded 4.12 licence — deliberately inside its 60-day renewal window, so the "
+                  "amber Expiring chip and the renewal queue are populated on first login.")
+        # Issued 10 days after it was applied for and 21 days before it lapses — the ladder
+        # clean() enforces (application <= issue <= expiry) holds on the seeded row too.
+        _grant(permit_lic, today - datetime.timedelta(days=390))
+
+        # ---- 3. the paperwork: one issued invoice that charges a licence, one draft declaration --
+        invoice = TradeDocument(
+            tenant=tenant, doc_type="commercial_invoice", direction="export",
+            document_number="INV-EXP-4471", issue_date=today - datetime.timedelta(days=2),
+            shipment=shipment, carrier=shipment.carrier, sales_order=shipment.sales_order,
+            license=export_lic, consignee_party=buyer, country_of_origin="United States",
+            country_of_destination="Canada", currency=usd,
+            # Set to the sum of the two lines below so `declared_value_matches` reads green: a
+            # divergence is a customs problem, and a demo should not open with a false one.
+            declared_value=Decimal("12485.00"), freight_charges=Decimal("2072.00"),
+            insurance_value=Decimal("13000.00"), incoterm="DAP",
+            gross_weight_kg=Decimal("9200.00"), net_weight_kg=Decimal("8750.00"),
+            package_count=48, vessel_or_flight="TRK-4471", port_of_loading="Chicago, IL",
+            port_of_discharge="Dallas, TX", container_numbers="TRLU-8890321",
+            filing_reference="AES ITN X20260214000871",
+            notes="Seeded 4.12 commercial invoice — issued through can_charge(), so the licence "
+                  "balance it consumed was derived rather than typed.")
+        invoice.full_clean(exclude=["number"])
+        invoice.save()
+        # The snapshot block is typed here rather than copied off `item` in code, because that is
+        # precisely what the model refuses to do for itself: a filed line records what was DECLARED,
+        # and re-classifying an item next year must not rewrite a document already submitted.
+        for item, description, hs, qty, unit in (
+            (ws16, "Laptop workstation, 16GB RAM", "8471.30", Decimal("5"), Decimal("1450.00")),
+            (mon27, "Monitor, 27-inch LCD", "8528.52", Decimal("15"), Decimal("349.00")),
+        ):
+            line = TradeDocumentLine(
+                document=invoice, item=item, description=description, hs_code=hs,
+                country_of_origin="United States", uom_text="each",
+                uom=item.uom if item is not None else None, quantity=qty, unit_value=unit)
+            line.full_clean()
+            line.save()
+
+        # The issue verb, in effect verbatim: the SAME two grains `_charge_figures()` sums (value off
+        # the document, quantity off the lines — one aggregate each, because asking for both at once
+        # fans the document row out per line), REFUSED rather than clamped if the headroom is short,
+        # and the counters re-derived afterwards instead of incremented.
+        charge_value = q2(invoice.declared_value)
+        charge_qty = q4(invoice.lines.aggregate(total=Sum("quantity"))["total"])
+        allowed, refusal = export_lic.can_charge(charge_value, charge_qty)
+        if allowed:
+            invoice.status = "issued"
+            invoice.issued_at = timezone.now()
+            invoice.issued_by = admin
+            invoice.save(update_fields=["status", "issued_at", "issued_by", "updated_at"])
+            export_lic.recompute_usage()
+        else:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: {invoice.number} left in draft — {refusal}"))
+
+        inbound = (Shipment.objects.filter(tenant=tenant, direction="inbound")
+                   .select_related("carrier", "purchase_order").order_by("id").first())
+        customs = TradeDocument(
+            tenant=tenant, doc_type="customs_declaration", direction="import",
+            document_number="ENT-2026-00918", issue_date=today,
+            shipment=inbound, carrier=getattr(inbound, "carrier", None),
+            purchase_order=getattr(inbound, "purchase_order", None), license=permit_lic,
+            shipper_party=northwind, country_of_origin="China",
+            country_of_destination="United States", currency=usd,
+            declared_value=Decimal("3480.00"), incoterm="FOB",
+            gross_weight_kg=Decimal("3100.00"), net_weight_kg=Decimal("2960.00"),
+            package_count=12,
+            notes="Seeded 4.12 import declaration — left in DRAFT on purpose. Only issued / "
+                  "submitted / accepted documents are in CHARGING_STATUSES, so its permit still "
+                  "reads unconsumed and the Issue button has something real to do.")
+        customs.full_clean(exclude=["number"])
+        customs.save()
+        for item, description, hs, qty, unit in (
+            (dock, "USB-C docking station", "8517.62", Decimal("8"), Decimal("150.00")),
+            (mon27, "Monitor, 27-inch LCD", "8528.52", Decimal("8"), Decimal("285.00")),
+        ):
+            line = TradeDocumentLine(
+                document=customs, item=item, description=description, hs_code=hs,
+                country_of_origin="China", uom_text="each",
+                uom=item.uom if item is not None else None, quantity=qty, unit_value=unit)
+            line.full_clean()
+            line.save()
+
+        # ---- 4. the standing-obligation register ------------------------------------------------
+        def _scoped(field, subject):
+            """Scope kwargs for one typed pointer, degrading to workspace-wide when 4.3 left the
+            subject absent. ``clean()`` rule (a) refuses a scope whose pointer is empty, so a
+            missing item has to change the SCOPE — dropping the FK alone would not validate."""
+            if subject is None:
+                return {"scope": "tenant"}
+            return {"scope": field, field: subject}
+
+        def _requirement(**fields):
+            obj = ComplianceRequirement(tenant=tenant, owner=admin, **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            return obj
+
+        coi = _requirement(
+            title="Certificate of insurance on file and current",
+            description="The supplier's general liability and cargo cover must be evidenced "
+                        "annually, naming us as additional insured.",
+            source="contract", contract=contract, source_reference=f"{contract.number}, clause 11.2",
+            framework="insurance_coi", obligation_category="insurance",
+            jurisdiction="United States", frequency="annual",
+            # The cycle the two checks below answer. record_check() advances from HERE rather than
+            # from the day the proof happened, so a late proof does not drag the schedule with it.
+            next_due_date=today - datetime.timedelta(days=40), notice_days=45,
+            criticality="high", **_scoped("party", contract.party))
+
+        hazmat = _requirement(
+            title="Lithium-cell shipments classified and packed to UN3481",
+            description="Every consignment containing cells must carry the correct UN number, "
+                        "packing instruction and marks under DOT / IATA / IMDG.",
+            source="regulation", source_reference="49 CFR 173.185; IATA DGR PI966",
+            framework="hazmat_dot_iata_imdg", obligation_category="regulatory",
+            jurisdiction="United States", frequency="quarterly",
+            next_due_date=today - datetime.timedelta(days=12), notice_days=30,
+            criticality="critical", **_scoped("item", ws16))
+        # The clock, not a typed status: applicable -> overdue purely from the date, through the
+        # same refresh_status() the list page rolls a whole page with.
+        hazmat.refresh_status()
+
+        proviso = _requirement(
+            title="Hazmat training records retained under the import permit",
+            description="A proviso of the import permit: training records for everyone handling "
+                        "the cells are retained and produced to CBP on request.",
+            source="license", license=permit_lic,
+            source_reference=f"{permit_lic.license_number}, condition 4",
+            framework="customs_export_control", obligation_category="regulatory",
+            jurisdiction="United States", frequency="semi_annual",
+            # Inside the 30-day notice window — this is what the amber "due soon" chip counts.
+            next_due_date=today + datetime.timedelta(days=15), notice_days=30,
+            criticality="high", scope="tenant")
+
+        uflpa = _requirement(
+            title="Forced-labour due diligence across the components supply chain",
+            description="Customer terms require an annual UFLPA attestation covering the sub-tier "
+                        "supply chain for this supplier's components.",
+            source="customer_requirement", source_reference="Fabrikam MSA, schedule 4",
+            framework="forced_labor_uflpa", obligation_category="regulatory",
+            jurisdiction="United States", frequency="annual",
+            next_due_date=today + datetime.timedelta(days=200), notice_days=60,
+            criticality="critical", **_scoped("party", cascade))
+
+        iso14001 = _requirement(
+            title="ISO 14001 surveillance audit of the main warehouse",
+            description="The certification body's surveillance visit for the environmental "
+                        "management system covering this site.",
+            source="certification", source_reference="ISO 14001:2015, cert. EMS-2024-8812",
+            framework="iso_14001", jurisdiction="United States", frequency="biennial",
+            next_due_date=today + datetime.timedelta(days=120), notice_days=60,
+            criticality="medium", **_scoped("location", main))
+
+        gdpr = _requirement(
+            title="GDPR processor terms for EU shipment data",
+            description="Whether the EU data-processing addendum binds this department.",
+            source="internal_policy", source_reference="Data policy DP-07",
+            framework="data_privacy_gdpr", obligation_category="data", jurisdiction="EU",
+            frequency="one_time", notice_days=30, criticality="low", status="not_applicable",
+            # A non-applicable row is KEPT for its reason: "we looked and it does not bind us" is
+            # itself an auditable answer, and clean() refuses the assertion without one.
+            not_applicable_reason="This department ships domestically only and holds no EU personal "
+                                  "data; reviewed and closed out for the 2026 cycle.",
+            **_scoped("org_unit", org_unit))
+        requirements = [coi, hazmat, proviso, uflpa, iso14001, gdpr]
+
+        # ---- 5. the proof history — every status below is WRITTEN BY record_check(), never typed -
+        def _check(requirement, **fields):
+            check = ComplianceCheck(requirement=requirement, performed_by=admin, **fields)
+            check.full_clean()
+            check.save()
+            requirement.record_check(check)
+            return check
+
+        checks = [
+            # A partial first (-> in_progress), then the pass that closes the SAME cycle
+            # (-> compliant, stamps last_checked_on, advances next_due_date a year from the cycle
+            # date). Two checks over one requirement is also what gives compliance_rate a value
+            # other than a bare 0 or 100 to render.
+            _check(coi, result="partial",
+                   due_date=today - datetime.timedelta(days=40),
+                   performed_on=today - datetime.timedelta(days=45),
+                   finding="Cargo cover evidenced; the general liability certificate was still "
+                           "with the broker.",
+                   notes="Seeded: chased the missing certificate."),
+            _check(coi, result="pass",
+                   due_date=today - datetime.timedelta(days=40),
+                   performed_on=today - datetime.timedelta(days=35),
+                   finding="Both certificates received, in date, and naming us as additional "
+                           "insured.",
+                   notes="Seeded: the cycle closed."),
+            # A fail flips its parent to non_compliant and deliberately leaves the due date alone —
+            # the cycle was not satisfied, so it is still owed.
+            _check(uflpa, result="fail",
+                   due_date=today + datetime.timedelta(days=200),
+                   performed_on=today - datetime.timedelta(days=6),
+                   finding="Two sub-tier smelters could not be evidenced against the CMRT.",
+                   corrective_reference="NCR-00002 / CAPA-00001",
+                   notes="Seeded: escalated to 4.9 by reference — 4.12 does not refactor a shipped "
+                         "sub-module for a convenience FK."),
+        ]
+
+        # ---- 6. two ESG scorecards — the medal is DERIVED by recompute_rating(), never set -------
+        # (party, source, provider, status, four themes, carbon, six declaration flags, scopes 1/2/3,
+        #  days ago, validity days, note)
+        esg_specs = [
+            (northwind, "third_party_rating", "EcoVadis", "validated",
+             (72, 68, 75, 61), 58, (True, True, True, True, False, True),
+             (Decimal("1240.500"), Decimal("3180.250"), Decimal("18640.000")), 60, 305,
+             "Seeded: a full four-theme scorecard — the mean of 72/68/75/61 lands on gold."),
+            (cascade, "self_assessment", "", "submitted",
+             (41, 52, None, None), 33, (False, True, True, False, False, True),
+             (Decimal("410.000"), Decimal("905.750"), None), 20, 345,
+             "Seeded: a PARTIAL scorecard — two themes were never asked, so the mean is taken over "
+             "the two that were. An unanswered theme is not a zero."),
+        ]
+        esg_rows = []
+        for (party, source, provider, status, themes, carbon, flags, scopes, days_ago,
+             valid_days, note) in esg_specs:
+            esg = SustainabilityAssessment(
+                tenant=tenant, party=party,
+                assessment_date=today - datetime.timedelta(days=days_ago),
+                valid_until=today + datetime.timedelta(days=valid_days),
+                source=source, provider=provider, status=status,
+                environment_score=themes[0], labor_human_rights_score=themes[1],
+                ethics_score=themes[2], sustainable_procurement_score=themes[3],
+                carbon_score=carbon,
+                strengths="ISO 14001 certified sites; a published living-wage commitment.",
+                improvement_areas="Publish a Scope 3 reduction target and extend the code of "
+                                  "conduct to sub-tier suppliers.",
+                conflict_minerals_declared=flags[0], reach_declared=flags[1],
+                rohs_declared=flags[2], forced_labor_attested=flags[3],
+                deforestation_declared=flags[4], code_of_conduct_signed=flags[5],
+                scope1_tco2e=scopes[0], scope2_tco2e=scopes[1], scope3_tco2e=scopes[2],
+                carbon_reporting_year=today.year - 1, assessed_by=admin, notes=note)
+            esg.full_clean(exclude=["number"])
+            # save() always calls recompute_rating() — the ONLY writer of overall_score / rating, on
+            # every path including this one.
+            esg.save()
+            esg_rows.append(esg)
+
+        utilization = export_lic.utilization_pct
+        self.stdout.write(
+            f"{tenant.name}: 4.12 compliance — licences {export_lic.number} "
+            f"[{export_lic.get_status_display()}, {utilization if utilization is not None else '—'}% "
+            f"of value used] / {permit_lic.number} [{permit_lic.get_status_display()}], documents "
+            f"{invoice.number} [{invoice.get_status_display()}] / {customs.number} "
+            f"[{customs.get_status_display()}], {len(requirements)} requirements "
+            f"({len(checks)} checks recorded, {coi.number} now "
+            f"{coi.get_status_display().lower()} at {coi.compliance_rate}%, {hazmat.number} "
+            f"{hazmat.get_status_display().lower()}), {len(esg_rows)} ESG assessments "
+            f"({', '.join(e.get_rating_display().lower() for e in esg_rows)}), contract owner set "
+            f"on {len(owned)} 4.2 contract(s) + amendment {amendment.number}.")
