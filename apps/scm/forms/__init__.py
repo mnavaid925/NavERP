@@ -256,3 +256,20 @@ from .SupplyChainAnalytics.SupplyChainAlerts import (  # noqa: F401
     AlertSnoozeForm,
     AlertResolveForm,
 )
+
+# --- 4.12 Contract & Compliance Management ---------------------------------------------------
+from .ContractCompliance.TradeLicenses import (  # noqa: F401
+    TradeLicenseForm,
+)
+from .ContractCompliance.ComplianceRequirements import (  # noqa: F401
+    ComplianceRequirementForm,
+    ComplianceCheckForm,
+)
+from .ContractCompliance.TradeDocuments import (  # noqa: F401
+    TradeDocumentForm,
+    TradeDocumentLineForm,
+    TradeDocumentLineFormSet,
+)
+from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
+    SustainabilityAssessmentForm,
+)
