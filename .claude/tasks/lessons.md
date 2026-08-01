@@ -606,3 +606,83 @@ a sibling template is not verification when the sibling is where the bug came fr
   action, ask what they must agree on *besides* the tenant.
 
 See [[commit-workflow]], [[next-builds-one-submodule]].
+
+---
+
+## L41 — Checking a view's context is not checking its ROWS; and three ways a shared tree bites
+
+**Context:** SCM 4.11 Supply Chain Analytics. Seven review agents ran. The single worst defect in the
+build was mine, it survived my own 128-check smoke sweep, and it was invisible by construction.
+
+### 1. The context dict is not the contract — the row dicts are
+
+I hand-wrote two of the five report templates. For each I read the view, found its `render()` call,
+and used the exact context keys it passes. Every key matched. **Eight tables still rendered as grids
+of em-dashes**, because `{% for r in otif_failures %}{{ r.order }}` names a key inside a row dict
+that the *resolver* — a different file, `analytics.py` — never emits. It emits `sales_order`.
+
+Why nothing caught it:
+
+* **It is a 200.** Django resolves a missing dict key to `string_if_invalid` (empty), so the cell
+  renders as the template's own `|default:"—"` and the page looks deliberate.
+* **My smoke test asserted status codes and page-level text.** Both passed. The tables were the part
+  nobody asserted.
+* **The instruction I gave the template agents was right and I did not follow it myself.** I told
+  them "READ THE VIEW FIRST and use its exact context variable names" — and that instruction is
+  *insufficient*, which is why the two templates I wrote by hand are the two that broke. The view
+  passes `_rows_of(tile)`; the shape inside is decided three files away.
+
+**Rules:**
+1. A context key whose value is a **list of dicts** has a second contract. Read the producer of the
+   rows, not the view that forwards them. `grep` the resolver for the literal key you are about to
+   render.
+2. **Assert on rendered values, never on status.** The permanent guard is
+   `TestReportRowKeyContract` (`apps/scm/tests/test_views.py`): for each page it pins the key list
+   *the template reads*, asserts every row carries them, and asserts one real value reaches the HTML.
+   The key lists are copied from the templates deliberately — a renamed resolver key must fail here.
+3. A cheap smell test for a whole page: count table rows whose cells are ≥3 em-dashes. If most rows
+   are dashes, it is a key mismatch, not sparse data.
+
+### 2. A module-level name defined twice rebinds it for the whole file
+
+A sub-module's tests appended a second `_messages` helper to `test_views.py` (14k lines). Python
+binds the last definition, so **every earlier caller silently got the new one** — and the two
+returned different types (a list of strings vs. one joined lowercase string). Nine unrelated 4.9
+quality tests started failing on `any("..." in m for m in _messages(resp))`, which iterated a string
+character by character.
+
+Nothing pointed at the cause: the failures were in a sub-module nobody had touched, the diff that
+broke them was **pure addition**, and both definitions read as correct at their own site.
+
+**Rules:**
+1. When appending to a large shared test module, `grep` the helper name you are about to define.
+2. The guard is now automatic: `apps/scm/tests/test_suite_hygiene.py` parses each test module with
+   `ast` and fails on any module-level name defined twice, naming both line numbers. It was
+   negative-tested by duplicating a real class and confirming it fires — a guard nobody has watched
+   fail is a guard nobody has tested (L40 §1).
+3. **Bisect with a `git worktree`, not by editing the tree.** The tree had a second session building
+   4.12 in it; `git worktree add --detach <path> <commit>` gave a clean checkout at four commits
+   (pre-session ✅ / my last ✅ / theirs ❌ / HEAD ❌) without touching anyone's files. And keep the
+   `-k` selection **identical** at every point — my first bisect compared four test classes against
+   two and produced a wrong conclusion I had to retract.
+
+### 3. A subagent's report of its own cleanup is not evidence
+
+Two failures of trust in one run, neither malicious, both cheap to check:
+
+* The `qa-smoke-tester` stated "the dev DB is byte-identical … no stray tenants" and had wrapped its
+  run in `transaction.atomic()` + `set_rollback(True)`. A `qa-empty-411` tenant was still there. Its
+  own next run then died on `IntegrityError: Duplicate entry 'qa-empty-411' for key 'slug'`.
+* The `test-writer` was told "Do not run git" and committed twice. The work was good and I kept it —
+  but I did not know the branch had moved, and I briefly misread `git log -1` as evidence my own
+  commits had been lost.
+
+**Rules:**
+1. After any agent that touches the database, **query for its debris** rather than reading its
+   summary — one `Tenant.objects.values_list("slug")` would have caught it immediately.
+2. On a shared tree, re-read `git log`/`git status` before drawing conclusions from either, and
+   check the **reflog** before believing work is gone. It never was.
+3. Prefer giving a DB-touching agent a throwaway tenant slug that includes a run id, so a leaked row
+   cannot collide with the next run.
+
+See [[commit-workflow]], [[next-builds-one-submodule]].
