@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% comment %}
+  Renders: apps/scm/views/ContractCompliance/Reports.py :: carbon_footprint_report
+
+  Context keys read here (the contract is pinned in that module's docstring):
+    date_from date_to date_from_raw date_to_raw window_invalid
+    mode mode_choices carrier_id carriers
+    total_tco2e total_tonne_km measured_count excluded_count considered_count
+    coverage_pct intensity_g_per_tonne_km
+    by_month by_mode by_carrier   (each row: label count tonne_km tco2e)
+    declared declared_count factors export_qs
+
+  total_tco2e / total_tonne_km / coverage_pct / intensity_g_per_tonne_km are deliberately None —
+  not 0 — when nothing could be measured, so every one of them is tested with `is not None`
+  rather than for truthiness. A zero here would read as "this freight emitted nothing", which is
+  the opposite of "we could not measure it".
+{% endcomment %}
+{% block title %}Carbon Footprint{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Carbon Footprint</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:sustainabilityassessment_list' %}">Sustainability</a><span class="sep">›</span>
+        <span>Carbon Footprint</span>
+      </div>
+      <p class="text-muted">
+        A GLEC v3.2 / ISO 14083 shaped freight estimate computed live from 4.6's shipments and loads —
+        <span class="fw-600">tonne-km × a published per-mode factor</span>. This page measures; it books
+        no freight, moves no stock and posts no journal entry.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:carbon_footprint_report_export' %}{% if export_qs %}?{{ export_qs }}{% endif %}"
+         class="btn btn-outline"><i data-lucide="download"></i> Export CSV</a>
+      <a href="{% url 'scm:sustainabilityassessment_list' %}" class="btn btn-outline">
+        <i data-lucide="leaf"></i> Assessments</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="calendar"></i>
+          {{ date_from|date:"M d, Y" }} – {{ date_to|date:"M d, Y" }}</span>
+        {% if window_invalid %}
+          <span class="badge badge-amber">That date was not readable — showing the default window</span>
+        {% endif %}
+        {% if coverage_pct is not None %}
+          <span class="badge {% if coverage_pct >= 80 %}badge-green{% elif coverage_pct >= 50 %}badge-amber{% else %}badge-red{% endif %}">
+            {{ coverage_pct }}% of shipments measurable
+          </span>
+        {% else %}
+          <span class="badge badge-muted">Nothing in this window</span>
+        {% endif %}
+        <span class="badge badge-info">Operational estimate — not an audited or statutory figure</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="cf-from">From</label>
+          <input type="date" id="cf-from" name="date_from" value="{{ date_from_raw }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cf-to">To</label>
+          <input type="date" id="cf-to" name="date_to" value="{{ date_to_raw }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cf-mode">Mode</label>
+          <select name="mode" id="cf-mode" class="form-select">
+            <option value="">All modes</option>
+            {% for val, label in mode_choices %}
+              <option value="{{ val }}" {% if mode == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cf-carrier">Carrier</label>
+          <select name="carrier" id="cf-carrier" class="form-select">
+            <option value="">All carriers</option>
+            {% for c in carriers %}
+              <option value="{{ c.pk }}" {% if carrier_id == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:carbon_footprint_report' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="cloud"></i></div>
+      <div>
+        <div class="stat-label">Estimated tCO2e</div>
+        <div class="stat-value">{% if total_tco2e is not None %}{{ total_tco2e }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="route"></i></div>
+      <div>
+        <div class="stat-label">Tonne-kilometres</div>
+        <div class="stat-value">{% if total_tonne_km is not None %}{{ total_tonne_km }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
+      <div>
+        <div class="stat-label">Intensity (g/tonne-km)</div>
+        <div class="stat-value">{% if intensity_g_per_tonne_km is not None %}{{ intensity_g_per_tonne_km }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="package-search"></i></div>
+      <div>
+        <div class="stat-label">Shipments measured</div>
+        <div class="stat-value">{{ measured_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if excluded_count %}
+    <div class="card">
+      <div class="card-body">
+        <p class="text-muted">
+          <i data-lucide="alert-triangle"></i>
+          <span class="fw-600">{{ excluded_count }} of {{ considered_count }}</span> shipment{{ considered_count|pluralize }}
+          in this window could not be measured — no linked load, no distance on the load, or no weight on the
+          shipment. Those rows are excluded from every figure above rather than counted as zero, so the totals
+          describe only what is actually measurable.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2>By month</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Month</th><th>Shipments</th><th>Tonne-km</th><th>tCO2e</th></tr></thead>
+        <tbody>
+          {% for row in by_month %}
+            <tr>
+              <td>{{ row.label }}</td><td>{{ row.count }}</td>
+              <td>{{ row.tonne_km }}</td><td>{{ row.tco2e }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i data-lucide="calendar-off"></i>
+                <h3>Nothing measurable in this window</h3>
+                <p>Shipments need a linked load with a distance, and a weight, before they can be costed.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>By mode</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Mode</th><th>Shipments</th><th>Tonne-km</th><th>tCO2e</th></tr></thead>
+        <tbody>
+          {% for row in by_mode %}
+            <tr>
+              <td>{{ row.label }}</td><td>{{ row.count }}</td>
+              <td>{{ row.tonne_km }}</td><td>{{ row.tco2e }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="truck"></i>
+              <h3>No measurable shipments</h3><p>Nothing to break down by mode yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>By carrier</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Carrier</th><th>Shipments</th><th>Tonne-km</th><th>tCO2e</th></tr></thead>
+        <tbody>
+          {% for row in by_carrier %}
+            <tr>
+              <td>{{ row.label }}</td><td>{{ row.count }}</td>
+              <td>{{ row.tonne_km }}</td><td>{{ row.tco2e }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="building"></i>
+              <h3>No measurable shipments</h3><p>Nothing to break down by carrier yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Supplier-declared emissions</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        These are figures <span class="fw-600">suppliers reported themselves</span> on
+        {{ declared_count }} sustainability assessment{{ declared_count|pluralize }} dated inside this window.
+        They are shown beside our freight estimate, never added to it — they are a different quantity,
+        measured by somebody else, on a different boundary.
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Scope 1 (tCO2e)</dt>
+          <dd>{% if declared.scope1 is not None %}{{ declared.scope1 }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scope 2 (tCO2e)</dt>
+          <dd>{% if declared.scope2 is not None %}{{ declared.scope2 }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Scope 3 (tCO2e)</dt>
+          <dd>{% if declared.scope3 is not None %}{{ declared.scope3 }}{% else %}—{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Method &amp; limitations</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        For each shipment: <span class="fw-600">tonne-km = (weight_kg ÷ 1000) × load distance_km</span>, then
+        <span class="fw-600">gCO2e = tonne-km × the factor for its mode</span> (falling back to its load's mode).
+        Totals are the sum over every measurable shipment; the intensity above is the blended realised
+        g/tonne-km, i.e. total grams ÷ total tonne-km, not an average of averages.
+      </p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Mode</th><th>gCO2e per tonne-km</th></tr></thead>
+          <tbody>
+            {% for label, factor in factors %}
+              <tr><td>{{ label }}</td><td>{{ factor }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted">
+        Factors are well-to-wheel defaults consistent with the GLEC Framework v3.2 / ISO 14083 default tables
+        and the UK DEFRA freighting-goods factors. <span class="fw-600">Limitations:</span> they are defaults,
+        not carrier-specific measured intensities; no allowance is made for empty running or backhaul; a
+        shipment with no distance or no weight is excluded rather than estimated; and this is an operational
+        estimate for internal decision-making. Statutory or assured disclosure (CSRD, GHG Protocol reporting)
+        is an accounting concern and does not come from this page.
+      </p>
+    </div>
+  </div>
+{% endblock %}
