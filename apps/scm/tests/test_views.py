@@ -13332,7 +13332,7 @@ def _alert_payload(**overrides):
     return data
 
 
-def _messages(response):
+def _message_blob(response):
     """Every flash message on a response as one lowercase string."""
     return " ".join(str(m) for m in response.context["messages"]).lower()
 
@@ -13616,7 +13616,7 @@ class TestKpiTargetCRUD:
         message has to be louder than "Deleted successfully."."""
         from apps.scm.models import KpiSnapshot
         resp = client_a.post(reverse("scm:kpitarget_delete", args=[kpi_target_a.pk]), follow=True)
-        assert "cannot be re-derived" in _messages(resp)
+        assert "cannot be re-derived" in _message_blob(resp)
         assert not KpiSnapshot.objects.filter(pk=kpi_snapshot_a.pk).exists()
 
     def test_deleting_a_target_leaves_its_alerts_standing(self, client_a, tenant_a, kpi_target_a):
@@ -13650,7 +13650,7 @@ class TestKpiTargetCRUD:
         kpi_target_a.is_active = False
         kpi_target_a.save(update_fields=["is_active"])
         resp = client_a.post(reverse("scm:kpitarget_snapshot", args=[kpi_target_a.pk]), follow=True)
-        assert "reactivate the target" in _messages(resp)
+        assert "reactivate the target" in _message_blob(resp)
         assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
 
     def test_a_metric_with_nothing_to_measure_reports_the_reason_and_writes_nothing(
@@ -13660,7 +13660,7 @@ class TestKpiTargetCRUD:
         target = KpiTarget.objects.create(tenant=tenant_a, metric="projected_stockout_count",
                                           name="Stockouts", scope="all")
         resp = client_a.post(reverse("scm:kpitarget_snapshot", args=[target.pk]), follow=True)
-        assert "reorder rule" in _messages(resp)
+        assert "reorder rule" in _message_blob(resp)
         assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
 
 
@@ -13688,7 +13688,7 @@ class TestKpiSnapshotCapture:
     def test_capture_with_no_active_target_says_so_and_writes_nothing(self, client_a, tenant_a):
         from apps.scm.models import KpiSnapshot
         resp = client_a.post(reverse("scm:kpisnapshot_capture"), follow=True)
-        assert "no active kpi targets" in _messages(resp)
+        assert "no active kpi targets" in _message_blob(resp)
         assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
 
     def test_capture_refuses_a_period_that_has_not_finished(self, client_a, tenant_a, kpi_target_a,
@@ -13699,7 +13699,7 @@ class TestKpiSnapshotCapture:
         tomorrow = (timezone.localdate() + datetime.timedelta(days=1)).isoformat()
         resp = client_a.post(reverse("scm:kpisnapshot_capture"), {"period_end": tomorrow},
                              follow=True)
-        assert "has not finished" in _messages(resp)
+        assert "has not finished" in _message_blob(resp)
         assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
 
     def test_capture_refuses_junk_rather_than_silently_freezing_today(self, client_a, tenant_a,
@@ -13708,7 +13708,7 @@ class TestKpiSnapshotCapture:
         from apps.scm.models import KpiSnapshot
         resp = client_a.post(reverse("scm:kpisnapshot_capture"), {"period_end": "last tuesday"},
                              follow=True)
-        assert "not a date" in _messages(resp)
+        assert "not a date" in _message_blob(resp)
         assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
 
     def test_capture_carries_only_the_whitelisted_filters_back_to_the_list(self, client_a,
@@ -13799,12 +13799,12 @@ class TestSupplyChainAlertDetect:
             critical_threshold=Decimal("20.00"), is_alerting=True,
             min_impact_value=Decimal("999999.00"))
         resp = client_a.post(reverse("scm:supplychainalert_detect"), follow=True)
-        assert "below their target's minimum impact value" in _messages(resp)
+        assert "below their target's minimum impact value" in _message_blob(resp)
 
     def test_detect_on_a_quiet_tenant_says_nothing_is_breaching(self, client_a, tenant_a):
         from apps.scm.models import SupplyChainAlert
         resp = client_a.post(reverse("scm:supplychainalert_detect"), follow=True)
-        assert "nothing is breaching" in _messages(resp)
+        assert "nothing is breaching" in _message_blob(resp)
         assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
 
     def test_a_resolved_alert_does_not_block_the_next_genuine_breach(self, client_a, tenant_a,
@@ -13919,7 +13919,7 @@ class TestSupplyChainAlertInbox:
         assert client_a.get(url).status_code == 405
         assert SupplyChainAlert.objects.filter(pk=alert_a.pk).exists()
         resp = client_a.post(url, follow=True)
-        assert "raised again on the next run" in _messages(resp)
+        assert "raised again on the next run" in _message_blob(resp)
         assert not SupplyChainAlert.objects.filter(pk=alert_a.pk).exists()
 
 
@@ -13945,7 +13945,7 @@ class TestSupplyChainAlertLifecycleActions:
 
         resp = member_client.post(reverse("scm:supplychainalert_acknowledge", args=[alert_a.pk]),
                                   follow=True)
-        assert "was already acknowledged by" in _messages(resp)
+        assert "was already acknowledged by" in _message_blob(resp)
         alert_a.refresh_from_db()
         assert alert_a.acknowledged_by == admin_user
         assert alert_a.acknowledged_by != member_user
@@ -13954,7 +13954,7 @@ class TestSupplyChainAlertLifecycleActions:
     def test_acknowledging_a_closed_alert_is_a_silent_no_op(self, client_a, resolved_alert_a):
         resp = client_a.post(reverse("scm:supplychainalert_acknowledge",
                                      args=[resolved_alert_a.pk]), follow=True)
-        assert "is already resolved" in _messages(resp)
+        assert "is already resolved" in _message_blob(resp)
         resolved_alert_a.refresh_from_db()
         assert resolved_alert_a.status == "resolved"
 
@@ -13972,7 +13972,7 @@ class TestSupplyChainAlertLifecycleActions:
                                                          member_user):
         resp = client_a.post(reverse("scm:supplychainalert_assign", args=[resolved_alert_a.pk]),
                              {"assigned_to": str(member_user.pk)}, follow=True)
-        assert "is not handed to anybody" in _messages(resp)
+        assert "is not handed to anybody" in _message_blob(resp)
         resolved_alert_a.refresh_from_db()
         assert resolved_alert_a.assigned_to_id is None
 
@@ -14034,7 +14034,7 @@ class TestSupplyChainAlertLifecycleActions:
         resp = member_client.post(reverse("scm:supplychainalert_resolve",
                                           args=[resolved_alert_a.pk]),
                                   {"resolution_note": "second attempt"}, follow=True)
-        assert "was already closed by" in _messages(resp)
+        assert "was already closed by" in _message_blob(resp)
         resolved_alert_a.refresh_from_db()
         assert resolved_alert_a.resolved_by == admin_user
         assert resolved_alert_a.resolution_note == original_note
@@ -14051,7 +14051,7 @@ class TestSupplyChainAlertLifecycleActions:
                                                           resolved_alert_a, admin_user):
         resp = member_client.post(reverse("scm:supplychainalert_dismiss",
                                           args=[resolved_alert_a.pk]), follow=True)
-        assert "was already closed by" in _messages(resp)
+        assert "was already closed by" in _message_blob(resp)
         resolved_alert_a.refresh_from_db()
         assert resolved_alert_a.status == "resolved"
         assert resolved_alert_a.resolved_by == admin_user
