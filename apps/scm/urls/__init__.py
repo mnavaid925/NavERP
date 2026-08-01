@@ -60,6 +60,11 @@ from .SupplyChainAnalytics.KpiTargets import urlpatterns as _sca_kpitargets
 from .SupplyChainAnalytics.KpiSnapshots import urlpatterns as _sca_kpisnapshots
 from .SupplyChainAnalytics.SupplyChainAlerts import urlpatterns as _sca_alerts
 from .SupplyChainAnalytics.Reports import urlpatterns as _sca_reports
+from .ContractCompliance.TradeLicenses import urlpatterns as _cc_tradelicenses
+from .ContractCompliance.ComplianceRequirements import urlpatterns as _cc_compliancerequirements
+from .ContractCompliance.TradeDocuments import urlpatterns as _cc_tradedocuments
+from .ContractCompliance.SustainabilityAssessments import urlpatterns as _cc_sustainability
+from .ContractCompliance.Reports import urlpatterns as _cc_reports
 
 
 app_name = "scm"
@@ -177,4 +182,29 @@ urlpatterns = [
     *_sca_kpisnapshots,                  # SupplyChainAnalytics/KpiSnapshots (frozen history)
     *_sca_alerts,                        # SupplyChainAnalytics/SupplyChainAlerts (the inbox)
     *_sca_reports,                       # SupplyChainAnalytics/Reports (the five bullet pages)
+
+    # 4.12 COLLISION CHECK — every first segment 4.12 adds, checked against the whole concatenated
+    # urlconf above rather than against its own module:
+    #   compliance-requirements/ · compliance-checks/ — nothing anywhere in scm starts with
+    #                         `compliance`. Django matches WHOLE path components and never splits at
+    #                         a hyphen, so these two cannot shadow each other either.
+    #   trade-documents/ · trade-licenses/ — nothing anywhere starts with `trade`.
+    #   sustainability-assessments/ — nothing starts with `sustainability`. Note 4.2 owns
+    #                         `risk-assessments/`: an unrelated FIRST segment, not a `…/assessments`
+    #                         suffix, so there is no overlap to reason about.
+    #   carbon-footprint/ — nothing starts with `carbon`; `carbon-footprint/export/` is a literal
+    #                         sub-route of that same segment, so the report pair adds ZERO new
+    #                         first segments beyond the one.
+    #
+    # 4.12 adds NO new first segment `contracts/` — 4.2 already owns it, and the Contract Repository
+    # sidebar bullet points at 4.2's list rather than a second contract table.
+    #
+    # 4.12 introduces NO greedy `<str:…>` converter; 4.10's `return-tracking/<str:token>/` remains
+    # the module's only one and sits alone on its own first segment. Within each module below,
+    # literal routes (`add/`, `export/`, `print/`) precede every `<int:pk>/` one.
+    *_cc_tradelicenses,                  # ContractCompliance/TradeLicenses (register + balance)
+    *_cc_compliancerequirements,         # ContractCompliance/ComplianceRequirements (+ checks)
+    *_cc_tradedocuments,                 # ContractCompliance/TradeDocuments (BoL / CI / packing)
+    *_cc_sustainability,                 # ContractCompliance/SustainabilityAssessments (ESG)
+    *_cc_reports,                        # ContractCompliance/Reports (carbon footprint estimate)
 ]
