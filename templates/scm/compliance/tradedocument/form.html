@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 — shared create/edit form for TradeDocument and its inline TradeDocumentLine formset.
+
+Context contract — apps/scm/views/ContractCompliance/TradeDocuments.py::_tradedocument_form, which
+renders this page directly rather than through crud_create / crud_edit so that the header and the
+lines commit inside ONE transaction.atomic(). Everything this page may read, and nothing else:
+  * form     — TradeDocumentForm (bound on POST)
+  * formset  — TradeDocumentLineFormSet, an inlineformset_factory(extra=1, can_delete=True)
+  * is_edit  — False on create, True on edit
+  * obj      — the TradeDocument on the EDIT path, and None on create (so every use of it is
+               guarded by is_edit, never rendered bare)
+
+Header fields are rendered BY NAME so they can be grouped, which couples this page to
+TradeDocumentForm's field set: Meta.fields is a WHITELIST of 31 names, and all 31 are below. A field
+added to the model and to that whitelist but not to a group here would never reach the POST — on
+edit it would be silently blanked on every save.
+
+The four columns the form deliberately omits are status, issued_at, issued_by and void_reason: all
+editable=False, all moved only by the issue / submit / accept / void verbs on the detail page.
+Issuing is what charges a licence balance, so a status dropdown here would let somebody spend a
+balance nobody checked.
+
+The formset needs {{ formset.management_form }} rendered or Django raises ManagementForm-tampering
+on POST and every line silently disappears; non_form_errors and the per-field errors below are what
+make a refused line visible instead of a row that just fails to save.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Trade Document{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Trade Document</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:tradedocument_list' %}">Trade Documents</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">A trade document records what was <span class="fw-600">declared</span>. Only a draft or an amendment can be edited — once issued, the row is the record of a declaration that was actually made to an authority, and the route to changing it is to void it and raise the amendment.</p>
+  </div></div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What kind of paper</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The document keeps <span class="fw-600">two</span> numbers: ours (TD-, assigned on save) is how we find it, and the external number is what the broker, the bank and the customs officer quote back. There is no status field on this form — the lifecycle moves through the issue, submit, accept and void buttons on the document's own page.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.doc_type %}
+          {% include "partials/form_field.html" with field=form.direction %}
+          {% include "partials/form_field.html" with field=form.document_number %}
+          {% include "partials/form_field.html" with field=form.issue_date %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What movement it papers</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">All five are optional link-outs to rows the transport, procurement and order sub-modules own — this document re-declares none of their addresses, tracking events or proof of delivery. The <span class="fw-600">licence</span> is the one that matters most: issuing this document charges that licence's balance, and issuing is refused outright if the balance will not cover it. A draft licence can be named here on purpose, because paperwork is prepared against a licence long before that licence goes active.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.shipment %}
+          {% include "partials/form_field.html" with field=form.carrier %}
+          {% include "partials/form_field.html" with field=form.purchase_order %}
+          {% include "partials/form_field.html" with field=form.sales_order %}
+          {% include "partials/form_field.html" with field=form.license %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Who the parties are</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">All three dropdowns offer the whole party book rather than one role. An export consignee is a customer, an import shipper is a supplier, and the notify party is routinely a broker or forwarder — narrowing to any single role would hide the majority of legitimate counterparties on the majority of documents.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.shipper_party %}
+          {% include "partials/form_field.html" with field=form.consignee_party %}
+          {% include "partials/form_field.html" with field=form.notify_party %}
+          {% include "partials/form_field.html" with field=form.country_of_origin %}
+          {% include "partials/form_field.html" with field=form.country_of_destination %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The money on the form</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">declared value</span> is the one money figure that is stored rather than computed: it is what the filer declared, not a total of the lines below. The document's own page shows when the two diverge by more than a cent, which is a customs problem rather than a rounding one. The Incoterm list is Incoterms 2020 — a term outside it is refused, because an Incoterm is a legal allocation of cost and risk and an invented one means nothing to the counterparty reading the form.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.currency %}
+          {% include "partials/form_field.html" with field=form.declared_value %}
+          {% include "partials/form_field.html" with field=form.freight_charges %}
+          {% include "partials/form_field.html" with field=form.insurance_value %}
+          {% include "partials/form_field.html" with field=form.incoterm %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What is in the box</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Net weight is the goods alone and gross weight includes the packaging, so a net larger than the gross is refused on save — the reverse is not a smaller number, it is a packing list that gets rejected at the border.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.gross_weight_kg %}
+          {% include "partials/form_field.html" with field=form.net_weight_kg %}
+          {% include "partials/form_field.html" with field=form.package_count %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How it travels</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">These are the transport details <span class="fw-600">as printed on this form</span>, not a second copy of the consignment — they are snapshots for the same reason the line descriptions are, so re-planning a shipment next month cannot rewrite what a filed document says. Tick <span class="fw-600">negotiable</span> for an ocean bill of lading, which is a document of title; an air waybill is not.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.vessel_or_flight %}
+          {% include "partials/form_field.html" with field=form.voyage_number %}
+          {% include "partials/form_field.html" with field=form.port_of_loading %}
+          {% include "partials/form_field.html" with field=form.port_of_discharge %}
+          {% include "partials/form_field.html" with field=form.container_numbers %}
+          {% include "partials/form_field.html" with field=form.is_negotiable %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Filing and evidence</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The filing reference is <span class="fw-600">stored, never transmitted</span> — 4.12 records the AES/ITN or broker reference that came back and files nothing itself. It can also be captured at the moment of submission, which is where it usually arrives, because an issued document can no longer reach this form.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.filing_reference %}
+          {% include "partials/form_field.html" with field=form.document %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Declared lines</h2></div>
+      <div class="table-wrap">
+        {% comment %}
+          management_form FIRST and unconditionally — without it Django raises a ManagementForm
+          tampering error on POST and the whole formset is dropped. non_form_errors carries the
+          formset-level refusals; each field also renders its own errors, because a line refused
+          with no visible message looks exactly like a line that simply did not save.
+        {% endcomment %}
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Description as declared</th>
+              <th>HS code</th>
+              <th>Origin</th>
+              <th>Item</th>
+              <th>Unit as printed</th>
+              <th>UOM</th>
+              <th>Quantity</th>
+              <th>Unit value</th>
+              <th>Net weight</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lf in formset %}
+              <tr>
+                {% for hidden in lf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in lf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ lf.description }}{% for e in lf.description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.hs_code }}{% for e in lf.hs_code.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.country_of_origin }}{% for e in lf.country_of_origin.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.item }}{% for e in lf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.uom_text }}{% for e in lf.uom_text.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.uom }}{% for e in lf.uom.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.quantity }}{% for e in lf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.unit_value }}{% for e in lf.unit_value.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ lf.net_weight_kg }}{% for e in lf.net_weight_kg.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{% if lf.instance.pk %}{{ lf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Leave a row blank to skip it; tick Remove to delete an existing line. There is deliberately <span class="fw-600">no "at least one line" rule</span> — an ocean bill of lading, an insurance certificate and a licence copy legitimately carry none, and the declared value above is what those documents state. The description, HS code, origin and printed unit are <span class="fw-600">snapshots</span>: typed here once and never back-filled from the item master, because a filed declaration has to keep saying what was declared even after the item is re-classified. The line value is not a column — it is quantity × unit value, computed on read, so it can never be edited into disagreeing with its own two factors.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:tradedocument_detail' obj.pk %}{% else %}{% url 'scm:tradedocument_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
