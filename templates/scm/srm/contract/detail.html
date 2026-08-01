@@ -47,6 +47,13 @@
       <div class="detail-item"><dt>End Date</dt><dd>{{ obj.end_date|date:"M d, Y"|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Contract Value</dt><dd class="fw-600">{{ obj.contract_value|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</dd></div>
       <div class="detail-item"><dt>Payment Terms</dt><dd>{% if obj.payment_terms %}{{ obj.payment_terms.name }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Master Agreement</dt><dd>
+        {% if obj.parent_contract %}
+          <a href="{% url 'scm:contract_detail' obj.parent_contract.pk %}">{{ obj.parent_contract.number }}</a>
+          · {{ obj.parent_contract.title }}
+        {% else %}—{% endif %}
+      </dd></div>
       <div class="detail-item"><dt>Auto Renew</dt><dd>{% if obj.auto_renew %}Yes{% else %}No{% endif %}</dd></div>
       <div class="detail-item"><dt>Renewal Notice</dt><dd>{{ obj.renewal_notice_days|default:"—" }} days</dd></div>
       <div class="detail-item"><dt>Terms Summary</dt><dd>{{ obj.terms_summary|default:"—"|linebreaksbr }}</dd></div>
@@ -54,6 +61,41 @@
       <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—"|linebreaksbr }}</dd></div>
     </dl>
   </div></div>
+
+  {% comment %}
+    4.12's amendment hierarchy. `amendments` is prefetched by contract_detail, so this list costs one
+    extra query rather than one per row. Rendering it is also what makes SupplierContract.clean()'s
+    cycle guard load-bearing: this is the page that walks the chain.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Amendments &amp; SOWs</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Status</th><th>Start</th><th>End</th></tr></thead>
+        <tbody>
+          {% for a in amendments %}
+            <tr>
+              <td><a href="{% url 'scm:contract_detail' a.pk %}">{{ a.number }}</a></td>
+              <td>{{ a.title }}</td>
+              <td><span class="badge badge-slate">{{ a.get_contract_type_display }}</span></td>
+              <td><span class="badge badge-info">{{ a.get_status_display }}</span></td>
+              <td>{{ a.start_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ a.end_date|date:"M d, Y"|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i data-lucide="git-branch"></i>
+                <h3>No amendments</h3>
+                <p>Nothing hangs off this agreement yet. A renewal, SOW or amendment points at it
+                   through its own Master Agreement field.</p>
+              </div>
+            </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
