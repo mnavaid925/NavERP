@@ -57,6 +57,8 @@ Badge colours come from ``TradeLicense.STATUS_CSS`` via ``obj.status_css`` — t
 becomes a class. ``badge-success`` / ``badge-warning`` / ``badge-danger`` DO NOT EXIST in theme.css
 (L33).
 """
+from functools import partial
+
 from django.db.models import ProtectedError
 
 from apps.scm.views._common import *  # noqa: F401,F403
@@ -226,9 +228,19 @@ def tradelicense_edit(request, pk):
     the four decision stamps and both usage counters are all off the form, so this screen can only
     correct what the licence SAYS, never what it has authorised or how much of it is left.
     """
-    return crud_edit(request, model=TradeLicense, pk=pk, form_class=TradeLicenseForm,
+    obj = get_object_or_404(TradeLicense, pk=pk, tenant=request.tenant)
+    # The three columns can_charge() tests are freely correctable while the licence is still being
+    # drafted or applied for; once it is IN FORCE, widening them is the same privilege as approving
+    # it, so it takes the same gate. Without this a member deliberately barred from
+    # tradelicense_approve could raise the ceiling on an active licence and then self-serve
+    # tradedocument_issue past what the authority actually granted.
+    may_edit_controls = (obj.status in ("draft", "applied")
+                         or request.user.is_superuser or request.user.is_tenant_admin)
+    return crud_edit(request, model=TradeLicense, pk=pk,
+                     form_class=partial(TradeLicenseForm, may_edit_controls=may_edit_controls),
                      template="scm/compliance/tradelicense/form.html",
-                     success_url="scm:tradelicense_list")
+                     success_url="scm:tradelicense_list",
+                     extra_context={"may_edit_controls": may_edit_controls})
 
 
 @login_required
