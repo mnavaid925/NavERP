@@ -8,7 +8,7 @@
     total_tco2e total_tonne_km measured_count excluded_count considered_count
     coverage_pct intensity_g_per_tonne_km
     by_month by_mode by_carrier   (each row: label count tonne_km tco2e)
-    declared declared_count factors export_qs
+    declared declared_count factors factor_source method_note export_qs
 
   total_tco2e / total_tonne_km / coverage_pct / intensity_g_per_tonne_km are deliberately None —
   not 0 — when nothing could be measured, so every one of them is tested with `is not None`
@@ -142,7 +142,7 @@
   {% endif %}
 
   <div class="card">
-    <div class="card-header"><h2>By month</h2></div>
+    <div class="card-header"><h2 class="card-title">By month</h2></div>
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Month</th><th>Shipments</th><th>Tonne-km</th><th>tCO2e</th></tr></thead>
@@ -167,7 +167,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>By mode</h2></div>
+    <div class="card-header"><h2 class="card-title">By mode</h2></div>
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Mode</th><th>Shipments</th><th>Tonne-km</th><th>tCO2e</th></tr></thead>
@@ -187,7 +187,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>By carrier</h2></div>
+    <div class="card-header"><h2 class="card-title">By carrier</h2></div>
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Carrier</th><th>Shipments</th><th>Tonne-km</th><th>tCO2e</th></tr></thead>
@@ -207,7 +207,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>Supplier-declared emissions</h2></div>
+    <div class="card-header"><h2 class="card-title">Supplier-declared emissions</h2></div>
     <div class="card-body">
       <p class="text-muted">
         These are figures <span class="fw-600">suppliers reported themselves</span> on
@@ -227,7 +227,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2>Method &amp; limitations</h2></div>
+    <div class="card-header"><h2 class="card-title">Method &amp; limitations</h2></div>
     <div class="card-body">
       <p class="text-muted">
         For each shipment: <span class="fw-600">tonne-km = (weight_kg ÷ 1000) × load distance_km</span>, then
@@ -246,12 +246,9 @@
         </table>
       </div>
       <p class="text-muted">
-        Factors are well-to-wheel defaults consistent with the GLEC Framework v3.2 / ISO 14083 default tables
-        and the UK DEFRA freighting-goods factors. <span class="fw-600">Limitations:</span> they are defaults,
-        not carrier-specific measured intensities; no allowance is made for empty running or backhaul; a
-        shipment with no distance or no weight is excluded rather than estimated; and this is an operational
-        estimate for internal decision-making. Statutory or assured disclosure (CSRD, GHG Protocol reporting)
-        is an accounting concern and does not come from this page.
+        <span class="fw-600">{{ factor_source }}.</span> {{ method_note }}
+        Statutory or assured disclosure (CSRD, GHG Protocol reporting) is an accounting concern and does not
+        come from this page.
       </p>
     </div>
   </div>
