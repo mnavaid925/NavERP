@@ -2116,3 +2116,390 @@ def resolved_alert_a(db, alert_a, admin_user):
     """A CLOSED alert carrying its original resolver and note — the re-resolve no-op fixture."""
     alert_a.resolve(admin_user, "Wrote the stock off against the quarantine bin.")
     return alert_a
+
+
+# ------------------------------------------------------------------ SCM 4.12 Contract & Compliance
+# Four registers, one report. Every date below is derived from ``timezone.localdate()`` — the SAME
+# basis ``TradeLicense.days_to_expiry``, ``ComplianceRequirement.refresh_status`` and the carbon
+# report's window all read (lesson L16). A literal 2026 date would drift out of the renewal window
+# and out of the report's default last-365-days window the moment the clock passed it.
+#
+# Nothing here TYPES a workflow status the app moves through a verb: ``TradeLicense.status`` and
+# ``TradeDocument.status`` are both ``editable=False``, so the licence fixtures walk
+# draft -> applied -> active exactly as ``tradelicense_submit`` / ``tradelicense_approve`` do, and a
+# document is issued through the same ``can_charge()`` gate ``tradedocument_issue`` uses. A hand-set
+# status would let a test assert a state the product cannot actually reach.
+def _compliance_date(days):
+    """A date ``days`` from today on the tz-aware basis every 4.12 date reader uses."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+@pytest.fixture
+def org_unit_b(db, tenant_b):
+    """The tenant_b org unit the ``scope="org_unit"`` isolation assertions point at.
+
+    4.1 shipped ``org_unit_a`` alone because nothing before 4.12 pointed an FK at an org unit from a
+    screen a crafted POST could reach; the obligation register does, so the foreign row it has to
+    fail against has to exist.
+    """
+    from apps.core.models import OrgUnit
+    return OrgUnit.objects.create(tenant=tenant_b, name="Globex Operations", kind="department")
+
+
+@pytest.fixture
+def evidence_document_a(db, tenant_a):
+    """A tenant_a ``core.Document`` — 4.12 attaches evidence through the generic attachment, never
+    a FileField of its own (Module 13 owns file storage)."""
+    from apps.core.models import Document
+    return Document.objects.create(tenant=tenant_a, name="COI 2026.pdf", file="documents/coi.pdf")
+
+
+@pytest.fixture
+def evidence_document_b(db, tenant_b):
+    """The tenant_b attachment every cross-tenant evidence assertion points at."""
+    from apps.core.models import Document
+    return Document.objects.create(tenant=tenant_b, name="Globex COI.pdf",
+                                   file="documents/globex.pdf")
+
+
+@pytest.fixture
+def trade_license_a(db, tenant_a, usd, supplier_a):
+    """An IN-FORCE export licence capped in BOTH dimensions — 10 000.00 value, 500.0000 units.
+
+    Driven through the real application ladder (draft -> applied -> active) rather than created at
+    ``status="active"``: the column is ``editable=False`` and only the verbs move it, so a hand-set
+    value would be a state no button in the product can produce.
+    """
+    from apps.scm.models import TradeLicense
+    lic = TradeLicense.objects.create(
+        tenant=tenant_a, license_number="BIS-2026-000111",
+        title="Export licence - workstation hardware", license_type="export_license",
+        issuing_authority="US Bureau of Industry and Security", issuing_country="United States",
+        holder_party=supplier_a, application_date=_compliance_date(-120),
+        issue_date=_compliance_date(-110), expiry_date=_compliance_date(300),
+        renewal_notice_days=60, authorized_value=Decimal("10000.00"),
+        authorized_quantity=Decimal("500.0000"), currency=usd,
+        commodity_scope="Laptop workstations and monitors.",
+        eccn_or_hs="EAR99 / HS 8471.30", destination_countries="Canada",
+    )
+    lic.status = "applied"
+    lic.save(update_fields=["status", "updated_at"])
+    lic.status = "active"
+    lic.save(update_fields=["status", "updated_at"])
+    lic.refresh_status()
+    return lic
+
+
+@pytest.fixture
+def uncapped_license_a(db, tenant_a):
+    """An in-force licence with NO ceiling in either dimension.
+
+    ``authorized_value`` / ``authorized_quantity`` are nullable and that nullability carries meaning:
+    unlimited, not exhausted. This is the fixture behind every "``remaining_*`` and
+    ``utilization_pct`` answer ``None``, never ``0``" assertion.
+    """
+    from apps.scm.models import TradeLicense
+    lic = TradeLicense.objects.create(
+        tenant=tenant_a, license_number="GEN-AUTH-000222", title="General authorization - spares",
+        license_type="general_authorization", issuing_authority="US Customs and Border Protection",
+        issue_date=_compliance_date(-30), expiry_date=_compliance_date(400),
+    )
+    lic.status = "active"
+    lic.save(update_fields=["status", "updated_at"])
+    return lic
+
+
+@pytest.fixture
+def expiring_license_a(db, tenant_a):
+    """An in-force licence 21 days from lapsing against a 60-day notice window — amber."""
+    from apps.scm.models import TradeLicense
+    lic = TradeLicense.objects.create(
+        tenant=tenant_a, license_number="CBP-IMP-000333", title="Import permit - lithium cells",
+        license_type="import_permit", issuing_authority="US Customs and Border Protection",
+        # Shares ``issuing_country`` with ``trade_license_a`` deliberately: the list's country
+        # dropdown is built with DISTINCT over a values_list, and DISTINCT over a queryset carrying
+        # an unrelated ORDER BY column returns duplicates — two rows on one country is what proves
+        # the explicit ``order_by`` on that dropdown is doing its job.
+        issuing_country="United States",
+        application_date=_compliance_date(-400), issue_date=_compliance_date(-390),
+        expiry_date=_compliance_date(21), renewal_notice_days=60,
+        authorized_quantity=Decimal("10000.0000"),
+    )
+    lic.status = "active"
+    lic.save(update_fields=["status", "updated_at"])
+    lic.refresh_status()
+    return lic
+
+
+@pytest.fixture
+def draft_license_a(db, tenant_a):
+    """A licence still at ``draft`` — the submit/approve ladder's starting point, and the one state
+    ``can_charge()`` refuses on the status alone."""
+    from apps.scm.models import TradeLicense
+    return TradeLicense.objects.create(
+        tenant=tenant_a, license_number="DRAFT-000444", title="Draft export licence",
+        issuing_authority="BIS", expiry_date=_compliance_date(200),
+    )
+
+
+@pytest.fixture
+def trade_license_b(db, tenant_b):
+    """The tenant_b licence every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import TradeLicense
+    lic = TradeLicense.objects.create(
+        tenant=tenant_b, license_number="GLOBEX-LIC-1", title="Globex export licence",
+        issuing_authority="Globex Authority", expiry_date=_compliance_date(300),
+        authorized_value=Decimal("5000.00"),
+    )
+    lic.status = "active"
+    lic.save(update_fields=["status", "updated_at"])
+    return lic
+
+
+@pytest.fixture
+def trade_document_a(db, tenant_a, usd, customer_a, shipment_a, trade_license_a, item_a,
+                     uom_each_a):
+    """A DRAFT commercial invoice charged to ``trade_license_a``, with TWO declared lines.
+
+    The two lines are the whole point: ``declared_value`` is 1 200.00 and the lines multiply out to
+    the same 1 200.00 (200 + 1 000), so a ``recompute_usage()`` that summed both grains in ONE
+    aggregate would fan the document row out per line and charge the licence 2 400.00 — twice its
+    face value, silently. The line quantities total 7.0000.
+    """
+    from apps.scm.models import TradeDocument, TradeDocumentLine
+    doc = TradeDocument.objects.create(
+        tenant=tenant_a, doc_type="commercial_invoice", direction="export",
+        document_number="INV-EXP-0001", issue_date=_compliance_date(-2), shipment=shipment_a,
+        license=trade_license_a, consignee_party=customer_a, country_of_origin="United States",
+        country_of_destination="Canada", currency=usd, declared_value=Decimal("1200.00"),
+        incoterm="DAP", gross_weight_kg=Decimal("900.00"), net_weight_kg=Decimal("850.00"),
+        package_count=12, port_of_loading="Chicago, IL", port_of_discharge="Toronto, ON",
+    )
+    TradeDocumentLine.objects.create(
+        document=doc, item=item_a, description="Laptop workstation", hs_code="8471.30",
+        country_of_origin="United States", uom_text="each", uom=uom_each_a,
+        quantity=Decimal("2.0000"), unit_value=Decimal("100.00"))
+    TradeDocumentLine.objects.create(
+        document=doc, description="Monitor, 27-inch", hs_code="8528.52",
+        country_of_origin="United States", uom_text="each",
+        quantity=Decimal("5.0000"), unit_value=Decimal("200.00"))
+    return doc
+
+
+@pytest.fixture
+def issued_document_a(db, trade_document_a, trade_license_a, admin_user):
+    """``trade_document_a`` put through the issue verb's own arithmetic — refused, never clamped.
+
+    ``status`` is ``editable=False`` and only ``tradedocument_issue`` moves it, so this mirrors that
+    route exactly: ``can_charge()`` first, then the stamps, then ``recompute_usage()`` on the licence
+    (re-derived from the documents, never incremented).
+    """
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.scm.models._base import q2, q4
+    value = q2(trade_document_a.declared_value)
+    quantity = q4(trade_document_a.lines.aggregate(total=Sum("quantity"))["total"])
+    allowed, reason = trade_license_a.can_charge(value, quantity)
+    assert allowed, reason
+    trade_document_a.status = "issued"
+    trade_document_a.issued_at = timezone.now()
+    trade_document_a.issued_by = admin_user
+    trade_document_a.save(update_fields=["status", "issued_at", "issued_by", "updated_at"])
+    trade_license_a.recompute_usage()
+    return trade_document_a
+
+
+@pytest.fixture
+def trade_document_b(db, tenant_b, trade_license_b, supplier_b):
+    """The tenant_b document every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import TradeDocument, TradeDocumentLine
+    doc = TradeDocument.objects.create(
+        tenant=tenant_b, doc_type="customs_declaration", direction="import",
+        document_number="GLOBEX-ENT-1", license=trade_license_b, shipper_party=supplier_b,
+        declared_value=Decimal("500.00"))
+    TradeDocumentLine.objects.create(document=doc, description="Globex widget",
+                                     quantity=Decimal("1.0000"), unit_value=Decimal("500.00"))
+    return doc
+
+
+@pytest.fixture
+def compliance_requirement_a(db, tenant_a, admin_user, supplier_a, contract_a):
+    """An open, QUARTERLY contract obligation due in 10 days, scoped to a supplier.
+
+    ``source="contract"`` with the contract named, because ``clean()`` rule (c) refuses a link-out
+    that links nowhere, and ``next_due_date`` is set because rule (d) refuses a scheduled obligation
+    with no first due date.
+    """
+    from apps.scm.models import ComplianceRequirement
+    return ComplianceRequirement.objects.create(
+        tenant=tenant_a, title="Certificate of insurance on file and current",
+        description="Evidence the supplier's cover annually.", source="contract",
+        contract=contract_a, source_reference=f"{contract_a.number}, clause 11.2",
+        framework="insurance_coi", obligation_category="insurance", jurisdiction="United States",
+        scope="party", party=supplier_a, owner=admin_user, frequency="quarterly",
+        next_due_date=_compliance_date(10), notice_days=30, criticality="high",
+    )
+
+
+@pytest.fixture
+def overdue_requirement_a(db, tenant_a, item_a):
+    """An ANNUAL obligation whose due date is already 12 days past — still sitting at ``applicable``.
+
+    Left un-rolled on purpose: ``refresh_status()`` moving it to ``overdue`` is what the list roll
+    and the detail page are asserted to do, so the fixture has to hand them a row that has crossed
+    the boundary but not yet been caught up.
+    """
+    from apps.scm.models import ComplianceRequirement
+    return ComplianceRequirement.objects.create(
+        tenant=tenant_a, title="Lithium cells classified to UN3481", source="regulation",
+        source_reference="49 CFR 173.185", framework="hazmat_dot_iata_imdg",
+        jurisdiction="United States", scope="item", item=item_a, frequency="annual",
+        next_due_date=_compliance_date(-12), notice_days=30, criticality="critical",
+    )
+
+
+@pytest.fixture
+def one_time_requirement_a(db, tenant_a):
+    """A ``one_time`` obligation — the cadence with NO next cycle, so a pass clears the due date
+    rather than inventing one."""
+    from apps.scm.models import ComplianceRequirement
+    return ComplianceRequirement.objects.create(
+        tenant=tenant_a, title="GDPR processor terms reviewed once", source="internal_policy",
+        framework="data_privacy_gdpr", scope="tenant", frequency="one_time",
+        next_due_date=_compliance_date(5), notice_days=30, criticality="low",
+    )
+
+
+@pytest.fixture
+def compliance_requirement_b(db, tenant_b):
+    """The tenant_b obligation every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import ComplianceRequirement
+    return ComplianceRequirement.objects.create(
+        tenant=tenant_b, title="Globex REACH declaration", source="regulation",
+        framework="reach", scope="tenant", frequency="annual",
+        next_due_date=_compliance_date(30), criticality="medium",
+    )
+
+
+@pytest.fixture
+def compliance_check_a(db, compliance_requirement_a, admin_user):
+    """One PARTIAL proof cycle folded into its parent through ``record_check()``.
+
+    Partial rather than pass: it moves the parent to ``in_progress`` and leaves ``next_due_date``
+    alone, so the fixture does not silently consume the cycle the advance tests are about.
+    """
+    from apps.scm.models import ComplianceCheck
+    check = ComplianceCheck.objects.create(
+        requirement=compliance_requirement_a, result="partial",
+        due_date=compliance_requirement_a.next_due_date, performed_on=_compliance_date(-3),
+        performed_by=admin_user,
+        finding="Cargo cover evidenced; liability certificate outstanding.",
+    )
+    compliance_requirement_a.record_check(check)
+    return check
+
+
+@pytest.fixture
+def compliance_check_b(db, compliance_requirement_b):
+    """A tenant-LESS child of the tenant_b requirement.
+
+    It carries no ``tenant`` column, so every view must resolve it as
+    ``requirement__tenant=request.tenant`` — a bare pk lookup is a cross-tenant read, and this is
+    the row that proves whether one is happening.
+    """
+    from apps.scm.models import ComplianceCheck
+    return ComplianceCheck.objects.create(
+        requirement=compliance_requirement_b, result="pass",
+        due_date=compliance_requirement_b.next_due_date, performed_on=_compliance_date(-1),
+    )
+
+
+@pytest.fixture
+def sustainability_assessment_a(db, tenant_a, supplier_a, admin_user):
+    """A full four-theme EcoVadis-shaped scorecard — 72/68/75/61 means 69, i.e. gold.
+
+    ``overall_score`` and ``rating`` are NOT passed: they are ``editable=False`` and
+    ``recompute_rating()`` (which ``save()`` calls on every path) is their only writer, which is
+    exactly what these tests assert.
+    """
+    from apps.scm.models import SustainabilityAssessment
+    return SustainabilityAssessment.objects.create(
+        tenant=tenant_a, party=supplier_a, assessment_date=_compliance_date(-60),
+        valid_until=_compliance_date(305), source="third_party_rating", provider="EcoVadis",
+        status="validated", environment_score=72, labor_human_rights_score=68, ethics_score=75,
+        sustainable_procurement_score=61, carbon_score=58, assessed_by=admin_user,
+        reach_declared=True, rohs_declared=True, conflict_minerals_declared=True,
+        code_of_conduct_signed=True,
+        scope1_tco2e=Decimal("1240.500"), scope2_tco2e=Decimal("3180.250"),
+        scope3_tco2e=Decimal("18640.000"), carbon_reporting_year=2025,
+    )
+
+
+@pytest.fixture
+def unscored_assessment_a(db, tenant_a, vendor_a):
+    """A scorecard with NOT ONE theme answered — ``overall_score`` must be ``None``, never 0.
+
+    "Assessed, terrible" and "not assessed" are different facts, and a blanket 0 states the first
+    when the truth is the second.
+    """
+    from apps.scm.models import SustainabilityAssessment
+    return SustainabilityAssessment.objects.create(
+        tenant=tenant_a, party=vendor_a, assessment_date=_compliance_date(-10),
+        source="self_assessment", status="draft",
+    )
+
+
+@pytest.fixture
+def sustainability_assessment_b(db, tenant_b, supplier_b):
+    """The tenant_b scorecard every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import SustainabilityAssessment
+    return SustainabilityAssessment.objects.create(
+        tenant=tenant_b, party=supplier_b, assessment_date=_compliance_date(-20),
+        source="desk_review", environment_score=30, scope1_tco2e=Decimal("99.000"),
+        carbon_reporting_year=2025,
+    )
+
+
+@pytest.fixture
+def carbon_shipment_a(db, tenant_a, carrier_a):
+    """One MEASURABLE movement inside the report's default window: 2 000 kg over 500 km by truck.
+
+    2.0 tonnes x 500 km = 1 000 tonne-km, times the truckload factor (62 gCO2e/tonne-km) = 62 000 g
+    = 0.06 tCO2e. Every assertion recomputes that from ``EMISSION_FACTORS`` rather than typing 0.06,
+    so a test cannot pass by agreeing with itself after a factor changes.
+    """
+    from django.utils import timezone
+    from apps.scm.models import Load, Shipment
+    load = Load.objects.create(tenant=tenant_a, carrier=carrier_a, mode="truckload",
+                               origin_text="Chicago, IL", destination_text="Dallas, TX",
+                               distance_km=Decimal("500.00"))
+    ship = Shipment.objects.create(
+        tenant=tenant_a, carrier=carrier_a, load=load, direction="outbound", mode="truckload",
+        origin_text="Chicago, IL", destination_text="Dallas, TX",
+        planned_pickup_date=_compliance_date(-12), planned_delivery_date=_compliance_date(-10),
+        weight_kg=Decimal("2000.00"), package_count=20,
+    )
+    ship.status = "delivered"
+    ship.actual_delivery_at = timezone.now() - datetime.timedelta(days=10)
+    ship.save(update_fields=["status", "actual_delivery_at", "updated_at"])
+    return ship
+
+
+@pytest.fixture
+def unmeasurable_shipment_a(db, tenant_a, carrier_a):
+    """A movement with a distance but NO weight — it cannot be scored, so the report must count it
+    as an EXCLUSION rather than fold it in as a carbon-free zero."""
+    from django.utils import timezone
+    from apps.scm.models import Load, Shipment
+    load = Load.objects.create(tenant=tenant_a, carrier=carrier_a, mode="air",
+                               distance_km=Decimal("3000.00"))
+    ship = Shipment.objects.create(
+        tenant=tenant_a, carrier=carrier_a, load=load, direction="outbound", mode="air",
+        origin_text="Chicago, IL", destination_text="London, UK",
+        planned_pickup_date=_compliance_date(-8), weight_kg=None,
+    )
+    ship.status = "delivered"
+    ship.actual_delivery_at = timezone.now() - datetime.timedelta(days=6)
+    ship.save(update_fields=["status", "actual_delivery_at", "updated_at"])
+    return ship
