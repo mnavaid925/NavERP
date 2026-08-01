@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — the obligation register (list).
+
+Renders apps/scm/views/ContractCompliance/ComplianceRequirements.py::compliancerequirement_list,
+which returns crud_list(...). Everything this page may read, and nothing else:
+  * object_list / page_obj / q                                     (from crud_list)
+  * status_choices / framework_choices / source_choices
+    / criticality_choices / due_choices        flat [(value, label), …] for the five selects
+  * owners                                     a User queryset for the owner select (int FK filter)
+  * due                                        the RESOLVED due-filter value — NOT request.GET.due;
+                                               see the note on that select for why
+  * overdue_count / due_soon_count             the two header chips
+There is deliberately no `stats` dict in that context, so this page renders no stat tiles — a tile
+bound to a key the view does not pass renders blank with no error anywhere, which is this codebase's
+most repeated frontend bug.
+
+`obj.compliance_rate` is deliberately ABSENT from this table. It is a property that runs its own
+aggregate over the child checks, so one column of it would turn a page of fifteen rows into fifteen
+extra queries — the same reason 4.11's target list leaves the live figure to the detail page. It is
+on each requirement's own page, where it costs exactly one query.
+{% endcomment %}
+{% block title %}Compliance Requirements{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Compliance Requirements</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Compliance Requirements</span></div>
+      <p class="text-muted">The queue of what this workspace still owes <span class="fw-600">proof</span> of. Every other table in Contract &amp; Compliance describes a document or a licence; this one describes a <em>duty</em> — an FDA control, a HazMat classification, a GDPR data clause, an ISO surveillance audit, a certificate of insurance, an SLA credit — and the whole point of the page is that a duty coming due is visible <span class="fw-600">before an auditor finds it</span>.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:compliancerequirement_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Requirement</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Register</h2>
+      {% comment %}
+        Both chips are counted over the WHOLE tenant, not over the current filter — they say what the
+        workspace owes, not what somebody just narrowed to. So each links to the unfiltered view of
+        its own bucket rather than appending to the query string: a chip that says 7 and then lands
+        you on 2 rows because a framework filter survived the click is the kind of off-target counter
+        that reports all-clear the moment somebody filters. Both counts are built from the same Qs
+        the `due` filter below applies, so a chip and the page it opens always agree.
+      {% endcomment %}
+      <div class="badge-group">
+        <a href="{% url 'scm:compliancerequirement_list' %}?due=overdue" class="badge {% if overdue_count %}badge-red{% else %}badge-muted{% endif %}">{{ overdue_count }} overdue</a>
+        <a href="{% url 'scm:compliancerequirement_list' %}?due=due_soon" class="badge {% if due_soon_count %}badge-amber{% else %}badge-muted{% endif %}">{{ due_soon_count }} due soon</a>
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title or citation (e.g. 21 CFR 117)…">
+        </div>
+        {% comment %}
+          The due select reflects `due` — the value the VIEW resolved — and not request.GET.due. The
+          view rewrites a hand-edited or unknown value to "" and then narrows nothing, so binding the
+          select to the raw parameter would leave it showing a bucket that was never applied while
+          the whole register renders underneath it.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="due" aria-label="Due state" class="form-select">
+            <option value="">Any due state</option>
+            {% for val, label in due_choices %}
+              <option value="{{ val }}" {% if due == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="framework" aria-label="Framework" class="form-select">
+            <option value="">All frameworks</option>
+            {% for val, label in framework_choices %}
+              <option value="{{ val }}" {% if request.GET.framework == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="criticality" aria-label="Criticality" class="form-select">
+            <option value="">Any criticality</option>
+            {% for val, label in criticality_choices %}
+              <option value="{{ val }}" {% if request.GET.criticality == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          Owner is an int FK lookup, so the option compares against the pk through stringformat:"d" —
+          slugify would agree only by accident. The view guards the value with the L11 as_db_int()
+          check before it ever reaches .filter(), so a hand-typed ?owner=abc skips the filter rather
+          than 500ing.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="owner" aria-label="Owner" class="form-select">
+            <option value="">All owners</option>
+            {% for u in owners %}
+              <option value="{{ u.pk }}" {% if request.GET.owner == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.get_username }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:compliancerequirement_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The owner list includes <span class="fw-600">deactivated logins</span> on purpose — “what was still owned by somebody when they left” is exactly the question this filter is for. The new-requirement form drops them, because you cannot make somebody who has left answerable for a new duty.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Requirement</th>
+            <th>Source</th>
+            <th>Framework</th>
+            <th>Applies to</th>
+            <th>Owner</th>
+            <th>Next due</th>
+            <th>Criticality</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:compliancerequirement_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title }}</div>
+              </td>
+              <td>
+                {{ obj.get_source_display }}
+                {% comment %}
+                  The link-outs, not a second copy of the source record: 4.2 already owns the
+                  agreement and 4.12's own TradeLicense owns the authorisation, so an obligation that
+                  comes out of one simply points at it. Both FKs are SET_NULL, so a source that was
+                  deleted leaves the obligation and its proof history standing — which is the point,
+                  a regulator asks what was done, not whether the paper still exists.
+                {% endcomment %}
+                {% if obj.contract %}<div class="form-help mono">{{ obj.contract.number }}</div>{% endif %}
+                {% if obj.license %}<div class="form-help mono">{{ obj.license.number }}</div>{% endif %}
+                {% if obj.source_reference %}<div class="form-help">{{ obj.source_reference|truncatechars:60 }}</div>{% endif %}
+              </td>
+              <td>
+                {{ obj.get_framework_display }}
+                {% if obj.jurisdiction %}<div class="form-help">{{ obj.jurisdiction }}</div>{% endif %}
+              </td>
+              {% comment %}
+                scope_label is one line of display text off resolved_scope(), which returns
+                (scope value, the object it narrows to or None). None on a NARROWED scope means the
+                subject was DELETED — the four pointers are SET_NULL — and such a row must never read
+                as workspace-wide, so the model renders it "Location (removed)" and it is flagged
+                amber here. The tint is on the badge and not on the row, because .row-warn and
+                .badge-amber share --warn-bg and an amber pill on an amber row is an invisible pill.
+              {% endcomment %}
+              <td>
+                {% if obj.scope == 'tenant' %}
+                  <span class="text-muted">{{ obj.scope_label }}</span>
+                {% elif obj.resolved_scope.1 %}
+                  <span class="badge badge-slate">{{ obj.scope_label }}</span>
+                {% else %}
+                  <span class="badge badge-amber">{{ obj.scope_label }}</span>
+                  <div class="form-help">The subject was deleted, so this obligation no longer names what it binds — re-point it.</div>
+                {% endif %}
+              </td>
+              <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.get_username }}{% else %}<span class="text-muted">Nobody answerable</span>{% endif %}</td>
+              {% comment %}
+                `obj.status in obj.OPEN_STATUSES` reads the model's OWN tuple rather than spelling the
+                four values out again. It has to be ANDed in: the two header chips AND the due filter
+                are both scoped to the open set, so flagging a retired or not-applicable row with a
+                stale date "Overdue" here would put a red badge on a row no chip counts and no filter
+                returns. A closed row simply shows its date.
+              {% endcomment %}
+              <td class="nowrap">
+                {% if obj.next_due_date %}{{ obj.next_due_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                <div class="form-help">
+                  {% if obj.status in obj.OPEN_STATUSES %}
+                    {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>
+                    {% elif obj.is_due_soon %}<span class="badge badge-amber">Due soon</span>
+                    {% elif obj.next_due_date %}{{ obj.get_frequency_display }}
+                    {% else %}<span class="badge badge-slate">Unscheduled</span>{% endif %}
+                  {% else %}
+                    {{ obj.get_frequency_display }}
+                  {% endif %}
+                </div>
+              </td>
+              {% comment %}
+                Both badges take their colour from the model's own *_CSS map through status_css /
+                criticality_css, so a badge on this row and the same badge on the detail page cannot
+                disagree, and the label is always the field's own get_*_display — which is what makes
+                an unmapped value degrade to a muted pill with the right words rather than to an
+                unstyled one with none. theme.css ships COLOUR-named badges only (L33).
+              {% endcomment %}
+              <td><span class="badge {{ obj.criticality_css }}">{{ obj.get_criticality_display }}</span></td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:compliancerequirement_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:compliancerequirement_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Only the system-generated number goes into the confirm string — never the title.
+                    An apostrophe in a user-typed title would be escaped to &#x27;, which the HTML
+                    parser hands to JavaScript as a bare quote and the dialog breaks.
+
+                    Gated to match the view's @tenant_admin_required: the proof history CASCADES with
+                    the requirement, and those child rows ARE the defensible documentation — they
+                    cannot be re-derived from anything. Showing the button to a member would offer a
+                    one-click 403, or worse, suggest the evidence was theirs to discard.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:compliancerequirement_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every check recorded against it is deleted too, and that proof history cannot be reconstructed. To keep the record of a decision, retire it or mark it not applicable with a reason instead.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="shield-check"></i>
+                  <h3>No compliance requirements</h3>
+                  <p>Nothing is being tracked yet. A requirement names one standing duty, says where it comes from and what it binds, puts a person's name against it and sets how often it must be re-proved — after that the due queue, the notice window and the proof history all follow from it. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered <span class="fw-600">soonest due first</span> — an obligation with no date at all sorts to the top, because an unscheduled duty needs a human more than a dated one does. Opening this page also <span class="fw-600">rolls the stored status</span> forward for the rows that actually crossed a due date, in one write: a status is a column but overdue is a fact about a date, and the two have to catch up somewhere. Only <span class="fw-600">applicable</span>, <span class="fw-600">in progress</span> and <span class="fw-600">overdue</span> rows are ever moved that way — compliant, non-compliant, not-applicable and retired are human decisions and a clock must not walk them back. The pass rate is not in this table on purpose: it is derived from each row's own checks, so a column of it would cost one aggregate per row. It is on the requirement's page.
+    </div>
+  </div>
+{% endblock %}
