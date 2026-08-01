@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module (4.11+), or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,9 +9,8 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management.** 4.11–4.19 are
-roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry —
-**4.11 Supply Chain Analytics** is next) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics.** 4.12–4.19 are
+roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -659,6 +658,133 @@ excludes every other seeded state** and the return slip would otherwise 404 for 
     characters, so it is a column widen against a 4.9 model plus a reversal of 4.9's documented reasoning. 4.10
     links via `ReturnDisposition.nonconformance` instead.
 
+## 4.11 Supply Chain Analytics  (`apps/scm/*/SupplyChainAnalytics/` + `apps/scm/analytics.py`, templates `templates/scm/analytics/`)
+
+**The measuring layer. 4.11 is READ-ONLY over 4.1–4.10: it posts no `StockMove` and no `JournalEntry`.**
+A survey of thirteen control-tower / spend-analytics products (SAP IBP, Blue Yonder, Kinaxis, o9, Oracle SCM
+Analytics, Sievo, Coupa, GEP, project44, FourKites, Netstock, Anaplan, Resilinc) found the same shape in every
+one: an analytics module is overwhelmingly **computed pages**, and the only things worth storing are metric
+targets, point-in-time snapshots and alert instances carrying human state. So **all five NavERP bullets are
+computed pages** and the three models are cross-cutting machinery, not one table per bullet.
+
+### `apps/scm/analytics.py` — the compute layer (flat at the app root, CLAUDE.md backend rule 8)
+
+**Every 4.11 number comes through `compute_metric()`.** No view, template or export does arithmetic. That is what
+makes it impossible for a tile to read green while the alert behind it fires red, or for a CSV to disagree with
+the page it was exported from.
+
+- `SCM_METRICS` — 36 resolvers, built by attaching one to every key in `METRIC_META`, with a module-level
+  assertion that none is missing so the catalog and the compute layer cannot drift.
+- `compute_metric(tenant, metric, start, end, scope=None, target=None)` — the single entry point. Result contract:
+  `{"value": Decimal|None, "display": str, "breakdown": {...}, "rows": [...]}`, everything inside `breakdown`/`rows`
+  JSON-serializable because `KpiSnapshot.breakdown` stores it verbatim.
+- `band_for(target, value)` → `ok|warning|critical|unknown`, honouring each metric's `direction`. **Both**
+  `KpiSnapshot.status_band` and the alert detector call this one function.
+- `range_bounds` / `period_windows` / `period_count` — `period_count` is computed **arithmetically** (L40: a guard
+  written as `len(build_the_whole_thing())` *is* the payload).
+- `capture_snapshots(tenant, targets, period_end, user)` and `detect_alerts(tenant, user)` — the two services. The
+  seeder and the POST actions both call these, so nothing hand-sets a plausible-looking number.
+- `supplier_delivery_stats` / `supplier_quality_stats` — deliberately **duplicate** the arithmetic of 4.2's
+  `SupplierScorecard.recompute_from_signals` rather than refactoring a shipped, tested sub-module (L38). A parity
+  test in `test_analytics.py` is what keeps the two honest.
+
+**A not-computed figure returns `None` with a stated reason (`_unavailable`), never `0`.** Zero is a fact ("no
+dead stock"); absence is not one ("no stock to measure"), and rendering them the same way is how a page reports
+good news it never computed.
+
+### Models (`models/SupplyChainAnalytics/`) — and why each is STORED rather than derived
+
+- **`_choices.py`** — the closed metric catalog (`METRIC_META`, 36 entries × group/unit/direction/scopes/
+  parameters) plus every shared vocabulary. **This file exists to break an import cycle**: `analytics.py` imports
+  models to aggregate over 4.1–4.10, so `KpiTarget.metric` cannot take its `choices` from `analytics`. Same split
+  `apps/crm` already proved (`models/AnalyticsReporting/_choices.py` vs `crm/analytics.py`). Edge runs one way:
+  `analytics → models → _choices`.
+- **`KpiTarget`** [`KPI-`] — target + warning/critical bands + the knobs a metric declares (`parameter_days`,
+  `parameter_pct`), `is_alerting`, `min_impact_value`, `owner`, `is_pinned`. **Stored because a target is human
+  intent** — nothing in 4.1–4.10 records "we want six turns". Scope is **four typed nullable FKs**
+  (`scope_category`/`scope_location`/`scope_carrier`/`scope_vendor`), never a generic `scope_ref` int: a bare int
+  carries neither tenant nor type (L40). `clean()` is registry-driven off `METRIC_META`, not a per-metric
+  if-chain, and rejects the empty conjunction `is_alerting` with no thresholds.
+- **`KpiSnapshot`** — the frozen fact row, with the component arithmetic in a `breakdown` JSON. **Stored for three
+  independent reasons**: history *drifts* (`Item.average_cost` is recomputed on every receipt and back-dated
+  `StockMove`/GRN rows are legal, so re-deriving last quarter silently rewrites the past); a twelve-point trend
+  would otherwise be twelve full FIFO ledger walks per page load; and every surveyed product ships it.
+  `unique_together (tenant, kpi_target, period_start, dimension_key)` makes a re-run idempotent, and `computed_at`
+  is `default=timezone.now` **not** `auto_now_add` precisely so the re-run re-stamps it.
+- **`SupplyChainAlert`** [`ALR-`] — twelve exception types, ranked by `impact_value` rather than by count, with
+  acknowledge/assign/snooze/resolve/dismiss as no-op-safe model methods each returning its own audit diff.
+  **Stored because acknowledgement is human state no aggregate reproduces** — a purely computed exception list
+  forgets that somebody already looked.
+
+### Non-negotiables for 4.11 (each is a defect that was found and fixed — the tests lock them)
+
+1. **De-dupe is enforced in `detect_alerts` under `transaction.atomic()` + `select_for_update()`, NOT by a DB
+   constraint.** A `unique_together` including `status` would let a *resolved* row block the next genuine breach,
+   and a `UniqueConstraint(condition=...)` is **silently dropped by Django on MariaDB**, which has no partial
+   indexes — so it would protect nothing here. The lock is load-bearing: `atomic()` bounds the write but grants no
+   mutual exclusion, and without it two concurrent runs both read an empty open set and both create.
+2. **`_impact_of` returns `None`, not `ZERO`, when a metric has no money behind it.** Most of the catalog emits no
+   `IMPACT_KEYS` figure, so collapsing "unmeasurable" into "zero" made `impact < min_impact_value` true forever —
+   any operator setting a floor on `otd_pct` silently stopped receiving its alerts. **An unmeasurable impact fails
+   OPEN.**
+3. **One resolver, one row shape.** `_r_supplier_disruption_score` used to emit `components` as `dict[str, dict]`
+   normally and `dict[str, str]` on the nothing-scored path; the view called `.get()` on each value, so a tenant
+   with no history got a 500 on the **first-run path**. Its league rows also carry **uniform keys** — a missing key
+   never reaches a template's `|default:"0"` (Django substitutes `string_if_invalid` and *drops* the filters), so
+   ragged rows render blank.
+4. **Report templates must read the resolver's real row keys.** Eight tables shipped naming keys that did not
+   exist; every cell rendered an em-dash behind a 200 with no error. `temp/smoke_411.py` has a row-key contract
+   check for exactly this.
+5. **Int FK filters guard with `.isdecimal()`, never `.isdigit()`.** `'²'.isdigit()` is `True` but `int('²')`
+   raises, and it 500'd six pages. `apps/core/crud.as_db_int()` is the shared guard — it also refuses over-range
+   values (`?vendor=999999999999999999999` converts fine then dies in the driver).
+6. **Deleting a `KpiTarget` is `@tenant_admin_required`** — it cascades `KpiSnapshot`, and *writing* that history
+   is admin-gated, so leaving the destructive path open inverted the gate. `kpitarget_edit` stays open to members
+   deliberately: tuning a threshold is the target owner's daily work.
+7. **Honest framing, enforced by a test.** `disruption_risk` renders a methodology card stating the scores are
+   deterministic weighted composites over real rows, and **the page never says "AI"** (the sidebar legitimately
+   does for Module 10's own bullets, so the assertion is scoped to the content region). Genuine ML is 10.13.
+8. **`margin_analytics` prints the L29 disclaimer on the page**, not in a comment: SCM posts no `JournalEntry`,
+   `apps.accounting` owns the ledger, this is an operational estimate and explicitly not the statutory P&L.
+9. **CSV cells go through `_csv_safe`** — a value starting `= + - @` executes as a formula when the export is
+   opened, and SKUs/supplier names are user-controlled. Numbers are left alone so `-3.5` stays numeric.
+10. **Chart payloads use `json_script`, never `|safe`** — series labels are SKUs and supplier names.
+
+### URLs / routes  (`urls/SupplyChainAnalytics/`)
+
+`kpi-targets/` · `kpi-snapshots/` · `alerts/` · `inventory-analytics/` · `spend-analytics/` · `logistics-kpis/` ·
+`margin-analytics/` · `disruption-risk/`. Two near-misses, both checked and both free — **`alerts/` vs 4.3's
+`reorder-alerts/`** and **`disruption-risk/` vs 4.2's `risk-assessments/`**: Django matches whole path components
+and never splits at a hyphen. *Do not "tidy" either one to match the other.* CSV exports are literal `export/`
+sub-routes, so they add no new first segment. 4.11 introduces no greedy converter.
+
+Names: `kpitarget_list/_create/_detail/_edit/_delete/_snapshot` · `kpisnapshot_list/_detail/_delete/_capture/
+_export` · `supplychainalert_list/_create/_detail/_edit/_delete/_acknowledge/_assign/_snooze/_resolve/_dismiss/
+_detect` · `inventory_analytics`/`spend_analytics`/`logistics_kpis`/`margin_analytics`/`disruption_risk` (+`_export`).
+
+### Templates  (`templates/scm/analytics/`)
+
+Entity folders `kpitarget/{list,detail,form}`, `kpisnapshot/{list,detail}`, `supplychainalert/{list,detail,form}`;
+the five report pages sit at the **sub-module root** as standalone pages (the `safety_stock_report.html`
+precedent). **`kpisnapshot` has no `form.html` on purpose** and both its templates say so on the page.
+
+### Seeder
+
+`_seed_analytics_tenant(tenant)` runs **last** in `handle()` — it measures every sub-module above it. It types the
+ten KPI targets (intent), then produces every number by calling the **real** `capture_snapshots` / `detect_alerts`,
+so the demo is reproducible by pressing the button on the page. Three alerts are moved through
+acknowledge/assign/resolve via the model methods. It **refuses rather than half-seeds** when there is no stock
+ledger or purchase history. Periods come from `analytics.period_windows("month", 3)` — 30-day deltas are not month
+arithmetic and collapsed three periods into two.
+
+### Query budget (measured)
+
+Report pages **28–36 queries each and scale-invariant** (verified by multiplying alerts/snapshots 10× and
+re-measuring — identical). List pages 9–12. `capture_snapshots` is ~8.5 queries/target and linear **by nature**
+(each target names a different metric over different tables); bounded by `MAX_SNAPSHOT_TARGETS = 200` and by being
+an explicit tenant-admin POST. Deliberately **not** memoised on `(metric, scope, period)`: `compute_metric` reads
+the target's own parameters and bands, so two targets sharing a metric can legitimately differ.
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -707,4 +833,10 @@ the `scm:reorder_alerts`/`scm:valuation_report` precedent that a bullet need not
 `scm:mrp_report`, Shop Floor Control **`scm:productiontimelog_list`** (the time-log list, NOT the work-centre
 master — the bullet is about *tracking* machine time, labour time and progress, which is what the log records;
 centres are reachable from it and from the schedule board).
+**`LIVE_LINKS["4.11"]`** → all five bullets are COMPUTED pages, the `safety_stock_report` precedent taken to
+its conclusion: Inventory Dashboards `scm:inventory_analytics`, Procurement Analytics `scm:spend_analytics`,
+Logistics KPIs `scm:logistics_kpis`, Financial Reporting `scm:margin_analytics` (operational, NOT the ledger),
+Predictive Analytics `scm:disruption_risk`. **None of 4.11's three models takes a sidebar key** — `KpiTarget`
+and `KpiSnapshot` are masters reached from the analytics pages (the `InspectionPlan`/`WorkCenter`/`ReorderRule`/
+`ReturnReason` precedent) and the alert inbox is reached from the open-count chip every report page carries.
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
