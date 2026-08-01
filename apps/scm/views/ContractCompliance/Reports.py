@@ -61,6 +61,10 @@ from apps.scm.models.TransportationManagement.Carriers import MODE_CHOICES
 from apps.scm.models.ContractCompliance._choices import (  # noqa: E402
     CARBON_METHOD_NOTE, EMISSION_FACTORS, EMISSION_FACTOR_SOURCE,
 )
+# The ONE CSV escaper, shared with 4.11's five exports rather than re-implemented — carrier labels
+# are Party.name, i.e. free text, and a cell starting = + - @ executes on the reader's machine.
+from apps.scm.views.SupplyChainAnalytics.Reports import _csv_safe  # noqa: E402
+from apps.scm import analytics  # noqa: E402
 
 _GRAMS_PER_TONNE = Decimal("1000000")  # gCO2e -> tCO2e
 _KG_PER_TONNE = Decimal("1000")
@@ -76,9 +80,16 @@ def _parse_date(raw):
     if not raw:
         return None
     try:
-        return datetime.date.fromisoformat(raw)
+        value = datetime.date.fromisoformat(raw)
     except (ValueError, TypeError):
         return None
+    # A date within a year of date.min makes the `date_to - timedelta(days=365)` default below raise
+    # OverflowError — an uncaught 500 on a value anybody can type into the address bar. Outside the
+    # range the window arithmetic survives, this is simply "not a date" for this page, so it falls
+    # back to the default window and lights the window_invalid banner the template already renders.
+    if not (analytics.MIN_PERIOD_DATE <= value <= analytics.MAX_PERIOD_DATE):
+        return None
+    return value
 
 
 def _window(request):
@@ -176,8 +187,11 @@ def _collect(request):
           .order_by())
     if mode in EMISSION_FACTORS:
         qs = qs.filter(mode=mode)
-    if carrier_raw.isdecimal():
-        qs = qs.filter(carrier_id=int(carrier_raw))
+    # as_db_int, not isdecimal(): a 21-digit value is all decimal digits and converts cleanly, then
+    # raises inside the database driver. Same L11 guard crud_list applies to its own int filters.
+    carrier_pk = as_db_int(carrier_raw)
+    if carrier_pk is not None:
+        qs = qs.filter(carrier_id=carrier_pk)
 
     months, modes, carriers_agg = {}, {}, {}
     total_grams = Decimal("0")
@@ -288,25 +302,32 @@ def carbon_footprint_report_export(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="carbon-footprint.csv"'
     writer = csv.writer(response)
-    writer.writerow(["NavERP — freight emissions estimate (GLEC v3.2 / ISO 14083 shaped)"])
-    writer.writerow(["Operational estimate from default factors — NOT an audited or statutory figure"])
-    writer.writerow(["Window", data["date_from"], data["date_to"]])
-    writer.writerow(["Shipments measured", data["measured_count"]])
-    writer.writerow(["Shipments excluded (no distance and/or no weight)", data["excluded_count"]])
-    writer.writerow(["Coverage %", data["coverage_pct"] if data["coverage_pct"] is not None else "n/a"])
-    writer.writerow(["Total tCO2e", data["total_tco2e"] if data["total_tco2e"] is not None else "n/a"])
-    writer.writerow(["Total tonne-km", data["total_tonne_km"] if data["total_tonne_km"] is not None else "n/a"])
-    writer.writerow([])
+
+    def write(cells):
+        # WARNING: never call writer.writerow directly in this view. Carrier and mode labels are
+        # free text (Carrier.name is a property over Party.name), and a cell beginning = + - @ is
+        # executed as a formula by Excel/LibreOffice on whoever opens the file.
+        writer.writerow([_csv_safe(c) for c in cells])
+
+    write(["NavERP — freight emissions estimate (GLEC v3.2 / ISO 14083 shaped)"])
+    write(["Operational estimate from default factors — NOT an audited or statutory figure"])
+    write(["Window", data["date_from"], data["date_to"]])
+    write(["Shipments measured", data["measured_count"]])
+    write(["Shipments excluded (no distance and/or no weight)", data["excluded_count"]])
+    write(["Coverage %", data["coverage_pct"] if data["coverage_pct"] is not None else "n/a"])
+    write(["Total tCO2e", data["total_tco2e"] if data["total_tco2e"] is not None else "n/a"])
+    write(["Total tonne-km", data["total_tonne_km"] if data["total_tonne_km"] is not None else "n/a"])
+    write([])
     for title, rows in (("By month", data["by_month"]), ("By mode", data["by_mode"]),
                         ("By carrier", data["by_carrier"])):
-        writer.writerow([title])
-        writer.writerow(["Bucket", "Shipments", "Tonne-km", "tCO2e"])
+        write([title])
+        write(["Bucket", "Shipments", "Tonne-km", "tCO2e"])
         for row in rows:
-            writer.writerow([row["label"], row["count"], row["tonne_km"], row["tco2e"]])
-        writer.writerow([])
-    writer.writerow(["Supplier-declared (their figures, not ours)"])
-    writer.writerow(["Assessments", data["declared_count"]])
+            write([row["label"], row["count"], row["tonne_km"], row["tco2e"]])
+        write([])
+    write(["Supplier-declared (their figures, not ours)"])
+    write(["Assessments", data["declared_count"]])
     for scope in ("scope1", "scope2", "scope3"):
         value = data["declared"].get(scope)
-        writer.writerow([scope, value if value is not None else "n/a"])
+        write([scope, value if value is not None else "n/a"])
     return response
