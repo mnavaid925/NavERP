@@ -5,10 +5,10 @@ SCM 4.12 Contract & Compliance — edit form for one recorded ComplianceCheck.
 Renders apps/scm/views/ContractCompliance/ComplianceRequirements.py::compliancecheck_edit.
 Everything this page may read, and nothing else:
   * form         — ComplianceCheckForm (bound on POST)
-  * is_edit      — always True; a check is only ever CREATED inline from its requirement's detail
-                   page, so this template exists solely to correct one that already exists
-  * obj          — the ComplianceCheck being corrected
   * requirement  — obj.requirement, for the breadcrumb and the Cancel target
+The view also passes `is_edit` and `obj`; this page reads neither, because there is no create path
+to branch on (a check is only ever CREATED inline from its requirement's detail page) and the
+requirement carries everything the header needs.
 
 There is deliberately no create path here and no list/detail page for this model: a check is a
 tenant-less child reached only through requirement__tenant, and it is rendered as a timeline on its
@@ -17,9 +17,12 @@ parent. The seven names below are ComplianceCheckForm's whole whitelist. Absent 
 somebody else's obligation), `performed_by` (stamped from request.user; who proved a control is an
 audit fact, not an input) and `created_at`.
 
-Editing a check does NOT re-run the parent's projection — the view refuses to let `result` or
-`due_date` change here, because re-deriving would advance the due date a second time for a cycle
-that already advanced it. That rule lives in the view, not in this template.
+Every field here IS editable, including `result` and `due_date` — this is the correction path. What
+the view deliberately does NOT do is re-run the parent's projection: re-deriving would advance
+`next_due_date` a second time for a cycle that already advanced it. So a changed verdict fixes the
+record and the derived `compliance_rate`, but the requirement's own status and due date stay where
+they are until somebody sets them on the requirement's edit screen. The view flashes exactly that
+when `result` changes.
 {% endcomment %}
 {% block title %}Edit Check · {{ requirement.number }}{% endblock %}
 
@@ -34,9 +37,11 @@ that already advanced it. That rule lives in the view, not in this template.
     </div>
     <p class="text-muted">
       Correcting the record of a proof cycle on
-      <span class="fw-600">{{ requirement.title }}</span>. The verdict and the cycle it answers are
-      fixed once recorded — re-deciding them here would advance the requirement's due date a second
-      time for a cycle that already advanced it. Record a new check instead.
+      <span class="fw-600">{{ requirement.title }}</span>. Changing the verdict here corrects this
+      row and the compliance rate derived from it, but it deliberately does
+      <span class="fw-600">not</span> re-derive the obligation's status or next due date —
+      re-running that projection would push the due date a second time for a cycle that already
+      advanced it. Adjust those on the requirement itself if they need to change.
     </p>
   </div></div>
 
