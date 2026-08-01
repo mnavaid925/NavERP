@@ -122,10 +122,15 @@ def _roll_license_statuses(tenant):
     nothing, so this is a single cheap SELECT and no writes.
     """
     changed = []
+    # bulk_update never calls pre_save, so auto_now does NOT fire: updated_at has to be stamped by
+    # hand or the column is written back with its stale in-memory value, silently backdating a row
+    # that just changed. Same fix ComplianceRequirements._roll_requirement_statuses carries.
+    stamp = timezone.now()
     for lic in TradeLicense.objects.filter(tenant=tenant, status__in=TradeLicense.AUTO_STATUSES):
         old = lic.status
         lic.refresh_status(save=False)
         if lic.status != old:
+            lic.updated_at = stamp
             changed.append(lic)
     if changed:
         with transaction.atomic():
@@ -508,8 +513,12 @@ def tradelicense_recompute(request, pk):
         changes = _changes(obj, before)
 
     if not changes:
+        # Count only the documents that actually CHARGE the licence — used_value sums exactly those.
+        # A plain .count() here would report a licence with two drafts and one issued document as
+        # "3 charged", i.e. a number the balance beside it cannot be reconciled with.
+        charging = obj.trade_documents.filter(status__in=TradeDocument.CHARGING_STATUSES).count()
         messages.info(request, f"{obj.number} was already in step with its documents — "
-                               f"{obj.used_value} used across {obj.trade_documents.count()} "
+                               f"{obj.used_value} used across {charging} "
                                "charged document(s). Nothing changed.")
         return redirect("scm:tradelicense_detail", pk=pk)
 
