@@ -73,7 +73,7 @@ refuses their save cannot drift apart.
         <div class="form-grid">
           {% include "partials/form_field.html" with field=form.application_date %}
           {% include "partials/form_field.html" with field=form.issue_date %}
-          {% include "partials/form_field.html" with field=form.expiry_date %}
+          {% if form.expiry_date %}{% include "partials/form_field.html" with field=form.expiry_date %}{% endif %}
           {% include "partials/form_field.html" with field=form.renewal_notice_days %}
         </div>
       </div>
@@ -84,9 +84,9 @@ refuses their save cannot drift apart.
       <div class="card-body">
         <p class="form-help" style="margin:0 0 .9rem;">This is what makes a licence a quantity rather than a piece of paper. A <span class="fw-600">blank</span> ceiling means unlimited in that dimension — <span class="fw-600">not zero</span>: the licence page prints "Unlimited" and its remaining figure and utilisation read as em dashes rather than as a confident 0 that looks exhausted. A ceiling of <span class="fw-600">0</span> is a real and quite different statement, and it authorises nothing. Set either, both or neither. Every document issued under the licence draws the balance down, and an issue that would exceed a ceiling is refused outright rather than clamped to the headroom — a shipment that went out partly unauthorised while the register still looked healthy is exactly the failure a balance exists to prevent.</p>
         <div class="form-grid">
-          {% include "partials/form_field.html" with field=form.authorized_value %}
+          {% if form.authorized_value %}{% include "partials/form_field.html" with field=form.authorized_value %}{% endif %}
           {% include "partials/form_field.html" with field=form.currency %}
-          {% include "partials/form_field.html" with field=form.authorized_quantity %}
+          {% if form.authorized_quantity %}{% include "partials/form_field.html" with field=form.authorized_quantity %}{% endif %}
         </div>
       </div>
     </div>
