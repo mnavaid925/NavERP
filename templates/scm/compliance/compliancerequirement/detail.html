@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — one obligation, where it stands, and every cycle ever performed
+against it.
+
+Renders apps/scm/views/ContractCompliance/ComplianceRequirements.py::compliancerequirement_detail.
+Everything this page may read, and nothing else:
+  * obj         the ComplianceRequirement (owner / party / org_unit / location / item / contract /
+                license / document are all select_related by the view, so every FK read below is
+                already joined)
+  * checks      the proof timeline as a LIST, newest first (Meta ordering), with performed_by and
+                evidence joined
+  * check_form  an UNBOUND ComplianceCheckForm for the inline "record a check" POST
+
+There is no `stats` dict in that context: the four tiles below are read off `obj` and off the length
+of `checks`, both of which really are there. `compliance_rate` is pulled ONCE into a with-block as
+`rate` — it is a property that runs its own aggregate over the child rows, so naming it a second
+time would be a second query for one number.
+
+ComplianceCheck has no list page and no detail page. It is a tenant-less child reached only through
+requirement__tenant, so it lives here as the timeline plus the inline form; its edit and delete
+routes are the only two pages it owns.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.title }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.criticality_css }}">{{ obj.get_criticality_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:compliancerequirement_list' %}">Compliance Requirements</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">A standing duty and the record that it was met. Opening this page rolls the stored status forward if the due date has passed — the same catch-up the register does — so a bookmark and the queue always show the same standing.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:compliancerequirement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'scm:compliancerequirement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% with rate=obj.compliance_rate %}
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="shield-check"></i></div>
+        <div class="stat-value">{{ obj.get_status_display }}</div>
+        <div class="stat-label">
+          Standing
+          <span class="badge {{ obj.criticality_css }}">{{ obj.get_criticality_display }}</span>
+        </div>
+      </div>
+      {% comment %}
+        The due tile carries the same open-set guard the register uses — `obj.status in
+        obj.OPEN_STATUSES` reads the model's own tuple, so this tile, the list badge and the header
+        chips cannot encode three different ideas of "still owed". A retired or not-applicable row
+        with a stale date owes nothing and is not flagged.
+      {% endcomment %}
+      <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-value">{% if obj.next_due_date %}{{ obj.next_due_date|date:"M d, Y" }}{% else %}—{% endif %}</div>
+        <div class="stat-label">
+          Next due
+          {% if obj.status in obj.OPEN_STATUSES %}
+            {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>
+            {% elif obj.days_to_due == 0 %}<span class="badge badge-amber">Due today</span>
+            {% elif obj.is_due_soon %}<span class="badge badge-amber">In {{ obj.days_to_due }} day{{ obj.days_to_due|pluralize }}</span>
+            {% elif obj.days_to_due is not None %}<span class="badge badge-slate">In {{ obj.days_to_due }} day{{ obj.days_to_due|pluralize }}</span>
+            {% else %}<span class="badge badge-slate">Unscheduled</span>{% endif %}
+          {% else %}
+            <span class="badge badge-muted">Nothing owed</span>
+          {% endif %}
+        </div>
+      </div>
+      {% comment %}
+        compliance_rate is deliberately None — never 0 — when nothing has been checked yet, so it is
+        tested with `is not None` and NOT for truthiness. A truthiness test would also swallow a
+        genuine 0.00%, and the None case would render a confident red zero that reads as FAILING when
+        the truth is simply UNKNOWN. A real 0% and "never checked" are different facts about an
+        obligation and this tile has to keep them apart.
+      {% endcomment %}
+      <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="percent"></i></div>
+        <div class="stat-value">{% if rate is not None %}{{ rate|floatformat:2 }}%{% else %}—{% endif %}</div>
+        <div class="stat-label">{% if rate is not None %}Passed cycles, not-applicable ones excluded{% else %}Not yet checked — no rate to state{% endif %}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="history"></i></div>
+        <div class="stat-value">{{ checks|length }}</div>
+        <div class="stat-label">Recorded cycle{{ checks|length|pluralize }}{% if obj.last_checked_on %} · last passed {{ obj.last_checked_on|date:"M d, Y" }}{% endif %}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What this obligation is</h2>
+        <span class="badge badge-slate">{{ obj.get_source_display }}</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Title</dt><dd class="fw-600">{{ obj.title }}</dd></div>
+          <div class="detail-item"><dt>Source of the duty</dt><dd>{{ obj.get_source_display }}</dd></div>
+          <div class="detail-item"><dt>Citation / reference</dt><dd>{% if obj.source_reference %}{{ obj.source_reference }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Framework</dt><dd><span class="badge badge-slate">{{ obj.get_framework_display }}</span></dd></div>
+          <div class="detail-item"><dt>Obligation category</dt><dd>{% if obj.obligation_category %}{{ obj.get_obligation_category_display }}{% else %}<span class="text-muted">Not a contract clause</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Jurisdiction</dt><dd>{% if obj.jurisdiction %}{{ obj.jurisdiction }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          {% comment %}
+            scope_label renders "Supplier: Acme Ltd", the bare "Whole workspace", or "Location
+            (removed)" when a SET_NULL pointer emptied out. That last case is flagged amber rather
+            than shown plainly: an obligation that bound one site must never quietly start reading as
+            if it bound everything.
+          {% endcomment %}
+          <div class="detail-item"><dt>Applies to</dt><dd>
+            {% if obj.scope == 'tenant' %}{{ obj.scope_label }}
+            {% elif obj.resolved_scope.1 %}<span class="badge badge-slate">{{ obj.scope_label }}</span>
+            {% else %}<span class="badge badge-amber">{{ obj.scope_label }}</span>{% endif %}
+          </dd></div>
+          <div class="detail-item"><dt>Standing document</dt><dd>{% if obj.document %}{{ obj.document.name }}{% else %}<span class="text-muted">None attached</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>From contract</dt><dd>
+            {% if obj.contract %}<a href="{% url 'scm:contract_detail' obj.contract.pk %}" class="mono">{{ obj.contract.number }}</a> {{ obj.contract.title }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </dd></div>
+          <div class="detail-item"><dt>From licence</dt><dd>
+            {% if obj.license %}<a href="{% url 'scm:tradelicense_detail' obj.license.pk %}" class="mono">{{ obj.license.number }}</a> {{ obj.license.title }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </dd></div>
+        </dl>
+        {% if obj.description %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.description }}</p>{% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Where it stands</h2>
+        <span class="badge badge-slate">{{ obj.get_frequency_display }}</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+          <div class="detail-item"><dt>Criticality</dt><dd><span class="badge {{ obj.criticality_css }}">{{ obj.get_criticality_display }}</span></dd></div>
+          <div class="detail-item"><dt>Owner</dt><dd>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.get_username }}{% else %}<span class="text-muted">Nobody answerable</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>How often proof is owed</dt><dd>{{ obj.get_frequency_display }}</dd></div>
+          <div class="detail-item"><dt>Next due</dt><dd>{% if obj.next_due_date %}{{ obj.next_due_date|date:"M d, Y" }}{% else %}<span class="text-muted">No cycle scheduled</span>{% endif %}</dd></div>
+          {% comment %}
+            days_to_due is None when nothing is scheduled and NEGATIVE once past, so it is tested
+            with `is not None`. Truthiness would hide the day the obligation actually falls due —
+            0 is a real answer here, and it is the one day that matters most.
+          {% endcomment %}
+          <div class="detail-item"><dt>Days to due</dt><dd>
+            {% if obj.days_to_due is not None %}{{ obj.days_to_due }}{% else %}<span class="text-muted">—</span>{% endif %}
+            <span class="text-muted">negative once past</span>
+          </dd></div>
+          <div class="detail-item"><dt>Notice window</dt><dd>{{ obj.notice_days }} day{{ obj.notice_days|pluralize }} <span class="text-muted">before the due date</span></dd></div>
+          <div class="detail-item"><dt>Last passed check</dt><dd>{% if obj.last_checked_on %}{{ obj.last_checked_on|date:"M d, Y" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Compliance rate</dt><dd>
+            {% if rate is not None %}<span class="fw-600">{{ rate|floatformat:2 }}%</span>{% else %}<span class="text-muted">— not yet checked</span>{% endif %}
+          </dd></div>
+          <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+        </dl>
+        {% if obj.status == 'not_applicable' %}
+          <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">
+            <span class="badge badge-muted">Why it does not apply</span> {{ obj.not_applicable_reason }}
+          </p>
+        {% endif %}
+        {% if obj.notes %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.notes }}</p>{% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          A passed check advances the due date by exactly <span class="fw-600">one</span> cycle, anchored on the cycle it answered rather than on the day it was done — so a proof performed three weeks late does not drag the whole schedule three weeks later, and a run of missed cycles is not silently erased by jumping straight to the next future date. A fail or a partial leaves the date alone, because the cycle was not satisfied and is still owed.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Proof history</h2>
+        <span class="badge badge-slate">Newest first · {{ checks|length }} cycle{{ checks|length|pluralize }}</span>
+      </div>
+      {% comment %}
+        The timeline. A ComplianceCheck has no list page and no detail page — it is a tenant-less
+        child resolved only through requirement__tenant — so this table IS its screen, and its edit
+        and delete routes are the only two pages it owns. `performed_by` and `evidence` are joined by
+        the view because every row renders both.
+      {% endcomment %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Performed</th>
+              <th>Result</th>
+              <th>Cycle answered</th>
+              <th>By</th>
+              <th>Finding</th>
+              <th>CAPA / NCR</th>
+              <th>Evidence</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in checks %}
+              <tr>
+                <td class="nowrap fw-600">{{ check.performed_on|date:"M d, Y" }}</td>
+                {% comment %}
+                  result_css is the model's own RESULT_CSS lookup — Django templates cannot subscript
+                  a dict by a variable, which is exactly why that property exists — and the label is
+                  always get_result_display, so an unmapped value degrades to a muted pill with the
+                  right words rather than an unstyled one with none.
+                {% endcomment %}
+                <td><span class="badge {{ check.result_css }}">{{ check.get_result_display }}</span></td>
+                <td class="nowrap">
+                  {% if check.due_date %}{{ check.due_date|date:"M d, Y" }}{% else %}<span class="text-muted">Ad hoc</span>{% endif %}
+                </td>
+                <td>{% if check.performed_by %}{{ check.performed_by.get_full_name|default:check.performed_by.get_username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if check.finding %}{{ check.finding|truncatechars:120 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if check.corrective_reference %}<span class="mono">{{ check.corrective_reference }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if check.evidence %}{{ check.evidence.name }}{% else %}<span class="text-muted">None</span>{% endif %}</td>
+                <td>
+                  <div class="table-actions">
+                    {% comment %}
+                      Both gated to match @tenant_admin_required on the two child views. Recording a
+                      check is the daily work of whoever owns the obligation and is open to anyone;
+                      rewriting or removing one after the fact is not — this row IS the evidence, and
+                      a proof history anybody can quietly restate is not defensible documentation.
+
+                      Only the PARENT's system number is interpolated into the confirm string. The
+                      check has no number of its own, and nothing user-typed may go in: an apostrophe
+                      would be escaped to &#x27; and break the dialog.
+                    {% endcomment %}
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <a href="{% url 'scm:compliancecheck_edit' check.pk %}" class="btn-icon" title="Correct this check"><i data-lucide="pencil"></i></a>
+                      <form method="post" action="{% url 'scm:compliancecheck_delete' check.pk %}" onsubmit="return confirm('Delete this recorded check from {{ obj.number }}? It is evidence, and removing it also raises the compliance rate — a failure removed is a failure that never happened as far as this page is concerned. A passed cycle is what advanced the due date, and that date is NOT rewound.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="8">
+                  <div class="empty-state">
+                    <i data-lucide="clipboard-check"></i>
+                    <h3>No cycle has been recorded yet</h3>
+                    <p>Until a check is recorded this obligation has a schedule and no proof, which is why the compliance rate above shows a dash rather than 0% — nothing has failed, nothing has passed, and the truth is simply unknown. Record the first cycle below.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% comment %}
+        The inline "record a check" form. It POSTs to compliancerequirement_record_check, which is
+        NOT admin-gated: recording that you did the thing you were supposed to do is the daily work
+        of whoever owns the obligation, and putting it behind a workspace administrator is how a
+        register stops being kept at all.
+
+        Fields are rendered BY NAME, which couples this block to ComplianceCheckForm's whitelist —
+        result / due_date / performed_on / finding / corrective_reference / evidence / notes, all
+        seven of it. `requirement` and `performed_by` are deliberately NOT on the form: the parent
+        comes from the URL, and "who did it" is stamped from request.user, because an audit fact is
+        not an input.
+
+        The non_field_errors loop is the house shape and is normally inert here: on an invalid POST
+        the view flashes the errors as a message and REDIRECTS, so this form arrives unbound. It
+        stays because a bound form is the one case where silence would be wrong.
+      {% endcomment %}
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:compliancerequirement_record_check' obj.pk %}">
+          {% csrf_token %}
+          {% for e in check_form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <p class="form-help" style="margin:0 0 .9rem;">Leave <span class="fw-600">the cycle this check answers</span> blank and it snapshots this obligation's current due date, which is the ordinary case. Fill it in to back-fill a proof — recording last quarter's certificate now — so it says which cycle it belongs to instead of silently claiming the current one. A check cannot be dated in the future.</p>
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=check_form.result %}
+            {% include "partials/form_field.html" with field=check_form.due_date %}
+            {% include "partials/form_field.html" with field=check_form.performed_on %}
+            {% include "partials/form_field.html" with field=check_form.evidence %}
+            {% include "partials/form_field.html" with field=check_form.corrective_reference %}
+            {% include "partials/form_field.html" with field=check_form.finding %}
+            {% include "partials/form_field.html" with field=check_form.notes %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="clipboard-check"></i> Record check</button>
+          <div class="form-help">A <span class="fw-600">pass</span> marks this compliant, stamps the last-checked date and moves the due date on one cycle. A <span class="fw-600">fail</span> marks it non-compliant and a <span class="fw-600">partial</span> marks it in progress — both leave the due date where it is, because the cycle is still owed. <span class="fw-600">Not applicable</span> deliberately changes nothing at all: it is evidence of neither compliance nor breach, so it does not stamp a proof date and is left out of the rate.</div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Actions</h2></div>
+      <div class="card-body">
+        <div class="form-actions">
+          <a href="{% url 'scm:compliancerequirement_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% comment %}
+            Same gate as the view. The checks CASCADE with the requirement, and only an administrator
+            may even correct one — so leaving the button visible to a member offered them a one-click
+            403 on an action they cannot take, or worse, suggested the proof history was theirs to
+            discard. Only the system number is interpolated into the confirm string.
+          {% endcomment %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:compliancerequirement_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every check recorded against it is deleted too, and that proof history cannot be reconstructed. To keep the record of a decision, retire it or mark it not applicable with a reason instead.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+          <a href="{% url 'scm:compliancerequirement_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">
+          An obligation stays editable at every status, retired included — duties get re-scoped, re-owned and re-cited, and the row worth editing most is often the one somebody got wrong. Editing never rewrites the proof history: each check snapshots the cycle it answered, so re-scheduling this requirement leaves what a <span class="fw-600">past</span> cycle was due exactly as it was. A row that turns out not to bind you is best kept with its reason rather than deleted — “we considered this and it does not apply, here is why” is itself an auditable answer, and deleting it leaves no answer at all.
+        </p>
+      </div>
+    </div>
+  {% endwith %}
+{% endblock %}
