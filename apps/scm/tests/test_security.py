@@ -4081,3 +4081,674 @@ class TestReturnsCSRFEnforcement:
                            {"item": str(item_a.pk), "quantity_requested": "1",
                             "reason": str(return_reason_a.pk)}).status_code == 403
         assert not ReturnAuthorization.objects.filter(tenant=tenant_a).exists()
+
+
+# =================================================================================================
+# SCM 4.11 Supply Chain Analytics — auth, tenant isolation, CSRF, method gates and hostile input.
+#
+# 4.11 is READ-ONLY over 4.1-4.10 and writes only its own three tables, so the attack surface is
+# exactly: who may read a computed page, who may press the two batch writers, whose rows a pk
+# resolves to, and what a hand-edited query string can do to a page anybody can reach.
+# =================================================================================================
+_ANALYTICS_GET_ROUTES = (
+    "scm:inventory_analytics", "scm:inventory_analytics_export",
+    "scm:spend_analytics", "scm:spend_analytics_export",
+    "scm:logistics_kpis", "scm:logistics_kpis_export",
+    "scm:margin_analytics", "scm:margin_analytics_export",
+    "scm:disruption_risk", "scm:disruption_risk_export",
+    "scm:kpitarget_list", "scm:kpitarget_create",
+    "scm:kpisnapshot_list", "scm:kpisnapshot_export",
+    "scm:supplychainalert_list", "scm:supplychainalert_create",
+)
+
+#: The five report pages plus the two filterable list pages — every 4.11 screen a hand-edited query
+#: string can reach.
+_ANALYTICS_FILTERABLE = ("scm:inventory_analytics", "scm:spend_analytics", "scm:logistics_kpis",
+                         "scm:margin_analytics", "scm:disruption_risk", "scm:kpitarget_list",
+                         "scm:kpisnapshot_list", "scm:supplychainalert_list")
+
+def _kpi_target_payload(**overrides):
+    """A complete, VALID ``KpiTargetForm`` POST body (the same shape ``test_views`` posts)."""
+    data = {
+        "metric": "inv_turnover", "name": "Turnover goal", "scope": "all",
+        "scope_category": "", "scope_location": "", "scope_carrier": "", "scope_vendor": "",
+        "period_grain": "month", "date_range": "last_90", "direction": "",
+        "target_value": "6.00", "warning_threshold": "4.00", "critical_threshold": "2.00",
+        "parameter_days": "", "parameter_pct": "",
+        "min_impact_value": "0.00", "severity": "warning", "owner": "",
+        "display_order": "0", "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+#: The POST-only routes that take a pk, as (url name, POST body).
+_ANALYTICS_PK_ACTIONS = (
+    ("scm:kpitarget_delete", {}),
+    ("scm:kpitarget_snapshot", {}),
+    ("scm:supplychainalert_acknowledge", {}),
+    ("scm:supplychainalert_assign", {"assigned_to": ""}),
+    ("scm:supplychainalert_snooze", {"snooze_days": "7"}),
+    ("scm:supplychainalert_resolve", {"resolution_note": "done"}),
+    ("scm:supplychainalert_dismiss", {}),
+    ("scm:supplychainalert_delete", {}),
+)
+
+
+# ================================================================ 4.11 · anonymous is turned away
+class TestAnalyticsAnonymousRedirect:
+    @pytest.mark.parametrize("url_name", _ANALYTICS_GET_ROUTES)
+    def test_every_get_route_redirects_to_login(self, url_name):
+        resp = Client().get(reverse(url_name))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_the_detail_pages_redirect_before_they_resolve_a_pk(self, kpi_target_a, kpi_snapshot_a,
+                                                                alert_a):
+        c = Client()
+        for url_name, obj in (("scm:kpitarget_detail", kpi_target_a),
+                              ("scm:kpitarget_edit", kpi_target_a),
+                              ("scm:kpisnapshot_detail", kpi_snapshot_a),
+                              ("scm:supplychainalert_detail", alert_a),
+                              ("scm:supplychainalert_edit", alert_a)):
+            resp = c.get(reverse(url_name, args=[obj.pk]))
+            assert resp.status_code == 302 and "login" in resp["Location"], url_name
+
+    def test_the_two_batch_writers_reject_anonymous_and_write_nothing(self, tenant_a,
+                                                                      kpi_target_a):
+        from apps.scm.models import KpiSnapshot, SupplyChainAlert
+        c = Client()
+        for url_name in ("scm:kpisnapshot_capture", "scm:supplychainalert_detect"):
+            resp = c.post(reverse(url_name))
+            assert resp.status_code == 302 and "login" in resp["Location"], url_name
+        assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
+        assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
+
+    @pytest.mark.parametrize("url_name,payload", _ANALYTICS_PK_ACTIONS)
+    def test_every_pk_action_rejects_anonymous(self, alert_a, kpi_target_a, url_name, payload):
+        obj = kpi_target_a if url_name.startswith("scm:kpitarget") else alert_a
+        resp = Client().post(reverse(url_name, args=[obj.pk]), payload)
+        assert resp.status_code == 302 and "login" in resp["Location"]
+        alert_a.refresh_from_db()
+        kpi_target_a.refresh_from_db()
+        assert alert_a.status == "open"
+
+
+# ================================================================ 4.11 · cross-tenant IDOR
+class TestAnalyticsCrossTenantIsolation:
+    """Tenant A's admin pointed at tenant B's pk. Every one of these must be a 404 — not a 403,
+    which would confirm the row exists, and certainly not a 200."""
+
+    def test_a_targets_detail_edit_and_delete_are_404_across_tenants(self, client_a, kpi_target_b):
+        from apps.scm.models import KpiTarget
+        assert client_a.get(reverse("scm:kpitarget_detail",
+                                    args=[kpi_target_b.pk])).status_code == 404
+        assert client_a.get(reverse("scm:kpitarget_edit",
+                                    args=[kpi_target_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:kpitarget_edit", args=[kpi_target_b.pk]),
+                             {"name": "stolen"}).status_code == 404
+        assert client_a.post(reverse("scm:kpitarget_delete",
+                                     args=[kpi_target_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:kpitarget_snapshot",
+                                     args=[kpi_target_b.pk])).status_code == 404
+        assert KpiTarget.objects.filter(pk=kpi_target_b.pk).exists()
+        kpi_target_b.refresh_from_db()
+        assert kpi_target_b.name == "Globex turnover goal"
+
+    def test_a_snapshots_detail_and_delete_are_404_across_tenants(self, client_a, kpi_snapshot_b):
+        from apps.scm.models import KpiSnapshot
+        assert client_a.get(reverse("scm:kpisnapshot_detail",
+                                    args=[kpi_snapshot_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:kpisnapshot_delete",
+                                     args=[kpi_snapshot_b.pk])).status_code == 404
+        assert KpiSnapshot.objects.filter(pk=kpi_snapshot_b.pk).exists()
+
+    def test_an_alerts_detail_edit_and_delete_are_404_across_tenants(self, client_a, alert_b):
+        from apps.scm.models import SupplyChainAlert
+        assert client_a.get(reverse("scm:supplychainalert_detail",
+                                    args=[alert_b.pk])).status_code == 404
+        assert client_a.get(reverse("scm:supplychainalert_edit",
+                                    args=[alert_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:supplychainalert_edit", args=[alert_b.pk]),
+                             {"title": "stolen"}).status_code == 404
+        assert client_a.post(reverse("scm:supplychainalert_delete",
+                                     args=[alert_b.pk])).status_code == 404
+        assert SupplyChainAlert.objects.filter(pk=alert_b.pk).exists()
+
+    @pytest.mark.parametrize("url_name,payload", [
+        ("scm:supplychainalert_acknowledge", {}),
+        ("scm:supplychainalert_assign", {"assigned_to": ""}),
+        ("scm:supplychainalert_snooze", {"snooze_days": "7"}),
+        ("scm:supplychainalert_resolve", {"resolution_note": "done"}),
+        ("scm:supplychainalert_dismiss", {}),
+    ])
+    def test_every_lifecycle_action_is_404_across_tenants(self, client_a, alert_b, url_name,
+                                                          payload):
+        """The tenant check comes BEFORE the form check on all five, so whether a POST 404s can
+        never depend on the payload being valid."""
+        assert client_a.post(reverse(url_name, args=[alert_b.pk]), payload).status_code == 404
+        alert_b.refresh_from_db()
+        assert alert_b.status == "open"
+        assert alert_b.assigned_to_id is None
+        assert alert_b.snoozed_until is None
+        assert alert_b.resolved_by_id is None
+
+    def test_a_list_page_never_shows_the_other_tenants_rows(self, client_a, kpi_target_a,
+                                                            kpi_target_b, kpi_snapshot_a,
+                                                            kpi_snapshot_b, alert_a, alert_b):
+        rows = client_a.get(reverse("scm:kpitarget_list")).context["object_list"]
+        assert kpi_target_a in rows and kpi_target_b not in rows
+        rows = client_a.get(reverse("scm:kpisnapshot_list")).context["object_list"]
+        assert kpi_snapshot_a in rows and kpi_snapshot_b not in rows
+        rows = client_a.get(reverse("scm:supplychainalert_list")).context["object_list"]
+        assert alert_a in rows and alert_b not in rows
+
+    def test_a_report_page_measures_only_its_own_tenant(self, client_b, analytics_history_a):
+        """Every figure on tenant A's history must be invisible to tenant B, whose own tenant is
+        empty — a resolver that forgot its tenant filter would show A's spend here."""
+        resp = client_b.get(reverse("scm:spend_analytics"))
+        assert resp.status_code == 200
+        assert resp.context["spend_cube"]["by_vendor"] == []
+        assert all(tile["value"] is None for tile in resp.context["tiles"])
+        assert "Acme Supplies Ltd" not in resp.content.decode()
+
+    def test_a_crafted_scope_pointing_at_the_other_tenant_is_flagged_not_applied(self, client_a,
+                                                                                  category_b,
+                                                                                  location_b,
+                                                                                  carrier_b,
+                                                                                  supplier_b):
+        """An id that does not resolve INSIDE THIS TENANT is dropped and SAID SO, never silently
+        widened to the network and never another workspace's row (L40 §3)."""
+        for url_name, param, obj in (("scm:inventory_analytics", "category", category_b),
+                                     ("scm:inventory_analytics", "location", location_b),
+                                     ("scm:logistics_kpis", "carrier", carrier_b),
+                                     ("scm:spend_analytics", "vendor", supplier_b),
+                                     ("scm:disruption_risk", "vendor", supplier_b)):
+            resp = client_a.get(reverse(url_name), {param: str(obj.pk)})
+            assert resp.status_code == 200, (url_name, param)
+            assert resp.context["scope_invalid"] is True, (url_name, param)
+            assert resp.context["scope_value"] == "all", (url_name, param)
+
+    def test_a_crafted_snapshot_filter_pointing_at_the_other_tenants_target_matches_nothing(
+        self, client_a, kpi_snapshot_a, kpi_target_b,
+    ):
+        resp = client_a.get(reverse("scm:kpisnapshot_list"), {"kpi_target": str(kpi_target_b.pk)})
+        assert resp.status_code == 200
+        assert list(resp.context["object_list"]) == []
+
+    def test_a_crafted_alert_POST_cannot_name_another_tenants_subject(self, client_a, tenant_a,
+                                                                      item_b, carrier_b,
+                                                                      kpi_target_b):
+        """The form's querysets are UX; the guard is the model's clean(), which is what holds
+        against a POST that never went near a dropdown."""
+        from apps.scm.models import SupplyChainAlert
+        resp = client_a.post(reverse("scm:supplychainalert_create"), {
+            "alert_type": "dead_stock", "metric": "", "kpi_target": str(kpi_target_b.pk),
+            "title": "Crafted", "severity": "warning", "observed_value": "",
+            "threshold_value": "", "impact_value": "1.00", "dimension_label": "",
+            "item": str(item_b.pk), "party": "", "carrier": str(carrier_b.pk), "shipment": "",
+            "purchase_order": "", "location": "", "assigned_to": "", "notes": "",
+        })
+        assert resp.status_code == 200                       # re-rendered with errors
+        assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
+        for field in ("kpi_target", "item", "carrier"):
+            assert field in resp.context["form"].errors, field
+
+    def test_an_alert_cannot_be_assigned_to_another_tenants_login(self, client_a, alert_a, admin_b):
+        """A person and the exception they are handed must agree on at least the workspace."""
+        resp = client_a.post(reverse("scm:supplychainalert_assign", args=[alert_a.pk]),
+                             {"assigned_to": str(admin_b.pk)}, follow=True)
+        assert resp.status_code == 200
+        alert_a.refresh_from_db()
+        assert alert_a.assigned_to_id is None
+
+    def test_a_crafted_target_POST_cannot_scope_to_another_tenants_category(self, client_a,
+                                                                            tenant_a, category_b):
+        from apps.scm.models import KpiTarget
+        resp = client_a.post(reverse("scm:kpitarget_create"),
+                             _kpi_target_payload(name="Crafted scope", scope="category",
+                                                 scope_category=str(category_b.pk)))
+        assert resp.status_code == 200
+        assert "scope_category" in resp.context["form"].errors
+        assert not KpiTarget.objects.filter(tenant=tenant_a, name="Crafted scope").exists()
+
+
+# ================================================================ 4.11 · the admin gates
+class TestAnalyticsTenantAdminGates:
+    """Four routes are ``@tenant_admin_required``; everything else in 4.11 is ``@login_required``.
+
+    The rule the module states: the routes that WRITE frozen history or raise the queue for the
+    whole workspace are admin-only, and so is the one that irreversibly destroys that history.
+    """
+
+    def test_a_member_cannot_capture_a_single_targets_snapshot(self, member_client, tenant_a,
+                                                               kpi_target_a, analytics_history_a):
+        from apps.scm.models import KpiSnapshot
+        assert member_client.post(reverse("scm:kpitarget_snapshot",
+                                          args=[kpi_target_a.pk])).status_code == 403
+        assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_member_cannot_run_the_capture_batch(self, member_client, tenant_a, kpi_target_a,
+                                                   analytics_history_a):
+        from apps.scm.models import KpiSnapshot
+        assert member_client.post(reverse("scm:kpisnapshot_capture")).status_code == 403
+        assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_member_cannot_run_detection(self, member_client, tenant_a, alerting_target_a,
+                                           late_shipment_a):
+        from apps.scm.models import SupplyChainAlert
+        assert member_client.post(reverse("scm:supplychainalert_detect")).status_code == 403
+        assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_member_cannot_delete_a_target_and_the_target_survives(self, member_client,
+                                                                     kpi_target_a,
+                                                                     kpi_snapshot_a):
+        """THE LOCK on the gate this route was just given: deleting a target CASCADES its frozen
+        snapshots, and writing those is admin-only — so leaving the destructive path open let a
+        member irreversibly destroy exactly the rows they were not trusted to create."""
+        from apps.scm.models import KpiSnapshot, KpiTarget
+        assert member_client.post(reverse("scm:kpitarget_delete",
+                                          args=[kpi_target_a.pk])).status_code == 403
+        assert KpiTarget.objects.filter(pk=kpi_target_a.pk).exists()
+        assert KpiSnapshot.objects.filter(pk=kpi_snapshot_a.pk).exists()
+
+    def test_the_gate_also_blocks_a_GET_before_the_method_check(self, member_client,
+                                                                kpi_target_a):
+        """@tenant_admin_required wraps @require_POST, so a member gets 403 rather than a 405 that
+        would tell them the route exists and takes a POST."""
+        assert member_client.get(reverse("scm:kpitarget_delete",
+                                         args=[kpi_target_a.pk])).status_code == 403
+        assert member_client.get(reverse("scm:kpitarget_snapshot",
+                                         args=[kpi_target_a.pk])).status_code == 403
+
+    def test_a_member_keeps_every_read_and_the_ordinary_triage_actions(self, member_client,
+                                                                       kpi_target_a, alert_a,
+                                                                       kpi_snapshot_a):
+        """The queue only gets triaged if triaging it is not behind an administrator."""
+        for url_name in _ANALYTICS_GET_ROUTES:
+            assert member_client.get(reverse(url_name)).status_code == 200, url_name
+        assert member_client.post(reverse("scm:supplychainalert_acknowledge",
+                                          args=[alert_a.pk])).status_code == 302
+        alert_a.refresh_from_db()
+        assert alert_a.status == "acknowledged"
+        # Editing a target is deliberately open too — tuning a threshold is routine planner work.
+        assert member_client.get(reverse("scm:kpitarget_edit",
+                                         args=[kpi_target_a.pk])).status_code == 200
+
+    def test_a_tenant_less_superuser_cannot_write_orphan_rows(self, db, tenant_a, kpi_target_a):
+        """The superuser has tenant=None by design; every 4.11 view filters by tenant, so a create
+        by that user would be an orphan row nobody can see."""
+        from apps.accounts.models import User
+        from apps.scm.models import KpiSnapshot, SupplyChainAlert
+        superuser = User.objects.create_superuser(email="root@naverp.test", username="root",
+                                                  password="TestPass123!")
+        c = Client()
+        c.force_login(superuser)
+        assert c.post(reverse("scm:kpisnapshot_capture")).status_code == 302
+        assert c.post(reverse("scm:supplychainalert_detect")).status_code == 302
+        assert not KpiSnapshot.objects.exists()
+        assert not SupplyChainAlert.objects.exists()
+        # And the read pages still render, with the "no workspace" state rather than a 500.
+        resp = c.get(reverse("scm:disruption_risk"))
+        assert resp.status_code == 200 and resp.context["no_tenant"] is True
+        assert resp.context["open_alert_count"] == 0
+
+
+# ================================================================ 4.11 · CSRF
+class TestAnalyticsCSRF:
+    """Every mutating route, with ``enforce_csrf_checks=True`` and no token. The repo's only CSRF
+    exemption is the Stripe webhook; nothing in 4.11 exempts itself."""
+
+    @staticmethod
+    def _client(user):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(user)
+        return c
+
+    def test_the_two_batch_writers_are_rejected_without_a_token(self, admin_user, tenant_a,
+                                                                kpi_target_a, alerting_target_a,
+                                                                late_shipment_a):
+        from apps.scm.models import KpiSnapshot, SupplyChainAlert
+        c = self._client(admin_user)
+        assert c.post(reverse("scm:kpisnapshot_capture")).status_code == 403
+        assert c.post(reverse("scm:supplychainalert_detect")).status_code == 403
+        assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
+        assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_two_create_forms_are_rejected_without_a_token(self, admin_user, tenant_a):
+        from apps.scm.models import KpiTarget, SupplyChainAlert
+        c = self._client(admin_user)
+        assert c.post(reverse("scm:kpitarget_create"),
+                      _kpi_target_payload(name="CSRF target")).status_code == 403
+        assert c.post(reverse("scm:supplychainalert_create"),
+                      {"alert_type": "dead_stock", "title": "CSRF alert", "severity": "warning",
+                       "impact_value": "0.00"}).status_code == 403
+        assert not KpiTarget.objects.filter(tenant=tenant_a, name="CSRF target").exists()
+        assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_edit_forms_are_rejected_without_a_token(self, admin_user, kpi_target_a, alert_a):
+        c = self._client(admin_user)
+        assert c.post(reverse("scm:kpitarget_edit", args=[kpi_target_a.pk]),
+                      _kpi_target_payload(name="CSRF edit")).status_code == 403
+        assert c.post(reverse("scm:supplychainalert_edit", args=[alert_a.pk]),
+                      {"alert_type": "dead_stock", "title": "CSRF edit",
+                       "severity": "warning", "impact_value": "0.00"}).status_code == 403
+        kpi_target_a.refresh_from_db()
+        alert_a.refresh_from_db()
+        assert kpi_target_a.name == "Turnover goal"
+        assert alert_a.title == "Dead stock: WIDGET-1"
+
+    def test_the_three_delete_routes_are_rejected_without_a_token(self, admin_user, kpi_target_a,
+                                                                  kpi_snapshot_a, alert_a):
+        from apps.scm.models import KpiSnapshot, KpiTarget, SupplyChainAlert
+        c = self._client(admin_user)
+        assert c.post(reverse("scm:kpitarget_delete", args=[kpi_target_a.pk])).status_code == 403
+        assert c.post(reverse("scm:kpisnapshot_delete",
+                              args=[kpi_snapshot_a.pk])).status_code == 403
+        assert c.post(reverse("scm:supplychainalert_delete", args=[alert_a.pk])).status_code == 403
+        assert KpiTarget.objects.filter(pk=kpi_target_a.pk).exists()
+        assert KpiSnapshot.objects.filter(pk=kpi_snapshot_a.pk).exists()
+        assert SupplyChainAlert.objects.filter(pk=alert_a.pk).exists()
+
+    @pytest.mark.parametrize("url_name,payload", [
+        ("scm:supplychainalert_acknowledge", {}),
+        ("scm:supplychainalert_assign", {"assigned_to": ""}),
+        ("scm:supplychainalert_snooze", {"snooze_days": "7"}),
+        ("scm:supplychainalert_resolve", {"resolution_note": "done"}),
+        ("scm:supplychainalert_dismiss", {}),
+    ])
+    def test_every_lifecycle_action_is_rejected_without_a_token(self, admin_user, alert_a,
+                                                                url_name, payload):
+        assert self._client(admin_user).post(reverse(url_name, args=[alert_a.pk]),
+                                             payload).status_code == 403
+        alert_a.refresh_from_db()
+        assert alert_a.status == "open"
+        assert alert_a.acknowledged_by_id is None
+
+    def test_the_single_target_snapshot_action_is_rejected_without_a_token(self, admin_user,
+                                                                           tenant_a, kpi_target_a,
+                                                                           analytics_history_a):
+        from apps.scm.models import KpiSnapshot
+        assert self._client(admin_user).post(reverse("scm:kpitarget_snapshot",
+                                                     args=[kpi_target_a.pk])).status_code == 403
+        assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================ 4.11 · POST-only method gates
+class TestAnalyticsMethodGates:
+    """A GET must never mutate. ``crud_delete`` is self-defending as well (it only writes on POST),
+    so these routes are guarded twice."""
+
+    def test_the_batch_writers_refuse_a_GET(self, client_a, tenant_a, kpi_target_a,
+                                            alerting_target_a, late_shipment_a,
+                                            analytics_history_a):
+        from apps.scm.models import KpiSnapshot, SupplyChainAlert
+        assert client_a.get(reverse("scm:kpisnapshot_capture")).status_code == 405
+        assert client_a.get(reverse("scm:supplychainalert_detect")).status_code == 405
+        assert not KpiSnapshot.objects.filter(tenant=tenant_a).exists()
+        assert not SupplyChainAlert.objects.filter(tenant=tenant_a).exists()
+
+    @pytest.mark.parametrize("url_name,payload", _ANALYTICS_PK_ACTIONS)
+    def test_every_pk_action_refuses_a_GET(self, client_a, kpi_target_a, alert_a, kpi_snapshot_a,
+                                           url_name, payload):
+        from apps.scm.models import KpiTarget, SupplyChainAlert
+        obj = kpi_target_a if url_name.startswith("scm:kpitarget") else alert_a
+        assert client_a.get(reverse(url_name, args=[obj.pk]), payload).status_code == 405
+        assert KpiTarget.objects.filter(pk=kpi_target_a.pk).exists()
+        assert SupplyChainAlert.objects.filter(pk=alert_a.pk).exists()
+        alert_a.refresh_from_db()
+        assert alert_a.status == "open"
+
+    def test_the_snapshot_delete_refuses_a_GET(self, client_a, kpi_snapshot_a):
+        from apps.scm.models import KpiSnapshot
+        assert client_a.get(reverse("scm:kpisnapshot_delete",
+                                    args=[kpi_snapshot_a.pk])).status_code == 405
+        assert KpiSnapshot.objects.filter(pk=kpi_snapshot_a.pk).exists()
+
+
+# ================================================================ 4.11 · hostile query strings
+class TestAnalyticsHostileFilters:
+    """Nothing anybody can type into the address bar may 500 a read-only page.
+
+    The headline case is the Unicode SUPERSCRIPT: ``'²'.isdigit()`` is True but ``int('²')`` raises,
+    so ``?category=²`` sailed through an ``.isdigit()`` guard and then raised ``ValueError`` from
+    INSIDE ``.filter()`` — an uncaught 500 on six pages. ``isdecimal()`` is precisely ``int()``'s
+    accepted set, and that is what this class locks.
+    """
+
+    #: One junk value of every shape a filter has ever been handed.
+    JUNK = ["abc", "²", "³", "1e5", "-1", "0", "999999999999999999999", " ",
+            "1;DROP TABLE", "<script>", "1.5"]
+
+    @pytest.mark.parametrize("value", JUNK)
+    def test_a_junk_scope_id_never_500s_any_report_page(self, client_a, analytics_history_a,
+                                                        value):
+        for url_name, param in (("scm:inventory_analytics", "category"),
+                                ("scm:inventory_analytics", "location"),
+                                ("scm:spend_analytics", "vendor"),
+                                ("scm:logistics_kpis", "carrier"),
+                                ("scm:margin_analytics", "category"),
+                                ("scm:disruption_risk", "vendor")):
+            resp = client_a.get(reverse(url_name), {param: value})
+            assert resp.status_code == 200, (url_name, param, value)
+
+    @pytest.mark.parametrize("value", JUNK)
+    def test_a_junk_scope_id_never_500s_any_export(self, client_a, analytics_history_a, value):
+        for url_name, param in (("scm:inventory_analytics_export", "category"),
+                                ("scm:spend_analytics_export", "vendor"),
+                                ("scm:logistics_kpis_export", "carrier"),
+                                ("scm:margin_analytics_export", "category"),
+                                ("scm:disruption_risk_export", "vendor")):
+            assert client_a.get(reverse(url_name),
+                                {param: value}).status_code == 200, (url_name, value)
+
+    @pytest.mark.parametrize("value", JUNK)
+    def test_a_junk_kpi_target_filter_never_500s_the_snapshot_page_or_its_export(self, client_a,
+                                                                                  kpi_snapshot_a,
+                                                                                  value):
+        """``?kpi_target=²`` — the exact superscript that raised out of ``.filter()``."""
+        assert client_a.get(reverse("scm:kpisnapshot_list"),
+                            {"kpi_target": value}).status_code == 200
+        assert client_a.get(reverse("scm:kpisnapshot_export"),
+                            {"kpi_target": value}).status_code == 200
+
+    @pytest.mark.parametrize("value", JUNK)
+    def test_a_junk_assignee_filter_never_500s_the_inbox(self, client_a, alert_a, value):
+        assert client_a.get(reverse("scm:supplychainalert_list"),
+                            {"assigned_to": value}).status_code == 200
+
+    @pytest.mark.parametrize("value", ["NaN", "nan", "Infinity", "-Infinity", "inf", "1e400",
+                                       "-1e400", "abc", "", "1e999999", "99999999999999999999",
+                                       "--5", "1,000"])
+    def test_a_hostile_min_impact_never_500s_the_inbox(self, client_a, alert_a, value):
+        """``Decimal("NaN")`` parses happily and then poisons every comparison it touches; an
+        oversized figure is clamped to what a DecimalField(14, 2) holds rather than dropped."""
+        resp = client_a.get(reverse("scm:supplychainalert_list"), {"min_impact": value})
+        assert resp.status_code == 200, value
+
+    def test_an_oversized_min_impact_matches_nothing_rather_than_everything(self, client_a,
+                                                                            alert_a):
+        """Clamping is the truthful answer: "at least 10^400" matches nothing. DROPPING the filter
+        would silently show every row under a heading that says it is filtered."""
+        resp = client_a.get(reverse("scm:supplychainalert_list"), {"min_impact": "1e400"})
+        assert list(resp.context["object_list"]) == []
+
+    @pytest.mark.parametrize("value", ["lastweek", "2026-02-31", "0000-00-00", "²", "1/1/2026",
+                                       "2026-13-01", "abc", "99999-01-01"])
+    def test_a_junk_date_window_never_500s_a_page_or_an_export(self, client_a,
+                                                               analytics_history_a,
+                                                               kpi_snapshot_a, value):
+        """``?date_to=2026-02-31`` is well-formed and NOT a date — parse_date raises on exactly
+        that, which anybody can type into the address bar."""
+        for url_name in ("scm:inventory_analytics", "scm:inventory_analytics_export",
+                         "scm:kpisnapshot_list", "scm:kpisnapshot_export"):
+            assert client_a.get(reverse(url_name),
+                                {"date_from": value, "date_to": value}).status_code == 200, (
+                                    url_name, value)
+
+    @pytest.mark.parametrize("value", ["abc", "²", "-1", "0", "99999", "1e5", ""])
+    def test_a_junk_page_number_never_500s_a_list(self, client_a, kpi_target_a, kpi_snapshot_a,
+                                                  alert_a, value):
+        """L9 — a page past the end lands on the last page; junk lands on the first."""
+        for url_name in ("scm:kpitarget_list", "scm:kpisnapshot_list",
+                         "scm:supplychainalert_list"):
+            assert client_a.get(reverse(url_name),
+                                {"page": value}).status_code == 200, (url_name, value)
+
+    #: One value of the wrong SHAPE for every non-integer filter 4.11 offers, sent together: a page
+    #: has to skip all of them at once, which is what a hand-edited URL actually looks like.
+    JUNK_CHOICES = {
+        "metric": "not_a_metric", "scope": "sideways", "severity": "purple", "group": "nonsense",
+        "status": "not_a_status", "alert_type": "invented", "status_band": "chartreuse",
+        "sort": "sideways", "basis": "furlongs", "date_range": "since_forever",
+        "gl_account": "²", "org_unit": "²", "customer": "²", "channel": "²",
+        "is_active": "maybe", "is_alerting": "maybe", "q": "²³",
+    }
+
+    @pytest.mark.parametrize("url_name", _ANALYTICS_FILTERABLE)
+    def test_every_junk_choice_filter_at_once_is_skipped_rather_than_matched(
+        self, client_a, kpi_target_a, kpi_snapshot_a, alert_a, analytics_history_a, url_name,
+    ):
+        assert client_a.get(reverse(url_name), self.JUNK_CHOICES).status_code == 200
+
+    def test_a_junk_status_falls_back_to_the_default_view_not_to_an_empty_page(self, client_a,
+                                                                               alert_a):
+        resp = client_a.get(reverse("scm:supplychainalert_list"), {"status": "not_a_status"})
+        assert list(resp.context["object_list"]) == [alert_a]
+        # The select shows the view that was actually rendered, not the value that was typed.
+        assert resp.context["status_value"] == ""
+
+    def test_a_junk_search_term_never_500s_and_matches_nothing(self, client_a, kpi_target_a,
+                                                               kpi_snapshot_a, alert_a):
+        for url_name in ("scm:kpitarget_list", "scm:kpisnapshot_list",
+                         "scm:supplychainalert_list"):
+            resp = client_a.get(reverse(url_name), {"q": "'; DROP TABLE scm_kpitarget; --"})
+            assert resp.status_code == 200
+            assert list(resp.context["object_list"]) == []
+
+    def test_two_scope_filters_at_once_apply_one_and_NAME_the_one_they_dropped(self, client_a,
+                                                                               category_a,
+                                                                               location_a):
+        """A metric narrows to exactly ONE subject. Silently intersecting them is not available and
+        silently dropping one is how a page ends up labelled with a filter it did not apply."""
+        resp = client_a.get(reverse("scm:inventory_analytics"),
+                            {"category": str(category_a.pk), "location": str(location_a.pk)})
+        assert resp.status_code == 200
+        assert resp.context["scope_value"] == "category"
+        assert resp.context["scope_ignored"] == ["location"]
+
+
+# ================================================================ 4.11 · CSV injection
+class TestAnalyticsCsvInjection:
+    """A cell beginning ``=`` ``+`` ``-`` ``@`` or a control character is executed as a FORMULA by
+    Excel and LibreOffice. SKUs, supplier names, carrier names and a KPI target's name are all free
+    text somebody typed, so every cell in every 4.11 export goes through one escape."""
+
+    def test_a_target_named_like_a_formula_exports_quoted(self, client_a, tenant_a,
+                                                          analytics_history_a):
+        """The named case: a KpiTarget called ``=1+1`` must reach the file as ``'=1+1``."""
+        from django.utils import timezone
+        from apps.scm.models import KpiSnapshot, KpiTarget
+        target = KpiTarget.objects.create(tenant=tenant_a, metric="inv_turnover", name="=1+1",
+                                          scope="all", date_range="last_90")
+        KpiSnapshot.objects.create(tenant=tenant_a, kpi_target=target, metric="inv_turnover",
+                                   period_start=timezone.localdate() - datetime.timedelta(days=30),
+                                   period_end=timezone.localdate(), value=Decimal("1.0000"))
+        body = client_a.get(reverse("scm:kpisnapshot_export")).content.decode()
+        assert "'=1+1" in body
+        assert ",=1+1" not in body
+
+    @pytest.mark.parametrize("hostile", ["=1+1", "+1+1", "-1+1", "@SUM(A1)",
+                                         "=cmd|'/c calc'!A0", "\t=1+1"])
+    def test_every_dangerous_prefix_is_neutralised(self, client_a, tenant_a, hostile):
+        from django.utils import timezone
+        from apps.scm.models import KpiSnapshot, KpiTarget
+        target = KpiTarget.objects.create(tenant=tenant_a, metric="inv_turnover", name=hostile,
+                                          scope="all")
+        KpiSnapshot.objects.create(tenant=tenant_a, kpi_target=target, metric="inv_turnover",
+                                   period_start=timezone.localdate() - datetime.timedelta(days=30),
+                                   period_end=timezone.localdate(), value=Decimal("1.0000"),
+                                   dimension_label=hostile)
+        body = client_a.get(reverse("scm:kpisnapshot_export")).content.decode()
+        assert f"'{hostile}" in body, hostile
+
+    def test_an_item_named_like_a_formula_exports_quoted_from_a_report(self, client_a, tenant_a,
+                                                                        analytics_history_a,
+                                                                        category_a, uom_each_a,
+                                                                        location_a):
+        """The report exports carry resolver ROWS — SKUs and supplier names straight off records
+        anybody in the tenant can rename."""
+        from django.utils import timezone
+        from apps.scm.models import Item
+        from apps.scm.views._helpers import _post_stock_move
+        item = Item.objects.create(tenant=tenant_a, sku="=1+1", name="@SUM(A1)",
+                                   category=category_a, uom=uom_each_a,
+                                   standard_cost=Decimal("5.00"))
+        _post_stock_move(tenant_a, item=item, location=location_a, quantity=Decimal("10"),
+                         move_type="receipt", unit_cost=Decimal("5.0000"), reference="OPENING",
+                         moved_at=timezone.now() - datetime.timedelta(days=120))
+        body = client_a.get(reverse("scm:inventory_analytics_export")).content.decode("utf-8-sig")
+        assert "'=1+1" in body
+        assert "'@SUM(A1)" in body
+
+    def test_a_negative_NUMBER_is_left_alone_so_the_spreadsheet_can_still_sum_it(self, client_a,
+                                                                                  tenant_a,
+                                                                                  kpi_target_a):
+        """Half the figures on these pages are negative (freight variance, a loss-making customer).
+        Prefixing every one of them would turn the column into text."""
+        from django.utils import timezone
+        from apps.scm.models import KpiSnapshot
+        KpiSnapshot.objects.create(tenant=tenant_a, kpi_target=kpi_target_a, metric="inv_turnover",
+                                   period_start=timezone.localdate() - datetime.timedelta(days=30),
+                                   period_end=timezone.localdate(), value=Decimal("-3.5000"))
+        body = client_a.get(reverse("scm:kpisnapshot_export")).content.decode()
+        assert "-3.5000" in body
+        assert "'-3.5000" not in body
+
+    def test_no_request_value_ever_reaches_a_content_disposition_header(self, client_a,
+                                                                        analytics_history_a):
+        """The filename is a server-side literal plus a server-side date — there is nothing to
+        inject a newline into and no way to smuggle a parameter into the header."""
+        from django.utils import timezone
+        resp = client_a.get(reverse("scm:inventory_analytics_export"),
+                            {"category": "1\r\nX-Injected: yes", "date_to": "</script>"})
+        assert resp.status_code == 200
+        assert "X-Injected" not in str(resp.serialize_headers())
+        assert resp["Content-Disposition"] == (
+            f'attachment; filename="inventory-analytics-{timezone.localdate().isoformat()}.csv"')
+
+
+# ================================================================ 4.11 · XSS
+class TestAnalyticsXss:
+    def test_a_chart_payload_is_escaped_by_json_script_not_interpolated(self, client_a, tenant_a,
+                                                                        analytics_history_a,
+                                                                        admin_user):
+        """Series labels are SKUs and supplier names. ``|safe`` on a hand-built JSON string is a
+        stored-XSS hole the first time somebody names an item ``</script>``."""
+        from apps.scm.analytics import capture_snapshots
+        from apps.scm.models import KpiTarget
+        KpiTarget.objects.create(tenant=tenant_a, metric="inv_turnover",
+                                 name="</script><script>alert(1)</script>", scope="all",
+                                 date_range="last_90")
+        capture_snapshots(tenant_a, user=admin_user)
+        body = client_a.get(reverse("scm:inventory_analytics")).content.decode()
+        assert "<script>alert(1)</script>" not in body
+
+    def test_a_hostile_alert_title_is_escaped_on_the_inbox_and_the_detail_page(self, client_a,
+                                                                               tenant_a):
+        from apps.scm.models import SupplyChainAlert
+        alert = SupplyChainAlert.objects.create(
+            tenant=tenant_a, alert_type="dead_stock", title="<script>alert('xss')</script>",
+            dimension_label="<img src=x onerror=alert(1)>")
+        for url in (reverse("scm:supplychainalert_list"),
+                    reverse("scm:supplychainalert_detail", args=[alert.pk])):
+            body = client_a.get(url).content.decode()
+            assert "<script>alert('xss')</script>" not in body
+            assert "<img src=x onerror=alert(1)>" not in body
+            assert "&lt;script&gt;" in body
+
+    def test_a_hostile_search_term_is_escaped_back_into_the_filter_bar(self, client_a,
+                                                                       kpi_target_a):
+        body = client_a.get(reverse("scm:kpitarget_list"),
+                            {"q": '"><script>alert(1)</script>'}).content.decode()
+        assert "<script>alert(1)</script>" not in body
