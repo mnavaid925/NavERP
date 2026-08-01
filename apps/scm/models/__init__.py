@@ -240,3 +240,23 @@ from .SupplyChainAnalytics.KpiSnapshots import (  # noqa: F401
 from .SupplyChainAnalytics.SupplyChainAlerts import (  # noqa: F401
     SupplyChainAlert,
 )
+
+# --- 4.12 Contract & Compliance Management ---------------------------------------------------
+# Dependency order, for the reader rather than for Django: every FK below is declared by string,
+# so the import order genuinely does not matter to the ORM. TradeLicense comes first because both
+# ComplianceRequirement and TradeDocument point at it.
+from .ContractCompliance._choices import *  # noqa: F401,F403
+from .ContractCompliance.TradeLicenses import (  # noqa: F401
+    TradeLicense,
+)
+from .ContractCompliance.ComplianceRequirements import (  # noqa: F401
+    ComplianceRequirement,
+    ComplianceCheck,
+)
+from .ContractCompliance.TradeDocuments import (  # noqa: F401
+    TradeDocument,
+    TradeDocumentLine,
+)
+from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
+    SustainabilityAssessment,
+)
