@@ -73,11 +73,23 @@ class TradeLicenseForm(TenantUniqueMixin, TenantModelForm):
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
 
-    def __init__(self, *args, **kwargs):
+    #: The three columns `can_charge()` tests — i.e. what this workspace is allowed to ship under
+    #: this authority. Approving a licence is tenant-admin gated, so raising its ceiling must be too:
+    #: otherwise a member barred from `tradelicense_approve` could simply widen an already in-force
+    #: licence and then self-serve `tradedocument_issue` past what was actually granted.
+    CONTROL_FIELDS = ("authorized_value", "authorized_quantity", "expiry_date")
+
+    def __init__(self, *args, may_edit_controls=True, **kwargs):
         # TenantUniqueMixin.__init__ runs first in the MRO: it calls up to TenantModelForm (which
         # sets self.tenant and applies the base scoping) and then stamps self.instance.tenant. Both
         # halves are load-bearing — see the module docstring.
         super().__init__(*args, **kwargs)
+
+        if not may_edit_controls:
+            # POPPED, not disabled: a field absent from self.fields is absent from cleaned_data, so
+            # a crafted POST cannot set it either. Hiding it in the template alone would not.
+            for _name in self.CONTROL_FIELDS:
+                self.fields.pop(_name, None)
 
         # --- who the licence names ------------------------------------------------------------------
         # Built ONCE and handed to both fields: `ModelChoiceField.queryset`'s setter calls
