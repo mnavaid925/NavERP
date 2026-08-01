@@ -4752,3 +4752,941 @@ class TestAnalyticsXss:
         body = client_a.get(reverse("scm:kpitarget_list"),
                             {"q": '"><script>alert(1)</script>'}).content.decode()
         assert "<script>alert(1)</script>" not in body
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.12 shared helpers.
+#
+# _security_blob is this module's OWN message reader, deliberately named apart from
+# test_views._messages / test_views._message_blob: those two live in a different file, and a
+# second definition of either name inside one module silently rebinds it for every caller written
+# above it (the failure test_suite_hygiene.py exists to catch). Cross-file there is no shadowing,
+# so a distinct name here keeps both files readable on their own.
+#
+# _localdate_sec is timezone.localdate(), NEVER datetime.date.today() — every 4.12
+# clean() compares a posted date against the LOCAL date, so a payload built on the other basis
+# flakes for the hours after local midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _security_blob(response):
+    """Every flash message on a response as one lowercase string."""
+    return " ".join(str(m) for m in response.context["messages"]).lower()
+
+
+def _localdate_sec(days=0):
+    """Today (or days from it) on the basis the 4.12 models validate against."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+
+# =================================================================================================
+# SCM 4.12 Contract & Compliance Management — auth, tenant isolation, CSRF, method gates, hostile
+# input, CSV injection and XSS.
+#
+# 4.12 is read-only over 4.1-4.11 (L29): the only rows it writes are its own four tables plus the
+# two cached counters on the ``TradeLicense`` a document is charged to. That makes the attack surface
+# exactly: who may read a register, who may press a verb, whose rows a pk resolves to, and what a
+# hand-edited query string can do to a page anybody can reach.
+#
+# Two things in this sub-module need naming before the tests below make sense:
+#
+#   * ``ComplianceCheck`` has NO tenant column. It is a pure child reached through
+#     ``requirement.tenant``, so its two routes must resolve it as
+#     ``requirement__tenant=request.tenant`` — a bare pk lookup is a cross-tenant read, and
+#     ``compliance_check_b`` is the row that proves whether one is happening.
+#   * ``tradelicense_revoke`` / ``tradedocument_void`` both resolve the object BEFORE their
+#     reason guard. Returning early on a missing reason meant a reasonless POST to another tenant's
+#     pk answered 302 instead of 404 — so the "cross-tenant is always a 404" invariant held only
+#     when a reason happened to be supplied. That is locked below with an EMPTY body.
+# =================================================================================================
+_COMPLIANCE_GET_ROUTES = (
+    "scm:tradelicense_list", "scm:tradelicense_create",
+    "scm:tradedocument_list", "scm:tradedocument_create",
+    "scm:compliancerequirement_list", "scm:compliancerequirement_create",
+    "scm:sustainabilityassessment_list", "scm:sustainabilityassessment_create",
+    "scm:carbon_footprint_report", "scm:carbon_footprint_report_export",
+)
+
+#: The four filterable registers plus the computed report — every 4.12 screen a hand-edited query
+#: string can reach.
+_COMPLIANCE_FILTERABLE = ("scm:tradelicense_list", "scm:tradedocument_list",
+                          "scm:compliancerequirement_list",
+                          "scm:sustainabilityassessment_list", "scm:carbon_footprint_report",
+                          "scm:carbon_footprint_report_export")
+
+#: Every ``@tenant_admin_required`` route in 4.12, as (url name, fixture name, POST body). These are
+#: the acts that destroy evidence, release a consumed authorisation, or move what the workspace is
+#: allowed to ship.
+_COMPLIANCE_ADMIN_ROUTES = (
+    ("scm:tradelicense_delete", "draft_license_a", {}),
+    ("scm:tradelicense_approve", "draft_license_a", {}),
+    ("scm:tradelicense_revoke", "trade_license_a", {"reason": "Withdrawn."}),
+    ("scm:tradelicense_recompute", "trade_license_a", {}),
+    ("scm:tradedocument_delete", "trade_document_a", {}),
+    ("scm:tradedocument_void", "issued_document_a", {"reason": "Superseded."}),
+    ("scm:compliancerequirement_delete", "compliance_requirement_a", {}),
+    ("scm:compliancecheck_delete", "compliance_check_a", {}),
+    ("scm:sustainabilityassessment_delete", "sustainability_assessment_a", {}),
+)
+
+#: Every POST-only route in 4.12 — a GET to one must be a 405, never a silent state change.
+_COMPLIANCE_POST_ONLY = (
+    ("scm:tradelicense_delete", "draft_license_a"),
+    ("scm:tradelicense_submit", "draft_license_a"),
+    ("scm:tradelicense_approve", "draft_license_a"),
+    ("scm:tradelicense_revoke", "trade_license_a"),
+    ("scm:tradelicense_recompute", "trade_license_a"),
+    ("scm:tradedocument_delete", "trade_document_a"),
+    ("scm:tradedocument_issue", "trade_document_a"),
+    ("scm:tradedocument_submit", "trade_document_a"),
+    ("scm:tradedocument_accept", "trade_document_a"),
+    ("scm:tradedocument_void", "trade_document_a"),
+    ("scm:compliancerequirement_delete", "compliance_requirement_a"),
+    ("scm:compliancerequirement_record_check", "compliance_requirement_a"),
+    ("scm:compliancecheck_delete", "compliance_check_a"),
+    ("scm:sustainabilityassessment_delete", "sustainability_assessment_a"),
+)
+
+#: Cross-tenant targets: (url name, the tenant-B fixture, POST body). Every one must answer 404 —
+#: not 403, which would confirm the row exists, and certainly not 200.
+_COMPLIANCE_CROSS_TENANT_POSTS = (
+    ("scm:tradelicense_delete", "trade_license_b", {}),
+    ("scm:tradelicense_submit", "trade_license_b", {}),
+    ("scm:tradelicense_approve", "trade_license_b", {}),
+    ("scm:tradelicense_revoke", "trade_license_b", {"reason": "Stolen."}),
+    ("scm:tradelicense_recompute", "trade_license_b", {}),
+    ("scm:tradelicense_edit", "trade_license_b", {"title": "stolen"}),
+    ("scm:tradedocument_delete", "trade_document_b", {}),
+    ("scm:tradedocument_issue", "trade_document_b", {}),
+    ("scm:tradedocument_submit", "trade_document_b", {}),
+    ("scm:tradedocument_accept", "trade_document_b", {}),
+    ("scm:tradedocument_void", "trade_document_b", {"reason": "Stolen."}),
+    ("scm:tradedocument_edit", "trade_document_b", {"doc_type": "packing_list"}),
+    ("scm:compliancerequirement_delete", "compliance_requirement_b", {}),
+    ("scm:compliancerequirement_edit", "compliance_requirement_b", {"title": "stolen"}),
+    ("scm:compliancerequirement_record_check", "compliance_requirement_b", {"result": "pass"}),
+    ("scm:compliancecheck_delete", "compliance_check_b", {}),
+    ("scm:compliancecheck_edit", "compliance_check_b", {"result": "fail"}),
+    ("scm:sustainabilityassessment_delete", "sustainability_assessment_b", {}),
+    ("scm:sustainabilityassessment_edit", "sustainability_assessment_b", {"provider": "stolen"}),
+)
+
+
+def _compliance_license_body(**overrides):
+    """A complete, VALID ``TradeLicenseForm`` POST body (the shape ``test_views`` posts)."""
+    data = {
+        "license_number": "BIS-SEC-1", "title": "Export licence", "license_type": "export_license",
+        "issuing_authority": "BIS", "issuing_country": "United States", "holder_party": "",
+        "end_user_party": "", "application_date": "", "issue_date": "", "expiry_date": "",
+        "renewal_notice_days": "60", "authorized_value": "", "authorized_quantity": "",
+        "currency": "", "commodity_scope": "", "eccn_or_hs": "", "destination_countries": "",
+        "conditions": "", "document": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _compliance_requirement_body(**overrides):
+    """A complete, VALID ``ComplianceRequirementForm`` POST body."""
+    from django.utils import timezone
+    data = {
+        "title": "Annual COI on file", "description": "", "source": "regulation",
+        "source_reference": "", "framework": "insurance_coi", "obligation_category": "",
+        "jurisdiction": "", "scope": "tenant", "org_unit": "", "party": "", "location": "",
+        "item": "", "owner": "", "frequency": "annual",
+        "next_due_date": (timezone.localdate() + datetime.timedelta(days=30)).isoformat(),
+        "notice_days": "30", "contract": "", "license": "", "document": "",
+        "status": "applicable", "criticality": "medium", "not_applicable_reason": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+# ================================================================ 4.12 · anonymous is turned away
+class TestComplianceAnonymousRedirect:
+    @pytest.mark.parametrize("url_name", _COMPLIANCE_GET_ROUTES)
+    def test_every_get_route_redirects_to_login(self, url_name):
+        resp = Client().get(reverse(url_name))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    def test_every_detail_page_redirects_BEFORE_it_resolves_a_pk(self, trade_license_a,
+                                                                  trade_document_a,
+                                                                  compliance_requirement_a,
+                                                                  compliance_check_a,
+                                                                  sustainability_assessment_a):
+        c = Client()
+        for url_name, obj in (("scm:tradelicense_detail", trade_license_a),
+                              ("scm:tradelicense_edit", trade_license_a),
+                              ("scm:tradedocument_detail", trade_document_a),
+                              ("scm:tradedocument_edit", trade_document_a),
+                              ("scm:tradedocument_print", trade_document_a),
+                              ("scm:compliancerequirement_detail", compliance_requirement_a),
+                              ("scm:compliancerequirement_edit", compliance_requirement_a),
+                              ("scm:compliancecheck_edit", compliance_check_a),
+                              ("scm:sustainabilityassessment_detail",
+                               sustainability_assessment_a),
+                              ("scm:sustainabilityassessment_edit",
+                               sustainability_assessment_a)):
+            resp = c.get(reverse(url_name, args=[obj.pk]))
+            assert resp.status_code == 302 and "login" in resp["Location"], url_name
+
+    @pytest.mark.parametrize("url_name,fixture_name", _COMPLIANCE_POST_ONLY)
+    def test_every_verb_rejects_anonymous_and_writes_nothing(self, request, url_name,
+                                                              fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        before = getattr(obj, "status", None)
+        resp = Client().post(reverse(url_name, args=[obj.pk]), {"reason": "x", "result": "pass"})
+        assert resp.status_code == 302 and "login" in resp["Location"]
+        obj.refresh_from_db()
+        assert getattr(obj, "status", None) == before
+
+    def test_anonymous_cannot_create_any_412_row(self, tenant_a, supplier_a):
+        from apps.scm.models import (ComplianceRequirement, SustainabilityAssessment,
+                                     TradeDocument, TradeLicense)
+        c = Client()
+        assert c.post(reverse("scm:tradelicense_create"),
+                      _compliance_license_body()).status_code == 302
+        assert c.post(reverse("scm:compliancerequirement_create"),
+                      _compliance_requirement_body()).status_code == 302
+        assert not TradeLicense.objects.exists()
+        assert not TradeDocument.objects.exists()
+        assert not ComplianceRequirement.objects.exists()
+        assert not SustainabilityAssessment.objects.exists()
+
+
+# ================================================================ 4.12 · cross-tenant IDOR
+class TestComplianceCrossTenantIsolation:
+    """Tenant A's admin pointed at tenant B's pk. Every one of these must be a 404."""
+
+    def test_every_detail_and_edit_page_is_404_across_tenants(self, client_a, trade_license_b,
+                                                               trade_document_b,
+                                                               compliance_requirement_b,
+                                                               compliance_check_b,
+                                                               sustainability_assessment_b):
+        for url_name, obj in (("scm:tradelicense_detail", trade_license_b),
+                              ("scm:tradelicense_edit", trade_license_b),
+                              ("scm:tradedocument_detail", trade_document_b),
+                              ("scm:tradedocument_edit", trade_document_b),
+                              ("scm:tradedocument_print", trade_document_b),
+                              ("scm:compliancerequirement_detail", compliance_requirement_b),
+                              ("scm:compliancerequirement_edit", compliance_requirement_b),
+                              ("scm:compliancecheck_edit", compliance_check_b),
+                              ("scm:sustainabilityassessment_detail",
+                               sustainability_assessment_b),
+                              ("scm:sustainabilityassessment_edit",
+                               sustainability_assessment_b)):
+            assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 404, url_name
+
+    @pytest.mark.parametrize("url_name,fixture_name,payload", _COMPLIANCE_CROSS_TENANT_POSTS)
+    def test_every_verb_is_404_across_tenants_and_changes_nothing(self, client_a, request,
+                                                                   url_name, fixture_name,
+                                                                   payload):
+        obj = request.getfixturevalue(fixture_name)
+        before = {name: getattr(obj, name, None)
+                  for name in ("status", "title", "result", "provider", "doc_type", "used_value")}
+        assert client_a.post(reverse(url_name, args=[obj.pk]), payload).status_code == 404
+        obj.refresh_from_db()
+        for name, value in before.items():
+            assert getattr(obj, name, None) == value, name
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:tradelicense_revoke", "trade_license_b"),
+        ("scm:tradedocument_void", "trade_document_b"),
+    ])
+    def test_a_REASONLESS_cross_tenant_post_is_404_and_not_302(self, client_a, request, url_name,
+                                                                fixture_name):
+        """THE regression lock. Both verbs used to return early on a missing reason BEFORE resolving
+        the object, so a reasonless POST to another tenant's pk answered 302 — the "cross-tenant is
+        always a 404" invariant held only when a reason happened to be supplied, which is exactly
+        what an attacker would omit."""
+        obj = request.getfixturevalue(fixture_name)
+        assert client_a.post(reverse(url_name, args=[obj.pk]), {}).status_code == 404
+
+    @pytest.mark.parametrize("url_name", ["scm:tradelicense_revoke", "scm:tradedocument_void"])
+    def test_a_REASONLESS_post_to_a_nonexistent_pk_is_404_and_not_302(self, client_a, url_name):
+        assert client_a.post(reverse(url_name, args=[999999]), {}).status_code == 404
+
+    def test_a_tenant_less_superuser_gets_404_rather_than_somebody_elses_proof_record(
+        self, db, compliance_check_a, compliance_requirement_a,
+    ):
+        """``request.tenant`` of ``None`` resolves to ``requirement__tenant IS NULL``, and that
+        column is NOT NULL — so the tenant-less superuser gets a 404, never a foreign row."""
+        from apps.accounts.models import User
+        superuser = User.objects.create_superuser(email="root412@naverp.test", username="root412",
+                                                  password="TestPass123!")
+        c = Client()
+        c.force_login(superuser)
+        assert c.get(reverse("scm:compliancecheck_edit",
+                             args=[compliance_check_a.pk])).status_code == 404
+        assert c.post(reverse("scm:compliancecheck_delete",
+                              args=[compliance_check_a.pk])).status_code == 404
+
+    def test_no_list_page_ever_shows_the_other_tenants_rows(self, client_a, trade_license_a,
+                                                             trade_license_b, trade_document_a,
+                                                             trade_document_b,
+                                                             compliance_requirement_a,
+                                                             compliance_requirement_b,
+                                                             sustainability_assessment_a,
+                                                             sustainability_assessment_b):
+        for url_name, mine, theirs in (
+            ("scm:tradelicense_list", trade_license_a, trade_license_b),
+            ("scm:tradedocument_list", trade_document_a, trade_document_b),
+            ("scm:compliancerequirement_list", compliance_requirement_a,
+             compliance_requirement_b),
+            ("scm:sustainabilityassessment_list", sustainability_assessment_a,
+             sustainability_assessment_b),
+        ):
+            rows = client_a.get(reverse(url_name)).context["object_list"]
+            assert mine in rows, url_name
+            assert theirs not in rows, url_name
+
+    def test_a_crafted_filter_pointing_at_the_other_tenants_row_matches_nothing(
+        self, client_a, trade_document_a, trade_license_b, shipment_b, sustainability_assessment_a,
+        supplier_b, compliance_requirement_a, admin_b,
+    ):
+        for url_name, param, obj in (("scm:tradedocument_list", "license", trade_license_b),
+                                     ("scm:tradedocument_list", "shipment", shipment_b),
+                                     ("scm:sustainabilityassessment_list", "party", supplier_b),
+                                     ("scm:compliancerequirement_list", "owner", admin_b)):
+            resp = client_a.get(reverse(url_name), {param: str(obj.pk)})
+            assert resp.status_code == 200, (url_name, param)
+            assert list(resp.context["object_list"]) == [], (url_name, param)
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("holder_party", "supplier_b"), ("end_user_party", "supplier_b"),
+        ("document", "evidence_document_b"),
+    ])
+    def test_a_crafted_licence_POST_cannot_name_another_tenants_row(self, client_a, request,
+                                                                     tenant_a, field,
+                                                                     fixture_name):
+        """The form's querysets are UX; ``TradeLicense.clean()`` is what holds against a POST that
+        never went near a dropdown (L39 §2)."""
+        from apps.scm.models import TradeLicense
+        other = request.getfixturevalue(fixture_name)
+        resp = client_a.post(reverse("scm:tradelicense_create"),
+                             _compliance_license_body(**{field: str(other.pk)}))
+        assert resp.status_code == 200
+        assert field in resp.context["form"].errors
+        assert not TradeLicense.objects.filter(tenant=tenant_a).exists()
+
+    @pytest.mark.parametrize("field,fixture_name,extra", [
+        ("party", "supplier_b", {"scope": "party"}),
+        ("org_unit", "org_unit_b", {"scope": "org_unit"}),
+        ("location", "location_b", {"scope": "location"}),
+        ("item", "item_b", {"scope": "item"}),
+        ("contract", "contract_b", {"source": "contract"}),
+        ("license", "trade_license_b", {"source": "license"}),
+        ("document", "evidence_document_b", {}),
+        ("owner", "admin_b", {}),
+    ])
+    def test_a_crafted_obligation_POST_cannot_name_another_tenants_row(self, client_a, request,
+                                                                        tenant_a, field,
+                                                                        fixture_name, extra):
+        from apps.scm.models import ComplianceRequirement
+        other = request.getfixturevalue(fixture_name)
+        body = _compliance_requirement_body(**{field: str(other.pk)}, **extra)
+        resp = client_a.post(reverse("scm:compliancerequirement_create"), body)
+        assert resp.status_code == 200
+        assert field in resp.context["form"].errors, resp.context["form"].errors
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_check_POST_cannot_attach_another_tenants_evidence(
+        self, client_a, compliance_requirement_a, evidence_document_b,
+    ):
+        """``ComplianceCheck`` has no tenant column, so ``TenantModelForm`` cannot scope its evidence
+        dropdown for free.
+
+        Two guards stand here and the OUTER one answers first: the form re-filters ``evidence`` from
+        ``Document.objects`` to this tenant, so a crafted pk is "not one of the available choices".
+        The inner guard — ``ComplianceCheck.clean()`` checking the document against the PARENT's
+        tenant — is what holds if that queryset is ever widened, and it is asserted directly in
+        ``test_models.py``. What this test pins is the OUTCOME: a refusal message and no child row.
+        """
+        resp = client_a.post(reverse("scm:compliancerequirement_record_check",
+                                     args=[compliance_requirement_a.pk]),
+                             {"result": "pass", "due_date": "",
+                              "performed_on": _localdate_sec().isoformat(),
+                              "finding": "", "corrective_reference": "",
+                              "evidence": str(evidence_document_b.pk), "notes": ""},
+                             follow=True)
+        assert resp.status_code == 200
+        assert _security_blob(resp)                        # refused out loud, not silently dropped
+        assert "select a valid choice" in _security_blob(resp)
+        assert compliance_requirement_a.checks.count() == 0
+
+    def test_a_crafted_document_POST_cannot_charge_another_tenants_licence(self, client_a,
+                                                                           tenant_a,
+                                                                           trade_license_b):
+        from apps.scm.models import TradeDocument
+        body = {
+            "doc_type": "commercial_invoice", "direction": "export", "document_number": "X",
+            "issue_date": "", "shipment": "", "carrier": "", "purchase_order": "",
+            "sales_order": "", "license": str(trade_license_b.pk), "shipper_party": "",
+            "consignee_party": "", "notify_party": "", "country_of_origin": "",
+            "country_of_destination": "", "currency": "", "declared_value": "10.00",
+            "freight_charges": "", "insurance_value": "", "incoterm": "", "gross_weight_kg": "",
+            "net_weight_kg": "", "package_count": "", "vessel_or_flight": "", "voyage_number": "",
+            "port_of_loading": "", "port_of_discharge": "", "container_numbers": "",
+            "is_negotiable": "", "filing_reference": "", "document": "", "notes": "",
+        }
+        body.update(formset_data("lines", []))
+        resp = client_a.post(reverse("scm:tradedocument_create"), body)
+        assert resp.status_code == 200
+        assert "license" in resp.context["form"].errors
+        assert not TradeDocument.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_esg_POST_cannot_score_another_tenants_party(self, client_a, tenant_a,
+                                                                    supplier_b):
+        from apps.scm.models import SustainabilityAssessment
+        resp = client_a.post(reverse("scm:sustainabilityassessment_create"), {
+            "party": str(supplier_b.pk), "assessment_date": _localdate_sec().isoformat(),
+            "valid_until": "", "source": "self_assessment", "provider": "", "status": "draft",
+            "environment_score": "", "labor_human_rights_score": "", "ethics_score": "",
+            "sustainable_procurement_score": "", "carbon_score": "", "strengths": "",
+            "improvement_areas": "", "scope1_tco2e": "", "scope2_tco2e": "", "scope3_tco2e": "",
+            "carbon_reporting_year": "", "document": "", "notes": "",
+        })
+        assert resp.status_code == 200
+        assert "party" in resp.context["form"].errors
+        assert not SustainabilityAssessment.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_carbon_report_measures_only_its_own_tenants_freight(self, client_b,
+                                                                      carbon_shipment_a,
+                                                                      sustainability_assessment_a):
+        """A resolver that forgot its tenant filter would show tenant A's tonne-km here."""
+        resp = client_b.get(reverse("scm:carbon_footprint_report"))
+        assert resp.status_code == 200
+        assert resp.context["total_tco2e"] is None
+        assert resp.context["considered_count"] == 0
+        assert resp.context["declared_count"] == 0
+        assert "Acme Trucking Co" not in resp.content.decode()
+
+    def test_a_cross_tenant_check_delete_leaves_the_row_and_its_parent_alone(self, client_a,
+                                                                             tenant_a,
+                                                                             compliance_check_b,
+                                                                             compliance_requirement_b):
+        """The child is reached ONLY through ``requirement__tenant``, so tenant A's admin cannot
+        touch it — and the parent's derived ``compliance_rate`` is unchanged by the attempt."""
+        from apps.scm.models import ComplianceCheck
+        before = compliance_requirement_b.compliance_rate
+        assert client_a.post(reverse("scm:compliancecheck_delete",
+                                     args=[compliance_check_b.pk])).status_code == 404
+        assert ComplianceCheck.objects.filter(pk=compliance_check_b.pk).exists()
+        compliance_requirement_b.refresh_from_db()
+        assert compliance_requirement_b.tenant_id != tenant_a.pk
+        assert compliance_requirement_b.compliance_rate == before
+
+
+# ================================================================ 4.12 · the admin gates
+class TestComplianceTenantAdminGates:
+    """The rule 4.12 states: recording work is open to every member; destroying evidence, releasing
+    a consumed authorisation and moving what the workspace may ship are administrator acts."""
+
+    @pytest.mark.parametrize("url_name,fixture_name,payload", _COMPLIANCE_ADMIN_ROUTES)
+    def test_a_plain_member_is_403_on_every_gated_route(self, member_client, request, url_name,
+                                                        fixture_name, payload):
+        obj = request.getfixturevalue(fixture_name)
+        assert member_client.post(reverse(url_name, args=[obj.pk]),
+                                  payload).status_code == 403
+
+    @pytest.mark.parametrize("url_name,fixture_name,payload", _COMPLIANCE_ADMIN_ROUTES)
+    def test_the_gate_blocks_a_GET_BEFORE_the_method_check(self, member_client, request,
+                                                           url_name, fixture_name, payload):
+        """``@tenant_admin_required`` wraps ``@require_POST``, so a member gets 403 rather than a 405
+        that would tell them the route exists and takes a POST."""
+        obj = request.getfixturevalue(fixture_name)
+        assert member_client.get(reverse(url_name, args=[obj.pk])).status_code == 403
+
+    def test_nothing_a_member_was_refused_actually_moved(self, member_client, trade_license_a,
+                                                          issued_document_a,
+                                                          compliance_requirement_a,
+                                                          compliance_check_a,
+                                                          sustainability_assessment_a):
+        from apps.scm.models import (ComplianceCheck, ComplianceRequirement,
+                                     SustainabilityAssessment, TradeDocument, TradeLicense)
+        for url_name, obj, payload in (
+            ("scm:tradelicense_revoke", trade_license_a, {"reason": "x"}),
+            ("scm:tradelicense_recompute", trade_license_a, {}),
+            ("scm:tradedocument_void", issued_document_a, {"reason": "x"}),
+            ("scm:compliancerequirement_delete", compliance_requirement_a, {}),
+            ("scm:compliancecheck_delete", compliance_check_a, {}),
+            ("scm:sustainabilityassessment_delete", sustainability_assessment_a, {}),
+        ):
+            member_client.post(reverse(url_name, args=[obj.pk]), payload)
+        trade_license_a.refresh_from_db()
+        issued_document_a.refresh_from_db()
+        assert trade_license_a.status == "active"
+        assert issued_document_a.status == "issued"
+        assert ComplianceRequirement.objects.filter(pk=compliance_requirement_a.pk).exists()
+        assert ComplianceCheck.objects.filter(pk=compliance_check_a.pk).exists()
+        assert SustainabilityAssessment.objects.filter(
+            pk=sustainability_assessment_a.pk).exists()
+        assert TradeDocument.objects.filter(pk=issued_document_a.pk).exists()
+        assert TradeLicense.objects.filter(pk=trade_license_a.pk).exists()
+
+    def test_a_member_keeps_every_read_and_the_daily_work(self, member_client, trade_license_a,
+                                                           draft_license_a, trade_document_a,
+                                                           compliance_requirement_a,
+                                                           sustainability_assessment_a):
+        """The register only gets kept if keeping it is not behind a workspace administrator."""
+        for url_name in _COMPLIANCE_GET_ROUTES:
+            assert member_client.get(reverse(url_name)).status_code == 200, url_name
+        # Lodging an application commits nothing and authorises nothing.
+        assert member_client.post(reverse("scm:tradelicense_submit",
+                                          args=[draft_license_a.pk])).status_code == 302
+        # Raising and issuing paperwork is the daily work of the person shipping the goods; the
+        # licence balance is the control here, not the role.
+        assert member_client.post(reverse("scm:tradedocument_issue",
+                                          args=[trade_document_a.pk])).status_code == 302
+        # Recording that you did the thing you were supposed to do must not need an administrator,
+        # or the register stops being kept at all.
+        assert member_client.post(
+            reverse("scm:compliancerequirement_record_check",
+                    args=[compliance_requirement_a.pk]),
+            {"result": "pass", "due_date": "", "performed_on": _localdate_sec().isoformat(),
+             "finding": "", "corrective_reference": "", "evidence": "",
+             "notes": ""}).status_code == 302
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.status == "compliant"
+        # Revising a scorecard is ordinary compliance work; only DISCARDING one is gated.
+        assert member_client.get(reverse("scm:sustainabilityassessment_edit",
+                                         args=[sustainability_assessment_a.pk])).status_code == 200
+
+    def test_a_member_may_record_a_check_but_not_rewrite_one_after_the_fact(self, member_client,
+                                                                            compliance_check_a):
+        """This row IS the evidence, and a proof history anybody can quietly restate is not
+        defensible documentation."""
+        assert member_client.get(reverse("scm:compliancecheck_edit",
+                                         args=[compliance_check_a.pk])).status_code == 403
+        assert member_client.post(reverse("scm:compliancecheck_edit",
+                                          args=[compliance_check_a.pk]),
+                                  {"result": "pass"}).status_code == 403
+        compliance_check_a.refresh_from_db()
+        assert compliance_check_a.result == "partial"
+
+    def test_a_tenant_less_superuser_cannot_write_orphan_rows(self, db, tenant_a):
+        """The superuser has ``tenant=None`` by design, and every 4.12 view filters by tenant — a
+        create by that user would be an orphan row no workspace can ever see."""
+        from apps.accounts.models import User
+        from apps.scm.models import ComplianceRequirement, TradeLicense
+        superuser = User.objects.create_superuser(email="root412b@naverp.test",
+                                                  username="root412b", password="TestPass123!")
+        c = Client()
+        c.force_login(superuser)
+        assert c.post(reverse("scm:tradelicense_create"),
+                      _compliance_license_body()).status_code == 302
+        assert c.post(reverse("scm:compliancerequirement_create"),
+                      _compliance_requirement_body()).status_code == 302
+        assert not TradeLicense.objects.exists()
+        assert not ComplianceRequirement.objects.exists()
+        # ...the READ pages still render rather than 500-ing on a missing workspace...
+        for url_name in ("scm:tradelicense_list", "scm:tradedocument_list",
+                         "scm:compliancerequirement_list", "scm:sustainabilityassessment_list",
+                         "scm:carbon_footprint_report", "scm:carbon_footprint_report_export"):
+            assert c.get(reverse(url_name)).status_code == 200, url_name
+        # ...and every CREATE screen turns the user away rather than rendering a form whose every
+        # dropdown is empty and whose save would produce an orphan row.
+        for url_name in ("scm:tradelicense_create", "scm:tradedocument_create",
+                         "scm:compliancerequirement_create",
+                         "scm:sustainabilityassessment_create"):
+            assert c.get(reverse(url_name)).status_code == 302, url_name
+
+
+# ================================================================ 4.12 · POST-only method gates
+class TestComplianceMethodGates:
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        (name, fixture) for name, fixture in _COMPLIANCE_POST_ONLY
+        if name in ("scm:tradelicense_submit", "scm:tradedocument_issue",
+                    "scm:tradedocument_submit", "scm:tradedocument_accept",
+                    "scm:compliancerequirement_record_check")
+    ])
+    def test_a_GET_to_an_open_verb_is_405_and_changes_nothing(self, client_a, request, url_name,
+                                                              fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        before = getattr(obj, "status", None)
+        assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 405
+        obj.refresh_from_db()
+        assert getattr(obj, "status", None) == before
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        (name, fixture) for name, fixture in _COMPLIANCE_POST_ONLY
+        if name in ("scm:tradelicense_delete", "scm:tradelicense_approve",
+                    "scm:tradelicense_revoke", "scm:tradelicense_recompute",
+                    "scm:tradedocument_delete", "scm:tradedocument_void",
+                    "scm:compliancerequirement_delete", "scm:compliancecheck_delete",
+                    "scm:sustainabilityassessment_delete")
+    ])
+    def test_a_GET_to_a_gated_verb_is_405_for_an_ADMIN_and_deletes_nothing(self, client_a,
+                                                                           request, url_name,
+                                                                           fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        model = type(obj)
+        assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 405
+        assert model.objects.filter(pk=obj.pk).exists()
+
+
+# ================================================================ 4.12 · CSRF
+class TestComplianceCSRF:
+    """Every mutating route with ``enforce_csrf_checks=True`` and no token. The repo's only CSRF
+    exemption is the Stripe webhook; nothing in 4.12 exempts itself."""
+
+    @staticmethod
+    def _client(user):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(user)
+        return c
+
+    def test_the_create_forms_are_rejected_without_a_token(self, admin_user, tenant_a,
+                                                            supplier_a):
+        from apps.scm.models import (ComplianceRequirement, SustainabilityAssessment,
+                                     TradeDocument, TradeLicense)
+        c = self._client(admin_user)
+        assert c.post(reverse("scm:tradelicense_create"),
+                      _compliance_license_body()).status_code == 403
+        assert c.post(reverse("scm:compliancerequirement_create"),
+                      _compliance_requirement_body()).status_code == 403
+        assert c.post(reverse("scm:tradedocument_create"), {}).status_code == 403
+        assert c.post(reverse("scm:sustainabilityassessment_create"),
+                      {"party": str(supplier_a.pk)}).status_code == 403
+        assert not TradeLicense.objects.filter(tenant=tenant_a).exists()
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+        assert not TradeDocument.objects.filter(tenant=tenant_a).exists()
+        assert not SustainabilityAssessment.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_edit_forms_are_rejected_without_a_token(self, admin_user, trade_license_a,
+                                                          trade_document_a,
+                                                          compliance_requirement_a,
+                                                          compliance_check_a,
+                                                          sustainability_assessment_a):
+        c = self._client(admin_user)
+        for url_name, obj in (("scm:tradelicense_edit", trade_license_a),
+                              ("scm:tradedocument_edit", trade_document_a),
+                              ("scm:compliancerequirement_edit", compliance_requirement_a),
+                              ("scm:compliancecheck_edit", compliance_check_a),
+                              ("scm:sustainabilityassessment_edit",
+                               sustainability_assessment_a)):
+            assert c.post(reverse(url_name, args=[obj.pk]),
+                          {"title": "CSRF"}).status_code == 403, url_name
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.title == "Export licence - workstation hardware"
+
+    @pytest.mark.parametrize("url_name,fixture_name", _COMPLIANCE_POST_ONLY)
+    def test_every_verb_is_rejected_without_a_token(self, admin_user, request, url_name,
+                                                    fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        before = getattr(obj, "status", None)
+        assert self._client(admin_user).post(
+            reverse(url_name, args=[obj.pk]),
+            {"reason": "x", "result": "pass"}).status_code == 403
+        obj.refresh_from_db()
+        assert getattr(obj, "status", None) == before
+
+    def test_the_licence_balance_is_untouched_by_a_tokenless_issue(self, admin_user,
+                                                                    trade_document_a,
+                                                                    trade_license_a):
+        assert self._client(admin_user).post(
+            reverse("scm:tradedocument_issue", args=[trade_document_a.pk])).status_code == 403
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("0.00")
+
+
+# ================================================================ 4.12 · hostile query strings
+class TestComplianceHostileFilters:
+    """Nothing anybody can type into the address bar may 500 a page.
+
+    The headline shapes: the Unicode SUPERSCRIPT (``'²'.isdigit()`` is True but ``int('²')`` raises),
+    the 21-digit id (all decimal digits, converts cleanly, then raises inside the driver), and the
+    out-of-range DATE (``0001-01-01`` makes ``date_to - timedelta(days=365)`` raise OverflowError).
+    """
+
+    #: One junk value of every shape a filter has ever been handed.
+    JUNK = ["abc", "²", "³", "1e5", "-1", "0", "999999999999999999999", " ", "1;DROP TABLE",
+            "<script>", "1.5"]
+
+    @pytest.mark.parametrize("value", JUNK)
+    def test_a_junk_int_filter_never_500s_any_register(self, client_a, trade_document_a,
+                                                       compliance_requirement_a,
+                                                       sustainability_assessment_a, value):
+        for url_name, param in (("scm:tradedocument_list", "shipment"),
+                                ("scm:tradedocument_list", "license"),
+                                ("scm:compliancerequirement_list", "owner"),
+                                ("scm:sustainabilityassessment_list", "party")):
+            resp = client_a.get(reverse(url_name), {param: value})
+            assert resp.status_code == 200, (url_name, param, value)
+
+    @pytest.mark.parametrize("value", JUNK)
+    def test_a_junk_carrier_filter_never_500s_the_carbon_report_or_its_export(self, client_a,
+                                                                              carbon_shipment_a,
+                                                                              value):
+        """``?carrier=999999999999999999999`` is all decimal digits and converts fine, then raises
+        ``OverflowError`` inside the driver — the same L11 guard ``crud_list`` applies to its own
+        int filters has to be applied by hand here."""
+        for url_name in ("scm:carbon_footprint_report", "scm:carbon_footprint_report_export"):
+            assert client_a.get(reverse(url_name),
+                                {"carrier": value}).status_code == 200, (url_name, value)
+
+    @pytest.mark.parametrize("value", ["0001-01-01", "0001-12-31", "1899-12-31", "9999-12-31",
+                                        "2026-02-31", "0000-00-00", "lastweek", "²", "1/1/2026",
+                                        "2026-13-01", "abc", "99999-01-01", ""])
+    def test_a_junk_or_out_of_range_date_window_never_500s_the_report_or_its_export(
+        self, client_a, carbon_shipment_a, value,
+    ):
+        """``?date_to=0001-01-01`` parses as a real date and then makes the default-window
+        subtraction raise ``OverflowError`` — an uncaught 500 on a value anybody can type into the
+        address bar. It has to fall back to the default window and SAY so."""
+        for url_name in ("scm:carbon_footprint_report", "scm:carbon_footprint_report_export"):
+            for param in ("date_from", "date_to"):
+                resp = client_a.get(reverse(url_name), {param: value})
+                assert resp.status_code == 200, (url_name, param, value)
+
+    def test_an_out_of_range_date_lights_the_invalid_banner_rather_than_failing_silently(
+        self, client_a, carbon_shipment_a,
+    ):
+        """Silently ignoring what somebody asked for is worse than saying the default window is
+        showing."""
+        resp = client_a.get(reverse("scm:carbon_footprint_report"), {"date_to": "0001-01-01"})
+        assert resp.status_code == 200
+        assert resp.context["window_invalid"] is True
+        assert resp.context["date_to_raw"] == "0001-01-01"
+        # ...and the fallback window is a real one the shipment still lands in.
+        assert resp.context["measured_count"] == 1
+
+    def test_an_over_range_carrier_id_skips_the_filter_rather_than_raising(self, client_a,
+                                                                           carbon_shipment_a):
+        resp = client_a.get(reverse("scm:carbon_footprint_report"),
+                            {"carrier": "999999999999999999999"})
+        assert resp.status_code == 200
+        assert resp.context["measured_count"] == 1
+        # The typed value is echoed back into the input rather than swallowed.
+        assert resp.context["carrier_id"] == "999999999999999999999"
+
+    @pytest.mark.parametrize("value", ["abc", "²", "-1", "0", "99999", "1e5", ""])
+    def test_a_junk_page_number_never_500s_a_register(self, client_a, trade_license_a,
+                                                       trade_document_a,
+                                                       compliance_requirement_a,
+                                                       sustainability_assessment_a, value):
+        """L9 — a page past the end lands on the last page; junk lands on the first."""
+        for url_name in _COMPLIANCE_FILTERABLE[:4]:
+            assert client_a.get(reverse(url_name),
+                                {"page": value}).status_code == 200, (url_name, value)
+
+    #: One value of the wrong SHAPE for every non-integer filter 4.12 offers, sent together — which
+    #: is what a hand-edited URL actually looks like.
+    JUNK_CHOICES = {
+        "status": "not_a_status", "license_type": "invented", "issuing_country": "²",
+        "doc_type": "nonsense", "direction": "sideways", "framework": "chartreuse",
+        "source": "nowhere", "criticality": "purple", "due": "whenever", "rating": "tin",
+        "mode": "teleport", "q": "²³",
+    }
+
+    @pytest.mark.parametrize("url_name", _COMPLIANCE_FILTERABLE)
+    def test_every_junk_choice_filter_at_once_is_skipped_rather_than_matched(
+        self, client_a, trade_license_a, trade_document_a, compliance_requirement_a,
+        sustainability_assessment_a, carbon_shipment_a, url_name,
+    ):
+        assert client_a.get(reverse(url_name), self.JUNK_CHOICES).status_code == 200
+
+    def test_a_junk_search_term_never_500s_and_matches_nothing(self, client_a, trade_license_a,
+                                                                trade_document_a,
+                                                                compliance_requirement_a,
+                                                                sustainability_assessment_a):
+        for url_name in _COMPLIANCE_FILTERABLE[:4]:
+            resp = client_a.get(reverse(url_name), {"q": "'; DROP TABLE scm_tradelicense; --"})
+            assert resp.status_code == 200, url_name
+            assert list(resp.context["object_list"]) == [], url_name
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "abc", "1e400", "-1",
+                                        "99999999999999999999.99", "--5", "1,000", ""])
+    def test_a_hostile_decimal_in_a_create_body_is_a_field_error_never_a_500(self, client_a,
+                                                                             tenant_a, value):
+        """``Decimal("NaN")`` parses happily and then poisons every comparison it touches; an
+        over-``max_digits`` figure raises ``DataError`` inside the driver if it ever reaches it."""
+        from apps.scm.models import TradeLicense
+        resp = client_a.post(reverse("scm:tradelicense_create"),
+                             _compliance_license_body(authorized_value=value))
+        assert resp.status_code in (200, 302), value
+        if resp.status_code == 200:
+            assert "authorized_value" in resp.context["form"].errors, value
+        else:
+            # The empty string is the legitimate "no ceiling" case, and it stores NULL not zero.
+            assert value == ""
+            assert TradeLicense.objects.get(tenant=tenant_a).authorized_value is None
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-1.00", "1e400",
+                                        "99999999999999999999.99"])
+    def test_a_hostile_declared_value_never_reaches_a_licence_balance(self, client_a, tenant_a,
+                                                                       trade_license_a, value):
+        from apps.scm.models import TradeDocument
+        body = {
+            "doc_type": "commercial_invoice", "direction": "export", "document_number": "H",
+            "issue_date": "", "shipment": "", "carrier": "", "purchase_order": "",
+            "sales_order": "", "license": str(trade_license_a.pk), "shipper_party": "",
+            "consignee_party": "", "notify_party": "", "country_of_origin": "",
+            "country_of_destination": "", "currency": "", "declared_value": value,
+            "freight_charges": "", "insurance_value": "", "incoterm": "", "gross_weight_kg": "",
+            "net_weight_kg": "", "package_count": "", "vessel_or_flight": "", "voyage_number": "",
+            "port_of_loading": "", "port_of_discharge": "", "container_numbers": "",
+            "is_negotiable": "", "filing_reference": "", "document": "", "notes": "",
+        }
+        body.update(formset_data("lines", []))
+        resp = client_a.post(reverse("scm:tradedocument_create"), body)
+        assert resp.status_code == 200, value
+        assert "declared_value" in resp.context["form"].errors, value
+        assert not TradeDocument.objects.filter(tenant=tenant_a).exists()
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("0.00")
+
+    @pytest.mark.parametrize("value", ["4294967295", "-1", "3651", "abc", "²", "1e5"])
+    def test_a_hostile_day_count_is_a_field_error_not_an_OverflowError(self, client_a, tenant_a,
+                                                                        value):
+        """``PositiveIntegerField`` accepts 4294967295 on MariaDB and both of 4.12's day counts are
+        fed to ``timedelta(days=...)`` — an absurd value is an uncaught OverflowError, i.e. a 500
+        rather than a validation error (the 4.10 denial-of-service finding)."""
+        from apps.scm.models import ComplianceRequirement, TradeLicense
+        resp = client_a.post(reverse("scm:tradelicense_create"),
+                             _compliance_license_body(renewal_notice_days=value))
+        assert resp.status_code == 200, value
+        assert "renewal_notice_days" in resp.context["form"].errors, value
+        resp = client_a.post(reverse("scm:compliancerequirement_create"),
+                             _compliance_requirement_body(notice_days=value))
+        assert resp.status_code == 200, value
+        assert "notice_days" in resp.context["form"].errors, value
+        assert not TradeLicense.objects.filter(tenant=tenant_a).exists()
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_huge_notice_window_cannot_be_stored_and_then_hang_the_due_queue(self, client_a,
+                                                                               tenant_a):
+        """The register's due-soon condition expands one clause per DISTINCT notice window, and the
+        expansion is capped — this pins that an absurd window never gets stored to begin with."""
+        from apps.scm.models import ComplianceRequirement
+        row = ComplianceRequirement(tenant=tenant_a, title="Absurd", frequency="on_event",
+                                    notice_days=4294967295)
+        from django.core.exceptions import ValidationError
+        with pytest.raises(ValidationError):
+            row.full_clean(exclude=["number"])
+
+    def test_a_reason_longer_than_the_column_is_truncated_rather_than_raising(self, client_a,
+                                                                              trade_license_a):
+        """``revocation_reason`` is a TextField and the audit entry is capped at 200 chars, so a
+        megabyte of prose is stored/truncated rather than crashing the verb."""
+        client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                      {"reason": "A" * 50000})
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "revoked"
+        assert len(trade_license_a.revocation_reason) == 2000
+
+
+# ================================================================ 4.12 · CSV injection
+class TestComplianceCsvInjection:
+    """A cell beginning ``=`` ``+`` ``-`` ``@`` or a control character is executed as a FORMULA by
+    Excel and LibreOffice. The carbon export's carrier column is ``Carrier.name``, a property over
+    ``Party.name`` — i.e. free text anybody in the workspace can type."""
+
+    def test_a_carrier_named_like_a_formula_exports_quoted(self, client_a, carbon_shipment_a,
+                                                            carrier_party_a):
+        carrier_party_a.name = "=1+1"
+        carrier_party_a.save(update_fields=["name"])
+        body = client_a.get(reverse("scm:carbon_footprint_report_export")).content.decode()
+        assert "'=1+1" in body
+        assert ",=1+1" not in body
+
+    @pytest.mark.parametrize("hostile", ["=1+1", "+1+1", "-1+1", "@SUM(A1)",
+                                          "=cmd|'/c calc'!A0", "\t=1+1"])
+    def test_every_dangerous_prefix_is_neutralised(self, client_a, carbon_shipment_a,
+                                                    carrier_party_a, hostile):
+        carrier_party_a.name = hostile
+        carrier_party_a.save(update_fields=["name"])
+        body = client_a.get(reverse("scm:carbon_footprint_report_export")).content.decode()
+        assert f"'{hostile}" in body, hostile
+
+    def test_a_negative_NUMBER_is_left_alone_so_the_spreadsheet_can_still_sum_it(self, client_a,
+                                                                                 carbon_shipment_a):
+        """Prefixing every negative figure would turn the column into text in the spreadsheet that
+        has to sum it. A number cannot carry a formula."""
+        body = client_a.get(reverse("scm:carbon_footprint_report_export")).content.decode()
+        assert "'1000.00" not in body
+        assert "1000.00" in body
+
+    def test_no_request_value_ever_reaches_the_content_disposition_header(self, client_a,
+                                                                          carbon_shipment_a):
+        """The filename is a server-side literal — there is nothing to inject a newline into."""
+        resp = client_a.get(reverse("scm:carbon_footprint_report_export"),
+                            {"carrier": "1\r\nX-Injected: yes", "date_to": "</script>"})
+        assert resp.status_code == 200
+        assert "X-Injected" not in str(resp.serialize_headers())
+        assert resp["Content-Disposition"] == 'attachment; filename="carbon-footprint.csv"'
+
+
+# ================================================================ 4.12 · XSS
+class TestComplianceXss:
+    """Titles, licence numbers, findings, conditions and provider names are all free text somebody
+    typed, and every one of them is rendered on a list AND a detail page."""
+
+    def test_a_hostile_licence_title_is_escaped_on_both_its_pages(self, client_a, tenant_a):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense.objects.create(
+            tenant=tenant_a, license_number="<img src=x onerror=alert(1)>",
+            title="<script>alert('xss')</script>", issuing_authority="BIS")
+        for url in (reverse("scm:tradelicense_list"),
+                    reverse("scm:tradelicense_detail", args=[lic.pk])):
+            body = client_a.get(url).content.decode()
+            assert "<script>alert('xss')</script>" not in body
+            assert "<img src=x onerror=alert(1)>" not in body
+            assert "&lt;script&gt;" in body
+
+    def test_a_hostile_document_number_is_escaped(self, client_a, tenant_a):
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a,
+                                           document_number="<script>alert(1)</script>",
+                                           vessel_or_flight="<img src=x onerror=alert(1)>")
+        for url in (reverse("scm:tradedocument_list"),
+                    reverse("scm:tradedocument_detail", args=[doc.pk]),
+                    reverse("scm:tradedocument_print", args=[doc.pk])):
+            body = client_a.get(url).content.decode()
+            assert "<script>alert(1)</script>" not in body
+            assert "<img src=x onerror=alert(1)>" not in body
+
+    def test_a_hostile_obligation_title_and_finding_are_escaped(self, client_a, tenant_a):
+        from apps.scm.models import ComplianceCheck, ComplianceRequirement
+        row = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="<script>alert('cr')</script>", frequency="on_event",
+            source_reference="<img src=x onerror=alert(1)>")
+        ComplianceCheck.objects.create(requirement=row, result="fail",
+                                       finding="<script>alert('chk')</script>")
+        for url in (reverse("scm:compliancerequirement_list"),
+                    reverse("scm:compliancerequirement_detail", args=[row.pk])):
+            body = client_a.get(url).content.decode()
+            assert "<script>alert('cr')</script>" not in body
+            assert "<script>alert('chk')</script>" not in body
+
+    def test_a_hostile_provider_name_is_escaped_on_the_scorecard(self, client_a, tenant_a,
+                                                                  supplier_a):
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(
+            tenant=tenant_a, party=supplier_a, assessment_date=_localdate_sec(),
+            provider="<script>alert('esg')</script>",
+            strengths="<img src=x onerror=alert(1)>")
+        for url in (reverse("scm:sustainabilityassessment_list"),
+                    reverse("scm:sustainabilityassessment_detail", args=[row.pk])):
+            body = client_a.get(url).content.decode()
+            assert "<script>alert('esg')</script>" not in body
+            assert "<img src=x onerror=alert(1)>" not in body
+
+    def test_a_hostile_search_term_is_escaped_back_into_the_filter_bar(self, client_a,
+                                                                       trade_license_a):
+        for url_name in ("scm:tradelicense_list", "scm:tradedocument_list",
+                         "scm:compliancerequirement_list",
+                         "scm:sustainabilityassessment_list"):
+            body = client_a.get(reverse(url_name),
+                                {"q": '"><script>alert(1)</script>'}).content.decode()
+            assert "<script>alert(1)</script>" not in body, url_name
+
+    def test_a_hostile_carrier_name_is_escaped_on_the_carbon_report(self, client_a,
+                                                                     carbon_shipment_a,
+                                                                     carrier_party_a):
+        carrier_party_a.name = "<script>alert('carbon')</script>"
+        carrier_party_a.save(update_fields=["name"])
+        body = client_a.get(reverse("scm:carbon_footprint_report")).content.decode()
+        assert "<script>alert('carbon')</script>" not in body
+        assert "&lt;script&gt;" in body
