@@ -26,6 +26,11 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.core.crud import crud_create, crud_delete, crud_detail, crud_edit, crud_list, paginate
+# The int-FK filter guard `crud_list` applies to its own `filters` spec (L11: a GET value that is
+# not a pk — non-numeric, a Unicode superscript, or wider than a 64-bit column — must SKIP the
+# filter, never raise out of .filter()). Imported so the views that hand-roll a filter spec apply
+# the same rule rather than a second, weaker copy of it.
+from apps.core.crud import as_db_int
 # _changed builds the {field: new_value} diff (with the sensitive-field redaction list applied) that
 # crud_edit records automatically. The scm form views hand-roll their save path so the inline
 # formset commits in the same transaction as its parent, which means they bypass crud_edit — and
