@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  {% comment %}
+    Context contract — apps/scm/views/ContractCompliance/TradeDocuments.py::tradedocument_detail.
+    Everything this page may read, and nothing else:
+      obj              the TradeDocument (FKs already joined by _document_queryset)
+      lines            list of TradeDocumentLine, with item + uom joined
+      has_lines        bool — whether `lines` has anything in it
+      lines_total      Decimal — sum of quantity × unit_value, ONE aggregate, memoised
+      value_matches    bool — obj.declared_value_matches, to the cent
+      charge_value     Decimal(2dp) — what this document draws from its licence in money
+      charge_quantity  Decimal(4dp) — what it draws in units
+      license_warning  str — the refusal tradedocument_issue WOULD give, or "" when it would pass
+      can_edit / can_issue / can_submit / can_accept / can_void   the action gates
+
+    The four can_* flags are decided in the VIEW from the same _ISSUE_FROM / _SUBMIT_FROM /
+    _ACCEPT_FROM tuples the guards inside the transactions read, so a button cannot be offered for a
+    transition the view will refuse. This page therefore never re-derives a gate from obj.status.
+
+    There is no context key for the tenant-admin gate: void and delete are @tenant_admin_required
+    and are wrapped in the house idiom `{% if request.user.is_superuser or
+    request.user.is_tenant_admin %}` instead, because offering a member a one-click 403 is worse
+    than not offering the button at all.
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.get_doc_type_display }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        {% if obj.direction == 'export' %}<span class="badge badge-info">Export</span>
+        {% elif obj.direction == 'import' %}<span class="badge badge-slate">Import</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+        {% if obj.is_negotiable %}<span class="badge badge-amber">Negotiable · document of title</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:tradedocument_list' %}">Trade Documents</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">What was declared on this piece of paperwork, to whom, and under which authority. The transport and party details here are <span class="fw-600">snapshots as printed on the form</span> — 4.6 owns the physical consignment, and this page re-declares none of its addresses, tracking events or proof of delivery.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:tradedocument_print' obj.pk %}" class="btn btn-outline" target="_blank" rel="noopener"><i data-lucide="printer"></i> Print</a>
+      <a href="{% url 'scm:tradedocument_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Every money figure below is tested with `is not None` rather than for truthiness. A declared
+    value of 0.00 is a real declaration — a free-of-charge sample, a warranty replacement, a
+    returned repair — and printing a dash over it would misreport the document.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{% if obj.declared_value is not None %}{{ obj.declared_value|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Declared value{% if obj.currency %} · {{ obj.currency.code }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="calculator"></i></div>
+      <div class="stat-value">{% if lines_total is not None %}{{ lines_total|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Lines total · {{ lines|length }} line{{ lines|length|pluralize }}
+        {% comment %}
+          The divergence badge is gated on has_lines. declared_value_matches states an arithmetic
+          fact and reads False for ANY line-less document with a non-zero declared value — and a
+          bill of lading, an insurance certificate or a licence copy legitimately carries no lines.
+          The property states the fact; this page decides when the fact is worth showing.
+        {% endcomment %}
+        {% if has_lines %}
+          {% if value_matches %}<span class="badge badge-green">Agrees</span>
+          {% else %}<span class="badge badge-amber">Diverges</span>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="stamp"></i></div>
+      <div class="stat-value">{% if charge_value is not None %}{{ charge_value|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Draws on the licence{% if charge_quantity is not None %} · {{ charge_quantity|floatformat:4 }} units{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="shield-check"></i></div>
+      {% comment %}
+        remaining_value answers None on a licence with no value cap — unlimited, not exhausted — and
+        the em dash is the honest reading. A confident 0.00 in a green tile is the failure this
+        module's model docstring names.
+      {% endcomment %}
+      <div class="stat-value">
+        {% if obj.license %}{% if obj.license.remaining_value is not None %}{{ obj.license.remaining_value|floatformat:2 }}{% else %}—{% endif %}{% else %}—{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if obj.license %}
+          Licence balance left · {{ obj.license.number }}
+          {% if obj.license.remaining_value is None %}<span class="badge badge-muted">No value cap</span>{% endif %}
+        {% else %}
+          No licence named on this document
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if license_warning %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">This document cannot be issued against its licence</h2>
+        <span class="badge badge-red">Would be refused</span>
+      </div>
+      <div class="card-body">
+        <p class="fw-600">{{ license_warning }}</p>
+        <p class="text-muted">This is the same check <span class="fw-600">Issue</span> runs, previewed here so you learn about it while the document is still editable rather than at the moment you press the button. Nothing is ever charged partially — the licence either covers this movement or the issue is refused outright, because letting the remainder go out unauthorised is precisely the failure a licence balance exists to prevent.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The document</h2>
+      <span class="badge badge-slate">{{ obj.get_doc_type_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>External number</dt><dd class="mono">{{ obj.document_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Document type</dt><dd>{{ obj.get_doc_type_display }}</dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Issue date</dt><dd>{% if obj.issue_date %}{{ obj.issue_date|date:"M d, Y" }}{% else %}<span class="text-muted">Not issued</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Issued at</dt><dd>{% if obj.issued_at %}{{ obj.issued_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Issued by</dt><dd>{% if obj.issued_by %}{{ obj.issued_by.get_full_name|default:obj.issued_by.get_username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Filing reference</dt><dd class="mono">{{ obj.filing_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Signed / stamped scan</dt><dd>
+          {% if obj.document %}<a href="{% url 'core:document_detail' obj.document.pk %}">{{ obj.document.name }}</a>{% else %}<span class="text-muted">Nothing attached</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.void_reason %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">
+          <span class="badge badge-muted">Voided</span> {{ obj.void_reason }}
+        </p>
+      {% endif %}
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.notes }}</p>{% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        The filing reference is <span class="fw-600">stored, not transmitted</span> — 4.12 records the AES/ITN or broker reference that came back, and files nothing itself.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What movement this papers</h2>
+      {% if obj.license %}<span class="badge {{ obj.license.status_css }}">{{ obj.license.get_status_display }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Shipment</dt><dd>
+          {% if obj.shipment %}<a href="{% url 'scm:shipment_detail' obj.shipment.pk %}" class="mono">{{ obj.shipment.number }}</a>{% else %}<span class="text-muted">No consignment</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Carrier</dt><dd>
+          {% if obj.carrier %}<a href="{% url 'scm:carrier_detail' obj.carrier.pk %}">{{ obj.carrier }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Purchase order</dt><dd>
+          {% if obj.purchase_order %}<a href="{% url 'scm:purchaseorder_detail' obj.purchase_order.pk %}" class="mono">{{ obj.purchase_order.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Sales order</dt><dd>
+          {% if obj.sales_order %}<a href="{% url 'scm:salesorder_detail' obj.sales_order.pk %}" class="mono">{{ obj.sales_order.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Licence</dt><dd>
+          {% if obj.license %}
+            <a href="{% url 'scm:tradelicense_detail' obj.license.pk %}" class="mono">{{ obj.license.number }}</a>
+            <span class="text-muted">{{ obj.license.license_number }}</span>
+          {% else %}<span class="text-muted">Unlicensed movement</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Currently charging</dt><dd>
+          {% if obj.is_charging %}<span class="badge badge-amber">Yes — consuming the balance</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}
+        </dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Every pointer above is a <span class="fw-600">link-out</span>, and every one of them is SET_NULL: a filed customs document is the record of a declaration that was actually made, and it has to outlive the shipment, the order or the counterparty it was made against. The licence is the deliberate exception — it is PROTECT, because what moved under a licence <span class="fw-600">is</span> that licence's audit trail and its consumed balance.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Parties and route</h2>
+      {% if obj.incoterm %}<span class="badge badge-slate">{{ obj.incoterm }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Shipper</dt><dd>{% if obj.shipper_party %}{{ obj.shipper_party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Consignee</dt><dd>{% if obj.consignee_party %}{{ obj.consignee_party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Notify party</dt><dd>{% if obj.notify_party %}{{ obj.notify_party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Country of origin</dt><dd>{{ obj.country_of_origin|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Country of destination</dt><dd>{{ obj.country_of_destination|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Incoterm 2020</dt><dd>{% if obj.incoterm %}<span class="badge badge-slate">{{ obj.incoterm }}</span>{% else %}<span class="text-muted">Not stated</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Vessel / flight</dt><dd>{{ obj.vessel_or_flight|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Voyage number</dt><dd class="mono">{{ obj.voyage_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Port of loading</dt><dd>{{ obj.port_of_loading|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Port of discharge</dt><dd>{{ obj.port_of_discharge|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Containers</dt><dd class="mono">{{ obj.container_numbers|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Negotiable</dt><dd>
+          {% if obj.is_negotiable %}<span class="badge badge-amber">Yes — a document of title</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}
+        </dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Money and weights</h2>
+      {% if obj.currency %}<span class="badge badge-slate">{{ obj.currency.code }}</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }} <span class="text-muted">{{ obj.currency.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Declared value</dt><dd class="fw-600 mono">{% if obj.declared_value is not None %}{{ obj.declared_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Sum of the lines</dt><dd class="mono">{% if lines_total is not None %}{{ lines_total|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Do they agree?</dt><dd>
+          {% if not has_lines %}
+            <span class="badge badge-muted">No lines declared</span>
+          {% elif value_matches %}
+            <span class="badge badge-green">Agrees to the cent</span>
+          {% else %}
+            <span class="badge badge-amber">Diverges</span>
+          {% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Freight charges</dt><dd class="mono">{% if obj.freight_charges is not None %}{{ obj.freight_charges|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Insured value</dt><dd class="mono">{% if obj.insurance_value is not None %}{{ obj.insurance_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Gross weight</dt><dd class="mono">{% if obj.gross_weight_kg is not None %}{{ obj.gross_weight_kg|floatformat:2 }} kg{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Net weight</dt><dd class="mono">{% if obj.net_weight_kg is not None %}{{ obj.net_weight_kg|floatformat:2 }} kg{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Packages</dt><dd class="mono">{% if obj.package_count is not None %}{{ obj.package_count }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      {% if has_lines and not value_matches %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Check this</span> The declared value and the sum of the declared lines disagree by more than a cent. The declared value is stored because it is what the filer <span class="fw-600">declared</span> — it is not a total of anything — so this is a customs problem to resolve on the form, not a rounding artefact to ignore.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Declared lines</h2>
+      <span class="badge badge-slate">{{ lines|length }} line{{ lines|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Description as declared</th>
+            <th>HS code</th>
+            <th>Origin</th>
+            <th>Item</th>
+            <th>Unit</th>
+            <th>Quantity</th>
+            <th>Unit value</th>
+            <th>Line value</th>
+            <th>Net weight</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td class="fw-600">{{ line.description }}</td>
+              <td class="mono">{{ line.hs_code|default:"—" }}</td>
+              <td>{{ line.country_of_origin|default:"—" }}</td>
+              <td>{% if line.item %}{{ line.item.sku }}{% else %}<span class="text-muted">Not in the item master</span>{% endif %}</td>
+              <td>
+                {% if line.uom_text %}{{ line.uom_text }}{% elif line.uom %}{{ line.uom.code }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="nowrap mono">{% if line.quantity is not None %}{{ line.quantity|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap mono">{% if line.unit_value is not None %}{{ line.unit_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap mono fw-600">{{ line.line_value|floatformat:2 }}</td>
+              <td class="nowrap mono">{% if line.net_weight_kg is not None %}{{ line.net_weight_kg|floatformat:2 }} kg{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="list"></i>
+                  <h3>No lines declared</h3>
+                  <p>Several document types legitimately carry none — an ocean bill of lading, an insurance certificate, a licence copy — and the declared value above is what those state. For an invoice, a packing list or a customs declaration, edit the document and add the goods line by line.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if has_lines %}
+          <tfoot>
+            <tr>
+              <td colspan="8" class="fw-600">Total of the declared lines</td>
+              <td class="nowrap mono fw-600">{% if lines_total is not None %}{{ lines_total|floatformat:2 }}{% else %}—{% endif %}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The description, HS code, origin and unit on each line are <span class="fw-600">snapshots frozen at line entry</span>, sitting next to the live item and UOM pointers rather than instead of them. A filed declaration has to report what was declared, so re-classifying an item a year from now must never rewrite a document that was already submitted to an authority — and nothing in this module back-fills a snapshot from the master.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Lifecycle</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        Each verb is a POST to its own route, shown only when the view's own can_* flag says the
+        transition is legal from the current status. Status is off the edit form precisely so that
+        issuing — the act that spends a licence balance — cannot happen by typing a word into a
+        dropdown.
+      {% endcomment %}
+      {% if can_issue %}
+        <form method="post" action="{% url 'scm:tradedocument_issue' obj.pk %}" onsubmit="return confirm('Issue {{ obj.number }}? This charges its licence balance and closes the document to editing — a filed instrument is amended or voided, not edited.');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="stamp"></i> Issue</button>
+          <div class="form-help">
+            Stamps the issue date, records who issued it, and charges the named licence for {{ charge_value|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}{% if charge_quantity is not None %} and {{ charge_quantity|floatformat:4 }} units{% endif %}.
+            {% if license_warning %}<span class="fw-600">The licence check above would refuse this right now.</span>{% endif %}
+            Once issued the document can no longer be edited.
+          </div>
+        </form>
+      {% endif %}
+
+      {% if can_submit %}
+        <form method="post" action="{% url 'scm:tradedocument_submit' obj.pk %}" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_filing_reference">Filing reference</label>
+            <input type="text" name="filing_reference" id="id_filing_reference" class="form-input" maxlength="64" value="{{ obj.filing_reference }}" placeholder="AES/ITN or broker reference">
+            <div class="form-help">Optional — leaving it blank keeps whatever reference is already on the document rather than erasing it. It is collected here because an issued document can no longer reach the edit form, and submission is exactly when the reference comes back.</div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Record as submitted</button>
+          <div class="form-help">4.12 <span class="fw-600">stores</span> the reference; it does not transmit anything. Real AESDirect / broker / EDI filing is deferred, so nothing here means a submission actually left the building.</div>
+        </form>
+      {% endif %}
+
+      {% if can_accept %}
+        <form method="post" action="{% url 'scm:tradedocument_accept' obj.pk %}" onsubmit="return confirm('Record that the authority accepted {{ obj.number }}?');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Record acceptance</button>
+          <div class="form-help">Terminal for the happy path — an accepted document keeps charging its licence, and the only move left after this is void.</div>
+        </form>
+      {% endif %}
+
+      {% comment %}
+        Void is @tenant_admin_required AND requires a reason: voiding is what releases a consumed
+        authorisation, and a released balance with no recorded reason is a hole in exactly the audit
+        trail this register exists to keep. The `required` attribute is the courtesy; the view
+        refuses a blank reason with a message either way.
+      {% endcomment %}
+      {% if can_void %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:tradedocument_void' obj.pk %}" onsubmit="return confirm('Void {{ obj.number }}? The row survives and keeps its history, but it stops charging its licence and the released balance is re-derived.');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_void_reason">Reason for voiding <span class="req">*</span></label>
+              <textarea name="reason" id="id_void_reason" class="form-textarea" rows="3" required></textarea>
+              <div class="form-help">Recorded against the document and kept — it is what explains the released licence balance to whoever audits it later.</div>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Void</button>
+          </form>
+        {% else %}
+          <p class="text-muted">
+            <span class="badge badge-muted">Administrators only</span> Voiding releases a consumed authorisation and gives a licence balance back, so it is a workspace-administrator action. Ask an administrator to void this document.
+          </p>
+        {% endif %}
+      {% endif %}
+
+      {% if not can_issue and not can_submit and not can_accept and not can_void %}
+        <p class="text-muted">This document is void. Nothing further moves it — voiding is terminal, and the row is kept precisely so the declaration that was made stays on the record.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if can_edit %}
+          <a href="{% url 'scm:tradedocument_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        <a href="{% url 'scm:tradedocument_print' obj.pk %}" class="btn btn-outline" target="_blank" rel="noopener"><i data-lucide="printer"></i> Print</a>
+        {% comment %}
+          Same gate as tradedocument_delete's @tenant_admin_required. Only the system-generated
+          number goes into the confirm string — an apostrophe in a typed field would be escaped to
+          &#x27; and break the dialog.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:tradedocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its declared lines go with it and the licence balance is re-derived. Voiding keeps the history and releases the balance just the same — delete only if this document should never have existed.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:tradedocument_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if can_edit %}
+          A draft or an amendment is still yours to correct. Once it is issued the document is the record of a declaration that was actually made, and changing it would rewrite what an authority was told — the route back is to void it and raise the amendment.
+        {% else %}
+          This document is no longer editable: it is a filed instrument, and the record of what an authority was told is not corrected in place. Void it and raise an amendment instead.
+        {% endif %}
+        Nothing on this page writes a stock movement or a journal entry — 4.12 only ever reads what the rest of the supply chain recorded.
+      </p>
+    </div>
+  </div>
+{% endblock %}
