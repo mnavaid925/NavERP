@@ -448,14 +448,16 @@ def tradedocument_void(request, pk):
     while its effect is undone, which is why it is the recommended alternative to deleting one.
     """
     reason = (request.POST.get("reason") or request.POST.get("void_reason") or "").strip()
-    if not reason:
-        messages.error(request, "Give a reason for voiding — it is recorded against the document "
-                                "and it is what explains the released licence balance.")
-        return redirect("scm:tradedocument_detail", pk=pk)
 
     with transaction.atomic():
+        # Resolve BEFORE the reason guard — see tradelicense_revoke for why: an early return on a
+        # missing reason answered 302 for a cross-tenant or nonexistent pk instead of 404.
         obj = get_object_or_404(TradeDocument.objects.select_for_update(), pk=pk,
                                 tenant=request.tenant)
+        if not reason:
+            messages.error(request, "Give a reason for voiding — it is recorded against the "
+                                    "document and it is what explains the released licence balance.")
+            return redirect("scm:tradedocument_detail", pk=pk)
         if obj.status == "void":
             messages.info(request, f"{obj.number} is already void.")
             return redirect("scm:tradedocument_detail", pk=pk)
