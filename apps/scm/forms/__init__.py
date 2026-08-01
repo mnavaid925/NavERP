@@ -268,6 +268,7 @@ from .ContractCompliance.ComplianceRequirements import (  # noqa: F401
 from .ContractCompliance.TradeDocuments import (  # noqa: F401
     TradeDocumentForm,
     TradeDocumentLineForm,
+    BaseTradeDocumentLineFormSet,
     TradeDocumentLineFormSet,
 )
 from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
