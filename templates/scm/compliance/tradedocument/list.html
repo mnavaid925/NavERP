@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Trade Documents{% endblock %}
+{% block content %}
+  {% comment %}
+    Context contract — apps/scm/views/ContractCompliance/TradeDocuments.py::tradedocument_list, which
+    returns crud_list(...). Everything this page may read, and nothing else:
+      object_list / page_obj / q        (from crud_list)
+      status_choices                    flat [(value, label), …] — TradeDocument.STATUS_CHOICES
+      doctype_choices                   flat [(value, label), …] — TradeDocument.DOC_TYPE_CHOICES
+      direction_choices                 flat [(value, label), …] — TradeDocument.DIRECTION_CHOICES
+      shipments                         Shipment queryset (only consignments that carry paperwork)
+      licenses                          TradeLicense queryset, ordered by number
+
+    There is deliberately no `stats` key in that dict, so this page renders NO stat tiles — a tile
+    bound to a key the view does not pass renders blank with no error anywhere, which is this
+    codebase's most repeated frontend bug. The one count shown below comes from page_obj.paginator,
+    which crud_list really does provide.
+
+    Two figures are deliberately ABSENT from this table even though the model offers them:
+    `lines_total` and `declared_value_matches`. Both run an aggregate over the document's lines, so
+    a column of either would be one extra query per row — fifteen aggregates to render one page.
+    They are on the detail page, where the aggregate is run once and is memoised.
+
+    The five filter GET params are named exactly as the view's `filters` spec reads them:
+    status / doc_type / direction / shipment / license. The two FK ones go through crud_list's
+    is_int guard, so `?shipment=abc` skips the filter rather than raising out of .filter().
+  {% endcomment %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Trade Documents</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Trade Documents</span></div>
+      <p class="text-muted">The import/export paperwork register: one row per commercial invoice, packing list, bill of lading, air waybill, certificate of origin or customs declaration — what was <span class="fw-600">declared</span>, to whom, under which licence, and how far through its filing lifecycle it got. This is not a second consignment: the shipment, carrier and order columns are link-outs to the rows 4.6, 4.1 and 4.5 own, and nothing on this screen writes a stock movement or a journal entry.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:tradelicense_list' %}" class="btn btn-outline"><i data-lucide="shield-check"></i> Licences</a>
+      <a href="{% url 'scm:tradedocument_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Trade Document</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Register</h2>
+      <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search our number, the external BoL/invoice number, or the consignee…">
+        </div>
+        <div class="form-group">
+          <select name="doc_type" aria-label="Document type" class="form-select">
+            <option value="">All document types</option>
+            {% for val, label in doctype_choices %}
+              <option value="{{ val }}" {% if request.GET.doc_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="direction" aria-label="Direction" class="form-select">
+            <option value="">Export &amp; import</option>
+            {% for val, label in direction_choices %}
+              <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            pk comparison uses stringformat:"d", never slugify — slugify would turn 12 into "12" by
+            a different route and silently stop matching the moment a pk is not plain digits.
+          {% endcomment %}
+          <select name="shipment" aria-label="Shipment" class="form-select">
+            <option value="">All shipments</option>
+            {% for s in shipments %}
+              <option value="{{ s.pk }}" {% if request.GET.shipment == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="license" aria-label="Licence" class="form-select">
+            <option value="">All licences</option>
+            {% for lic in licenses %}
+              <option value="{{ lic.pk }}" {% if request.GET.license == lic.pk|stringformat:"d" %}selected{% endif %}>{{ lic.number }} · {{ lic.license_number }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:tradedocument_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The shipment list offers only consignments that already carry paperwork — the unfiltered alternative is the whole shipment table, thousands of options of which all but a handful select nothing.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Direction</th>
+            <th>External number</th>
+            <th>Consignee</th>
+            <th>Movement</th>
+            <th>Licence</th>
+            <th>Declared value</th>
+            <th>Status</th>
+            <th>Issue date</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:tradedocument_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.get_doc_type_display }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  Colour-named badges only. badge-success / badge-warning / badge-danger do NOT exist
+                  in theme.css and render as an unstyled pill with no error anywhere, so the mapping
+                  is written out by hand with an {% else %} onto the field's own display.
+                {% endcomment %}
+                {% if obj.direction == 'export' %}<span class="badge badge-info">Export</span>
+                {% elif obj.direction == 'import' %}<span class="badge badge-slate">Import</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+              </td>
+              <td class="mono">
+                {% if obj.document_number %}{{ obj.document_number }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if obj.filing_reference %}<div class="form-help">Filed as {{ obj.filing_reference }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.consignee_party %}{{ obj.consignee_party.name }}{% else %}<span class="text-muted">Not named</span>{% endif %}
+                {% if obj.country_of_destination %}<div class="form-help">to {{ obj.country_of_destination }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.shipment %}
+                  <a href="{% url 'scm:shipment_detail' obj.shipment.pk %}" class="mono">{{ obj.shipment.number }}</a>
+                {% else %}
+                  <span class="text-muted">No consignment</span>
+                {% endif %}
+                {% if obj.carrier %}<div class="form-help">{{ obj.carrier }}</div>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  A document only draws on its licence while its status is in CHARGING_STATUSES, so
+                  the badge reads is_charging rather than "has a licence" — a draft or a voided
+                  document names its licence without consuming a unit of it.
+                {% endcomment %}
+                {% if obj.license %}
+                  <a href="{% url 'scm:tradelicense_detail' obj.license.pk %}" class="mono">{{ obj.license.number }}</a>
+                  {% if obj.is_charging %}
+                    <div class="form-help"><span class="badge badge-amber">Charging</span></div>
+                  {% else %}
+                    <div class="form-help">Named, not charged</div>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">Unlicensed</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                declared_value is a stored 2dp column with a default of 0, and a declared zero is a
+                real declaration (a free-of-charge sample, a replacement under warranty). Tested with
+                `is not None`, never for truthiness, so a genuine 0.00 prints as 0.00 and not a dash.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if obj.declared_value is not None %}
+                  {{ obj.declared_value|floatformat:2 }}{% if obj.currency %} <span class="text-muted">{{ obj.currency.code }}</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+              </td>
+              <td class="nowrap">
+                {% if obj.issue_date %}{{ obj.issue_date|date:"M d, Y" }}{% else %}<span class="badge badge-slate">Not issued</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:tradedocument_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit is offered only while the document is a draft or an amendment — the edit
+                    view refuses anything else with a message, and offering a link that bounces
+                    straight back is worse than not offering it (§7.5: the gate lives in the view as
+                    well as on the button).
+                  {% endcomment %}
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:tradedocument_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    Only the system-generated number goes into the confirm string — never the
+                    consignee, the description or any other typed field. An apostrophe in a
+                    user-typed value would be escaped to &#x27;, which the HTML parser hands to
+                    JavaScript as a bare quote and the dialog breaks.
+
+                    Gated to match tradedocument_delete's @tenant_admin_required decorator: offering
+                    a member a one-click 403 is worse than not offering the button at all.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:tradedocument_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its declared lines go with it, and a filed document is the record of a declaration that was actually made. Voiding keeps the history and still releases the licence balance — delete only if this document should never have existed.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="file-text"></i>
+                  <h3>No trade documents</h3>
+                  <p>Nothing has been raised yet. A trade document records what was declared on one piece of import/export paperwork — the parties, the transport as printed on the form, the declared value and the licence the movement is authorised under. Issuing one is what charges that licence's balance. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">issue date, newest first</span>, then by most recently created — so a document that carries no issue date yet sorts to the end rather than jumping the queue. <span class="fw-600">Status is never typed</span>: it moves only through the issue / submit / accept / void verbs on each document's own page, because issuing is what spends a licence balance and voiding is what gives it back. A document keeps <span class="fw-600">two</span> numbers on purpose — ours (TD-) is how we find it, the external one is what the broker, the bank and the customs officer quote back. The declared value shown here is what the filer <span class="fw-600">declared</span>, not a sum of the lines; whether the two agree is on each document's own page, where the arithmetic costs one query instead of one per row.
+    </div>
+  </div>
+{% endblock %}
