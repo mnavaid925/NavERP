@@ -319,3 +319,31 @@ from .SupplyChainAnalytics.Reports import (  # noqa: F401
     margin_analytics, margin_analytics_export,
     disruption_risk, disruption_risk_export,
 )
+
+# --- 4.12 Contract & Compliance Management ---------------------------------------------------
+# Every name here is referenced as `views.<name>` from apps/scm/urls/ContractCompliance/*. A name
+# missing from this block does not fail at import of this module — it fails when the URLconf is
+# built, as `AttributeError: module 'apps.scm.views' has no attribute '…'`.
+from .ContractCompliance.TradeLicenses import (  # noqa: F401
+    tradelicense_list, tradelicense_create, tradelicense_detail, tradelicense_edit,
+    tradelicense_delete, tradelicense_submit, tradelicense_approve, tradelicense_revoke,
+    tradelicense_recompute,
+)
+from .ContractCompliance.ComplianceRequirements import (  # noqa: F401
+    compliancerequirement_list, compliancerequirement_create, compliancerequirement_detail,
+    compliancerequirement_edit, compliancerequirement_delete, compliancerequirement_record_check,
+    compliancecheck_edit, compliancecheck_delete,
+)
+from .ContractCompliance.TradeDocuments import (  # noqa: F401
+    tradedocument_list, tradedocument_create, tradedocument_detail, tradedocument_edit,
+    tradedocument_delete, tradedocument_issue, tradedocument_submit, tradedocument_accept,
+    tradedocument_void, tradedocument_print,
+)
+from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
+    sustainabilityassessment_list, sustainabilityassessment_create,
+    sustainabilityassessment_detail, sustainabilityassessment_edit,
+    sustainabilityassessment_delete,
+)
+from .ContractCompliance.Reports import (  # noqa: F401
+    carbon_footprint_report, carbon_footprint_report_export,
+)
