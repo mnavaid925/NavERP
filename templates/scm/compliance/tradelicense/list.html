@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — the trade licence & permit register.
+
+Renders apps/scm/views/ContractCompliance/TradeLicenses.py::tradelicense_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py:106)
+  status_choices               [(value, label), …]  — TradeLicense.STATUS_CHOICES
+  type_choices                 [(value, label), …]  — TradeLicense.LICENSE_TYPE_CHOICES
+  countries                    a FLAT list of this tenant's distinct non-blank issuing_country
+                               strings — there is no choices constant for that column, so the third
+                               dropdown renders from the data the workspace actually holds
+  expiring_count               header chip, counted over the WHOLE workspace
+  expired_count                header chip, same
+
+The view passes no `stats` dict, so this page renders no stat tiles — a tile bound to a key the view
+does not pass renders blank with no error anywhere, which is this codebase's most repeated frontend
+bug. The two chips below come from expiring_count / expired_count, which the view really does pass,
+and the "matching" count comes from page_obj.paginator.
+
+Filter params are q / status / license_type / issuing_country. All three filters are STRING columns,
+so each option compares against request.GET.<param> directly — no |stringformat:"d" is needed here
+(and |slugify would be wrong on any of them).
+
+Every row figure below is a model property or a select_related FK, never a query: the view's
+select_related covers holder_party / end_user_party / currency, and remaining_value /
+utilization_pct / days_to_expiry are computed on the instance. Reading obj.trade_documents.count()
+here would be one extra query per row — the charged-document count lives on the detail page, where
+it is a single aggregate.
+{% endcomment %}
+{% block title %}Trade Licences{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Trade Licences &amp; Permits</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Trade Licences</span></div>
+      <p class="text-muted">A licence is not paperwork, it is a <span class="fw-600">quantity</span>: authorised for so much value or so many units, and drawn down by every document issued under it. Granted licences, claimed exceptions and general authorisations all live in this one register, because the question asked before a shipment leaves — <em>what authority covers this movement</em> — has an answer nobody trusts when it lives in two tables.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:tradedocument_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Trade Documents</a>
+      <a href="{% url 'scm:compliancerequirement_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Obligations</a>
+      <a href="{% url 'scm:tradelicense_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Licence</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Licences</h2>
+      {% comment %}
+        The two chips are counted over the WHOLE workspace, not over the filtered page — "3 expiring"
+        is a fact somebody has to act on, and a number that re-scoped itself as you browsed would
+        report all-clear the moment you filtered to one licence type. The "matching" badge next to
+        them IS the filtered count, and says so.
+      {% endcomment %}
+      <div class="badge-group">
+        {% if expiring_count %}<span class="badge badge-amber">{{ expiring_count }} expiring</span>{% endif %}
+        {% if expired_count %}<span class="badge badge-red">{{ expired_count }} expired</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search LIC- number, the authority's number, title or issuing authority…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="license_type" aria-label="Licence type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.license_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `countries` is a flat list of strings, not (value, label) pairs — issuing_country is free
+            text with no choices constant, so this dropdown is built from the values this workspace
+            actually holds. A licence with a blank country is excluded by the view and is reachable
+            only by clearing this filter.
+          {% endcomment %}
+          <select name="issuing_country" aria-label="Issuing country" class="form-select">
+            <option value="">All countries</option>
+            {% for country in countries %}
+              <option value="{{ country }}" {% if request.GET.issuing_country == country %}selected{% endif %}>{{ country }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:tradelicense_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">Opening this page rolls every <span class="fw-600">active / expiring / expired</span> licence forward from its own dates first, so the chips, the badges and the rows below all read the same statuses. A draft, applied-for, approved, suspended or revoked licence is a human decision and no date roll ever walks one back.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Licence</th>
+            <th>Type</th>
+            <th>Issued by</th>
+            <th>Status</th>
+            <th>Expires</th>
+            <th>Balance</th>
+            <th>Holder / end user</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:tradelicense_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title }}</div>
+                <div class="form-help mono">{{ obj.license_number }}</div>
+              </td>
+              <td><span class="badge badge-slate">{{ obj.get_license_type_display }}</span></td>
+              <td>
+                {{ obj.issuing_authority|default:"—" }}
+                {% if obj.issuing_country %}<div class="form-help">{{ obj.issuing_country }}</div>{% endif %}
+              </td>
+              {% comment %}
+                One lookup, on the model: TradeLicense.STATUS_CSS via obj.status_css. theme.css ships
+                COLOUR-named badges only — badge-success / badge-warning / badge-danger do not exist
+                and render as an unstyled pill with no error anywhere (L33) — so no template here
+                invents a colour, and the list badge and the detail badge cannot disagree.
+              {% endcomment %}
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td class="nowrap">
+                {% if obj.expiry_date %}
+                  {{ obj.expiry_date|date:"M d, Y" }}
+                  {% comment %}
+                    days_to_expiry() is a method with no required arguments, so the template calls it
+                    directly. `is not None` and not truthiness: 0 means it lapses TODAY, which is the
+                    one day it matters most, and a truthiness test would print nothing on it. The
+                    lapsed branch reads the date through `timesince` rather than printing a negative
+                    day count, which would render as "-14 days left".
+                  {% endcomment %}
+                  {% if obj.days_to_expiry is not None %}
+                    <div class="form-help">
+                      {% if obj.days_to_expiry < 0 %}Lapsed {{ obj.expiry_date|timesince }} ago
+                      {% elif obj.days_to_expiry == 0 %}Lapses today
+                      {% else %}{{ obj.days_to_expiry }} day{{ obj.days_to_expiry|pluralize }} left{% endif %}
+                    </div>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-muted">No expiry</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                A blank ceiling means UNLIMITED in that dimension, not exhausted — remaining_value /
+                remaining_quantity / utilization_pct all answer None there and this cell says so in
+                words. Printing a 0 would read as a licence with nothing left, which is the opposite
+                of the truth. Every test below is `is not None`, because 0 authorised, 0 used and 0%
+                utilised are each a real, different figure.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if obj.authorized_value is not None %}
+                  {{ obj.used_value|floatformat:2 }} <span class="text-muted">/ {{ obj.authorized_value|floatformat:2 }}</span>
+                  {% if obj.currency %} <span class="text-muted">{{ obj.currency.code }}</span>{% endif %}
+                {% elif obj.authorized_quantity is not None %}
+                  {{ obj.used_quantity|floatformat:4 }} <span class="text-muted">/ {{ obj.authorized_quantity|floatformat:4 }}</span>
+                  <div class="form-help">units</div>
+                {% else %}
+                  <span class="badge badge-muted">Unlimited</span>
+                {% endif %}
+                {% if obj.utilization_pct is not None %}
+                  <div class="form-help">
+                    {% if obj.utilization_pct > 100 %}<span class="badge badge-red">{{ obj.utilization_pct|floatformat:2 }}% over-drawn</span>
+                    {% elif obj.utilization_pct >= 90 %}<span class="badge badge-amber">{{ obj.utilization_pct|floatformat:2 }}% used</span>
+                    {% else %}{{ obj.utilization_pct|floatformat:2 }}% used{% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.holder_party %}{{ obj.holder_party.name }}{% else %}<span class="text-muted">Us</span>{% endif %}
+                {% if obj.end_user_party %}<div class="form-help">End user: {{ obj.end_user_party.name }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:tradelicense_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:tradelicense_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Same gate as tradelicense_delete's @tenant_admin_required, so a member is never
+                    offered a button they will 403 on. Only the system-generated LIC- number goes
+                    into the confirm string — never the title or the authority's number, both of
+                    which are user-typed: an apostrophe would be escaped to &#x27;, which the HTML
+                    parser hands to JavaScript as a bare quote and the dialog breaks.
+
+                    A licence that has papered anything is REFUSED by the view (TradeDocument.license
+                    is PROTECT) and comes back with a message naming the blocker. The button stays
+                    visible here because this page has no per-row document count to gate on and
+                    faking one would be a query per row; the detail page, which has the real count,
+                    hides Delete outright.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:tradelicense_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This is refused outright if any trade document was ever issued under it — what moved under a licence is the record this register exists to keep. Compliance requirements pointing at it survive and simply lose the link.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="stamp"></i>
+                  <h3>No trade licences</h3>
+                  <p>Nothing authorises movement yet. Register an export licence, an ITAR DSP, an EAR/BIS authorisation, an import permit, a customs or hazmat authorisation — or a licence exception, which is claimed rather than granted and belongs in the same register. Give it a ceiling and every document issued under it draws the balance down. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">expiry date, soonest first</span> — the order the renewal queue is read in. The <span class="fw-600">used</span> figure is a stored counter with a stated invalidation path: every writer of a charging document re-derives it, and each licence's own page carries a Recompute button, so a wrong balance can never become permanent. Only <span class="fw-600">issued, submitted and accepted</span> documents count against it — a draft or a voided one spends nothing, which is why a licence's page can show more documents than its balance reflects. Nothing on this screen posts a stock movement or drafts an accounting document: a licence authorises movement, the movement itself belongs to Transportation and the money to Accounting.
+    </div>
+  </div>
+{% endblock %}
