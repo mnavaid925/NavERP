@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — edit form for one recorded ComplianceCheck.
+
+Renders apps/scm/views/ContractCompliance/ComplianceRequirements.py::compliancecheck_edit.
+Everything this page may read, and nothing else:
+  * form         — ComplianceCheckForm (bound on POST)
+  * is_edit      — always True; a check is only ever CREATED inline from its requirement's detail
+                   page, so this template exists solely to correct one that already exists
+  * obj          — the ComplianceCheck being corrected
+  * requirement  — obj.requirement, for the breadcrumb and the Cancel target
+
+There is deliberately no create path here and no list/detail page for this model: a check is a
+tenant-less child reached only through requirement__tenant, and it is rendered as a timeline on its
+parent. The seven names below are ComplianceCheckForm's whole whitelist. Absent by design:
+`requirement` (it comes from the URL — letting a POST choose its own parent is how a check lands on
+somebody else's obligation), `performed_by` (stamped from request.user; who proved a control is an
+audit fact, not an input) and `created_at`.
+
+Editing a check does NOT re-run the parent's projection — the view refuses to let `result` or
+`due_date` change here, because re-deriving would advance the due date a second time for a cycle
+that already advanced it. That rule lives in the view, not in this template.
+{% endcomment %}
+{% block title %}Edit Check · {{ requirement.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Edit Recorded Check</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:compliancerequirement_list' %}">Compliance Requirements</a><span class="sep">›</span>
+      <a href="{% url 'scm:compliancerequirement_detail' requirement.pk %}">{{ requirement.number }}</a><span class="sep">›</span>
+      <span>Edit check</span>
+    </div>
+    <p class="text-muted">
+      Correcting the record of a proof cycle on
+      <span class="fw-600">{{ requirement.title }}</span>. The verdict and the cycle it answers are
+      fixed once recorded — re-deciding them here would advance the requirement's due date a second
+      time for a cycle that already advanced it. Record a new check instead.
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What was found</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.result %}
+          {% include "partials/form_field.html" with field=form.due_date %}
+          {% include "partials/form_field.html" with field=form.performed_on %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Evidence &amp; follow-up</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The corrective reference is the 4.9 NCR or CAPA number a failure was escalated to — a
+          free-text pointer on purpose, so recording a compliance failure never requires editing a
+          shipped sub-module's choice list.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.finding %}
+          {% include "partials/form_field.html" with field=form.corrective_reference %}
+          {% include "partials/form_field.html" with field=form.evidence %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save changes</button>
+      <a href="{% url 'scm:compliancerequirement_detail' requirement.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
