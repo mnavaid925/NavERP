@@ -248,6 +248,11 @@ class SustainabilityAssessment(TenantNumbered):
             # The reason `rating` is a column and not a property: the list page filters on it.
             models.Index(fields=["tenant", "rating"], name="scm_esg_tnt_rating_idx"),
             models.Index(fields=["tenant", "valid_until"], name="scm_esg_tnt_valid_idx"),
+            # assessment_date is the HOT column: Meta.ordering sorts every list render on it and the
+            # carbon report range-filters it. valid_until above is read only by the is_expired()
+            # property — no queryset filters or orders on it — so without this the one date the
+            # database actually needs was the one date not indexed.
+            models.Index(fields=["tenant", "assessment_date"], name="scm_esg_tnt_asmt_idx"),
         ]
 
     def __str__(self):
