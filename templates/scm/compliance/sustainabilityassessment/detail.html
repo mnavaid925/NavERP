@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 — SustainabilityAssessment detail.
+
+Renders apps/scm/views/ContractCompliance/SustainabilityAssessments.py::sustainabilityassessment_detail.
+Every context key this page reads, and nothing else:
+  * obj              — the SustainabilityAssessment
+  * themes           — [{"field", "label", "help", "score"}, …] for the FOUR EcoVadis themes that
+                       vote on the medal. `score` is 0-100 OR None; None means nobody scored that
+                       theme and renders as "Not scored", never as a 0% bar. Carbon is deliberately
+                       NOT in this list — it has its own card, read straight off obj.carbon_score.
+  * declarations     — [{"field", "label", "help", "declared"}, …] — the six-flag checklist
+  * risk_assessment  — the party's most recent 4.2 SupplierRiskAssessment, or None
+  * risk_level_css   — the colour-named badge class for THAT row's risk_level (badge-muted when
+                       there is none). It is NOT this model's rating_css: the medal's colour comes
+                       from obj.rating_css / obj.status_css on the model itself.
+
+Not one number on this page is computed here. overall_score, rating, maturity_level,
+total_declared_tco2e and is_expired all come from the model — recompute_rating() is the only writer
+of the stored pair — so the list badge, the medal below and the carbon report cannot disagree.
+
+Every optional figure is tested with `is not None`, never truthiness: a supplier that declared
+0 tCO2e is a measured zero, a supplier that declared nothing is an em-dash, and merging the two
+would be the one mistake a carbon page cannot afford.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {{ obj.rating_css }}">{{ obj.get_rating_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        {% if obj.is_expired %}<span class="badge badge-red">Lapsed</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:sustainabilityassessment_list' %}">Sustainability Assessments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">An ESG scorecard for <span class="fw-600">{% if obj.party %}{{ obj.party.name }}{% else %}an unassigned partner{% endif %}</span> as at {{ obj.assessment_date|date:"M d, Y" }}. The medal is arithmetic over the themes that were scored, not an opinion — it cannot be typed in on the form, by a seeder or by a crafted POST.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:carbon_footprint_report' %}" class="btn btn-outline"><i data-lucide="leaf"></i> Carbon footprint report</a>
+      <a href="{% url 'scm:sustainabilityassessment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="award"></i></div>
+      {% comment %}
+        None here means NO theme was scored, which is not a score of zero. Printing 0 would say
+        "assessed, terrible" where the truth is "not assessed" — and a real 0 does exist and prints.
+      {% endcomment %}
+      <div class="stat-value">{% if obj.overall_score is not None %}{{ obj.overall_score }}<span class="text-muted" style="font-size:1rem;">/100</span>{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Overall score
+        <span class="badge {{ obj.rating_css }}">{{ obj.get_rating_display }}</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+      {% comment %}
+        maturity_level is a PROPERTY off the same ladder as the medal, and is None when nothing was
+        scored: "insufficient" is the bottom rung — a verdict — and an assessment that measured
+        nothing has not earned one. The stored `rating` cannot make that distinction, because its
+        non-null "none" value has to serve both "no medal" and "not measured".
+      {% endcomment %}
+      <div class="stat-value">{% if obj.maturity_level %}{{ obj.maturity_level|capfirst }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Maturity ladder{% if not obj.maturity_level %} · nothing scored yet{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="leaf"></i></div>
+      <div class="stat-value">{% if obj.carbon_score is not None %}{{ obj.carbon_score }}<span class="text-muted" style="font-size:1rem;">/100</span>{% else %}—{% endif %}</div>
+      <div class="stat-label">Carbon scorecard · does not vote on the medal</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="factory"></i></div>
+      <div class="stat-value">{% if obj.total_declared_tco2e is not None %}{{ obj.total_declared_tco2e|floatformat:3 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Supplier-<span class="fw-600">declared</span> tCO2e{% if obj.carbon_reporting_year %} · {{ obj.carbon_reporting_year }}{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Scorecard — the four themes that vote</h2>
+      <span class="badge badge-slate">Mean of the themes actually scored</span>
+    </div>
+    <div class="card-body">
+      {% for row in themes %}
+        <div style="margin-bottom:1rem;">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:1rem;">
+            <span class="fw-600">{{ row.label }}</span>
+            {% comment %}
+              `is not None` again — a theme nobody scored is a question that was never asked, and a
+              0% bar would print a failing grade this assessment never gave. The width below is only
+              ever reached on the not-None branch and the column is validated 0-100 at the model, so
+              the inline width cannot escape its track.
+            {% endcomment %}
+            {% if row.score is not None %}
+              <span class="mono fw-600">{{ row.score }}<span class="text-muted">/100</span></span>
+            {% else %}
+              <span class="badge badge-muted">Not scored</span>
+            {% endif %}
+          </div>
+          {% if row.score is not None %}
+            <div class="progress" style="margin:.35rem 0 .25rem;"><div class="progress-bar" style="width: {{ row.score }}%;"></div></div>
+          {% endif %}
+          <div class="form-help">{{ row.help }}</div>
+        </div>
+      {% empty %}
+        <div class="empty-state">
+          <i data-lucide="list-checks"></i>
+          <h3>No themes defined</h3>
+          <p>The theme list comes from the model itself, so an empty list here means the build is broken rather than the data.</p>
+        </div>
+      {% endfor %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Only the themes above vote on the medal, and only the ones that were <span class="fw-600">actually scored</span> take part in the mean — averaging an unanswered theme in as 0 would quietly convert “we did not ask” into “they failed”. Rounding at the band edges is half-up, so 84.5 becomes 85 and lands on platinum rather than falling just short of it.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Carbon scorecard</h2>
+      <span class="badge badge-slate">Separate — not part of the medal</span>
+    </div>
+    <div class="card-body">
+      {% if obj.carbon_score is not None %}
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:1rem;">
+          <span class="fw-600">Carbon management</span>
+          <span class="mono fw-600">{{ obj.carbon_score }}<span class="text-muted">/100</span></span>
+        </div>
+        <div class="progress" style="margin:.35rem 0 .25rem;"><div class="progress-bar" style="width: {{ obj.carbon_score }}%;"></div></div>
+      {% else %}
+        <p><span class="badge badge-muted">Not scored</span> <span class="text-muted">The separate Carbon scorecard was not covered by this assessment.</span></p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Scored on its own scorecard, exactly as EcoVadis does it — it is stored, shown and filterable, it simply does not vote. That is deliberate twice over: a strong carbon page must not be able to lift a supplier's medal over a weak labour theme, and adding a carbon score to an existing assessment must not silently re-band every row that already has one.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Declarations on file</h2>
+      <span class="badge badge-slate">Flags, not dated certificates</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Declaration</th><th>On file</th><th>What it covers</th></tr></thead>
+        <tbody>
+          {% for row in declarations %}
+            <tr>
+              <td class="fw-600">{{ row.label }}</td>
+              <td class="nowrap">
+                {% comment %}
+                  Green for present, muted for absent — never red. A declaration that is not on file
+                  is a gap to chase, not a finding this register has established, and dressing an
+                  unanswered question in the colour of a failure is how a compliance page starts
+                  lying.
+                {% endcomment %}
+                {% if row.declared %}
+                  <span class="badge badge-green"><i data-lucide="check"></i> On file</span>
+                {% else %}
+                  <span class="badge badge-muted">Not on file</span>
+                {% endif %}
+              </td>
+              <td class="text-muted">{{ row.help }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3">
+                <div class="empty-state">
+                  <i data-lucide="clipboard-list"></i>
+                  <h3>No declarations defined</h3>
+                  <p>The checklist is named explicitly in the view, so an empty list here means the build is broken rather than the data.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      These record <span class="fw-600">that</span> a declaration is on file — they are not dated certificates and nothing here expires them. Anything that needs a recurring proof cycle (an annual code-of-conduct re-signature, a REACH re-declaration) belongs in a <a href="{% url 'scm:compliancerequirement_list' %}">compliance requirement</a>, which already owns due dates, recurrence and evidence. 4.12 deliberately does not grow a third expiry mechanism.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Emissions — declared by the supplier</h2>
+      <span class="badge badge-amber">Reported to us, not measured by us</span>
+    </div>
+    <div class="card-body">
+      <p class="form-help" style="margin:0 0 .9rem;">
+        Every figure below is what <span class="fw-600">{% if obj.party %}{{ obj.party.name }}{% else %}this partner{% endif %} told us</span>, in tonnes CO2e, for the reporting year stated. Nothing here is computed by this system and nothing here is verified by it. The <a href="{% url 'scm:carbon_footprint_report' %}">carbon footprint report</a> keeps these declared figures visibly apart from the freight emissions it works out itself from 4.6's shipment weights and distances — the two are different measurements of different things and are never added together.
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Scope 1 · declared</dt>
+          <dd class="mono">{% if obj.scope1_tco2e is not None %}{{ obj.scope1_tco2e|floatformat:3 }} <span class="text-muted">tCO2e</span>{% else %}<span class="text-muted">Not declared</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Scope 2 · declared</dt>
+          <dd class="mono">{% if obj.scope2_tco2e is not None %}{{ obj.scope2_tco2e|floatformat:3 }} <span class="text-muted">tCO2e</span>{% else %}<span class="text-muted">Not declared</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Scope 3 · declared</dt>
+          <dd class="mono">{% if obj.scope3_tco2e is not None %}{{ obj.scope3_tco2e|floatformat:3 }} <span class="text-muted">tCO2e</span>{% else %}<span class="text-muted">Not declared</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Total declared</dt>
+          <dd class="mono fw-600">{% if obj.total_declared_tco2e is not None %}{{ obj.total_declared_tco2e|floatformat:3 }} <span class="text-muted">tCO2e</span>{% else %}<span class="text-muted">Nothing declared</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Reporting year</dt>
+          <dd>{% if obj.carbon_reporting_year %}{{ obj.carbon_reporting_year }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        “Not declared” and a declared <span class="mono">0.000</span> are different answers and are shown differently. The total sums only the scopes that were actually given, so a supplier who reported Scope 1 and 2 but not Scope 3 has a total covering two scopes — it is not a whole-footprint figure and should not be read as one.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The record</h2>
+      <span class="badge badge-slate">{{ obj.get_source_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd class="mono fw-600">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Trading partner</dt><dd>{% if obj.party %}{{ obj.party.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Assessment date</dt><dd>{{ obj.assessment_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Valid until</dt><dd>
+          {% if obj.valid_until %}
+            {{ obj.valid_until|date:"M d, Y" }}
+            {% if obj.is_expired %}<span class="badge badge-red">Lapsed</span>{% else %}<span class="badge badge-green">Current</span>{% endif %}
+          {% else %}
+            <span class="text-muted">No stated validity period</span>
+          {% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Source</dt><dd>
+          {% if obj.source == 'third_party_rating' %}<span class="badge badge-info">{{ obj.get_source_display }}</span>
+          {% elif obj.source == 'onsite_audit' %}<span class="badge badge-green">{{ obj.get_source_display }}</span>
+          {% elif obj.source == 'desk_review' %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>
+          {% elif obj.source == 'self_assessment' %}<span class="badge badge-muted">{{ obj.get_source_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Provider</dt><dd>{% if obj.provider %}{{ obj.provider }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Record status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Medal</dt><dd><span class="badge {{ obj.rating_css }}">{{ obj.get_rating_display }}</span></dd></div>
+        <div class="detail-item"><dt>Overall score</dt><dd class="mono">{% if obj.overall_score is not None %}{{ obj.overall_score }}/100{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Maturity level</dt><dd>{% if obj.maturity_level %}{{ obj.maturity_level|capfirst }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Assessed by</dt><dd>{% if obj.assessed_by %}{{ obj.assessed_by.get_full_name|default:obj.assessed_by.get_username }}{% else %}<span class="text-muted">Account removed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Evidence document</dt><dd>{% if obj.document %}{{ obj.document.name }}{% else %}<span class="text-muted">None attached</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.strengths %}
+        <h3 class="card-title" style="margin-top:1.25rem;">Strengths</h3>
+        <p class="text-muted" style="white-space:pre-line; margin:0;">{{ obj.strengths }}</p>
+      {% endif %}
+      {% if obj.improvement_areas %}
+        <h3 class="card-title" style="margin-top:1.25rem;">Improvement areas</h3>
+        <p class="text-muted" style="white-space:pre-line; margin:0;">{{ obj.improvement_areas }}</p>
+      {% endif %}
+      {% if obj.notes %}
+        <h3 class="card-title" style="margin-top:1.25rem;">Notes</h3>
+        <p class="text-muted" style="white-space:pre-line; margin:0;">{{ obj.notes }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:1.25rem;">
+        The record status is the assessor's own note about their own work — nothing in 4.12 drives it, and there are no verb routes on this page. That is why a row can legitimately read <span class="fw-600">Validated</span> beside <span class="fw-600">Lapsed</span>: the validity date is what actually expires a rating, and both are shown rather than one being quietly resolved into the other.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The same partner, as a risk</h2>
+      {% comment %}
+        risk_level_css is computed by the VIEW for 4.2's SupplierRiskAssessment.risk_level, and is
+        badge-muted when there is no assessment. It is not this model's rating_css — two different
+        questions on two different scales must not borrow each other's colour rules.
+      {% endcomment %}
+      {% if risk_assessment %}
+        <span class="badge {{ risk_level_css }}">{{ risk_assessment.get_risk_level_display }} risk</span>
+      {% else %}
+        <span class="badge {{ risk_level_css }}">Not assessed</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if risk_assessment %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Risk assessment</dt><dd><a href="{% url 'scm:riskassessment_detail' risk_assessment.pk %}" class="mono fw-600">{{ risk_assessment.number }}</a></dd></div>
+          <div class="detail-item"><dt>Assessed</dt><dd>{{ risk_assessment.assessment_date|date:"M d, Y" }}</dd></div>
+          <div class="detail-item"><dt>Risk level</dt><dd><span class="badge {{ risk_level_css }}">{{ risk_assessment.get_risk_level_display }}</span></dd></div>
+          <div class="detail-item"><dt>Risk index</dt><dd class="mono">{{ risk_assessment.risk_index|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Next review</dt><dd>{% if risk_assessment.next_review_date %}{{ risk_assessment.next_review_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Read as a <span class="fw-600">separate question</span>, never as a second opinion on the medal above. Risk asks what this supplier could do to <em>us</em> and scores four factors 1–5 where the <span class="fw-600">worst</span> factor drives the headline; sustainability asks how this supplier <em>behaves</em>, scores 0–100, and <span class="fw-600">averages</span> the themes. A gold supplier with a critical risk level is not a contradiction — it is a well-run business in a fragile place.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="shield-question"></i>
+          <h3>This partner has never been risk-assessed</h3>
+          <p>That is the absence of a review, not a low risk score — nothing here should be read as “safe”. Risk lives in 4.2 and answers a different question on a different scale.</p>
+          <a href="{% url 'scm:riskassessment_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Open supplier risk assessments</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          Edit is open to every member on purpose and matches the view, which carries no status gate:
+          re-scoring a supplier when the provider re-issues its rating is a revision of one dated
+          finding, and a typo in a scorecard should not need an administrator to fix.
+        {% endcomment %}
+        <a href="{% url 'scm:sustainabilityassessment_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% comment %}
+          Delete is gated to match the view's @tenant_admin_required. Leaving the button visible to a
+          member would offer them a one-click 403 — or worse, suggest the dated compliance record was
+          theirs to discard.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:sustainabilityassessment_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This is the dated record of what was assessed, by whom, and which declarations were on file — it cannot be reconstructed. The evidence document it cites is kept.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:sustainabilityassessment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          Deleting removes the finding, its declarations and its declared figures from the carbon report. The evidence file survives — the link is severed from this side only, so housekeeping around a record can never destroy the file it cited.
+        {% else %}
+          Revising a scorecard is ordinary compliance work and is open to you. Discarding one is not: this row <span class="fw-600">is</span> what an auditor asks for, so deleting it is a workspace-administrator action.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% endblock %}
