@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 — shared create/edit form for SustainabilityAssessment.
+
+Renders apps/scm/views/ContractCompliance/SustainabilityAssessments.py::_sustainabilityassessment_form
+(reached from sustainabilityassessment_create and sustainabilityassessment_edit — a hand-rolled save
+path, not crud_create/crud_edit). Every context key this page reads, and nothing else:
+  * form     — SustainabilityAssessmentForm (bound on POST)
+  * is_edit  — False on create, True on edit
+  * obj      — the SustainabilityAssessment on the EDIT path, None on create
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to the form's whitelist:
+SustainabilityAssessmentForm.Meta.fields is exactly the 25 names below. A field added to that
+whitelist and not added to a group here would never reach the POST and would fail validation with no
+visible cause.
+
+Four names are deliberately ABSENT because they are not on the form at all: `number` (auto-assigned),
+`tenant` and `assessed_by` (system stamps written from the session), and the derived pair
+`overall_score` / `rating`. The medal is arithmetic over the themes rather than an opinion, so the
+only honest input surface is the themes themselves — which is why the author cannot see the medal
+until the save lands them on the detail page.
+
+Every rule stated in the operator notes below is enforced by SustainabilityAssessment.clean() and
+save(), never by this template, so the words somebody reads and the validation that refuses their
+save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Sustainability Assessment{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Sustainability Assessment</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:sustainabilityassessment_list' %}">Sustainability Assessments</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">Score whichever themes this review actually covered and leave the rest blank — a partial scorecard is the normal case here, and an unanswered theme is a question nobody asked rather than a zero. The overall score, the medal and the maturity level are worked out from what you enter and cannot be typed in.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Who was assessed, and where the finding came from</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The partner list is the parties this workspace <span class="fw-600">buys from or hires to haul freight</span> — a customer is not offered, because an ESG scorecard for someone we sell to is a different question with a different owner. The four sources carry very different evidentiary weight, so a <span class="fw-600">third-party rating</span> must name its provider: the reason that source outranks a self-assessment is that somebody independent put their name to it. A validity date that falls before the assessment date is refused — it would read as a rating that lapsed when it never began. The <span class="fw-600">status</span> is your own note about your own work; nothing in this module moves it, and the validity date is what actually expires a rating.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.party %}
+          {% include "partials/form_field.html" with field=form.assessment_date %}
+          {% include "partials/form_field.html" with field=form.valid_until %}
+          {% include "partials/form_field.html" with field=form.source %}
+          {% include "partials/form_field.html" with field=form.provider %}
+          {% include "partials/form_field.html" with field=form.status %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Scorecard</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Each theme is 0–100, and every one of them is <span class="fw-600">optional</span>. Only the themes you fill in are averaged into the overall score, so leaving one blank costs the supplier nothing — entering 0 is a measured failing grade and is a completely different statement. <span class="fw-600">Carbon is scored separately and does not vote on the medal</span>: it is shown next to it, exactly as EcoVadis does it, so a strong carbon page cannot lift a supplier over a weak labour theme. Score nothing at all and the assessment is saved with no medal and no maturity level rather than a zero.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.environment_score %}
+          {% include "partials/form_field.html" with field=form.labor_human_rights_score %}
+          {% include "partials/form_field.html" with field=form.ethics_score %}
+          {% include "partials/form_field.html" with field=form.sustainable_procurement_score %}
+          {% include "partials/form_field.html" with field=form.carbon_score %}
+        </div>
+        <div class="form-grid" style="margin-top:1rem;">
+          {% include "partials/form_field.html" with field=form.strengths %}
+          {% include "partials/form_field.html" with field=form.improvement_areas %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Declarations on file</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Tick only what is <span class="fw-600">actually on file</span>. These are flags rather than dated certificates — nothing here carries an expiry, and nothing in this module will re-ask for one. If a declaration needs a recurring proof cycle (an annual code-of-conduct re-signature, a REACH re-declaration), raise a <a href="{% url 'scm:compliancerequirement_list' %}">compliance requirement</a> instead: that register already owns due dates, recurrence and evidence.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.conflict_minerals_declared %}
+          {% include "partials/form_field.html" with field=form.reach_declared %}
+          {% include "partials/form_field.html" with field=form.rohs_declared %}
+          {% include "partials/form_field.html" with field=form.forced_labor_attested %}
+          {% include "partials/form_field.html" with field=form.deforestation_declared %}
+          {% include "partials/form_field.html" with field=form.code_of_conduct_signed %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Emissions declared by the supplier</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Enter these <span class="fw-600">only as the supplier reported them</span>, in tonnes CO2e — this system never computes them and never verifies them, and the carbon report keeps them visibly apart from the freight emissions it works out itself from shipment weights and distances. Leave a scope <span class="fw-600">blank</span> when it was not reported: blank and <span class="mono">0</span> are stored and shown as different answers, and a blank scope is simply left out of the declared total rather than counted as nothing emitted. The reporting year is what the carbon report groups by, so it is bounded 2000–2100.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.scope1_tco2e %}
+          {% include "partials/form_field.html" with field=form.scope2_tco2e %}
+          {% include "partials/form_field.html" with field=form.scope3_tco2e %}
+          {% include "partials/form_field.html" with field=form.carbon_reporting_year %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Evidence</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Attach the scorecard, certificate or audit report this row was written from — it is what turns a set of numbers into a finding an auditor can follow. Deleting this assessment later never deletes the file, and deleting the file never deletes this assessment.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.document %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:sustainabilityassessment_detail' obj.pk %}{% else %}{% url 'scm:sustainabilityassessment_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+    <p class="form-help" style="margin-top:.5rem;">Saving lands on the assessment's own page rather than back on the list, because the overall score, the medal and the maturity level are derived on save and are invisible on this form — that page is the only place to see what the system made of what you entered.</p>
+  </form>
+{% endblock %}
