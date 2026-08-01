@@ -5231,3 +5231,959 @@ class TestAlertTriageForms:
                                    tenant=tenant_a).is_valid()
         assert AlertAssignForm({"assigned_to": str(member_user.pk)}, tenant=tenant_a,
                                current=member_user.pk).is_valid()
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.12 date helpers. timezone.localdate(), NEVER datetime.date.today() — a DateField
+# posted through a form is compared against the local date by every 4.12 clean(), so an
+# exact-date payload built on the other basis flakes for the hours after local midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _localdate_iso_date(days=0):
+    """Today (or days from it) as a date, on the basis the 4.12 models measure against."""
+    import datetime as _dt
+    from django.utils import timezone
+    return timezone.localdate() + _dt.timedelta(days=days)
+
+
+def _localdate_iso(days=0):
+    """The same date as the YYYY-MM-DD string a form POST carries."""
+    return _localdate_iso_date(days).isoformat()
+
+
+
+# =================================================================================================
+# SCM 4.12 Contract & Compliance Management — the five ModelForms and the line formset.
+#
+# Nothing in 4.12 re-implements a rule on a form: the scope/pointer agreement, the cross-tenant
+# guards, the date ladders, the medal arithmetic and the "not applicable needs a reason" rule all
+# live on the models and are tested in ``test_models.py``. What IS tested here is the boundary each
+# form draws — because that boundary is the only thing standing between a crafted POST and a column
+# nobody is supposed to be able to write:
+#
+#   * L20/L22 — ``status`` and every system stamp are OFF the form. On ``TradeLicense`` /
+#     ``TradeDocument`` that is not tidiness: issuing is what charges a licence balance, so a status
+#     somebody can type is a balance nobody checked.
+#   * ``ComplianceRequirementForm`` narrows ``status.choices`` to the four a human may ASSERT.
+#     ``compliant`` / ``non_compliant`` are the PROJECTION of a recorded check and ``overdue``
+#     belongs to the date roller, so a POST naming one is refused rather than merely hidden.
+#   * ``TradeLicenseForm(may_edit_controls=False)`` POPS the three ceiling columns. Popped, not
+#     disabled — a field absent from ``self.fields`` is absent from ``cleaned_data``, which a
+#     template-only hide would not achieve.
+# =================================================================================================
+def _license_form_payload(**overrides):
+    """A complete, VALID ``TradeLicenseForm`` POST body.
+
+    Every field the form declares is present (blank where optional) because a ModelForm treats an
+    ABSENT field exactly like an empty one, and a payload that quietly omits ``renewal_notice_days``
+    — non-null with a model default, therefore REQUIRED on the form — would fail for a reason the
+    test was not written to measure.
+    """
+    data = {
+        "license_number": "BIS-FORM-1", "title": "Export licence",
+        "license_type": "export_license", "issuing_authority": "BIS",
+        "issuing_country": "United States", "holder_party": "", "end_user_party": "",
+        "application_date": "", "issue_date": "", "expiry_date": "", "renewal_notice_days": "60",
+        "authorized_value": "", "authorized_quantity": "", "currency": "",
+        "commodity_scope": "", "eccn_or_hs": "", "destination_countries": "", "conditions": "",
+        "document": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _document_form_payload(**overrides):
+    """A complete, VALID ``TradeDocumentForm`` POST body (the header only — the formset is separate)."""
+    data = {
+        "doc_type": "commercial_invoice", "direction": "export", "document_number": "INV-1",
+        "issue_date": "", "shipment": "", "carrier": "", "purchase_order": "", "sales_order": "",
+        "license": "", "shipper_party": "", "consignee_party": "", "notify_party": "",
+        "country_of_origin": "", "country_of_destination": "", "currency": "",
+        "declared_value": "100.00", "freight_charges": "", "insurance_value": "", "incoterm": "",
+        "gross_weight_kg": "", "net_weight_kg": "", "package_count": "", "vessel_or_flight": "",
+        "voyage_number": "", "port_of_loading": "", "port_of_discharge": "",
+        "container_numbers": "", "is_negotiable": "", "filing_reference": "", "document": "",
+        "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _requirement_form_payload(**overrides):
+    """A complete, VALID ``ComplianceRequirementForm`` POST body."""
+    from django.utils import timezone
+    data = {
+        "title": "Annual COI on file", "description": "", "source": "regulation",
+        "source_reference": "", "framework": "insurance_coi", "obligation_category": "",
+        "jurisdiction": "", "scope": "tenant", "org_unit": "", "party": "", "location": "",
+        "item": "", "owner": "", "frequency": "annual",
+        "next_due_date": (timezone.localdate() + datetime.timedelta(days=30)).isoformat(),
+        "notice_days": "30", "contract": "", "license": "", "document": "",
+        "status": "applicable", "criticality": "medium", "not_applicable_reason": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _check_form_payload(**overrides):
+    """A complete, VALID ``ComplianceCheckForm`` POST body."""
+    from django.utils import timezone
+    data = {
+        "result": "pass", "due_date": "", "performed_on": timezone.localdate().isoformat(),
+        "finding": "", "corrective_reference": "", "evidence": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _esg_form_payload(**overrides):
+    """A complete, VALID ``SustainabilityAssessmentForm`` POST body."""
+    from django.utils import timezone
+    data = {
+        "party": "", "assessment_date": timezone.localdate().isoformat(), "valid_until": "",
+        "source": "self_assessment", "provider": "", "status": "draft",
+        "environment_score": "", "labor_human_rights_score": "", "ethics_score": "",
+        "sustainable_procurement_score": "", "carbon_score": "", "strengths": "",
+        "improvement_areas": "", "conflict_minerals_declared": "", "reach_declared": "",
+        "rohs_declared": "", "forced_labor_attested": "", "deforestation_declared": "",
+        "code_of_conduct_signed": "", "scope1_tco2e": "", "scope2_tco2e": "", "scope3_tco2e": "",
+        "carbon_reporting_year": "", "document": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+# ================================================================ 4.12 · what is OFF the five forms
+class TestComplianceFormsMassAssignmentExclusions:
+    """L20/L22 — a whitelist ``Meta.fields``, never ``Meta.exclude``.
+
+    A blacklist means the next column added to the model joins the form silently, which on these
+    models would mean the next system stamp landing on a public screen.
+    """
+
+    def test_the_licence_form_omits_the_status_the_balance_and_every_decision_stamp(self):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(tenant=None)
+        for field in ("tenant", "number", "status", "used_value", "used_quantity", "approved_at",
+                      "approved_by", "revoked_at", "revocation_reason", "created_at",
+                      "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_licence_form_offers_exactly_the_models_editable_set(self):
+        from apps.scm.forms import TradeLicenseForm
+        from apps.scm.models import TradeLicense
+        editable = {f.name for f in TradeLicense._meta.get_fields()
+                    if getattr(f, "editable", False) and not f.auto_created
+                    and f.name not in ("tenant", "created_at", "updated_at")}
+        assert set(TradeLicenseForm(tenant=None).fields) == editable
+
+    def test_the_document_form_omits_the_status_and_every_lifecycle_stamp(self):
+        """``status`` off the form is the mechanism, not the decoration: issuing is what SPENDS a
+        licence balance, so a free-text status dropdown would let somebody spend one no-one checked."""
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(tenant=None)
+        for field in ("tenant", "number", "status", "issued_at", "issued_by", "void_reason",
+                      "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_document_form_offers_exactly_the_models_editable_set(self):
+        from apps.scm.forms import TradeDocumentForm
+        from apps.scm.models import TradeDocument
+        editable = {f.name for f in TradeDocument._meta.get_fields()
+                    if getattr(f, "editable", False) and not f.auto_created
+                    and f.name not in ("tenant", "created_at", "updated_at")}
+        assert set(TradeDocumentForm(tenant=None).fields) == editable
+
+    def test_the_line_form_omits_the_parent_and_the_computed_line_value(self):
+        from apps.scm.forms import TradeDocumentLineForm
+        form = TradeDocumentLineForm(tenant=None)
+        assert "document" not in form.fields
+        assert "line_value" not in form.fields
+
+    def test_the_requirement_form_omits_the_number_and_the_proof_stamp(self):
+        """``last_checked_on`` is written ONLY by ``record_check()`` — a proof date somebody can type
+        is not proof (L22)."""
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(tenant=None)
+        for field in ("tenant", "number", "last_checked_on", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_check_form_omits_its_parent_and_who_performed_it(self):
+        """``requirement`` comes from the URL — letting a POST choose its own parent is how a check
+        lands on somebody else's obligation. ``performed_by`` is an audit fact, not an input."""
+        from apps.scm.forms import ComplianceCheckForm
+        form = ComplianceCheckForm(tenant=None)
+        for field in ("requirement", "performed_by", "created_at"):
+            assert field not in form.fields, field
+
+    def test_the_assessment_form_omits_the_derived_medal_and_the_assessor_stamp(self):
+        """The medal is arithmetic over the themes, not an opinion, so the only honest input surface
+        is the themes themselves."""
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(tenant=None)
+        for field in ("tenant", "number", "overall_score", "rating", "assessed_by", "created_at",
+                      "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_assessment_form_offers_exactly_the_models_editable_set(self):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        from apps.scm.models import SustainabilityAssessment
+        editable = {f.name for f in SustainabilityAssessment._meta.get_fields()
+                    if getattr(f, "editable", False) and not f.auto_created
+                    and f.name not in ("tenant", "created_at", "updated_at")}
+        assert set(SustainabilityAssessmentForm(tenant=None).fields) == editable
+
+    def test_the_sweep_no_412_form_field_maps_to_an_editable_False_column(self):
+        """The whole-sub-module sweep: every ModelForm in 4.12, every field, against ``editable``."""
+        from apps.scm.forms import (ComplianceCheckForm, ComplianceRequirementForm,
+                                    SustainabilityAssessmentForm, TradeDocumentForm,
+                                    TradeDocumentLineForm, TradeLicenseForm)
+        for form_class in (TradeLicenseForm, TradeDocumentForm, TradeDocumentLineForm,
+                           ComplianceRequirementForm, ComplianceCheckForm,
+                           SustainabilityAssessmentForm):
+            form = form_class(tenant=None)
+            model = form_class._meta.model
+            for name in form.fields:
+                try:
+                    field = model._meta.get_field(name)
+                except Exception:      # a declared, non-model field (TradeDocumentForm.incoterm)
+                    continue
+                assert field.editable is True, f"{form_class.__name__}.{name}"
+
+
+# ================================================================ 4.12 · the licence form
+class TestTradeLicenseForm:
+    def test_a_minimal_payload_saves(self, tenant_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.number.startswith("LIC-")
+        assert obj.status == "draft"
+
+    @pytest.mark.parametrize("field", ["license_number", "title", "issuing_authority"])
+    def test_the_identity_fields_are_required(self, tenant_a, field):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(**{field: ""}), tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_a_duplicate_authority_number_is_a_FIELD_error_not_an_IntegrityError_500(
+        self, tenant_a, trade_license_a,
+    ):
+        """``TenantUniqueMixin`` is what turns the ``(tenant, license_number)`` constraint into a
+        message. Without it a duplicate passes ``is_valid()`` and raises inside ``save()``.
+
+        Django reports a ``unique_together`` as a NON-field error, so this asserts the same
+        "non_field_errors() or the field" shape ``TestTenantUniqueMixinRegression`` already uses for
+        the SKU / UOM / location duplicates.
+        """
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(
+            _license_form_payload(license_number=trade_license_a.license_number), tenant=tenant_a)
+        assert not form.is_valid()
+        assert form.non_field_errors() or "license_number" in form.errors
+        assert "License number already exists" in str(form.errors)
+
+    def test_the_same_authority_number_is_accepted_in_another_workspace(self, tenant_b,
+                                                                        trade_license_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(
+            _license_form_payload(license_number=trade_license_a.license_number), tenant=tenant_b)
+        assert form.is_valid(), form.errors
+
+    def test_the_tenant_is_stamped_in_the_constructor_so_the_models_guard_actually_runs(
+        self, tenant_a, supplier_b,
+    ):
+        """``crud_create`` assigns the tenant only AFTER ``is_valid()``, so without the stamp the
+        instance is validated with ``tenant_id`` None — the exact case the guard skips."""
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(holder_party=str(supplier_b.pk)),
+                                tenant=tenant_a)
+        assert form.instance.tenant_id == tenant_a.pk
+        assert not form.is_valid()
+        assert "holder_party" in form.errors
+
+    def test_the_two_party_dropdowns_offer_counterparties_not_the_whole_party_book(
+        self, tenant_a, supplier_a, vendor_a, carrier_party_a, customer_a, non_supplier_party_a,
+    ):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(tenant=tenant_a)
+        for name in ("holder_party", "end_user_party"):
+            offered = set(form.fields[name].queryset)
+            assert {supplier_a, vendor_a, carrier_party_a} <= offered, name
+            assert customer_a not in offered, name
+            assert non_supplier_party_a not in offered, name
+
+    def test_the_two_party_dropdowns_do_not_share_evaluation_state(self, tenant_a, supplier_a):
+        """``ModelChoiceField.queryset``'s setter calls ``queryset.all()``, which clones — this pins
+        that the two selects cannot end up sharing a cache."""
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(tenant=tenant_a)
+        assert (form.fields["holder_party"].queryset
+                is not form.fields["end_user_party"].queryset)
+
+    def test_a_cross_tenant_party_is_not_offered_and_not_accepted(self, tenant_a, supplier_b):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(tenant=tenant_a)
+        assert supplier_b not in form.fields["holder_party"].queryset
+        bound = TradeLicenseForm(_license_form_payload(end_user_party=str(supplier_b.pk)),
+                                 tenant=tenant_a)
+        assert not bound.is_valid()
+        assert "end_user_party" in bound.errors
+
+    def test_the_evidence_dropdown_is_scoped_and_empty_without_a_tenant(self, tenant_a,
+                                                                        evidence_document_a,
+                                                                        evidence_document_b):
+        from apps.scm.forms import TradeLicenseForm
+        offered = set(TradeLicenseForm(tenant=tenant_a).fields["document"].queryset)
+        assert evidence_document_a in offered and evidence_document_b not in offered
+        assert list(TradeLicenseForm(tenant=None).fields["document"].queryset) == []
+
+    def test_a_tenant_less_caller_gets_no_options_rather_than_everything(self, supplier_a,
+                                                                         evidence_document_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(tenant=None)
+        for name in ("holder_party", "end_user_party", "document"):
+            assert list(form.fields[name].queryset) == [], name
+
+    def test_only_active_currencies_are_offered(self, tenant_a, usd):
+        from apps.accounting.models import Currency
+        from apps.scm.forms import TradeLicenseForm
+        retired = Currency.objects.create(code="ZWD", name="Old Dollar", is_active=False)
+        offered = set(TradeLicenseForm(tenant=tenant_a).fields["currency"].queryset)
+        assert usd in offered and retired not in offered
+
+    def test_the_date_ladder_surfaces_as_a_form_error_not_an_exception(self, tenant_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(
+            application_date=_localdate_iso(0), issue_date=_localdate_iso(-5)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "issue_date" in form.errors
+
+    def test_a_negative_ceiling_is_refused(self, tenant_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(authorized_value="-1.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "authorized_value" in form.errors
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "abc", "1e400",
+                                        "99999999999999999999.99", "1,000"])
+    def test_a_hostile_ceiling_is_a_field_error_never_a_500(self, tenant_a, value):
+        """``Decimal("NaN")`` parses happily and then poisons every comparison it touches; an
+        over-``max_digits`` figure raises ``DataError`` from inside the driver if it ever reaches it."""
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(authorized_value=value), tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "authorized_value" in form.errors, value
+
+    @pytest.mark.parametrize("value", ["-1", "3651", "4294967295", "abc"])
+    def test_a_hostile_renewal_window_is_a_field_error(self, tenant_a, value):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(_license_form_payload(renewal_notice_days=value), tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "renewal_notice_days" in form.errors, value
+
+
+class TestTradeLicenseFormControlFields:
+    """THE regression lock. The three columns ``can_charge()`` tests are what this workspace is
+    allowed to ship under this authority, so widening them on an IN-FORCE licence is the same
+    privilege as approving it — and approving is tenant-admin gated.
+
+    Without ``may_edit_controls=False`` a member barred from ``tradelicense_approve`` could raise the
+    ceiling on an active licence and then self-serve ``tradedocument_issue`` past what was granted.
+    """
+
+    def test_the_three_control_fields_are_named_once_on_the_form(self):
+        from apps.scm.forms import TradeLicenseForm
+        assert TradeLicenseForm.CONTROL_FIELDS == ("authorized_value", "authorized_quantity",
+                                                    "expiry_date")
+
+    @pytest.mark.parametrize("field", ["authorized_value", "authorized_quantity", "expiry_date"])
+    def test_a_locked_form_does_not_render_the_field_at_all(self, tenant_a, trade_license_a,
+                                                            field):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(instance=trade_license_a, tenant=tenant_a,
+                                may_edit_controls=False)
+        assert field not in form.fields
+
+    def test_a_locked_form_keeps_every_OTHER_field(self, tenant_a, trade_license_a):
+        """The screen still corrects what the licence SAYS — it just cannot move what it authorises."""
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(instance=trade_license_a, tenant=tenant_a,
+                                may_edit_controls=False)
+        for kept in ("license_number", "title", "issuing_authority", "commodity_scope",
+                     "conditions", "notes", "currency", "application_date", "issue_date"):
+            assert kept in form.fields, kept
+
+    @pytest.mark.parametrize("field,hostile", [("authorized_value", "9999999.99"),
+                                                ("authorized_quantity", "9999999.9999"),
+                                                ("expiry_date", "2099-12-31")])
+    def test_a_crafted_POST_naming_a_popped_field_never_reaches_cleaned_data(
+        self, tenant_a, trade_license_a, field, hostile,
+    ):
+        """POPPED, not disabled: a field absent from ``self.fields`` is absent from ``cleaned_data``,
+        so the value cannot be assigned. Hiding it in the template alone would not do this."""
+        from apps.scm.forms import TradeLicenseForm
+        before = getattr(trade_license_a, field)
+        payload = _license_form_payload(license_number=trade_license_a.license_number,
+                                        title=trade_license_a.title,
+                                        issuing_authority=trade_license_a.issuing_authority,
+                                        **{field: hostile})
+        form = TradeLicenseForm(payload, instance=trade_license_a, tenant=tenant_a,
+                                may_edit_controls=False)
+        assert form.is_valid(), form.errors
+        assert field not in form.cleaned_data
+        saved = form.save(commit=False)
+        assert getattr(saved, field) == before
+
+    def test_an_unlocked_form_still_offers_all_three(self, tenant_a, trade_license_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(instance=trade_license_a, tenant=tenant_a, may_edit_controls=True)
+        for field in TradeLicenseForm.CONTROL_FIELDS:
+            assert field in form.fields, field
+
+    def test_the_controls_are_editable_by_default_so_the_create_screen_is_complete(self, tenant_a):
+        from apps.scm.forms import TradeLicenseForm
+        form = TradeLicenseForm(tenant=tenant_a)
+        for field in TradeLicenseForm.CONTROL_FIELDS:
+            assert field in form.fields, field
+
+
+# ================================================================ 4.12 · the document form + formset
+class TestTradeDocumentForm:
+    def test_a_minimal_payload_saves(self, tenant_a):
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(_document_form_payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.number.startswith("TD-")
+        assert obj.status == "draft"
+
+    def test_the_incoterm_vocabulary_is_OFFERED_from_the_models_constant_not_restated(self):
+        """Restating the eleven terms on the form would be a third copy and the one that drifts."""
+        from apps.scm.forms import TradeDocumentForm
+        from apps.scm.models import TradeDocument
+        offered = [value for value, _ in TradeDocumentForm(tenant=None).fields["incoterm"].choices]
+        assert offered == [""] + [value for value, _ in TradeDocument.INCOTERM_CHOICES]
+
+    def test_an_invented_incoterm_is_refused_by_the_choice_field(self, tenant_a):
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(_document_form_payload(incoterm="XYZ"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "incoterm" in form.errors
+
+    def test_a_real_incoterm_is_accepted_and_blank_is_legitimate(self, tenant_a):
+        from apps.scm.forms import TradeDocumentForm
+        assert TradeDocumentForm(_document_form_payload(incoterm="FOB"), tenant=tenant_a).is_valid()
+        assert TradeDocumentForm(_document_form_payload(incoterm=""), tenant=tenant_a).is_valid()
+
+    def test_a_term_a_later_revision_retired_stays_selectable_on_the_row_that_stores_it(
+        self, tenant_a, trade_document_a,
+    ):
+        """Opening that document must not silently blank a legal allocation of cost and risk."""
+        from apps.scm.forms import TradeDocumentForm
+        from apps.scm.models import TradeDocument
+        TradeDocument.objects.filter(pk=trade_document_a.pk).update(incoterm="DAT")
+        trade_document_a.refresh_from_db()
+        form = TradeDocumentForm(instance=trade_document_a, tenant=tenant_a)
+        offered = dict(form.fields["incoterm"].choices)
+        assert "DAT" in offered
+        assert "retired term" in offered["DAT"]
+
+    def test_the_tenant_is_stamped_so_the_models_nine_FK_guard_runs_on_create(self, tenant_a,
+                                                                              shipment_b):
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(_document_form_payload(shipment=str(shipment_b.pk)),
+                                 tenant=tenant_a)
+        assert form.instance.tenant_id == tenant_a.pk
+        assert not form.is_valid()
+        assert "shipment" in form.errors
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("shipment", "shipment_b"), ("carrier", "carrier_b"), ("purchase_order",
+                                                               "purchase_order_b"),
+        ("sales_order", "sales_order_b"), ("license", "trade_license_b"),
+        ("shipper_party", "supplier_b"), ("consignee_party", "customer_b"),
+        ("notify_party", "supplier_b"), ("document", "evidence_document_b"),
+    ])
+    def test_no_dropdown_offers_another_workspaces_row(self, request, tenant_a, field,
+                                                       fixture_name):
+        from apps.scm.forms import TradeDocumentForm
+        other = request.getfixturevalue(fixture_name)
+        assert other not in TradeDocumentForm(tenant=tenant_a).fields[field].queryset
+
+    def test_a_tenant_less_caller_gets_no_options_rather_than_everything(self, shipment_a,
+                                                                         trade_license_a):
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(tenant=None)
+        for name in ("shipment", "carrier", "purchase_order", "sales_order", "license",
+                     "shipper_party", "consignee_party", "notify_party", "document"):
+            assert list(form.fields[name].queryset) == [], name
+
+    def test_the_three_party_dropdowns_offer_the_WHOLE_party_book(self, tenant_a, supplier_a,
+                                                                   customer_a,
+                                                                   non_supplier_party_a):
+        """An export consignee is a CUSTOMER and a notify party is routinely a broker — narrowing to
+        one role would hide the majority of legitimate counterparties (the 4.5 failure)."""
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(tenant=tenant_a)
+        for name in ("shipper_party", "consignee_party", "notify_party"):
+            offered = set(form.fields[name].queryset)
+            assert {supplier_a, customer_a, non_supplier_party_a} <= offered, name
+
+    def test_the_licence_dropdown_is_NOT_narrowed_to_the_chargeable_statuses(self, tenant_a,
+                                                                             draft_license_a,
+                                                                             trade_license_a):
+        """A document is prepared against the licence it will move under long before that licence is
+        active; the gate belongs at issue time, where ``can_charge()`` states its refusal."""
+        from apps.scm.forms import TradeDocumentForm
+        offered = set(TradeDocumentForm(tenant=tenant_a).fields["license"].queryset)
+        assert {draft_license_a, trade_license_a} <= offered
+
+    def test_the_weight_rule_surfaces_as_a_form_error(self, tenant_a):
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(_document_form_payload(gross_weight_kg="10.00",
+                                                        net_weight_kg="11.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "net_weight_kg" in form.errors
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-1.00", "1e400",
+                                        "99999999999999999999.99"])
+    def test_a_hostile_declared_value_is_a_field_error_never_a_500(self, tenant_a, value):
+        from apps.scm.forms import TradeDocumentForm
+        form = TradeDocumentForm(_document_form_payload(declared_value=value), tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "declared_value" in form.errors, value
+
+
+class TestTradeDocumentLineFormSet:
+    def test_the_line_dropdowns_are_scoped_to_the_tenant(self, tenant_a, item_a, item_b,
+                                                          uom_each_a, uom_each_b):
+        from apps.scm.forms import TradeDocumentLineForm
+        form = TradeDocumentLineForm(tenant=tenant_a)
+        assert item_a in form.fields["item"].queryset
+        assert item_b not in form.fields["item"].queryset
+        assert uom_each_a in form.fields["uom"].queryset
+        assert uom_each_b not in form.fields["uom"].queryset
+
+    def test_a_tenant_less_line_form_gets_an_empty_select_rather_than_everything(self, item_a):
+        from apps.scm.forms import TradeDocumentLineForm
+        form = TradeDocumentLineForm(tenant=None)
+        assert list(form.fields["item"].queryset) == []
+        assert list(form.fields["uom"].queryset) == []
+
+    def test_a_document_with_NO_lines_is_legitimate(self, tenant_a):
+        """An ocean bill of lading, an insurance certificate and a licence copy all carry none —
+        refusing to save one would make the form unusable for a third of the register."""
+        from apps.scm.forms import TradeDocumentLineFormSet
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a)
+        formset = TradeDocumentLineFormSet(formset_data("lines", []), instance=doc,
+                                           form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+    def test_a_line_saves_through_the_formset(self, tenant_a, item_a, uom_each_a):
+        from apps.scm.forms import TradeDocumentLineFormSet
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a)
+        formset = TradeDocumentLineFormSet(
+            formset_data("lines", [{"item": item_a.pk, "description": "Workstation",
+                                    "hs_code": "8471.30", "country_of_origin": "US",
+                                    "uom_text": "each", "uom": uom_each_a.pk,
+                                    "quantity": "3", "unit_value": "10.00",
+                                    "net_weight_kg": ""}]),
+            instance=doc, form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+        formset.save()
+        assert doc.lines.count() == 1
+        assert doc.lines.first().line_value == Decimal("30.00")
+
+    def test_a_crafted_line_naming_another_workspaces_item_is_refused(self, tenant_a, item_b):
+        """The formset scopes the two selects by hand, which is UX; ``TradeDocumentLine.clean()`` is
+        the guard that holds against a POST that never went near a dropdown."""
+        from apps.scm.forms import TradeDocumentLineFormSet
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a)
+        formset = TradeDocumentLineFormSet(
+            formset_data("lines", [{"item": item_b.pk, "description": "Crafted",
+                                    "quantity": "1", "unit_value": "1.00"}]),
+            instance=doc, form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert doc.lines.count() == 0
+
+    def test_the_option_list_is_built_once_for_the_whole_formset(self, tenant_a, item_a,
+                                                                  uom_each_a):
+        """``ModelChoiceField.__deepcopy__`` calls ``queryset.all()``, discarding any cache, so every
+        rendered row otherwise re-ran the same two SELECTs — a 20-line invoice is 40 queries.
+
+        Asserted as a COMPARISON rather than against a magic number: a 6-line document must cost
+        exactly what a 1-line document costs. A fixed ceiling would pass the day somebody made the
+        per-row cost smaller but still per-row.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from apps.scm.forms import TradeDocumentLineFormSet
+        from apps.scm.models import TradeDocument, TradeDocumentLine
+
+        def _render_cost(line_count):
+            doc = TradeDocument.objects.create(tenant=tenant_a)
+            for index in range(line_count):
+                TradeDocumentLine.objects.create(document=doc, description=f"Line {index}",
+                                                 item=item_a, uom=uom_each_a,
+                                                 quantity=Decimal("1"), unit_value=Decimal("1.00"))
+            formset = TradeDocumentLineFormSet(instance=doc, form_kwargs={"tenant": tenant_a})
+            with CaptureQueriesContext(connection) as captured:
+                for form in formset.forms:
+                    list(form.fields["item"].choices)
+                    list(form.fields["uom"].choices)
+            return len(captured)
+
+        assert _render_cost(6) == _render_cost(1)
+
+
+# ================================================================ 4.12 · the obligation form
+class TestComplianceRequirementForm:
+    def test_a_minimal_payload_saves(self, tenant_a):
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(_requirement_form_payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.number.startswith("CR-")
+
+    def test_the_status_select_offers_only_what_a_human_may_ASSERT(self):
+        """``compliant`` / ``non_compliant`` are the PROJECTION of a recorded check and ``overdue``
+        belongs to the date roller. None of the three is an opinion somebody types, or the register
+        stops being evidence and becomes a claim."""
+        from apps.scm.forms import ComplianceRequirementForm
+        offered = {value for value, _ in ComplianceRequirementForm(tenant=None)
+                   .fields["status"].choices}
+        assert offered == {"applicable", "in_progress", "not_applicable", "retired"}
+
+    @pytest.mark.parametrize("status", ["compliant", "non_compliant", "overdue"])
+    def test_a_crafted_status_POST_is_REFUSED_not_merely_hidden(self, tenant_a, status):
+        """THE regression lock. Narrowing ``.choices`` is ENFORCEMENT: ``ChoiceField.validate``
+        refuses a value outside the list. Without it any logged-in member could mark an overdue
+        obligation compliant with zero evidence — which drops it out of ``OPEN_STATUSES`` (so it
+        leaves the overdue chip and the due queue) and, because ``compliant`` is not in
+        ``AUTO_STATUSES``, the roller never walks it back.
+        """
+        from apps.scm.forms import ComplianceRequirementForm
+        from apps.scm.models import ComplianceRequirement
+        form = ComplianceRequirementForm(_requirement_form_payload(status=status), tenant=tenant_a)
+        assert not form.is_valid(), status
+        assert "status" in form.errors, status
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_the_STORED_status_stays_selectable_so_an_edit_does_not_blank_the_field(
+        self, tenant_a, compliance_requirement_a,
+    ):
+        """A row ``record_check()`` already moved to ``compliant`` has to be editable without the
+        select silently dropping its own current value."""
+        from apps.scm.forms import ComplianceRequirementForm
+        compliance_requirement_a.status = "compliant"
+        compliance_requirement_a.save(update_fields=["status"])
+        form = ComplianceRequirementForm(instance=compliance_requirement_a, tenant=tenant_a)
+        offered = {value for value, _ in form.fields["status"].choices}
+        assert "compliant" in offered
+        # ...and the three that are NOT this row's stored value are still refused.
+        assert "non_compliant" not in offered and "overdue" not in offered
+
+    def test_saving_an_unrelated_edit_does_not_walk_a_projected_status_back(
+        self, tenant_a, compliance_requirement_a,
+    ):
+        from apps.scm.forms import ComplianceRequirementForm
+        compliance_requirement_a.status = "compliant"
+        compliance_requirement_a.save(update_fields=["status"])
+        payload = _requirement_form_payload(
+            title="Retitled", status="compliant", source="contract",
+            contract=str(compliance_requirement_a.contract_id), scope="party",
+            party=str(compliance_requirement_a.party_id), frequency="quarterly",
+            next_due_date=compliance_requirement_a.next_due_date.isoformat(),
+            criticality="high")
+        form = ComplianceRequirementForm(payload, instance=compliance_requirement_a,
+                                         tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.status == "compliant"
+        assert saved.title == "Retitled"
+
+    def test_the_tenant_is_stamped_so_the_models_cross_tenant_guard_runs_on_create(self, tenant_a,
+                                                                                   supplier_b):
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(
+            _requirement_form_payload(scope="party", party=str(supplier_b.pk)), tenant=tenant_a)
+        assert form.instance.tenant_id == tenant_a.pk
+        assert not form.is_valid()
+        assert "party" in form.errors
+
+    def test_the_five_scope_pointers_are_NOT_narrowed_by_the_chosen_scope(self, tenant_a,
+                                                                          org_unit_a, supplier_a,
+                                                                          location_a, item_a):
+        """A create form is unbound, so no scope has been chosen yet — narrowing ``party`` to "only
+        when scope == party" would render four permanently empty selects and the screen could never
+        be completed (the 4.5 ``ship_to_address`` failure verbatim)."""
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(tenant=tenant_a)
+        assert org_unit_a in form.fields["org_unit"].queryset
+        assert supplier_a in form.fields["party"].queryset
+        assert location_a in form.fields["location"].queryset
+        assert item_a in form.fields["item"].queryset
+
+    def test_the_party_dropdown_is_the_same_counterparty_set_the_sibling_forms_use(
+        self, tenant_a, supplier_a, carrier_party_a, customer_a,
+    ):
+        from apps.scm.forms import ComplianceRequirementForm
+        offered = set(ComplianceRequirementForm(tenant=tenant_a).fields["party"].queryset)
+        assert {supplier_a, carrier_party_a} <= offered
+        assert customer_a not in offered
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("org_unit", "org_unit_b"), ("location", "location_b"), ("item", "item_b"),
+        ("contract", "contract_b"), ("license", "trade_license_b"),
+        ("document", "evidence_document_b"), ("owner", "admin_b"),
+    ])
+    def test_no_dropdown_offers_another_workspaces_row(self, request, tenant_a, field,
+                                                       fixture_name):
+        from apps.scm.forms import ComplianceRequirementForm
+        other = request.getfixturevalue(fixture_name)
+        assert other not in ComplianceRequirementForm(tenant=tenant_a).fields[field].queryset
+
+    def test_a_tenant_less_caller_gets_no_options_rather_than_everything(self, org_unit_a,
+                                                                         supplier_a, item_a):
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(tenant=None)
+        for name in ("org_unit", "party", "location", "item", "contract", "license", "document",
+                     "owner"):
+            assert list(form.fields[name].queryset) == [], name
+
+    def test_the_owner_dropdown_drops_deactivated_logins(self, tenant_a, admin_user, member_user):
+        """You cannot make somebody who has left answerable for a NEW obligation."""
+        from apps.scm.forms import ComplianceRequirementForm
+        member_user.is_active = False
+        member_user.save(update_fields=["is_active"])
+        offered = set(ComplianceRequirementForm(tenant=tenant_a).fields["owner"].queryset)
+        assert admin_user in offered and member_user not in offered
+
+    def test_an_ALREADY_STORED_owner_stays_selectable_after_being_deactivated(
+        self, tenant_a, compliance_requirement_a, admin_user,
+    ):
+        """Without the ``pk=`` leg the option vanishes and saving an unrelated edit would silently
+        null the FK."""
+        from apps.scm.forms import ComplianceRequirementForm
+        admin_user.is_active = False
+        admin_user.save(update_fields=["is_active"])
+        form = ComplianceRequirementForm(instance=compliance_requirement_a, tenant=tenant_a)
+        assert admin_user in form.fields["owner"].queryset
+
+    def test_the_link_out_dropdowns_are_NOT_narrowed_by_status(self, tenant_a, contract_a,
+                                                               draft_license_a):
+        """An obligation routinely OUTLIVES the paper that created it — a data-retention clause of an
+        expired contract still binds, and a revoked licence's closing conditions still need proving."""
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(tenant=tenant_a)
+        assert contract_a in form.fields["contract"].queryset
+        assert draft_license_a in form.fields["license"].queryset
+
+    def test_a_scheduled_obligation_with_no_first_due_date_is_a_field_error(self, tenant_a):
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(
+            _requirement_form_payload(frequency="quarterly", next_due_date=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "next_due_date" in form.errors
+
+    def test_a_not_applicable_row_without_a_reason_is_a_field_error(self, tenant_a):
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(
+            _requirement_form_payload(status="not_applicable", frequency="one_time",
+                                      next_due_date=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "not_applicable_reason" in form.errors
+
+    @pytest.mark.parametrize("value", ["-1", "3651", "4294967295", "abc", "²"])
+    def test_a_hostile_notice_window_is_a_field_error(self, tenant_a, value):
+        from apps.scm.forms import ComplianceRequirementForm
+        form = ComplianceRequirementForm(_requirement_form_payload(notice_days=value),
+                                         tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "notice_days" in form.errors, value
+
+
+# ================================================================ 4.12 · the proof-cycle form
+class TestComplianceCheckForm:
+    def test_a_minimal_payload_saves_against_its_parent(self, tenant_a,
+                                                         compliance_requirement_a):
+        from apps.scm.forms import ComplianceCheckForm
+        form = ComplianceCheckForm(_check_form_payload(), tenant=tenant_a,
+                                   requirement=compliance_requirement_a)
+        assert form.is_valid(), form.errors
+        check = form.save()
+        assert check.requirement_id == compliance_requirement_a.pk
+        assert check.performed_by_id is None    # stamped by the view, never by the form
+
+    def test_the_requirement_kwarg_stamps_the_parent_so_the_evidence_guard_runs(
+        self, tenant_a, compliance_requirement_a, evidence_document_b,
+    ):
+        """``ComplianceCheck`` has no tenant column at all, so its evidence guard reads
+        ``requirement.tenant_id`` — which is unset until something attaches the parent."""
+        from apps.scm.forms import ComplianceCheckForm
+        form = ComplianceCheckForm(_check_form_payload(evidence=str(evidence_document_b.pk)),
+                                   tenant=tenant_a, requirement=compliance_requirement_a)
+        assert form.instance.requirement_id == compliance_requirement_a.pk
+        assert not form.is_valid()
+        assert "evidence" in form.errors
+
+    def test_an_edit_is_never_repointed_at_another_parent(self, tenant_a, compliance_check_a,
+                                                           compliance_requirement_b):
+        """The stamp only fires when the relation is UNSET — an edit already carries its parent."""
+        from apps.scm.forms import ComplianceCheckForm
+        form = ComplianceCheckForm(instance=compliance_check_a, tenant=tenant_a,
+                                   requirement=compliance_requirement_b)
+        assert form.instance.requirement_id == compliance_check_a.requirement_id
+
+    def test_a_future_dated_check_is_a_field_error(self, tenant_a, compliance_requirement_a):
+        from apps.scm.forms import ComplianceCheckForm
+        form = ComplianceCheckForm(_check_form_payload(performed_on=_localdate_iso(1)),
+                                   tenant=tenant_a, requirement=compliance_requirement_a)
+        assert not form.is_valid()
+        assert "performed_on" in form.errors
+
+    def test_the_evidence_dropdown_is_scoped_and_empty_without_a_tenant(self, tenant_a,
+                                                                        evidence_document_a,
+                                                                        evidence_document_b):
+        from apps.scm.forms import ComplianceCheckForm
+        offered = set(ComplianceCheckForm(tenant=tenant_a).fields["evidence"].queryset)
+        assert evidence_document_a in offered and evidence_document_b not in offered
+        assert list(ComplianceCheckForm(tenant=None).fields["evidence"].queryset) == []
+
+    def test_the_due_date_stays_editable_so_a_back_filled_proof_can_name_its_cycle(self, tenant_a,
+                                                                                    compliance_requirement_a):
+        """Recording last quarter's certificate now must say which cycle it belongs to rather than
+        silently claiming the current one."""
+        from apps.scm.forms import ComplianceCheckForm
+        assert "due_date" in ComplianceCheckForm(tenant=tenant_a).fields
+        form = ComplianceCheckForm(_check_form_payload(due_date=_localdate_iso(-90)),
+                                   tenant=tenant_a, requirement=compliance_requirement_a)
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["due_date"] == _localdate_iso_date(-90)
+
+
+# ================================================================ 4.12 · the ESG scorecard form
+class TestSustainabilityAssessmentForm:
+    def test_a_minimal_payload_saves_and_derives_its_own_headline(self, tenant_a, supplier_a):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), environment_score="90"), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.number.startswith("ESG-")
+        assert obj.overall_score == 90 and obj.rating == "platinum"
+
+    def test_a_crafted_medal_in_the_POST_body_is_simply_ignored(self, tenant_a, supplier_a):
+        """``overall_score`` / ``rating`` are ``editable=False``, so they can never reach a whitelist
+        and the form machinery ignores a POST that names them."""
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), environment_score="10",
+                              overall_score="99", rating="platinum"), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.overall_score == 10 and obj.rating == "none"
+
+    def test_the_party_dropdown_offers_the_supply_side_only(self, tenant_a, supplier_a, vendor_a,
+                                                             carrier_party_a, customer_a):
+        """4.12 assesses the SUPPLY side; an ESG scorecard for someone we sell to is a different
+        question with a different owner."""
+        from apps.scm.forms import SustainabilityAssessmentForm
+        offered = set(SustainabilityAssessmentForm(tenant=tenant_a).fields["party"].queryset)
+        assert {supplier_a, vendor_a, carrier_party_a} <= offered
+        assert customer_a not in offered
+
+    def test_the_party_dropdown_is_the_same_set_the_list_page_filters_on(self, tenant_a,
+                                                                         supplier_a):
+        """The view imports the helper FROM the form module so the create select and the filter
+        dropdown are the same set by construction."""
+        from apps.scm.forms import SustainabilityAssessmentForm
+        from apps.scm.forms.ContractCompliance.SustainabilityAssessments import _assessable_parties
+        assert set(SustainabilityAssessmentForm(tenant=tenant_a).fields["party"].queryset) == set(
+            _assessable_parties(tenant_a))
+
+    def test_a_tenant_less_caller_gets_no_options_rather_than_everything(self, supplier_a,
+                                                                         evidence_document_a):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(tenant=None)
+        assert list(form.fields["party"].queryset) == []
+        assert list(form.fields["document"].queryset) == []
+
+    def test_the_tenant_is_stamped_so_the_models_guard_runs_on_create(self, tenant_a, supplier_b):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(_esg_form_payload(party=str(supplier_b.pk)),
+                                            tenant=tenant_a)
+        assert form.instance.tenant_id == tenant_a.pk
+        assert not form.is_valid()
+        assert "party" in form.errors
+
+    def test_a_third_party_rating_without_a_provider_is_a_field_error(self, tenant_a, supplier_a):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), source="third_party_rating"),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "provider" in form.errors
+
+    def test_a_validity_window_that_closes_before_it_opens_is_a_field_error(self, tenant_a,
+                                                                            supplier_a):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), assessment_date=_localdate_iso(0),
+                              valid_until=_localdate_iso(-1)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "valid_until" in form.errors
+
+    @pytest.mark.parametrize("value", ["101", "-1", "abc", "999999"])
+    def test_a_theme_outside_0_to_100_is_a_field_error(self, tenant_a, supplier_a, value):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), environment_score=value), tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "environment_score" in form.errors, value
+
+    @pytest.mark.parametrize("value", ["1999", "2101", "4294967295", "abc"])
+    def test_a_hostile_reporting_year_is_a_field_error(self, tenant_a, supplier_a, value):
+        """The carbon report groups BY this column, so an absurd value is a looping hazard
+        downstream, not a wrong number in one cell."""
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), carbon_reporting_year=value),
+            tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "carbon_reporting_year" in form.errors, value
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-1.000", "abc",
+                                        "99999999999999999999.999"])
+    def test_a_hostile_declared_scope_figure_is_a_field_error_never_a_500(self, tenant_a,
+                                                                          supplier_a, value):
+        from apps.scm.forms import SustainabilityAssessmentForm
+        form = SustainabilityAssessmentForm(
+            _esg_form_payload(party=str(supplier_a.pk), scope1_tco2e=value), tenant=tenant_a)
+        assert not form.is_valid(), value
+        assert "scope1_tco2e" in form.errors, value
+
+    def test_the_status_IS_authorable_here_unlike_its_two_412_siblings(self, tenant_a,
+                                                                       supplier_a):
+        """No verb route and no roller moves this one, so it is the assessor's own note about their
+        own work (the ``SupplierRiskAssessment.status`` precedent)."""
+        from apps.scm.forms import SustainabilityAssessmentForm
+        from apps.scm.models import SustainabilityAssessment
+        offered = {value for value, _ in
+                   SustainabilityAssessmentForm(tenant=None).fields["status"].choices if value}
+        assert offered == {value for value, _ in SustainabilityAssessment.STATUS_CHOICES}
