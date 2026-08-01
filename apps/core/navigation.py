@@ -913,6 +913,26 @@ LIVE_LINKS = {
         "Financial Reporting":   "scm:margin_analytics",      # bullet (margin + cost-to-serve — NOT the ledger)
         "Predictive Analytics":  "scm:disruption_risk",       # bullet (explainable composite + spike detection)
     },
+    # 4.12 Contract & Compliance Management. "Contract Repository" points at 4.2's EXISTING
+    # scm:contract_list rather than standing up a second contract table: SupplierContract already
+    # carries party, type (incl. nda/sla and now logistics), status, dates, value, currency, terms
+    # and the renewal window, and 4.12 adds only the amendment hierarchy + owner it was missing.
+    # Same precedent as 4.4 pointing its "Bin/Location Management" bullet at 4.3's scm:location_list.
+    #
+    # The carbon-footprint report is reached from a chip in the Sustainability list header rather
+    # than from a sixth key — 4.12 has five bullets in NavERP.md and the sidebar mirrors it exactly.
+    #
+    # 4.12 writes no StockMove and no JournalEntry. The tonne-km figure is an OPERATIONAL estimate
+    # from published per-mode factors and says so on its own page; statutory emissions disclosure is
+    # not SCM's to make. Audit findings and remediation stay with 4.9 (NonConformance/CapaAction) —
+    # a failed compliance check links out by reference rather than growing a second finding table.
+    "4.12": {
+        "Contract Repository":     "scm:contract_list",                  # bullet (4.2's list, extended)
+        "Compliance Tracking":     "scm:compliancerequirement_list",     # bullet (the obligation register)
+        "Trade Documentation":     "scm:tradedocument_list",             # bullet (BoL / CI / packing list)
+        "License Management":      "scm:tradelicense_list",              # bullet (register + balance + expiry)
+        "Sustainability Tracking": "scm:sustainabilityassessment_list",  # bullet (ESG + carbon report chip)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
