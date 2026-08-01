@@ -43,6 +43,34 @@ def apply_search(qs, q, fields):
     return qs
 
 
+#: Largest value a signed 64-bit integer column can hold. Django range-VALIDATES an IntegerField on
+#: a form, but it does not range-check a LOOKUP value: it hands the int straight to the driver, and
+#: the driver is where an over-range one dies (SQLite raises ``OverflowError: Python int too large
+#: to convert to SQLite INTEGER``). No row can ever have such a pk, so this is not a narrowing rule
+#: — it is the same L11 guard as ``isdecimal()``, one column-width further along.
+MAX_DB_INT = 9223372036854775807
+
+#: 9223372036854775807 is 19 digits. Checked before ``int()`` so a megabyte of digits in the query
+#: string costs a length test rather than an arbitrary-precision parse (and so this stays correct on
+#: Python 3.11+, where ``int()`` refuses a string over 4300 digits outright).
+_MAX_DB_INT_DIGITS = len(str(MAX_DB_INT))
+
+
+def as_db_int(value):
+    """A GET value as an int an integer column can actually hold, or ``None``.
+
+    L11, completed: ``?vendor=abc`` and ``?vendor=²`` are refused by ``isdecimal()``, but
+    ``?vendor=999999999999999999999`` passes it, converts cleanly, and then 500s inside the database
+    driver. All three are the same thing — a value that is not a pk — and all three must skip the
+    filter rather than raise on a URL anybody can type into the address bar.
+    """
+    value = (value or "").strip()
+    if not value.isdecimal() or len(value) > _MAX_DB_INT_DIGITS:
+        return None
+    number = int(value)
+    return number if number <= MAX_DB_INT else None
+
+
 def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_context=None, per_page=15):
     """``filters`` = iterable of ``(get_param, orm_lookup, is_int)`` tuples."""
     q = request.GET.get("q", "").strip()
@@ -57,8 +85,13 @@ def crud_list(request, qs, template, *, search_fields=(), filters=(), extra_cont
             # only category Nd, so `?vendor=²` passed this guard and then raised ValueError from
             # inside .filter() — an uncaught 500 on a value anyone can type into the address bar.
             # isdecimal() is precisely int()'s accepted set. ASCII digits are unaffected.
-            if val.isdecimal():  # L11: never pass non-numeric to an int FK filter
-                qs = qs.filter(**{lookup: int(val)})
+            #
+            # as_db_int() also refuses an OVER-RANGE value: `?vendor=999999999999999999999` is all
+            # decimal digits and converts fine, then raises OverflowError inside the driver. Same
+            # class of bug, one step further along. (L11: never pass a non-pk to an int FK filter.)
+            number = as_db_int(val)
+            if number is not None:
+                qs = qs.filter(**{lookup: number})
         else:
             # Map stringified booleans so BooleanField filters work — `.filter(x="False")` would
             # otherwise coerce via bool("False") == True and silently return every row.
