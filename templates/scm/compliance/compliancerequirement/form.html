@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — shared create/edit form for ComplianceRequirement.
+
+Renders apps/core/crud.py crud_create / crud_edit, called from
+apps/scm/views/ContractCompliance/ComplianceRequirements.py::compliancerequirement_create and
+::compliancerequirement_edit. Everything this page may read, and nothing else:
+  * form     — ComplianceRequirementForm (bound on POST)
+  * is_edit  — False on create, True on edit
+  * obj      — the ComplianceRequirement, ON THE EDIT PATH ONLY (crud_create does not pass it)
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to
+ComplianceRequirementForm's field list — a WHITELIST of exactly 23 names, all of which are below.
+A field added to the model and to that whitelist but not to a group here would never reach the POST
+and would fail validation with no visible cause. Deliberately absent from both, and so from this
+page: `tenant` (stamped by the form and by crud_create), `number` (auto-assigned in
+TenantNumbered.save), `last_checked_on` (a system stamp written only by record_check — a proof date
+somebody can type is not proof), `created_at` / `updated_at`.
+
+Every rule the operator notes state is enforced by ComplianceRequirement.clean(), never by this
+template — so the words somebody reads and the validation that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Compliance Requirement{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Compliance Requirement</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:compliancerequirement_list' %}">Compliance Requirements</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">One standing duty: what it is, what it binds, who is answerable and how often it must be re-proved. The register is only worth keeping if a requirement can surface <span class="fw-600">before</span> it is late, which is why a scheduled obligation is refused without a first due date.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the obligation is</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">source</span> is what creates the duty; the <span class="fw-600">framework</span> is the regime it belongs to, and it is what the compliance report groups by. Saying the duty comes out of a contract or a licence and then not naming one is refused — an unlinked claim is the same empty promise as an alert with no threshold. The <span class="fw-600">obligation category</span> is for a contract clause only; a pure regulatory row leaves it blank.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.source %}
+          {% include "partials/form_field.html" with field=form.framework %}
+          {% include "partials/form_field.html" with field=form.obligation_category %}
+          {% include "partials/form_field.html" with field=form.jurisdiction %}
+          {% include "partials/form_field.html" with field=form.source_reference %}
+          {% include "partials/form_field.html" with field=form.description %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What it applies to</h2></div>
+      <div class="card-body">
+        {% comment %}
+          Five typed pointers, not one generic id: a bare integer carries neither a tenant nor a
+          type, so it would happily survive pointing at a deleted or another workspace's row and this
+          obligation would silently narrow to the wrong subject.
+
+          The four selects are NOT narrowed by the chosen scope on the server. A create form is
+          unbound, so no scope has been picked yet, and narrowing would render four permanently empty
+          dropdowns nobody could complete. The script at the foot of this page hides the three that
+          do not apply as a courtesy only — with scripting off all four render, the form still
+          submits, and clean() still refuses the wrong combination. A narrowed dropdown was never the
+          guard.
+        {% endcomment %}
+        <p class="form-help" style="margin:0 0 .9rem;">Pick the scope first, then name the one subject it narrows to. The other three pointers must stay empty: a scope switched from Supplier to Location that leaves the old supplier behind is a stale filter quietly narrowing somebody else's register months later, so the save is refused rather than accepted. Subjects are offered even when they are <span class="fw-600">suspended or discontinued</span> — that a supplier is dormant today is often exactly why somebody is still tracking the duty.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.scope %}
+          <div data-scope-for="org_unit"{% if form.org_unit.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.org_unit %}
+          </div>
+          <div data-scope-for="party"{% if form.party.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.party %}
+          </div>
+          <div data-scope-for="location"{% if form.location.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.location %}
+          </div>
+          <div data-scope-for="item"{% if form.item.errors %} data-has-error="1"{% endif %}>
+            {% include "partials/form_field.html" with field=form.item %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Who owns it, and how often</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">A <span class="fw-600">monthly, quarterly, semi-annual, annual or biennial</span> obligation needs a first due date or it can never appear on the due queue — it would sit invisible until an auditor found it — so the save is refused without one. <span class="fw-600">One-time</span> and <span class="fw-600">on event</span> have no next cycle and need no date: a pass simply clears it rather than inventing one. The <span class="fw-600">notice window</span> is the staged 90/60/30 reminder pattern permit and certificate-of-insurance trackers use — it is what puts a row in the “due soon” bucket. Deactivated logins are dropped from the owner list, because making somebody who has left answerable is how an obligation ends up with nobody watching it; an owner already stored stays selectable so an unrelated edit cannot silently null them.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.owner %}
+          {% include "partials/form_field.html" with field=form.frequency %}
+          {% include "partials/form_field.html" with field=form.next_due_date %}
+          {% include "partials/form_field.html" with field=form.notice_days %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Where it comes from</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Link-outs, never a second copy of the source record: the agreement already lives in Supplier Contracts and the authorisation in Trade Licences, so an obligation that comes out of one simply points at it. Neither list is filtered to “active”, on purpose — an obligation routinely <span class="fw-600">outlives</span> the paper that created it: a data-retention clause of an expired contract still binds, and a revoked licence's closing conditions still need proving. Deleting either one leaves this requirement and its proof history standing; the evidence that we <em>were</em> compliant outlives the paper. The document is the standing policy, certificate or clause extract the duty rests on.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.contract %}
+          {% include "partials/form_field.html" with field=form.license %}
+          {% include "partials/form_field.html" with field=form.document %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Where it stands</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Status is a human decision here and stays one: opening the register rolls <span class="fw-600">applicable</span>, <span class="fw-600">in progress</span> and <span class="fw-600">overdue</span> forward from the due date, but never touches compliant, non-compliant, not-applicable or retired — a clock must not walk back a judgement. Choosing <span class="fw-600">Not Applicable</span> requires the reason: an unexplained assertion is not auditable, and the row is kept for the reason rather than for the row. Recording a check is done on the requirement's own page, not here.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.criticality %}
+          {% include "partials/form_field.html" with field=form.not_applicable_reason %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:compliancerequirement_detail' obj.pk %}{% else %}{% url 'scm:compliancerequirement_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    // Progressive enhancement ONLY. With scripting off all four scope pointers render, the form
+    // still submits, and ComplianceRequirement.clean() still refuses the wrong combination — a
+    // narrowed dropdown was never the guard (L39 §2), it is the courtesy. The scope VALUES and the
+    // pointer FIELD NAMES are the same four strings (org_unit / party / location / item), which is
+    // what lets data-scope-for be matched straight against the select's value; the fifth scope,
+    // "tenant", matches none of them and correctly hides all four.
+    var scopeSelect = document.getElementById("{{ form.scope.id_for_label }}");
+    var groups = Array.prototype.slice.call(document.querySelectorAll("[data-scope-for]"));
+    if (!scopeSelect || !groups.length) { return; }
+
+    function sync() {
+      var chosen = scopeSelect.value;
+      groups.forEach(function (group) {
+        // A group carrying a server-side error stays on screen whatever the scope now says —
+        // hiding it would hide the message that explains why the save was refused.
+        var keep = group.getAttribute("data-scope-for") === chosen
+          || group.hasAttribute("data-has-error");
+        group.style.display = keep ? "" : "none";
+        if (!keep) {
+          // Cleared, not merely hidden: clean() refuses a pointer that does not match the scope,
+          // so a display:none select still POSTing its old value would refuse the save on a field
+          // the operator cannot see.
+          var input = group.querySelector("select");
+          if (input) { input.value = ""; }
+        }
+      });
+    }
+
+    scopeSelect.addEventListener("change", function () {
+      // The scope has now been chosen by hand, so last attempt's errors no longer describe this
+      // form — stop pinning those groups open.
+      groups.forEach(function (group) { group.removeAttribute("data-has-error"); });
+      sync();
+    });
+    sync();
+  })();
+</script>
+{% endblock %}
