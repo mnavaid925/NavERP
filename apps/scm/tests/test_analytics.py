@@ -518,7 +518,14 @@ class TestCaptureSnapshots:
         from apps.scm.models import KpiSnapshot
         first = capture_snapshots(tenant_a)
         before = KpiSnapshot.objects.filter(tenant=tenant_a).count()
-        stamped = KpiSnapshot.objects.get(tenant=tenant_a).computed_at
+        # Back-dated with a direct UPDATE rather than read straight off the first capture. Windows'
+        # system clock ticks every ~15.6 ms and two back-to-back `timezone.now()` calls inside that
+        # tick return the IDENTICAL microsecond, so `second > first` compared two equal values and
+        # failed — every time this test ran on its own, and intermittently inside the full suite.
+        # The contract under test is "a re-run RE-STAMPS freshness", and forcing a known-old stamp
+        # is what measures that instead of measuring the clock.
+        stamped = timezone.now() - datetime.timedelta(hours=1)
+        KpiSnapshot.objects.filter(tenant=tenant_a).update(computed_at=stamped)
 
         second = capture_snapshots(tenant_a)
         assert KpiSnapshot.objects.filter(tenant=tenant_a).count() == before == 1
