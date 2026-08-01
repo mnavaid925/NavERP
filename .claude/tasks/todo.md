@@ -18397,3 +18397,45 @@ Carried over from `research-scm-4.12.md` so nothing is lost, plus what this plan
 
 (filled in at the end)
 
+
+---
+
+## Review — 4.12 Contract & Compliance Management (as built)
+
+**Shipped:** 6 models in `apps/scm/{models,forms,views,urls}/ContractCompliance/` (`TradeLicense` `LIC-`,
+`ComplianceRequirement` `CR-` + child `ComplianceCheck`, `TradeDocument` `TD-` + child `TradeDocumentLine`,
+`SustainabilityAssessment` `ESG-`), one computed report (`scm:carbon_footprint_report` + CSV), 13 templates under
+`templates/scm/compliance/`, migration `0020` (verified additive — zero `RemoveField`/`DeleteModel`/`RunPython`),
+`LIVE_LINKS["4.12"]`, admin registrations, and a `_seed_compliance_tenant` seeder block.
+
+**Verified:** `manage.py check` clean · `makemigrations` + `migrate` applied to `nav_erp` · `seed_scm` twice
+(second run a no-op) · all 20 4.12 pages render 200 with real seeded data and no template-comment leaks ·
+cross-tenant IDOR returns 404 on every detail/edit route · full `apps/scm` suite **0 failures**.
+
+**Plan deviations, and why:**
+1. *`scm.Item` trade-classification columns dropped* (plan already flagged them optional). `TradeDocumentLine`
+   snapshots `hs_code`/`country_of_origin`, which is the correct design for a filed declaration; adding master
+   columns would create a second source of truth, and the first "helpful" default copying master onto an existing
+   line would silently rewrite a filed customs declaration.
+2. *Report `by_month` sorts on the `YYYY-MM` dict key, not the label* — `"Apr 2026"` sorts above `"Jan 2026"`
+   alphabetically, which would have scrambled the trend line.
+
+**Two real defects found and fixed during the build:**
+- `apps/scm/views/ContractCompliance/Reports.py` used `q2()` without importing it (`views/_common.py` does not
+  re-export it; it lives in `models/_base.py`). Invisible until the seeder produced a shipment with both a weight
+  and a load distance, because every call site was short-circuited on an unmeasurable dataset — i.e. the report
+  would have 500'd for the first tenant with real data and nobody else.
+- **`test_views.py` had two module-level `_messages()` helpers.** The 4.11 one (returning a joined lowercase
+  *string*) was defined 4,600 lines below the original (returning a *list*), and Python resolves module-level
+  names at call time — so the later definition won for all 91 call sites, not just the 14 written against it. The
+  77 older ones then ran `any(<needle> in m for m in <a string>)`, which iterates **characters**, making every one
+  of those assertions trivially False. **74 tests across 4.9 and 4.3 were silently passing-as-failing.** Renamed
+  to `_message_blob`; `test_views.py` went 74 failed → 0.
+  *Lesson:* it was committed after a filtered `-k` run that exercised the 14 new call sites and none of the 77 it
+  broke. A new shared test helper needs a FULL-suite run before commit, not a subset run.
+
+**Deliberately out of scope** (recorded in the model docstrings): denied-party/sanctions screening, licence &
+document determination, AES/EDI/TRACES filing, per-form PDF layouts, clause library & supplier e-sign, AI
+extraction, a frozen carbon-entry ledger, multi-tier supply mapping, SDS/GHS chemical library. Parked to named
+siblings: landed cost → 4.18, compliance dashboards → 4.11, ESG *risk* → 4.2, audits/CAPA → 4.9, EDI → 4.19,
+GDPR engine → Module 13, statutory CSRD → `apps/accounting`.
