@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — one trade licence: its authority, its balance and what it papered.
+
+Renders apps/scm/views/ContractCompliance/TradeLicenses.py::tradelicense_detail. Everything this
+page may read, and nothing else:
+
+  obj                     the TradeLicense (select_related: holder_party, end_user_party, currency,
+                          document, approved_by — anything else on it is a query, so this page reads
+                          only those five FKs and the model's own properties)
+  days_to_expiry          int, NEGATIVE once past, None when no expiry is recorded
+  expiring_soon           bool — inside the licence's own renewal notice window
+  remaining_value         None when the licence has NO value cap (unlimited, not exhausted)
+  remaining_quantity      None when the licence has NO quantity cap
+  utilization_pct         0-100+, deliberately UNCLAMPED so an over-drawn licence reads over-drawn;
+                          None when nothing is capped
+  utilization_bar_pct     the same figure clamped to 0-100, for the bar's width ONLY; None likewise
+  is_chargeable           may this licence authorise new movement right now?
+  charge_block_reason     the sentence saying why not; empty when it can
+  documents               the newest window of TradeDocuments charged here (DB-sliced)
+  documents_truncated     True when there are more than the panel shows
+  document_count          every document under this licence
+  charging_count          only the issued/submitted/accepted ones — the balance's evidence
+  requirements            ComplianceRequirements pointing at this licence (DB-sliced)
+  requirements_truncated  True when there are more than the panel shows
+  can_submit              status is draft
+  can_approve             status is draft / applied / approved
+  can_revoke              status is anything but revoked
+
+MAX_PANEL_ROWS is NOT in the context, so the panel caps are described as "the window shown" rather
+than quoted as a number this page cannot see.
+
+Delete is gated on document_count == 0 — exactly the condition tradelicense_delete enforces, since
+TradeDocument.license is PROTECT. Offering a one-click failure is worse than not offering it.
+Approve / Revoke / Recompute / Delete are @tenant_admin_required, so all four are wrapped in the
+superuser-or-tenant-admin gate; Submit and Edit are @login_required and are not.
+
+Badge colours come from TradeLicense.STATUS_CSS via obj.status_css and TradeDocument.STATUS_CSS via
+doc.status_css — one place a status becomes a class. badge-success / badge-warning / badge-danger
+DO NOT EXIST in theme.css and render unstyled (L33).
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.title }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        {% if is_chargeable %}<span class="badge badge-green">Can authorise movement</span>{% else %}<span class="badge badge-muted">Cannot authorise movement</span>{% endif %}
+        {% if expiring_soon %}<span class="badge badge-amber">Renewal window</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:tradelicense_list' %}">Trade Licences</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">The authority's grant, as granted — its number, its dates, its scope and its two ceilings. The balance below is drawn down by every document issued under it, and is re-derived from those documents rather than typed. Nothing on this page posts a stock movement or drafts an accounting document.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:tradedocument_list' %}?license={{ obj.pk }}" class="btn btn-outline"><i data-lucide="file-text"></i> Documents under this licence</a>
+      <a href="{% url 'scm:tradelicense_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Every figure in this grid is tested with `is not None`, never for truthiness. A licence with 0
+    remaining, 0 used or 0% utilised is a real, and quite different, fact from a licence with no cap
+    at all — and the blank one is the one that must say "Unlimited" rather than a confident zero.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="shield-check"></i></div>
+      <div class="stat-value">{{ obj.get_status_display }}</div>
+      <div class="stat-label">{% if is_chargeable %}New movement may be authorised{% else %}No new movement{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">
+        {% if days_to_expiry is not None %}
+          {% if days_to_expiry < 0 %}Lapsed{% elif days_to_expiry == 0 %}Today{% else %}{{ days_to_expiry }}{% endif %}
+        {% else %}—{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if days_to_expiry is None %}No expiry recorded
+        {% elif days_to_expiry < 0 %}Expired {{ obj.expiry_date|date:"M d, Y" }}
+        {% elif days_to_expiry == 0 %}Lapses today
+        {% else %}Day{{ days_to_expiry|pluralize }} until {{ obj.expiry_date|date:"M d, Y" }}{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{% if remaining_value is not None %}{{ remaining_value|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if remaining_value is not None %}
+          Value left{% if obj.currency %} · {{ obj.currency.code }}{% endif %}{% if remaining_value < 0 %} <span class="badge badge-red">Over-drawn</span>{% endif %}
+        {% else %}
+          <span class="badge badge-muted">No value cap</span> unlimited in value, not exhausted
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{% if utilization_pct is not None %}{{ utilization_pct|floatformat:2 }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if utilization_pct is not None %}Consumed across {{ charging_count }} charging document{{ charging_count|pluralize }}
+        {% else %}Nothing is capped, so nothing is measurable{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if not is_chargeable and charge_block_reason %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Why this licence cannot authorise new movement</h2>
+        <span class="badge badge-red">Refused at issue time</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">{{ charge_block_reason }}</p>
+        <p class="text-muted">This is the same question the issue route asks before it charges anything, asked here with no charge. A refusal is never clamped down to the headroom and let through: a shipment that went out partly unauthorised while the register still looked healthy is precisely the failure a licence balance exists to prevent.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The balance</h2>
+      <span class="badge badge-slate">{{ charging_count }} of {{ document_count }} document{{ document_count|pluralize }} charging</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        utilization_bar_pct is the CLAMPED figure and is used for the bar's width and nothing else —
+        utilization_pct above is passed unclamped on purpose, because an over-drawn licence has to
+        read as over-drawn rather than as a tidy full bar. None means there is nothing to draw at
+        all, which is not the same as 0%.
+      {% endcomment %}
+      {% if utilization_bar_pct is not None %}
+        <div class="progress" style="max-width:520px;"><div class="progress-bar" style="width:{{ utilization_bar_pct }}%;"></div></div>
+        <div class="form-help">{{ utilization_pct|floatformat:2 }}% of the authorised ceiling consumed{% if utilization_pct > 100 %} — <span class="fw-600">more has been papered under this licence than it authorises</span>{% endif %}</div>
+      {% else %}
+        <p class="text-muted"><span class="badge badge-muted">Unlimited</span> This licence carries neither a value nor a quantity ceiling, so there is no balance to draw down and nothing to measure a percentage against. A blank ceiling means unlimited in that dimension — never zero.</p>
+      {% endif %}
+
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Authorised value</dt><dd class="mono">{% if obj.authorized_value is not None %}{{ obj.authorized_value|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}{% else %}<span class="badge badge-muted">No cap</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Used value</dt><dd class="mono">{{ obj.used_value|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Remaining value</dt><dd class="mono">
+          {% if remaining_value is not None %}
+            {% if remaining_value < 0 %}<span class="badge badge-red">{{ remaining_value|floatformat:2 }}</span>{% else %}{{ remaining_value|floatformat:2 }}{% endif %}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Authorised quantity</dt><dd class="mono">{% if obj.authorized_quantity is not None %}{{ obj.authorized_quantity|floatformat:4 }}{% else %}<span class="badge badge-muted">No cap</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Used quantity</dt><dd class="mono">{{ obj.used_quantity|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Remaining quantity</dt><dd class="mono">
+          {% if remaining_quantity is not None %}
+            {% if remaining_quantity < 0 %}<span class="badge badge-red">{{ remaining_quantity|floatformat:4 }}</span>{% else %}{{ remaining_quantity|floatformat:4 }}{% endif %}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }} <span class="text-muted">{{ obj.currency.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Utilisation</dt><dd>{% if utilization_pct is not None %}{{ utilization_pct|floatformat:2 }}%{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        The two <span class="fw-600">used</span> figures are the only stored derived numbers on this record, and they are a cache with a stated invalidation path: every writer of a charging document re-derives them, and the <span class="fw-600">Recompute</span> action below re-derives them again from the documents themselves, so drift can never become permanent. Everything computed <em>from</em> them — remaining, utilisation — is recomputed on read, because a stored "remaining" would be a second copy of the same fact that could disagree with the first. Only <span class="fw-600">issued, submitted and accepted</span> documents count; a draft or a voided one spends nothing, which is why {{ document_count }} document{{ document_count|pluralize }} can sit under a licence that only {{ charging_count }} of them charge.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The authorisation</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Authority's number</dt><dd class="mono">{{ obj.license_number }}</dd></div>
+        <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ obj.get_license_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Issuing authority</dt><dd>{{ obj.issuing_authority|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Issuing country</dt><dd>{{ obj.issuing_country|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Holder</dt><dd>{% if obj.holder_party %}{{ obj.holder_party.name }}{% else %}<span class="text-muted">Us</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Named end user</dt><dd>{% if obj.end_user_party %}{{ obj.end_user_party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Applied for</dt><dd>{{ obj.application_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Issued</dt><dd>{{ obj.issue_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Expires</dt><dd>{% if obj.expiry_date %}{{ obj.expiry_date|date:"M d, Y" }}{% else %}<span class="badge badge-muted">No expiry</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Renewal notice</dt><dd>{{ obj.renewal_notice_days }} day{{ obj.renewal_notice_days|pluralize }} before it lapses</dd></div>
+        <div class="detail-item"><dt>Approved</dt><dd>
+          {% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% if obj.approved_by %} <span class="text-muted">· {{ obj.approved_by.get_full_name|default:obj.approved_by.get_username }}</span>{% endif %}{% else %}<span class="text-muted">Not approved</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Revoked</dt><dd>{% if obj.revoked_at %}<span class="badge badge-red">{{ obj.revoked_at|date:"M d, Y H:i" }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Licence document</dt><dd>{% if obj.document %}{{ obj.document.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Registered</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.revocation_reason %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="badge badge-red">Revocation reason</span> {{ obj.revocation_reason }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What it covers</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>ECCN / USML / HS</dt><dd class="mono">{{ obj.eccn_or_hs|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Approved destinations</dt><dd>{{ obj.destination_countries|default:"—" }}</dd></div>
+      </dl>
+      {% if obj.commodity_scope %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Commodity scope.</span> {{ obj.commodity_scope }}</p>{% endif %}
+      {% if obj.conditions %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Conditions and provisos.</span> {{ obj.conditions }}</p>{% endif %}
+      {% if obj.notes %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.notes }}</p>{% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Scope is deliberately free text: this build carries no HS/ECCN master and no country-control content, and a dropdown over data we do not have would be a fake feed with a real audit trail hanging off it. Any proviso here that needs <span class="fw-600">periodic proof</span> belongs in the obligation register below, not in this box — 4.12 has exactly one recurring-obligation engine, not two.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Documents issued under this licence</h2>
+      <a href="{% url 'scm:tradedocument_list' %}?license={{ obj.pk }}" class="btn btn-outline"><i data-lucide="file-text"></i> Open in documents</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Document</th><th>Type</th><th>Consignee</th><th>Issued</th><th>Declared value</th><th>Charging</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for doc in documents %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:tradedocument_detail' doc.pk %}" class="fw-600 mono">{{ doc.number }}</a>
+                {% if doc.document_number %}<div class="form-help mono">{{ doc.document_number }}</div>{% endif %}
+                {% if doc.shipment %}<div class="form-help"><a href="{% url 'scm:shipment_detail' doc.shipment.pk %}">{{ doc.shipment.number }}</a></div>{% endif %}
+              </td>
+              <td>{{ doc.get_doc_type_display }}<div class="form-help">{{ doc.get_direction_display }}</div></td>
+              <td>{% if doc.consignee_party %}{{ doc.consignee_party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap">{{ doc.issue_date|date:"M d, Y"|default:"—" }}</td>
+              <td class="nowrap mono">{{ doc.declared_value|floatformat:2 }}{% if doc.currency %} <span class="text-muted">{{ doc.currency.code }}</span>{% endif %}</td>
+              {% comment %}
+                is_charging reads TradeDocument.CHARGING_STATUSES — the same tuple
+                TradeLicense.recompute_usage() sums over. The column and the sentence explaining the
+                column therefore cannot encode two different rules.
+              {% endcomment %}
+              <td>{% if doc.is_charging %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td><span class="badge {{ doc.status_css }}">{{ doc.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:tradedocument_detail' doc.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="file-text"></i>
+                  <h3>Nothing has been papered under this licence</h3>
+                  <p>Its balance is untouched. Raise a trade document and point it at this licence — issuing it is what charges the balance and what makes this licence's audit trail.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if documents_truncated %}
+        Showing the newest {{ documents|length }} of <span class="fw-600">{{ document_count }}</span> — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. Open the full list to see the rest.
+      {% else %}
+        {{ document_count }} document{{ document_count|pluralize }} in total, {{ charging_count }} of them currently charging the balance.
+      {% endif %}
+      Deleting this licence is <span class="fw-600">refused</span> while any of these exist: the record of what moved under a licence is the evidence this register exists to keep, and losing it must not be one click away. Revoke it instead — a revoked licence stops authorising new movement and keeps every one of these rows.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Obligations this licence creates</h2>
+      <a href="{% url 'scm:compliancerequirement_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> All obligations</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requirement</th><th>Framework</th><th>Owner</th><th>Next due</th><th>Criticality</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for req in requirements %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:compliancerequirement_detail' req.pk %}" class="fw-600 mono">{{ req.number }}</a>
+                <div class="text-muted">{{ req.title }}</div>
+              </td>
+              <td>{{ req.get_framework_display }}<div class="form-help">{{ req.get_frequency_display }}</div></td>
+              <td>{% if req.owner %}{{ req.owner.get_full_name|default:req.owner.get_username }}{% else %}<span class="text-muted">Nobody answerable</span>{% endif %}</td>
+              <td class="nowrap">
+                {% if req.next_due_date %}
+                  {{ req.next_due_date|date:"M d, Y" }}
+                  {% if req.is_overdue %}<div class="form-help"><span class="badge badge-red">Overdue</span></div>
+                  {% elif req.is_due_soon %}<div class="form-help"><span class="badge badge-amber">Due soon</span></div>{% endif %}
+                {% else %}<span class="text-muted">Unscheduled</span>{% endif %}
+              </td>
+              <td><span class="badge {{ req.criticality_css }}">{{ req.get_criticality_display }}</span></td>
+              <td><span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:compliancerequirement_detail' req.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="clipboard-check"></i>
+                  <h3>No standing obligations point here</h3>
+                  <p>A licence proviso that has to be re-proved on a cadence — an RWA status, an annual report to the authority, a condition on the grant — belongs in the obligation register with this licence named as its source. Recording it there is what puts it on the due queue.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if requirements_truncated %}
+        Showing a window of the obligations pointing at this licence — the cap is applied by the database. Open the obligation register to see them all.
+      {% endif %}
+      These survive this licence being deleted and merely lose the link, because the evidence that we <em>were</em> compliant outlives the paper that created the duty. That is a real consequence of pressing Delete, so it is said here rather than discovered afterwards.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% comment %}
+        Each verb is rendered only when its transition is legal for the CURRENT status — can_submit /
+        can_approve / can_revoke are read straight off the module constants the views themselves
+        guard on (SUBMITTABLE_STATUSES / APPROVABLE_STATUSES), so a button and the route behind it
+        cannot disagree about whether an action is available. All four routes are POST-only; a GET is
+        a 405, never a silent state change.
+
+        Submit is @login_required — lodging an application commits nothing and authorises nothing —
+        so it is deliberately NOT wrapped in the admin gate. Approve, Revoke and Recompute are
+        @tenant_admin_required and are.
+      {% endcomment %}
+      {% if can_submit %}
+        <form method="post" action="{% url 'scm:tradelicense_submit' obj.pk %}" onsubmit="return confirm('Mark {{ obj.number }} as applied for? This records that the application went to the authority — nothing is transmitted and nothing is filed.');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Mark as applied for</button>
+          <div class="form-help">Records the lodgement and, where it does not invert the application → issue → expiry ladder, stamps today as the application date. The transport is deliberately deferred: 4.12 records the fact, it does not file.</div>
+        </form>
+      {% endif %}
+
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if can_approve %}
+          <form method="post" action="{% url 'scm:tradelicense_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }} and put it in force? From this point it can authorise new movement and documents may be issued against its balance.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Approve and put in force</button>
+            <div class="form-help">Lands on <span class="fw-600">active</span> and then lets the dates have the last word — a licence approved after it lapsed reads as expired, not active. It is never parked at "approved": that status authorises nothing and no date roll ever leaves it, so a licence left there would be a granted authority nobody could use.</div>
+          </form>
+        {% endif %}
+
+        {% if can_revoke %}
+          <form method="post" action="{% url 'scm:tradelicense_revoke' obj.pk %}" onsubmit="return confirm('Revoke {{ obj.number }}? It stops authorising new movement immediately. Everything already issued under it stays charged to it — the balance is the record of what was authorised at the time and is not re-derived downward.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_revocation_reason">Reason for revoking <span class="req">*</span></label>
+              <textarea name="revocation_reason" id="id_revocation_reason" class="form-textarea" rows="3" required></textarea>
+              <div class="form-help">Required in the browser as a courtesy; the view refuses a blank reason with a message either way. This sentence is the record of why the authority was withdrawn, and it is what an auditor reads.</div>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Revoke licence</button>
+            <div class="form-help">Revoking does not unwind the balance: what was authorised was authorised, and re-deriving it downward would erase the evidence that the movement happened. What it stops is <span class="fw-600">new</span> movement.</div>
+          </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'scm:tradelicense_recompute' obj.pk %}" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Recompute balance from documents</button>
+          <div class="form-help">Re-derives the used value and used quantity from the documents actually charged here. This is the stated invalidation path that lets those two be columns at all — it fixes drift from a direct database edit, an import or a bug since fixed. Finding nothing to change is the normal, healthy case and writes no audit row.</div>
+        </form>
+      {% else %}
+        <p class="text-muted">Approving, revoking and recomputing the balance decide what this workspace is allowed to ship, so all three are workspace-administrator actions. Ask an administrator, or record the application above.</p>
+      {% endif %}
+
+      <div class="form-actions">
+        <a href="{% url 'scm:tradelicense_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% comment %}
+          Same gate as tradelicense_delete's @tenant_admin_required, AND the same document check the
+          view enforces: TradeDocument.license is PROTECT, so a licence that papered anything cannot
+          be deleted. Offering a one-click failure is worse than not offering it, so the button is
+          replaced by the sentence explaining what to do instead. Only the system-generated LIC-
+          number goes into the confirm string — never the title, which is user-typed and whose
+          apostrophe would break the dialog.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if document_count == 0 %}
+            <form method="post" action="{% url 'scm:tradelicense_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Nothing has been issued under it, so nothing is lost from the movement record. Compliance requirements pointing at it survive with their proof history and simply lose the link.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:tradelicense_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if document_count %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-muted">Delete unavailable</span> {{ document_count }} trade document{{ document_count|pluralize }} {{ document_count|pluralize:"was,were" }} issued under this licence, and that record is the evidence this register exists to keep. Revoke it instead — a revoked licence stops authorising new movement and keeps its whole history.
+          </p>
+        {% endif %}
+      {% endif %}
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        The licence stays <span class="fw-600">editable at any status</span>, deliberately and narrowly: this record tracks an external authority's grant, and authorities amend, extend and re-scope what they granted. What an edit cannot do is move the licence — the status, the four decision stamps and both usage counters are all off the form, so editing can only correct what the licence <em>says</em>, never what it has authorised or how much of it is left.
+      </p>
+    </div>
+  </div>
+{% endblock %}
