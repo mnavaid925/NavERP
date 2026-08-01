@@ -57,7 +57,7 @@
               <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
               <td><span class="badge badge-slate">{{ obj.get_contract_type_display }}</span>{% if obj.parent_contract %} <span class="badge badge-info">Amendment</span>{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
-              <td><span class="badge badge-{% if obj.status == 'active' or obj.status == 'renewed' %}green{% elif obj.status == 'expiring' %}amber{% elif obj.status == 'expired' or obj.status == 'terminated' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.end_date|date:"M d, Y"|default:"—" }}</td>
               <td>{{ obj.contract_value|floatformat:2 }}</td>
               <td>
@@ -67,7 +67,7 @@
                     <a href="{% url 'scm:contract_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                   {% endif %}
                   {% if obj.status == 'draft' %}
-                    <form method="post" action="{% url 'scm:contract_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');">
+                    <form method="post" action="{% url 'scm:contract_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This cannot be undone.');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
                   {% endif %}
