@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">
         {{ obj.number }}
-        <span class="badge badge-{% if obj.status == 'active' or obj.status == 'renewed' %}green{% elif obj.status == 'expiring' %}amber{% elif obj.status == 'expired' or obj.status == 'terminated' %}red{% elif obj.status == 'draft' %}slate{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
       </h1>
       <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:contract_list' %}">Supplier Contracts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
     </div>
@@ -71,19 +71,22 @@
     <div class="card-header"><h2 class="card-title">Amendments &amp; SOWs</h2></div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Status</th><th>Start</th><th>End</th></tr></thead>
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Status</th><th>Start</th><th>End</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for a in amendments %}
             <tr>
               <td><a href="{% url 'scm:contract_detail' a.pk %}">{{ a.number }}</a></td>
               <td>{{ a.title }}</td>
               <td><span class="badge badge-slate">{{ a.get_contract_type_display }}</span></td>
-              <td><span class="badge badge-{% if a.status == 'active' or a.status == 'renewed' %}green{% elif a.status == 'expiring' %}amber{% elif a.status == 'expired' or a.status == 'terminated' %}red{% elif a.status == 'draft' %}slate{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
+              <td><span class="badge {{ a.status_css }}">{{ a.get_status_display }}</span></td>
               <td>{{ a.start_date|date:"M d, Y"|default:"—" }}</td>
               <td>{{ a.end_date|date:"M d, Y"|default:"—" }}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'scm:contract_detail' a.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+              </div></td>
             </tr>
           {% empty %}
-            <tr><td colspan="6">
+            <tr><td colspan="7">
               <div class="empty-state">
                 <i data-lucide="git-branch"></i>
                 <h3>No amendments</h3>
@@ -120,7 +123,7 @@
         {% endif %}
 
         {% if obj.status == 'draft' %}
-          <form method="post" action="{% url 'scm:contract_delete' obj.pk %}" onsubmit="return confirm('Delete this contract?');">
+          <form method="post" action="{% url 'scm:contract_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This cannot be undone.');">
             {% csrf_token %}
             <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
           </form>
