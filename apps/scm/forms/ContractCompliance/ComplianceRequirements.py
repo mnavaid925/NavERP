@@ -74,6 +74,13 @@ def _obligation_subject_parties(tenant):
     return (_supplier_parties(tenant) | _carrier_parties(tenant)).distinct()
 
 
+#: The statuses a HUMAN may set directly. `compliant` / `non_compliant` are the PROJECTION of a
+#: recorded ComplianceCheck (record_check()), and `overdue` belongs to the date roller — none of the
+#: three is an opinion somebody types, or the register stops being evidence and becomes a claim.
+#: `not_applicable` and `retired` stay authorable because the form is their ONLY path.
+_AUTHORABLE_STATUSES = ("applicable", "in_progress", "not_applicable", "retired")
+
+
 class ComplianceRequirementForm(TenantModelForm):
     """One standing obligation: what it is, what it binds, who owns it and how often it is re-proved."""
 
@@ -102,6 +109,18 @@ class ComplianceRequirementForm(TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Narrowing `.choices` is ENFORCEMENT, not decoration: ChoiceField.validate refuses a value
+        # outside the list, so a crafted POST of `status=compliant` is rejected rather than hidden.
+        # Without this any logged-in member could mark an overdue obligation compliant with zero
+        # evidence, which drops it out of OPEN_STATUSES (so it leaves the overdue chip and the due
+        # queue) and — because `compliant` is not in AUTO_STATUSES — the roller never walks it back.
+        # The STORED value stays selectable so editing a row record_check() already moved does not
+        # blank the field on save.
+        if "status" in self.fields:
+            allowed = set(_AUTHORABLE_STATUSES) | {self.instance.status}
+            self.fields["status"].choices = [
+                (v, label) for v, label in ComplianceRequirement.STATUS_CHOICES if v in allowed]
 
         # THE STAMP. See the module docstring: without it, `ComplianceRequirement.clean()`'s
         # cross-tenant FK guard is skipped on create, which is the one path a crafted POST uses.
