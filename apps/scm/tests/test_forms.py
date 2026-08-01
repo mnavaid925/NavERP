@@ -4700,3 +4700,534 @@ class TestReturnsCrossTenantFormScoping:
         for field in ("supplier", "item", "return_authorization", "nonconformance",
                       "goods_receipt"):
             assert field in form.errors, field
+
+
+# =================================================================================================
+# SCM 4.11 Supply Chain Analytics — the two ModelForms and the three triage payloads.
+#
+# ``KpiTarget`` is the ONE row in 4.11 a human authors (everything else on the five report pages is
+# computed live out of 4.1-4.10), so this is the sub-module's only real create/edit screen — and
+# every rule it enforces is registry-driven: the legal scopes, the band direction and the required
+# parameters all come out of ``METRIC_META``, so a new metric inherits the validation without a line
+# changing. What is tested here is that those rules actually fire through the FORM, that the four
+# scope dropdowns are usable at all (L39 §2), and that no system column is reachable from either
+# form (L20/L22).
+# =================================================================================================
+def _target_data(**overrides):
+    """A complete, VALID ``KpiTargetForm`` payload — every declared field present, blank if optional.
+
+    A ModelForm treats an ABSENT field exactly like an empty one, so a payload that quietly omits
+    ``display_order`` or ``min_impact_value`` (both non-null with a model default, and therefore
+    REQUIRED on the form) would fail for a reason the test was not written to measure.
+    """
+    data = {
+        "metric": "inv_turnover", "name": "Turnover goal", "scope": "all",
+        "scope_category": "", "scope_location": "", "scope_carrier": "", "scope_vendor": "",
+        "period_grain": "month", "date_range": "last_90", "direction": "",
+        "target_value": "6.00", "warning_threshold": "4.00", "critical_threshold": "2.00",
+        "parameter_days": "", "parameter_pct": "",
+        "min_impact_value": "0.00", "severity": "warning", "owner": "",
+        "display_order": "0", "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _alert_data(**overrides):
+    """A complete, VALID ``SupplyChainAlertForm`` payload."""
+    data = {
+        "alert_type": "dead_stock", "metric": "", "kpi_target": "", "title": "Dead stock spotted",
+        "severity": "warning", "observed_value": "", "threshold_value": "",
+        "impact_value": "100.00", "dimension_label": "", "item": "", "party": "", "carrier": "",
+        "shipment": "", "purchase_order": "", "location": "", "assigned_to": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+# ================================================================ 4.11 · the KpiTarget form is usable
+class TestKpiTargetFormIsUsable:
+    """L39 §2 — a dropdown narrowed by a key the CREATE form does not have yet is permanently empty.
+
+    The four scope selects are deliberately NOT filtered by ``scope``: the create form is unbound,
+    so no scope has been chosen, and "only show carriers when scope == carrier" renders four empty
+    selects on a screen that can then never be completed (the 4.5 ``ship_to_address`` failure). The
+    wrong combination is refused by ``KpiTarget.clean()`` instead — which also holds against a
+    crafted POST, as a narrowed dropdown never did.
+    """
+
+    def test_the_create_form_is_unbound(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(tenant=tenant_a)
+        assert not form.is_bound
+        assert form.instance.pk is None
+        # The tenant is stamped on the unsaved instance so clean()'s cross-tenant scope guard is
+        # not dead code on the one path a crafted POST would exercise (crud_create assigns the
+        # tenant only AFTER is_valid()).
+        assert form.instance.tenant_id == tenant_a.pk
+
+    def test_all_four_scope_dropdowns_are_populated_on_the_unbound_create_form(
+        self, tenant_a, category_a, location_a, carrier_a, supplier_a,
+    ):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(tenant=tenant_a)
+        assert list(form.fields["scope_category"].queryset) == [category_a]
+        assert location_a in form.fields["scope_location"].queryset
+        assert list(form.fields["scope_carrier"].queryset) == [carrier_a]
+        assert supplier_a in form.fields["scope_vendor"].queryset
+
+    def test_each_scope_dropdown_is_scoped_to_the_tenant(self, tenant_a, category_a, category_b,
+                                                         location_a, location_b, carrier_a,
+                                                         carrier_b, supplier_a, supplier_b):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(tenant=tenant_a)
+        assert category_b not in form.fields["scope_category"].queryset
+        assert location_b not in form.fields["scope_location"].queryset
+        assert carrier_b not in form.fields["scope_carrier"].queryset
+        assert supplier_b not in form.fields["scope_vendor"].queryset
+
+    def test_a_tenant_less_form_offers_nothing_rather_than_every_workspace(self, category_a,
+                                                                           carrier_a, supplier_a):
+        """``TenantModelForm`` leaves an FK queryset UNSCOPED when tenant is None; the whole table
+        is not an acceptable default for a superuser's dropdown."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(tenant=None)
+        for name in ("scope_category", "scope_location", "scope_carrier", "scope_vendor", "owner"):
+            assert list(form.fields[name].queryset) == [], name
+
+    def test_the_vendor_dropdown_offers_supplier_AND_vendor_roles_but_not_a_customer(
+        self, tenant_a, supplier_a, vendor_a, non_supplier_party_a, customer_a,
+    ):
+        """Same helper ``PurchaseOrderForm.vendor`` uses, so the buyer and the analyst are looking
+        at one supplier list."""
+        from apps.scm.forms import KpiTargetForm
+        parties = list(KpiTargetForm(tenant=tenant_a).fields["scope_vendor"].queryset)
+        assert supplier_a in parties and vendor_a in parties
+        assert non_supplier_party_a not in parties and customer_a not in parties
+
+    def test_the_owner_dropdown_drops_deactivated_logins_but_keeps_the_stored_one(self, tenant_a,
+                                                                                   admin_user,
+                                                                                   member_user):
+        """Handing a number to a disabled account is how a target ends up with nobody watching it —
+        but dropping the option would silently NULL the FK on the next unrelated edit."""
+        from apps.scm.forms import KpiTargetForm
+        from apps.scm.models import KpiTarget
+        target = KpiTarget.objects.create(tenant=tenant_a, metric="inv_turnover", name="Owned",
+                                          scope="all", owner=member_user)
+        member_user.is_active = False
+        member_user.save(update_fields=["is_active"])
+
+        create_form = KpiTargetForm(tenant=tenant_a)
+        assert member_user not in create_form.fields["owner"].queryset
+        assert admin_user in create_form.fields["owner"].queryset
+
+        edit_form = KpiTargetForm(instance=target, tenant=tenant_a)
+        assert member_user in edit_form.fields["owner"].queryset
+
+    def test_a_valid_payload_saves(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        target = form.save()
+        assert target.tenant_id == tenant_a.pk
+        assert target.number.startswith("KPI-")
+        assert target.direction == "higher_is_better"     # inherited from the registry on save()
+
+
+# ================================================================ 4.11 · the KpiTarget form refuses
+class TestKpiTargetFormValidation:
+    """Every rule below lives in ``KpiTarget.clean()`` and is driven by ``METRIC_META`` — nothing is
+    re-implemented on the form. These tests assert the rules reach a user through it."""
+
+    def test_alerting_with_no_threshold_is_refused(self, tenant_a):
+        """L39 — the conjunction that can never be true. Alerting fires on the two thresholds, so a
+        target with neither is a tick-box that does nothing, which is worse than no tick-box because
+        the operator believes they are covered."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(is_alerting="on", warning_threshold="",
+                                          critical_threshold=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "is_alerting" in form.errors
+
+    def test_alerting_with_only_one_threshold_is_allowed(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(is_alerting="on", warning_threshold="4.00",
+                                          critical_threshold=""), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_a_scope_the_metric_cannot_be_narrowed_to_is_refused(self, tenant_a, category_a):
+        """A carrier scope on a dead-stock metric is an empty conjunction: the page would render 0
+        forever and look like good news."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(metric="otd_pct", name="OTD by category",
+                                          scope="category", scope_category=str(category_a.pk),
+                                          target_value="98.00", warning_threshold="95.00",
+                                          critical_threshold="90.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "scope" in form.errors
+        assert "only computable at" in " ".join(form.errors["scope"])
+
+    def test_a_scoped_target_that_does_not_say_WHICH_one_is_refused(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(scope="category"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "scope_category" in form.errors
+
+    def test_a_pointer_the_scope_would_never_read_is_refused(self, tenant_a, category_a):
+        """A scope switched from Category to Network that leaves the old pointer behind is a stale
+        filter quietly narrowing somebody else's metric months later."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(scope="all", scope_category=str(category_a.pk)),
+                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "scope_category" in form.errors
+
+    def test_bands_running_the_wrong_way_for_a_higher_is_better_metric_are_refused(self, tenant_a):
+        """``inv_turnover`` climbs towards its goal, so the bands run target >= warning >= critical."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(target_value="2.00", warning_threshold="4.00",
+                                          critical_threshold="6.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "warning_threshold" in form.errors
+        assert "wrong side" in " ".join(form.errors["warning_threshold"])
+
+    def test_bands_running_the_wrong_way_for_a_lower_is_better_metric_are_refused(self, tenant_a):
+        """``inv_days_on_hand`` climbs AWAY from its goal, so the bands run target <= warning <=
+        critical — the same payload that is legal above is illegal here."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(metric="inv_days_on_hand", name="Days on hand",
+                                          target_value="30.00", warning_threshold="20.00",
+                                          critical_threshold="10.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "warning_threshold" in form.errors
+
+        ok = KpiTargetForm(_target_data(metric="inv_days_on_hand", name="Days on hand",
+                                        target_value="30.00", warning_threshold="45.00",
+                                        critical_threshold="60.00"), tenant=tenant_a)
+        assert ok.is_valid(), ok.errors
+
+    def test_only_the_bands_that_are_SET_take_part_in_the_ordering(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(target_value="", warning_threshold="4.00",
+                                          critical_threshold="2.00"), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_a_metric_defined_in_terms_of_DAYS_is_refused_without_one(self, tenant_a):
+        """"Dead stock" with no N is not a smaller number, it is not a number at all."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(metric="inv_dead_stock_value", name="Dead stock",
+                                          target_value="1000.00", warning_threshold="5000.00",
+                                          critical_threshold="9000.00", parameter_days=""),
+                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "parameter_days" in form.errors
+
+        ok = KpiTargetForm(_target_data(metric="inv_dead_stock_value", name="Dead stock",
+                                        target_value="1000.00", warning_threshold="5000.00",
+                                        critical_threshold="9000.00", parameter_days="90"),
+                           tenant=tenant_a)
+        assert ok.is_valid(), ok.errors
+
+    def test_a_metric_defined_in_terms_of_a_PERCENTAGE_is_refused_without_one(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(metric="inv_carrying_cost", name="Carrying cost",
+                                          target_value="1000.00", warning_threshold="5000.00",
+                                          critical_threshold="9000.00", parameter_pct=""),
+                             tenant=tenant_a)
+        assert not form.is_valid()
+        assert "parameter_pct" in form.errors
+
+    def test_a_metric_outside_the_closed_registry_is_refused(self, tenant_a):
+        """The metric set is CLOSED — a key is a promise that a reviewed resolver exists for it.
+        Authoring your own formula is Module 10's 10.11, not this."""
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(metric="profit_per_wish"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "metric" in form.errors
+
+    def test_a_crafted_cross_tenant_scope_FK_is_refused_on_every_one_of_the_four(
+        self, tenant_a, category_b, location_b, carrier_b, supplier_b,
+    ):
+        """A narrowed dropdown is UX; this is the guard (L39 §2 / L40 §3)."""
+        from apps.scm.forms import KpiTargetForm
+        for field, obj, metric in (("scope_category", category_b, "inv_turnover"),
+                                   ("scope_location", location_b, "inv_turnover"),
+                                   ("scope_carrier", carrier_b, "otd_pct"),
+                                   ("scope_vendor", supplier_b, "spend_total")):
+            scope = field.replace("scope_", "")
+            data = _target_data(metric=metric, scope=scope, target_value="", warning_threshold="",
+                                critical_threshold="", **{field: str(obj.pk)})
+            form = KpiTargetForm(data, tenant=tenant_a)
+            assert not form.is_valid(), field
+            assert field in form.errors, field
+
+    def test_a_crafted_cross_tenant_owner_is_refused(self, tenant_a, admin_b):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(owner=str(admin_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "owner" in form.errors
+
+    def test_the_days_parameter_is_capped_so_a_timedelta_cannot_overflow(self, tenant_a):
+        """``PositiveIntegerField`` accepts 4294967295 on MariaDB and these numbers are fed to
+        ``timedelta(days=...)``, where an absurd value is an uncaught OverflowError — a 500, not a
+        validation error."""
+        from apps.scm.forms import KpiTargetForm
+        for days in ("0", "3651", "999999999"):
+            form = KpiTargetForm(_target_data(metric="inv_dead_stock_value", name="Dead stock",
+                                              target_value="", warning_threshold="",
+                                              critical_threshold="", parameter_days=days),
+                                 tenant=tenant_a)
+            assert not form.is_valid(), days
+            assert "parameter_days" in form.errors, days
+
+    def test_a_negative_alert_fatigue_floor_is_refused(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(min_impact_value="-1.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "min_impact_value" in form.errors
+
+    def test_metric_and_name_are_both_required(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(_target_data(metric="", name=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "metric" in form.errors and "name" in form.errors
+
+
+# ================================================================ 4.11 · what is OFF the two forms
+class TestAnalyticsFormExclusions:
+    """L20 / L22 — a system column reachable from a form has two writers, and the second one is a
+    user. Every column named here has exactly ONE writer and it is never a form."""
+
+    def test_the_target_form_excludes_the_number_and_the_system_stamp(self, tenant_a):
+        from apps.scm.forms import KpiTargetForm
+        form = KpiTargetForm(tenant=tenant_a)
+        for field in ("number", "last_evaluated_at", "tenant", "created_at", "updated_at", "id"):
+            assert field not in form.fields, field
+
+    def test_the_target_forms_whitelist_IS_the_models_editable_set(self, tenant_a):
+        """``Meta.fields`` is a whitelist rather than ``exclude`` so the NEXT column added to the
+        model cannot join the form silently — this asserts the two are in step today."""
+        from apps.scm.forms import KpiTargetForm
+        from apps.scm.models import KpiTarget
+        editable = {f.name for f in KpiTarget._meta.fields
+                    if f.editable and f.name not in ("id", "tenant", "created_at", "updated_at")}
+        assert set(KpiTargetForm(tenant=tenant_a).fields) == editable
+
+    def test_the_alert_form_excludes_every_lifecycle_column(self, tenant_a):
+        """``status`` / the two attribution pairs / the snooze deadline / the resolution note each
+        have exactly one writer — one of the five workflow methods on the model."""
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(tenant=tenant_a)
+        for field in ("status", "acknowledged_by", "acknowledged_at", "snoozed_until",
+                      "resolved_by", "resolved_at", "resolution_note", "raised_at",
+                      "last_seen_at", "number", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_alert_form_excludes_the_machine_side_keys_and_the_evidence(self, tenant_a):
+        """``dedupe_key`` / ``dimension_key`` are what ``detect_alerts()`` matches an open row on —
+        a hand-edited key would either strand a detector row or collide with one. ``detail`` is the
+        evidence JSON the detector writes, not free-form user text."""
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(tenant=tenant_a)
+        for field in ("dedupe_key", "dimension_key", "detail"):
+            assert field not in form.fields, field
+
+    def test_assigned_to_IS_on_the_alert_form_deliberately(self, tenant_a):
+        """It is not state, it is a name — the state columns each keep a single writer."""
+        from apps.scm.forms import SupplyChainAlertForm
+        assert "assigned_to" in SupplyChainAlertForm(tenant=tenant_a).fields
+
+    def test_neither_form_is_a_blacklist(self, tenant_a):
+        """There is no ``Meta.exclude`` anywhere in ``apps/`` — a blacklist quietly adopts the next
+        column somebody adds to the model."""
+        from apps.scm.forms import KpiTargetForm, SupplyChainAlertForm
+        for form_class in (KpiTargetForm, SupplyChainAlertForm):
+            assert getattr(form_class.Meta, "exclude", None) is None
+            assert isinstance(form_class.Meta.fields, list)
+
+
+# ================================================================ 4.11 · the alert form's own rules
+class TestSupplyChainAlertForm:
+    def test_a_valid_hand_raised_exception_saves(self, tenant_a, item_a):
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(item=str(item_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        alert = form.save()
+        assert alert.tenant_id == tenant_a.pk
+        assert alert.status == "open"
+        assert alert.dedupe_key == ""       # machine-side: a hand-raise carries none
+
+    def test_a_negative_value_at_risk_is_refused(self, tenant_a):
+        """``Meta.ordering`` is ``-impact_value`` — a negative figure sorts the exception below
+        every zero-impact one, which is a silent way to hide the thing you just called expensive."""
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(impact_value="-1.00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "impact_value" in form.errors
+
+    def test_a_kpi_breach_naming_neither_target_nor_metric_is_refused(self, tenant_a):
+        """A KPI breach with no figure behind it has nothing to link to and no report page to send
+        the reader to."""
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(alert_type="kpi_breach"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "metric" in form.errors
+
+        ok = SupplyChainAlertForm(_alert_data(alert_type="kpi_breach", metric="inv_turnover"),
+                                  tenant=tenant_a)
+        assert ok.is_valid(), ok.errors
+
+    def test_a_shipment_and_a_carrier_that_disagree_are_refused(self, tenant_a, shipment_a,
+                                                                carrier_a, carrier_party_a):
+        """L40 §3 — same tenant is not the same movement. The detail page would otherwise point at
+        two unrelated things with freight figures beside them."""
+        from apps.scm.forms import SupplyChainAlertForm
+        from apps.scm.models import Carrier
+        from apps.core.models import Party, PartyRole
+        other_party = Party.objects.create(tenant=tenant_a, name="Rival Haulage",
+                                           kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=other_party, role="vendor")
+        other = Carrier.objects.create(tenant=tenant_a, party=other_party)
+        form = SupplyChainAlertForm(_alert_data(alert_type="shipment_at_risk",
+                                                shipment=str(shipment_a.pk),
+                                                carrier=str(other.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "shipment" in form.errors
+
+    def test_a_purchase_order_and_a_party_that_disagree_are_refused(self, tenant_a,
+                                                                    purchase_order_a, vendor_a):
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(alert_type="off_contract_spend",
+                                                purchase_order=str(purchase_order_a.pk),
+                                                party=str(vendor_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "purchase_order" in form.errors
+
+    def test_a_matching_shipment_and_carrier_pair_is_accepted(self, tenant_a, shipment_a,
+                                                              carrier_a):
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(alert_type="shipment_at_risk",
+                                                shipment=str(shipment_a.pk),
+                                                carrier=str(carrier_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    def test_a_closed_exception_cannot_be_handed_to_somebody_through_the_EDIT_form(
+        self, tenant_a, resolved_alert_a, member_user,
+    ):
+        """``assign()`` refuses a closed alert, so the edit form must not be the way round it —
+        gating the action is not gating the column (L40 §3)."""
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(title=resolved_alert_a.title,
+                                                item=str(resolved_alert_a.item_id),
+                                                impact_value="800.00",
+                                                assigned_to=str(member_user.pk)),
+                                    instance=resolved_alert_a, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "assigned_to" in form.errors
+
+    def test_the_assignee_dropdown_is_tenant_scoped_and_drops_deactivated_logins(self, tenant_a,
+                                                                                  admin_user,
+                                                                                  member_user,
+                                                                                  admin_b):
+        from apps.scm.forms import SupplyChainAlertForm
+        member_user.is_active = False
+        member_user.save(update_fields=["is_active"])
+        people = list(SupplyChainAlertForm(tenant=tenant_a).fields["assigned_to"].queryset)
+        assert admin_user in people
+        assert member_user not in people
+        assert admin_b not in people
+
+    def test_the_assignee_dropdown_keeps_the_present_holder_even_once_deactivated(self, tenant_a,
+                                                                                   alert_a,
+                                                                                   member_user):
+        """Otherwise an unrelated edit fails with "Select a valid choice" on a field nobody touched."""
+        from apps.scm.forms import SupplyChainAlertForm
+        alert_a.assign(member_user)
+        member_user.is_active = False
+        member_user.save(update_fields=["is_active"])
+        form = SupplyChainAlertForm(instance=alert_a, tenant=tenant_a)
+        assert member_user in form.fields["assigned_to"].queryset
+
+    def test_the_six_subject_dropdowns_are_tenant_scoped(self, tenant_a, item_a, item_b,
+                                                         supplier_a, supplier_b, carrier_a,
+                                                         carrier_b, shipment_a, shipment_b,
+                                                         purchase_order_a, purchase_order_b,
+                                                         location_a, location_b):
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(tenant=tenant_a)
+        for name, mine, theirs in (("item", item_a, item_b), ("party", supplier_a, supplier_b),
+                                   ("carrier", carrier_a, carrier_b),
+                                   ("shipment", shipment_a, shipment_b),
+                                   ("purchase_order", purchase_order_a, purchase_order_b),
+                                   ("location", location_a, location_b)):
+            assert mine in form.fields[name].queryset, name
+            assert theirs not in form.fields[name].queryset, name
+
+    def test_a_title_is_required(self, tenant_a):
+        from apps.scm.forms import SupplyChainAlertForm
+        form = SupplyChainAlertForm(_alert_data(title=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "title" in form.errors
+
+
+# ================================================================ 4.11 · the three triage payloads
+class TestAlertTriageForms:
+    """Plain ``forms.Form``s: each collects the argument for ONE workflow method on the model, and
+    that method — not the form — writes the columns. Nothing here can move a state column by itself."""
+
+    @pytest.mark.parametrize("days", [1, 7, 30, 90])
+    def test_the_snooze_form_accepts_the_whole_legal_window(self, days):
+        from apps.scm.forms import AlertSnoozeForm
+        form = AlertSnoozeForm({"snooze_days": str(days)})
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["snooze_days"] == days
+
+    @pytest.mark.parametrize("days", ["0", "-1", "91", "365", "abc", "", "7.5", "²"])
+    def test_the_snooze_form_refuses_anything_outside_1_to_90(self, days):
+        from apps.scm.forms import AlertSnoozeForm
+        form = AlertSnoozeForm({"snooze_days": days})
+        assert not form.is_valid(), days
+        assert "snooze_days" in form.errors
+
+    def test_the_snooze_bounds_are_READ_from_the_model_not_re_typed(self):
+        """The form is the message and ``snooze()`` is the guard; they must not be able to drift
+        into disagreeing about what a legal window is."""
+        from apps.scm.forms import AlertSnoozeForm
+        from apps.scm.models import SupplyChainAlert
+        field = AlertSnoozeForm().fields["snooze_days"]
+        assert field.min_value == SupplyChainAlert.MIN_SNOOZE_DAYS
+        assert field.max_value == SupplyChainAlert.MAX_SNOOZE_DAYS
+
+    def test_the_resolve_form_requires_a_note(self, ):
+        """An exception closed with no account of what was done is a queue that cannot be audited
+        and a number nobody can explain later."""
+        from apps.scm.forms import AlertResolveForm
+        assert not AlertResolveForm({"resolution_note": ""}).is_valid()
+        # CharField strips by default, so whitespace alone does not satisfy it either.
+        assert not AlertResolveForm({"resolution_note": "    "}).is_valid()
+        form = AlertResolveForm({"resolution_note": "Cycle counted and written off."})
+        assert form.is_valid(), form.errors
+
+    def test_the_assign_form_allows_an_EMPTY_choice_because_that_is_the_un_assign_path(self,
+                                                                                       tenant_a):
+        from apps.scm.forms import AlertAssignForm
+        form = AlertAssignForm({"assigned_to": ""}, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert form.cleaned_data["assigned_to"] is None
+
+    def test_the_assign_form_is_tenant_scoped(self, tenant_a, admin_user, admin_b):
+        from apps.scm.forms import AlertAssignForm
+        assert AlertAssignForm({"assigned_to": str(admin_user.pk)},
+                               tenant=tenant_a).is_valid()
+        crossed = AlertAssignForm({"assigned_to": str(admin_b.pk)}, tenant=tenant_a)
+        assert not crossed.is_valid()
+        assert "assigned_to" in crossed.errors
+
+    def test_the_assign_form_re_admits_the_current_holder(self, tenant_a, member_user):
+        from apps.scm.forms import AlertAssignForm
+        member_user.is_active = False
+        member_user.save(update_fields=["is_active"])
+        assert not AlertAssignForm({"assigned_to": str(member_user.pk)},
+                                   tenant=tenant_a).is_valid()
+        assert AlertAssignForm({"assigned_to": str(member_user.pk)}, tenant=tenant_a,
+                               current=member_user.pk).is_valid()
