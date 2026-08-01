@@ -451,15 +451,21 @@ def tradelicense_revoke(request, pk):
     erase the evidence that the movement happened. What revocation stops is NEW movement —
     ``revoked`` is not in ``CHARGEABLE_STATUSES``, so ``can_charge()`` refuses from here on.
     """
-    reason = (request.POST.get("revocation_reason") or "").strip()
-    if not reason:
-        messages.error(request, "Give a reason when revoking a licence — it is the record of why "
-                                "the authority was withdrawn.")
-        return redirect("scm:tradelicense_detail", pk=pk)
+    # `reason` OR `revocation_reason`: the sibling void action accepts both spellings, and a caller
+    # that guesses the short one here would otherwise get a silent no-op redirect.
+    reason = (request.POST.get("reason")
+              or request.POST.get("revocation_reason") or "").strip()
 
     with transaction.atomic():
+        # Resolve BEFORE the reason guard. Returning early on a missing reason meant a reasonless
+        # POST to any pk — another tenant's, or one that does not exist — answered 302 instead of
+        # 404, so the "cross-tenant is always a 404" invariant held only when a reason was supplied.
         obj = get_object_or_404(TradeLicense.objects.select_for_update(),
                                 pk=pk, tenant=request.tenant)
+        if not reason:
+            messages.error(request, "Give a reason when revoking a licence — it is the record of "
+                                    "why the authority was withdrawn.")
+            return redirect("scm:tradelicense_detail", pk=pk)
         # Re-read inside the lock: a second revocation would overwrite the first reason and date
         # without trace, and those are what an auditor reads.
         if obj.status == "revoked":
