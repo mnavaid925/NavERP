@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 — SustainabilityAssessment list.
+
+Renders apps/scm/views/ContractCompliance/SustainabilityAssessments.py::sustainabilityassessment_list,
+which returns crud_list(...). Every context key this page reads, and nothing else:
+  * object_list / page_obj / q  — from crud_list
+  * status_choices             — flat [(value, label), …]  -> the ?status= dropdown
+  * rating_choices             — flat [(value, label), …]  -> the ?rating= dropdown (the MEDAL)
+  * source_choices             — flat [(value, label), …]  -> the ?source= dropdown
+  * parties                    — a core.Party queryset      -> the ?party= dropdown (FK, int pk)
+
+The view passes no `stats` dict, so this page renders no stat tiles: a tile bound to a key the view
+does not pass renders blank with no error anywhere. The one count in the card header comes from
+page_obj.paginator, which crud_list really does provide.
+
+Two things this page must NOT invent. `overall_score` and `rating` are DERIVED columns written only
+by SustainabilityAssessment.recompute_rating(), so the medal below is read, never re-banded here —
+this table, the detail medal and the carbon report therefore cannot disagree. And `maturity_level`
+is deliberately absent: it is a property, the database cannot search it, and offering a filter the
+view does not support would be a control that silently does nothing.
+{% endcomment %}
+{% block title %}Sustainability Assessments{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sustainability Assessments</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Sustainability Assessments</span></div>
+      <p class="text-muted">One dated <span class="fw-600">ESG scorecard per trading partner</span> — the four themes that vote on the medal, Carbon on its own separate scorecard, the declarations a compliance team actually asks for (REACH, RoHS, conflict minerals, forced labour, deforestation, code of conduct) and the supplier's <em>own</em> Scope 1/2/3 figures. This is not 4.2's risk assessment: risk asks what a supplier could do to <em>us</em>, this asks how a supplier <em>behaves</em>. Both live on each row's page, side by side, so neither can be read as the other.</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        The ONLY route to the computed carbon report. That page is deliberately not a sidebar entry —
+        it is a reading of THIS register plus 4.6's shipments — so if this chip goes, the report
+        becomes unreachable from the UI. It needs no context: the url takes no arguments.
+      {% endcomment %}
+      <a href="{% url 'scm:carbon_footprint_report' %}" class="btn btn-outline"><i data-lucide="leaf"></i> Carbon footprint report</a>
+      <a href="{% url 'scm:sustainabilityassessment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Assessment</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Assessments</h2>
+      <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, party or provider (e.g. ESG-00007, EcoVadis)…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Record status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="rating" aria-label="Medal" class="form-select">
+            <option value="">Any medal</option>
+            {% for val, label in rating_choices %}
+              <option value="{{ val }}" {% if request.GET.rating == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            party is an INT FK, so the selected test goes through stringformat:"d" — slugify would
+            agree only by accident on small pks and disagree the moment one is not a bare integer.
+            The view's own int guard (crud_list, is_int=True) means a hand-typed ?party=abc skips
+            the filter rather than raising out of .filter().
+          {% endcomment %}
+          <select name="party" aria-label="Trading partner" class="form-select">
+            <option value="">All partners</option>
+            {% for p in parties %}
+              <option value="{{ p.pk }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:sustainabilityassessment_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">Medal filters on the <span class="fw-600">stored</span> rating, which is why it can be searched at all — the maturity ladder is the same cut points expressed as a property, so it is shown on each assessment's own page and cannot be filtered here. <span class="fw-600">Not rated</span> covers both "scored, below bronze" and "no theme scored yet"; the score column tells the two apart.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Assessment</th>
+            <th>Partner</th>
+            <th>Assessed / valid</th>
+            <th>Source</th>
+            <th>Overall</th>
+            <th>Carbon</th>
+            <th>Declarations</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:sustainabilityassessment_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                {% comment %}
+                  rating_css comes off the model (RATING_CSS, already defaulted to badge-muted) so
+                  this pill, the detail medal and the carbon report are the same colour by
+                  construction; the label is the field's own display, which is the fallback.
+                {% endcomment %}
+                <div><span class="badge {{ obj.rating_css }}">{{ obj.get_rating_display }}</span></div>
+              </td>
+              <td>
+                {% if obj.party %}{{ obj.party.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                {% if obj.provider %}<div class="form-help">{{ obj.provider }}</div>{% endif %}
+              </td>
+              <td class="nowrap">
+                {{ obj.assessment_date|date:"M d, Y" }}
+                {% comment %}
+                  valid_until is optional, and blank means "no stated validity period" — a rating
+                  that never lapses, not one that lapsed. is_expired is a zero-argument method, so
+                  Django calls it for us; it can legitimately disagree with `status`, because the
+                  date is the truth and the status is the assessor's note about their own work.
+                {% endcomment %}
+                {% if obj.valid_until %}
+                  <div class="form-help">
+                    Valid to {{ obj.valid_until|date:"M d, Y" }}
+                    {% if obj.is_expired %} <span class="badge badge-red">Lapsed</span>{% endif %}
+                  </div>
+                {% else %}
+                  <div class="form-help">No stated validity period</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.source == 'third_party_rating' %}<span class="badge badge-info">{{ obj.get_source_display }}</span>
+                {% elif obj.source == 'onsite_audit' %}<span class="badge badge-green">{{ obj.get_source_display }}</span>
+                {% elif obj.source == 'desk_review' %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>
+                {% elif obj.source == 'self_assessment' %}<span class="badge badge-muted">{{ obj.get_source_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_source_display }}</span>{% endif %}
+              </td>
+              {% comment %}
+                `is not None`, never truthiness. An assessment where nothing was scored has
+                overall_score None and must read "—", not a red 0 — "not assessed" and "assessed,
+                terrible" are the one pair of answers a scorecard cannot afford to merge. A genuine
+                0/100 does exist and prints as 0.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if obj.overall_score is not None %}
+                  <span class="fw-600">{{ obj.overall_score }}</span><span class="text-muted">/100</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help">No theme scored</div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if obj.carbon_score is not None %}
+                  {{ obj.carbon_score }}<span class="text-muted">/100</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  The six flags, abbreviated — an absent chip means the declaration is simply not on
+                  file, which is why nothing here is red: a missing declaration is a gap to chase,
+                  not a failure this register has established. Full labels and each field's own
+                  help_text are on the detail page.
+                {% endcomment %}
+                {% if obj.conflict_minerals_declared or obj.reach_declared or obj.rohs_declared or obj.forced_labor_attested or obj.deforestation_declared or obj.code_of_conduct_signed %}
+                  <div class="badge-group">
+                    {% if obj.conflict_minerals_declared %}<span class="badge badge-green" title="Conflict minerals (3TG / CMRT)">3TG</span>{% endif %}
+                    {% if obj.reach_declared %}<span class="badge badge-green" title="EU REACH / SVHC">REACH</span>{% endif %}
+                    {% if obj.rohs_declared %}<span class="badge badge-green" title="EU RoHS">RoHS</span>{% endif %}
+                    {% if obj.forced_labor_attested %}<span class="badge badge-green" title="Forced labour (UFLPA / modern slavery)">UFLPA</span>{% endif %}
+                    {% if obj.deforestation_declared %}<span class="badge badge-green" title="Deforestation-free (EUDR)">EUDR</span>{% endif %}
+                    {% if obj.code_of_conduct_signed %}<span class="badge badge-green" title="Supplier code of conduct">CoC</span>{% endif %}
+                  </div>
+                {% else %}
+                  <span class="text-muted">None on file</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:sustainabilityassessment_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:sustainabilityassessment_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Gated to match the view's @tenant_admin_required — editing a scorecard is daily
+                    compliance work and stays open to every member, destroying the dated record an
+                    auditor asks for is not. Only the system-generated number goes into the confirm
+                    string: an apostrophe in a party name or a provider would be escaped to &#x27;,
+                    which the HTML parser hands to JavaScript as a bare quote and the dialog breaks.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:sustainabilityassessment_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This is the dated record of what was assessed, by whom, and which declarations were on file — it cannot be reconstructed. The evidence document it cites is kept.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="leaf"></i>
+                  <h3>No sustainability assessments</h3>
+                  <p>Nothing has been scored yet. An assessment names one trading partner, says where the finding came from — a supplier's own questionnaire is not an EcoVadis rating and neither is an on-site audit — and scores whichever themes were actually covered. The medal and the maturity level follow from those scores; neither can be typed in. If you were expecting rows here, try clearing the filters.</p>
+                  <a href="{% url 'scm:sustainabilityassessment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Assessment</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Newest assessment date first. The medal is the <span class="fw-600">mean of the themes that were actually scored</span> — an unanswered theme is a question nobody asked, not a zero, so a partial scorecard is normal and is not punished for its gaps. <span class="fw-600">Carbon does not vote</span>: it is scored, stored and shown on its own separate scorecard exactly as EcoVadis does it, so a strong carbon page cannot lift a supplier over a weak labour theme. The Scope 1/2/3 figures behind the <a href="{% url 'scm:carbon_footprint_report' %}">carbon footprint report</a> are <span class="fw-600">declared by the supplier</span>; the freight emissions on that page are the ones this system works out itself from 4.6's shipments, and the two are never added together.
+    </div>
+  </div>
+{% endblock %}
