@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.12 Contract & Compliance — shared create/edit form for TradeLicense.
+
+Renders apps/scm/views/ContractCompliance/TradeLicenses.py::tradelicense_create and
+::tradelicense_edit, both of which delegate to apps/core/crud.py. Everything this page may read, and
+nothing else:
+
+  form      TradeLicenseForm (bound on POST)
+  is_edit   False on create, True on edit
+  obj       the TradeLicense, ON THE EDIT PATH ONLY — crud_create does not put it in the context, so
+            every reference to it below sits inside an `is_edit` branch
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to TradeLicenseForm's
+whitelist: Meta.fields is the 20 names below and nothing else. A field added to the model and to the
+form but not added to a group here would never reach the POST and would fail validation with no
+visible cause.
+
+What is deliberately absent, and must not be added: `status` (moved only by the submit / approve /
+revoke verbs and by the date-driven refresh — a dropdown here would let somebody type "active" on a
+licence no authority ever granted and start charging movement to it), `used_value` /
+`used_quantity` (re-derived from the documents charged to the licence; a field that let somebody
+type one would make the register lie about how much authority is left), and the four decision
+stamps. All are editable=False on the model, so this template's omission documents a boundary the
+model itself enforces.
+
+Every rule stated in the operator notes below is enforced by TradeLicense.clean() and by the form's
+TenantUniqueMixin, never by this template — so the words somebody reads and the validation that
+refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Trade Licence{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Trade Licence</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:tradelicense_list' %}">Trade Licences</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">What you type here is the authorisation <span class="fw-600">as the authority granted it</span>. The licence's status and its consumed balance are not on this form: the first moves only through the submit, approve and revoke actions, and the second is re-derived from the documents issued under the licence. A licence stays editable at any status precisely because authorities amend, extend and re-scope what they granted — but an edit can only correct what the licence <em>says</em>, never what it has authorised.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Identity</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">Two numbers, on purpose. The internal <span class="fw-600">LIC-</span> reference is assigned on save and is how this workspace finds the licence; the <span class="fw-600">authority's number</span> is what a customs officer, a broker or a bank quotes back at you. That second one is unique per workspace and the save is refused if it is already registered — precisely so one licence cannot be entered twice and have its balance drawn down in two places. Exceptions, exemptions and general authorisations are registered here too, as their own type: they are claimed rather than granted, but the question "what authority covers this movement" has to have one answer in one place.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.license_number %}
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.license_type %}
+          {% include "partials/form_field.html" with field=form.issuing_authority %}
+          {% include "partials/form_field.html" with field=form.issuing_country %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Who it covers</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Leave the <span class="fw-600">holder</span> blank when the licence is ours; name a party only when it is held by a subsidiary or an agent. The <span class="fw-600">named end user</span> is the final recipient the authority approved — recording it against the licence rather than against a shipment is what makes it checkable before any document is raised. Both dropdowns are narrowed to this workspace's commercial counterparties, and both are re-checked against the workspace on save: a narrowed dropdown is a courtesy, never the guard.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.holder_party %}
+          {% include "partials/form_field.html" with field=form.end_user_party %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Dates and renewal</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The three dates form a ladder — <span class="fw-600">applied for → issued → expires</span> — and the save is refused if they run backwards, including the case where the issue date is blank and the licence would still expire before it was applied for. All three may be left empty; a licence with no expiry never lapses and never enters the renewal queue. The <span class="fw-600">notice window</span> is how far ahead this licence starts reading as "expiring": the status roll uses this number, not a global one, so a permit that takes six months to renew can say so.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.application_date %}
+          {% include "partials/form_field.html" with field=form.issue_date %}
+          {% include "partials/form_field.html" with field=form.expiry_date %}
+          {% include "partials/form_field.html" with field=form.renewal_notice_days %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The ceilings</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">This is what makes a licence a quantity rather than a piece of paper. A <span class="fw-600">blank</span> ceiling means unlimited in that dimension — <span class="fw-600">not zero</span>: the licence page prints "Unlimited" and its remaining figure and utilisation read as em dashes rather than as a confident 0 that looks exhausted. A ceiling of <span class="fw-600">0</span> is a real and quite different statement, and it authorises nothing. Set either, both or neither. Every document issued under the licence draws the balance down, and an issue that would exceed a ceiling is refused outright rather than clamped to the headroom — a shipment that went out partly unauthorised while the register still looked healthy is exactly the failure a balance exists to prevent.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.authorized_value %}
+          {% include "partials/form_field.html" with field=form.currency %}
+          {% include "partials/form_field.html" with field=form.authorized_quantity %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What it covers</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">These four are free text on purpose. This build carries no HS/ECCN master and no country-control content, and a picklist over data we do not have would be a fake feed with a real audit trail hanging off it — a typed classification is honest, a wrong dropdown is not. Put provisos and RWA statuses in <span class="fw-600">conditions</span>; anything that needs <span class="fw-600">periodic proof</span> belongs in the obligation register instead, pointing at this licence, because 4.12 has exactly one recurring-obligation engine and a proviso buried in a text box never reaches a due queue.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.commodity_scope %}
+          {% include "partials/form_field.html" with field=form.eccn_or_hs %}
+          {% include "partials/form_field.html" with field=form.destination_countries %}
+          {% include "partials/form_field.html" with field=form.conditions %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Evidence</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The issued licence itself is attached as a workspace <span class="fw-600">document</span> rather than uploaded here — 4.12 grows no second file store, and folders and versioning belong to the document module. Deleting the attachment later empties this pointer and leaves the licence record intact, which is the right way round: the register is the audit artefact.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.document %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:tradelicense_detail' obj.pk %}{% else %}{% url 'scm:tradelicense_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
