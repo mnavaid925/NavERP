@@ -3449,24 +3449,43 @@ def _r_supplier_disruption_score(tenant, start, end, scope, params=DEFAULT_PARAM
         # The network figure's supporting rows are the per-supplier league built from the grouped
         # queries already run above — no extra query, and no per-supplier composite (that would be
         # one full pass per supplier, which is the N+1 this whole file is written to avoid).
+        #
+        # EVERY row carries the SAME keys, even where a source said nothing about that supplier.
+        # This is a TABLE, and five independent sources merging by `setdefault(...).update(...)`
+        # produced RAGGED rows: a supplier with no nonconformances simply had no `nonconformances`
+        # key, and a missing key does not reach the template's `|default:"0"` — Django substitutes
+        # `string_if_invalid` and DROPS the filters, so the cell rendered blank. A blank cell under
+        # a "NCRs" heading is unreadable: it could mean zero, or that nobody looked.
+        #
+        # The defaults below are each a measured fact rather than a filler. Every supplier in the
+        # league was examined by all five grouped queries, so absence from `ncr_by_party` /
+        # `capa_rows` genuinely IS zero, while absence from `indices` is "never assessed" (None, and
+        # the page badges it as such) and no datable receipt leaves `otd_pct` None rather than 0 %.
         league = {}
+
+        def _league_row(vendor_id, name):
+            return league.setdefault(vendor_id, {
+                "vendor": name, "receipts": 0, "on_time": 0, "otd_pct": None, "reject_pct": None,
+                "nonconformances": 0, "open_capa": 0, "risk_index": None, "risk_level": "",
+                "contract_cover": "none",
+            })
+
         for row in _delivery_rows(tenant, None, start, end):
-            league.setdefault(row["vendor_id"], {"vendor": row["vendor"]}).update(
+            _league_row(row["vendor_id"], row["vendor"]).update(
                 {"receipts": row["datable"], "on_time": row["on_time"],
                  "otd_pct": _f(_safe_div(Decimal(row["on_time"]) * HUNDRED,
                                          Decimal(row["datable"])) if row["datable"] else None)})
         for row in _quality_rows(tenant, None, start, end):
-            entry = league.setdefault(row["vendor_id"], {"vendor": row["vendor"]})
+            entry = _league_row(row["vendor_id"], row["vendor"])
             presented = row["received"] + row["rejected"]
             entry["reject_pct"] = _f(_safe_div(row["rejected"] * HUNDRED, presented)
                                      if presented > ZERO else None)
         for party_id, entry in ncr_by_party.items():
-            league.setdefault(party_id, {"vendor": entry["name"]})["nonconformances"] = entry["count"]
+            _league_row(party_id, entry["name"])["nonconformances"] = entry["count"]
         for row in capa_rows:
-            league.setdefault(row["supplier_id"],
-                              {"vendor": row["supplier__name"]})["open_capa"] = row["n"]
+            _league_row(row["supplier_id"], row["supplier__name"])["open_capa"] = row["n"]
         for party_id, row in indices.items():
-            league.setdefault(party_id, {"vendor": row["party__name"]}).update(
+            _league_row(party_id, row["party__name"]).update(
                 {"risk_index": _f(row["risk_index"]), "risk_level": row["risk_level"]})
         for party_id, entry in league.items():
             entry["contract_cover"] = ("covered" if party_id in covered else "none")
