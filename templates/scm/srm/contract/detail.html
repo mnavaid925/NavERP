@@ -78,7 +78,7 @@
               <td><a href="{% url 'scm:contract_detail' a.pk %}">{{ a.number }}</a></td>
               <td>{{ a.title }}</td>
               <td><span class="badge badge-slate">{{ a.get_contract_type_display }}</span></td>
-              <td><span class="badge badge-info">{{ a.get_status_display }}</span></td>
+              <td><span class="badge badge-{% if a.status == 'active' or a.status == 'renewed' %}green{% elif a.status == 'expiring' %}amber{% elif a.status == 'expired' or a.status == 'terminated' %}red{% elif a.status == 'draft' %}slate{% else %}muted{% endif %}">{{ a.get_status_display }}</span></td>
               <td>{{ a.start_date|date:"M d, Y"|default:"—" }}</td>
               <td>{{ a.end_date|date:"M d, Y"|default:"—" }}</td>
             </tr>
