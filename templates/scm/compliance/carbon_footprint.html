@@ -99,31 +99,23 @@
   <div class="stat-grid">
     <div class="stat-card">
       <div class="stat-icon green"><i data-lucide="cloud"></i></div>
-      <div>
-        <div class="stat-label">Estimated tCO2e</div>
-        <div class="stat-value">{% if total_tco2e is not None %}{{ total_tco2e }}{% else %}—{% endif %}</div>
-      </div>
+      <div class="stat-value">{% if total_tco2e is not None %}{{ total_tco2e }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Estimated tCO2e</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon blue"><i data-lucide="route"></i></div>
-      <div>
-        <div class="stat-label">Tonne-kilometres</div>
-        <div class="stat-value">{% if total_tonne_km is not None %}{{ total_tonne_km }}{% else %}—{% endif %}</div>
-      </div>
+      <div class="stat-value">{% if total_tonne_km is not None %}{{ total_tonne_km }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Tonne-kilometres</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
-      <div>
-        <div class="stat-label">Intensity (g/tonne-km)</div>
-        <div class="stat-value">{% if intensity_g_per_tonne_km is not None %}{{ intensity_g_per_tonne_km }}{% else %}—{% endif %}</div>
-      </div>
+      <div class="stat-value">{% if intensity_g_per_tonne_km is not None %}{{ intensity_g_per_tonne_km }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Intensity (g/tonne-km)</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon orange"><i data-lucide="package-search"></i></div>
-      <div>
-        <div class="stat-label">Shipments measured</div>
-        <div class="stat-value">{{ measured_count }}</div>
-      </div>
+      <div class="stat-value">{{ measured_count }}</div>
+      <div class="stat-label">Shipments measured</div>
     </div>
   </div>
 
