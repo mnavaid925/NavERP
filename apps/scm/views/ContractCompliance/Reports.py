@@ -36,6 +36,8 @@ CONTEXT-VARIABLE CONTRACT (templates/scm/compliance/carbon_footprint.html reads 
     declared                    -- dict of supplier-DECLARED scope 1/2/3 totals (clearly not ours)
     declared_count              -- int, assessments behind `declared`
     factors                     -- list[(mode_label, factor)] rendered as the method table
+    factor_source               -- str, the factor table's provenance line
+    method_note                 -- str, the limitations paragraph
     export_qs                   -- str, the current filter re-encoded for the CSV link
 """
 import csv
@@ -52,28 +54,13 @@ from apps.scm.models._base import q2
 from apps.scm.models import Carrier, Shipment, SustainabilityAssessment
 from apps.scm.models.TransportationManagement.Carriers import MODE_CHOICES
 
-#: Well-to-wheel gCO2e per tonne-kilometre, by transport mode.
-#:
-#: Order-of-magnitude defaults consistent with the GLEC Framework v3.2 / ISO 14083 default-factor
-#: tables and the UK DEFRA/BEIS freighting-goods factors. They are DEFAULTS: a real programme
-#: replaces them with carrier-specific measured intensities, which is exactly why the numbers are
-#: kept in one visible table that the page renders rather than being buried in the arithmetic.
-#:
-#: `parcel` is the outlier and deliberately so — last-mile parcel work carries a light load over a
-#: long stop-dense route, so its per-tonne-km intensity is far above line-haul truckload.
-EMISSION_FACTORS = {
-    "truckload": Decimal("62"),
-    "ltl": Decimal("95"),
-    "parcel": Decimal("650"),
-    "ocean": Decimal("8"),
-    "air": Decimal("602"),
-    "rail": Decimal("22"),
-    "intermodal": Decimal("34"),
-}
-#: Used when a shipment's mode is absent or is a value the table does not know. Chosen as the
-#: truckload factor rather than zero: an unknown mode is still a lorry-shaped movement, and zero
-#: would quietly discount it to nothing.
-DEFAULT_FACTOR = EMISSION_FACTORS["truckload"]
+# The factor table, its provenance string and the limitations paragraph all live in
+# models/ContractCompliance/_choices.py — ONE table with two readers (this report and the page's
+# method section), which is exactly what that module exists for. A second copy here drifted from it
+# within one build: four of seven values already disagreed.
+from apps.scm.models.ContractCompliance._choices import (  # noqa: E402
+    CARBON_METHOD_NOTE, EMISSION_FACTORS, EMISSION_FACTOR_SOURCE,
+)
 
 _GRAMS_PER_TONNE = Decimal("1000000")  # gCO2e -> tCO2e
 _KG_PER_TONNE = Decimal("1000")
@@ -143,7 +130,12 @@ def _measure(shipment):
         # A zero-distance or zero-weight row is a data-entry stub, not a carbon-free movement.
         return None
     mode = shipment.mode or (load.mode if load is not None else "")
-    factor = EMISSION_FACTORS.get(mode, DEFAULT_FACTOR)
+    factor = EMISSION_FACTORS.get(mode)
+    if factor is None:
+        # The factor table is a CLOSED set. A mode added to 4.6 without a factor here is a coverage
+        # gap the page must REPORT, not a movement to score with a substituted default — the same
+        # rule that excludes a shipment with no weight rather than calling it zero.
+        return None
     tonne_km = (Decimal(weight) / _KG_PER_TONNE) * Decimal(distance)
     return tonne_km, factor, tonne_km * factor
 
@@ -248,6 +240,8 @@ def _collect(request):
         "by_month": by_month, "by_mode": by_mode, "by_carrier": by_carrier,
         "declared": declared, "declared_count": declared_qs.count(),
         "factors": [(dict(MODE_CHOICES).get(k, k), v) for k, v in EMISSION_FACTORS.items()],
+        "factor_source": EMISSION_FACTOR_SOURCE,
+        "method_note": CARBON_METHOD_NOTE,
         "export_qs": urlencode({k: v for k, v in (
             ("date_from", raw_from), ("date_to", raw_to), ("mode", mode),
             ("carrier", carrier_raw)) if v}),
