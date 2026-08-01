@@ -754,3 +754,83 @@ class SupplyChainAlertAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "status", "dedupe_key", "acknowledged_by", "acknowledged_at",
                        "snoozed_until", "resolved_by", "resolved_at", "raised_at", "last_seen_at",
                        "created_at", "updated_at")
+
+
+# --- 4.12 Contract & Compliance Management ------------------------------------------------------
+from apps.scm.models import (  # noqa: E402
+    ComplianceRequirement, ComplianceCheck, TradeDocument, TradeDocumentLine, TradeLicense,
+    SustainabilityAssessment,
+)
+
+
+class ComplianceCheckInline(admin.TabularInline):
+    model = ComplianceCheck
+    extra = 0
+    # performed_by is stamped from request.user by the view, never typed — see the model. Showing it
+    # read-only here keeps the admin from becoming the one path that can forge "who proved this".
+    readonly_fields = ("performed_by", "created_at")
+
+
+@admin.register(ComplianceRequirement)
+class ComplianceRequirementAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "title", "source", "framework", "scope", "criticality",
+                    "status", "frequency", "next_due_date", "owner")
+    list_filter = ("tenant", "status", "source", "framework", "criticality", "frequency")
+    search_fields = ("number", "title", "description", "jurisdiction", "source_reference",
+                     "party__name")
+    date_hierarchy = "next_due_date"
+    inlines = [ComplianceCheckInline]
+    # number is assigned once in save(); last_checked_on is written only by record_check() as the
+    # parent's proof stamp, so it is a derived fact rather than an input.
+    readonly_fields = ("number", "last_checked_on", "created_at", "updated_at")
+
+
+@admin.register(ComplianceCheck)
+class ComplianceCheckAdmin(admin.ModelAdmin):
+    list_display = ("requirement", "result", "due_date", "performed_on", "performed_by")
+    list_filter = ("result", "performed_on")
+    search_fields = ("requirement__number", "requirement__title", "finding",
+                     "corrective_reference", "notes")
+    date_hierarchy = "performed_on"
+    readonly_fields = ("performed_by", "created_at")
+
+
+class TradeDocumentLineInline(admin.TabularInline):
+    model = TradeDocumentLine
+    extra = 0
+
+
+@admin.register(TradeDocument)
+class TradeDocumentAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "doc_type", "status", "issue_date", "shipment",
+                    "license")
+    list_filter = ("tenant", "status", "doc_type", "issue_date")
+    search_fields = ("number", "shipment__number", "license__license_number")
+    date_hierarchy = "issue_date"
+    inlines = [TradeDocumentLineInline]
+    # status is editable=False on the model and moves only through issue/submit/accept/void, each of
+    # which is what charges or refunds the licence balance. An editable status column here would let
+    # a document be marked issued without ever touching the licence it was issued under.
+    readonly_fields = ("number", "status", "created_at", "updated_at")
+
+
+@admin.register(TradeLicense)
+class TradeLicenseAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "license_number", "title", "license_type", "status",
+                    "issue_date", "expiry_date")
+    list_filter = ("tenant", "status", "license_type", "expiry_date")
+    search_fields = ("number", "license_number", "title", "issuing_authority")
+    date_hierarchy = "expiry_date"
+    readonly_fields = ("number", "status", "created_at", "updated_at")
+
+
+@admin.register(SustainabilityAssessment)
+class SustainabilityAssessmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "party", "assessment_date", "source", "status",
+                    "overall_score")
+    list_filter = ("tenant", "status", "source", "assessment_date")
+    search_fields = ("number", "party__name")
+    date_hierarchy = "assessment_date"
+    # overall_score is DERIVED from the theme scores — it is editable=False on the model precisely so
+    # the headline number can never disagree with the components it is computed from.
+    readonly_fields = ("number", "overall_score", "created_at", "updated_at")
