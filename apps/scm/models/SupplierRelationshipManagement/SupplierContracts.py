@@ -39,6 +39,20 @@ class SupplierContract(TenantNumbered):
     # Statuses that a date-driven refresh may move between; terminated/renewed are terminal decisions.
     AUTO_STATUSES = ("active", "expiring", "expired")
 
+    #: Badge colour per status, decided in ONE place. theme.css only ships colour-named badge
+    #: modifiers (green/red/amber/info/muted/slate) — the semantic -success/-warning/-danger
+    #: variants do not exist and render unstyled, which is lesson L33 and has recurred four times.
+    #: Every 4.12 model carries a map like this; SupplierContract predates the convention and had
+    #: the ladder hand-written at three separate call sites, i.e. three places to get it wrong.
+    STATUS_CSS = {
+        "draft": "badge-slate",
+        "active": "badge-green",
+        "expiring": "badge-amber",
+        "expired": "badge-red",
+        "terminated": "badge-red",
+        "renewed": "badge-green",
+    }
+
     party = models.ForeignKey("core.Party", on_delete=models.PROTECT, related_name="scm_supplier_contracts")
     title = models.CharField(max_length=255)
     # --- 4.12 Contract & Compliance additions (additive, nullable, behaviour-neutral) -------------
@@ -105,6 +119,11 @@ class SupplierContract(TenantNumbered):
             seen.add(node.pk)
             node = node.parent_contract
             hops += 1
+
+    @property
+    def status_css(self):
+        """The badge class for this contract's status — see :attr:`STATUS_CSS`."""
+        return self.STATUS_CSS.get(self.status, "badge-muted")
 
     def days_to_expiry(self, today=None):
         """Days until ``end_date`` (negative if already past). None when no end date is set."""
