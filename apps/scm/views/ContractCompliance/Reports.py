@@ -153,9 +153,27 @@ def _collect(request):
     mode = (request.GET.get("mode") or "").strip()
     carrier_raw = (request.GET.get("carrier") or "").strip()
 
+    # The window goes in the WHERE clause, not just in the Python loop below. Filtering only in
+    # Python materialised the tenant's ENTIRE shipment history — plus a Load and a Carrier instance
+    # each — to answer a twelve-month question, and the CSV export re-ran the whole thing.
+    #
+    # This predicate is exactly the set _shipment_date() selects (actual delivery when known, else
+    # planned pickup), so the per-row check further down stays the arbiter and can only ever be a
+    # no-op. An explicit aware datetime range rather than __date__gte: __date compiles to CONVERT_TZ
+    # on MariaDB and returns NULL when the tz tables are not loaded, which on XAMPP they are not.
+    start_dt = timezone.make_aware(datetime.datetime.combine(date_from, datetime.time.min))
+    end_dt = timezone.make_aware(datetime.datetime.combine(date_to, datetime.time.max))
     qs = (Shipment.objects.filter(tenant=request.tenant)
-          .select_related("load", "carrier")
-          .exclude(status="cancelled"))
+          # carrier__party, NOT carrier: Carrier.name is a property over self.party.name, so
+          # stopping one hop short costs a query PER SHIPMENT in the loop below (L18).
+          .select_related("load", "carrier__party")
+          .exclude(status="cancelled")
+          .filter(Q(actual_delivery_at__gte=start_dt, actual_delivery_at__lte=end_dt)
+                  | Q(actual_delivery_at__isnull=True,
+                      planned_pickup_date__gte=date_from, planned_pickup_date__lte=date_to))
+          # Shipment.Meta.ordering is ["-id"]; this report sorts its own buckets, so the inherited
+          # ORDER BY is a filesort over the whole result set for nothing.
+          .order_by())
     if mode in EMISSION_FACTORS:
         qs = qs.filter(mode=mode)
     if carrier_raw.isdecimal():
@@ -194,9 +212,12 @@ def _collect(request):
         mrow["tonne_km"] += tonne_km
         mrow["count"] += 1
 
+        # Keyed on carrier_id, not the display name: two carriers whose parties happen to share a
+        # name are two carriers, and grouping on the label would silently merge them into one row.
         cname = shipment.carrier.name if shipment.carrier_id else "— unassigned —"
-        crow = carriers_agg.setdefault(cname, {"label": cname, "grams": Decimal("0"),
-                                               "tonne_km": Decimal("0"), "count": 0})
+        crow = carriers_agg.setdefault(shipment.carrier_id,
+                                       {"label": cname, "grams": Decimal("0"),
+                                        "tonne_km": Decimal("0"), "count": 0})
         crow["grams"] += grams
         crow["tonne_km"] += tonne_km
         crow["count"] += 1
@@ -221,14 +242,21 @@ def _collect(request):
     # total nobody computed.
     declared_qs = SustainabilityAssessment.objects.filter(
         tenant=request.tenant, assessment_date__gte=date_from, assessment_date__lte=date_to)
+    # One aggregate, not three Sums plus a separate .count() — the shape tradelicense_list and
+    # compliancerequirement_list already use.
     declared = declared_qs.aggregate(
-        scope1=Sum("scope1_tco2e"), scope2=Sum("scope2_tco2e"), scope3=Sum("scope3_tco2e"))
+        scope1=Sum("scope1_tco2e"), scope2=Sum("scope2_tco2e"), scope3=Sum("scope3_tco2e"),
+        n=Count("id"))
 
     return {
         "date_from": date_from, "date_to": date_to,
         "date_from_raw": raw_from, "date_to_raw": raw_to, "window_invalid": invalid,
         "mode": mode, "mode_choices": MODE_CHOICES,
-        "carrier_id": carrier_raw, "carriers": Carrier.objects.filter(tenant=request.tenant),
+        # select_related("party"): Carrier.Meta.ordering is ["party__name"], which makes Django JOIN
+        # core_party for the ORDER BY without SELECTing from it — so the dropdown looks joined and
+        # still lazy-loads one query per <option> when the template reads {{ c.name }}.
+        "carrier_id": carrier_raw,
+        "carriers": Carrier.objects.filter(tenant=request.tenant).select_related("party"),
         # None, never 0, when nothing could be measured — see the module docstring.
         "total_tco2e": q2(total_grams / _GRAMS_PER_TONNE) if measured else None,
         "total_tonne_km": q2(total_tonne_km) if measured else None,
@@ -238,7 +266,7 @@ def _collect(request):
         "intensity_g_per_tonne_km": (q2(total_grams / total_tonne_km)
                                      if total_tonne_km > 0 else None),
         "by_month": by_month, "by_mode": by_mode, "by_carrier": by_carrier,
-        "declared": declared, "declared_count": declared_qs.count(),
+        "declared": declared, "declared_count": declared["n"],
         "factors": [(dict(MODE_CHOICES).get(k, k), v) for k, v in EMISSION_FACTORS.items()],
         "factor_source": EMISSION_FACTOR_SOURCE,
         "method_note": CARBON_METHOD_NOTE,
