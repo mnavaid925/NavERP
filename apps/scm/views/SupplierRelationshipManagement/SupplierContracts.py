@@ -14,10 +14,15 @@ def _roll_contract_statuses(request, qs):
     one atomic bulk_update, so it no longer scales a write with the tenant's whole contract count.
     """
     changed = []
+    # bulk_update never calls pre_save, so auto_now does not fire — updated_at must be stamped by
+    # hand or the column is written back with its stale in-memory value, silently backdating a row
+    # that just changed. Same fix both 4.12 rollers carry.
+    stamp = timezone.now()
     for c in qs.filter(status__in=SupplierContract.AUTO_STATUSES):
         old = c.status
         c.refresh_status(save=False)
         if c.status != old:
+            c.updated_at = stamp
             changed.append(c)
     if changed:
         with transaction.atomic():
@@ -26,9 +31,16 @@ def _roll_contract_statuses(request, qs):
 
 @login_required
 def contract_list(request):
+    # `owner` is rendered as a column; `parent_contract` is NOT joined here — the list only asks
+    # whether one exists, which `parent_contract_id` answers with no join at all. The detail page
+    # renders its number and title, so it keeps the join.
     qs = SupplierContract.objects.filter(tenant=request.tenant).select_related(
-        "party", "currency", "parent_contract", "owner")
-    _roll_contract_statuses(request, qs)
+        "party", "currency", "owner")
+    # The roller reads three columns on every AUTO_STATUSES row and writes the ones that moved, so
+    # it gets its OWN lean queryset rather than the display one — otherwise an unpaginated write
+    # scan drags the joins along for nothing. Both 4.12 rollers do the same.
+    _roll_contract_statuses(request, SupplierContract.objects.filter(tenant=request.tenant).only(
+        "id", "status", "start_date", "end_date", "renewal_notice_days", "updated_at"))
     return crud_list(
         request, qs, "scm/srm/contract/list.html",
         search_fields=["number", "title", "party__name"],
