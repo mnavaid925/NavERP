@@ -342,13 +342,16 @@ def _resolve_scope(tenant, data, kinds):
         if chosen is not analytics.NETWORK:
             ignored.append(kind)
             continue
-        # isdecimal(), not isdigit(): '²'.isdigit() is True but int('²') raises, so a superscript in
-        # ?category= / ?vendor= / ?carrier= slipped past this guard and 500'd out of the .filter()
-        # below instead of landing in the scope_invalid state this branch exists to produce.
-        if not raw.isdecimal():
+        # as_db_int() is `crud_list`'s own int-FK guard (L11), imported rather than restated. It
+        # refuses two shapes, and BOTH 500'd out of the .filter() below instead of landing in the
+        # scope_invalid state this branch exists to produce: '²'.isdigit() is True but int('²')
+        # raises, and 999999999999999999999 converts cleanly and then overflows a 64-bit column
+        # inside the database driver. Neither is a pk, so both are "not a subject at all".
+        subject_pk = as_db_int(raw)
+        if subject_pk is None:
             invalid = True
             continue
-        subject = _SCOPE_QUERYSETS[kind](tenant).filter(pk=int(raw)).first()
+        subject = _SCOPE_QUERYSETS[kind](tenant).filter(pk=subject_pk).first()
         if subject is None:
             invalid = True
             continue
