@@ -55,7 +55,7 @@
               <td><a href="{% url 'scm:contract_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.title|default:"—" }}</td>
               <td>{% if obj.party %}{{ obj.party.name }}{% else %}—{% endif %}</td>
-              <td><span class="badge badge-slate">{{ obj.get_contract_type_display }}</span>{% if obj.parent_contract %} <span class="badge badge-info">Amendment</span>{% endif %}</td>
+              <td><span class="badge badge-slate">{{ obj.get_contract_type_display }}</span>{% if obj.parent_contract_id %} <span class="badge badge-info">Amendment</span>{% endif %}</td>
               <td>{% if obj.owner %}{{ obj.owner.get_full_name|default:obj.owner.username }}{% else %}—{% endif %}</td>
               <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
               <td>{{ obj.end_date|date:"M d, Y"|default:"—" }}</td>
