@@ -14290,3 +14290,1725 @@ class TestAnalyticsEmptyTenantFirstRun:
         assert resp.status_code == 200
         assert resp.context["scope_invalid"] is False
         assert resp.context["scope_value"] == "category"
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.12 date basis for the view tests. timezone.localdate(), NEVER datetime.date.today():
+# the verbs stamp timezone.localdate() and the carbon window is built from it, so an exact-date
+# assertion on the other basis flakes for the hours after local midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _localdate_view(days=0):
+    """Today (or days from it) on the basis the 4.12 views stamp and window against."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+
+# =================================================================================================
+# SCM 4.12 Contract & Compliance Management — views.
+#
+# Four registers (licences, paperwork, obligations, ESG scorecards) plus one COMPUTED carbon report
+# that stores nothing. What the tests below are actually pinned on, in the order they matter:
+#
+#   * the licence BALANCE round trip — issue charges it, void gives it back, and both go through
+#     ``recompute_usage()`` so a cached counter can never drift permanently;
+#   * ``record_check()`` reaching the obligation register through its own route;
+#   * the ``None``-not-zero contract on the carbon report — a green zero that actually means "we had
+#     no data" is worse here than anywhere else, because the number looks like an environmental
+#     result;
+#   * the ordinary CRUD contract every list/detail/form page in this app owes: 200, the right
+#     template, the right context keys, a filter that is applied BEFORE pagination, and a hostile
+#     query string that lands on a page rather than a 500.
+#
+# The two module-level message helpers this file already carries are REUSED, never redefined:
+# ``_messages(resp)`` returns a LIST of strings and ``_message_blob(response)`` returns ONE joined
+# lowercase string. A duplicate definition of either silently rebinds it for every caller above it —
+# that is the exact failure ``test_suite_hygiene.py`` was written for.
+# =================================================================================================
+_COMPLIANCE_LIST_PAGES = ("scm:tradelicense_list", "scm:tradedocument_list",
+                          "scm:compliancerequirement_list",
+                          "scm:sustainabilityassessment_list")
+
+#: Every 4.12 GET page, including the two create screens and the computed report.
+_COMPLIANCE_GET_PAGES = _COMPLIANCE_LIST_PAGES + (
+    "scm:tradelicense_create", "scm:tradedocument_create", "scm:compliancerequirement_create",
+    "scm:sustainabilityassessment_create", "scm:carbon_footprint_report",
+    "scm:carbon_footprint_report_export",
+)
+
+
+def _compliance_license_post(**overrides):
+    """A complete, VALID ``TradeLicenseForm`` POST body.
+
+    Every declared field is present (blank where optional): a ModelForm treats an ABSENT field
+    exactly like an empty one, so a payload that quietly omits ``renewal_notice_days`` would fail for
+    a reason the test was not written to measure.
+    """
+    data = {
+        "license_number": "BIS-VIEW-1", "title": "Export licence via the form",
+        "license_type": "export_license", "issuing_authority": "BIS",
+        "issuing_country": "United States", "holder_party": "", "end_user_party": "",
+        "application_date": "", "issue_date": "", "expiry_date": "", "renewal_notice_days": "60",
+        "authorized_value": "", "authorized_quantity": "", "currency": "", "commodity_scope": "",
+        "eccn_or_hs": "", "destination_countries": "", "conditions": "", "document": "",
+        "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _compliance_document_post(rows=(), initial=0, **overrides):
+    """A complete ``TradeDocumentForm`` POST body WITH its inline line formset.
+
+    ``TradeDocumentLine.document`` declares ``related_name="lines"``, and
+    ``BaseInlineFormSet.get_default_prefix()`` returns that related name — so the formset prefix on
+    this page is ``lines``, exactly like 4.1's.
+    """
+    data = {
+        "doc_type": "commercial_invoice", "direction": "export", "document_number": "TD-VIEW-1",
+        "issue_date": "", "shipment": "", "carrier": "", "purchase_order": "", "sales_order": "",
+        "license": "", "shipper_party": "", "consignee_party": "", "notify_party": "",
+        "country_of_origin": "", "country_of_destination": "", "currency": "",
+        "declared_value": "100.00", "freight_charges": "", "insurance_value": "", "incoterm": "",
+        "gross_weight_kg": "", "net_weight_kg": "", "package_count": "", "vessel_or_flight": "",
+        "voyage_number": "", "port_of_loading": "", "port_of_discharge": "",
+        "container_numbers": "", "is_negotiable": "", "filing_reference": "", "document": "",
+        "notes": "",
+    }
+    data.update(overrides)
+    data.update(formset_data("lines", list(rows), initial=initial))
+    return data
+
+
+def _compliance_requirement_post(**overrides):
+    """A complete, VALID ``ComplianceRequirementForm`` POST body."""
+    from django.utils import timezone
+    data = {
+        "title": "Annual COI on file", "description": "", "source": "regulation",
+        "source_reference": "", "framework": "insurance_coi", "obligation_category": "",
+        "jurisdiction": "", "scope": "tenant", "org_unit": "", "party": "", "location": "",
+        "item": "", "owner": "", "frequency": "annual",
+        "next_due_date": (timezone.localdate() + datetime.timedelta(days=30)).isoformat(),
+        "notice_days": "30", "contract": "", "license": "", "document": "",
+        "status": "applicable", "criticality": "medium", "not_applicable_reason": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _compliance_check_post(**overrides):
+    """A complete, VALID ``ComplianceCheckForm`` POST body (the inline "record check" form)."""
+    from django.utils import timezone
+    data = {
+        "result": "pass", "due_date": "", "performed_on": timezone.localdate().isoformat(),
+        "finding": "", "corrective_reference": "", "evidence": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _compliance_esg_post(**overrides):
+    """A complete, VALID ``SustainabilityAssessmentForm`` POST body."""
+    from django.utils import timezone
+    data = {
+        "party": "", "assessment_date": timezone.localdate().isoformat(), "valid_until": "",
+        "source": "self_assessment", "provider": "", "status": "draft",
+        "environment_score": "", "labor_human_rights_score": "", "ethics_score": "",
+        "sustainable_procurement_score": "", "carbon_score": "", "strengths": "",
+        "improvement_areas": "", "conflict_minerals_declared": "", "reach_declared": "",
+        "rohs_declared": "", "forced_labor_attested": "", "deforestation_declared": "",
+        "code_of_conduct_signed": "", "scope1_tco2e": "", "scope2_tco2e": "", "scope3_tco2e": "",
+        "carbon_reporting_year": "", "document": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _expected_tco2e(weight_kg, distance_km, mode):
+    """The report's own arithmetic, recomputed from the ONE factor table.
+
+    Typing 0.06 into the assertion would make the test agree with itself: the factors live in
+    ``models/ContractCompliance/_choices.py`` precisely so the page and the test read the same table
+    and a changed factor fails loudly rather than shipping green.
+    """
+    from apps.scm.models._base import q2
+    from apps.scm.models.ContractCompliance._choices import EMISSION_FACTORS
+    tonne_km = (Decimal(weight_kg) / Decimal("1000")) * Decimal(distance_km)
+    return q2(tonne_km * EMISSION_FACTORS[mode] / Decimal("1000000"))
+
+
+# ================================================================ 4.12 · every page renders
+class TestComplianceRegistersRender:
+    def test_every_page_renders_200_for_a_tenant_admin(self, client_a, trade_license_a,
+                                                       trade_document_a,
+                                                       compliance_requirement_a,
+                                                       sustainability_assessment_a,
+                                                       carbon_shipment_a):
+        for url_name in _COMPLIANCE_GET_PAGES:
+            assert client_a.get(reverse(url_name)).status_code == 200, url_name
+
+    def test_every_page_renders_for_a_workspace_that_owns_nothing(self, client_b):
+        """The very first page load: no licences, no paperwork, no obligations, no shipments. Every
+        one of these has been a 500 in an earlier sub-module."""
+        for url_name in _COMPLIANCE_GET_PAGES:
+            assert client_b.get(reverse(url_name)).status_code == 200, url_name
+
+    @pytest.mark.parametrize("url_name,template", [
+        ("scm:tradelicense_list", "scm/compliance/tradelicense/list.html"),
+        ("scm:tradedocument_list", "scm/compliance/tradedocument/list.html"),
+        ("scm:compliancerequirement_list", "scm/compliance/compliancerequirement/list.html"),
+        ("scm:sustainabilityassessment_list",
+         "scm/compliance/sustainabilityassessment/list.html"),
+        ("scm:carbon_footprint_report", "scm/compliance/carbon_footprint.html"),
+    ])
+    def test_each_page_renders_the_template_its_docstring_names(self, client_a, url_name,
+                                                                template):
+        resp = client_a.get(reverse(url_name))
+        assert template in [t.name for t in resp.templates]
+
+    def test_every_detail_page_renders(self, client_a, trade_license_a, trade_document_a,
+                                       compliance_requirement_a, sustainability_assessment_a):
+        for url_name, obj in (("scm:tradelicense_detail", trade_license_a),
+                              ("scm:tradedocument_detail", trade_document_a),
+                              ("scm:tradedocument_print", trade_document_a),
+                              ("scm:compliancerequirement_detail", compliance_requirement_a),
+                              ("scm:sustainabilityassessment_detail",
+                               sustainability_assessment_a)):
+            resp = client_a.get(reverse(url_name, args=[obj.pk]))
+            assert resp.status_code == 200, url_name
+            assert resp.context["obj"] == obj, url_name
+
+    def test_every_edit_form_renders_pre_filled(self, client_a, trade_license_a, trade_document_a,
+                                                compliance_requirement_a,
+                                                sustainability_assessment_a, compliance_check_a):
+        for url_name, obj in (("scm:tradelicense_edit", trade_license_a),
+                              ("scm:tradedocument_edit", trade_document_a),
+                              ("scm:compliancerequirement_edit", compliance_requirement_a),
+                              ("scm:sustainabilityassessment_edit", sustainability_assessment_a),
+                              ("scm:compliancecheck_edit", compliance_check_a)):
+            resp = client_a.get(reverse(url_name, args=[obj.pk]))
+            assert resp.status_code == 200, url_name
+            assert resp.context["is_edit"] is True, url_name
+            assert resp.context["form"].instance.pk == obj.pk, url_name
+
+
+# ================================================================ 4.12 · the licence register
+class TestTradeLicenseViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    trade_license_a,
+                                                                    expiring_license_a):
+        """A filter with no context to render from is the single most common defect in this
+        codebase: the select comes out empty and the filter is unreachable."""
+        resp = client_a.get(reverse("scm:tradelicense_list"))
+        for key in ("object_list", "page_obj", "q", "status_choices", "type_choices", "countries",
+                    "expiring_count", "expired_count"):
+            assert key in resp.context, key
+        assert list(resp.context["countries"]) == ["United States"]
+        assert resp.context["expiring_count"] == 1
+
+    def test_the_list_shows_this_workspaces_rows_and_not_the_other_ones(self, client_a,
+                                                                        trade_license_a,
+                                                                        trade_license_b):
+        rows = client_a.get(reverse("scm:tradelicense_list")).context["object_list"]
+        assert trade_license_a in rows and trade_license_b not in rows
+
+    @pytest.mark.parametrize("term,found", [("BIS-2026", True), ("workstation", True),
+                                             ("Bureau", True), ("nothing-matches", False)])
+    def test_the_search_covers_the_four_fields_the_view_declares(self, client_a, trade_license_a,
+                                                                  term, found):
+        rows = client_a.get(reverse("scm:tradelicense_list"), {"q": term}).context["object_list"]
+        assert (trade_license_a in rows) is found
+
+    def test_each_of_the_three_filters_narrows_the_list(self, client_a, trade_license_a,
+                                                        expiring_license_a, uncapped_license_a):
+        url = reverse("scm:tradelicense_list")
+        rows = client_a.get(url, {"status": "expiring"}).context["object_list"]
+        assert list(rows) == [expiring_license_a]
+        rows = client_a.get(url, {"license_type": "import_permit"}).context["object_list"]
+        assert list(rows) == [expiring_license_a]
+        rows = client_a.get(url, {"issuing_country": "United States"}).context["object_list"]
+        assert set(rows) == {trade_license_a, expiring_license_a}
+
+    def test_the_list_rolls_a_lapsed_licence_forward_on_the_way_in(self, client_a,
+                                                                    trade_license_a):
+        """A date-derived status has to catch up somewhere, and a page load is where somebody is
+        looking. The roll is ONE bulk_update over the rows that actually crossed a boundary."""
+        trade_license_a.expiry_date = _localdate_view(-1)
+        trade_license_a.save(update_fields=["expiry_date", "updated_at"])
+        client_a.get(reverse("scm:tradelicense_list"))
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "expired"
+
+    def test_the_roll_stamps_updated_at_rather_than_writing_back_a_stale_value(self, client_a,
+                                                                               trade_license_a):
+        """``bulk_update`` never calls ``pre_save``, so ``auto_now`` does not fire — the column has
+        to be stamped by hand or the roll silently BACKDATES a row that just changed.
+
+        The stale value is pushed a week into the past with a direct ``.update()`` rather than read
+        off the fixture: Windows' system clock has ~15 ms granularity, so two ``timezone.now()``
+        calls inside one request can return the SAME microsecond and a bare "moved forward"
+        assertion would flake rather than measure anything.
+        """
+        from django.utils import timezone
+        from apps.scm.models import TradeLicense
+        stale = timezone.now() - datetime.timedelta(days=7)
+        trade_license_a.expiry_date = _localdate_view(-1)
+        trade_license_a.save(update_fields=["expiry_date", "updated_at"])
+        TradeLicense.objects.filter(pk=trade_license_a.pk).update(updated_at=stale)
+        client_a.get(reverse("scm:tradelicense_list"))
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "expired"
+        assert trade_license_a.updated_at > stale
+
+    def test_the_list_is_bounded_in_queries_regardless_of_row_count(self, client_a, tenant_a,
+                                                                     supplier_a, usd,
+                                                                     django_assert_max_num_queries):
+        """``select_related`` covers the three FKs a row renders; without it a page of 15 licences is
+        up to 45 extra queries for three columns."""
+        from apps.scm.models import TradeLicense
+        for index in range(15):
+            TradeLicense.objects.create(tenant=tenant_a, license_number=f"N+1-{index}",
+                                        title=f"Licence {index}", issuing_authority="BIS",
+                                        holder_party=supplier_a, end_user_party=supplier_a,
+                                        currency=usd)
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:tradelicense_list")).status_code == 200
+
+    def test_creating_a_licence_saves_it_against_the_REQUEST_tenant(self, client_a, tenant_a):
+        from apps.scm.models import TradeLicense
+        resp = client_a.post(reverse("scm:tradelicense_create"), _compliance_license_post())
+        assert resp.status_code == 302
+        obj = TradeLicense.objects.get(license_number="BIS-VIEW-1")
+        assert obj.tenant_id == tenant_a.pk
+        assert obj.status == "draft"          # never typed — the verbs own it
+        assert obj.number.startswith("LIC-")
+
+    def test_a_crafted_status_in_the_create_body_is_ignored(self, client_a, tenant_a):
+        """``status`` is ``editable=False`` and off the whitelist, so the form machinery never sees
+        it — a licence cannot be born in force."""
+        from apps.scm.models import TradeLicense
+        client_a.post(reverse("scm:tradelicense_create"),
+                      _compliance_license_post(status="active", used_value="9999.00",
+                                               number="LIC-99999"))
+        obj = TradeLicense.objects.get(license_number="BIS-VIEW-1")
+        assert obj.status == "draft"
+        assert obj.used_value == Decimal("0.00")
+        assert obj.number != "LIC-99999"
+
+    def test_an_invalid_create_re_renders_the_form_with_errors(self, client_a, tenant_a):
+        from apps.scm.models import TradeLicense
+        resp = client_a.post(reverse("scm:tradelicense_create"),
+                             _compliance_license_post(title=""))
+        assert resp.status_code == 200
+        assert "title" in resp.context["form"].errors
+        assert not TradeLicense.objects.filter(tenant=tenant_a).exists()
+
+    def test_editing_corrects_what_the_licence_SAYS(self, client_a, trade_license_a):
+        resp = client_a.post(reverse("scm:tradelicense_edit", args=[trade_license_a.pk]),
+                             _compliance_license_post(
+                                 license_number=trade_license_a.license_number,
+                                 title="Corrected title", issuing_authority="BIS",
+                                 issuing_country="United States",
+                                 authorized_value="10000.00", authorized_quantity="500.0000",
+                                 expiry_date=trade_license_a.expiry_date.isoformat()))
+        assert resp.status_code == 302
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.title == "Corrected title"
+        assert trade_license_a.status == "active"
+
+    def test_a_member_cannot_widen_an_IN_FORCE_licences_ceiling(self, member_client,
+                                                                 trade_license_a):
+        """The regression lock: approving is admin-gated, so raising the ceiling on an already
+        in-force licence takes the same gate — otherwise a member barred from approve could widen it
+        and then self-serve ``tradedocument_issue`` past what the authority granted."""
+        resp = member_client.get(reverse("scm:tradelicense_edit", args=[trade_license_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["may_edit_controls"] is False
+        for popped in ("authorized_value", "authorized_quantity", "expiry_date"):
+            assert popped not in resp.context["form"].fields, popped
+
+        member_client.post(reverse("scm:tradelicense_edit", args=[trade_license_a.pk]),
+                           _compliance_license_post(
+                               license_number=trade_license_a.license_number,
+                               title=trade_license_a.title, issuing_authority="BIS",
+                               authorized_value="999999.00",
+                               expiry_date=_localdate_view(3000).isoformat()))
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.authorized_value == Decimal("10000.00")
+        assert trade_license_a.expiry_date == _localdate_view(300)
+
+    def test_a_member_MAY_still_edit_the_ceilings_while_the_licence_is_only_a_draft(
+        self, member_client, draft_license_a,
+    ):
+        resp = member_client.get(reverse("scm:tradelicense_edit", args=[draft_license_a.pk]))
+        assert resp.context["may_edit_controls"] is True
+        for offered in ("authorized_value", "authorized_quantity", "expiry_date"):
+            assert offered in resp.context["form"].fields, offered
+
+    def test_an_admin_keeps_the_ceilings_editable_on_an_in_force_licence(self, client_a,
+                                                                         trade_license_a):
+        resp = client_a.get(reverse("scm:tradelicense_edit", args=[trade_license_a.pk]))
+        assert resp.context["may_edit_controls"] is True
+
+    def test_the_detail_page_carries_every_key_its_balance_card_reads(self, client_a,
+                                                                       trade_license_a,
+                                                                       issued_document_a,
+                                                                       compliance_requirement_a):
+        resp = client_a.get(reverse("scm:tradelicense_detail", args=[trade_license_a.pk]))
+        for key in ("obj", "days_to_expiry", "expiring_soon", "remaining_value",
+                    "remaining_quantity", "utilization_pct", "utilization_bar_pct",
+                    "is_chargeable", "charge_block_reason", "documents", "documents_truncated",
+                    "document_count", "charging_count", "requirements", "requirements_truncated",
+                    "can_submit", "can_approve", "can_revoke"):
+            assert key in resp.context, key
+        assert resp.context["document_count"] == 1
+        assert resp.context["charging_count"] == 1
+        assert resp.context["remaining_value"] == Decimal("8800.00")
+        assert resp.context["is_chargeable"] is True
+        assert resp.context["charge_block_reason"] == ""
+
+    def test_the_detail_page_prints_a_blank_rather_than_a_zero_on_an_uncapped_licence(
+        self, client_a, uncapped_license_a,
+    ):
+        resp = client_a.get(reverse("scm:tradelicense_detail", args=[uncapped_license_a.pk]))
+        assert resp.context["remaining_value"] is None
+        assert resp.context["remaining_quantity"] is None
+        assert resp.context["utilization_pct"] is None
+        assert resp.context["utilization_bar_pct"] is None
+
+    def test_the_progress_bar_is_clamped_but_the_FIGURE_is_not(self, client_a, trade_license_a):
+        """An over-drawn licence has to read as over-drawn rather than as a tidy full bar."""
+        trade_license_a.used_value = Decimal("15000.00")
+        trade_license_a.save(update_fields=["used_value", "updated_at"])
+        resp = client_a.get(reverse("scm:tradelicense_detail", args=[trade_license_a.pk]))
+        assert resp.context["utilization_pct"] == Decimal("150.00")
+        assert resp.context["utilization_bar_pct"] == 100
+
+    def test_the_detail_page_previews_the_refusal_the_issue_route_would_give(self, client_a,
+                                                                             draft_license_a):
+        resp = client_a.get(reverse("scm:tradelicense_detail", args=[draft_license_a.pk]))
+        assert resp.context["is_chargeable"] is False
+        assert "only an active or expiring licence" in resp.context["charge_block_reason"]
+
+    def test_the_submit_verb_lodges_the_application_and_stamps_its_date(self, client_a,
+                                                                        draft_license_a):
+        resp = client_a.post(reverse("scm:tradelicense_submit", args=[draft_license_a.pk]))
+        assert resp.status_code == 302
+        draft_license_a.refresh_from_db()
+        assert draft_license_a.status == "applied"
+        assert draft_license_a.application_date == _localdate_view()
+
+    def test_a_second_submit_is_an_info_no_op_that_does_not_re_stamp_the_date(self, client_a,
+                                                                              draft_license_a):
+        client_a.post(reverse("scm:tradelicense_submit", args=[draft_license_a.pk]))
+        draft_license_a.refresh_from_db()
+        stamped = draft_license_a.application_date
+        resp = client_a.post(reverse("scm:tradelicense_submit", args=[draft_license_a.pk]),
+                             follow=True)
+        assert "already been submitted" in _message_blob(resp)
+        draft_license_a.refresh_from_db()
+        assert draft_license_a.application_date == stamped
+
+    def test_submitting_does_not_invert_the_date_ladder(self, client_a, tenant_a):
+        """``save()`` does not run ``clean()``, so a helpful "today" default would quietly write a
+        row the form would refuse. Where today does not fit, the date is left for a human."""
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense.objects.create(tenant=tenant_a, license_number="BACKDATED-1",
+                                          title="Old grant", issuing_authority="BIS",
+                                          issue_date=_localdate_view(-30),
+                                          expiry_date=_localdate_view(300))
+        client_a.post(reverse("scm:tradelicense_submit", args=[lic.pk]))
+        lic.refresh_from_db()
+        assert lic.status == "applied"
+        assert lic.application_date is None
+
+    def test_the_approve_verb_puts_the_licence_in_force_and_stamps_who_decided(self, client_a,
+                                                                               admin_user,
+                                                                               draft_license_a):
+        resp = client_a.post(reverse("scm:tradelicense_approve", args=[draft_license_a.pk]),
+                             follow=True)
+        assert resp.status_code == 200
+        draft_license_a.refresh_from_db()
+        assert draft_license_a.status == "active"
+        assert draft_license_a.approved_by_id == admin_user.pk
+        assert draft_license_a.approved_at is not None
+        assert draft_license_a.issue_date == _localdate_view()
+
+    def test_approving_never_parks_a_licence_at_a_status_nothing_can_revive(self, client_a,
+                                                                            draft_license_a):
+        """``approved`` is not in ``CHARGEABLE_STATUSES`` and no date roll ever leaves it, so a
+        licence left there would be a granted authority nobody could use."""
+        from apps.scm.models import TradeLicense
+        client_a.post(reverse("scm:tradelicense_approve", args=[draft_license_a.pk]))
+        draft_license_a.refresh_from_db()
+        assert draft_license_a.status in TradeLicense.CHARGEABLE_STATUSES
+
+    def test_the_dates_get_the_last_word_when_a_lapsed_licence_is_approved(self, client_a,
+                                                                           tenant_a):
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense.objects.create(tenant=tenant_a, license_number="LAPSED-1",
+                                          title="Already lapsed", issuing_authority="BIS",
+                                          expiry_date=_localdate_view(-1))
+        resp = client_a.post(reverse("scm:tradelicense_approve", args=[lic.pk]), follow=True)
+        lic.refresh_from_db()
+        assert lic.status == "expired"
+        assert "already passed" in _message_blob(resp)
+
+    def test_a_revoked_licence_is_re_registered_not_re_approved(self, client_a, trade_license_a):
+        client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                      {"reason": "Withdrawn by BIS."})
+        resp = client_a.post(reverse("scm:tradelicense_approve", args=[trade_license_a.pk]),
+                             follow=True)
+        assert "re-registered, not re-approved" in _message_blob(resp)
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "revoked"
+
+    def test_the_revoke_verb_requires_a_reason_and_records_it(self, client_a, trade_license_a):
+        resp = client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]), {},
+                             follow=True)
+        assert "give a reason" in _message_blob(resp)
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "active"
+
+        client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                      {"reason": "Withdrawn after an end-use finding."})
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "revoked"
+        assert trade_license_a.revoked_at is not None
+        assert "end-use finding" in trade_license_a.revocation_reason
+
+    def test_the_revoke_verb_accepts_both_spellings_of_the_reason_input(self, client_a,
+                                                                        trade_license_a):
+        client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                      {"revocation_reason": "The long spelling."})
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "revoked"
+
+    def test_revoking_does_NOT_unwind_the_balance(self, client_a, trade_license_a,
+                                                  issued_document_a):
+        """The balance is the record of what was authorised AT THE TIME; re-deriving it downward on
+        revocation would erase the evidence that the movement happened. What revocation stops is NEW
+        movement."""
+        resp = client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                             {"reason": "Withdrawn."}, follow=True)
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("1200.00")
+        assert "remain charged against it" in _message_blob(resp)
+        assert trade_license_a.can_charge(Decimal("1"), Decimal("1"))[0] is False
+
+    def test_a_second_revoke_does_not_overwrite_the_first_reason_or_date(self, client_a,
+                                                                         trade_license_a):
+        client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                      {"reason": "The original reason."})
+        trade_license_a.refresh_from_db()
+        first_at, first_reason = trade_license_a.revoked_at, trade_license_a.revocation_reason
+        resp = client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                             {"reason": "A second, different reason."}, follow=True)
+        assert "already revoked" in _message_blob(resp)
+        trade_license_a.refresh_from_db()
+        assert (trade_license_a.revoked_at, trade_license_a.revocation_reason) == (first_at,
+                                                                                   first_reason)
+
+    def test_the_recompute_button_says_nothing_changed_rather_than_writing_noise(self, client_a,
+                                                                                  trade_license_a,
+                                                                                  issued_document_a):
+        """"Recomputed, identical" is noise in a trail somebody has to read, so it is an info message
+        and NO audit row."""
+        from apps.core.models import AuditLog
+        before = AuditLog.objects.count()
+        resp = client_a.post(reverse("scm:tradelicense_recompute", args=[trade_license_a.pk]),
+                             follow=True)
+        assert "already in step with its documents" in _message_blob(resp)
+        assert AuditLog.objects.count() == before
+
+    def test_the_recompute_button_fixes_a_drifted_counter(self, client_a, trade_license_a,
+                                                           issued_document_a):
+        """The stated invalidation path that lets the counters be columns at all — a wrong balance
+        can never become permanent."""
+        from apps.scm.models import TradeLicense
+        TradeLicense.objects.filter(pk=trade_license_a.pk).update(used_value=Decimal("99.00"))
+        resp = client_a.post(reverse("scm:tradelicense_recompute", args=[trade_license_a.pk]),
+                             follow=True)
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("1200.00")
+        assert "re-derived from its documents" in _message_blob(resp)
+
+    def test_deleting_is_refused_while_anything_was_papered_under_the_licence(self, client_a,
+                                                                              trade_license_a,
+                                                                              trade_document_a):
+        """``TradeDocument.license`` is PROTECT: the record of what moved under a licence is the
+        evidence the whole category exists to keep."""
+        from apps.scm.models import TradeLicense
+        resp = client_a.post(reverse("scm:tradelicense_delete", args=[trade_license_a.pk]),
+                             follow=True)
+        assert "cannot be deleted" in _message_blob(resp)
+        assert "revoke the licence instead" in _message_blob(resp)
+        assert TradeLicense.objects.filter(pk=trade_license_a.pk).exists()
+
+    def test_deleting_a_clean_licence_succeeds_and_names_what_lost_its_link(self, client_a,
+                                                                            tenant_a,
+                                                                            draft_license_a):
+        """``ComplianceRequirement.license`` is SET_NULL, so obligations SURVIVE with their proof
+        history and merely lose the link — a real consequence, said out loud."""
+        from apps.scm.models import ComplianceRequirement, TradeLicense
+        requirement = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Licence proviso", source="license", license=draft_license_a,
+            frequency="on_event")
+        resp = client_a.post(reverse("scm:tradelicense_delete", args=[draft_license_a.pk]),
+                             follow=True)
+        assert not TradeLicense.objects.filter(pk=draft_license_a.pk).exists()
+        assert "lost their link" in _message_blob(resp)
+        requirement.refresh_from_db()
+        assert requirement.license_id is None
+
+    def test_a_GET_never_deletes(self, client_a, draft_license_a):
+        from apps.scm.models import TradeLicense
+        assert client_a.get(reverse("scm:tradelicense_delete",
+                                    args=[draft_license_a.pk])).status_code == 405
+        assert TradeLicense.objects.filter(pk=draft_license_a.pk).exists()
+
+    @pytest.mark.parametrize("value", ["abc", "²", "-1", "0", "99999", "1e5", ""])
+    def test_a_junk_page_number_lands_on_a_page_rather_than_a_500(self, client_a, trade_license_a,
+                                                                   value):
+        assert client_a.get(reverse("scm:tradelicense_list"),
+                            {"page": value}).status_code == 200, value
+
+    def test_page_two_renders_when_the_rows_exceed_the_page_size(self, client_a, tenant_a):
+        """L9 — the guard is only exercised once there IS a second page."""
+        from apps.scm.models import TradeLicense
+        for index in range(20):
+            TradeLicense.objects.create(tenant=tenant_a, license_number=f"PAGE-{index}",
+                                        title=f"Licence {index}", issuing_authority="BIS")
+        resp = client_a.get(reverse("scm:tradelicense_list"), {"page": "2"})
+        assert resp.status_code == 200
+        assert resp.context["page_obj"].number == 2
+        past_end = client_a.get(reverse("scm:tradelicense_list"), {"page": "9999"})
+        assert past_end.status_code == 200
+        assert past_end.context["page_obj"].number == past_end.context["page_obj"].paginator.num_pages
+
+
+# ================================================================ 4.12 · the paperwork register
+class TestTradeDocumentViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    trade_document_a):
+        resp = client_a.get(reverse("scm:tradedocument_list"))
+        for key in ("object_list", "page_obj", "q", "status_choices", "doctype_choices",
+                    "direction_choices", "shipments", "licenses"):
+            assert key in resp.context, key
+
+    def test_the_shipment_dropdown_offers_only_consignments_that_carry_paperwork(
+        self, client_a, trade_document_a, shipment_a, carbon_shipment_a,
+    ):
+        """The unfiltered alternative is the whole shipment table — thousands of options of which all
+        but a handful select nothing."""
+        offered = list(client_a.get(reverse("scm:tradedocument_list")).context["shipments"])
+        assert offered == [shipment_a]
+        assert carbon_shipment_a not in offered
+
+    def test_each_filter_narrows_the_list(self, client_a, trade_document_a, trade_license_a,
+                                          shipment_a):
+        url = reverse("scm:tradedocument_list")
+        for params in ({"status": "draft"}, {"doc_type": "commercial_invoice"},
+                       {"direction": "export"}, {"shipment": str(shipment_a.pk)},
+                       {"license": str(trade_license_a.pk)}):
+            rows = client_a.get(url, params).context["object_list"]
+            assert list(rows) == [trade_document_a], params
+
+    @pytest.mark.parametrize("value", ["abc", "²", "999999999999999999999", "1.5", "-1",
+                                        "1;DROP TABLE", "<script>"])
+    def test_a_junk_FK_filter_skips_rather_than_raising_out_of_filter(self, client_a,
+                                                                      trade_document_a, value):
+        """L11 — ``?shipment=²`` sailed through an ``isdigit()`` guard and then raised ValueError
+        from INSIDE ``.filter()``; a 21-digit value converts fine and dies in the driver."""
+        for param in ("shipment", "license"):
+            resp = client_a.get(reverse("scm:tradedocument_list"), {param: value})
+            assert resp.status_code == 200, (param, value)
+            assert list(resp.context["object_list"]) == [trade_document_a], (param, value)
+
+    def test_creating_a_document_saves_its_header_and_its_lines_in_one_go(self, client_a,
+                                                                          tenant_a, item_a,
+                                                                          uom_each_a):
+        from apps.scm.models import TradeDocument
+        resp = client_a.post(reverse("scm:tradedocument_create"), _compliance_document_post(
+            rows=[{"item": item_a.pk, "description": "Workstation", "hs_code": "8471.30",
+                   "country_of_origin": "US", "uom_text": "each", "uom": uom_each_a.pk,
+                   "quantity": "2", "unit_value": "50.00", "net_weight_kg": ""}]))
+        assert resp.status_code == 302
+        doc = TradeDocument.objects.get(tenant=tenant_a, document_number="TD-VIEW-1")
+        assert doc.status == "draft"
+        assert doc.lines.count() == 1
+        assert doc.lines_total == Decimal("100.00")
+
+    def test_a_document_with_no_lines_at_all_saves(self, client_a, tenant_a):
+        """A bill of lading, an insurance certificate and a licence copy legitimately carry none."""
+        from apps.scm.models import TradeDocument
+        resp = client_a.post(reverse("scm:tradedocument_create"),
+                             _compliance_document_post(doc_type="bill_of_lading_ocean",
+                                                       declared_value="0.00"))
+        assert resp.status_code == 302
+        assert TradeDocument.objects.filter(tenant=tenant_a).count() == 1
+
+    def test_an_invalid_line_rolls_the_HEADER_back_too(self, client_a, tenant_a):
+        """Header and lines commit in ONE ``transaction.atomic()``."""
+        from apps.scm.models import TradeDocument
+        resp = client_a.post(reverse("scm:tradedocument_create"), _compliance_document_post(
+            rows=[{"description": "   ", "quantity": "1", "unit_value": "1.00"}]))
+        assert resp.status_code == 200
+        assert not TradeDocument.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_filed_document_is_amended_or_voided_not_edited(self, client_a, issued_document_a):
+        """Changing it would rewrite what an authority was told."""
+        resp = client_a.get(reverse("scm:tradedocument_edit", args=[issued_document_a.pk]),
+                            follow=True)
+        assert "a filed document is amended or voided, not edited" in _message_blob(resp)
+
+    def test_the_detail_page_carries_every_key_it_renders_from(self, client_a, trade_document_a):
+        resp = client_a.get(reverse("scm:tradedocument_detail", args=[trade_document_a.pk]))
+        for key in ("obj", "lines", "has_lines", "lines_total", "value_matches", "charge_value",
+                    "charge_quantity", "license_warning", "can_edit", "can_issue", "can_submit",
+                    "can_accept", "can_void"):
+            assert key in resp.context, key
+        assert resp.context["lines_total"] == Decimal("1200.00")
+        assert resp.context["value_matches"] is True
+        assert resp.context["charge_value"] == Decimal("1200.00")
+        assert resp.context["charge_quantity"] == Decimal("7.0000")
+        assert resp.context["license_warning"] == ""
+
+    def test_the_detail_page_warns_BEFORE_the_filer_presses_issue(self, client_a,
+                                                                   trade_document_a,
+                                                                   trade_license_a):
+        """A filer learns the licence is exhausted while the document is still editable, rather than
+        at the moment they press Issue."""
+        trade_license_a.authorized_value = Decimal("100.00")
+        trade_license_a.save(update_fields=["authorized_value", "updated_at"])
+        resp = client_a.get(reverse("scm:tradedocument_detail", args=[trade_document_a.pk]))
+        assert "exceed the authorised value" in resp.context["license_warning"]
+
+    def test_issuing_charges_the_licence_with_the_documents_FACE_value(self, client_a,
+                                                                        trade_document_a,
+                                                                        trade_license_a):
+        resp = client_a.post(reverse("scm:tradedocument_issue", args=[trade_document_a.pk]),
+                             follow=True)
+        assert resp.status_code == 200
+        trade_document_a.refresh_from_db()
+        trade_license_a.refresh_from_db()
+        assert trade_document_a.status == "issued"
+        assert trade_document_a.issued_at is not None
+        assert trade_license_a.used_value == Decimal("1200.00")
+        assert trade_license_a.used_quantity == Decimal("7.0000")
+        # ``_message_blob`` lowercases, so the licence number is matched in the same case.
+        assert f"charged to {trade_license_a.number}".lower() in _message_blob(resp)
+
+    def test_issuing_is_REFUSED_when_the_charge_would_exceed_the_ceiling_and_charges_nothing(
+        self, client_a, trade_document_a, trade_license_a,
+    ):
+        """Refuse, never clamp: charging what fits and letting the rest go out unauthorised is
+        precisely the failure a licence balance exists to prevent."""
+        trade_license_a.authorized_value = Decimal("100.00")
+        trade_license_a.save(update_fields=["authorized_value", "updated_at"])
+        resp = client_a.post(reverse("scm:tradedocument_issue", args=[trade_document_a.pk]),
+                             follow=True)
+        assert "exceed the authorised value" in _message_blob(resp)
+        trade_document_a.refresh_from_db()
+        trade_license_a.refresh_from_db()
+        assert trade_document_a.status == "draft"
+        assert trade_license_a.used_value == Decimal("0.00")
+
+    def test_issuing_an_already_issued_document_is_refused(self, client_a, issued_document_a):
+        resp = client_a.post(reverse("scm:tradedocument_issue", args=[issued_document_a.pk]),
+                             follow=True)
+        assert "only a draft or an amendment can be issued" in _message_blob(resp)
+
+    def test_issuing_defaults_the_printed_date_and_says_so_in_the_diff(self, client_a, tenant_a,
+                                                                        trade_license_a):
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a, license=trade_license_a,
+                                           declared_value=Decimal("10.00"))
+        client_a.post(reverse("scm:tradedocument_issue", args=[doc.pk]))
+        doc.refresh_from_db()
+        assert doc.issue_date == _localdate_view()
+
+    def test_an_unlicensed_document_issues_without_charging_anything(self, client_a, tenant_a):
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a, declared_value=Decimal("10.00"))
+        resp = client_a.post(reverse("scm:tradedocument_issue", args=[doc.pk]), follow=True)
+        doc.refresh_from_db()
+        assert doc.status == "issued"
+        assert "issued." in _message_blob(resp)
+
+    def test_the_submit_verb_only_moves_an_issued_document_and_stores_the_filing_reference(
+        self, client_a, trade_document_a, issued_document_a,
+    ):
+        resp = client_a.post(reverse("scm:tradedocument_submit", args=[issued_document_a.pk]),
+                             {"filing_reference": "AES ITN X20260214000871"}, follow=True)
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.status == "submitted"
+        assert issued_document_a.filing_reference == "AES ITN X20260214000871"
+        # 4.12 STORES the reference; it does not transmit anything.
+        assert "recorded as submitted" in _message_blob(resp)
+
+    def test_a_blank_filing_reference_does_not_erase_what_was_already_captured(self, client_a,
+                                                                               issued_document_a):
+        issued_document_a.filing_reference = "AES-EXISTING"
+        issued_document_a.save(update_fields=["filing_reference", "updated_at"])
+        client_a.post(reverse("scm:tradedocument_submit", args=[issued_document_a.pk]),
+                      {"filing_reference": "   "})
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.filing_reference == "AES-EXISTING"
+
+    def test_submitting_a_draft_is_refused(self, client_a, trade_document_a):
+        resp = client_a.post(reverse("scm:tradedocument_submit", args=[trade_document_a.pk]),
+                             follow=True)
+        assert "only an issued document can be submitted" in _message_blob(resp)
+        trade_document_a.refresh_from_db()
+        assert trade_document_a.status == "draft"
+
+    def test_the_accept_verb_only_moves_a_submitted_document(self, client_a, issued_document_a):
+        resp = client_a.post(reverse("scm:tradedocument_accept", args=[issued_document_a.pk]),
+                             follow=True)
+        assert "only a submitted document can be accepted" in _message_blob(resp)
+        client_a.post(reverse("scm:tradedocument_submit", args=[issued_document_a.pk]))
+        client_a.post(reverse("scm:tradedocument_accept", args=[issued_document_a.pk]))
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.status == "accepted"
+
+    def test_moving_between_two_charging_statuses_does_not_touch_the_balance(self, client_a,
+                                                                             issued_document_a,
+                                                                             trade_license_a):
+        """``issued``/``submitted``/``accepted`` are all in ``CHARGING_STATUSES``, so re-writing the
+        counters would be an UPDATE with nothing to say."""
+        trade_license_a.refresh_from_db()
+        before = (trade_license_a.used_value, trade_license_a.used_quantity)
+        client_a.post(reverse("scm:tradedocument_submit", args=[issued_document_a.pk]))
+        client_a.post(reverse("scm:tradedocument_accept", args=[issued_document_a.pk]))
+        trade_license_a.refresh_from_db()
+        assert (trade_license_a.used_value, trade_license_a.used_quantity) == before
+
+    def test_the_void_verb_requires_a_reason_and_gives_the_balance_back(self, client_a,
+                                                                         issued_document_a,
+                                                                         trade_license_a):
+        resp = client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]), {},
+                             follow=True)
+        assert "give a reason for voiding" in _message_blob(resp)
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.status == "issued"
+
+        resp = client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]),
+                             {"reason": "Raised against the wrong consignee."}, follow=True)
+        issued_document_a.refresh_from_db()
+        trade_license_a.refresh_from_db()
+        assert issued_document_a.status == "void"
+        assert "wrong consignee" in issued_document_a.void_reason
+        assert trade_license_a.used_value == Decimal("0.00")
+        assert trade_license_a.used_quantity == Decimal("0.0000")
+
+    def test_the_void_verb_accepts_both_spellings_of_the_reason_input(self, client_a,
+                                                                      issued_document_a):
+        client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]),
+                      {"void_reason": "The long spelling."})
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.status == "void"
+
+    def test_voiding_keeps_the_row_so_the_history_survives(self, client_a, issued_document_a):
+        """Voiding is how a filed document's history is kept while its effect is undone — which is
+        why it is the recommended alternative to deleting one."""
+        from apps.scm.models import TradeDocument
+        client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]),
+                      {"reason": "Superseded."})
+        assert TradeDocument.objects.filter(pk=issued_document_a.pk).exists()
+
+    def test_deleting_a_charging_document_re_derives_the_licence_balance(self, client_a,
+                                                                         issued_document_a,
+                                                                         trade_license_a):
+        from apps.scm.models import TradeDocument
+        resp = client_a.post(reverse("scm:tradedocument_delete", args=[issued_document_a.pk]),
+                             follow=True)
+        assert not TradeDocument.objects.filter(pk=issued_document_a.pk).exists()
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.used_value == Decimal("0.00")
+        assert "was re-derived" in _message_blob(resp)
+
+    def test_the_print_page_renders_the_lines_and_a_generated_stamp(self, client_a,
+                                                                     trade_document_a):
+        resp = client_a.get(reverse("scm:tradedocument_print", args=[trade_document_a.pk]))
+        assert resp.status_code == 200
+        assert len(resp.context["lines"]) == 2
+        assert resp.context["lines_total"] == Decimal("1200.00")
+        assert resp.context["printed_at"] is not None
+
+    def test_the_list_is_bounded_in_queries_regardless_of_row_count(self, client_a, tenant_a,
+                                                                     carrier_a, customer_a, usd,
+                                                                     trade_license_a, shipment_a,
+                                                                     django_assert_max_num_queries):
+        """``carrier__party`` and not just ``carrier``: ``Carrier.__str__`` renders ``Carrier.name``,
+        a PROPERTY reading ``self.party.name``, so stopping one hop short costs a query per row."""
+        from apps.scm.models import TradeDocument
+        for index in range(15):
+            TradeDocument.objects.create(tenant=tenant_a, carrier=carrier_a,
+                                         consignee_party=customer_a, currency=usd,
+                                         license=trade_license_a, shipment=shipment_a,
+                                         document_number=f"N1-{index}")
+        with django_assert_max_num_queries(15):
+            assert client_a.get(reverse("scm:tradedocument_list")).status_code == 200
+
+
+# ================================================================ 4.12 · the obligation register
+class TestComplianceRequirementViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    compliance_requirement_a,
+                                                                    overdue_requirement_a):
+        resp = client_a.get(reverse("scm:compliancerequirement_list"))
+        for key in ("object_list", "page_obj", "q", "status_choices", "framework_choices",
+                    "source_choices", "criticality_choices", "due_choices", "owners", "due",
+                    "overdue_count", "due_soon_count"):
+            assert key in resp.context, key
+
+    def test_the_list_rolls_a_crossed_row_to_overdue_on_the_way_in(self, client_a,
+                                                                    overdue_requirement_a):
+        assert overdue_requirement_a.status == "applicable"
+        client_a.get(reverse("scm:compliancerequirement_list"))
+        overdue_requirement_a.refresh_from_db()
+        assert overdue_requirement_a.status == "overdue"
+
+    def test_the_roll_stamps_updated_at_rather_than_writing_back_a_stale_value(self, client_a,
+                                                                               overdue_requirement_a):
+        """``bulk_update`` builds a CASE out of the in-memory attribute values and never calls
+        ``pre_save``, so an ``auto_now`` column would be written back with its stale value.
+
+        The stale value is forced a week into the past with a direct ``.update()`` — Windows' system
+        clock has ~15 ms granularity, so a bare "moved forward" assertion against the creation stamp
+        can compare two identical microseconds and flake.
+        """
+        from django.utils import timezone
+        from apps.scm.models import ComplianceRequirement
+        stale = timezone.now() - datetime.timedelta(days=7)
+        ComplianceRequirement.objects.filter(pk=overdue_requirement_a.pk).update(updated_at=stale)
+        client_a.get(reverse("scm:compliancerequirement_list"))
+        overdue_requirement_a.refresh_from_db()
+        assert overdue_requirement_a.status == "overdue"
+        assert overdue_requirement_a.updated_at > stale
+
+    def test_the_two_header_chips_count_the_whole_workspace_not_the_filtered_page(
+        self, client_a, compliance_requirement_a, overdue_requirement_a,
+    ):
+        """These chips say what the WORKSPACE owes; recomputing them per filter would make the
+        number change as you browse."""
+        resp = client_a.get(reverse("scm:compliancerequirement_list"), {"status": "retired"})
+        assert list(resp.context["object_list"]) == []
+        assert resp.context["overdue_count"] == 1
+        assert resp.context["due_soon_count"] == 1
+
+    def test_the_due_filter_and_the_chip_it_links_to_agree(self, client_a,
+                                                            compliance_requirement_a,
+                                                            overdue_requirement_a):
+        url = reverse("scm:compliancerequirement_list")
+        overdue = client_a.get(url, {"due": "overdue"})
+        assert list(overdue.context["object_list"]) == [overdue_requirement_a]
+        assert overdue.context["overdue_count"] == 1
+        due_soon = client_a.get(url, {"due": "due_soon"})
+        assert list(due_soon.context["object_list"]) == [compliance_requirement_a]
+        assert due_soon.context["due_soon_count"] == 1
+
+    def test_the_open_view_is_the_models_own_OPEN_STATUSES(self, client_a,
+                                                            compliance_requirement_a,
+                                                            overdue_requirement_a):
+        rows = client_a.get(reverse("scm:compliancerequirement_list"),
+                            {"due": "open"}).context["object_list"]
+        assert set(rows) == {compliance_requirement_a, overdue_requirement_a}
+
+    def test_a_retired_row_with_a_stale_date_is_not_counted_as_overdue(self, client_a, tenant_a):
+        """A retired or not-applicable row owes nothing, and counting it is the noise that makes a
+        queue unopenable. All three due buckets are ANDed with "still open" for that reason."""
+        from apps.scm.models import ComplianceRequirement
+        retired = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Retired long ago", frequency="on_event",
+            next_due_date=_localdate_view(-400), status="retired")
+        resp = client_a.get(reverse("scm:compliancerequirement_list"))
+        assert resp.context["overdue_count"] == 0
+        assert resp.context["due_soon_count"] == 0
+        # It is still IN the register — it is simply not owed.
+        assert retired in resp.context["object_list"]
+        overdue_rows = client_a.get(reverse("scm:compliancerequirement_list"),
+                                    {"due": "overdue"}).context["object_list"]
+        assert retired not in overdue_rows
+        # ...and a clock never walks a human decision back.
+        retired.refresh_from_db()
+        assert retired.status == "retired"
+
+    @pytest.mark.parametrize("value", ["", "sideways", "OVERDUE", "1", "<script>"])
+    def test_a_junk_due_filter_shows_everything_and_tells_the_select_so(self, client_a,
+                                                                        compliance_requirement_a,
+                                                                        value):
+        """The ``crud_list`` posture on a bad filter — skip it, never 500, and never silently show
+        nothing. The select is told the view that was ACTUALLY rendered."""
+        resp = client_a.get(reverse("scm:compliancerequirement_list"), {"due": value})
+        assert resp.status_code == 200
+        assert compliance_requirement_a in resp.context["object_list"]
+        assert resp.context["due"] == ""
+
+    def test_the_due_soon_condition_expands_per_notice_window(self, client_a, tenant_a):
+        """``notice_days`` is a per-row column and no portable ORM expression adds an integer column
+        of days to a date, so the condition is an OR over the windows the tenant actually uses."""
+        from apps.scm.models import ComplianceRequirement
+        near = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Tight window", frequency="on_event",
+            next_due_date=_localdate_view(5), notice_days=7)
+        far = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Wide window", frequency="on_event",
+            next_due_date=_localdate_view(80), notice_days=90)
+        outside = ComplianceRequirement.objects.create(
+            tenant=tenant_a, title="Not yet", frequency="on_event",
+            next_due_date=_localdate_view(60), notice_days=7)
+        rows = client_a.get(reverse("scm:compliancerequirement_list"),
+                            {"due": "due_soon"}).context["object_list"]
+        assert set(rows) == {near, far}
+        assert outside not in rows
+
+    def test_the_owner_filter_carries_the_L11_guard(self, client_a, compliance_requirement_a,
+                                                     admin_user):
+        url = reverse("scm:compliancerequirement_list")
+        rows = client_a.get(url, {"owner": str(admin_user.pk)}).context["object_list"]
+        assert list(rows) == [compliance_requirement_a]
+        for junk in ("abc", "²", "999999999999999999999", "-1", "1.5"):
+            resp = client_a.get(url, {"owner": junk})
+            assert resp.status_code == 200, junk
+            assert list(resp.context["object_list"]) == [compliance_requirement_a], junk
+
+    def test_the_owner_filter_is_WIDER_than_the_forms_owner_dropdown(self, client_a, tenant_a,
+                                                                      admin_user, member_user):
+        """"What was still owned by them when they left" is exactly the question this filter
+        answers, so it does not drop deactivated logins the way the form does."""
+        member_user.is_active = False
+        member_user.save(update_fields=["is_active"])
+        owners = list(client_a.get(reverse("scm:compliancerequirement_list")).context["owners"])
+        assert member_user in owners and admin_user in owners
+
+    def test_creating_an_obligation_saves_it_against_the_REQUEST_tenant(self, client_a, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        resp = client_a.post(reverse("scm:compliancerequirement_create"),
+                             _compliance_requirement_post())
+        assert resp.status_code == 302
+        obj = ComplianceRequirement.objects.get(tenant=tenant_a, title="Annual COI on file")
+        assert obj.number.startswith("CR-")
+        assert obj.status == "applicable"
+
+    def test_a_crafted_compliant_status_is_refused_at_the_create_screen(self, client_a, tenant_a):
+        """The regression lock, end to end: without the narrowed choices ANY logged-in member could
+        mark an obligation compliant with zero evidence — which drops it out of the overdue chip and
+        the due queue, and the roller never walks it back."""
+        from apps.scm.models import ComplianceRequirement
+        resp = client_a.post(reverse("scm:compliancerequirement_create"),
+                             _compliance_requirement_post(status="compliant"))
+        assert resp.status_code == 200
+        assert "status" in resp.context["form"].errors
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_crafted_compliant_status_is_refused_at_the_EDIT_screen_too(
+        self, client_a, overdue_requirement_a,
+    ):
+        from apps.scm.models import ComplianceRequirement
+        payload = _compliance_requirement_post(
+            title=overdue_requirement_a.title, status="compliant", scope="item",
+            item=str(overdue_requirement_a.item_id), frequency="annual",
+            next_due_date=overdue_requirement_a.next_due_date.isoformat(),
+            framework="hazmat_dot_iata_imdg", criticality="critical")
+        resp = client_a.post(
+            reverse("scm:compliancerequirement_edit", args=[overdue_requirement_a.pk]), payload)
+        assert resp.status_code == 200
+        assert "status" in resp.context["form"].errors
+        overdue_requirement_a.refresh_from_db()
+        assert overdue_requirement_a.status != "compliant"
+
+    def test_the_detail_page_carries_the_timeline_and_the_inline_record_form(
+        self, client_a, compliance_requirement_a, compliance_check_a,
+    ):
+        resp = client_a.get(reverse("scm:compliancerequirement_detail",
+                                    args=[compliance_requirement_a.pk]))
+        assert resp.status_code == 200
+        assert list(resp.context["checks"]) == [compliance_check_a]
+        assert "check_form" in resp.context
+
+    def test_the_detail_page_rolls_this_one_row_forward_too(self, client_a,
+                                                             overdue_requirement_a):
+        """Opening a requirement directly from a bookmark shows the same standing the queue does."""
+        client_a.get(reverse("scm:compliancerequirement_detail",
+                             args=[overdue_requirement_a.pk]))
+        overdue_requirement_a.refresh_from_db()
+        assert overdue_requirement_a.status == "overdue"
+
+    def test_recording_a_pass_advances_the_standing_and_the_due_date(self, client_a, admin_user,
+                                                                      compliance_requirement_a):
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        cycle = compliance_requirement_a.next_due_date
+        resp = client_a.post(
+            reverse("scm:compliancerequirement_record_check",
+                    args=[compliance_requirement_a.pk]),
+            _compliance_check_post(result="pass", finding="Both certificates received."),
+            follow=True)
+        assert resp.status_code == 200
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.status == "compliant"
+        assert compliance_requirement_a.next_due_date == _add_months(cycle, 3)
+        check = compliance_requirement_a.checks.first()
+        # Stamped from the session, never typed (L22).
+        assert check.performed_by_id == admin_user.pk
+        # The cycle the check ANSWERS, snapshotted when the form left it blank.
+        assert check.due_date == cycle
+
+    def test_recording_a_fail_flips_the_standing_and_leaves_the_cycle_owed(
+        self, client_a, compliance_requirement_a,
+    ):
+        cycle = compliance_requirement_a.next_due_date
+        client_a.post(reverse("scm:compliancerequirement_record_check",
+                              args=[compliance_requirement_a.pk]),
+                      _compliance_check_post(result="fail",
+                                             corrective_reference="NCR-00002 / CAPA-00001"))
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.status == "non_compliant"
+        assert compliance_requirement_a.next_due_date == cycle
+
+    def test_a_not_applicable_cycle_is_messaged_at_info_and_changes_nothing(
+        self, client_a, compliance_requirement_a,
+    ):
+        before = (compliance_requirement_a.status, compliance_requirement_a.next_due_date)
+        resp = client_a.post(reverse("scm:compliancerequirement_record_check",
+                                     args=[compliance_requirement_a.pk]),
+                             _compliance_check_post(result="not_applicable"), follow=True)
+        assert "evidence of neither compliance nor breach" in _message_blob(resp)
+        compliance_requirement_a.refresh_from_db()
+        assert (compliance_requirement_a.status,
+                compliance_requirement_a.next_due_date) == before
+
+    def test_a_back_filled_proof_may_name_the_cycle_it_belongs_to(self, client_a,
+                                                                   compliance_requirement_a):
+        from apps.scm.models.ContractCompliance.ComplianceRequirements import _add_months
+        client_a.post(reverse("scm:compliancerequirement_record_check",
+                              args=[compliance_requirement_a.pk]),
+                      _compliance_check_post(result="pass", due_date=_localdate_view(-90).isoformat(),
+                                             performed_on=_localdate_view(-80).isoformat()))
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.next_due_date == _add_months(_localdate_view(-90), 3)
+
+    def test_an_invalid_check_is_a_message_not_a_500(self, client_a, compliance_requirement_a):
+        resp = client_a.post(reverse("scm:compliancerequirement_record_check",
+                                     args=[compliance_requirement_a.pk]),
+                             _compliance_check_post(performed_on=_localdate_view(1).isoformat()),
+                             follow=True)
+        assert resp.status_code == 200
+        assert "cannot be dated in the future" in _message_blob(resp)
+        assert compliance_requirement_a.checks.count() == 0
+
+    def test_editing_a_recorded_check_does_NOT_re_project_its_parent(self, client_a,
+                                                                      compliance_requirement_a):
+        """Re-running ``record_check`` on an edit would advance ``next_due_date`` a SECOND time for a
+        cycle that already advanced it, silently pushing the obligation a full period out."""
+        client_a.post(reverse("scm:compliancerequirement_record_check",
+                              args=[compliance_requirement_a.pk]),
+                      _compliance_check_post(result="pass"))
+        compliance_requirement_a.refresh_from_db()
+        advanced = compliance_requirement_a.next_due_date
+        check = compliance_requirement_a.checks.first()
+        resp = client_a.post(reverse("scm:compliancecheck_edit", args=[check.pk]),
+                             _compliance_check_post(result="fail"), follow=True)
+        assert "were NOT re-derived" in " ".join(_messages(resp))
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.next_due_date == advanced
+        assert compliance_requirement_a.status == "compliant"
+
+    def test_deleting_a_recorded_check_improves_the_derived_rate_and_says_so(
+        self, client_a, compliance_requirement_a,
+    ):
+        client_a.post(reverse("scm:compliancerequirement_record_check",
+                              args=[compliance_requirement_a.pk]),
+                      _compliance_check_post(result="pass"))
+        check = compliance_requirement_a.checks.first()
+        resp = client_a.post(reverse("scm:compliancecheck_delete", args=[check.pk]), follow=True)
+        assert "that was a passed cycle" in _message_blob(resp)
+        compliance_requirement_a.refresh_from_db()
+        assert compliance_requirement_a.checks.count() == 0
+        assert compliance_requirement_a.compliance_rate is None
+
+    def test_deleting_an_obligation_names_the_proof_history_that_goes_with_it(
+        self, client_a, compliance_requirement_a, compliance_check_a,
+    ):
+        """Those rows ARE the defensible documentation and cannot be re-derived from anything —
+        "Deleted successfully." would not admit that."""
+        from apps.scm.models import ComplianceRequirement
+        resp = client_a.post(reverse("scm:compliancerequirement_delete",
+                                     args=[compliance_requirement_a.pk]), follow=True)
+        assert "recorded check(s) were removed" in _message_blob(resp)
+        assert not ComplianceRequirement.objects.filter(
+            pk=compliance_requirement_a.pk).exists()
+
+    def test_the_list_is_bounded_in_queries_regardless_of_row_count(self, client_a, tenant_a,
+                                                                     admin_user, supplier_a,
+                                                                     contract_a, trade_license_a,
+                                                                     django_assert_max_num_queries):
+        """``scope_label`` walks whichever pointer the row's scope names, so ALL the scope FKs are
+        joined or a page of 15 rows is 15 extra queries for one column."""
+        from apps.scm.models import ComplianceRequirement
+        for index in range(15):
+            ComplianceRequirement.objects.create(
+                tenant=tenant_a, title=f"Obligation {index}", owner=admin_user, scope="party",
+                party=supplier_a, contract=contract_a, license=trade_license_a,
+                frequency="on_event")
+        with django_assert_max_num_queries(16):
+            assert client_a.get(reverse("scm:compliancerequirement_list")).status_code == 200
+
+    def test_page_two_renders_when_the_rows_exceed_the_page_size(self, client_a, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        for index in range(20):
+            ComplianceRequirement.objects.create(tenant=tenant_a, title=f"Duty {index}",
+                                                 frequency="on_event")
+        resp = client_a.get(reverse("scm:compliancerequirement_list"), {"page": "2"})
+        assert resp.status_code == 200 and resp.context["page_obj"].number == 2
+        assert client_a.get(reverse("scm:compliancerequirement_list"),
+                            {"page": "9999"}).status_code == 200
+
+
+# ================================================================ 4.12 · the ESG register
+class TestSustainabilityAssessmentViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    sustainability_assessment_a):
+        resp = client_a.get(reverse("scm:sustainabilityassessment_list"))
+        for key in ("object_list", "page_obj", "q", "status_choices", "rating_choices",
+                    "source_choices", "parties"):
+            assert key in resp.context, key
+
+    def test_each_filter_narrows_the_list(self, client_a, sustainability_assessment_a,
+                                          unscored_assessment_a, supplier_a):
+        url = reverse("scm:sustainabilityassessment_list")
+        for params, expected in (({"status": "validated"}, [sustainability_assessment_a]),
+                                 ({"rating": "gold"}, [sustainability_assessment_a]),
+                                 ({"source": "self_assessment"}, [unscored_assessment_a]),
+                                 ({"party": str(supplier_a.pk)},
+                                  [sustainability_assessment_a])):
+            assert list(client_a.get(url, params).context["object_list"]) == expected, params
+
+    def test_the_medal_is_filterable_because_it_is_an_INDEXED_column(self, client_a,
+                                                                     sustainability_assessment_a,
+                                                                     unscored_assessment_a):
+        """``maturity_level`` is the same ladder and is deliberately a property — you cannot filter
+        on something the database cannot search, so it is never offered here."""
+        rows = client_a.get(reverse("scm:sustainabilityassessment_list"),
+                            {"rating": "none"}).context["object_list"]
+        assert list(rows) == [unscored_assessment_a]
+
+    @pytest.mark.parametrize("value", ["abc", "²", "999999999999999999999", "-1", "1.5"])
+    def test_a_junk_party_filter_skips_rather_than_raising(self, client_a,
+                                                           sustainability_assessment_a, value):
+        resp = client_a.get(reverse("scm:sustainabilityassessment_list"), {"party": value})
+        assert resp.status_code == 200, value
+        assert sustainability_assessment_a in resp.context["object_list"], value
+
+    def test_creating_a_scorecard_stamps_the_assessor_and_reports_the_derived_medal(
+        self, client_a, tenant_a, admin_user, supplier_a,
+    ):
+        from apps.scm.models import SustainabilityAssessment
+        resp = client_a.post(reverse("scm:sustainabilityassessment_create"),
+                             _compliance_esg_post(party=str(supplier_a.pk),
+                                                  environment_score="72",
+                                                  labor_human_rights_score="68",
+                                                  ethics_score="75",
+                                                  sustainable_procurement_score="61"),
+                             follow=True)
+        assert resp.status_code == 200
+        obj = SustainabilityAssessment.objects.get(tenant=tenant_a)
+        assert obj.assessed_by_id == admin_user.pk
+        assert obj.overall_score == 69 and obj.rating == "gold"
+        # Both paths land on the DETAIL page, because the form could not show the derived headline.
+        assert resp.context["obj"] == obj
+        assert "overall 69/100, gold" in _message_blob(resp)
+
+    def test_a_scorecard_with_no_theme_scored_says_so_in_WORDS_not_as_a_zero(self, client_a,
+                                                                             tenant_a,
+                                                                             supplier_a):
+        from apps.scm.models import SustainabilityAssessment
+        resp = client_a.post(reverse("scm:sustainabilityassessment_create"),
+                             _compliance_esg_post(party=str(supplier_a.pk)), follow=True)
+        obj = SustainabilityAssessment.objects.get(tenant=tenant_a)
+        assert obj.overall_score is None
+        assert "no theme scored yet, so no medal" in _message_blob(resp)
+
+    def test_an_edit_does_not_re_attribute_somebody_elses_finding(self, client_a, member_client,
+                                                                   sustainability_assessment_a,
+                                                                   admin_user):
+        """Whoever fixes a typo does not become the assessor."""
+        member_client.post(
+            reverse("scm:sustainabilityassessment_edit", args=[sustainability_assessment_a.pk]),
+            _compliance_esg_post(party=str(sustainability_assessment_a.party_id),
+                                 assessment_date=sustainability_assessment_a.assessment_date.isoformat(),
+                                 source="third_party_rating", provider="EcoVadis",
+                                 status="validated", environment_score="99"))
+        sustainability_assessment_a.refresh_from_db()
+        assert sustainability_assessment_a.assessed_by_id == admin_user.pk
+        assert sustainability_assessment_a.environment_score == 99
+
+    def test_the_detail_page_carries_the_themes_the_declarations_and_the_risk_cross_link(
+        self, client_a, sustainability_assessment_a, risk_assessment_a,
+    ):
+        resp = client_a.get(reverse("scm:sustainabilityassessment_detail",
+                                    args=[sustainability_assessment_a.pk]))
+        assert resp.status_code == 200
+        assert [row["field"] for row in resp.context["themes"]] == [
+            "environment_score", "labor_human_rights_score", "ethics_score",
+            "sustainable_procurement_score"]
+        assert len(resp.context["declarations"]) == 6
+        assert resp.context["risk_assessment"] == risk_assessment_a
+        assert resp.context["risk_level_css"].startswith("badge-")
+
+    def test_an_unscored_theme_is_passed_through_as_None_not_as_a_zero(self, client_a,
+                                                                       unscored_assessment_a):
+        """An unscored theme is a question nobody asked; a 0% bar would print a failing grade the
+        assessment never gave."""
+        resp = client_a.get(reverse("scm:sustainabilityassessment_detail",
+                                    args=[unscored_assessment_a.pk]))
+        assert all(row["score"] is None for row in resp.context["themes"])
+
+    def test_a_party_that_was_never_risk_assessed_reads_as_not_assessed(self, client_a,
+                                                                         unscored_assessment_a):
+        """The absence of a risk review is NOT a low risk score."""
+        resp = client_a.get(reverse("scm:sustainabilityassessment_detail",
+                                    args=[unscored_assessment_a.pk]))
+        assert resp.context["risk_assessment"] is None
+        assert resp.context["risk_level_css"] == "badge-muted"
+
+    def test_deleting_a_scorecard_leaves_its_evidence_file_alone(self, client_a, tenant_a,
+                                                                  supplier_a,
+                                                                  evidence_document_a):
+        from apps.core.models import Document
+        from apps.scm.models import SustainabilityAssessment
+        row = SustainabilityAssessment.objects.create(tenant=tenant_a, party=supplier_a,
+                                                      assessment_date=_localdate_view(),
+                                                      document=evidence_document_a)
+        client_a.post(reverse("scm:sustainabilityassessment_delete", args=[row.pk]))
+        assert not SustainabilityAssessment.objects.filter(pk=row.pk).exists()
+        assert Document.objects.filter(pk=evidence_document_a.pk).exists()
+
+    def test_the_list_is_bounded_in_queries_regardless_of_row_count(self, client_a, tenant_a,
+                                                                     supplier_a, admin_user,
+                                                                     django_assert_max_num_queries):
+        from apps.scm.models import SustainabilityAssessment
+        for index in range(15):
+            SustainabilityAssessment.objects.create(tenant=tenant_a, party=supplier_a,
+                                                    assessment_date=_localdate_view(-index),
+                                                    assessed_by=admin_user,
+                                                    environment_score=50 + index)
+        with django_assert_max_num_queries(14):
+            assert client_a.get(reverse("scm:sustainabilityassessment_list")).status_code == 200
+
+
+# ================================================================ 4.12 · the carbon report
+class TestCarbonFootprintReport:
+    def test_the_page_carries_every_key_its_template_reads(self, client_a, carbon_shipment_a):
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.status_code == 200
+        for key in ("date_from", "date_to", "date_from_raw", "date_to_raw", "window_invalid",
+                    "mode", "mode_choices", "carrier_id", "carriers", "total_tco2e",
+                    "total_tonne_km", "measured_count", "excluded_count", "considered_count",
+                    "coverage_pct", "intensity_g_per_tonne_km", "by_month", "by_mode",
+                    "by_carrier", "declared", "declared_count", "factors", "factor_source",
+                    "method_note", "export_qs"):
+            assert key in resp.context, key
+
+    def test_the_estimate_is_weight_times_distance_times_the_modal_factor(self, client_a,
+                                                                          carbon_shipment_a):
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.context["measured_count"] == 1
+        assert resp.context["total_tonne_km"] == Decimal("1000.00")
+        assert resp.context["total_tco2e"] == _expected_tco2e("2000", "500", "truckload")
+        assert resp.context["intensity_g_per_tonne_km"] == Decimal("62.00")
+
+    def test_an_unmeasurable_shipment_is_EXCLUDED_and_reported_as_a_coverage_gap(
+        self, client_a, carbon_shipment_a, unmeasurable_shipment_a,
+    ):
+        """A green zero that actually means "we had no data" is the failure mode this report exists
+        to avoid — the number looks like an environmental result."""
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.context["measured_count"] == 1
+        assert resp.context["excluded_count"] == 1
+        assert resp.context["considered_count"] == 2
+        assert resp.context["coverage_pct"] == Decimal("50.00")
+
+    def test_a_workspace_whose_freight_cannot_be_measured_reports_None_not_zero(
+        self, client_a, unmeasurable_shipment_a,
+    ):
+        """THE contract. Every shipment lacks a weight, so nothing is computable — and the page must
+        say so rather than publish a confident 0.00 tCO2e."""
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.status_code == 200
+        assert resp.context["total_tco2e"] is None
+        assert resp.context["total_tonne_km"] is None
+        assert resp.context["intensity_g_per_tonne_km"] is None
+        assert resp.context["measured_count"] == 0
+        assert resp.context["excluded_count"] == resp.context["considered_count"] == 1
+
+    def test_an_empty_workspace_renders_the_same_shape_with_a_zero_coverage_line(self, client_b):
+        resp = client_b.get(reverse("scm:carbon_footprint_report"))
+        assert resp.status_code == 200
+        assert resp.context["total_tco2e"] is None
+        assert resp.context["considered_count"] == 0
+        # None, not 0 %: there is nothing to divide by.
+        assert resp.context["coverage_pct"] is None
+
+    def test_a_zero_distance_row_is_a_data_entry_stub_not_a_carbon_free_movement(self, client_a,
+                                                                                  tenant_a,
+                                                                                  carrier_a):
+        from django.utils import timezone
+        from apps.scm.models import Load, Shipment
+        load = Load.objects.create(tenant=tenant_a, carrier=carrier_a, mode="truckload",
+                                   distance_km=Decimal("0.00"))
+        ship = Shipment.objects.create(tenant=tenant_a, carrier=carrier_a, load=load,
+                                       direction="outbound", mode="truckload",
+                                       planned_pickup_date=_localdate_view(-5),
+                                       weight_kg=Decimal("1000.00"))
+        ship.status = "delivered"
+        ship.actual_delivery_at = timezone.now() - datetime.timedelta(days=4)
+        ship.save(update_fields=["status", "actual_delivery_at", "updated_at"])
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.context["measured_count"] == 0
+        assert resp.context["excluded_count"] == 1
+
+    def test_a_mode_with_no_factor_is_a_reported_gap_not_a_substituted_default(self, client_a,
+                                                                               tenant_a,
+                                                                               carrier_a):
+        """The factor table is a CLOSED set: a mode added to 4.6 without a factor here must be
+        reported, never scored with a stand-in."""
+        from django.utils import timezone
+        from apps.scm.models import Load, Shipment
+        from apps.scm.models.ContractCompliance._choices import EMISSION_FACTORS
+        assert "parcel" in EMISSION_FACTORS      # sanity: the mode we are about to blank IS known
+        load = Load.objects.create(tenant=tenant_a, carrier=carrier_a,
+                                   distance_km=Decimal("100.00"))
+        Shipment.objects.filter(pk=Shipment.objects.create(
+            tenant=tenant_a, carrier=carrier_a, load=load, direction="outbound",
+            planned_pickup_date=_localdate_view(-5),
+            weight_kg=Decimal("500.00")).pk).update(mode="")
+        Load.objects.filter(pk=load.pk).update(mode="")
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.context["measured_count"] == 0
+        assert resp.context["excluded_count"] == 1
+
+    def test_the_three_breakdowns_carry_the_keys_the_template_loops_over(self, client_a,
+                                                                         carbon_shipment_a,
+                                                                         carrier_a):
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        for bucket in ("by_month", "by_mode", "by_carrier"):
+            rows = resp.context[bucket]
+            assert rows, bucket
+            for row in rows:
+                assert set(row) >= {"label", "count", "tonne_km", "tco2e"}, bucket
+        assert resp.context["by_carrier"][0]["label"] == carrier_a.name
+
+    def test_the_carrier_bucket_keys_on_the_ID_not_the_display_name(self, client_a, tenant_a,
+                                                                     carbon_shipment_a,
+                                                                     carrier_party_a):
+        """Two carriers whose parties happen to share a name are two carriers; grouping on the label
+        would silently merge them into one row."""
+        from django.utils import timezone
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import Carrier, Load, Shipment
+        twin_party = Party.objects.create(tenant=tenant_a, name=carrier_party_a.name,
+                                          kind="organization")
+        PartyRole.objects.create(tenant=tenant_a, party=twin_party, role="vendor")
+        twin = Carrier.objects.create(tenant=tenant_a, party=twin_party, primary_mode="truckload")
+        load = Load.objects.create(tenant=tenant_a, carrier=twin, mode="truckload",
+                                   distance_km=Decimal("100.00"))
+        ship = Shipment.objects.create(tenant=tenant_a, carrier=twin, load=load,
+                                       direction="outbound", mode="truckload",
+                                       planned_pickup_date=_localdate_view(-5),
+                                       weight_kg=Decimal("1000.00"))
+        ship.status = "delivered"
+        ship.actual_delivery_at = timezone.now() - datetime.timedelta(days=4)
+        ship.save(update_fields=["status", "actual_delivery_at", "updated_at"])
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert len(resp.context["by_carrier"]) == 2
+
+    def test_the_supplier_DECLARED_figures_are_kept_apart_from_our_estimate(
+        self, client_a, carbon_shipment_a, sustainability_assessment_a,
+    ):
+        """A different number measured by somebody else — merging the two would invent a total
+        nobody computed."""
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.context["declared_count"] == 1
+        assert resp.context["declared"]["scope1"] == Decimal("1240.500")
+        assert resp.context["declared"]["scope3"] == Decimal("18640.000")
+
+    def test_the_method_note_and_the_factor_table_are_rendered_on_the_page(self, client_a):
+        """An unlabelled tonne of CO2e on a dashboard gets quoted in a sustainability report."""
+        from apps.scm.models.ContractCompliance._choices import (EMISSION_FACTORS,
+                                                                 EMISSION_FACTOR_SOURCE)
+        resp = client_a.get(reverse("scm:carbon_footprint_report"))
+        assert resp.context["factor_source"] == EMISSION_FACTOR_SOURCE
+        assert len(resp.context["factors"]) == len(EMISSION_FACTORS)
+        assert "Screening estimate only" in resp.context["method_note"]
+        assert "Screening estimate only" in resp.content.decode()
+
+    def test_the_mode_and_carrier_filters_narrow_the_estimate(self, client_a, carbon_shipment_a,
+                                                               carrier_a):
+        url = reverse("scm:carbon_footprint_report")
+        assert client_a.get(url, {"mode": "truckload"}).context["measured_count"] == 1
+        assert client_a.get(url, {"mode": "air"}).context["measured_count"] == 0
+        assert client_a.get(url, {"carrier": str(carrier_a.pk)}).context["measured_count"] == 1
+
+    def test_a_typed_window_narrows_and_a_reversed_one_is_swapped_rather_than_emptied(
+        self, client_a, carbon_shipment_a,
+    ):
+        url = reverse("scm:carbon_footprint_report")
+        inside = client_a.get(url, {"date_from": _localdate_view(-30).isoformat(),
+                                    "date_to": _localdate_view().isoformat()})
+        assert inside.context["measured_count"] == 1
+        outside = client_a.get(url, {"date_from": _localdate_view(-3).isoformat(),
+                                     "date_to": _localdate_view().isoformat()})
+        assert outside.context["measured_count"] == 0
+        reversed_window = client_a.get(url, {"date_from": _localdate_view().isoformat(),
+                                             "date_to": _localdate_view(-30).isoformat()})
+        assert reversed_window.status_code == 200
+        assert reversed_window.context["window_invalid"] is True
+        assert reversed_window.context["measured_count"] == 1
+
+    def test_the_export_is_a_csv_attachment_carrying_the_same_figures(self, client_a,
+                                                                       carbon_shipment_a,
+                                                                       sustainability_assessment_a):
+        resp = client_a.get(reverse("scm:carbon_footprint_report_export"))
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "text/csv"
+        assert resp["Content-Disposition"] == ('attachment; filename="carbon-footprint.csv"')
+        body = resp.content.decode()
+        assert "NavERP" in body
+        assert "NOT an audited or statutory figure" in body
+        assert str(_expected_tco2e("2000", "500", "truckload")) in body
+        assert "By month" in body and "By mode" in body and "By carrier" in body
+        assert "Supplier-declared (their figures, not ours)" in body
+
+    def test_the_export_prints_n_slash_a_rather_than_zero_where_nothing_is_measurable(
+        self, client_a, unmeasurable_shipment_a,
+    ):
+        body = client_a.get(reverse("scm:carbon_footprint_report_export")).content.decode()
+        assert "Total tCO2e,n/a" in body
+        assert "Coverage %,0.00" in body
+
+    def test_the_export_link_re_encodes_the_current_filter(self, client_a, carrier_a):
+        resp = client_a.get(reverse("scm:carbon_footprint_report"),
+                            {"mode": "truckload", "carrier": str(carrier_a.pk)})
+        assert "mode=truckload" in resp.context["export_qs"]
+        assert f"carrier={carrier_a.pk}" in resp.context["export_qs"]
+
+
+# ================================================================ 4.12 · absent prerequisites
+class TestComplianceAbsentPrerequisites:
+    """L35 — a missing prerequisite is REFUSED, never allowed to fall through to the happy path.
+
+    Each case below is a state a crafted POST or a stale row can actually reach, and in each one the
+    "helpful" behaviour (carry on, charge nothing, stamp today anyway) is the bug.
+    """
+
+    def test_a_document_naming_a_licence_from_another_workspace_cannot_be_issued(self, client_a,
+                                                                                  tenant_a,
+                                                                                  trade_license_b):
+        """Belt to ``clean()``'s braces. The pointer is written straight to the column here — which
+        is what a crafted POST that beat the form, or an import, would leave behind. Issuing it
+        anyway would produce an UNCHARGED document and understate a balance forever."""
+        from apps.scm.models import TradeDocument
+        doc = TradeDocument.objects.create(tenant=tenant_a, declared_value=Decimal("10.00"))
+        TradeDocument.objects.filter(pk=doc.pk).update(license=trade_license_b)
+        resp = client_a.post(reverse("scm:tradedocument_issue", args=[doc.pk]), follow=True)
+        assert resp.status_code == 200
+        assert "not in this workspace" in _message_blob(resp)
+        doc.refresh_from_db()
+        trade_license_b.refresh_from_db()
+        assert doc.status == "draft"
+        assert trade_license_b.used_value == Decimal("0.00")
+
+    def test_a_reasonless_revoke_leaves_the_licence_authorising_movement(self, client_a,
+                                                                         trade_license_a):
+        """A withdrawn authority with no recorded reason is a hole in the audit trail this register
+        exists to keep — so the verb refuses rather than revoking with a blank."""
+        client_a.post(reverse("scm:tradelicense_revoke", args=[trade_license_a.pk]),
+                      {"reason": "   "})
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "active"
+        assert trade_license_a.revoked_at is None
+        assert trade_license_a.revocation_reason == ""
+
+    def test_a_reasonless_void_leaves_the_balance_consumed(self, client_a, issued_document_a,
+                                                            trade_license_a):
+        """Voiding is what RELEASES a consumed authorisation; releasing one with no reason is the
+        case the guard exists for."""
+        client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]),
+                      {"reason": "\t \n"})
+        issued_document_a.refresh_from_db()
+        trade_license_a.refresh_from_db()
+        assert issued_document_a.status == "issued"
+        assert trade_license_a.used_value == Decimal("1200.00")
+
+    def test_approving_a_licence_whose_ladder_today_would_invert_leaves_the_date_blank(
+        self, client_a, tenant_a,
+    ):
+        """``save()`` does not run ``clean()``, so stamping today as the issue date on a licence
+        applied for in the future would quietly write a row the form would refuse."""
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense.objects.create(tenant=tenant_a, license_number="FUTURE-1",
+                                          title="Applied for ahead of time",
+                                          issuing_authority="BIS",
+                                          application_date=_localdate_view(30),
+                                          expiry_date=_localdate_view(400))
+        client_a.post(reverse("scm:tradelicense_approve", args=[lic.pk]))
+        lic.refresh_from_db()
+        assert lic.status == "active"
+        assert lic.issue_date is None
+
+    def test_recording_a_check_against_an_obligation_that_is_not_ours_creates_nothing(
+        self, client_a, compliance_requirement_b,
+    ):
+        from apps.scm.models import ComplianceCheck
+        assert client_a.post(
+            reverse("scm:compliancerequirement_record_check",
+                    args=[compliance_requirement_b.pk]),
+            _compliance_check_post()).status_code == 404
+        assert not ComplianceCheck.objects.filter(requirement=compliance_requirement_b,
+                                                  result="pass",
+                                                  performed_by__isnull=False).exists()
+
+    def test_an_obligation_whose_source_names_a_link_out_it_does_not_carry_is_refused(
+        self, client_a, tenant_a,
+    ):
+        """"This duty comes out of a contract" with no contract named is an empty claim, and the
+        register would carry an obligation nobody can trace to its origin."""
+        from apps.scm.models import ComplianceRequirement
+        for source, field in (("contract", "contract"), ("license", "license")):
+            resp = client_a.post(reverse("scm:compliancerequirement_create"),
+                                 _compliance_requirement_post(source=source))
+            assert resp.status_code == 200, source
+            assert field in resp.context["form"].errors, source
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_scoped_obligation_with_no_subject_is_refused(self, client_a, tenant_a):
+        from apps.scm.models import ComplianceRequirement
+        resp = client_a.post(reverse("scm:compliancerequirement_create"),
+                             _compliance_requirement_post(scope="party"))
+        assert resp.status_code == 200
+        assert "party" in resp.context["form"].errors
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_not_applicable_obligation_with_no_reason_is_refused(self, client_a, tenant_a):
+        """"Not applicable" is an assertion, and an unexplained assertion is not auditable — the row
+        is kept FOR the reason, not for the row."""
+        from apps.scm.models import ComplianceRequirement
+        resp = client_a.post(reverse("scm:compliancerequirement_create"),
+                             _compliance_requirement_post(status="not_applicable",
+                                                          frequency="one_time",
+                                                          next_due_date=""))
+        assert resp.status_code == 200
+        assert "not_applicable_reason" in resp.context["form"].errors
+        assert not ComplianceRequirement.objects.filter(tenant=tenant_a).exists()
+
+    def test_a_third_party_rating_with_no_provider_named_is_refused(self, client_a, tenant_a,
+                                                                     supplier_a):
+        """The whole reason that source outranks a self-assessment is that somebody independent put
+        their name to it — an unattributed one is not evidence."""
+        from apps.scm.models import SustainabilityAssessment
+        resp = client_a.post(reverse("scm:sustainabilityassessment_create"),
+                             _compliance_esg_post(party=str(supplier_a.pk),
+                                                  source="third_party_rating"))
+        assert resp.status_code == 200
+        assert "provider" in resp.context["form"].errors
+        assert not SustainabilityAssessment.objects.filter(tenant=tenant_a).exists()
+
+
+# ================================================================ 4.12 · the remaining verb branches
+class TestComplianceVerbEdgeBranches:
+    """The branches an ordinary happy-path walk never reaches — each one is a real state a second
+    press, a stale row or a legitimately unusual document actually produces."""
+
+    def test_approving_a_licence_already_in_force_is_an_info_no_op(self, client_a, admin_user,
+                                                                   trade_license_a):
+        """A double POST must not re-stamp who approved it and when — those are what an auditor
+        reads."""
+        before_at, before_by = trade_license_a.approved_at, trade_license_a.approved_by_id
+        resp = client_a.post(reverse("scm:tradelicense_approve", args=[trade_license_a.pk]),
+                             follow=True)
+        assert "already in force" in _message_blob(resp)
+        trade_license_a.refresh_from_db()
+        assert (trade_license_a.approved_at, trade_license_a.approved_by_id) == (before_at,
+                                                                                 before_by)
+
+    def test_approving_a_licence_inside_its_renewal_window_warns_that_it_lapses_soon(
+        self, client_a, tenant_a,
+    ):
+        """It lands on ``active`` and lets ``refresh_status()`` correct it from the dates — so a
+        licence granted three weeks before it expires comes out amber and SAYS so."""
+        from apps.scm.models import TradeLicense
+        lic = TradeLicense.objects.create(tenant=tenant_a, license_number="NEARLY-1",
+                                          title="Granted late", issuing_authority="BIS",
+                                          expiry_date=_localdate_view(21),
+                                          renewal_notice_days=60)
+        resp = client_a.post(reverse("scm:tradelicense_approve", args=[lic.pk]), follow=True)
+        lic.refresh_from_db()
+        assert lic.status == "expiring"
+        assert "start the renewal now" in _message_blob(resp)
+
+    def test_a_licence_with_no_expiry_date_at_all_rolls_back_to_active(self, trade_license_a):
+        """``days_to_expiry`` is ``None`` for an open-ended authority, and ``None`` is not "lapsed"."""
+        trade_license_a.status = "expiring"
+        trade_license_a.expiry_date = None
+        trade_license_a.refresh_status()
+        trade_license_a.refresh_from_db()
+        assert trade_license_a.status == "active"
+
+    def test_voiding_a_document_that_was_never_charging_says_so_plainly(self, client_a,
+                                                                        trade_document_a,
+                                                                        trade_license_a):
+        """A DRAFT draws nothing, so there is no released balance to report — and reporting one
+        would be a number the licence beside it cannot be reconciled with."""
+        resp = client_a.post(reverse("scm:tradedocument_void", args=[trade_document_a.pk]),
+                             {"reason": "Raised in error before it was ever issued."},
+                             follow=True)
+        trade_document_a.refresh_from_db()
+        trade_license_a.refresh_from_db()
+        assert trade_document_a.status == "void"
+        assert "voided." in _message_blob(resp)
+        assert "now shows" not in _message_blob(resp)
+        assert trade_license_a.used_value == Decimal("0.00")
+
+    def test_voiding_twice_is_an_info_no_op_that_keeps_the_first_reason(self, client_a,
+                                                                        issued_document_a):
+        client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]),
+                      {"reason": "The original reason."})
+        issued_document_a.refresh_from_db()
+        first_reason = issued_document_a.void_reason
+        resp = client_a.post(reverse("scm:tradedocument_void", args=[issued_document_a.pk]),
+                             {"reason": "A different reason."}, follow=True)
+        assert "already void" in _message_blob(resp)
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.void_reason == first_reason
+
+    def test_submitting_twice_and_accepting_twice_are_info_no_ops(self, client_a,
+                                                                   issued_document_a):
+        client_a.post(reverse("scm:tradedocument_submit", args=[issued_document_a.pk]))
+        resp = client_a.post(reverse("scm:tradedocument_submit", args=[issued_document_a.pk]),
+                             follow=True)
+        assert "only an issued document can be submitted" in _message_blob(resp)
+        client_a.post(reverse("scm:tradedocument_accept", args=[issued_document_a.pk]))
+        resp = client_a.post(reverse("scm:tradedocument_accept", args=[issued_document_a.pk]),
+                             follow=True)
+        assert "only a submitted document can be accepted" in _message_blob(resp)
+        issued_document_a.refresh_from_db()
+        assert issued_document_a.status == "accepted"
+
+    def test_the_due_soon_condition_degrades_by_OVER_counting_past_its_window_cap(self, client_a,
+                                                                                   tenant_a):
+        """Past 64 distinct notice windows the condition widens to the largest one seen. A chip that
+        says MORE than it should is a visible discrepancy somebody can chase; one that quietly drops
+        rows is the failure this whole register exists to prevent (fail open)."""
+        from apps.scm.models import ComplianceRequirement
+        from apps.scm.views.ContractCompliance.ComplianceRequirements import _MAX_NOTICE_WINDOWS
+        for index in range(_MAX_NOTICE_WINDOWS + 6):
+            ComplianceRequirement.objects.create(
+                tenant=tenant_a, title=f"Window {index}", frequency="on_event",
+                next_due_date=_localdate_view(1 + index), notice_days=index + 1)
+        resp = client_a.get(reverse("scm:compliancerequirement_list"), {"due": "due_soon"})
+        assert resp.status_code == 200
+        # Widened, not narrowed: every future-dated row inside the WIDEST window is offered.
+        assert resp.context["due_soon_count"] >= _MAX_NOTICE_WINDOWS
+        assert len(resp.context["object_list"]) > 0
