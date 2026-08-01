@@ -13671,12 +13671,20 @@ class TestKpiSnapshotCapture:
     ):
         """THE LOCK on the create path for this model: ``update_or_create`` on
         (tenant, kpi_target, period_start, dimension_key), so the button is safe to press twice."""
+        from django.utils import timezone
         from apps.scm.models import KpiSnapshot
         url = reverse("scm:kpisnapshot_capture")
         assert client_a.post(url).status_code == 302
         after_first = list(KpiSnapshot.objects.filter(tenant=tenant_a).values_list("pk", flat=True))
         assert after_first
-        stamped = KpiSnapshot.objects.get(tenant=tenant_a).computed_at
+        # Back-dated with a direct UPDATE rather than read straight off the first capture. Windows'
+        # system clock ticks every ~15.6 ms and two back-to-back `timezone.now()` calls inside that
+        # tick return the IDENTICAL microsecond, so `second > first` compared two equal values and
+        # failed intermittently. The contract under test is "a re-press RE-STAMPS freshness", and
+        # forcing a known-old stamp measures that instead of measuring the clock. Same fix as
+        # test_analytics.py::test_running_it_twice_UPDATES_rather_than_stacking_a_second_row.
+        stamped = timezone.now() - datetime.timedelta(hours=1)
+        KpiSnapshot.objects.filter(tenant=tenant_a).update(computed_at=stamped)
 
         assert client_a.post(url).status_code == 302
         after_second = list(KpiSnapshot.objects.filter(tenant=tenant_a)
