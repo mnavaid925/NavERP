@@ -1,0 +1,226 @@
+{% comment %}
+  SCM 4.12 — the printable form for one TradeDocument.
+
+  Context contract — apps/scm/views/ContractCompliance/TradeDocuments.py::tradedocument_print.
+  Everything this page may read, and nothing else:
+    obj          the TradeDocument (every FK already joined by _document_queryset)
+    lines        list of TradeDocumentLine, with item + uom joined
+    lines_total  Decimal — sum of quantity × unit_value, ONE aggregate, memoised on the instance
+    printed_at   the timezone-aware moment this render happened
+  `request` comes from the context processor, and is read only for `request.tenant.name` on the
+  letterhead — the same way templates/scm/quality/coa/print.html reads it.
+
+  Why this page does NOT extend base.html, and so declares no title/content blocks: it is a document,
+  not a screen. Every other print page in the application is a standalone HTML file for the same
+  reason — templates/scm/quality/coa/print.html, templates/hrm/offboarding/relieving_letter.html,
+  templates/crm/sales/quote/print.html. What goes in an envelope or to a broker carries no sidebar,
+  no navigation and no action buttons. The toolbar is the only chrome and the print stylesheet
+  hides it.
+
+  ONE generic layout serves all thirteen document types. Per-type official layouts — the real
+  commercial-invoice and bill-of-lading forms — are deferred and named as deferred, because printing
+  an approximation of a statutory form under the authority's own headings would be worse than
+  printing an honest internal one. The status is stated at the top of the sheet for exactly that
+  reason: a draft that prints like a filed document is the failure mode this banner exists to stop.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ obj.get_doc_type_display }} {{ obj.number }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2937; margin: 0; padding: 2rem; }
+    .wrap { max-width: 820px; margin: 0 auto; }
+    .letterhead { text-align: center; border-bottom: 2px solid #1f3a8a; padding-bottom: 1rem; margin-bottom: 1.25rem; }
+    .letterhead h1 { margin: 0; font-size: 1.4rem; color: #1f3a8a; letter-spacing: 1px; }
+    .letterhead p { margin: .25rem 0 0; font-size: .85rem; color: #6b7280; }
+    h2.doc-title { text-align: center; text-transform: uppercase; letter-spacing: 2px; font-size: .95rem; margin: 1.25rem 0 .35rem; }
+    .subtitle { text-align: center; font-size: .82rem; color: #6b7280; margin: 0 0 1rem; }
+    h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: 1px; color: #1f3a8a; margin: 1.5rem 0 .5rem; }
+    .muted { color: #6b7280; font-size: .85rem; }
+    .banner { border: 1px solid #d97706; background: #fffbeb; color: #92400e; border-radius: .4rem; padding: .6rem .8rem; font-size: .85rem; margin-bottom: 1rem; }
+    .banner.void { border-color: #dc2626; background: #fef2f2; color: #991b1b; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .35rem 1.5rem; margin: 1rem 0; font-size: .88rem; }
+    .meta div { border-bottom: 1px solid #f3f4f6; padding: .35rem 0; }
+    .meta dt { display: inline; font-weight: 600; color: #374151; }
+    .meta dd { display: inline; margin: 0 0 0 .35rem; }
+    .parties { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; margin: .5rem 0 0; }
+    .party { border: 1px solid #e5e7eb; border-radius: .4rem; padding: .7rem .8rem; font-size: .85rem; }
+    .party .label { font-size: .72rem; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; margin-bottom: .25rem; }
+    .party .name { font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin: .75rem 0; }
+    th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #e5e7eb; font-size: .85rem; }
+    th { background: #f3f4f6; }
+    td.num, th.num { text-align: right; }
+    tfoot td { font-weight: 700; border-top: 2px solid #9ca3af; }
+    .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .35rem 1.5rem; margin-top: .5rem; font-size: .88rem; }
+    .totals div { border-bottom: 1px solid #f3f4f6; padding: .35rem 0; }
+    .totals dt { display: inline; font-weight: 600; color: #374151; }
+    .totals dd { display: inline; margin: 0 0 0 .35rem; }
+    .statement { margin-top: 1.5rem; font-size: .85rem; line-height: 1.6; border: 1px solid #e5e7eb; border-radius: .4rem; padding: .9rem; }
+    .sign { display: flex; justify-content: space-between; margin-top: 3rem; font-size: .85rem; }
+    .sign div { width: 45%; border-top: 1px solid #9ca3af; padding-top: .4rem; }
+    .foot { margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: .75rem; font-size: .78rem; color: #6b7280; }
+    .toolbar { max-width: 820px; margin: 0 auto 1rem; }
+    .btn { display: inline-block; padding: .5rem .9rem; background: #1f3a8a; color: #fff; border: none; border-radius: .4rem; text-decoration: none; cursor: pointer; font-size: .9rem; }
+    .btn.secondary { background: #e5e7eb; color: #1f2937; margin-left: .5rem; }
+    @media print { .toolbar { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">Print / Save PDF</button>
+    <a class="btn secondary" href="{% url 'scm:tradedocument_detail' obj.pk %}">Back to document</a>
+  </div>
+
+  <div class="wrap">
+    <div class="letterhead">
+      <h1>{{ request.tenant.name|default:"Trade Document" }}</h1>
+      <p>{% if obj.direction == 'export' %}Export Documentation{% elif obj.direction == 'import' %}Import Documentation{% else %}{{ obj.get_direction_display }} Documentation{% endif %}</p>
+    </div>
+
+    {% comment %}
+      A draft has been through no licence check and no issue verb, and a voided document no longer
+      authorises anything. Both still print — somebody has to be able to proof-read a draft and to
+      show what a voided declaration said — but neither may print looking like a live instrument.
+    {% endcomment %}
+    {% if obj.status == 'void' %}
+      <div class="banner void">
+        <strong>VOID.</strong> This document has been voided and no longer authorises any movement. It is reproduced here as a record of what was declared.
+        {% if obj.void_reason %}<br>Reason: {{ obj.void_reason }}{% endif %}
+      </div>
+    {% elif obj.status == 'draft' %}
+      <div class="banner"><strong>DRAFT — not issued.</strong> Nothing has been charged against a licence and no declaration has been made. This copy is for checking only.</div>
+    {% elif obj.status == 'amended' %}
+      <div class="banner"><strong>AMENDMENT — not yet issued.</strong> This replaces an earlier declaration and takes effect only once it has been issued.</div>
+    {% endif %}
+
+    <h2 class="doc-title">{{ obj.get_doc_type_display }}</h2>
+    <p class="subtitle">{{ obj.number }}{% if obj.document_number %} · {{ obj.document_number }}{% endif %} · {{ obj.get_status_display }}{% if obj.is_negotiable %} · Negotiable — document of title{% endif %}</p>
+
+    <dl class="meta">
+      <div><dt>Our reference</dt><dd>{{ obj.number }}</dd></div>
+      <div><dt>Document number</dt><dd>{{ obj.document_number|default:"—" }}</dd></div>
+      <div><dt>Issue date</dt><dd>{% if obj.issue_date %}{{ obj.issue_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+      <div><dt>Incoterm 2020</dt><dd>{{ obj.incoterm|default:"—" }}</dd></div>
+      <div><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Licence</dt><dd>{% if obj.license %}{{ obj.license.license_number }} <span class="muted">({{ obj.license.number }})</span>{% else %}—{% endif %}</dd></div>
+      <div><dt>Filing reference</dt><dd>{{ obj.filing_reference|default:"—" }}</dd></div>
+      <div><dt>Shipment</dt><dd>{% if obj.shipment %}{{ obj.shipment.number }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Carrier</dt><dd>{% if obj.carrier %}{{ obj.carrier }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Purchase order</dt><dd>{% if obj.purchase_order %}{{ obj.purchase_order.number }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Sales order</dt><dd>{% if obj.sales_order %}{{ obj.sales_order.number }}{% else %}—{% endif %}</dd></div>
+    </dl>
+
+    <h3>Parties</h3>
+    <div class="parties">
+      <div class="party">
+        <div class="label">Shipper / Exporter</div>
+        <div class="name">{% if obj.shipper_party %}{{ obj.shipper_party.name }}{% else %}—{% endif %}</div>
+        {% if obj.country_of_origin %}<div class="muted">Country of origin: {{ obj.country_of_origin }}</div>{% endif %}
+      </div>
+      <div class="party">
+        <div class="label">Consignee</div>
+        <div class="name">{% if obj.consignee_party %}{{ obj.consignee_party.name }}{% else %}—{% endif %}</div>
+        {% if obj.country_of_destination %}<div class="muted">Country of destination: {{ obj.country_of_destination }}</div>{% endif %}
+      </div>
+      <div class="party">
+        <div class="label">Notify party</div>
+        <div class="name">{% if obj.notify_party %}{{ obj.notify_party.name }}{% else %}—{% endif %}</div>
+        <div class="muted">Advised on arrival</div>
+      </div>
+    </div>
+
+    <h3>Transport</h3>
+    <dl class="meta">
+      <div><dt>Vessel / flight</dt><dd>{{ obj.vessel_or_flight|default:"—" }}</dd></div>
+      <div><dt>Voyage number</dt><dd>{{ obj.voyage_number|default:"—" }}</dd></div>
+      <div><dt>Port of loading</dt><dd>{{ obj.port_of_loading|default:"—" }}</dd></div>
+      <div><dt>Port of discharge</dt><dd>{{ obj.port_of_discharge|default:"—" }}</dd></div>
+      <div><dt>Containers</dt><dd>{{ obj.container_numbers|default:"—" }}</dd></div>
+      <div><dt>Negotiable</dt><dd>{% if obj.is_negotiable %}Yes — document of title{% else %}No{% endif %}</dd></div>
+    </dl>
+
+    <h3>Declared goods</h3>
+    {% comment %}
+      Every optional figure is tested with `is not None`, never for truthiness — a declared quantity
+      or unit value of zero is a real declaration (a free-of-charge sample, a warranty replacement)
+      and must print as 0, not as an em dash that reads like "nobody filled this in".
+    {% endcomment %}
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th>HS code</th>
+          <th>Origin</th>
+          <th>Unit</th>
+          <th class="num">Quantity</th>
+          <th class="num">Unit value</th>
+          <th class="num">Line value</th>
+          <th class="num">Net weight</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ line.description }}</td>
+            <td>{{ line.hs_code|default:"—" }}</td>
+            <td>{{ line.country_of_origin|default:"—" }}</td>
+            <td>{% if line.uom_text %}{{ line.uom_text }}{% elif line.uom %}{{ line.uom.code }}{% else %}—{% endif %}</td>
+            <td class="num">{% if line.quantity is not None %}{{ line.quantity|floatformat:4 }}{% else %}—{% endif %}</td>
+            <td class="num">{% if line.unit_value is not None %}{{ line.unit_value|floatformat:2 }}{% else %}—{% endif %}</td>
+            <td class="num">{{ line.line_value|floatformat:2 }}</td>
+            <td class="num">{% if line.net_weight_kg is not None %}{{ line.net_weight_kg|floatformat:2 }} kg{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="9" class="muted">No goods lines are declared on this document. Several document types legitimately carry none — the declared value below is what this one states.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if lines %}
+        <tfoot>
+          <tr>
+            <td colspan="7">Total of the declared lines</td>
+            <td class="num">{% if lines_total is not None %}{{ lines_total|floatformat:2 }}{% else %}—{% endif %}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      {% endif %}
+    </table>
+
+    <h3>Declared totals</h3>
+    <dl class="totals">
+      <div><dt>Declared value</dt><dd>{% if obj.declared_value is not None %}{{ obj.declared_value|floatformat:2 }}{% else %}—{% endif %}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</dd></div>
+      <div><dt>Sum of the lines</dt><dd>{% if lines_total is not None %}{{ lines_total|floatformat:2 }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Freight charges</dt><dd>{% if obj.freight_charges is not None %}{{ obj.freight_charges|floatformat:2 }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Insured value</dt><dd>{% if obj.insurance_value is not None %}{{ obj.insurance_value|floatformat:2 }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Gross weight</dt><dd>{% if obj.gross_weight_kg is not None %}{{ obj.gross_weight_kg|floatformat:2 }} kg{% else %}—{% endif %}</dd></div>
+      <div><dt>Net weight</dt><dd>{% if obj.net_weight_kg is not None %}{{ obj.net_weight_kg|floatformat:2 }} kg{% else %}—{% endif %}</dd></div>
+      <div><dt>Packages</dt><dd>{% if obj.package_count is not None %}{{ obj.package_count }}{% else %}—{% endif %}</dd></div>
+    </dl>
+
+    {% if obj.notes %}
+      <h3>Notes</h3>
+      <p class="muted" style="white-space:pre-line;">{{ obj.notes }}</p>
+    {% endif %}
+
+    <div class="statement">
+      The particulars stated above are declared by the shipper and describe the goods covered by this document. The descriptions, classifications, origins and units on each line are recorded <strong>as declared on this document</strong> and are not re-read from any master record, so they continue to say what was declared even after the goods are re-classified elsewhere.
+      {% if obj.license %}This movement is made under licence {{ obj.license.license_number }}, against whose authorised balance it is charged.{% else %}No licence is named on this document.{% endif %}
+      {% if obj.incoterm %}Delivery terms: {{ obj.incoterm }} (Incoterms 2020).{% endif %}
+    </div>
+
+    <div class="sign">
+      <div>Authorised signature{% if obj.issued_by %} — {{ obj.issued_by.get_full_name|default:obj.issued_by.get_username }}{% endif %}</div>
+      <div>Date — {% if obj.issue_date %}{{ obj.issue_date|date:"M d, Y" }}{% else %}—{% endif %}</div>
+    </div>
+
+    <div class="foot">
+      Printed {{ printed_at|date:"M d, Y H:i" }}. {{ obj.get_doc_type_display }} {{ obj.number }}{% if obj.document_number %} · {{ obj.document_number }}{% endif %} · status {{ obj.get_status_display|lower }}{% if obj.issued_at %} · issued {{ obj.issued_at|date:"M d, Y H:i" }}{% endif %}. This is one generic layout for all trade-document types; it is an internal record of what was declared and is not a reproduction of any authority's official form.
+    </div>
+  </div>
+</body>
+</html>
