@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the maintenance work order register (requests, PM jobs and breakdowns).
+
+Renders apps/scm/views/AssetManagement/MaintenanceWorkOrders.py::maintenanceworkorder_list, which
+returns crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q  from crud_list (apps/core/crud.py)
+  status_choices              [(value, label), …] — MaintenanceWorkOrder.STATUS_CHOICES, 8 pairs
+  work_type_choices           [(value, label), …] — 7 pairs
+  priority_choices            [(value, label), …] — 4 pairs
+  problem_code_choices        [(value, label), …] — 13 pairs
+  assets                      Asset queryset, tenant-scoped (__str__ is "code · name")
+  assignees                   core.Party queryset, the same employee set the form's assigned_to offers
+  stats                       {open, in_progress, on_hold, down_now, unplanned_downtime_minutes}
+
+EVERY ROW additionally carries two annotations the view computes in ONE grouped aggregate:
+row.issued_parts_cost and row.job_cost. Those are what the Cost column reads. Reading
+obj.total_cost / obj.parts_cost here instead would walk self.parts.all() once PER ROW — 15 extra
+queries a screen, and 15 more every time the figure is printed a second time.
+
+stats.unplanned_downtime_minutes is a Sum and is None — never 0 — when no unplanned outage has ever
+been recorded. It prints an em dash: a zero in a tile reads as a measurement, a blank makes someone
+go and look. Every other key in stats is a real int.
+
+Filter params: q / status / work_type / priority / problem_code are STRING columns and compare
+against request.GET.<param> directly; asset / assigned_to are PKS and compare with
+|stringformat:"d" — |slugify would be wrong on both. date_from / date_to window reported_at and are
+inclusive at both ends (the view normalises a bare date to that day's last microsecond).
+
+Badge classes come from the model — obj.status_css / obj.priority_css / obj.work_type_css and
+obj.asset.criticality_css. theme.css ships COLOUR-named badges only: badge-success / badge-warning /
+badge-danger do not exist and render as an unstyled pill with no error anywhere (L33).
+
+Edit and Delete are gated on obj.is_editable, which reads `status` alone and costs no query — the
+edit view redirects a terminal job straight back with a message, so offering the link would be a
+one-click failure. The SECOND thing maintenanceworkorder_delete refuses on — any part already issued
+— is a query per row here, so it is left to the view's message, exactly as the 4.12 licence list
+leaves the PROTECT check to tradelicense_delete. The job's own page, which has the real count, hides
+Delete outright.
+{% endcomment %}
+{% block title %}Maintenance Work Orders{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Maintenance Work Orders</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Maintenance Work Orders</span></div>
+      <p class="text-muted">A maintenance <span class="fw-600">request</span>, a generated preventive occurrence and a breakdown are the same document at different points on one ladder — so they live in one register rather than in a notification table joined to an order table. That is what makes "what has this machine cost us, and how often does it stop?" a single <em>group by</em> instead of a union over two grains. This is <span class="fw-600">not</span> the production work order: that one makes product against a BOM, this one repairs a machine and consumes spares against an asset.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Assets</a>
+      <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Preventive Plans</a>
+      <a href="{% url 'scm:maintenanceworkorder_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Work Order</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, not over the filtered page: "4 jobs on hold" is a fact
+    somebody has to act on, and a number that re-scoped itself as you browsed would report all-clear
+    the moment you filtered to one work type. The filtered count is the badge in the card header
+    below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+      <div class="stat-value">{{ stats.open }}</div>
+      <div class="stat-label">Open jobs · requested through on-hold</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.in_progress }}</div>
+      <div class="stat-label">In progress right now</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="pause-circle"></i></div>
+      <div class="stat-value">{{ stats.on_hold }}</div>
+      <div class="stat-label">On hold — waiting on a part, a permit or a shutdown window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-octagon"></i></div>
+      <div class="stat-value">{{ stats.down_now }}</div>
+      <div class="stat-label">Machines down now · outage opened and never closed</div>
+    </div>
+    {% comment %}
+      `is None` and not truthiness: 0 minutes of unplanned downtime is a real, excellent figure and a
+      truthiness test would blank it exactly when it is worth reading. None means nothing has ever
+      been recorded, which is a different statement entirely (the 4.11 lesson).
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="timer-off"></i></div>
+      <div class="stat-value">{% if stats.unplanned_downtime_minutes is None %}—{% else %}{{ stats.unplanned_downtime_minutes }}{% endif %}</div>
+      <div class="stat-label">
+        {% if stats.unplanned_downtime_minutes is None %}
+          No unplanned outage has ever been recorded — not zero minutes, no measurement
+        {% else %}
+          Unplanned downtime minutes · the figure availability and MTBF are actually about
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Jobs</h2>
+      <div class="badge-group">
+        {% if stats.down_now %}<span class="badge badge-red">{{ stats.down_now }} down now</span>{% endif %}
+        {% if stats.on_hold %}<span class="badge badge-amber">{{ stats.on_hold }} on hold</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search MWO- number, title, description or the asset's code / name…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="work_type" aria-label="Work type" class="form-select">
+            <option value="">All work types</option>
+            {% for val, label in work_type_choices %}
+              <option value="{{ val }}" {% if request.GET.work_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Priority" class="form-select">
+            <option value="">All priorities</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The failure vocabulary is CLOSED on purpose — that is the entire reason "which symptom
+            costs us the most downtime?" is a GROUP BY rather than a text-mining project, and it is
+            why this is a dropdown rather than a search box.
+          {% endcomment %}
+          <select name="problem_code" aria-label="Problem code" class="form-select">
+            <option value="">All problem codes</option>
+            {% for val, label in problem_code_choices %}
+              <option value="{{ val }}" {% if request.GET.problem_code == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            PK dropdown — |stringformat:"d" and never |slugify. The view routes both pk filters
+            through crud_list's is_int leg, so a hand-edited ?asset=abc skips the filter instead of
+            500-ing. The list is not narrowed to active assets: a retired machine still has job
+            history somebody filters for.
+          {% endcomment %}
+          <select name="asset" aria-label="Asset" class="form-select">
+            <option value="">All assets</option>
+            {% for a in assets %}
+              <option value="{{ a.pk }}" {% if request.GET.asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="assigned_to" aria-label="Assigned to" class="form-select">
+            <option value="">Anyone</option>
+            {% for p in assignees %}
+              <option value="{{ p.pk }}" {% if request.GET.assigned_to == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ request.GET.date_from }}" aria-label="Reported from" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ request.GET.date_to }}" aria-label="Reported to" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The two dates window <span class="fw-600">reported at</span> and are inclusive at both ends — a bare <span class="mono">to</span> date takes the whole of that day rather than stopping at midnight, so a window can never silently lose the last day you asked for. Unparseable input skips the filter rather than refusing the page.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Asset</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Reported / scheduled</th>
+            <th>Outage</th>
+            <th>Cost</th>
+            <th>Assigned to</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceworkorder_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title }}</div>
+                <div class="form-help">
+                  <span class="badge {{ obj.work_type_css }}">{{ obj.get_work_type_display }}</span>
+                  <span class="badge badge-slate">{{ obj.get_source_display }}</span>
+                </div>
+              </td>
+              <td>
+                {% if obj.asset %}
+                  <a href="{% url 'scm:asset_detail' obj.asset.pk %}">{{ obj.asset.code }}</a>
+                  <div class="text-muted">{{ obj.asset.name }}</div>
+                  <div class="form-help"><span class="badge {{ obj.asset.criticality_css }}">{{ obj.asset.get_criticality_display }}</span></div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                {% if obj.plan %}<div class="form-help mono"><a href="{% url 'scm:maintenanceplan_detail' obj.plan.pk %}">{{ obj.plan.number }}</a></div>{% endif %}
+              </td>
+              <td><span class="badge {{ obj.priority_css }}">{{ obj.get_priority_display }}</span></td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                {% if obj.problem_code %}<div class="form-help">{{ obj.get_problem_code_display }}</div>{% endif %}
+              </td>
+              <td class="nowrap">
+                {{ obj.reported_at|date:"M d, Y H:i" }}
+                {% if obj.scheduled_start %}
+                  <div class="form-help">Due {{ obj.scheduled_start|date:"M d, Y H:i" }}</div>
+                {% else %}
+                  <div class="form-help text-muted">Not scheduled</div>
+                {% endif %}
+              </td>
+              {% comment %}
+                downtime_minutes is derived in save() from the window and is a real 0 when no window
+                was recorded — never None — so the honest reading is "was an outage recorded at all",
+                which is what downtime_start answers. is_down_now is the open outage: it started and
+                never ended, and that is the row somebody has to chase.
+              {% endcomment %}
+              <td class="nowrap">
+                {% if obj.downtime_start %}
+                  {% if obj.is_down_now %}
+                    <span class="badge badge-red">Down now</span>
+                    <div class="form-help">Since {{ obj.downtime_start|date:"M d, H:i" }}</div>
+                  {% else %}
+                    <span class="mono">{{ obj.downtime_minutes }}</span> min
+                    {% if obj.is_unplanned_downtime %}<div class="form-help"><span class="badge badge-amber">Unplanned</span></div>{% endif %}
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">No outage recorded</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                Both figures are the view's annotations, computed for the whole page in ONE grouped
+                aggregate. obj.total_cost / obj.parts_cost would each walk self.parts.all() per row.
+                issued_parts_cost is 0 (never None) when nothing has been issued — Coalesce is what
+                keeps a labour-only repair's cost from silently blanking.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {{ obj.job_cost|floatformat:2 }}
+                <div class="form-help">{{ obj.issued_parts_cost|floatformat:2 }} parts issued</div>
+              </td>
+              <td>
+                {% if obj.assigned_to %}{{ obj.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                {% if obj.parts_location %}<div class="form-help mono">Store {{ obj.parts_location.code }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceworkorder_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    is_editable is the OPEN statuses and reads `status` alone, so this costs no
+                    query. A completed, closed or cancelled job is the record of what happened —
+                    maintenanceworkorder_edit redirects it straight back with a message, so the link
+                    would be a one-click failure.
+                  {% endcomment %}
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:maintenanceworkorder_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    Same gate as maintenanceworkorder_delete's @tenant_admin_required, so a member is
+                    never offered a button they will 403 on. Only the system-generated MWO- number
+                    goes into the confirm string — never the title or the asset name, both of which
+                    are user-typed: an apostrophe escapes to &#x27;, which the HTML parser hands to
+                    JavaScript as a bare quote and the dialog breaks.
+
+                    A job with parts already issued is REFUSED by the view (the posted StockMove must
+                    not be left with nothing to explain it). The button stays visible here because
+                    this page has no per-row issued count to gate on and faking one would be a query
+                    per row; the job's own page, which has the real count, hides Delete outright.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if obj.is_editable %}
+                      <form method="post" action="{% url 'scm:maintenanceworkorder_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This is refused outright once any part has been issued from stock, because the ledger movement would be left with nothing to explain it. Cancel the job instead — a cancelled job keeps its history and is excluded from the reliability figures.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="wrench"></i>
+                  <h3>No maintenance work orders</h3>
+                  <p>Nothing has been raised against a machine yet. Raise one here and it starts as a <span class="fw-600">request</span>; approving it, scheduling it and starting it are buttons on its own page, not a status you type. A preventive plan generates one of these on its due date, so the planned and the reactive job end up in the same register with the same costs and the same downtime. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">reported at, newest first</span>. The cost column is issued parts + labour hours × labour rate + the contractor's charge; a part that has only been <em>planned</em> contributes nothing, because its unit cost is stamped from the item's average cost at the instant it is issued and never read live afterwards — average cost moves with every receipt, and a live read would quietly restate the cost of a repair closed last quarter every time a new delivery landed. Issuing parts is the <span class="fw-600">only</span> thing in this sub-module that writes the stock ledger, and it posts no journal entry: the contractor's charge is recorded here, not billed from here.
+    </div>
+  </div>
+{% endblock %}
