@@ -174,6 +174,9 @@ MIN_TAIL_SUPPLIERS = 10
 #: ``apps/scm/views/InventoryManagement/Reports.py`` makes in the FIFO/LIFO layer walk. ``issue`` is
 #: customer demand and ``consumption`` is a work-order draw: 4.8 split them deliberately so 4.7's
 #: forecasts would not read raw-material draws as demand, and both are genuine cost out of stock.
+#: 4.13's ``maintenance`` is EXCLUDED on purpose and is not an oversight to tidy up later: a spare
+#: drawn to repair a machine is maintenance OPEX, not the cost of any good that was sold, so folding
+#: it in here would inflate COGS and understate gross margin on every product it never touched.
 COGS_MOVE_TYPES = ("issue", "consumption")
 
 #: PO statuses that represent committed money. Draft and pending-approval are not spend yet, and a
