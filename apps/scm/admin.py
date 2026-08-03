@@ -171,8 +171,12 @@ class UOMAdmin(admin.ModelAdmin):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ("sku", "name", "tenant", "item_type", "tracking", "costing_method", "average_cost")
-    list_filter = ("tenant", "item_type", "tracking", "costing_method", "is_active")
+    # is_spare_part (4.13) is an ordinary editable marker, not a derived column — it says "this is an
+    # MRO part", which is a decision somebody makes, so it is a filter and a column and stays out of
+    # readonly_fields.
+    list_display = ("sku", "name", "tenant", "item_type", "tracking", "costing_method",
+                    "average_cost", "is_spare_part")
+    list_filter = ("tenant", "item_type", "tracking", "costing_method", "is_spare_part", "is_active")
     search_fields = ("sku", "name")
     readonly_fields = ("average_cost",)
 
@@ -856,3 +860,125 @@ class SustainabilityAssessmentAdmin(admin.ModelAdmin):
     # the headline number can never disagree with the components it is computed from.
     readonly_fields = ("number", "overall_score", "rating", "assessed_by", "created_at",
                        "updated_at")
+
+
+# --- 4.13 Asset Management ----------------------------------------------------------------------
+from apps.scm.models import (  # noqa: E402
+    Asset, AssetSparePart, MaintenancePlan, MaintenancePlanTask, MaintenanceWorkOrder,
+    MaintenanceWorkOrderPart, MaintenanceWorkOrderTask, MeterReading,
+)
+
+
+class AssetSparePartInline(admin.TabularInline):
+    model = AssetSparePart
+    extra = 0
+    # Nothing here is derived — the row is the ASSOCIATION (which item, how many per service,
+    # whether running out stops the job), so every column is a genuine input.
+
+
+@admin.register(Asset)
+class AssetAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "tenant", "asset_type", "status", "criticality", "location",
+                    "work_center", "custodian", "warranty_expires_on", "is_active")
+    list_filter = ("tenant", "status", "criticality", "asset_type", "is_active")
+    search_fields = ("code", "name", "number", "serial_number", "tag_code", "model_number",
+                     "manufacturer", "category")
+    date_hierarchy = "warranty_expires_on"
+    inlines = [AssetSparePartInline]
+    # number is minted once in save(). MTBF, MTTR, availability, downtime and maintenance cost to
+    # date are METHODS on the model and are deliberately not columns here or anywhere else — the
+    # whole design is that a reliability figure recomputes on read and may honestly answer None.
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+class MaintenancePlanTaskInline(admin.TabularInline):
+    model = MaintenancePlanTask
+    extra = 0
+    # The job plan's steps. Editing them here changes what FUTURE generated jobs will ask for and
+    # nothing else — a job already raised snapshotted its own copy (MaintenanceWorkOrderTask has no
+    # FK back), which is exactly why that snapshot exists.
+
+
+@admin.register(MaintenancePlan)
+class MaintenancePlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "name", "asset", "trigger_type", "schedule_basis",
+                    "interval_days", "meter_interval", "next_due_on", "next_due_reading",
+                    "priority", "work_type", "is_active")
+    list_filter = ("tenant", "trigger_type", "schedule_basis", "priority", "work_type", "is_active")
+    search_fields = ("number", "name", "instructions", "asset__code", "asset__name")
+    date_hierarchy = "next_due_on"
+    inlines = [MaintenancePlanTaskInline]
+    # number is minted once in save(); last_completed_on is stamped by the work-order complete verb
+    # and last_generated_on by the generate action (both editable=False on the model, so listing
+    # them here is what makes them VISIBLE rather than silently absent from the form). Typing either
+    # by hand would claim a service that was never performed, and the PM-compliance report believes
+    # it. next_due_on / next_due_reading are deliberately NOT here: they are the schedule, and a
+    # planner shifting one is a legitimate edit.
+    readonly_fields = ("number", "last_completed_on", "last_generated_on", "created_at",
+                       "updated_at")
+
+
+class MaintenanceWorkOrderPartInline(admin.TabularInline):
+    model = MaintenanceWorkOrderPart
+    extra = 0
+    # unit_cost is stamped from the item's average cost AT ISSUE TIME by the issue verb, in the same
+    # transaction that posts the negative `maintenance` StockMove; is_issued / issued_at are that
+    # verb's own evidence. Editing any of them here would claim a draw the ledger never recorded —
+    # the ReturnDisposition.stock_posted reasoning, one table over.
+    readonly_fields = ("unit_cost", "is_issued", "issued_at")
+
+
+class MaintenanceWorkOrderTaskInline(admin.TabularInline):
+    model = MaintenanceWorkOrderTask
+    extra = 0
+    # completed_at is stamped by the tick route (L22) — the tick IS the event, so its time is not
+    # something anyone should be able to disagree with afterwards. The five snapshot columns stay
+    # editable: an ad-hoc breakdown job has steps typed straight onto it, so they are inputs here in
+    # a way the plan-copied ones are not, and a single readonly rule cannot tell the two apart.
+    readonly_fields = ("completed_at",)
+
+
+@admin.register(MaintenanceWorkOrder)
+class MaintenanceWorkOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "title", "asset", "work_type", "priority", "status",
+                    "source", "assigned_to", "reported_at", "scheduled_start", "completed_at",
+                    "downtime_minutes")
+    list_filter = ("tenant", "status", "work_type", "priority", "source", "is_unplanned_downtime",
+                   "problem_code", "cause_code", "remedy_code")
+    search_fields = ("number", "title", "description", "resolution_notes", "asset__code",
+                     "asset__name", "plan__number", "assigned_to__name", "service_vendor__name")
+    date_hierarchy = "reported_at"
+    inlines = [MaintenanceWorkOrderPartInline, MaintenanceWorkOrderTaskInline]
+    # status moves only through the lifecycle verbs (editable=False on the model, and absent from
+    # the form's Meta.fields so a crafted POST has no path to it either) — an editable status here
+    # would be the one surface that can mark a job complete without stamping completed_at, advancing
+    # its plan or filing the meter reading the complete verb captures. started_at / completed_at are
+    # the verbs' stamps. downtime_minutes is DERIVED in save() from the start/end pair and clamped:
+    # showing it read-only is what stops the admin making the total disagree with the window it is
+    # computed from. parts_cost / labour_cost / total_cost / duration_hours / is_on_time are
+    # PROPERTIES and are deliberately not columns anywhere.
+    readonly_fields = ("number", "status", "started_at", "completed_at", "downtime_minutes",
+                       "created_at", "updated_at")
+
+
+@admin.register(MeterReading)
+class MeterReadingAdmin(admin.ModelAdmin):
+    # APPEND-ONLY log — read-only in the admin, no add/change/delete. Exactly the StockMoveAdmin
+    # posture, and for the same reason: a wrong reading is corrected by posting a later, correct one,
+    # never by editing the row a scheduler has already acted on. An editable meter reading is a
+    # number that silently moves every meter-based due date derived from it, with no trace that it
+    # ever said anything else. The front end ships no edit and no delete route for the same reason.
+    list_display = ("asset", "tenant", "meter_name", "reading", "unit", "read_at", "source",
+                    "reference", "recorded_by")
+    list_filter = ("tenant", "source", "meter_name")
+    search_fields = ("meter_name", "reference", "notes", "asset__code", "asset__name")
+    date_hierarchy = "read_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
