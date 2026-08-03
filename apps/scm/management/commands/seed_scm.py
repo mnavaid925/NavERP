@@ -60,8 +60,8 @@ REQUISITION_LINES = [
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns + 4.11 analytics + 4.12 contract & compliance demo data — idempotent "
-            "(skips a tenant that already has the rows each pass creates).")
+            "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management "
+            "demo data — idempotent (skips a tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -125,11 +125,20 @@ class Command(BaseCommand):
             # 4.2's contracts (`owner` and the `parent_contract` amendment link), so those contracts
             # have to exist first. Like 4.11 it writes no StockMove and no JournalEntry.
             self._seed_compliance_tenant(tenant)
+            # 4.13 AFTER 4.12, and it is the one pass since 4.10 that WRITES to the stock ledger
+            # again — so its dependencies are real, not decorative. Its assets sit at 4.3's locations
+            # and its conveyor serves one of 4.8's work centres; it flips 4.3 items to spare parts and
+            # hangs the machines' parts lists off them; and the completed PM job draws those parts out
+            # of 4.3's storeroom through the REAL _post_stock_move path under the new `maintenance`
+            # move type. Every one of those rows must already exist, and like 4.9-4.12 it posts no
+            # JournalEntry — the only ledger effect in the whole sub-module is that one stock issue.
+            self._seed_asset_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns + 4.11 analytics + 4.12 contract & compliance seed complete."))
+            "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management "
+            "seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -902,7 +911,40 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.12 Contract & Compliance FIRST (newest sub-module). Exactly ONE edge inside it is
+        # 4.13 Asset Management FIRST (newest sub-module). The order inside it is forced by ONE
+        # PROTECT edge: MaintenanceWorkOrder.asset is PROTECT onto Asset — a completed job is history
+        # and must never be one click from deletion — so every job goes before the assets they were
+        # raised against. MaintenancePlan.asset is CASCADE and MaintenanceWorkOrder.plan is SET_NULL,
+        # so the plans could not block anything; they are named before the assets anyway so the
+        # teardown reads top-down like every block below it. MeterReading CASCADEs from its asset and
+        # the three child tables (parts, both task tables) CASCADE from their parents — deleting the
+        # four parents clears all of them.
+        #
+        # AssetSparePart.item and MaintenanceWorkOrderPart.item are PROTECT onto 4.3's Item, which is
+        # cleared at the BOTTOM of this method: both cascade away with the rows deleted here, so 4.3's
+        # masters are already unblocked by the time they are reached.
+        #
+        # The `maintenance` StockMoves the issue-parts path posted carry no FK to 4.13 — only the MWO
+        # number as free text — exactly like 4.8's consumption/production moves and 4.9's scrap
+        # adjustment, so StockMove.objects.all().delete() further down would cover them. They are
+        # named here regardless, and deliberately: the seeder's "post these parts exactly once" guard
+        # keys on precisely this filter, so flush and guard describe the SAME set of rows rather than
+        # one of them being an implicit consequence of a line 180 lines further down. Tenant-less like
+        # every other delete in this method — --flush is workspace-wide by design.
+        #
+        # `Item.is_spare_part` is deliberately NOT unwound: it is a property of the item itself
+        # ("this is a machine spare"), not of the asset register, and the whole Item table is deleted
+        # at the bottom of this method anyway — a hand-written UPDATE first would only be a slower way
+        # to reach the same empty table (the 4.12 SupplierContract.owner reasoning).
+        from apps.scm.models import (Asset, MaintenancePlan, MaintenanceWorkOrder, MeterReading,
+                                     StockMove as _StockMove)
+        MeterReading.objects.all().delete()
+        MaintenanceWorkOrder.objects.all().delete()   # parts + task snapshots cascade
+        MaintenancePlan.objects.all().delete()        # plan tasks cascade
+        Asset.objects.all().delete()                  # spare-part lists cascade
+        _StockMove.objects.filter(move_type="maintenance").delete()
+
+        # 4.12 Contract & Compliance NEXT. Exactly ONE edge inside it is
         # PROTECT and it decides the whole order: TradeDocument.license is PROTECT onto TradeLicense,
         # because the record of what actually moved under a licence IS that licence's audit trail and
         # its consumed balance, so losing it must never be one click away. That puts the licences
@@ -1100,8 +1142,8 @@ class Command(BaseCommand):
         UOM.objects.all().delete()
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
-            f"demand planning + manufacturing + quality + returns + analytics + compliance rows "
-            f"(+{bill_count + freight_bill_count} linked accounting bill(s), "
+            f"demand planning + manufacturing + quality + returns + analytics + compliance + asset "
+            f"management rows (+{bill_count + freight_bill_count} linked accounting bill(s), "
             f"+{return_credit_count} linked credit note(s))."))
 
     def _seed_manufacturing_tenant(self, tenant):
@@ -2761,3 +2803,514 @@ class Command(BaseCommand):
             f"{hazmat.get_status_display().lower()}), {len(esg_rows)} ESG assessments "
             f"({', '.join(e.get_rating_display().lower() for e in esg_rows)}), contract owner set "
             f"on {len(owned)} 4.2 contract(s) + amendment {amendment.number}.")
+
+    # --------------------------------------------------------------------- 4.13 Asset Management
+    def _seed_asset_tenant(self, tenant):
+        """4.13 demo rows: the asset register (with a real parent/child hierarchy), the machines'
+        spare-parts lists, three maintenance plans on three DIFFERENT triggers, a rising meter
+        history, and three jobs sitting at three different points of the lifecycle.
+
+        Idempotent via an ``Asset`` guard. Runs LAST, and its dependencies are load-bearing rather
+        than cosmetic: the assets sit at 4.3's locations, the conveyor serves one of 4.8's work
+        centres, the parts lists point at 4.3 items this pass flips to ``is_spare_part``, and the
+        completed PM job DRAWS those parts out of 4.3's storeroom. It REFUSES rather than half-seeds
+        when 4.3 is absent (the 4.10/4.11/4.12 posture) — an asset register with no location and no
+        parts to issue would demo three pages that all read "no data".
+
+        **The one ledger write in the whole sub-module, and it goes through the real service.**
+        ``_post_stock_move(..., move_type="maintenance")`` — the same call
+        ``maintenanceworkorder_issue_parts`` makes, preceded by the same ``_insufficient_stock``
+        check and the same ``_shared_items`` sharing, with ``unit_cost`` stamped from
+        ``item.average_cost`` AT ISSUE TIME. So the seeded job's cost is what the app itself would
+        have written and on-hand stays a pure aggregate of one append-only ledger. It posts **no
+        ``JournalEntry``** — the standing 4.9-4.12 rule (L29).
+
+        **Nothing here hand-sets a workflow status or a system stamp.** ``MaintenanceWorkOrder.status``
+        is ``editable=False`` (L22), so the completed job is walked down the SAME ladder the verbs
+        take — requested -> approved -> scheduled -> in_progress -> completed — with each verb's own
+        stamps written at that step and the parts issued while the job is still open, exactly as
+        ``ISSUABLE_STATUSES`` requires. The plan's schedule is rolled by
+        :meth:`MaintenancePlan.advance` (once at generate, once at completion), never by date maths
+        written here; ``downtime_minutes`` is derived by ``save()`` from the window; and
+        ``AssetSparePart.quantity_per_service`` goes through the model's own ``q4``. Every row is
+        checked with ``full_clean()``, so the seed PROVES the trigger contract, the plan/asset
+        agreement and the cross-tenant guards instead of side-stepping them (the 4.11/4.12 posture).
+        ``number`` is the one exclusion — ``TenantNumbered.save()`` mints it and it is blank until
+        then.
+
+        **Deliberately mixed demo state**, because a uniform register exercises nothing: one asset is
+        down RIGHT NOW on an open breakdown (so ``is_down_now()`` is true and ``mttr_hours()`` hits
+        its zero-denominator guard and answers ``None`` rather than a flattering 0 h); two of the four
+        assets are linked to an ``accounting.FixedAsset`` and two are not, so the depreciation
+        report's coverage figure is genuinely measured rather than faked; and the three plans come out
+        scheduled / meter-overdue / condition-overdue so all three trigger arithmetics are visibly
+        working on the first login.
+        """
+        from apps.accounting.models import FixedAsset
+        from apps.scm.models import (Asset, AssetSparePart, Item, Location, MaintenancePlan,
+                                     MaintenancePlanTask, MaintenanceWorkOrder,
+                                     MaintenanceWorkOrderPart, MaintenanceWorkOrderTask,
+                                     MeterReading, StockMove, WorkCenter)
+        from apps.scm.models._base import ZERO, q4
+        from apps.scm.views._helpers import (_insufficient_stock, _post_stock_move, _shared_items)
+
+        if Asset.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: asset management data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10/4.11/4.12 posture) ---
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        dock = Item.objects.filter(tenant=tenant, sku="DOCK-C").first()
+        mon27 = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        if main is None or dock is None or mon27 is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no 4.3 items/locations — skipping 4.13 asset management (its assets "
+                "sit at 4.3 locations and its jobs draw spare parts out of the 4.3 stock ledger)."))
+            return
+
+        now = timezone.now()
+        today = timezone.localdate()
+        admin = self._admin(tenant)
+        org_unit = self._org_unit(tenant)
+        custodian = self._employee(tenant, "Liam Johnson")
+        technician = self._employee(tenant, "Emma Williams")
+        reporter = self._employee(tenant, "Sophia Miller")
+        northwind = self._supplier(tenant, *SUPPLIERS[0])
+        cascade = self._supplier(tenant, *SUPPLIERS[1])
+        # 4.8's assembly centre. None when manufacturing was skipped for this tenant — the link is
+        # SET_NULL and the whole point of it is that it is optional, so a missing centre degrades the
+        # conveyor to "not tied to production" rather than aborting the pass.
+        assembly = WorkCenter.objects.filter(tenant=tenant, code="WC-ASM").first()
+
+        def _at(day, hour, minute=0):
+            """An aware datetime at a FIXED local time on ``day``.
+
+            Deliberately not ``now - timedelta(days=n, hours=m)``: ``is_on_time`` compares the
+            completion and the commitment by local DATE, so a seed run at 02:00 would push one of the
+            two over a day boundary and the demo job would read late on some mornings and on time on
+            others. Anchoring on the date makes it the same job whenever the seeder is run.
+            """
+            return timezone.make_aware(datetime.datetime.combine(day, datetime.time(hour, minute)))
+
+        # ---- 1. the register — existence-checked on (tenant, code), never a bare create ----------
+        def _asset(code, **fields):
+            existing = Asset.objects.filter(tenant=tenant, code=code).first()
+            if existing is not None:
+                return existing
+            obj = Asset(tenant=tenant, code=code, **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            return obj
+
+        # The two capitalised records 2.6 already seeded. Read, never created: 4.13 stores no
+        # acquisition cost, no salvage value and no accumulated depreciation — the link exists so the
+        # asset page can SHOW a book value the accounting row owns (the module docstring's rule), and
+        # a second writer of one accumulated figure is exactly how two pages come to disagree.
+        van = (FixedAsset.objects.filter(tenant=tenant, name="Delivery Van").first()
+               or FixedAsset.objects.filter(tenant=tenant).order_by("id").first())
+        racking = FixedAsset.objects.filter(tenant=tenant, name="Warehouse Racking").first()
+
+        line = _asset(
+            "LINE-01", name="Assembly Line 1", asset_type="machine", status="in_service",
+            criticality="critical", category="Production lines",
+            manufacturer="Vollmer Systemtechnik", model_number="VL-4400", serial_number="VS4400-11872",
+            tag_code="QR-LINE-01",
+            specifications="14 m modular line, 3-phase 400 V, rated 240 units/hour.",
+            location=main, org_unit=org_unit, custodian=custodian, supplier=northwind,
+            service_vendor=cascade,
+            purchase_date=today - datetime.timedelta(days=930),
+            commissioned_on=today - datetime.timedelta(days=900),
+            # Deliberately lapsed, so the red Expired warranty chip is populated on first login — and
+            # so is the case for reading it: this is the state in which somebody pays for a repair the
+            # supplier used to owe them.
+            warranty_expires_on=today - datetime.timedelta(days=60),
+            purchase_cost=Decimal("185000.00"),
+            notes="Seeded 4.13 parent asset — the child below hangs off it through `parent`, so the "
+                  "hierarchy walk and the roll-ups have a real two-level tree to work on. "
+                  "Deliberately NOT linked to a fixed asset: it is the coverage gap the depreciation "
+                  "report is built to surface.")
+
+        drive = _asset(
+            "LINE-01-DRV", name="Line 1 drive motor & gearbox", asset_type="machine",
+            status="in_service", criticality="high", category="Drives & motors",
+            manufacturer="SEW-Eurodrive", model_number="K107-DRN132", serial_number="SEW-88-40219",
+            tag_code="QR-LINE-01-DRV",
+            specifications="7.5 kW geared motor, ratio 28.6:1, IP55.",
+            parent=line, location=main, org_unit=org_unit, custodian=custodian, supplier=northwind,
+            purchase_date=today - datetime.timedelta(days=930),
+            commissioned_on=today - datetime.timedelta(days=900),
+            purchase_cost=Decimal("12500.00"),
+            notes="Seeded 4.13 CHILD component — a sub-assembly of LINE-01. No warranty date on "
+                  "purpose: 'not recorded' is its own muted chip and must never read green.")
+
+        forklift = _asset(
+            "FL-002", name="Counterbalance forklift 2.5 t", asset_type="forklift",
+            status="in_service", criticality="medium", category="Fork trucks",
+            manufacturer="Toyota Material Handling", model_number="8FGCU25",
+            serial_number="8FGCU25-31447", tag_code="QR-FL-002",
+            specifications="2 500 kg at 500 mm load centre, LPG, triplex mast 4.7 m.",
+            location=main, org_unit=org_unit, custodian=custodian, supplier=cascade,
+            service_vendor=cascade,
+            # The meter DEFINITION only — every number lives in MeterReading, append-only.
+            meter_name="Running Hours", meter_unit="h",
+            purchase_date=today - datetime.timedelta(days=520),
+            commissioned_on=today - datetime.timedelta(days=500),
+            # Inside the 60-day notice window, so the amber warranty chip is populated too.
+            warranty_expires_on=today + datetime.timedelta(days=45),
+            purchase_cost=Decimal("48000.00"), fixed_asset=van,
+            notes="Seeded 4.13 asset — LINKED to a capitalised record, so the depreciation report has "
+                  "a real book value to divide maintenance spend by. Its meter is the one the "
+                  "meter-based plan schedules against.")
+
+        conveyor = _asset(
+            "CNV-03", name="Pick-line belt conveyor", asset_type="conveyor", status="in_service",
+            criticality="high", category="Conveyors",
+            manufacturer="Interroll", model_number="RM8730", serial_number="IR-8730-5521",
+            tag_code="QR-CNV-03",
+            specifications="18 m belt, 0.6 m wide, 0.55 kW drum motor, variable 0.2-0.8 m/s.",
+            location=main, org_unit=org_unit, custodian=custodian, supplier=northwind,
+            # THE SCM DIFFERENTIATOR: taking this machine down is a CAPACITY fact, so it points at
+            # 4.8's work centre and a repair can explain a hole in the load board.
+            work_center=assembly,
+            meter_name="Bearing Temp", meter_unit="°C",
+            purchase_date=today - datetime.timedelta(days=320),
+            commissioned_on=today - datetime.timedelta(days=300),
+            warranty_expires_on=today + datetime.timedelta(days=300),
+            purchase_cost=Decimal("18000.00"), fixed_asset=racking,
+            notes="Seeded 4.13 asset — tied to a 4.8 work centre AND to a capitalised record. It "
+                  "carries the completed PM job, so it is the row whose repair-vs-replace ratio is a "
+                  "real quotient rather than a zero.")
+        assets = [line, drive, forklift, conveyor]
+
+        # ---- 2. 4.3 items become spares — a GUARDED update that is a no-op on the second run -----
+        # `.update()` on a filter that already excludes the flipped rows: the first run writes 2, the
+        # second matches nothing and writes 0. A blanket `.update(is_spare_part=True)` would report
+        # two flips forever and touch rows it did not change; `save()` per item would be two round
+        # trips to say the same thing. There is deliberately no SparePart table — scm.Item already
+        # owns UoM, costing, average cost, reorder point and a derived on-hand, and a parallel parts
+        # master would fork every one of them (the model docstring's rule).
+        spare_skus = ["DOCK-C", "MON-27"]
+        flipped = Item.objects.filter(
+            tenant=tenant, sku__in=spare_skus, is_spare_part=False).update(is_spare_part=True)
+
+        # ---- 3. the machines' parts lists — the ASSOCIATION, nothing more ------------------------
+        parts_specs = [
+            (conveyor, dock, Decimal("2"), True,
+             "Consumed at every service. Running out stops the job, so it is flagged critical."),
+            (conveyor, mon27, Decimal("1"), False, "Replaced on condition, not every service."),
+            (forklift, dock, Decimal("1"), False, "Carried as a shelf spare for the mast harness."),
+            (drive, mon27, Decimal("1"), True, "Long-lead item — the line stops without it."),
+        ]
+        spare_rows = 0
+        for asset, item, qty, critical, note in parts_specs:
+            if AssetSparePart.objects.filter(asset=asset, item=item).exists():
+                continue
+            row = AssetSparePart(asset=asset, item=item, quantity_per_service=qty,
+                                 is_critical=critical, notes=note)
+            row.full_clean()
+            row.save()
+            spare_rows += 1
+
+        # ---- 4. the meter history — a REAL rising trend, so the arithmetic has something to do ---
+        # Six observations on the forklift's primary meter and two on the conveyor's. Both are what
+        # the schedule below actually reads: the meter plan compares its target against the newest
+        # forklift row, and the condition plan compares its threshold against the newest conveyor row.
+        # A single reading would let both look configured while proving nothing.
+        def _reading(asset, meter_name, unit, value, days_ago, **fields):
+            read_at = _at(today - datetime.timedelta(days=days_ago), 9)
+            existing = MeterReading.objects.filter(
+                tenant=tenant, asset=asset, meter_name=meter_name, read_at=read_at).first()
+            if existing is not None:
+                return existing
+            obj = MeterReading(tenant=tenant, asset=asset, meter_name=meter_name, unit=unit,
+                               reading=value, read_at=read_at, recorded_by=technician, **fields)
+            obj.full_clean()
+            obj.save()
+            return obj
+
+        readings = []
+        for days_ago, hours in ((150, "968.0"), (120, "1012.5"), (90, "1058.0"),
+                                (60, "1104.5"), (30, "1161.0"), (3, "1218.5")):
+            readings.append(_reading(forklift, "Running Hours", "h", Decimal(hours), days_ago,
+                                     source="manual", notes="Seeded: read off the hour counter."))
+        for days_ago, temp in ((14, "68.4"), (2, "77.2")):
+            readings.append(_reading(conveyor, "Bearing Temp", "°C", Decimal(temp), days_ago,
+                                     source="manual",
+                                     notes="Seeded: drive-end bearing, infrared spot check."))
+
+        # ---- 5. three plans on three DIFFERENT triggers ------------------------------------------
+        def _plan(name, asset, tasks, **fields):
+            """Existence-checked on (tenant, asset, name) — never a bare create on an auto-numbered
+            row (the 4.12 `_license` pattern). The checklist is written only for a plan this run
+            actually created, so a re-run cannot stack a second copy of the same steps."""
+            existing = MaintenancePlan.objects.filter(
+                tenant=tenant, asset=asset, name=name).first()
+            if existing is not None:
+                return existing
+            obj = MaintenancePlan(tenant=tenant, asset=asset, name=name, **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            for sequence, description, expected, mandatory, safety in tasks:
+                task = MaintenancePlanTask(
+                    plan=obj, sequence=sequence, description=description,
+                    expected_result=expected, is_mandatory=mandatory, is_safety_step=safety)
+                task.full_clean()
+                task.save()
+            return obj
+
+        calendar_plan = _plan(
+            "Monthly conveyor inspection & belt lubrication", conveyor,
+            [(10, "Isolate the drive and apply lock-out/tag-out",
+              "Isolation proved dead; personal tag fitted", True, True),
+             (20, "Inspect the belt for tears, tracking and edge wear",
+              "No tears; tracking within 5 mm of centre", True, False),
+             (30, "Grease the drive and idler bearings",
+              "Two shots per nipple, no purge past the seal", True, False),
+             (40, "Test the emergency pull-cord along both runs",
+              "Belt stops within 1 s from every station", True, False),
+             (50, "Record the bearing temperature after 10 minutes running",
+              "Below 70 °C", False, False)],
+            trigger_type="calendar", schedule_basis="floating", interval_days=30, lead_time_days=7,
+            # The cycle the completed job below answers. It is rolled TWICE by advance() — once at
+            # generate, once at completion — so what ends up on the row is the schedule the app
+            # itself produced, not a date typed here.
+            next_due_on=today - datetime.timedelta(days=5),
+            priority="high", work_type="preventive", estimated_hours=Decimal("3.50"),
+            assigned_to=technician, parts_location=main,
+            instructions="The standing monthly service on the pick line. Runs during the Friday "
+                         "shutdown window; the line must be isolated before any guard is opened.")
+
+        meter_plan = _plan(
+            "250-hour forklift service", forklift,
+            [(10, "Park, lower the forks, isolate and apply lock-out/tag-out",
+              "Key removed, tag fitted", True, True),
+             (20, "Change the engine oil and filter", "5.5 L 15W-40; filter torqued to spec",
+              True, False),
+             (30, "Check hydraulic level, hoses and mast chains",
+              "No weeping; chain stretch under 2%", True, False),
+             (40, "Test the service and parking brakes", "Holds loaded on a 15% grade", True, False)],
+            trigger_type="meter", schedule_basis="floating", meter_interval=Decimal("250"),
+            lead_time_days=5,
+            # 1 200 h against a newest reading of 1 218.5 h — meter_gap() is NEGATIVE, so due_status
+            # answers `overdue` off the USAGE axis with no date involved at all. That is the half of
+            # the trigger a boolean `is_meter_based` would have had, and the half a calendar-only
+            # demo never exercises.
+            next_due_reading=Decimal("1200"),
+            priority="medium", work_type="preventive", estimated_hours=Decimal("3.00"),
+            assigned_to=technician, parts_location=main,
+            instructions="The 250-hour interval service. Due on RUNNING HOURS, not on the calendar — "
+                         "a truck that sat idle for a month does not owe a service.")
+
+        condition_plan = _plan(
+            "Conveyor drive bearing temperature watch", conveyor,
+            [(10, "Read the drive-end bearing temperature with the infrared gun",
+              "Below 75 °C at steady state", True, False),
+             (20, "If the reading is above threshold, check alignment and lubrication before "
+                  "running on", "Cause identified and cleared, or the belt is stopped", True, False)],
+            trigger_type="condition", condition_operator="gte",
+            condition_threshold=Decimal("75"), lead_time_days=7,
+            priority="high", work_type="predictive", estimated_hours=Decimal("1.00"),
+            assigned_to=technician, parts_location=main,
+            instructions="A condition trigger, not a schedule: the machine decides when this is due. "
+                         "The newest seeded reading is 77.2 °C against a 75 °C threshold, so it "
+                         "fires on first login and the trigger is visibly working rather than merely "
+                         "configured.")
+        plans = [calendar_plan, meter_plan, condition_plan]
+
+        # ---- 6. the jobs -------------------------------------------------------------------------
+        def _job(title, asset, tasks=(), **fields):
+            """Existence-checked on (tenant, asset, title) — the auto-numbered rule again."""
+            existing = MaintenanceWorkOrder.objects.filter(
+                tenant=tenant, asset=asset, title=title).first()
+            if existing is not None:
+                return existing
+            obj = MaintenanceWorkOrder(tenant=tenant, asset=asset, title=title, **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            # Plain COLUMN copies of the plan's checklist, with no FK back to it — the generate
+            # action's rule: editing a plan next month must not rewrite what a finished job asked a
+            # technician to check and sign.
+            for task in tasks:
+                snapshot = MaintenanceWorkOrderTask(
+                    work_order=obj, sequence=task.sequence, description=task.description,
+                    expected_result=task.expected_result, is_mandatory=task.is_mandatory,
+                    is_safety_step=task.is_safety_step)
+                snapshot.full_clean()
+                snapshot.save()
+            return obj
+
+        def _walk(job, status, **stamps):
+            """One verb's effect: write the stamps that verb owns, move ``status``, one round trip.
+
+            ``status`` is ``editable=False`` and the verbs are its only writer (L22), so the seeded
+            job is walked down the same ladder rather than being dropped straight into ``completed``
+            with a set of stamps that never happened. ``save()`` folds ``downtime_minutes`` into
+            ``update_fields`` itself, so the derived total always rides along with its inputs.
+            """
+            for field, value in stamps.items():
+                setattr(job, field, value)
+            job.status = status
+            job.save(update_fields=["status", *stamps, "updated_at"])
+
+        # --- 6a. the completed PM: generated from the calendar plan, worked, and costed -----------
+        pm_day = today - datetime.timedelta(days=5)
+        generated_on = today - datetime.timedelta(days=8)
+        scheduled_start = _at(calendar_plan.next_due_on, 7)   # captured BEFORE advance() moves it
+        pm_job = _job(
+            "Monthly conveyor inspection & belt lubrication", conveyor,
+            tasks=list(calendar_plan.tasks.all()),
+            plan=calendar_plan, source="plan", work_type=calendar_plan.work_type,
+            priority=calendar_plan.priority, assigned_to=calendar_plan.assigned_to,
+            parts_location=calendar_plan.parts_location,
+            reported_at=_at(generated_on, 9), scheduled_start=scheduled_start,
+            labour_rate=Decimal("42.0000"),
+            description="Generated from the monthly plan. Full inspection and lubrication of the "
+                        "pick-line conveyor during the Friday shutdown window.")
+        if pm_job.status == "requested":
+            # The generate action rolls the schedule ONCE, from the day the job was raised, and
+            # stamps last_generated_on. advance() returns the field names it wrote and saves nothing
+            # by default, so its write is folded into this caller's own update_fields — its stated
+            # contract, and one UPDATE instead of two.
+            rolled = calendar_plan.advance(from_date=generated_on)
+            calendar_plan.last_generated_on = generated_on
+            calendar_plan.save(update_fields=list(dict.fromkeys(
+                rolled + ["last_generated_on", "updated_at"])))
+
+            _walk(pm_job, "approved")
+            _walk(pm_job, "scheduled")
+            _walk(pm_job, "in_progress",
+                  started_at=_at(pm_day, 8), downtime_start=_at(pm_day, 8))
+
+        # The part lines the job consumed. Added while the job is open, which is the only state the
+        # issue verb accepts — a line planned onto a closed job could never be drawn.
+        for item, qty in ((dock, Decimal("1")), (mon27, Decimal("2"))):
+            if not pm_job.parts.filter(item=item).exists():
+                part = MaintenanceWorkOrderPart(work_order=pm_job, item=item, quantity=qty)
+                part.full_clean()
+                part.save()
+
+        # --- 6b. THE ONLY LEDGER WRITE IN 4.13 ----------------------------------------------------
+        # Guarded on (move_type, reference) rather than on the seeder's outer Asset check, because
+        # this is the one write here with an effect outside 4.13: a second post would draw the same
+        # parts out of stock twice and silently understate on-hand for every page that reads the
+        # ledger. The filter is exactly the one _flush() deletes on, so the guard and the teardown
+        # describe the same set of rows.
+        issued_lines, issued_value = 0, ZERO
+        if StockMove.objects.filter(tenant=tenant, move_type="maintenance",
+                                    reference=pm_job.number).exists():
+            self.stdout.write(f"{tenant.name}: {pm_job.number} parts already issued — not "
+                              f"re-posting the maintenance stock moves.")
+        else:
+            # `maintenanceworkorder_issue_parts`, in effect verbatim: _shared_items so two lines for
+            # one part read ONE Item instance rather than each rolling its own stale average cost;
+            # _insufficient_stock BEFORE every move so a line the storeroom cannot cover is named and
+            # skipped rather than failing the whole issue; unit_cost stamped from average_cost AT
+            # ISSUE TIME, because the job's cost has to be what the stock actually cost when drawn.
+            lines = list(pm_job.parts.filter(is_issued=False).select_related("item", "lot_serial"))
+            shared = _shared_items(lines)
+            stamp = _at(pm_day, 8, 20)
+            for part in lines:
+                item = shared[part.item_id]
+                shortfall = _insufficient_stock(item, pm_job.parts_location, part.quantity,
+                                                part.lot_serial)
+                if shortfall:
+                    self.stdout.write(self.style.WARNING(
+                        f"{tenant.name}: {pm_job.number} — not issued: {shortfall}"))
+                    continue
+                cost = item.average_cost or ZERO
+                _post_stock_move(tenant, item=item, location=pm_job.parts_location,
+                                 quantity=-part.quantity, move_type="maintenance", unit_cost=cost,
+                                 lot_serial=part.lot_serial, reference=pm_job.number,
+                                 reason="Maintenance issue", moved_at=stamp)
+                part.unit_cost = q4(cost)
+                part.is_issued = True
+                part.issued_at = stamp
+                # No `updated_at`: MaintenanceWorkOrderPart is a plain child and has no timestamps.
+                part.save(update_fields=["unit_cost", "is_issued", "issued_at"])
+                issued_value += part.line_cost
+                issued_lines += 1
+
+        # --- 6c. completion, and the second schedule roll -----------------------------------------
+        if pm_job.status == "in_progress":
+            _walk(pm_job, "completed",
+                  completed_at=_at(pm_day, 11, 30), downtime_end=_at(pm_day, 10),
+                  labour_hours=Decimal("3.50"), remedy_code="lubricate",
+                  resolution_notes="Belt tracking corrected by 3 mm at the tail pulley, all four "
+                                   "bearings greased, pull-cords proved. Bearing temperature 61 °C "
+                                   "after 10 minutes — within tolerance.")
+            for task, result in zip(pm_job.tasks.all(), (
+                    "Isolated at the local isolator, tag fitted by E. Williams.",
+                    "Minor edge fray at 11 m, within limits. Tracking 3 mm off centre, corrected.",
+                    "All four bearings greased, no purge past the seals.",
+                    "All six stations stopped the belt inside 1 s.",
+                    "61 °C after 10 minutes.")):
+                task.is_done = True
+                task.actual_result = result
+                task.completed_at = _at(pm_day, 11, 30)
+                task.save(update_fields=["is_done", "actual_result", "completed_at"])
+
+            # The complete verb's plan roll: stamp last_completed_on and advance ONE cycle from the
+            # completion date. Exactly one cycle even when several were missed, so a plan that is
+            # behind stays visibly behind instead of being silently caught up.
+            rolled = calendar_plan.advance(from_date=pm_day)
+            calendar_plan.last_completed_on = pm_day
+            calendar_plan.save(update_fields=list(dict.fromkeys(
+                ["last_completed_on", "updated_at"] + rolled)))
+
+        # --- 6d. the OPEN breakdown: the line is down right now -----------------------------------
+        # downtime_start set with downtime_end still NULL is the whole point: Asset.is_down_now()
+        # answers from these rows rather than from a status column something has to remember to flip,
+        # Asset.downtime_minutes() adds the still-running window that the stored total cannot see,
+        # and mttr_hours() finds no FINISHED breakdown and answers None — the zero-denominator guard
+        # doing its job, where a confident 0 h would read as instant repairs.
+        breakdown = _job(
+            "Line 1 stopped — heavy vibration from the drive end", line,
+            source="request", work_type="breakdown", priority="urgent",
+            reported_by=reporter, assigned_to=technician, parts_location=main,
+            reported_at=now - datetime.timedelta(hours=9),
+            downtime_start=now - datetime.timedelta(hours=9), is_unplanned_downtime=True,
+            problem_code="vibration", cause_code="misalignment",
+            labour_rate=Decimal("42.0000"),
+            description="Night shift reported heavy vibration and a rising noise from the drive end "
+                        "before the line tripped. Coupling alignment suspect; remedy not yet "
+                        "determined.")
+        if breakdown.status == "requested":
+            _walk(breakdown, "approved")
+            _walk(breakdown, "in_progress", started_at=now - datetime.timedelta(hours=6))
+        # One PLANNED, deliberately UNISSUED line, so the Issue Parts button on the detail page has
+        # something real to do and the planned-vs-issued split is visible: an unissued line carries
+        # unit_cost 0 and contributes nothing to the job's cost, because the cost is stamped by the
+        # issue, not by the intention.
+        if not breakdown.parts.filter(item=dock).exists():
+            part = MaintenanceWorkOrderPart(work_order=breakdown, item=dock, quantity=Decimal("1"))
+            part.full_clean()
+            part.save()
+
+        # --- 6e. the intake: a request nobody has approved yet ------------------------------------
+        # status stays at its default `requested`, which IS the maintenance request — see the model
+        # docstring for why there is no second request table to convert from.
+        request_job = _job(
+            "Hydraulic weep at the mast cylinder", forklift,
+            source="request", work_type="corrective", priority="medium",
+            reported_by=reporter, parts_location=main,
+            reported_at=now - datetime.timedelta(days=1, hours=2),
+            description="Driver reports a slow weep at the lift cylinder gland and a puddle under "
+                        "the mast after standing overnight. Truck still usable; raised for "
+                        "assessment.")
+
+        jobs = [pm_job, breakdown, request_job]
+        self.stdout.write(
+            f"{tenant.name}: 4.13 asset management — {len(assets)} assets "
+            f"({line.code} > {drive.code} hierarchy, {conveyor.code} on "
+            f"{assembly.code if assembly else 'no work centre'}, "
+            f"{sum(1 for a in assets if a.fixed_asset_id)} of {len(assets)} linked to a fixed "
+            f"asset), {flipped} item(s) flipped to spare parts, {spare_rows} parts-list row(s), "
+            f"{len(plans)} plans ({calendar_plan.number} {calendar_plan.due_status_label.lower()} "
+            f"next {calendar_plan.next_due_on}, {meter_plan.number} "
+            f"{meter_plan.due_status_label.lower()} at {meter_plan.next_due_reading} h, "
+            f"{condition_plan.number} {condition_plan.due_status_label.lower()}), "
+            f"{len(readings)} meter readings, {len(jobs)} work orders "
+            f"({pm_job.number} {pm_job.get_status_display().lower()} costing {pm_job.total_cost}, "
+            f"{breakdown.number} {breakdown.get_status_display().lower()} and down now, "
+            f"{request_job.number} {request_job.get_status_display().lower()}), "
+            f"{issued_lines} part line(s) worth {issued_value} issued through the ledger.")
