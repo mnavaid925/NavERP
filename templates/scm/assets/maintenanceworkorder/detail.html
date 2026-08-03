@@ -1,0 +1,719 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — one maintenance job: its ladder, its outage, its parts and what it cost.
+
+Renders apps/scm/views/AssetManagement/MaintenanceWorkOrders.py::maintenanceworkorder_detail.
+Everything this page may read, and nothing else:
+
+  obj                     the MaintenanceWorkOrder (select_related: asset, asset__location,
+                          asset__work_center, plan, reported_by, assigned_to, service_vendor,
+                          parts_location, non_conformance — anything else on it is a query)
+  parts                   list[MaintenanceWorkOrderPart], item + lot_serial__item joined
+  tasks                   list[MaintenanceWorkOrderTask], the SNAPSHOT checklist
+  moves                   list[StockMove] this job wrote (the issue-parts verb), DB-sliced
+  readings                list[MeterReading] filed against this job, DB-sliced
+  parts_cost / labour_cost / total_cost           Decimal
+  duration_hours          Decimal or None while the job is unfinished
+  is_on_time              True / False / None when unanswerable
+  open_task_count / issued_part_count / unissued_part_count / has_issued_parts
+  can_edit / can_delete
+  can_approve can_schedule can_start can_hold can_resume can_complete can_close can_cancel
+  can_issue_parts can_record_reading                 the ten ladder gates
+  parts_location_missing  say WHY issue-parts is unavailable rather than merely hiding it
+  asset_meter_name / asset_meter_unit                 "" when the asset names no meter
+
+THE LADDER IS NOT RE-DERIVED HERE. Each verb below is rendered only when its own can_* flag is
+True, and those flags are read off the very module constants the views guard on
+(APPROVABLE_STATUSES / STARTABLE_STATUSES / …). A button and the route behind it therefore cannot
+disagree about whether an action is available — the 4.10 "two of three shapes" finding. No template
+{% if obj.status == … %} appears anywhere on this page for that reason.
+
+`status` is editable=False and absent from the form, so these buttons are the ONLY thing that can
+move it. Every verb route is POST-only (@require_POST): a GET is a 405, never a silent state change.
+approve / cancel / issue-parts / delete are additionally @tenant_admin_required, so all four are
+wrapped in the superuser-or-tenant-admin gate — showing a member a button they will 403 on is the
+4.11 finding. schedule / start / hold / resume / complete / close / record-reading and the checklist
+toggle are @login_required and are deliberately NOT wrapped: those are the technician's own job.
+
+MAX_PANEL_ROWS is not in the context, so the two DB-sliced panels describe their cap as "the window
+shown" rather than quoting a number this page cannot see.
+
+duration_hours and is_on_time are None — never 0, never False — while unanswerable, and both print
+an em dash. An in-flight repair counted as zero hours would flatter every MTTR figure that reads it,
+and a never-scheduled job counted as "Late" would be a miss nobody committed to. Note that
+`|default:"—"` would be WRONG on either, because it also swallows a real 0.
+
+Badge classes come from the model — obj.status_css / obj.priority_css / obj.work_type_css and
+obj.asset.criticality_css / obj.asset.status_css. badge-success / badge-warning / badge-danger DO
+NOT EXIST in theme.css and render completely unstyled (L33).
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.title }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.priority_css }}">{{ obj.get_priority_display }}</span>
+        <span class="badge {{ obj.work_type_css }}">{{ obj.get_work_type_display }}</span>
+        {% if obj.is_down_now %}<span class="badge badge-red">Machine down now</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:maintenanceworkorder_list' %}">Maintenance Work Orders</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One job on one machine. The status is not a field anybody types — it moves only through the buttons below, and only along the legal ladder: <span class="mono">requested → approved → scheduled → in progress → completed → closed</span>, with <span class="mono">on hold</span> reachable from in progress and <span class="mono">cancelled</span> from any open status. Everything this page shows about cost, downtime and reliability is derived from what is recorded here.</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.asset %}<a href="{% url 'scm:asset_detail' obj.asset.pk %}" class="btn btn-outline"><i data-lucide="package"></i> {{ obj.asset.code }}</a>{% endif %}
+      <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+      <div class="stat-value">{{ obj.get_status_display }}</div>
+      <div class="stat-label">{% if obj.is_open %}Still live — parts may be issued and the checklist ticked{% else %}Terminal — this job is now the record of what happened{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ total_cost|floatformat:2 }}</div>
+      <div class="stat-label">Total cost · parts issued + labour + contractor</div>
+    </div>
+    {% comment %}
+      downtime_minutes is derived in save() from the window and is a real 0 when no window has been
+      recorded — the honest question is therefore "was an outage recorded at all", which
+      downtime_start answers.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="timer-off"></i></div>
+      <div class="stat-value">{% if obj.downtime_start %}{% if obj.is_down_now %}Open{% else %}{{ obj.downtime_minutes }}{% endif %}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if not obj.downtime_start %}No outage window recorded on this job
+        {% elif obj.is_down_now %}The outage started and has not been closed
+        {% else %}Downtime minutes{% if obj.is_unplanned_downtime %} · unplanned{% endif %}{% endif %}
+      </div>
+    </div>
+    {% comment %}
+      `is None`, deliberately, on both. duration_hours is None until the job has both a start and a
+      completion stamp; is_on_time is None until it has both a completion and a committed date.
+      Printing 0 hours or "Late" on either would be a confident answer to a question nobody can yet
+      answer — and `|default:"—"` would be wrong here because it also swallows a real 0.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{% if duration_hours is None %}—{% else %}{{ duration_hours|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">
+        {% if duration_hours is None %}Hours on the job — measurable once it is started and completed
+        {% else %}Hours from start to completion{% endif %}
+        {% if is_on_time is None %}
+          · <span class="badge badge-muted">On time: unanswerable</span>
+        {% elif is_on_time %}
+          · <span class="badge badge-green">Finished on time</span>
+        {% else %}
+          · <span class="badge badge-red">Finished late</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What happens next</h2>
+      <span class="badge {{ obj.status_css }}">Currently {{ obj.get_status_display|lower }}</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        ONLY the legal next moves are drawn. Nothing here is greyed out and nothing re-derives the
+        ladder: each block is gated on the can_* flag the view computed from the same tuple its own
+        route guards on. Every form is POST with a csrf token and a confirm, because each one is a
+        state change that cannot be undone by pressing back.
+      {% endcomment %}
+      {% if can_approve %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:maintenanceworkorder_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}? Approving is what commits somebody&#39;s time and the money this job will spend.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Approve this request</button>
+            <div class="form-help">A request plus whoever raised it <span class="fw-600">is</span> the maintenance notification — there is no second table to convert from. Approving moves it one rung up the ladder and nothing else; it schedules no date and reserves no part.</div>
+          </form>
+        {% else %}
+          <p class="text-muted"><span class="badge badge-muted">Approval pending</span> Approving a request commits time and money, so it is a workspace-administrator action. Ask an administrator to approve {{ obj.number }}.</p>
+        {% endif %}
+      {% endif %}
+
+      {% if can_schedule %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_schedule' obj.pk %}" onsubmit="return confirm('Commit {{ obj.number }} to this start date? This is the date the job&#39;s on-time performance is measured against.');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_scheduled_start">Scheduled start</label>
+            <input type="datetime-local" name="scheduled_start" id="id_scheduled_start" class="form-input" value="{{ obj.scheduled_start|date:'Y-m-d\TH:i' }}">
+            <div class="form-help">Optional only when a date is already committed — rescheduling is the normal case and a posted value replaces what is there. With nothing posted and nothing stored the view refuses, because a job put into "scheduled" with no date is a commitment to nothing and every PM-compliance figure that reads it goes unanswerable.</div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="calendar-clock"></i> Schedule</button>
+        </form>
+      {% endif %}
+
+      {% if can_start %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_start' obj.pk %}" onsubmit="return confirm('Start work on {{ obj.number }}? The start time is stamped now and is what the job&#39;s duration is measured from.');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start work</button>
+          <div class="form-help">Accepted from <span class="fw-600">approved</span> as well as from scheduled, on purpose: a breakdown is worked the moment somebody walks to the machine, and forcing a scheduling step first would only ever produce a fake date. Resuming from a hold deliberately does <em>not</em> re-stamp this, so duration stays measured from when work first began.</div>
+        </form>
+      {% endif %}
+
+      {% if can_hold %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_hold' obj.pk %}" onsubmit="return confirm('Put {{ obj.number }} on hold?');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_hold_reason">Why it is being held</label>
+            <input type="text" name="reason" id="id_hold_reason" class="form-input" maxlength="200" placeholder="Waiting on a part, a permit, a shutdown window, a contractor…">
+            <div class="form-help">Optional, and recorded in the audit trail rather than on the job. It is a note about a <em>moment</em>; writing it onto the resolution notes would overwrite what the technician eventually says they actually did.</div>
+          </div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="pause-circle"></i> Put on hold</button>
+        </form>
+      {% endif %}
+
+      {% if can_resume %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_resume' obj.pk %}" onsubmit="return confirm('Resume work on {{ obj.number }}?');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="play-circle"></i> Resume work</button>
+          <div class="form-help">A held job is resumed and <em>then</em> completed — completing straight from hold is deliberately not a move. One extra click buys "was it ever actually restarted?" as a fact on the ladder rather than a guess.</div>
+        </form>
+      {% endif %}
+
+      {% if can_complete %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_complete' obj.pk %}" onsubmit="return confirm('Complete {{ obj.number }}? The completion time is stamped now, the job can no longer be edited, and a preventive plan behind it rolls forward exactly one cycle.');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="id_resolution_notes_verb">What was actually done</label>
+            <textarea name="resolution_notes" id="id_resolution_notes_verb" class="form-textarea" rows="3">{{ obj.resolution_notes }}</textarea>
+            <div class="form-help">Collected <span class="fw-600">here</span> rather than only on the edit form, because a completed job is no longer editable — and completion is exactly the moment the technician has something to write. Leave it blank to keep whatever is already stored.</div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Complete the job</button>
+          <div class="form-help">Three things happen in one locked transaction: the completion is stamped; a preventive plan behind this job has its schedule rolled forward by exactly one cycle; and a meter value captured on the form is filed as a reading against the asset. A second click is refused before it reaches any of them.</div>
+        </form>
+      {% endif %}
+
+      {% if can_close %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_close' obj.pk %}" onsubmit="return confirm('Close {{ obj.number }}? Reviewed, costed and now history.');" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="archive"></i> Close the job</button>
+          <div class="form-help"><span class="fw-600">Completed</span> and <span class="fw-600">closed</span> are kept apart on purpose — that is what lets a supervisor find "finished but not yet signed off" without a second flag.</div>
+        </form>
+      {% endif %}
+
+      {% if can_cancel %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:maintenanceworkorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel {{ obj.number }}? A cancelled job keeps its history but is excluded from every reliability figure — MTTR, MTBF and availability all stop counting it.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_cancel_reason">Why it is being cancelled</label>
+              <input type="text" name="reason" id="id_cancel_reason" class="form-input" maxlength="200" placeholder="Duplicate of another job, raised in error, machine already replaced…">
+              <div class="form-help">Optional, and recorded in the audit trail.</div>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Cancel the job</button>
+          </form>
+        {% else %}
+          <p class="text-muted"><span class="badge badge-muted">Cancellation</span> Cancelling takes a job out of every reliability figure, so it is a workspace-administrator action.</p>
+        {% endif %}
+      {% elif obj.is_open and has_issued_parts %}
+        <p class="text-muted"><span class="badge badge-muted">Cancel unavailable</span> {{ issued_part_count }} part line{{ issued_part_count|pluralize }} {{ issued_part_count|pluralize:"has,have" }} already been issued from stock. Cancelling would leave that consumption attached to a job claiming nothing happened, while the outage vanished from MTTR and MTBF. Complete and close it instead, or post a stock adjustment to return the parts first.</p>
+      {% endif %}
+
+      {% if not can_approve and not can_schedule and not can_start and not can_hold and not can_resume and not can_complete and not can_close and not can_cancel %}
+        <p class="text-muted"><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span> This job has reached the end of the ladder — there is no legal move left from here. Its checklist, its parts and its costs stay exactly as they are, which is the whole point: a finished job is the evidence of what happened to the machine, and the reliability figures on the asset's page are computed from it.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The job</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Work type</dt><dd><span class="badge {{ obj.work_type_css }}">{{ obj.get_work_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd><span class="badge {{ obj.priority_css }}">{{ obj.get_priority_display }}</span></dd></div>
+        <div class="detail-item"><dt>Raised as</dt><dd><span class="badge badge-slate">{{ obj.get_source_display }}</span></dd></div>
+        <div class="detail-item"><dt>Asset</dt><dd>
+          {% if obj.asset %}
+            <a href="{% url 'scm:asset_detail' obj.asset.pk %}" class="mono">{{ obj.asset.code }}</a> {{ obj.asset.name }}
+            <div class="form-help">
+              <span class="badge {{ obj.asset.criticality_css }}">{{ obj.asset.get_criticality_display }}</span>
+              <span class="badge {{ obj.asset.status_css }}">{{ obj.asset.get_status_display }}</span>
+            </div>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Where it sits</dt><dd>{% if obj.asset.location %}{{ obj.asset.location.code }} <span class="text-muted">{{ obj.asset.location.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        {% comment %}
+          The one place 4.13 and 4.8 touch. Taking a machine down is a CAPACITY fact the load board
+          and OEE both want to read — it is not a row Manufacturing should own, which is why this is
+          a link out to the asset's work centre and not a production work order.
+        {% endcomment %}
+        <div class="detail-item"><dt>Work centre</dt><dd>{% if obj.asset.work_center %}{{ obj.asset.work_center }}{% else %}<span class="text-muted">Not tied to production capacity</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Preventive plan</dt><dd>
+          {% if obj.plan %}<a href="{% url 'scm:maintenanceplan_detail' obj.plan.pk %}" class="mono">{{ obj.plan.number }}</a> {{ obj.plan.name }}{% else %}<span class="text-muted">Ad-hoc — no plan behind it</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Reported by</dt><dd>{% if obj.reported_by %}{{ obj.reported_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Assigned to</dt><dd>{% if obj.assigned_to %}{{ obj.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Contractor</dt><dd>{% if obj.service_vendor %}{{ obj.service_vendor.name }}{% else %}<span class="text-muted">Done in house</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Parts storeroom</dt><dd>
+          {% if obj.parts_location %}<a href="{% url 'scm:location_detail' obj.parts_location.pk %}" class="mono">{{ obj.parts_location.code }}</a> <span class="text-muted">{{ obj.parts_location.name }}</span>
+          {% else %}<span class="badge badge-muted">Not set</span> <span class="text-muted">parts cannot be issued</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Quality non-conformance</dt><dd>
+          {% if obj.non_conformance %}<a href="{% url 'scm:nonconformance_detail' obj.non_conformance.pk %}" class="mono">{{ obj.non_conformance.number }}</a> {{ obj.non_conformance.title }}{% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Reported at</dt><dd>{{ obj.reported_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Scheduled start</dt><dd>{% if obj.scheduled_start %}{{ obj.scheduled_start|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not committed to a date</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd>{% if obj.started_at %}{{ obj.started_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not started</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Completed</dt><dd>{% if obj.completed_at %}{{ obj.completed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not completed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Duration</dt><dd class="mono">{% if duration_hours is None %}<span class="text-muted">—</span>{% else %}{{ duration_hours|floatformat:2 }} h{% endif %}</dd></div>
+        <div class="detail-item"><dt>On time</dt><dd>
+          {% if is_on_time is None %}<span class="text-muted">—</span>
+          {% elif is_on_time %}<span class="badge badge-green">Yes</span>
+          {% else %}<span class="badge badge-red">No</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Raised</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.description %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">What was observed.</span> {{ obj.description }}</p>{% endif %}
+      {% if obj.resolution_notes %}<p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">What was actually done.</span> {{ obj.resolution_notes }}</p>{% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        The started and completed stamps are written by the buttons above and are not on any form: the moment work began is an event, not an opinion. The <span class="fw-600">outage window</span> below is the deliberate exception — a technician discovering afterwards that the machine actually went down at 02:10 is the normal case, and a verb-only window could never be corrected.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The outage</h2>
+      {% if obj.is_down_now %}<span class="badge badge-red">Still down</span>
+      {% elif obj.is_unplanned_downtime %}<span class="badge badge-amber">Unplanned</span>
+      {% elif obj.downtime_start %}<span class="badge badge-info">Planned</span>
+      {% else %}<span class="badge badge-muted">No window recorded</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Went down</dt><dd>{% if obj.downtime_start %}{{ obj.downtime_start|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Came back</dt><dd>
+          {% if obj.downtime_end %}{{ obj.downtime_end|date:"M d, Y H:i" }}
+          {% elif obj.downtime_start %}<span class="badge badge-red">Not yet</span>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        {% comment %}
+          DERIVED, never typed: MaintenanceWorkOrder.save() computes it from the pair and clamps the
+          result at one year. The clamp is not decoration — two DateTimeFields can legally be 9999
+          years apart, which is ~5.3e9 minutes and does not fit a PositiveIntegerField, so a mistyped
+          year would otherwise be an uncaught overflow from an ordinary edit.
+        {% endcomment %}
+        <div class="detail-item"><dt>Downtime</dt><dd class="mono">
+          {% if obj.downtime_start and obj.downtime_end %}{{ obj.downtime_minutes }} min
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Counts against availability</dt><dd>
+          {% if obj.is_unplanned_downtime %}<span class="badge badge-amber">Unplanned outage</span>{% else %}<span class="badge badge-muted">Planned</span>{% endif %}
+        </dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        The minutes are <span class="fw-600">computed from the two timestamps</span> and cannot be typed — typing them would be typing a subtraction, and the two figures could then disagree. An <em>unplanned</em> outage is the one that feeds mean time between failures and the asset's availability percentage; a planned shutdown for a preventive job is downtime the plant already knew about, and counting it as a failure would make every well-maintained machine look unreliable.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Failure chain</h2>
+      <span class="badge badge-slate">Problem → cause → remedy</span>
+    </div>
+    <div class="card-body">
+      {% if obj.problem_code or obj.cause_code or obj.remedy_code %}
+        <div class="badge-group" style="margin-bottom:.9rem;">
+          {% if obj.problem_code %}<span class="badge badge-red">{{ obj.get_problem_code_display }}</span>{% else %}<span class="badge badge-muted">Symptom not coded</span>{% endif %}
+          <span class="text-muted">→</span>
+          {% if obj.cause_code %}<span class="badge badge-amber">{{ obj.get_cause_code_display }}</span>{% else %}<span class="badge badge-muted">Cause not coded</span>{% endif %}
+          <span class="text-muted">→</span>
+          {% if obj.remedy_code %}<span class="badge badge-green">{{ obj.get_remedy_code_display }}</span>{% else %}<span class="badge badge-muted">Remedy not coded</span>{% endif %}
+        </div>
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Problem — the symptom observed</dt><dd>{{ obj.get_problem_code_display|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Cause — why it happened</dt><dd>{{ obj.get_cause_code_display|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Remedy — what was done about it</dt><dd>{{ obj.get_remedy_code_display|default:"—" }}</dd></div>
+        </dl>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="git-branch"></i>
+          <h3>No failure codes on this job</h3>
+          <p>Coding a job takes three clicks on the edit form and is what turns "the pump keeps failing" into an answer. Edit the job and pick a symptom, a cause and a remedy.</p>
+        </div>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Three <span class="fw-600">closed</span> vocabularies, deliberately — the bottom three levels of the classic failure hierarchy. A closed list is the entire reason "which cause costs us the most downtime this year?" is a single grouped query rather than a text-mining project, and it is why free-text symptoms are not offered. Every list carries an honest <span class="fw-600">Other</span>, because a technician forced into a wrong code makes all the other codes untrustworthy.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Parts</h2>
+      <div class="badge-group">
+        <span class="badge badge-green">{{ issued_part_count }} issued</span>
+        <span class="badge badge-slate">{{ unissued_part_count }} planned</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Part</th>
+            <th>Lot / serial</th>
+            <th>Quantity</th>
+            <th>Unit cost at issue</th>
+            <th>Line cost</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for part in parts %}
+            <tr>
+              <td>
+                {% if part.item %}<a href="{% url 'scm:item_detail' part.item.pk %}" class="fw-600 mono">{{ part.item.sku }}</a><div class="text-muted">{{ part.item.name }}</div>{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>{% if part.lot_serial %}<span class="mono">{{ part.lot_serial.number }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap mono">{{ part.quantity|floatformat:4 }}</td>
+              {% comment %}
+                unit_cost is stamped from the item's average cost AT ISSUE TIME and never re-read.
+                It is genuinely 0 on a line that has only been planned, so the unissued row says
+                "not yet stamped" rather than printing a zero that reads like a free part.
+              {% endcomment %}
+              <td class="nowrap mono">{% if part.is_issued %}{{ part.unit_cost|floatformat:4 }}{% else %}<span class="text-muted">Not yet stamped</span>{% endif %}</td>
+              <td class="nowrap mono">{% if part.is_issued %}{{ part.line_cost|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap">
+                {% if part.is_issued %}
+                  <span class="badge badge-green">Issued</span>
+                  <div class="form-help">{{ part.issued_at|date:"M d, Y H:i" }}</div>
+                {% else %}
+                  <span class="badge badge-slate">Planned</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="package-open"></i>
+                  <h3>No parts on this job</h3>
+                  <p>A labour-only repair legitimately consumes nothing. Add the spares on the edit form — a bearing is an ordinary stock item here, not a separate spare-parts master, which is what keeps one on-hand figure, one valuation and one reorder rule per part.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        THE ONLY LEDGER WRITE IN 4.13, and it posts no journal entry. can_issue_parts already folds
+        in all three conditions the view enforces (open status, a storeroom set, at least one
+        un-issued line), so this button and the route behind it cannot disagree. It is
+        @tenant_admin_required, hence the gate.
+      {% endcomment %}
+      {% if can_issue_parts %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:maintenanceworkorder_issue_parts' obj.pk %}" onsubmit="return confirm('Issue the {{ unissued_part_count }} un-issued part line(s) on {{ obj.number }} from store {{ obj.parts_location.code }}? This draws the stock out of that storeroom for real and cannot be undone by pressing back — an over-issue is corrected with a stock adjustment.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="package-minus"></i> Issue {{ unissued_part_count }} part line{{ unissued_part_count|pluralize }} from {{ obj.parts_location.code }}</button>
+            <div class="form-help">Posts one negative <span class="fw-600">maintenance</span> stock movement per un-issued line through the shared posting service, so on-hand stays a pure sum of one append-only ledger. A line the storeroom cannot cover is <span class="fw-600">named and skipped</span>, not thrown — refusing an eight-line issue over one missing washer helps nobody. Each line's unit cost is stamped from the item's average cost at this instant and never read live again.</div>
+          </form>
+        {% else %}
+          <p class="text-muted"><span class="badge badge-muted">Issue parts</span> Drawing stock out of a storeroom is the one thing on this page that writes the inventory ledger, so it is a workspace-administrator action. Ask an administrator to issue the {{ unissued_part_count }} outstanding line{{ unissued_part_count|pluralize }}.</p>
+        {% endif %}
+      {% elif parts_location_missing %}
+        <p class="text-muted"><span class="badge badge-muted">Issue unavailable</span> This job has no <span class="fw-600">parts storeroom</span>, so there is nowhere to draw the spares from. There is deliberately no default: guessing a storeroom would draw stock out of a location that never held it, and the tenant-wide figure would stay balanced while the real holding bin was never debited. Edit the job and set the parts location.</p>
+      {% elif unissued_part_count == 0 and parts %}
+        <p class="text-muted"><span class="badge badge-green">All issued</span> Every part line on this job has been drawn from stock. Correcting an over-issue is a stock adjustment, never a deletion — the ledger is append-only.</p>
+      {% elif not obj.is_open %}
+        <p class="text-muted"><span class="badge badge-muted">Issue unavailable</span> Parts may be drawn only while the job is open. Issuing against a finished job would attach a stock consumption to a document nobody can change.</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        A line is <span class="fw-600">planned</span> when it is added and <span class="fw-600">issued</span> when the stock actually moves — two separate facts, which is why the flag exists rather than the row's mere presence meaning consumption. An issued line can no longer be edited or removed on the form: deleting it would leave a posted movement standing with nothing to explain it and would silently drop the cost off this job, off the asset's maintenance cost to date and off the repair-versus-replace ratio on the depreciation report.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Checklist</h2>
+      <div class="badge-group">
+        {% if open_task_count %}<span class="badge badge-amber">{{ open_task_count }} step{{ open_task_count|pluralize }} outstanding</span>{% else %}<span class="badge badge-green">Nothing outstanding</span>{% endif %}
+        <span class="badge badge-slate">{{ tasks|length }} step{{ tasks|length|pluralize }}</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Step</th>
+            <th>What a pass looks like</th>
+            <th>Result</th>
+            <th>Done</th>
+            <th class="table-actions">Tick</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for task in tasks %}
+            <tr>
+              <td class="mono">{{ task.sequence }}</td>
+              <td>
+                {{ task.description }}
+                <div class="form-help">
+                  {% if task.is_mandatory %}<span class="badge badge-info">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}
+                  {% if task.is_safety_step %}<span class="badge badge-red">Safety</span>{% endif %}
+                </div>
+              </td>
+              <td>{{ task.expected_result|default:"—" }}</td>
+              <td>{{ task.actual_result|default:"—" }}</td>
+              <td class="nowrap">
+                {% if task.is_done %}
+                  <span class="badge badge-green">Done</span>
+                  <div class="form-help">{{ task.completed_at|date:"M d, Y H:i" }}</div>
+                {% else %}
+                  <span class="badge badge-slate">Open</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  One POST per step. `actual_result` is sent present-but-possibly-empty, which the
+                  route reads as a deliberate set/clear — so the box is pre-filled with what is
+                  stored and submitting it unchanged keeps it. completed_at is stamped by the route
+                  and never typed: the tick IS the event, so its time is not something to disagree
+                  with. The route refuses once the job is terminal, because a finished job's
+                  checklist is the evidence of what was signed off.
+                {% endcomment %}
+                <form method="post" action="{% url 'scm:maintenanceworkordertask_toggle' task.pk %}" onsubmit="return confirm('{% if task.is_done %}Un-tick{% else %}Tick{% endif %} step {{ task.sequence }} on {{ obj.number }}?');">
+                  {% csrf_token %}
+                  <input type="text" name="actual_result" class="form-input" maxlength="255" value="{{ task.actual_result }}" aria-label="Actual result for step {{ task.sequence }}" placeholder="Reading, measurement, note…">
+                  <button class="btn btn-outline" type="submit">
+                    {% if task.is_done %}<i data-lucide="rotate-ccw"></i> Un-tick{% else %}<i data-lucide="check"></i> Tick{% endif %}
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="list-checks"></i>
+                  <h3>No checklist on this job</h3>
+                  <p>An ad-hoc corrective job simply has none. A job generated from a preventive plan arrives with the plan's steps <span class="fw-600">copied onto it</span> — and copied, deliberately, with no link back: editing a plan next month must not rewrite what a job three weeks ago asked the technician to check and sign off.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      These steps are a <span class="fw-600">snapshot</span>, not a reference. There is no route that adds or removes one, and once the job is terminal the ticks are frozen — the reason to keep a completed checklist at all is that it is evidence, and evidence someone can edit afterwards is not evidence.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What it cost</h2>
+      <span class="badge badge-slate">{{ total_cost|floatformat:2 }} all in</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Parts issued</dt><dd class="mono">{{ parts_cost|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Labour</dt><dd class="mono">{{ labour_cost|floatformat:2 }}<div class="form-help">{{ obj.labour_hours|floatformat:2 }} h × {{ obj.labour_rate|floatformat:4 }}</div></dd></div>
+        <div class="detail-item"><dt>Contractor</dt><dd class="mono">{{ obj.external_cost|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Total</dt><dd class="fw-600 mono">{{ total_cost|floatformat:2 }}</dd></div>
+      </dl>
+      <p class="mono" style="margin-top:.75rem;">
+        {{ parts_cost|floatformat:2 }} <span class="text-muted">parts</span>
+        + {{ labour_cost|floatformat:2 }} <span class="text-muted">labour</span>
+        + {{ obj.external_cost|floatformat:2 }} <span class="text-muted">contractor</span>
+        = <span class="fw-600">{{ total_cost|floatformat:2 }}</span>
+      </p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        The total is <span class="fw-600">never stored</span>. A stored total would be a second copy of the same fact that could disagree with the first the moment a part is issued, and there is no event that reliably re-stamps it. Only <span class="fw-600">issued</span> parts count — a planned line has no stamped cost yet, so it contributes nothing, and that is arithmetic rather than a filter. The contractor's charge is recorded here and nowhere else: this sub-module drafts no accounting document and posts no journal entry, so nothing on this page reaches the general ledger.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Stock movements this job wrote</h2>
+      <span class="badge badge-slate">{{ moves|length }} movement{{ moves|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Moved at</th><th>Item</th><th>Location</th><th>Lot / serial</th><th>Quantity</th><th>Unit cost</th><th>Type</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in moves %}
+            <tr>
+              <td class="nowrap">{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{% if m.item %}<a href="{% url 'scm:item_detail' m.item.pk %}" class="mono">{{ m.item.sku }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono">{% if m.location %}{{ m.location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono">{% if m.lot_serial %}{{ m.lot_serial.number }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap mono">{{ m.quantity|floatformat:4 }}</td>
+              <td class="nowrap mono">{{ m.unit_cost|floatformat:4 }}</td>
+              <td><span class="badge badge-info">{{ m.get_move_type_display }}</span></td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="scroll-text"></i>
+                  <h3>This job has moved no stock</h3>
+                  <p>Nothing has been issued from the storeroom yet, so the ledger has nothing to show. Issuing parts is the only action in the whole of Asset Management that writes a stock movement.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      These rows are matched on this job's number, which is the only link a stock movement keeps back to its source document. The ledger is <span class="fw-600">append-only</span>: a movement is never edited and never deleted, and a mistake is corrected by posting the opposite adjustment. That is what makes on-hand a pure sum rather than a stored number somebody has to trust. The <span class="fw-600">maintenance</span> movement type is its own type on purpose — booking a bearing drawn for a repair as a customer issue would inflate every demand forecast built on stock issues, and booking it as a production consumption would charge a repair to the cost of a manufacturing run.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Meter readings filed against this job</h2>
+      <a href="{% url 'scm:meterreading_list' %}?asset={{ obj.asset_id }}" class="btn btn-outline"><i data-lucide="gauge"></i> All readings for this asset</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Read at</th><th>Meter</th><th>Reading</th><th>Source</th><th>Recorded by</th><th>Notes</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for r in readings %}
+            <tr>
+              <td class="nowrap">{{ r.read_at|date:"M d, Y H:i" }}</td>
+              <td>{{ r.meter_name }}</td>
+              <td class="nowrap mono">{{ r.reading|floatformat:4 }} <span class="text-muted">{{ r.unit }}</span></td>
+              <td><span class="badge badge-slate">{{ r.get_source_display }}</span></td>
+              <td>{% if r.recorded_by %}{{ r.recorded_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ r.notes|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:meterreading_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>No readings captured on this job</h3>
+                  <p>A meter value taken while the machine was open is a fact about the machine, and the reading log is the single place a meter is ever read from — this job stores no meter value of its own.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        can_record_reading folds in BOTH conditions the view enforces: an open-or-completed status,
+        and an asset that actually names a meter (meter_name is required on MeterReading, so a
+        capture against an asset with no meter cannot be filed at all). asset_meter_name is what
+        tells the two apart in the message below.
+      {% endcomment %}
+      {% if can_record_reading %}
+        <form method="post" action="{% url 'scm:maintenanceworkorder_record_reading' obj.pk %}" onsubmit="return confirm('File this reading against {{ obj.number }}? The reading log is append-only — a filed reading is never edited.');">
+          {% csrf_token %}
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label" for="id_reading">Reading <span class="req">*</span></label>
+              <input type="number" step="0.0001" min="0" name="reading" id="id_reading" class="form-input" required>
+              <div class="form-help">The only required value. A future timestamp or an out-of-range figure comes back as a field error, never a 500.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="id_meter_name">Meter</label>
+              <input type="text" name="meter_name" id="id_meter_name" class="form-input" maxlength="40" value="{{ asset_meter_name }}">
+              <div class="form-help">Defaults to the asset's primary meter.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="id_unit">Unit</label>
+              <input type="text" name="unit" id="id_unit" class="form-input" maxlength="16" value="{{ asset_meter_unit }}">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="id_read_at">Read at</label>
+              <input type="datetime-local" name="read_at" id="id_read_at" class="form-input">
+              <div class="form-help">Leave blank for now. A bare date is rejected — a meter reading is a moment, not a day.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="id_reading_notes">Notes</label>
+              <input type="text" name="notes" id="id_reading_notes" class="form-input" maxlength="255">
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="gauge"></i> File the reading</button>
+          <div class="form-help">The asset, the source and this job's number are forced from the job and are never taken from the form: the reading is a fact about <span class="fw-600">this</span> machine, and letting a caller name the asset would put a dropdown between a crafted request and another workspace's meter history.</div>
+        </form>
+      {% elif not asset_meter_name %}
+        <p class="text-muted"><span class="badge badge-muted">No meter</span> {% if obj.asset %}{{ obj.asset }}{% else %}This asset{% endif %} names no meter, so a reading against it could not be identified and cannot be filed. Set the asset's meter name and unit on the asset first — a reading nobody can identify is worse than no reading.</p>
+      {% else %}
+        <p class="text-muted"><span class="badge badge-muted">Readings closed</span> {{ obj.number }} is {{ obj.get_status_display|lower }}, and a reading cannot be attached to a job that is already history. Log it from the asset's page instead — the machine's meter keeps running either way.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% comment %}
+          can_edit is is_editable — the OPEN statuses. A terminal job is the record of what happened
+          and editing one would silently restate a cost already reported on the asset's maintenance
+          cost to date and on the depreciation report's repair-versus-replace ratio.
+        {% endcomment %}
+        {% if can_edit %}
+          <a href="{% url 'scm:maintenanceworkorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% comment %}
+          Same gate as maintenanceworkorder_delete's @tenant_admin_required, AND the same two checks
+          the view enforces — can_delete is `is_editable and no part issued`. Offering a one-click
+          failure is worse than not offering the button, so it is replaced by the sentence below
+          saying what to do instead. Only the system-generated MWO- number goes into the confirm
+          string; the title is user-typed and an apostrophe in it would break the dialog.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:maintenanceworkorder_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Nothing has been issued against it, so no stock movement is orphaned — but the job disappears from this machine&#39;s history. Cancelling keeps the record.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      {% if not can_edit %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-muted">Edit unavailable</span> {{ obj.number }} is {{ obj.get_status_display|lower }}. A finished job is the record of what happened: editing it would silently restate a cost that has already been reported on the asset's maintenance cost to date and on the repair-versus-replace ratio in the depreciation report.
+        </p>
+      {% endif %}
+      {% if not can_delete %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-muted">Delete unavailable</span>
+            {% if has_issued_parts %}
+              {{ issued_part_count }} part line{{ issued_part_count|pluralize }} {{ issued_part_count|pluralize:"has,have" }} been issued from stock. Deleting the job would leave those movements standing in an append-only ledger with nothing to explain them and would drop the cost off three pages. Post a stock adjustment to return the parts first, or simply leave the job as the record it is.
+            {% else %}
+              A completed, closed or cancelled job feeds mean time to repair, mean time between failures, availability and the asset's cost to date — losing it must not be one click away. Cancel an open job instead: a cancelled job keeps its whole history and is merely excluded from the reliability figures.
+            {% endif %}
+          </p>
+        {% endif %}
+      {% endif %}
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        Nothing on this page can set the status directly. The column is not on the form at all, so a crafted request naming a status has nowhere to land — the ladder above is the only path, every rung is a locked transaction, and a double-click or a replay is refused rather than stamping the same event twice.
+      </p>
+    </div>
+  </div>
+{% endblock %}
