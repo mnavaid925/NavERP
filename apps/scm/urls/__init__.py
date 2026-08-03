@@ -65,6 +65,11 @@ from .ContractCompliance.ComplianceRequirements import urlpatterns as _cc_compli
 from .ContractCompliance.TradeDocuments import urlpatterns as _cc_tradedocuments
 from .ContractCompliance.SustainabilityAssessments import urlpatterns as _cc_sustainability
 from .ContractCompliance.Reports import urlpatterns as _cc_reports
+from .AssetManagement.Assets import urlpatterns as _am_assets
+from .AssetManagement.MaintenancePlans import urlpatterns as _am_maintenanceplans
+from .AssetManagement.MaintenanceWorkOrders import urlpatterns as _am_maintenanceworkorders
+from .AssetManagement.MeterReadings import urlpatterns as _am_meterreadings
+from .AssetManagement.Reports import urlpatterns as _am_reports
 
 
 app_name = "scm"
@@ -207,4 +212,47 @@ urlpatterns = [
     *_cc_tradedocuments,                 # ContractCompliance/TradeDocuments (BoL / CI / packing)
     *_cc_sustainability,                 # ContractCompliance/SustainabilityAssessments (ESG)
     *_cc_reports,                        # ContractCompliance/Reports (carbon footprint estimate)
+
+    # ---------------------------------------------------------------------------------------
+    # 4.13 COLLISION CHECK — nine new first segments, every one re-verified against the WHOLE
+    # concatenated urlconf above rather than against its own block:
+    #
+    #   assets/ · asset-spare-parts/ · asset-depreciation/
+    #                         — NOTHING anywhere in scm starts with `asset`. Django matches WHOLE
+    #                           path components and never splits one at a hyphen, so these are three
+    #                           unrelated segments and none can shadow either of the others. Do not
+    #                           "tidy" any of them to look like another.
+    #   maintenance-plans/ · maintenance-work-orders/ · maintenance-work-order-tasks/
+    #                         — nothing anywhere starts with `maintenance`; again three distinct
+    #                           whole components, so the pk routes in one cannot capture another.
+    #
+    #                           **`maintenance-work-orders/` is a DISTINCT whole path component from
+    #                           4.8's `work-orders/` (and from 4.1's `orders/` and 4.5's
+    #                           `sales-orders/`).** Django never splits a component at the hyphen, so
+    #                           neither can shadow the other — and neither may ever be "tidied" to
+    #                           look like the other, because they are different documents:
+    #                           4.8's WorkOrder MAKES product and consumes components against a BOM;
+    #                           4.13's MaintenanceWorkOrder REPAIRS a machine and consumes spares
+    #                           against an asset. `scm:workorder_list` and
+    #                           `scm:maintenanceworkorder_list` are two live, unrelated pages.
+    #   meter-readings/       — nothing anywhere starts with `meter`.
+    #   pm-forecast/          — nothing anywhere starts with `pm`.
+    #   spare-parts/          — nothing anywhere starts with `spare`; a separate component from
+    #                           4.13's own `asset-spare-parts/`, and a different thing (the report is
+    #                           4.3's item ledger filtered; the child is one machine's parts list).
+    #
+    # 4.13 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` remains
+    # the app's only one and sits alone on its own first segment. Within each module below, literal
+    # routes (`add/`) precede every `<int:pk>/` one, or the create page is swallowed and 404s as
+    # "asset 'add' not found". Every verb route sits under its own `<int:pk>/` and is POST-only at
+    # the view, so a GET to one is a 405 rather than a silent state change.
+    #
+    # 4.13 adds no `fixed-assets/` segment: Asset Depreciation is a COMPUTED report that READS
+    # accounting.FixedAsset, and there is no `spare-parts/<int:pk>/` CRUD either — the storeroom page
+    # is 4.3's Item/StockMove/ReorderRule, filtered.
+    *_am_assets,                         # AssetManagement/Assets (register + the parts-list child)
+    *_am_maintenanceplans,               # AssetManagement/MaintenancePlans (PM programme + generate)
+    *_am_maintenanceworkorders,          # AssetManagement/MaintenanceWorkOrders (ladder + issue)
+    *_am_meterreadings,                  # AssetManagement/MeterReadings (append-only — no edit/delete)
+    *_am_reports,                        # AssetManagement/Reports (PM board + MRO + repair-vs-replace)
 ]
