@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — repair vs replace.
+
+Renders apps/scm/views/AssetManagement/Reports.py::asset_depreciation_report. Everything this page
+may read, and nothing else:
+
+  rows            list of ROW DICTS, worst ratio first, no-ratio rows last. NOT PAGINATED — there is
+                  no page_obj in the context, so this page includes no pagination partial. The
+                  coverage line and the money totals have to describe exactly the rows the table
+                  shows; a report whose footer counted a different set from its body contradicts
+                  itself.
+  q status asset_type criticality linked location    RESOLVED GET echoes — bind the controls to
+                  these, never to request.GET, so a value the view dropped cannot leave a dropdown
+                  showing a filter that is not in force. `location` is the one pk param and compares
+                  with |stringformat:"d" — NEVER |slugify.
+  status_choices type_choices criticality_choices link_choices    [(value, label)] lists
+  locations       Location queryset
+  stats           considered_count linked_count unlinked_count foreign_link_count zero_book_count
+                  ratio_count (int) · coverage_pct (Decimal|None) · total_acquisition
+                  total_accumulated total_book (Decimal|None) · total_spend linked_spend
+                  unlinked_spend (Decimal, always real) · overall_ratio_pct (Decimal|None)
+  watch_pct replace_pct    the two thresholds, so this page invents none of its own
+  accounting_note the L29 standing note, printed verbatim
+
+Row dict: asset fixed_asset foreign_link job_count downtime_minutes maintenance_spend parts_spend
+          labour_spend external_spend acquisition_cost accumulated_depreciation book_value ratio_pct
+          excluded_reason ratio_label ratio_css
+
+THE NONE CONTRACT, which is the whole point of this page. acquisition_cost /
+accumulated_depreciation / book_value are None when the asset has NO capitalised record, and
+ratio_pct is None when there is no link OR when book value is nil. None is NEVER rendered as 0 and
+NEVER as infinity: a green 0% that actually means "we had no data" is worse than a blank, because a
+blank makes somebody go and look. Every test here is `is not None` — |default:"—" would be WRONG
+because it also swallows a real 0, and a real 0 spend or a real 0 book value are each a genuine,
+different fact. The three money TOTALS are None-able for the same reason; total_spend / linked_spend
+/ unlinked_spend are not, because spend is knowable without the accounting link. That asymmetry is
+deliberate and the footer says so.
+
+Badge classes come from the view's own ratio_css (Reports._ratio_chip) and from the models'
+status_css / criticality_css, so a colour is decided in exactly one place. theme.css ships
+badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render unstyled (L33).
+
+ACTIONS. View and Edit reach the asset's own 4.13 pages; the fixed-asset cell links straight into
+Accounting. There is deliberately no delete form: the view passes no per-row deletability gate (an
+Asset with work orders is PROTECTed by them), so a bin icon here would be a one-click failure
+offered on a read-only analysis page. Delete lives on the asset's detail page, which the eye reaches
+in one hop and which does carry the gate.
+{% endcomment %}
+{% block title %}Asset Depreciation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Asset Depreciation &amp; Repair vs Replace</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:asset_list' %}">Assets</a><span class="sep">›</span>
+        <span>Depreciation</span>
+      </div>
+      <p class="text-muted">
+        What each machine is still worth against what it has cost to keep running.
+        <span class="fw-600">Book value is read from Accounting; maintenance spend is the SCM side.</span>
+        The ratio between them is arithmetic — spend ÷ book value — and the division is printed on every row
+        so nothing here has to be taken on trust. This is not a model and not a prediction.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'accounting:fixed_asset_list' %}" class="btn btn-outline"><i data-lucide="landmark"></i> Fixed Assets</a>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Work Orders</a>
+      <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Assets</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The L29 standing note, printed rather than paraphrased. Two writers of one accumulated figure is
+    exactly how the two numbers on the two pages come to disagree, and a reader of this screen has to
+    know which side owns which column.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">SCM reads these figures — it does not own them</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ accounting_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">Acquisition · accumulated · book value → from accounting.FixedAsset</span>
+        <span class="badge badge-slate">Parts · labour · contractor → from SCM work orders</span>
+        <span class="badge badge-muted">No journal entry is posted from this page</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="ad-q">Search</label>
+          <input type="text" id="ad-q" name="q" value="{{ q }}" class="form-input" placeholder="Asset code, name, category, serial or fixed-asset number…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ad-status">Status</label>
+          <select name="status" id="ad-status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ad-type">Type</label>
+          <select name="asset_type" id="ad-type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if asset_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ad-crit">Criticality</label>
+          <select name="criticality" id="ad-crit" class="form-select">
+            <option value="">All criticalities</option>
+            {% for val, label in criticality_choices %}
+              <option value="{{ val }}" {% if criticality == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ad-linked">Capitalised</label>
+          <select name="linked" id="ad-linked" class="form-select">
+            <option value="">Linked and unlinked</option>
+            {% for val, label in link_choices %}
+              <option value="{{ val }}" {% if linked == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ad-loc">Location</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="location" id="ad-loc" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }} · {{ loc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:asset_depreciation_report' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% comment %} ===================== coverage, stated before any total ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Coverage</h2>
+      <div class="badge-group">
+        {% if stats.coverage_pct is not None %}
+          <span class="badge {% if stats.coverage_pct >= 80 %}badge-green{% elif stats.coverage_pct >= 50 %}badge-amber{% else %}badge-red{% endif %}">
+            {{ stats.coverage_pct }}% of assets carry a book value
+          </span>
+        {% else %}
+          <span class="badge badge-muted">Nothing to measure</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Assets considered</dt><dd>{{ stats.considered_count }}</dd></div>
+        <div class="detail-item"><dt>Linked to a fixed asset</dt><dd>{{ stats.linked_count }}</dd></div>
+        <div class="detail-item">
+          <dt>Not capitalised — excluded</dt>
+          <dd>
+            {% if stats.unlinked_count %}
+              <span class="badge badge-amber">{{ stats.unlinked_count }} asset{{ stats.unlinked_count|pluralize }}</span>
+            {% else %}
+              <span class="badge badge-green">None</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Nil book value — excluded</dt>
+          <dd>
+            {% if stats.zero_book_count %}
+              <span class="badge badge-slate">{{ stats.zero_book_count }} asset{{ stats.zero_book_count|pluralize }}</span>
+            {% else %}
+              <span class="badge badge-muted">None</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Rows with a ratio</dt><dd>{{ stats.ratio_count }}</dd></div>
+        <div class="detail-item">
+          <dt>Cross-workspace link</dt>
+          <dd>
+            {% if stats.foreign_link_count %}
+              <span class="badge badge-red">{{ stats.foreign_link_count }} anomal{{ stats.foreign_link_count|pluralize:"y,ies" }}</span>
+            {% else %}
+              <span class="badge badge-green">None</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      {% if stats.unlinked_count or stats.zero_book_count or stats.foreign_link_count %}
+        <p class="text-muted">
+          <i data-lucide="alert-triangle"></i>
+          {% if stats.unlinked_count %}
+            <span class="fw-600">{{ stats.unlinked_count }} of {{ stats.considered_count }}</span>
+            asset{{ stats.unlinked_count|pluralize }} here {{ stats.unlinked_count|pluralize:"has,have" }} no capitalised
+            record, so there is no book value to compare their repair spend against. They are excluded from the
+            ratio and from all three money totals below — <span class="fw-600">counted, not zeroed</span> — and
+            the {{ stats.unlinked_spend }} spent on them is reported separately so it does not simply vanish.
+            Link each one to its <a href="{% url 'accounting:fixed_asset_list' %}">accounting.FixedAsset</a> to
+            bring it in.
+          {% endif %}
+          {% if stats.zero_book_count %}
+            <span class="fw-600">{{ stats.zero_book_count }}</span>
+            asset{{ stats.zero_book_count|pluralize }} {{ stats.zero_book_count|pluralize:"is,are" }} fully
+            depreciated or written down: spend ÷ 0 has no answer, so the ratio is blank rather than an enormous
+            percentage that would make a healthy, fully-written-down machine the loudest row on a page about
+            replacement decisions.
+          {% endif %}
+          {% if stats.foreign_link_count %}
+            <span class="fw-600">{{ stats.foreign_link_count }}</span>
+            asset{{ stats.foreign_link_count|pluralize }} point{{ stats.foreign_link_count|pluralize:"s," }} at a
+            fixed asset in <span class="fw-600">another workspace</span>. Those are treated as unlinked here
+            rather than quietly printing somebody else's book value, and are surfaced so the anomaly is visible
+            instead of merely handled.
+          {% endif %}
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="link"></i></div>
+      <div class="stat-value">{% if stats.coverage_pct is not None %}{{ stats.coverage_pct }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">Assets with a book value</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="unlink"></i></div>
+      <div class="stat-value">{{ stats.unlinked_count }}</div>
+      <div class="stat-label">Unlinked — excluded from the ratio</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="landmark"></i></div>
+      <div class="stat-value">{% if stats.total_book is not None %}{{ stats.total_book }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Total book value (linked only)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.total_spend }}</div>
+      <div class="stat-label">Maintenance spend to date</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="divide"></i></div>
+      <div class="stat-value">{% if stats.overall_ratio_pct is not None %}{{ stats.overall_ratio_pct }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">Overall repair vs replace</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Per asset</h2>
+      <div class="badge-group">
+        <span class="badge badge-green">Under {{ watch_pct }}% — economic to repair</span>
+        <span class="badge badge-amber">{{ watch_pct }}%+ — review replacement</span>
+        <span class="badge badge-red">{{ replace_pct }}%+ — repairs exceed book value</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Fixed asset (Accounting)</th>
+            <th>Acquisition</th>
+            <th>Accumulated deprec.</th>
+            <th>Book value</th>
+            <th>Maintenance spend</th>
+            <th>Repair vs replace</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="fw-600 mono">{{ row.asset.code }}</a>
+                <div class="text-muted">{{ row.asset.name }}</div>
+                <div class="badge-group">
+                  <span class="badge {{ row.asset.status_css }}">{{ row.asset.get_status_display }}</span>
+                  <span class="badge {{ row.asset.criticality_css }}">{{ row.asset.get_criticality_display }}</span>
+                </div>
+                {% if row.asset.location %}<div class="form-help">{{ row.asset.location.code }}</div>{% endif %}
+              </td>
+              {% comment %}
+                foreign_link is checked FIRST: the view has already forced fixed_asset to None on
+                those rows, so testing fixed_asset alone would print the same "not capitalised"
+                sentence for a genuine gap and for a cross-workspace anomaly, which are different
+                problems with different fixes.
+              {% endcomment %}
+              <td>
+                {% if row.foreign_link %}
+                  <span class="badge badge-red">Cross-workspace link</span>
+                  <div class="form-help">Ignored here rather than reading another workspace's figures.</div>
+                {% elif row.fixed_asset %}
+                  <a href="{% url 'accounting:fixed_asset_detail' row.fixed_asset.pk %}" class="fw-600 mono">{{ row.fixed_asset.number }}</a>
+                  <div class="text-muted">{{ row.fixed_asset.name }}</div>
+                  <div class="form-help">{{ row.fixed_asset.get_method_display }}</div>
+                {% else %}
+                  <span class="badge badge-amber">Not capitalised</span>
+                  <div class="form-help">No accounting.FixedAsset is linked.</div>
+                {% endif %}
+              </td>
+              {% comment %}
+                Three read-only columns. None means "there is no capitalised record", which is a
+                missing link and not a zero — `is not None`, never |default, which would swallow a
+                genuine 0.00 acquisition cost.
+              {% endcomment %}
+              <td class="nowrap mono">{% if row.acquisition_cost is not None %}{{ row.acquisition_cost }}{% else %}—{% endif %}</td>
+              <td class="nowrap mono">{% if row.accumulated_depreciation is not None %}{{ row.accumulated_depreciation }}{% else %}—{% endif %}</td>
+              <td class="nowrap mono">
+                {% if row.book_value is not None %}{{ row.book_value }}{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {{ row.maintenance_spend }}
+                <div class="form-help">
+                  Parts {{ row.parts_spend }} · Labour {{ row.labour_spend }} · External {{ row.external_spend }}
+                </div>
+                <div class="form-help">
+                  {{ row.job_count }} job{{ row.job_count|pluralize }} · {{ row.downtime_minutes }} min down
+                </div>
+              </td>
+              {% comment %}
+                THE DIVISION IS SHOWN. A ratio nobody can check is a ratio nobody should act on, and
+                this page exists to justify a capital decision. None renders an em dash plus the
+                reason — never a number, never infinity.
+              {% endcomment %}
+              <td>
+                {% if row.ratio_pct is not None %}
+                  <span class="badge {{ row.ratio_css }}">{{ row.ratio_pct }}%</span>
+                  <div class="form-help mono">{{ row.maintenance_spend }} ÷ {{ row.book_value }} = {{ row.ratio_pct }}%</div>
+                  <div class="form-help">{{ row.ratio_label }}</div>
+                {% else %}
+                  <span class="badge {{ row.ratio_css }}">—</span>
+                  <div class="form-help">{{ row.excluded_reason }}</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="btn-icon" title="View asset"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:asset_edit' row.asset.pk %}" class="btn-icon" title="Edit asset"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="landmark"></i>
+                  <h3>No assets to compare</h3>
+                  <p>There is nothing in the asset register yet — so there is no coverage figure, no book value and no ratio, rather than a row of confident zeros. <a href="{% url 'scm:asset_list' %}">Register a machine</a>, link it to its capitalised record in Accounting, and its repair spend will start accumulating against its book value from the first work order. If you were expecting rows, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body form-help">
+      Sorted <span class="fw-600">worst ratio first</span> — this page is read to find the machines that have
+      cost more than they are still worth. Rows with no ratio sort to the bottom rather than being dropped:
+      they are the coverage gap, and somebody has to see them. Delete is not offered on a report — it lives on
+      the asset's own page, which knows whether the machine still has work orders protecting it.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Totals</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        {% comment %}
+          The three accounting totals are None — not 0.00 — when NOTHING is linked: a money total of
+          zero would read as "these machines cost nothing", when the truth is that nobody told us
+          what they cost. Spend is knowable WITHOUT the accounting link, so it is a real zero and is
+          reported as one. That asymmetry is the point of the page, not an inconsistency.
+        {% endcomment %}
+        <div class="detail-item">
+          <dt>Total acquisition cost</dt>
+          <dd class="mono">{% if stats.total_acquisition is not None %}{{ stats.total_acquisition }}{% else %}—{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Total accumulated depreciation</dt>
+          <dd class="mono">{% if stats.total_accumulated is not None %}{{ stats.total_accumulated }}{% else %}—{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Total book value</dt>
+          <dd class="mono">{% if stats.total_book is not None %}{{ stats.total_book }}{% else %}—{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Maintenance spend — all assets</dt>
+          <dd class="mono">{{ stats.total_spend }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>…of which on capitalised assets</dt>
+          <dd class="mono">{{ stats.linked_spend }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>…of which on unlinked assets</dt>
+          <dd class="mono">{{ stats.unlinked_spend }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Overall repair vs replace</dt>
+          <dd>
+            {% if stats.overall_ratio_pct is not None %}
+              <span class="fw-600 mono">{{ stats.linked_spend }} ÷ {{ stats.total_book }} = {{ stats.overall_ratio_pct }}%</span>
+            {% else %}
+              <span class="badge badge-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+      {% if stats.overall_ratio_pct is None %}
+        <p class="text-muted">
+          There is no overall ratio because the linked assets have no book value left to divide by — fully
+          depreciated, written down, or simply not capitalised yet. A blank is the honest answer; a percentage
+          here would be invented.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How to read this</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        <span class="fw-600">Repair vs replace = maintenance spend ÷ book value × 100.</span> Maintenance spend
+        is the SCM side and is real money already committed: issued parts at the cost they were actually drawn
+        at, plus labour hours × rate, plus contractor charges, over every job on that machine that was not
+        cancelled. A cancelled job may still carry a labour figure typed before it was called off, and counting
+        it would charge the asset for work nobody did.
+      </p>
+      <p class="text-muted">
+        The two thresholds are a <span class="fw-600">rule of thumb, not a policy engine</span>: past
+        {{ watch_pct }}% the cumulative repairs are worth more than half what the machine is still worth, which
+        is the conventional point to start planning a replacement; past {{ replace_pct }}% it has cost more to
+        keep than it is worth. Neither is a decision — criticality, lead time, spares availability and what a
+        replacement would actually cost all sit outside this page.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">The statutory figures and their GL postings belong to Accounting.</span>
+        Acquisition cost, salvage value, useful life, method and accumulated depreciation are all maintained on
+        the <a href="{% url 'accounting:fixed_asset_list' %}">fixed asset</a>, and the depreciation journal is
+        posted there. 4.13 stores none of them, recomputes none of them, and writes no journal entry from this
+        screen — because two writers of one accumulated figure is precisely how the two numbers on the two pages
+        come to disagree.
+      </p>
+    </div>
+  </div>
+{% endblock %}
