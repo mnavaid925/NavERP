@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — shared add/edit form for one AssetSparePart line.
+
+Renders apps/scm/views/AssetManagement/Assets.py::asset_add_spare_part and ::assetsparepart_edit.
+Everything this page may read, and nothing else:
+
+  form      AssetSparePartForm (bound on POST) — four fields: item, quantity_per_service,
+            is_critical, notes
+  is_edit   False on the add path, True on the edit path
+  asset     THE PARENT Asset. The form has no `asset` field at all, so the header, the breadcrumb
+            and the Cancel target can only come from here — there is nothing on the form to read it
+            off, and inventing one would be exactly the field the view refuses to accept.
+  obj       the AssetSparePart, ON THE EDIT PATH ONLY — so every reference to it below sits inside
+            an `is_edit` branch
+
+WHY THE PARENT IS NOT A FIELD. `asset` comes from the route on the add path and from the row itself
+on the edit path, never from the POST body. AssetSparePart carries no tenant column of its own (it
+is a pure child, reached through asset__tenant), so a parent pk in the body is precisely how a
+crafted request would graft a line onto another workspace's machine, with no column left to catch
+it. The four names below are the form's whole whitelist; the model has no other editable columns.
+
+NO DELETE BUTTON HERE, deliberately. Removing a line is a POST-only, tenant-admin-gated action and
+it lives on the asset's own page beside the parts panel — a form nested inside this form would be
+invalid HTML, and the panel is where somebody is actually looking when they decide a part no longer
+belongs on the list.
+
+Both paths redirect to the asset's detail page on success, which is where the parts list lives:
+there is no list and no detail page for this model, because a machine's parts list is a panel on the
+machine. The workspace-wide view of every part line is the spare-parts report, which reads 4.3's
+stock ledger rather than this join table.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}Add{% endif %} Spare Part · {{ asset.code }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit Spare Part{% else %}Add Spare Part{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:asset_list' %}">Assets</a><span class="sep">›</span>
+      <a href="{% url 'scm:asset_detail' asset.pk %}">{{ asset.code }}</a><span class="sep">›</span>
+      <span>{% if is_edit %}Edit part{% else %}Add part{% endif %}</span>
+    </div>
+    <p class="text-muted">
+      {% if is_edit %}Correcting one line on{% else %}Adding one item to{% endif %}
+      the parts list for <span class="fw-600">{{ asset.name }}</span> — the answer to
+      "what does this machine eat when it is serviced", which is what the storeroom reads before
+      anybody walks out to it. This line is an <span class="fw-600">association</span> and nothing
+      more: it moves no stock, reserves nothing and changes no cost. Parts leave stock only when a
+      work order issues them, through the append-only ledger.
+    </p>
+  </div></div>
+
+  {% comment %}
+    The parent, restated. The form cannot show it — `asset` is not a field — so this card is the only
+    thing on the page that says which machine is being changed, and getting that wrong is the whole
+    failure mode the route-supplied parent exists to prevent. Every value here is a plain column or a
+    *_css property on the already-fetched asset, so none of it is a query; is_down_now() and
+    open_job_count() are queries and are deliberately not asked for on a form page.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ asset.code }} · {{ asset.name }}</h2>
+      <div class="badge-group">
+        <span class="badge {{ asset.status_css }}">{{ asset.get_status_display }}</span>
+        <span class="badge {{ asset.criticality_css }}">{{ asset.get_criticality_display }}</span>
+        <span class="badge badge-slate">{{ asset.get_asset_type_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Asset number</dt>
+          <dd class="mono">{{ asset.number }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Location</dt>
+          <dd>{% if asset.location %}{{ asset.location }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Work centre</dt>
+          <dd>{% if asset.work_center %}{{ asset.work_center }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        {% if is_edit %}
+          <div class="detail-item">
+            <dt>Line being edited</dt>
+            <dd>{{ obj.item }}</dd>
+          </div>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The part</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">There is no separate spare-parts master and there never will be: the <span class="fw-600">item</span> is the same one the storeroom counts, with its own unit of measure, category, costing method and on-hand across every location. A parallel parts table would duplicate all of it and then need reconciling with the ledger a maintenance issue posts into. The list is not narrowed to items flagged as spares, on purpose — a machine legitimately consumes ordinary consumables like grease and filters that nobody has flagged, and narrowing would make the obvious line un-addable with no way to see why. Each item may appear <span class="fw-600">once</span> per asset; a duplicate is refused as a field error rather than accepted and left to collide.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.item %}
+          {% include "partials/form_field.html" with field=form.quantity_per_service %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How it matters</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Mark a line <span class="fw-600">critical</span> when running out of it <em>stops the job</em> — not merely when the part is expensive. That flag is what separates "the service is delayed" from "the technician is standing at the machine with nothing to fit", and it is the one thing on this form that changes how a shortage reads. The <span class="fw-600">quantity per service</span> is what one service consumes, held to four decimal places, and it is a planning figure only: it is never posted anywhere and never draws stock down by itself.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.is_critical %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Add to parts list{% endif %}</button>
+      <a href="{% url 'scm:asset_detail' asset.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
