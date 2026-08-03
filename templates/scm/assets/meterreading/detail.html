@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — one meter reading, what the meter said before it, and whether it is
+still the current value.
+
+Renders apps/scm/views/AssetManagement/MeterReadings.py::meterreading_detail. Everything this page
+may read, and nothing else:
+
+  obj             the MeterReading (select_related: asset, recorded_by — anything else on it is a
+                  query, so this page reads only those two FKs and the model's own columns)
+  previous        the prior reading of the SAME asset AND the same meter, or None
+  delta           obj.reading minus previous.reading — None, NEVER 0, when there is no previous row
+  superseded_by   the next reading of the same meter, or None
+  is_current      True exactly when superseded_by is None — this row IS what Asset.latest_reading()
+                  answers with
+  append_only_note the one sentence-set that explains the missing Edit and Delete
+
+`delta` is tested with `is None`, never for truthiness. Zero means the meter did not move between
+two observations, which is a measurement; blank means there is nothing to compare against, which is
+the honest answer for the first reading of a meter. A confident 0 in that slot would be a reliability
+figure this page invented.
+
+THE ACTIONS SIDEBAR IS BACK-TO-LIST ONLY, AND THAT IS THE DESIGN. MeterReading is append-only —
+there is no meterreading_edit view, no meterreading_delete view and no route for either
+(apps/scm/urls/AssetManagement/MeterReadings.py), so no Edit button and no Delete form appears
+anywhere below. What IS offered is the correction path: record a NEW reading. Because that is a
+create rather than a state change, it needs no tenant-admin gate — unlike the delete forms on the
+4.12 detail pages, which are wrapped in `is_superuser or is_tenant_admin` because the routes behind
+them carry @tenant_admin_required. Nothing on this page is gated, because nothing on it mutates an
+existing row.
+
+Badge classes are the six theme.css ships — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-warning / badge-danger DO NOT EXIST and render
+completely unstyled (L33).
+{% endcomment %}
+{% block title %}{{ obj.asset.code }} · {{ obj.meter_name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.asset.code }} · {{ obj.meter_name }}
+        {% if is_current %}
+          <span class="badge badge-green">Current value</span>
+        {% else %}
+          <span class="badge badge-muted">Superseded</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:meterreading_list' %}">Meter Readings</a><span class="sep">›</span><span>{{ obj.read_at|date:"M d, Y H:i" }}</span></div>
+      <p class="text-muted">One observation, as observed: a value, a unit, a timestamp and who said so. This record is never edited and never deleted — it is corrected, if it needs correcting, by a later reading.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:asset_detail' obj.asset.pk %}" class="btn btn-outline"><i data-lucide="package"></i> {{ obj.asset.code }}</a>
+      <a href="{% url 'scm:meterreading_list' %}?asset={{ obj.asset.pk }}" class="btn btn-outline"><i data-lucide="list"></i> This asset's readings</a>
+      <a href="{% url 'scm:meterreading_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{{ obj.reading|floatformat:4 }}{% if obj.unit %} <span class="text-muted">{{ obj.unit }}</span>{% endif %}</div>
+      <div class="stat-label">{{ obj.meter_name }}</div>
+    </div>
+    {% comment %}
+      `delta is None` — not `{% if delta %}` and not |default. There is no previous reading of this
+      meter on this asset, so there is nothing to subtract from; an em dash says exactly that, while
+      a 0 would claim the meter had not moved, which is a completely different (and unmeasured)
+      statement. |default:"—" would ALSO swallow a genuine 0, which is why it is not used here.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">
+        {% if delta is None %}—{% else %}{% if delta > 0 %}+{% endif %}{{ delta|floatformat:4 }}{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if delta is None %}
+          No earlier reading of this meter to compare against
+        {% else %}
+          Change since {{ previous.read_at|date:"M d, Y H:i" }}
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ obj.read_at|date:"M d, Y" }}</div>
+      <div class="stat-label">Read at {{ obj.read_at|date:"H:i" }} · logged {{ obj.created_at|date:"M d, Y H:i" }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon {% if is_current %}green{% else %}slate{% endif %}"><i data-lucide="{% if is_current %}check-circle{% else %}history{% endif %}"></i></div>
+      <div class="stat-value">{% if is_current %}Current{% else %}Historic{% endif %}</div>
+      <div class="stat-label">
+        {% if is_current %}
+          This is what {{ obj.asset.code }}'s {{ obj.meter_name }} reads now
+        {% else %}
+          A later reading of this meter has taken over
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The observation</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Asset</dt><dd><a href="{% url 'scm:asset_detail' obj.asset.pk %}" class="fw-600 mono">{{ obj.asset.code }}</a> <span class="text-muted">{{ obj.asset.name }}</span></dd></div>
+        <div class="detail-item"><dt>Meter</dt><dd class="fw-600">{{ obj.meter_name }}</dd></div>
+        <div class="detail-item"><dt>Reading</dt><dd class="mono fw-600">{{ obj.reading|floatformat:4 }}{% if obj.unit %} {{ obj.unit }}{% endif %}</dd></div>
+        <div class="detail-item"><dt>Unit</dt><dd>{{ obj.unit|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Read at</dt><dd class="nowrap">{{ obj.read_at|date:"M d, Y H:i" }}</dd></div>
+        {% comment %}
+          There is no METER_SOURCE_CSS dict on the model, so this badge takes ONE neutral class for
+          every value rather than inventing a per-value colour — provenance is not a status and
+          nothing reads it to decide what somebody may do. The list page renders it identically; if a
+          CSS dict is ever added to models/AssetManagement/_choices.py, both should switch together.
+        {% endcomment %}
+        <div class="detail-item"><dt>Source</dt><dd><span class="badge badge-slate">{{ obj.get_source_display }}</span></dd></div>
+        <div class="detail-item"><dt>Reference</dt><dd class="mono">{{ obj.reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Recorded by</dt><dd>{% if obj.recorded_by %}{{ obj.recorded_by.name }}{% else %}<span class="text-muted">Not attributed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Logged in the system</dt><dd class="nowrap">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.notes }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Read at</span> is when the gauge was looked at; <span class="fw-600">logged</span> is when it reached this system. The two differ whenever an observation is back-dated, which is supported and ordinary — a reading taken in the yard on Friday and typed up on Monday is still a Friday reading. Post-dating one is refused outright: a reading dated ahead would sort to the top of this log and become the current value for a machine that has not reached it yet, silently advancing every meter-based due date. <span class="fw-600">Recorded by</span> is stamped from the signed-in user's party when the reading is saved, never typed — who took a reading is an audit fact, not an input, and a blank here means the login was not tied to a party rather than that nobody took it.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Where this sits in the meter's history</h2>
+      <div class="badge-group">
+        {% if is_current %}<span class="badge badge-green">Newest reading of this meter</span>{% else %}<span class="badge badge-muted">Superseded</span>{% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Position</th><th>Read at</th><th class="text-right">Reading</th><th>Source</th><th>Recorded by</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% comment %}
+            Exactly three rows at most, and each one comes from a context variable the view really
+            passes — `previous` and `superseded_by` are single objects (or None), not querysets, so
+            nothing here walks the meter's whole history and nothing here is a query. Both are keyed
+            on the same asset AND the same meter name, because comparing an odometer row against a
+            bearing-temperature row would produce a delta that means nothing at all.
+          {% endcomment %}
+          {% if previous %}
+            <tr>
+              <td><span class="badge badge-slate">Previous</span></td>
+              <td class="nowrap"><a href="{% url 'scm:meterreading_detail' previous.pk %}">{{ previous.read_at|date:"M d, Y H:i" }}</a></td>
+              <td class="nowrap text-right mono">{{ previous.reading|floatformat:4 }}{% if previous.unit %} <span class="text-muted">{{ previous.unit }}</span>{% endif %}</td>
+              <td><span class="badge badge-slate">{{ previous.get_source_display }}</span></td>
+              <td>{% if previous.recorded_by %}{{ previous.recorded_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:meterreading_detail' previous.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% endif %}
+          <tr>
+            <td><span class="badge badge-info">This reading</span></td>
+            <td class="nowrap fw-600">{{ obj.read_at|date:"M d, Y H:i" }}</td>
+            <td class="nowrap text-right mono fw-600">
+              {{ obj.reading|floatformat:4 }}{% if obj.unit %} <span class="text-muted">{{ obj.unit }}</span>{% endif %}
+              {% if delta is not None %}
+                <div class="form-help">{% if delta > 0 %}+{% endif %}{{ delta|floatformat:4 }} since the previous reading</div>
+              {% endif %}
+            </td>
+            <td><span class="badge badge-slate">{{ obj.get_source_display }}</span></td>
+            <td>{% if obj.recorded_by %}{{ obj.recorded_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td><span class="text-muted">—</span></td>
+          </tr>
+          {% if superseded_by %}
+            <tr>
+              <td><span class="badge badge-amber">Superseded by</span></td>
+              <td class="nowrap"><a href="{% url 'scm:meterreading_detail' superseded_by.pk %}">{{ superseded_by.read_at|date:"M d, Y H:i" }}</a></td>
+              <td class="nowrap text-right mono">{{ superseded_by.reading|floatformat:4 }}{% if superseded_by.unit %} <span class="text-muted">{{ superseded_by.unit }}</span>{% endif %}</td>
+              <td><span class="badge badge-slate">{{ superseded_by.get_source_display }}</span></td>
+              <td>{% if superseded_by.recorded_by %}{{ superseded_by.recorded_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:meterreading_detail' superseded_by.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if delta is None and not superseded_by %}
+        This is the <span class="fw-600">only</span> reading of {{ obj.meter_name }} on {{ obj.asset.code }} so far — nothing precedes it, so there is no movement to measure, and nothing follows it, so it is the current value. The second reading is the one that turns this into a trend.
+      {% elif delta is None %}
+        Nothing precedes this reading of {{ obj.meter_name }}, so its change reads as a blank rather than as a zero — there is no earlier figure to subtract, which is not the same as a meter that did not move. A later reading has since taken over as the current value.
+      {% elif not superseded_by %}
+        This is the newest reading of {{ obj.meter_name }} on {{ obj.asset.code }}, so it is the figure every meter-based maintenance plan and every condition trigger on this meter is measured against right now.
+      {% else %}
+        A later reading has taken over as the current value, so plans and condition triggers on {{ obj.meter_name }} are now measured against that one. This row stays exactly as it was recorded — that is what makes it possible to see which figure a schedule was actually built on.
+      {% endif %}
+      A negative change is entirely normal on a gauge (temperature, pressure) and worth a second look on a counter (hours, odometer), where it usually means the meter was replaced or reset rather than that the machine ran backwards.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Actions</h2>
+      <span class="badge badge-info">Append-only record</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        NO Edit button and NO Delete form, on purpose — neither route exists, so either one would be
+        a NoReverseMatch as well as a lie about how this log works. The correction path IS offered,
+        because it is the real one: record a later reading. It is a create, so it carries no
+        tenant-admin gate; there is no destructive action on this page for a gate to protect.
+      {% endcomment %}
+      <p class="text-muted">{{ append_only_note }}</p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        If the figure above is wrong, do not look for an Edit button — there is none, and its absence is the feature. Record the correct reading on {{ obj.asset.code }} instead: it becomes the current value the moment it is saved, every meter-based due date recalculates against it, and this row stays where it is so the history still shows what the schedule was built on at the time.
+      </p>
+
+      <div class="form-actions">
+        <a href="{% url 'scm:meterreading_create' %}?asset={{ obj.asset.pk }}" class="btn btn-primary"><i data-lucide="plus"></i> Record a new reading on {{ obj.asset.code }}</a>
+        <a href="{% url 'scm:meterreading_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
