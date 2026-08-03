@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — one maintenance plan: what makes it due, its checklist, and its jobs.
+
+Renders apps/scm/views/AssetManagement/MaintenancePlans.py::maintenanceplan_detail. Everything this
+page may read, and nothing else:
+
+  obj                    the MaintenancePlan (select_related: asset, assigned_to, parts_location —
+                         anything else on it is a query, so this page reads only those three FKs
+                         and the model's own columns and properties)
+  tasks                  the job plan, ordered (sequence, id): sequence / description /
+                         expected_result / is_mandatory / is_safety_step
+  task_count             len(tasks)
+  safety_task_count      how many of them are safety steps
+  jobs                   the newest window of MaintenanceWorkOrders raised here (DB-sliced,
+                         select_related asset + assigned_to). Parts are NOT prefetched, so this page
+                         never reads wo.parts_cost / wo.total_cost / wo.open_task_count — each would
+                         be a query per row. The job's own page carries those figures.
+  jobs_truncated         True when more exist than the window shows
+  job_count              every job ever raised from this plan
+  open_job               the newest job still in OPEN_STATUSES, or None
+  latest_reading         MeterReading or None (meter_name / reading / unit / read_at / source)
+  meter_gap              Decimal or None — units still to run; NEGATIVE once past. None ≠ 0
+  days_until_due         int or None — NEGATIVE once past. None ≠ 0
+  due_status             token: overdue / due_today / due_soon / scheduled / not_scheduled
+  due_label / due_css    the human label and the badge class for that token
+  is_due                 bool — work is OWED now (overdue or due today); due_soon is not owed
+  can_generate           bool — gate the Generate button on this
+  generate_block_reason  the sentence saying why not; "" when generating is allowed
+
+Every None-able figure above is tested with `is not None`, never for truthiness: 0 days until due
+means DUE TODAY and a 0 meter gap means the machine has just reached its target — both are the day
+the figure matters most, and a truthiness test would print an em dash on exactly those rows. The
+reverse trap is equally live: {{ x|default:"—" }} would swallow a real 0, so this page uses
+`is not None` branches (and default_if_none where a bare value is enough).
+
+Generate and Delete are @tenant_admin_required and POST-only (a GET is a 405), so both are wrapped
+in the house gate `{% if request.user.is_superuser or request.user.is_tenant_admin %}` and both are
+a <form method="post"> with {% csrf_token %}. Edit is @login_required and is not gated.
+
+Badge classes come from the model's own lookups — due_css (DUE_STATUS_CSS), obj.trigger_css,
+obj.priority_css, obj.work_type_css, wo.status_css. theme.css ships COLOUR-named badges only;
+badge-success / badge-warning / badge-danger do not exist and render unstyled (L33).
+
+MAX_PANEL_ROWS is not in the context, so the job panel describes its cap as "the window shown"
+rather than quoting a number this page cannot see.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        <span class="badge {{ due_css }}">{{ due_label }}</span>
+        <span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_type_display }}</span>
+        {% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:maintenanceplan_list' %}">Maintenance Plans</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">A standing instruction on <a href="{% url 'scm:asset_detail' obj.asset.pk %}">{{ obj.asset.code }} · {{ obj.asset.name }}</a>. This page shows <span class="fw-600">why</span> the plan reads the way it does — the trigger in words and the arithmetic behind the due state — rather than only the date it landed on. Nothing here is a stored flag: every figure below recomputes from the schedule and the machine's latest reading each time the page is opened.</p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        ?asset= and NOT ?plan= — the work-order list's filter spec is status / work_type / priority /
+        problem_code / asset / assigned_to, with no plan filter at all, and crud_list silently skips
+        a param it was not given. A link carrying ?plan= would land on the unfiltered register while
+        looking like it had narrowed it, which is worse than a slightly wider link that works.
+      {% endcomment %}
+      <a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ obj.asset.pk }}" class="btn btn-outline"><i data-lucide="wrench"></i> Jobs on this asset</a>
+      <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="activity"></i></div>
+      <div class="stat-value">{{ due_label }}</div>
+      <div class="stat-label">{% if is_due %}The work is owed now{% elif due_status == "due_soon" %}Inside the call horizon — may be raised early{% elif due_status == "not_scheduled" %}Nothing schedules this plan right now{% else %}Beyond the call horizon{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="calendar-clock"></i></div>
+      {% comment %}
+        `is not None` and never truthiness: 0 means it is due TODAY, which is the one day this tile
+        matters most. A negative figure is rendered as words rather than as "-14 days left".
+      {% endcomment %}
+      <div class="stat-value">
+        {% if days_until_due is not None %}
+          {% if days_until_due < 0 %}Overdue{% elif days_until_due == 0 %}Today{% else %}{{ days_until_due }}{% endif %}
+        {% else %}—{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if days_until_due is None %}No due date on this plan
+        {% elif days_until_due < 0 %}Owed since {{ obj.next_due_on|date:"M d, Y" }}
+        {% elif days_until_due == 0 %}Due {{ obj.next_due_on|date:"M d, Y" }}
+        {% else %}Day{{ days_until_due|pluralize }} until {{ obj.next_due_on|date:"M d, Y" }}{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
+      {% comment %}
+        meter_gap is None — never 0 — when the plan is not meter-driven, has no target reading, or
+        the asset has never been read. "No answer" and "due right now" are different facts and a
+        confident zero states the second, so the blank prints an em dash.
+      {% endcomment %}
+      <div class="stat-value">{% if meter_gap is not None %}{{ meter_gap|floatformat:"-4" }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if meter_gap is not None %}
+          {% if meter_gap > 0 %}{{ obj.asset.meter_unit|default:"units" }} still to run{% else %}<span class="badge badge-red">Past its target reading</span>{% endif %}
+        {% else %}
+          Not measured on a meter — no gap to state
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ job_count }}</div>
+      <div class="stat-label">{% if open_job %}Job{{ job_count|pluralize }} raised · <a href="{% url 'scm:maintenanceworkorder_detail' open_job.pk %}">{{ open_job.number }} still open</a>{% else %}Job{{ job_count|pluralize }} raised · none open{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What makes this plan due</h2>
+      <span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_type_display }}</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        The trigger IN WORDS first, then the arithmetic underneath. A date on its own does not tell a
+        planner why it is that date, and "measured from the last completion" versus "measured from
+        the calendar regardless" is the difference between a service done a fortnight late pushing
+        the whole future schedule out and it not doing so.
+      {% endcomment %}
+      <p class="fw-600" style="margin:0 0 .35rem;">
+        {% if obj.trigger_type == "calendar" %}
+          {% if obj.interval_days %}Every {{ obj.interval_days }} day{{ obj.interval_days|pluralize }}{% else %}No interval set{% endif %},
+          measured from {% if obj.schedule_basis == "floating" %}the last completion{% else %}the calendar date already published{% endif %}.
+        {% elif obj.trigger_type == "meter" %}
+          {% if obj.meter_interval %}Every {{ obj.meter_interval|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}{% else %}No meter interval set{% endif %}
+          on the {% if obj.asset.meter_name %}{{ obj.asset.meter_name }}{% else %}<span class="badge badge-red">undefined</span>{% endif %} meter,
+          measured from {% if obj.schedule_basis == "floating" %}the meter as it reads now{% else %}the target already published{% endif %}.
+        {% elif obj.trigger_type == "combined" %}
+          {% if obj.interval_days %}Every {{ obj.interval_days }} day{{ obj.interval_days|pluralize }}{% else %}No interval set{% endif %}
+          <span class="text-muted">or</span>
+          {% if obj.meter_interval %}every {{ obj.meter_interval|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}{% else %}no meter interval set{% endif %}
+          on the {% if obj.asset.meter_name %}{{ obj.asset.meter_name }}{% else %}<span class="badge badge-red">undefined</span>{% endif %} meter —
+          <span class="fw-600">whichever arrives first</span>, measured from {% if obj.schedule_basis == "floating" %}the last completion and the meter as it reads now{% else %}the calendar and target already published{% endif %}.
+        {% elif obj.trigger_type == "condition" %}
+          When {% if obj.asset.meter_name %}{{ obj.asset.meter_name }}{% else %}the asset's meter{% endif %}
+          is {% if obj.condition_operator %}{{ obj.get_condition_operator_display|lower }}{% else %}<span class="badge badge-red">no operator set</span>{% endif %}
+          {% if obj.condition_threshold is not None %}{{ obj.condition_threshold|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}{% else %}<span class="badge badge-red">no threshold set</span>{% endif %}.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        {% if obj.trigger_type == "condition" %}
+          A condition plan has <span class="fw-600">no cycle to roll</span>: its next occurrence is decided by the machine, not by a schedule, so generating a job leaves the trigger exactly where it is and the plan comes due again the moment a reading says so. There is deliberately no equality operator — a continuous reading almost never lands exactly on a threshold, so an “equals” trigger would look configured and never fire.
+        {% elif obj.trigger_type == "combined" %}
+          The two axes are evaluated <span class="fw-600">together</span>, and the usage axis is consulted first: a machine that has already run past its target outranks a date still in the future. A combined plan reading <em>Overdue</em> on a future date is not a bug — the work was owed at the meter and the calendar simply has not caught up.
+        {% elif obj.schedule_basis == "floating" %}
+          <span class="fw-600">Floating</span> measures the next occurrence from what actually happened, so a service done a fortnight late pushes the whole future schedule a fortnight out. That is the right reading for wear-driven work.
+        {% else %}
+          <span class="fw-600">Fixed</span> measures from the calendar the plan already published, so a job done late does not drag every future cycle late with it. That is the right reading for a statutory inspection due in January whatever happened in December.
+        {% endif %}
+      </p>
+
+      {% comment %}
+        The ARITHMETIC, axis by axis — the sum, its inputs and what it makes this plan read as. A
+        date on its own hides which of the two axes actually fired, which is the first question asked
+        about a combined plan that went red early.
+      {% endcomment %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Axis</th><th>The sum</th><th>Reads</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Date</td>
+              <td class="mono">
+                {% if obj.next_due_on %}
+                  {{ obj.next_due_on|date:"Y-m-d" }} − {% now "Y-m-d" %} =
+                  {% if days_until_due is not None %}{{ days_until_due }} day{{ days_until_due|pluralize }}{% else %}—{% endif %}
+                {% else %}
+                  <span class="text-muted">No due date set — this axis cannot fire</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if days_until_due is None %}
+                  <span class="badge badge-muted">Not scheduled</span>
+                {% elif days_until_due < 0 %}
+                  <span class="badge badge-red">Overdue</span> the due date passed
+                {% elif days_until_due == 0 %}
+                  <span class="badge badge-amber">Due today</span>
+                {% elif days_until_due <= obj.lead_time_days %}
+                  <span class="badge badge-info">Due soon</span> inside the {{ obj.lead_time_days }}-day call horizon
+                {% else %}
+                  <span class="badge badge-green">Scheduled</span> {{ days_until_due }} &gt; the {{ obj.lead_time_days }}-day call horizon
+                {% endif %}
+              </td>
+            </tr>
+            {% if obj.trigger_type == "meter" or obj.trigger_type == "combined" %}
+              <tr>
+                <td class="fw-600">Meter</td>
+                <td class="mono">
+                  {% if obj.next_due_reading is not None and latest_reading %}
+                    {{ obj.next_due_reading|floatformat:"-4" }} − {{ latest_reading.reading|floatformat:"-4" }} =
+                    {% if meter_gap is not None %}{{ meter_gap|floatformat:"-4" }}{% else %}—{% endif %}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}
+                  {% elif obj.next_due_reading is None %}
+                    <span class="text-muted">No target reading set — this axis cannot fire</span>
+                  {% else %}
+                    <span class="text-muted">{{ obj.asset.code }} has never been read — nothing to subtract from</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if meter_gap is None %}
+                    <span class="badge badge-muted">No answer</span> not a zero — the sum has a missing input
+                  {% elif meter_gap <= 0 %}
+                    <span class="badge badge-red">Overdue</span> the machine has reached or passed its target
+                  {% else %}
+                    <span class="badge badge-green">Running</span> {{ meter_gap|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %} still to go
+                  {% endif %}
+                </td>
+              </tr>
+            {% endif %}
+            {% if obj.trigger_type == "condition" %}
+              <tr>
+                <td class="fw-600">Condition</td>
+                <td class="mono">
+                  {% if latest_reading and obj.condition_threshold is not None %}
+                    {{ latest_reading.reading|floatformat:"-4" }}
+                    {% if obj.condition_operator == "gte" %}≥{% elif obj.condition_operator == "lte" %}≤{% else %}?{% endif %}
+                    {{ obj.condition_threshold|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}
+                  {% elif obj.condition_threshold is None %}
+                    <span class="text-muted">No threshold set — this axis cannot fire</span>
+                  {% else %}
+                    <span class="text-muted">{{ obj.asset.code }} has never been read — nothing to compare</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if not latest_reading %}
+                    <span class="badge badge-muted">Unknown</span> an unmeasured machine is not healthy and not failing
+                  {% elif due_status == "overdue" %}
+                    <span class="badge badge-red">Threshold crossed</span>
+                  {% else %}
+                    <span class="badge badge-green">Within threshold</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if due_status == "overdue" and days_until_due is not None and days_until_due > 0 %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-red">Overdue on usage, not on the calendar</span>
+          The due date above is still in the future and this plan reads overdue anyway. That is the trigger working as designed: the usage axis is consulted before the date, so a machine that has already run past its target — or a reading that has crossed the threshold — outranks a date that has not arrived. The work was owed at the meter.
+        </p>
+      {% endif %}
+
+      {% if latest_reading %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          Latest reading: <span class="fw-600 mono">{{ latest_reading.reading|floatformat:"-4" }}{% if latest_reading.unit %} {{ latest_reading.unit }}{% endif %}</span>
+          on {{ latest_reading.meter_name|default:"the primary meter" }}, taken {{ latest_reading.read_at|date:"M d, Y H:i" }} <span class="text-muted">({{ latest_reading.get_source_display }}{% if latest_reading.reference %} · {{ latest_reading.reference }}{% endif %})</span>.
+          Readings for a plan are read from the asset's <span class="fw-600">primary</span> meter only, deliberately: an odometer figure handed to a plan whose interval is in running hours would schedule a service roughly never, and silently.
+        </p>
+      {% elif obj.trigger_type != "calendar" %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">No readings</span>
+          {{ obj.asset.code }} has never been read on its primary meter, so this plan's usage axis has nothing to evaluate and answers <span class="fw-600">no</span> rather than a zero.
+          <a href="{% url 'scm:meterreading_create' %}">Record a reading</a> and the arithmetic above starts producing an answer.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where the schedule stands</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Plan</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Asset</dt><dd><a href="{% url 'scm:asset_detail' obj.asset.pk %}">{{ obj.asset.code }}</a> <span class="text-muted">{{ obj.asset.name }}</span></dd></div>
+        <div class="detail-item"><dt>Trigger</dt><dd><span class="badge {{ obj.trigger_css }}">{{ obj.get_trigger_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Schedule basis</dt><dd>{{ obj.get_schedule_basis_display }}</dd></div>
+        <div class="detail-item"><dt>Calendar interval</dt><dd class="mono">{% if obj.interval_days %}{{ obj.interval_days }} day{{ obj.interval_days|pluralize }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Meter interval</dt><dd class="mono">{% if obj.meter_interval is not None %}{{ obj.meter_interval|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Call horizon</dt><dd>{{ obj.lead_time_days }} day{{ obj.lead_time_days|pluralize }} before it is due</dd></div>
+        <div class="detail-item"><dt>Next due date</dt><dd class="mono">{% if obj.next_due_on %}{{ obj.next_due_on|date:"M d, Y" }}{% else %}<span class="badge badge-muted">No date</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Next due reading</dt><dd class="mono">{% if obj.next_due_reading is not None %}{{ obj.next_due_reading|floatformat:"-4" }}{% if obj.asset.meter_unit %} {{ obj.asset.meter_unit }}{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Days until due</dt><dd class="mono">{% if days_until_due is not None %}{{ days_until_due }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Meter gap</dt><dd class="mono">{% if meter_gap is not None %}{{ meter_gap|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Condition rule</dt><dd class="mono">{% if obj.condition_operator and obj.condition_threshold is not None %}{{ obj.get_condition_operator_display }} {{ obj.condition_threshold|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        {% comment %}
+          |default and NOT |default_if_none after |date: the date filter turns None into the EMPTY
+          STRING, which default_if_none would then happily print as nothing at all. `default` is
+          safe here precisely because a date is never a real 0 — the swallowed-zero trap that makes
+          `default` wrong on every numeric figure on this page.
+        {% endcomment %}
+        <div class="detail-item"><dt>Last completed</dt><dd>{{ obj.last_completed_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Last generated</dt><dd>{{ obj.last_generated_on|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No — never comes due</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Next due date</span> and <span class="fw-600">next due reading</span> are the only forward-looking columns here, and they are the schedule itself rather than a derivation — an input a planner may deliberately shift, and one whose historical anchor is gone the moment a job closes. Everything computed <em>from</em> them recomputes on every read. The two stamps below them are the opposite case: <span class="fw-600">last completed</span> is written only by the work-order complete verb and <span class="fw-600">last generated</span> only by the generate action, and both are off the form — a planner who could type a completion date could type a service that was never performed, and the PM-compliance figure would believe it.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The job plan</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ task_count }} step{{ task_count|pluralize }}</span>
+        {% if safety_task_count %}<span class="badge badge-red">{{ safety_task_count }} safety</span>{% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>What to check</th><th>What good looks like</th><th>Mandatory</th><th>Safety</th></tr></thead>
+        <tbody>
+          {% for task in tasks %}
+            <tr>
+              <td class="mono">{{ task.sequence }}</td>
+              <td>{{ task.description }}</td>
+              <td>{% if task.expected_result %}{{ task.expected_result }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if task.is_mandatory %}<span class="badge badge-info">Mandatory</span>{% else %}<span class="badge badge-muted">Optional</span>{% endif %}</td>
+              <td>{% if task.is_safety_step %}<span class="badge badge-red">Safety</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="list-checks"></i>
+                  <h3>This plan has no steps</h3>
+                  <p>It can still raise a job — the work order simply carries no checklist, and the technician gets the prose instructions and nothing to tick. Adding steps here is what gives every cycle the same instructions and gives an auditor something to read afterwards. Edit the plan to add them.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Generating a job <span class="fw-600">copies these steps as plain columns</span>, with no link back. That is deliberate: editing this plan next month must not rewrite what a job three weeks ago actually asked a technician to check and sign against. A step marked <span class="fw-600">mandatory</span> is one the job cannot be signed off without; optional steps exist so nobody is forced to tick something that did not apply, which is what keeps the ticks on the mandatory ones worth reading. Safety steps — isolation, lock-out/tag-out, permit — are flagged rather than kept in a separate permit register, so they stay visible and printable on the job itself.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What a generated job inherits</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Work type</dt><dd><span class="badge {{ obj.work_type_css }}">{{ obj.get_work_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd><span class="badge {{ obj.priority_css }}">{{ obj.get_priority_display }}</span></dd></div>
+        <div class="detail-item"><dt>Planned labour</dt><dd class="mono">{{ obj.estimated_hours|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Default crew</dt><dd>{% if obj.assigned_to %}{{ obj.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Parts storeroom</dt><dd>{% if obj.parts_location %}{{ obj.parts_location.code }} <span class="text-muted">{{ obj.parts_location.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.instructions %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Instructions.</span> {{ obj.instructions }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        The planned labour figure is carried onto the generated job as a <span class="fw-600">stated line in its description</span>, never written into the job's labour hours. Labour hours are the <em>actual</em> figure the job's labour cost, its total cost, the asset's maintenance-cost-to-date and the depreciation report's repair-vs-replace ratio are all computed from; pre-filling it would put a real cost on a job nobody has worked yet. The storeroom is only named here — parts leave stock at the job's own issue action, and nothing on this page posts a stock movement or drafts an accounting document.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Jobs raised from this plan</h2>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ obj.asset.pk }}" class="btn btn-outline"><i data-lucide="wrench"></i> Open in work orders</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Job</th><th>Status</th><th>Type / priority</th><th>Scheduled</th><th>Completed</th><th>On time</th><th>Crew</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for wo in jobs %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceworkorder_detail' wo.pk %}" class="fw-600 mono">{{ wo.number }}</a>
+                <div class="text-muted">{{ wo.title }}</div>
+                <div class="form-help">{{ wo.get_source_display }}</div>
+              </td>
+              <td><span class="badge {{ wo.status_css }}">{{ wo.get_status_display }}</span></td>
+              <td>
+                <span class="badge {{ wo.work_type_css }}">{{ wo.get_work_type_display }}</span>
+                <div class="form-help"><span class="badge {{ wo.priority_css }}">{{ wo.get_priority_display }}</span></div>
+              </td>
+              <td class="nowrap">{{ wo.scheduled_start|date:"M d, Y"|default:"—" }}</td>
+              <td class="nowrap">{{ wo.completed_at|date:"M d, Y"|default:"—" }}</td>
+              <td>
+                {% comment %}
+                  is_on_time is None while a job is unfinished or was never scheduled — a third
+                  state, not a "no". It reads only completed_at and scheduled_start, both columns on
+                  the row, so it costs nothing here.
+                {% endcomment %}
+                {% if wo.is_on_time is None %}<span class="text-muted">—</span>
+                {% elif wo.is_on_time %}<span class="badge badge-green">On time</span>
+                {% else %}<span class="badge badge-red">Late</span>{% endif %}
+              </td>
+              <td>{% if wo.assigned_to %}{{ wo.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceworkorder_detail' wo.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="wrench"></i>
+                  <h3>This plan has never raised a job</h3>
+                  <p>The schedule is defined and nothing has been executed against it yet. Pressing Generate below snapshots a work order with this plan's checklist on it and rolls the schedule forward exactly one cycle — that job, not this plan, is what gets scheduled, worked and costed.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if jobs_truncated %}
+        Showing the newest {{ jobs|length }} of <span class="fw-600">{{ job_count }}</span> — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. Open the full work-order list to see the rest.
+      {% else %}
+        {{ job_count }} job{{ job_count|pluralize }} in total.
+      {% endif %}
+      Costs are deliberately not totalled in this panel: each job's parts are read on its own page, and summing them here would be a query per row for a figure the asset's page already reports properly. Every one of these jobs <span class="fw-600">survives this plan being deleted</span> and merely loses the provenance link — which is exactly why its checklist is a snapshot with no pointer back.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% comment %}
+        Generate and Delete are both @tenant_admin_required and both @require_POST, so each is a real
+        <form method="post"> with a csrf token — a GET is a 405, never a silent state change — and
+        both sit behind the house gate. Offering a member a one-click 403 is worse than not offering
+        the button (the 4.11 finding).
+
+        can_generate and generate_block_reason come from the SAME helper the verb guards on inside
+        its lock, so a button can never be offered for a press the view will refuse. When it would
+        refuse, the sentence is shown instead of a dead button.
+
+        Only the system-generated PM- number goes into either confirm string. The plan name is
+        user-typed and an apostrophe in it would be escaped to &#x27;, which the HTML parser hands to
+        JavaScript as a bare quote — and the dialog breaks.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if can_generate %}
+          <form method="post" action="{% url 'scm:maintenanceplan_generate' obj.pk %}" onsubmit="return confirm('Raise the next job from {{ obj.number }}? A work order is created with a snapshot of this plan checklist ({{ task_count }} step(s)), and the schedule rolls forward exactly one cycle.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="clipboard-plus"></i> Generate work order</button>
+            <div class="form-help">
+              One explicit press, inside one transaction: the job, its snapshotted checklist and the rolled-forward schedule either all land or none of them do — a job with no tasks, or a plan advanced past a job that was never written, is worse than a failed press. The new job starts at <span class="fw-600">Requested</span>; generating one is not approving it. The schedule rolls <span class="fw-600">exactly one cycle even when several were missed</span>, so a plan three cycles behind stays visibly behind rather than being silently caught up.
+              {% if not is_due %}
+                <br>This plan is not owed yet, and that is <em>not</em> a refusal: the call horizon exists so a job can legitimately be raised ahead of its date, and pulling a service forward because the machine is already open is ordinary work.
+              {% endif %}
+            </div>
+          </form>
+        {% else %}
+          <p class="text-muted" style="margin-bottom:1rem;">
+            <span class="badge badge-muted">Generate unavailable</span> {{ generate_block_reason }}
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">Generating a job creates a document and deleting a plan destroys a checklist, so both are workspace-administrator actions. Ask an administrator — everything else on this page is readable and the plan itself stays editable.</p>
+      {% endif %}
+
+      <div class="form-actions">
+        <a href="{% url 'scm:maintenanceplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <form method="post" action="{% url 'scm:maintenanceplan_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its {{ task_count }} job-plan step(s) go with it and cannot be reconstructed. The {{ job_count }} job(s) it raised survive with their own checklists and costs and simply lose the link. Deactivating instead stops the schedule coming due and keeps everything.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        The plan stays <span class="fw-600">editable at any time</span>, including once it has raised jobs — a standing instruction is re-scoped, re-timed and re-crewed, and a screen that froze the row the moment it generated something would push those corrections into a notes field. Nothing an edit does reaches a job that already exists. <span class="fw-600">Deleting</span> is the honest opposite: the checklist above is cascaded away and cannot be rebuilt, while every job survives with its own snapshot. If the schedule is simply finished with, untick <span class="fw-600">Active</span> on the edit form — an inactive plan never comes due, cannot generate, and keeps its whole history.
+      </p>
+    </div>
+  </div>
+{% endblock %}
