@@ -933,6 +933,50 @@ LIVE_LINKS = {
         "License Management":      "scm:tradelicense_list",              # bullet (register + balance + expiry)
         "Sustainability Tracking": "scm:sustainabilityassessment_list",  # bullet (ESG + carbon report chip)
     },
+    # 4.13 Asset Management — the maintenance side of the plant, and the L36 ownership call is that
+    # `scm.Asset` IS the operational asset spine. Module 11 (Asset Management) EXTENDS this table
+    # rather than standing up a second one, exactly as 4.12 extended 4.2's SupplierContract instead
+    # of growing a parallel contract register. One machine, one row, one code.
+    #
+    # **`MaintenanceWorkOrder` is NOT 4.8's `WorkOrder`.** They share four letters and nothing else:
+    # 4.8's WorkOrder MAKES product — it explodes a BOM, consumes components and produces finished
+    # goods through `consumption`/`production` stock moves — while 4.13's MaintenanceWorkOrder
+    # REPAIRS a machine, consumes spares through a `maintenance` move and carries the downtime,
+    # failure codes and labour that every reliability figure (MTBF/MTTR/availability) is derived
+    # from. Two tables, two prefixes (`work-orders/` vs `maintenance-work-orders/`, distinct whole
+    # path components), two sidebar bullets in two different sub-modules. Merging them would put a
+    # production schedule and a breakdown queue in one list.
+    #
+    # **"Spare Parts Inventory" is a COMPUTED page over 4.3, not a table.** There is no `SparePart`
+    # model: a spare part is an `scm.Item` flagged `is_spare_part`, its on-hand is the live SUM of
+    # the append-only `StockMove` ledger (nothing stored to drift from it) and its min/max come from
+    # the same `ReorderRule` the buyer already maintains. A second parts catalogue would be a second
+    # thing to keep in step with the ledger. Precedent: 4.4 points its "Bin/Location Management"
+    # bullet at 4.3's `scm:location_list`, and 4.12 points "Contract Repository" at 4.2's list.
+    #
+    # **"Asset Depreciation" is a COMPUTED report over `accounting.FixedAsset`.** Acquisition cost,
+    # accumulated depreciation, method and useful life belong to apps.accounting, which also posts
+    # the depreciation JOURNAL; 4.13 READS those figures, stores none of them, recomputes none of
+    # them and posts NO JournalEntry (L29). The page's own contribution is the SCM half — issued
+    # parts at the cost they were drawn at, plus labour, plus contractor charges — and the
+    # repair-vs-replace ratio between the two. Two writers of one accumulated figure is exactly how
+    # the two numbers on the two pages come to disagree.
+    #
+    # NO sidebar key for `MeterReading`, `AssetSparePart`, `MaintenanceWorkOrderPart` or
+    # `MaintenanceWorkOrderTask` — NavERP.md gives 4.13 five bullets and the sidebar mirrors it
+    # exactly. The reading log is reached from the asset's meter panel and from
+    # `scm:meterreading_list`; the three children are panels on their parent's detail page. That is
+    # the WorkCenter / ReorderRule / ReturnReason / InspectionPlan precedent: a master or child
+    # reached from the page that uses it takes no bullet of its own. The PM forecast board
+    # (`scm:pm_forecast`) is likewise reached from a chip in the Preventive Maintenance list header
+    # rather than from a sixth key.
+    "4.13": {
+        "Asset Registry":         "scm:asset_list",                   # bullet (the plant register + 360° page)
+        "Preventive Maintenance": "scm:maintenanceplan_list",         # bullet (PM programme + generate)
+        "Breakdown Maintenance":  "scm:maintenanceworkorder_list",    # bullet (the job ladder + downtime)
+        "Spare Parts Inventory":  "scm:sparepart_list",               # bullet (COMPUTED over 4.3 — no table)
+        "Asset Depreciation":     "scm:asset_depreciation_report",    # bullet (COMPUTED over accounting)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
