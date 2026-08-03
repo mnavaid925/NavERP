@@ -680,7 +680,42 @@ def maintenanceworkorder_complete(request, pk):
             fields.append("resolution_notes")
         obj.save(update_fields=fields)
 
+        # --- the meter capture --------------------------------------------------------------------
+        # Filed BEFORE the plan roll, and the order is load-bearing: `advance()` on a *floating*
+        # meter plan takes its base from `plan.latest_reading()` (MaintenancePlans.py:445), so a
+        # capture filed afterwards is invisible to the very roll it should drive. Measured on a
+        # forklift last read at 1218.5h completed with a 1250h capture and a 250h interval: the roll
+        # published 1468.5 instead of 1500 — the next service falling 31.5h early, every cycle,
+        # compounding.
+        #
+        # `meter_name` is required on MeterReading and blank on an asset that declares no meter, so
+        # a capture against such an asset cannot be filed. That is said out loud rather than saved
+        # under an invented name — a reading nobody can identify is worse than no reading.
+        if obj.meter_reading_at_work is not None:
+            if obj.asset.meter_name:
+                MeterReading.objects.create(
+                    tenant=request.tenant, asset=obj.asset,
+                    recorded_by=_acting_party(request),
+                    meter_name=obj.asset.meter_name, unit=obj.asset.meter_unit,
+                    # Already bounded by the form's MaxValueValidator(MAX_Q4); q4 clamps anyway so a
+                    # seeded or imported job can never fail the whole atomic block on one column.
+                    reading=q4(obj.meter_reading_at_work),
+                    read_at=stamped_at, source="work_order", reference=obj.number,
+                    notes=f"Captured on completion of {obj.number}"[:255])
+                filed_reading = True
+            else:
+                meter_skipped = (f"{obj.asset} names no meter, so the captured reading "
+                                 f"({obj.meter_reading_at_work}) was not filed. Set the asset's "
+                                 "meter name and log the reading from the asset page.")
+
         # --- the plan roll ------------------------------------------------------------------------
+        # This verb is the ONLY caller of `advance()` — the published schedule has exactly one
+        # writer, the same rule `Asset.status` and `downtime_minutes` follow. `maintenanceplan_
+        # generate` deliberately does not roll: it would advance a `fixed` plan twice per occurrence
+        # (advance() anchors a fixed plan on its own `next_due_on`, so the calls compound), it would
+        # anchor a `floating` plan on the generate date rather than the completion it is defined to
+        # measure from, and it would let a cancelled job consume a cycle nobody performed.
+        #
         # Locked SECOND and always second, one direction for every route in this file, so two
         # concurrent completions on one plan serialise instead of deadlocking. Re-fetched with an
         # explicit tenant filter rather than followed off `obj.plan`: a plan whose row went away (or
@@ -702,27 +737,6 @@ def maintenanceworkorder_complete(request, pk):
                 if plan_rolled:
                     plan_message = (f"{plan.number} rolled forward — next due "
                                     f"{plan.next_due_on or plan.next_due_reading}.")
-
-        # --- the meter capture --------------------------------------------------------------------
-        # `meter_name` is required on MeterReading and blank on an asset that declares no meter, so
-        # a capture against such an asset cannot be filed. That is said out loud rather than saved
-        # under an invented name — a reading nobody can identify is worse than no reading.
-        if obj.meter_reading_at_work is not None:
-            if obj.asset.meter_name:
-                MeterReading.objects.create(
-                    tenant=request.tenant, asset=obj.asset,
-                    recorded_by=_acting_party(request),
-                    meter_name=obj.asset.meter_name, unit=obj.asset.meter_unit,
-                    # Already bounded by the form's MaxValueValidator(MAX_Q4); q4 clamps anyway so a
-                    # seeded or imported job can never fail the whole atomic block on one column.
-                    reading=q4(obj.meter_reading_at_work),
-                    read_at=stamped_at, source="work_order", reference=obj.number,
-                    notes=f"Captured on completion of {obj.number}"[:255])
-                filed_reading = True
-            else:
-                meter_skipped = (f"{obj.asset} names no meter, so the captured reading "
-                                 f"({obj.meter_reading_at_work}) was not filed. Set the asset's "
-                                 "meter name and log the reading from the asset page.")
 
     write_audit_log(request.user, obj, "update", {
         "action": "complete", "status": "completed",
