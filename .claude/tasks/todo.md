@@ -18439,3 +18439,822 @@ document determination, AES/EDI/TRACES filing, per-form PDF layouts, clause libr
 extraction, a frozen carbon-entry ledger, multi-tier supply mapping, SDS/GHS chemical library. Parked to named
 siblings: landed cost → 4.18, compliance dashboards → 4.11, ESG *risk* → 4.2, audits/CAPA → 4.9, EDI → 4.19,
 GDPR engine → Module 13, statutory CSRD → `apps/accounting`.
+
+
+---
+# Sub-module 4.13 — Asset Management (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.13.md  (2026-08-04)
+
+**EXTEND run, not a scaffold run.** `apps/scm` exists and ships 4.1–4.12. **No `config/settings.py` and no
+`config/urls.py` change.**
+
+- New backend sub-package: **`AssetManagement/`** in all four layers (`models` / `forms` / `views` / `urls`) —
+  PascalCase of the NavERP.md title, the `ContractCompliance/` precedent.
+- New template sub-module slug: **`assets/`** — **this supersedes the `assetmanagement/` name in the task
+  brief.** The brief itself said to check the as-built convention, and the convention is *drop the
+  "Management"/"System" and use the distinctive noun*: the twelve shipped folders are `procurement/ srm/
+  inventory/ warehouse/ orders/ transportation/ demandplanning/ manufacturing/ quality/ returns/ analytics/
+  compliance/` — i.e. 4.3 "Inventory Management" → `inventory/`, 4.4 "Warehouse Management" → `warehouse/`,
+  4.5 "Order Management System" → `orders/`, 4.10 "Returns Management" → `returns/`, 4.12 "Contract &
+  Compliance Management" → `compliance/`. So 4.13 "Asset Management" → **`assets/`**. (No clash: Accounting's
+  `templates/accounting/assets/` is a different app root.)
+- Migration will be **`0022_…`** (latest on disk is `0021_sustainabilityassessment_scm_esg_tnt_asmt_idx.py`).
+
+**Shape of the sub-module.** 4 primary models (3 of them with children — 7 tables total) + 3 computed report
+pages + 2 thin additive extensions to shipped 4.3 models. **Exactly ONE thing in 4.13 writes a ledger: the
+issue-parts verb, which posts a negative `StockMove` of a NEW `maintenance` move type.** 4.13 posts **no
+`JournalEntry`** (the standing 4.9/4.10/4.11/4.12 rule, `navigation.py:864-868`, `:901-905`, `:925-928`) and
+builds **no second depreciation ledger** — `accounting.FixedAsset` already owns that (L29).
+
+**The L36 ownership call, made explicitly.** Module 11 (Asset Management System, `NavERP.md:1681-1815`) is the
+eventual home of full EAM, but 11.x is unbuilt, 4.13 is being built now, and grep confirms **no `Asset` row
+exists anywhere** (`core.Asset`, `scm.Asset`, `scm.Equipment` all absent). Same shape as 4.3 owning
+`Item`/`Location`/`StockMove`: **`scm.Asset` is the operational asset spine**; Module 11 FKs into it by string
+and extends (11.2 tracking, 11.7 condition monitoring, 11.19 fleet). `NavERP-ERD.md:473` + `:490-491` describe a
+shared `Asset` anchor that was never built — reconcile them to point at `scm.Asset` in this pass. The
+alternative (a throwaway 4.13 that Module 11 duplicates) is the second-parallel-schema bug L29 forbids.
+
+---
+
+## Pre-flight (do these BEFORE writing a single file)
+
+- [ ] `grep -n '\.badge-\|detail-item\|detail-grid\|stat-icon' static/css/theme.css` — **mandatory pre-write
+      step, not a pre-ship check** (L33, now at five recurrences). Re-confirmed at plan time from
+      `static/css/theme.css:260-264, 285-290, 353-356`: badges are **`badge-green / badge-red / badge-amber /
+      badge-info / badge-muted / badge-slate` ONLY** — `badge-success` / `badge-warning` / `badge-danger`
+      **DO NOT EXIST**; layout is `<dl class="detail-grid"><div class="detail-item"><dt>Label</dt><dd>Value</dd>
+      </div></dl>` (`.detail-label` / `.detail-value` do not exist); `stat-icon` has
+      `blue/green/orange/purple/slate` — **no `amber`, no `red`**.
+- [ ] Re-run the spine grep before FK-ing anything (L28). **All verified present at plan time** — this is the
+      evidence every FK below rests on, re-check it rather than trusting this list:
+      - `grep -rn "^class Asset\|^class Equipment\|^class MaintenancePlan\|^class MeterReading" apps/` →
+        **nothing.** All four 4.13 models are genuinely new.
+      - `scm.Item` `InventoryManagement/Items.py:56` (has `sku`, `category`→`ItemCategory`, `uom`→`UOM`,
+        `item_type`, `tracking`, `costing_method`, `standard_cost`, `average_cost` *(editable=False)*,
+        `reorder_point`, `is_active`, and `on_hand(location=None)` at `:107-116` — the derived-quantity rule).
+      - `scm.Location` `InventoryManagement/Locations.py:10` (`code`, `name`, `location_type`, `parent`
+        self-FK `:30`, `is_active`, + the 4.4 bin attrs `capacity`/`pick_sequence`/`abc_class`/`is_pickable`).
+      - `scm.StockMove` `InventoryManagement/StockMoves.py:13` — **`move_type` is
+        `CharField(max_length=12, choices=MOVE_TYPES)` at `:37`**, current values
+        `receipt | issue | transfer | adjustment | consumption | production` (`:16-27`).
+      - `scm.LotSerial` `LotSerials.py:5` · `scm.ReorderRule` `ReorderRules.py:26` ·
+        `scm.StockTransfer` `StockTransfers.py:11`.
+      - `scm.WorkCenter` `Manufacturing/WorkCenters.py:23` (`NUMBER_PREFIX="WC"`, `code`, `center_type`,
+        `location` `:39`, `org_unit` `:42`, `supervisor`→`core.Party` `:45`).
+      - `scm.WorkOrder` `Manufacturing/WorkOrders.py:26` — **the PRODUCTION run [WO-]**, url names
+        `scm:workorder_list/_create/_detail/_edit/_delete/_plan/_release/_close/_cancel/_schedule/
+        _issue_components/_report_production` on prefix `work-orders/`. **Do not touch it.**
+      - `scm.NonConformance` `QualityManagement/NonConformances.py:28` · `scm.CapaAction` `CapaActions.py:24` ·
+        `scm.WarrantyClaim` `ReturnsManagement/WarrantyClaims.py:34`.
+      - `accounting.FixedAsset` `accounting/models/FixedAssets/FixedAssetsRegister.py:6` — verified fields
+        `NUMBER_PREFIX="FA"`, `name`, `category` *(CharField(120))*, `acquisition_cost`, `salvage_value`,
+        `useful_life_months`, `method` ∈ {straight_line, declining_balance, units_of_production},
+        `in_service_date`, `accumulated_depreciation` *(editable=False)*, `last_depreciation_date`,
+        `status` ∈ {cip, active, disposed}, `asset_account`/`accumulated_account`/`expense_account`,
+        `custodian`→`core.Party` (related_name **`custodian_assets`** — do not reuse), `location`→`core.OrgUnit`
+        (related_name `located_assets`); methods `depreciable_base`, `book_value()`, `remaining_depreciable()`,
+        `period_depreciation()`.
+      - `core.Party` `core/models/Party.py:5` · `core.PartyRole` `:5` · `core.OrgUnit` `OrgUnit.py:5` ·
+        `core.Document` `Document.py:5` (GenericForeignKey attachment) · `core.Tenant` `Tenant.py:5`.
+- [ ] **Auto-number prefix collision check — done, all three are FREE.** `NUMBER_PREFIX` values already in
+      `scm`: `PR RFQ QT PO GRN SC SCR SRA CAT ADJ TRF LD SHP FRT CAR SO WO WC PRD BOM DF FA DS SEA YRD PUT PIK
+      CC QC QA NCR CAPA RMA WTY ALR KPI CR TD LIC ESG`. **`AST`, `PM`, `MWO` do not appear.** Near-misses that
+      are NOT collisions and must not be "tidied": `PM` ≠ `PR` ≠ `PRD` ≠ `PIK` ≠ `PUT`; `AST` ≠ `ADJ`;
+      `MWO` ≠ `WO`. `FA` is taken twice already (`scm.ForecastAdjustment` **and** `accounting.FixedAsset`) —
+      do not reuse it. `MeterReading` takes **no prefix at all** (it is `TenantOwned`, like `StockMove`).
+- [ ] **Index-name collision check — done, all prefixes FREE.** Every `scm_*_idx` name in `apps/scm/models/`
+      was enumerated; **no `scm_ast_`, `scm_asp_`, `scm_pm_`, `scm_pmt_`, `scm_mwo_`, `scm_mwop_`, `scm_mwot_`
+      or `scm_mtr_` exists.** Keep every new name **globally unique AND ≤ 30 chars**, pattern
+      `scm_<abbr>_tnt_<x>_idx`. Watch the near-misses: `scm_pm_` is free but `scm_pr_` (PurchaseRequisition),
+      `scm_prd_` (ProductionTimeLog), `scm_put_`/`scm_pik_`/`scm_po_` are taken.
+- [ ] **`related_name` collision check** — grep each one before writing; a duplicate reverse accessor on
+      `core.Party` / `core.OrgUnit` / `scm.Location` / `accounting.FixedAsset` is a `SystemCheckError`, not a
+      runtime surprise. Known taken: `WorkCenter.supervisor` → `scm_supervised_work_centers`;
+      `WorkCenter.org_unit` → `scm_work_centers`; `FixedAsset.custodian` → `custodian_assets`;
+      `FixedAsset.location` → `located_assets`. Use the `scm_*`-prefixed names listed per model below.
+- [ ] Confirm `apps/scm/models/AssetManagement/` does not exist (verified absent at plan time) and that
+      `apps/core/navigation.py` has **`"4.12"` as its LAST `LIVE_LINKS` key** (verified: block at
+      `navigation.py:929-935`, dict closes at `:936`).
+- [ ] Read `apps/scm/models/ContractCompliance/` + `apps/scm/urls/ContractCompliance/ComplianceRequirements.py`
+      + `apps/scm/views/_common.py` + `apps/scm/views/_helpers.py:130-171` as the shape reference. Note that
+      **`apps/scm/models/ContractCompliance/__init__.py` is EMPTY** — the re-export block lives in
+      `apps/scm/models/__init__.py`. Same for forms/views/urls. Create the four
+      `AssetManagement/__init__.py` files empty (each still gets its own commit).
+
+---
+
+## Models (4 primary + 5 children, in `apps/scm/models/AssetManagement/`)
+
+Shared conventions for every file: `from apps.scm.models._base import *` (gives `TenantOwned` /
+`TenantNumbered` / `q2` / `q4` / `MAX_Q2` / `MAX_Q4` / `ZERO` / `settings` / `models` / `ValidationError` /
+`MinValueValidator` / `MaxValueValidator` / `timezone` / `Decimal` / `Sum` / `Q` / `transaction`).
+**Every FK by string.** Every *primary* model carries a `tenant` FK via the base; the five children are
+tenant-less and reached through `…__tenant` (the `ComplianceCheck` / `TradeDocumentLine` / `InspectionResult`
+precedent) — **every child view must scope on the parent's tenant, never on the child alone.**
+Money = `DecimalField(max_digits=14, decimal_places=2)` written through `q2()`; quantity/meter =
+`(14, 4)` through `q4()`. **Every day-count field is capped** `validators=[MinValueValidator(…),
+MaxValueValidator(3650)]` — each one is fed to `datetime.timedelta(days=…)`, and `PositiveIntegerField` accepts
+4294967295 on MariaDB, which is an uncaught `OverflowError` (a 500), not a validation error (the 4.10 DoS
+finding). Colour-named `*_CSS` dicts live **on the model** (the `KpiSnapshot.BAND_CSS` precedent) so a badge
+colour is decided in exactly one place, and only the six real classes may appear (L33).
+
+### File 0 — `models/AssetManagement/_choices.py` (shared vocabularies, imports NO sibling model)
+
+- [ ] Create it FIRST and import it from all four entity modules — the `SupplyChainAnalytics/_choices.py` /
+      `ContractCompliance/_choices.py` precedent. It deliberately imports no model, so the edge runs one way and
+      there is no cycle.
+- [ ] `CRITICALITY_CHOICES` = `critical | high | medium | low` + `CRITICALITY_CSS = {"critical": "badge-red",
+      "high": "badge-amber", "medium": "badge-info", "low": "badge-muted"}`
+      *(drivers: Fiix "assign importance levels to assets for work prioritisation"; Infor asset criticality;
+      eMaint criticality as a standard field)*
+- [ ] `PRIORITY_CHOICES` = `low | medium | high | urgent` + `PRIORITY_CSS`
+      *(driver: MaintainX requests → prioritised work orders)*
+- [ ] `WORK_TYPE_CHOICES` = `preventive | corrective | breakdown | inspection | calibration | predictive |
+      safety` → `max_length=12` (`preventive` = 10, `inspection` = 10 — 12 gives headroom without a widen)
+      *(drivers: Infor's reactive→preventive→predictive→condition-based maturity curve; Odoo's preventive vs
+      corrective split; `calibration` reserves the slot `research-scm-4.9.md:581` parked here)*
+- [ ] `PROBLEM_CODE_CHOICES` = `no_start | overheating | vibration | leak | noise | jam_blockage |
+      electrical_fault | hydraulic_fault | wear | corrosion | calibration_drift | software_fault | other`
+- [ ] `CAUSE_CODE_CHOICES` = `lack_of_lubrication | contamination | misalignment | fatigue | overload |
+      operator_error | design_defect | material_defect | environmental | age_wear | improper_install |
+      unknown | other`
+- [ ] `REMEDY_CODE_CHOICES` = `repair | replace_part | adjust_align | lubricate | clean | recalibrate |
+      software_update | operator_retrain | no_action | monitor | other`
+      *(all three drivers: **Maximo's failure hierarchy** — failure class → problem → cause → remedy, the
+      canonical model; SAP's damage/cause catalogs; Fiix custom failure codes. This closed vocabulary is what
+      makes the failure-analysis view possible with no sensor stack.)*
+- [ ] `METER_SOURCE_CHOICES` = `manual | work_order | sensor` — `sensor` is the seam left open for 11.7 /
+      IoT ingestion; nothing writes it this pass.
+- [ ] `MAX_LABOUR_RATE = Decimal("100000")` — the ceiling on `MaintenanceWorkOrder.labour_rate`. Same reasoning
+      as `WorkCenters.py:60-67`: `q4()` **clamps** rather than errors, editing is only `@login_required`, and an
+      uncapped rate silently poisons the TCO/depreciation report every other page reads.
+
+### Model 1 — `Asset` [`AST-`] + child `AssetSparePart` · `models/AssetManagement/Assets.py`
+
+*The Asset Registry bullet, and the operational asset spine Module 11 will extend.* Drivers: the asset master
+record (all 10 leaders); multi-level hierarchy to component level (Limble, MaintainX "attribute costs",
+Fiix drag-and-drop tree, SAP functional-location + equipment); asset ↔ location; custodian/team; criticality;
+lifecycle status; warranty terms + expiry (UpKeep, eMaint); QR/barcode tag (Limble, MaintainX, Fiix, UpKeep);
+specifications; **asset ↔ production work centre (Odoo raises maintenance requests from the work-center control
+panel — this is the SCM-specific differentiator)**; and the financial link (Oracle→Fusion Financials,
+SAP→FI-AA, Maximo procurement-to-decommissioning).
+
+- [ ] `class Asset(TenantNumbered)` — `NUMBER_PREFIX = "AST"`
+  - `ASSET_TYPE_CHOICES` = `machine | vehicle | forklift | conveyor | rack | tool | facility | it_equipment |
+    other` → `asset_type = CharField(max_length=14, default="machine")` *(the longest value `it_equipment` is
+    12; 14 is deliberate headroom — the 4.10 lesson that a 15-char value into a `max_length=14` column is a
+    widen, not "a one-line migration")*
+  - `STATUS_CHOICES` = `planned | in_service | under_maintenance | standby | idle | retired | disposed` →
+    `status = CharField(max_length=18, default="in_service")` + `STATUS_CSS`
+    *(drivers: Maximo/Infor/UpKeep/eMaint lifecycle states; mirrors `NavERP.md:1701` (11.3). Deliberately a
+    DIFFERENT vocabulary from `accounting.FixedAsset.status` ∈ {cip, active, disposed} — the operational states
+    belong here, the financial ones there, and neither writes the other.)*
+    **Decision to record in the docstring: `status` is USER-EDITABLE and the work-order verbs never write it.**
+    "Down right now" is a **derived** chip from open breakdown jobs (`downtime_start` set, `downtime_end`
+    null) — one writer per column, no drift.
+  - `criticality` ← `CRITICALITY_CHOICES`, default `medium`
+  - `code = CharField(max_length=32)` · `name = CharField(max_length=255)`
+  - `category = CharField(max_length=120, blank=True)` — **plain text, deliberately NOT a FK to
+    `scm.ItemCategory`**: an asset family is not an item taxonomy, and overloading it would make the item
+    category list unusable. Matches `accounting.FixedAsset.category` (also `CharField(120)`), which makes the
+    depreciation report read consistently.
+  - `manufacturer = CharField(max_length=120, blank=True)` · `model_number = CharField(max_length=64,
+    blank=True)` · `serial_number = CharField(max_length=64, blank=True)`
+  - `tag_code = CharField(max_length=64, blank=True)` — the QR/barcode VALUE, printable now; camera scanning is
+    deferred. **Unique per tenant when non-blank** — enforce in `clean()` (a `unique_together` would forbid a
+    second blank on MariaDB only if blanks were NULL, and they are `""`).
+  - `specifications = TextField(blank=True)` — capacity / voltage / rated output. A real user-defined-field
+    engine is 11.3's "Custom Attributes", not a 4.13 table.
+  - `commissioned_on` / `purchase_date` / `warranty_expires_on` = `DateField(null=True, blank=True)`
+  - `purchase_cost = DecimalField(14, 2, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_Q2)])`
+  - `meter_name = CharField(max_length=40, blank=True)` + `meter_unit = CharField(max_length=16, blank=True)`
+    — the asset's PRIMARY meter *definition* only. **There is no `current_reading` column** — the reading lives
+    in `MeterReading` (see Model 4) so nothing can drift.
+  - `is_active = BooleanField(default=True)` · `notes = TextField(blank=True)`
+  - **Verified FKs (all by string):**
+    - `parent` → `"self"` `SET_NULL, null, blank, related_name="children"` — the `Location.parent`
+      (`Locations.py:30`) precedent. `clean()` **must** reject self-parenting, a cross-tenant parent, and a
+      cycle (walk ancestors with a hard depth cap, e.g. 20, so a pre-existing loop cannot hang the request).
+    - `location` → `"scm.Location"` `SET_NULL, null, blank, related_name="assets"`
+    - `org_unit` → `"core.OrgUnit"` `SET_NULL, null, blank, related_name="scm_assets"`
+    - `work_center` → `"scm.WorkCenter"` `SET_NULL, null, blank, related_name="assets"` — **the SCM
+      differentiator**; taking a machine down is a fact 4.8's load board needs.
+    - `custodian` → `"core.Party"` `SET_NULL, null, blank, related_name="scm_custodian_assets"`
+    - `supplier` → `"core.Party"` `… related_name="scm_supplied_assets"`
+    - `service_vendor` → `"core.Party"` `… related_name="scm_serviced_assets"`
+    - `fixed_asset` → `"accounting.FixedAsset"` `SET_NULL, null, blank, related_name="scm_assets"` —
+      **the depreciation link and nothing more.** 4.13 stores no method, no salvage, no accumulated figure and
+      posts no `JournalEntry` (L29).
+  - `Meta`: `ordering = ["code"]`, `unique_together = (("tenant", "code"), ("tenant", "number"))`,
+    indexes `scm_ast_tnt_status_idx` (tenant, status) · `scm_ast_tnt_crit_idx` (tenant, criticality) ·
+    `scm_ast_tnt_loc_idx` (tenant, location) · `scm_ast_tnt_wty_idx` (tenant, warranty_expires_on) ·
+    `scm_ast_tnt_active_idx` (tenant, is_active)
+  - **Derived, NEVER stored** (methods/properties, each documented with its arithmetic):
+    `open_job_count()` · `is_down_now()` · `downtime_minutes(since=None)` · `failure_count(since=None)` ·
+    `mtbf_hours()` (uptime ÷ failures; **returns None, not 0, when failures == 0** — a divide-by-zero guard
+    that must not render as a confident zero) · `mttr_hours()` (total repair downtime ÷ completed breakdown
+    jobs, same None guard) · `availability_pct()` · `maintenance_cost_to_date()` (parts + labour + external
+    over the job history) · `next_pm_due()` · `latest_reading()` · `warranty_chip()` (expired / expiring in
+    ≤60d / in force / not recorded — a **derived chip, not a stored flag**, the 4.12 licence-expiry precedent)
+  - **Form excludes:** `tenant`, `number` (auto `AST-`), `created_at`, `updated_at`. Everything else is
+    editable, `status` included (see the decision above).
+- [ ] `class AssetSparePart(models.Model)` — tenant-less child, reached through `asset__tenant`
+      *(drivers: Maximo asset spare-parts list, Oracle 360° asset "parts list", Limble "associated assets",
+      Fiix per-machine parts consumption)*
+  - `asset` → `"scm.Asset"` `CASCADE, related_name="spare_parts"`
+  - `item` → `"scm.Item"` `PROTECT, related_name="asset_spare_parts"` — **reuses 4.3's ONE item master.
+    There is no `SparePart` table.**
+  - `quantity_per_service = DecimalField(14, 4, default=1, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_Q4)])` written through `q4()`
+  - `is_critical = BooleanField(default=False)` · `notes = CharField(max_length=255, blank=True)`
+  - `Meta`: `unique_together = ("asset", "item")`, `ordering = ["item__sku"]`,
+    index `scm_asp_asset_idx` (asset)
+  - **Form excludes:** `asset` (taken from the parent route, never from POST — a pk in the body would let a
+    caller graft a line onto somebody else's asset).
+
+### Model 2 — `MaintenancePlan` [`PM-`] + child `MaintenancePlanTask` · `models/AssetManagement/MaintenancePlans.py`
+
+*The Preventive Maintenance bullet.* Drivers: calendar/fixed-interval PM (all 10); meter/usage PM (Maximo
+"time and/or meter-based frequency", SAP counter plans, MaintainX time-used/mileage/temperature/pressure);
+**Oracle names the forecast methods outright — calendar, meter, combined calendar+meter, condition event**;
+floating-vs-fixed next-due (SAP cycle/offset/shift factors, reduced to a two-value choice); automatic
+generation ahead of the due date (SAP *call horizon*, Oracle PM *forecast* window, Maximo PM generation,
+MaintainX recurring WOs); job plan / task list / procedure checklist (Maximo job plans, SAP task lists,
+MaintainX procedures, Limble PM templates); estimated duration + assigned technician.
+
+- [ ] `class MaintenancePlan(TenantNumbered)` — `NUMBER_PREFIX = "PM"`
+  - `TRIGGER_CHOICES` = `calendar | meter | combined | condition` → `trigger_type = CharField(max_length=10,
+    default="calendar")` + `TRIGGER_CSS` *(driver: Oracle's four forecast methods, verbatim)*
+  - `SCHEDULE_BASIS_CHOICES` = `floating | fixed` → `schedule_basis = CharField(max_length=8,
+    default="floating")` — floating = next due measured from LAST COMPLETION; fixed = from the calendar
+    regardless. *(driver: SAP's cycle/offset/shift-factor machinery, reduced to the one bit that matters.)*
+  - `CONDITION_OPERATOR_CHOICES` = `gte | lte` → `condition_operator = CharField(max_length=4, blank=True)`
+  - `name = CharField(max_length=255)` · `instructions = TextField(blank=True)` ·
+    `is_active = BooleanField(default=True)`
+  - `interval_days = PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(1),
+    MaxValueValidator(3650)])` — **capped**, it is fed straight to `timedelta(days=…)`
+  - `lead_time_days = PositiveIntegerField(default=7, validators=[MaxValueValidator(365)])` — the call horizon
+  - `meter_interval` / `next_due_reading` / `condition_threshold` = `DecimalField(14, 4, null=True, blank=True,
+    validators=[MinValueValidator(ZERO), MaxValueValidator(MAX_Q4)])`
+  - `next_due_on = DateField(null=True, blank=True)`
+  - `last_completed_on = DateField(null=True, blank=True, editable=False)` — stamped by the work-order
+    **complete** verb (L22: a system timestamp is never a form field)
+  - `last_generated_on = DateField(null=True, blank=True, editable=False)` — stamped by the **generate** action
+  - `estimated_hours = DecimalField(6, 2, default=1, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(Decimal("999.99"))])`
+  - `priority` ← `PRIORITY_CHOICES`, default `medium` · `work_type` ← `WORK_TYPE_CHOICES`, default
+    `preventive` (what the generated job is stamped with)
+  - **Verified FKs:** `asset` → `"scm.Asset"` `CASCADE, related_name="maintenance_plans"` ·
+    `assigned_to` → `"core.Party"` `SET_NULL, null, blank, related_name="scm_maintenance_plans"` ·
+    `parts_location` → `"scm.Location"` `SET_NULL, null, blank, related_name="maintenance_plans"`
+    (the storeroom a generated job defaults to)
+  - `clean()`: the trigger contract — `calendar` requires `interval_days`; `meter` requires `meter_interval`
+    (and the asset must have a `meter_name`); `combined` requires both; `condition` requires
+    `condition_operator` **and** `condition_threshold`. Plus: `asset.tenant` must equal the plan's tenant
+    (a crafted POST must be refused even though the dropdown never offered the row).
+  - Methods: `days_until_due(today)` · `meter_gap()` (against the asset's latest `MeterReading`) ·
+    `is_due(today)` — for `combined`, due = **whichever comes first** · `due_status(today)` →
+    `overdue | due_today | due_soon | scheduled | not_scheduled` + `DUE_STATUS_CSS` ·
+    `advance(from_date)` — the floating-vs-fixed next-due arithmetic, one place only.
+  - `Meta`: `ordering = ["-id"]`, `unique_together = ("tenant", "number")`,
+    indexes `scm_pm_tnt_active_idx` · `scm_pm_tnt_due_idx` (tenant, next_due_on) ·
+    `scm_pm_tnt_asset_idx` (tenant, asset) · `scm_pm_tnt_trig_idx` (tenant, trigger_type)
+  - **Form excludes:** `tenant`, `number`, `last_completed_on`, `last_generated_on`.
+- [ ] `class MaintenancePlanTask(models.Model)` — the job plan / task list, tenant-less child
+  - `plan` → `CASCADE, related_name="tasks"` · `sequence = PositiveIntegerField(default=10,
+    validators=[MaxValueValidator(9999)])` · `description = CharField(max_length=255)` ·
+    `expected_result = CharField(max_length=255, blank=True)` · `is_mandatory = BooleanField(default=True)` ·
+    `is_safety_step = BooleanField(default=False)` *(Maximo embeds safety plans / permits / LOTO in job plans;
+    until 11.11 exists they ride as flagged tasks)*
+  - `Meta`: `ordering = ["sequence", "id"]`, index `scm_pmt_plan_seq_idx` (plan, sequence)
+  - Edited as an **inline formset on the plan form** (the `TradeDocumentLine` / `PurchaseOrderLine`
+    precedent) — parent + lines commit in ONE `transaction.atomic()`, and because that path bypasses
+    `crud_edit`, it must call `write_audit_log(..., changes=_changed(form))` itself.
+- [ ] **Generate action** (`maintenanceplan_generate`, POST-only, `transaction.atomic()`): creates a
+      `MaintenanceWorkOrder` (`source="plan"`, `work_type` / `priority` / `assigned_to` / `parts_location` /
+      `estimated_hours` copied from the plan), **SNAPSHOTS the tasks onto `MaintenanceWorkOrderTask`**,
+      advances `next_due_on` / `next_due_reading`, stamps `last_generated_on`. *Snapshot, don't reference* —
+      the 4.9 `QualityInspection`/`InspectionResult` precedent: editing a plan must never rewrite a completed
+      job's record. **Explicit user action only — never a silent background auto-post** (the 4.3 reorder-alert
+      precedent). Refuse (message, no row) when the plan is inactive or already has an open job.
+
+### Model 3 — `MaintenanceWorkOrder` [`MWO-`] + children `…Part` / `…Task` · `models/AssetManagement/MaintenanceWorkOrders.py`
+
+*The Breakdown Maintenance bullet — and the execution record for PM too.* Drivers: request/notification intake
+(SAP splits notification from order; Maximo service requests; MaintainX/Limble work requests a manager
+converts); corrective/breakdown job with priority, assignment, due date (all 10); downtime start/stop and
+unplanned-downtime totals (Limble per-asset unplanned downtime, MaintainX logs downtime "at the moment it
+occurs", Fiix uptime/downtime KPIs); Maximo failure hierarchy; labour time & cost; external contractor (Infor
+outsourced-maintenance billing, eMaint POs on work orders); meter reading captured at the moment of work
+(Oracle prompts for a mandatory reading); parts assigned → issued (MaintainX "where every part stands from
+assigned to issued", Limble "track inventory in real time as it's used").
+
+> **This is NOT `scm.WorkOrder` [WO-].** The production run carries `item`, `bom`, `quantity_planned`,
+> `quantity_produced`, `component_location`/`output_location` (`WorkOrders.py:59-100`) — none of which a repair
+> has — and its `status` is written only by the production verbs. Overloading it would corrupt 4.8's MRP
+> netting, load board and OEE. **Separate document, separate prefix (`MWO-` vs `WO-`), separate url prefix
+> (`maintenance-work-orders/` vs `work-orders/`), separate templates.** Equally: it is **ONE** table covering
+> requests, PM jobs and breakdowns — `status="requested"` + `reported_by` is the intake, not a second request
+> table. Same call 4.9 made for audit findings vs NCRs (`navigation.py:859-868`); a split would fork every
+> MTTR and downtime query.
+
+- [ ] `class MaintenanceWorkOrder(TenantNumbered)` — `NUMBER_PREFIX = "MWO"`
+  - `work_type` ← `WORK_TYPE_CHOICES` (default `corrective`) · `priority` ← `PRIORITY_CHOICES` (default
+    `medium`)
+  - `SOURCE_CHOICES` = `plan | request | condition | inspection` → `source = CharField(max_length=10,
+    default="request")`
+  - `STATUS_CHOICES` = `requested | approved | scheduled | in_progress | on_hold | completed | closed |
+    cancelled` → `status = CharField(max_length=12, default="requested", **editable=False**)` + `STATUS_CSS`
+    — **verb-driven only**, the 4.8 `WorkOrder.status` precedent. It must not appear on the form, and a
+    crafted `status=` in POST must be impossible because the field is not in `Meta.fields`.
+  - `title = CharField(max_length=255)` · `description = TextField(blank=True)` ·
+    `resolution_notes = TextField(blank=True)`
+  - `reported_at = DateTimeField(default=timezone.now)` (editable — an operator back-dates a fault) ·
+    `scheduled_start = DateTimeField(null=True, blank=True)` (editable)
+  - `started_at` / `completed_at` = `DateTimeField(null=True, blank=True, **editable=False**)` — stamped by
+    the start/complete verbs (L22)
+  - `downtime_start` / `downtime_end` = `DateTimeField(null=True, blank=True)` (editable — a technician
+    corrects the window afterwards)
+  - `downtime_minutes = PositiveIntegerField(default=0, **editable=False**)` — **derived in `save()`** from
+    the pair and clamped to a ceiling (the `ProductionTimeLog.duration_minutes` precedent,
+    `ProductionTimeLogs.py:102-115`). `clean()` refuses `downtime_end < downtime_start`.
+  - `is_unplanned_downtime = BooleanField(default=False)`
+  - `problem_code` / `cause_code` / `remedy_code` ← the three `_choices.py` catalogs, `blank=True`
+  - `labour_hours = DecimalField(8, 2, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(Decimal("9999.99"))])`
+  - `labour_rate = DecimalField(14, 4, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_LABOUR_RATE)])` — **capped for the reason `WorkCenters.py:60-67` spells out**
+  - `external_cost = DecimalField(14, 2, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_Q2)])` — the contractor's charge. **Drafting an `accounting.Bill` from it is
+    DEFERRED** (the `FreightInvoice.bill` pattern is proven and small, but it is a second hand-off in a pass
+    that already has one).
+  - `meter_reading_at_work = DecimalField(14, 4, null=True, blank=True, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_Q4)])` — optional; the **complete** verb turns it into a `MeterReading` row
+    (`source="work_order"`, `reference=<MWO number>`).
+  - **Verified FKs:** `asset` → `"scm.Asset"` `PROTECT, related_name="work_orders"` ·
+    `plan` → `"scm.MaintenancePlan"` `SET_NULL, null, blank, related_name="work_orders"` ·
+    `reported_by` / `assigned_to` / `service_vendor` → `"core.Party"` `SET_NULL, null, blank` with
+    related_names `scm_reported_maintenance_orders` / `scm_assigned_maintenance_orders` /
+    `scm_vendor_maintenance_orders` · `parts_location` → `"scm.Location"` `SET_NULL, null, blank,
+    related_name="maintenance_work_orders"` · `non_conformance` → `"scm.NonConformance"` `SET_NULL, null,
+    blank, related_name="maintenance_work_orders"` — **a link out to 4.9 by reference; 4.13 adds no RCA table
+    and does NOT touch `NonConformance.source`** (refactoring a shipped sub-module for a convenience link is
+    what 4.11 refused to do).
+  - Derived: `parts_cost()` · `labour_cost()` (`labour_hours × labour_rate`) · `total_cost()` (parts + labour
+    + external) · `duration_hours()` · `is_on_time()` (completed on/before the plan's due date — the PM
+    compliance input) · `open_task_count()`
+  - `Meta`: `ordering = ["-reported_at", "-id"]`, `unique_together = ("tenant", "number")`,
+    indexes `scm_mwo_tnt_status_idx` · `scm_mwo_tnt_asset_idx` (tenant, asset) ·
+    `scm_mwo_tnt_type_idx` (tenant, work_type) · `scm_mwo_tnt_rep_idx` (tenant, reported_at) ·
+    `scm_mwo_tnt_prio_idx` (tenant, priority)
+  - **Form excludes:** `tenant`, `number`, `status`, `started_at`, `completed_at`, `downtime_minutes`.
+- [ ] `class MaintenanceWorkOrderPart(models.Model)` — tenant-less child, reached through `work_order__tenant`
+  - `work_order` `CASCADE, related_name="parts"` · `item` → `"scm.Item"` `PROTECT,
+    related_name="maintenance_parts"` · `lot_serial` → `"scm.LotSerial"` `SET_NULL, null, blank,
+    related_name="maintenance_parts"`
+  - `quantity = DecimalField(14, 4, validators=[MinValueValidator(ZERO), MaxValueValidator(MAX_Q4)])`
+  - `unit_cost = DecimalField(14, 4, default=0, **editable=False**)` — stamped from `item.average_cost` **at
+    issue time**, so the job's cost is what the stock actually cost then, not what it costs today
+  - `is_issued = BooleanField(default=False, **editable=False**)` ·
+    `issued_at = DateTimeField(null=True, blank=True, **editable=False**)`
+  - `Meta`: `ordering = ["id"]`, index `scm_mwop_wo_idx` (work_order)
+  - **Form excludes:** `work_order`, `unit_cost`, `is_issued`, `issued_at`. Edited as an inline formset on the
+    MWO form; the formset queryset for `item`/`lot_serial` is scoped to `work_order.tenant`.
+- [ ] `class MaintenanceWorkOrderTask(models.Model)` — the SNAPSHOTTED checklist, tenant-less child
+  - `work_order` `CASCADE, related_name="tasks"` · `sequence` · `description` (255) ·
+    `expected_result` (255, blank) · `is_mandatory` · `is_safety_step` — **plain snapshot columns copied from
+    `MaintenancePlanTask` at generate time; there is deliberately NO FK back to the plan task** (the 4.9
+    `InspectionResult` precedent — editing a plan must not rewrite a completed job).
+  - `is_done = BooleanField(default=False)` · `actual_result = CharField(max_length=255, blank=True)` ·
+    `completed_at = DateTimeField(null=True, blank=True, editable=False)`
+  - `Meta`: `ordering = ["sequence", "id"]`, index `scm_mwot_wo_seq_idx` (work_order, sequence)
+  - Ticked off from the MWO detail page via a small POST route — no separate template.
+
+### Model 4 — `MeterReading` (no prefix, `TenantOwned`) · `models/AssetManagement/MeterReadings.py`
+
+*Append-only reading log.* Drivers: **Maximo's three meter kinds** (continuous runtime / gauge measurement /
+characteristic observation) driving both PM and condition monitoring; Oracle meter templates mass-associated to
+assets and updated from IoT; MaintainX per-meter insight over time; Fiix/UpKeep runtime tracking.
+
+> A reading **history** is what makes meter-based due dates, usage trends and condition triggers possible. A
+> single `current_reading` column on `Asset` cannot produce them and would be a mutable number with two
+> writers — the exact drift 4.3 and 4.8 were built to avoid. Same append-only philosophy as `StockMove`.
+
+- [ ] `class MeterReading(TenantOwned)`
+  - `asset` → `"scm.Asset"` `CASCADE, related_name="meter_readings"` ·
+    `recorded_by` → `"core.Party"` `SET_NULL, null, blank, related_name="scm_meter_readings"`
+  - `meter_name = CharField(max_length=40)` · `unit = CharField(max_length=16, blank=True)`
+  - `reading = DecimalField(14, 4, validators=[MinValueValidator(ZERO), MaxValueValidator(MAX_Q4)])` through
+    `q4()`
+  - `read_at = DateTimeField(default=timezone.now)` · `source` ← `METER_SOURCE_CHOICES`, default `manual`
+  - `reference = CharField(max_length=40, blank=True)` — the MWO number when captured on a job ·
+    `notes = CharField(max_length=255, blank=True)`
+  - `Meta`: `ordering = ["-read_at", "-id"]`, indexes `scm_mtr_tnt_asset_idx` (tenant, asset, read_at) ·
+    `scm_mtr_tnt_read_idx` (tenant, read_at)
+  - **Form excludes:** `tenant`.
+- [ ] **Documented CRUD exception — write it into the model docstring AND the url module docstring so no
+      reviewer flags it as an omission.** `MeterReading` gets **list + create + detail and NO edit, NO delete**
+      — exactly like `scm.StockMove` (`StockMoves.py:1-9`: "never edited or deleted — no form, no admin write,
+      no delete view"). A wrong reading is corrected by posting a later reading. Register it **read-only** in
+      `admin.py` (the `StockMoveAdmin` posture at `admin.py:194`).
+
+### Additive changes to shipped 4.3 models (no new tables)
+
+- [ ] **`scm.Item` += `is_spare_part = BooleanField(default=False, help_text="MRO part held for maintenance;
+      shown on the spare-parts storeroom page")`** — and only that. Precedent: 4.4 added bin attributes to
+      `Location` (`Locations.py:34-44`), 4.7 extended `ReorderRule` in place. **Do not create a `SparePart`
+      table** — UoM, category, costing, on-hand and average cost all already exist on `Item`.
+      Additive, all-default, no backfill, no behaviour change. Add it to `ItemForm.Meta.fields` and to the
+      item list filter (`?spare=1`).
+- [ ] **`scm.StockMove.MOVE_TYPES` += `("maintenance", "Maintenance")`** — outbound MRO draw.
+      **`"maintenance"` is 11 chars and the column is `CharField(max_length=12)` (`StockMoves.py:37`) — this
+      needs NO column widen.** Verify that before writing; if it were 13 the migration would be a widen, not a
+      choices change.
+- [ ] **`apps/scm/analytics.py:177` — DO NOT change `COGS_MOVE_TYPES = ("issue", "consumption")`.** Add a
+      one-line comment there recording the decision, so a future tidy-up sweep does not "fix" the omission:
+      an MRO part drawn for a repair is **maintenance opex, not cost of goods**, so it must stay out of 4.11's
+      margin analytics (`analytics.py:889/958/988/1007/1026`). It must equally NOT be posted as `issue`, which
+      4.7 reads as **customer demand** (`analytics.py:1949`, `:2529`) and 4.11 reads for returns rate
+      (`:3628-3634`) — booking MRO draws there would inflate every forecast. It correctly **does** participate
+      in the FIFO/LIFO layer walk and aging, which exclude only `transfer` (`analytics.py:1054`), because the
+      part genuinely leaves stock.
+- [ ] `grep -rn "MOVE_TYPES\|move_type" apps/scm/ templates/scm/` and confirm every consumer of the choice
+      list tolerates the new value (filter dropdowns just gain an option; any hard-coded `if/elif` chain on
+      move type needs an `{% else %}` fallback — the badge rule).
+
+---
+
+## Backend (`apps/scm/{models,forms,views,urls}/AssetManagement/`)
+
+One `AssetManagement/` folder per layer, one `<Entity>.py` per entity, the four layers lining up one-to-one.
+**Absolute imports only** (`from apps.scm.models import Asset`); a relative `from .models import X` resolves one
+package too deep. Entity modules pull the toolkit via `from apps.scm.models._base import *` /
+`from apps.scm.forms._common import *` / `from apps.scm.views._common import *`.
+
+- [ ] `apps/scm/models/AssetManagement/__init__.py` (empty — the ContractCompliance precedent)
+- [ ] `apps/scm/models/AssetManagement/_choices.py`
+- [ ] `apps/scm/models/AssetManagement/Assets.py` — `Asset` + `AssetSparePart`
+- [ ] `apps/scm/models/AssetManagement/MaintenancePlans.py` — `MaintenancePlan` + `MaintenancePlanTask`
+- [ ] `apps/scm/models/AssetManagement/MaintenanceWorkOrders.py` — `MaintenanceWorkOrder` +
+      `MaintenanceWorkOrderPart` + `MaintenanceWorkOrderTask`
+- [ ] `apps/scm/models/AssetManagement/MeterReadings.py` — `MeterReading`
+- [ ] `apps/scm/models/InventoryManagement/Items.py` — add `is_spare_part`
+- [ ] `apps/scm/models/InventoryManagement/StockMoves.py` — add the `maintenance` move type + its comment
+
+- [ ] `apps/scm/forms/AssetManagement/__init__.py` (empty)
+- [ ] `apps/scm/forms/AssetManagement/Assets.py` — `AssetForm`, `AssetSparePartForm`
+- [ ] `apps/scm/forms/AssetManagement/MaintenancePlans.py` — `MaintenancePlanForm` +
+      `MaintenancePlanTaskFormSet` (inlineformset_factory)
+- [ ] `apps/scm/forms/AssetManagement/MaintenanceWorkOrders.py` — `MaintenanceWorkOrderForm` +
+      `MaintenanceWorkOrderPartFormSet`
+- [ ] `apps/scm/forms/AssetManagement/MeterReadings.py` — `MeterReadingForm` (create only)
+- [ ] **Every form subclasses `TenantModelForm`** (`apps/core/forms/_common.py`), takes `tenant=`, and
+      **narrows every FK queryset to that tenant** (`location`, `work_center`, `parent`, `asset`, `plan`,
+      `item`, `lot_serial`, `parts_location`, `fixed_asset`, `non_conformance`, and each `core.Party`
+      dropdown). Then **`clean()` re-checks the tenant of each chosen FK** — a narrowed dropdown is a UI
+      convenience, not an authorization boundary, and a crafted POST must be a field error rather than a saved
+      cross-tenant row (the 4.12 security finding).
+- [ ] `Meta.fields` is an explicit **whitelist** on every form — never `exclude`, never `"__all__"`. The
+      excluded-by-design set per model is listed above (tenant / number / status / `*_at` stamps / derived
+      `downtime_minutes` / `unit_cost` / `is_issued`).
+
+- [ ] `apps/scm/views/AssetManagement/__init__.py` (empty)
+- [ ] `apps/scm/views/AssetManagement/Assets.py` — `asset_list` (search + filters + pagination),
+      `asset_create`, `asset_detail`, `asset_edit`, `asset_delete`, plus the child routes
+      `asset_add_spare_part`, `assetsparepart_edit`, `assetsparepart_delete`
+- [ ] `apps/scm/views/AssetManagement/MaintenancePlans.py` — full CRUD + `maintenanceplan_generate`
+- [ ] `apps/scm/views/AssetManagement/MaintenanceWorkOrders.py` — full CRUD + the verbs
+      `_approve` `_schedule` `_start` `_hold` `_resume` `_complete` `_close` `_cancel` `_issue_parts`
+      `_record_reading`, plus `maintenanceworkordertask_toggle`
+- [ ] `apps/scm/views/AssetManagement/MeterReadings.py` — `meterreading_list`, `_create`, `_detail` **only**
+- [ ] `apps/scm/views/AssetManagement/Reports.py` — `pm_forecast`, `sparepart_list`,
+      `asset_depreciation_report`
+- [ ] **Every view:** function-based, `@login_required`, `Model.objects.filter(tenant=request.tenant)` with no
+      exceptions, `get_object_or_404(..., tenant=request.tenant)` on every pk lookup (children via
+      `asset__tenant` / `work_order__tenant` / `plan__tenant`). Audit via `write_audit_log`
+      (`apps/core/utils.py`) — the `crud_*` helpers in `apps/core/crud.py` call it automatically, but **every
+      hand-rolled save path and every verb must call it itself**.
+- [ ] **`@tenant_admin_required` on the privileged writes:** all five delete views, plus
+      `maintenanceworkorder_approve`, `_cancel`, `_issue_parts` (a ledger write) and `maintenanceplan_generate`
+      (it creates a document). Everything else is `@login_required`.
+- [ ] **Every verb is `@require_POST`** so a GET is a 405, not a silent state change. Each one validates the
+      status transition and answers with a message + redirect rather than a 500 on an illegal move; a
+      cross-tenant pk must be **404 before any 302**, not a redirect (the 4.12 finding).
+- [ ] **`_issue_parts` detail:** inside `transaction.atomic()`, for each un-issued part line —
+      `_insufficient_stock(item, location, qty, lot_serial)` first (a shortfall is a message, not an exception),
+      then `_post_stock_move(tenant, item=…, location=work_order.parts_location, quantity=-qty,
+      move_type="maintenance", unit_cost=item.average_cost, lot_serial=…, reference=work_order.number,
+      reason="Maintenance issue")` via `apps/scm/views/_helpers.py:130`. Stamp `unit_cost`, `is_issued=True`,
+      `issued_at`. Refuse the whole action when `parts_location` is unset.
+- [ ] **List filters (mandatory on every list page — pass the choices/querysets from the view, and compare pk
+      params with `|stringformat:"d"`, never `|slugify`):**
+  - `asset_list` — `q` (code / name / serial_number / tag_code / manufacturer / model_number),
+    `status`, `criticality`, `asset_type`, `location` (int), `work_center` (int), `org_unit` (int),
+    `warranty` (`expired` / `expiring` / `in_force`, derived — not a column), `is_active`
+  - `maintenanceplan_list` — `q` (name / number / asset code+name), `trigger_type`, `schedule_basis`,
+    `priority`, `asset` (int), `assigned_to` (int), `due` (`overdue` / `due_soon` / `scheduled`), `is_active`
+  - `maintenanceworkorder_list` — `q` (number / title / asset code+name), `status`, `work_type`, `priority`,
+    `asset` (int), `assigned_to` (int), `problem_code`, `date_from`/`date_to` on `reported_at`
+    (use the shared `_date_window` helper, `views/_helpers.py:88`)
+  - `meterreading_list` — `q` (meter_name / reference), `asset` (int), `source`, `date_from`/`date_to`
+  - Every int-valued param goes through `as_db_int` / the `crud_list` `(param, lookup, is_int)` spec so
+    `?asset=abc`, `?asset=²` and `?asset=999999999999999999999` **skip the filter rather than 500** (L11).
+- [ ] **Query hygiene** — `select_related("asset", "plan", "assigned_to", "location", "work_center",
+      "fixed_asset")` on every list/detail; `Exists()/OuterRef` rather than `Count()` where a template only asks
+      "are there any?" (`views/_common.py:20-23`); the spare-parts page computes on-hand with **one grouped
+      aggregate over `StockMove`**, never `item.on_hand()` per row.
+
+- [ ] `apps/scm/urls/AssetManagement/__init__.py` (empty)
+- [ ] `apps/scm/urls/AssetManagement/Assets.py` — prefixes `assets/` + `asset-spare-parts/`
+- [ ] `apps/scm/urls/AssetManagement/MaintenancePlans.py` — prefix `maintenance-plans/`
+- [ ] `apps/scm/urls/AssetManagement/MaintenanceWorkOrders.py` — prefix `maintenance-work-orders/`
+- [ ] `apps/scm/urls/AssetManagement/MeterReadings.py` — prefix `meter-readings/`
+- [ ] `apps/scm/urls/AssetManagement/Reports.py` — prefixes `pm-forecast/`, `spare-parts/`,
+      `asset-depreciation/`
+- [ ] **COLLISION CHECK, to be written into `urls/__init__.py` as a comment and re-verified against the WHOLE
+      concatenated urlconf (not just the 4.13 block):** seven new first segments, all free —
+      `assets/` · `asset-spare-parts/` · `asset-depreciation/` (nothing anywhere in `scm` starts with `asset`;
+      Django matches **whole path components** and never splits at a hyphen, so these three cannot shadow each
+      other) · `maintenance-plans/` · `maintenance-work-orders/` (**a distinct component from 4.8's
+      `work-orders/` — neither can shadow the other, and neither may be "tidied" to look like the other**) ·
+      `meter-readings/` · `pm-forecast/` · `spare-parts/`. 4.13 introduces **no** greedy `<str:…>` converter —
+      4.10's `return-tracking/<str:token>/` remains the module's only one. Within every module, literal routes
+      (`add/`) precede every `<int:pk>/` route, or the create page is swallowed and 404s as "asset 'add' not
+      found".
+- [ ] Child routes hang off their **own** pk (`asset-spare-parts/<int:pk>/edit/`), not nested under the
+      parent — a child pk already identifies it, and nesting invites a caller to pair a real child with
+      somebody else's parent id (the `compliance-checks/` docstring rationale).
+
+### Re-export blocks — **forgetting one is an ImportError at runtime, not at import time**
+
+- [ ] `apps/scm/models/__init__.py` — append a `# --- 4.13 Asset Management ---` block after the 4.12 block:
+      `from .AssetManagement._choices import *` first (it imports no sibling), then `Assets` (`Asset`,
+      `AssetSparePart`), `MaintenancePlans` (`MaintenancePlan`, `MaintenancePlanTask`),
+      `MaintenanceWorkOrders` (`MaintenanceWorkOrder`, `MaintenanceWorkOrderPart`,
+      `MaintenanceWorkOrderTask`), `MeterReadings` (`MeterReading`). Order is for the reader only — every FK is
+      declared by string.
+- [ ] `apps/scm/forms/__init__.py` — the four form modules + the two formsets
+- [ ] `apps/scm/views/__init__.py` — **every** view name, including all ten verbs and the three report views
+      (they are referenced as `views.<name>` from the urlconf; a missing name is an `AttributeError` at
+      startup)
+- [ ] `apps/scm/urls/__init__.py` — the six `from .AssetManagement.<X> import urlpatterns as _am_<x>` lines,
+      the six `*_am_<x>,` entries at the END of `urlpatterns`, and the collision-check comment block above them
+- [ ] `apps/scm/admin.py` — register `Asset`, `AssetSparePart` (inline on Asset), `MaintenancePlan` (+ task
+      inline), `MaintenanceWorkOrder` (+ part & task inlines), `MeterReading` (**read-only**, the
+      `StockMoveAdmin` posture). Add the `is_spare_part` column/filter to `ItemAdmin`.
+- [ ] `python manage.py makemigrations scm` → expect **`0022_…`**. **Read the generated file before applying**:
+      it must be `CreateModel` × 7 + `AddField` (`Item.is_spare_part`) + `AlterField`
+      (`StockMove.move_type`, choices only) + `AddIndex` × ~18 — and **zero** `RemoveField` / `DeleteModel` /
+      `RunPython` / `AlterField` that narrows an existing column.
+- [ ] **Extend `apps/scm/management/commands/seed_scm.py`** — a new `_seed_asset_tenant(tenant)` called from
+      `handle()` **after `_seed_compliance_tenant(tenant)`** (line ~127), with the same comment style
+      explaining the dependency: it hangs assets off 4.3's locations and 4.8's work centres, flips 4.3 items to
+      spare parts, and **issues real stock through the ledger** — so all of those must exist first.
+  - **Prerequisite guard:** if the tenant has no `Item`/`Location` (4.3) it must **warn and RETURN rather than
+    half-seed** (the 4.10/4.11/4.12 posture).
+  - **Idempotent:** `if Asset.objects.filter(tenant=tenant).exists(): print + return`. Auto-numbered rows use
+    the "check existence before creating" pattern; `Item.is_spare_part` is flipped with a guarded
+    `update()`/`save(update_fields=…)` that is a no-op on the second run; **the maintenance `StockMove` must be
+    posted exactly once** (guard on `reference=<MWO number>`).
+  - **Reuses existing seeded rows only** — `_employee()` / `_supplier()` for custodian, technician, service
+    vendor; `_org_unit()`; existing `Location` rows for the asset site and the parts storeroom; an existing
+    `WorkCenter` for the work-centre link; 2–3 existing `Item` rows flipped to `is_spare_part=True`.
+  - **Demo data:** 4 assets (a parent production line + a child component to exercise the hierarchy, a forklift,
+    a conveyor tied to a work centre — one of them **linked to an `accounting.FixedAsset`** and at least one
+    deliberately **unlinked**, so the depreciation report's coverage figure is exercised rather than faked);
+    3–4 `AssetSparePart` rows; 3 `MaintenancePlan`s (calendar+floating, meter-based, condition) with task
+    checklists; 5–6 `MeterReading`s forming a real rising trend so the meter-due arithmetic has data;
+    3 `MaintenanceWorkOrder`s — one **completed PM** with parts issued through the real
+    `_post_stock_move(move_type="maintenance")` path (the ONLY 4.13 ledger write), one **open breakdown** with
+    `downtime_start` set and `downtime_end` null (so `is_down_now()` and the MTTR guard are both exercised),
+    one **requested** intake.
+  - Update the final `SUCCESS` string to mention 4.13.
+  - **`_flush()`** — add a 4.13 block **FIRST** (newest sub-module, the existing convention): delete
+    `MeterReading`, `MaintenanceWorkOrder` (children cascade), `MaintenancePlan`, `Asset`, and the
+    `StockMove.objects.filter(tenant=…, move_type="maintenance")` rows it posted. Mirror exactly how the
+    existing flush handles 4.8's `consumption`/`production` moves — read it, don't guess.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **one new `LIVE_LINKS["4.13"]` entry**, appended after the `"4.12"` block
+      (which closes at `:935`; the dict closes at `:936`). The five keys are the **exact `**Feature**` bullet
+      text from `NavERP.md:818-822`**, verbatim:
+
+      "4.13": {
+          "Asset Registry":         "scm:asset_list",
+          "Preventive Maintenance": "scm:maintenanceplan_list",
+          "Breakdown Maintenance":  "scm:maintenanceworkorder_list",
+          "Spare Parts Inventory":  "scm:sparepart_list",
+          "Asset Depreciation":     "scm:asset_depreciation_report",
+      },
+
+      Plus the block comment recording the decisions, in the house style: the L36 ownership call
+      (`scm.Asset` is the operational asset spine; Module 11 extends it); **`MaintenanceWorkOrder` is NOT
+      4.8's `WorkOrder`** and why; **Spare Parts Inventory is a COMPUTED page over 4.3's `Item`/`StockMove`/
+      `ReorderRule` — there is no `SparePart` table** (the 4.4 "Bin/Location Management" → 4.3's
+      `scm:location_list` precedent); **Asset Depreciation is a COMPUTED report over `accounting.FixedAsset` —
+      SCM posts no `JournalEntry`** (L29); `MeterReading`, `AssetSparePart` and the two work-order children
+      take **no sidebar key** (the `WorkCenter` / `ReorderRule` / `InspectionPlan` / `ReturnReason` /
+      `KpiTarget` precedent); every bullet points at a **staff-facing** management page (L32).
+- [ ] **No `config/settings.py` change and no `config/urls.py` change** — `apps.scm` is already installed and
+      already included. Touching either on an extend run is the error this line exists to prevent.
+
+---
+
+## Templates (`templates/scm/assets/`)
+
+Two levels — sub-module folder then entity folder — with **bare page filenames**. Never a flat
+`<entity>_<page>.html`. All extend `base.html` and `{% include %}` the shared partials at the templates root.
+
+- [ ] `templates/scm/assets/asset/list.html`
+- [ ] `templates/scm/assets/asset/detail.html` — the 360° asset view: header chips (criticality, status,
+      warranty, down-now), the derived MTBF / MTTR / availability / downtime / maintenance-cost-to-date panel
+      **with each figure's arithmetic shown** (the 4.11 explainability rule) and **"—" rather than 0 when the
+      denominator is zero**; the spare-parts table with add/edit/delete; the maintenance-history table (this
+      asset's work orders); the recent meter readings; the children (sub-assets); the linked
+      `accounting.FixedAsset` card (cost / accumulated / book value, labelled as read from Accounting);
+      the Actions sidebar (Edit, Delete POST+confirm+csrf, Back to List)
+- [ ] `templates/scm/assets/asset/form.html`
+- [ ] `templates/scm/assets/assetsparepart/form.html`
+- [ ] `templates/scm/assets/maintenanceplan/list.html`
+- [ ] `templates/scm/assets/maintenanceplan/detail.html` — the trigger explained in words, the due
+      arithmetic, the task checklist, the generated-jobs history, the **Generate Work Order** POST button
+- [ ] `templates/scm/assets/maintenanceplan/form.html` — with the task inline formset
+- [ ] `templates/scm/assets/maintenanceworkorder/list.html`
+- [ ] `templates/scm/assets/maintenanceworkorder/detail.html` — the status ladder with each verb as a
+      POST+confirm form (only the legal next moves rendered), the downtime panel, the failure-code triple, the
+      parts table with the **Issue Parts** button and per-line issued state, the snapshotted task checklist
+      with per-task toggle, the cost breakdown (parts + labour + external), the Actions sidebar
+- [ ] `templates/scm/assets/maintenanceworkorder/form.html` — with the parts inline formset
+- [ ] `templates/scm/assets/meterreading/list.html` — with a visible note that readings are append-only and
+      corrected by a later reading (so the absent Edit/Delete reads as a decision, not a bug)
+- [ ] `templates/scm/assets/meterreading/detail.html`
+- [ ] `templates/scm/assets/meterreading/form.html` (create only)
+- [ ] `templates/scm/assets/pm_forecast.html` — **standalone report at the sub-module root** (rule 6):
+      plans due within `?days=N` (clamped 1..365), bucketed **overdue / due today / due soon**, each row with
+      its due arithmetic and a Generate POST button; plus the open-jobs board (requested → in_progress) folded
+      in, so the dispatch view does not need a sixth destination
+- [ ] `templates/scm/assets/spare_parts.html` — the MRO storeroom: `Item(is_spare_part=True)` with derived
+      on-hand per location, the `ReorderRule` min/max, a below-reorder chip, maintenance consumption over the
+      window, and the existing one-click hand-off into 4.1's requisition. States on the page that it is 4.3's
+      ledger, not a second parts catalogue.
+- [ ] `templates/scm/assets/asset_depreciation.html` — per asset: acquisition cost / accumulated depreciation /
+      book value **read from the linked `accounting.FixedAsset`**, maintenance spend to date, and the
+      repair-vs-replace ratio (spend ÷ book value) **with the division shown** and a threshold chip. Assets
+      with no `fixed_asset` link are reported as an explicit **coverage/unlinked count** and excluded from the
+      ratio; a zero book value yields **None, never infinity** (the 4.12 carbon-report "coverage, not a
+      confident zero" rule). A standing note that the statutory depreciation figures and their GL postings
+      belong to `apps.accounting` — SCM only reads them (L29).
+- [ ] **Every list template:** filter bar reflecting `request.GET` (string params `{% if request.GET.x == v %}`,
+      pk params `{% if request.GET.x == o.pk|stringformat:"d" %}`), an **Actions column** with View (eye) /
+      Edit (pencil) / Delete (bin, POST form + `onclick="return confirm(...)"` + `{% csrf_token %}`),
+      pagination guarded with `{% if page_obj.has_previous %}` / `{% if page_obj.has_next %}` (L9), and an
+      empty-state row. Badges use **only** `badge-green / badge-red / badge-amber / badge-info / badge-muted /
+      badge-slate`, driven by the model's `*_CSS` dict, always with an `{% else %}` fallback to
+      `{{ obj.get_<field>_display }}`.
+- [ ] **Every detail template:** an Actions sidebar with Edit, Delete (POST+confirm+csrf) and Back to List —
+      except `meterreading/detail.html`, which has Back to List only (the append-only exception).
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` — read `0022_…` before applying; confirm additive-only (see the
+      backend section for the exact expected operation list)
+- [ ] `python manage.py migrate` against `nav_erp`
+- [ ] `python manage.py seed_scm` **twice** — the second run is a no-op: no duplicate `Asset`, no second
+      `maintenance` `StockMove`, no re-flip of `is_spare_part`
+- [ ] `python manage.py check` — clean (in particular: no `fields.E304/E305` reverse-accessor clash from the
+      new `related_name`s, no `models.E006` field clash, no index-name collision)
+- [ ] `temp/` smoke sweep, logged in as **`admin_acme` / `password`**:
+  - every new `scm:*` url returns **200** (GET pages) or **302** (verb POSTs) — `asset_list/_create/_detail/
+    _edit`, `assetsparepart_*`, `maintenanceplan_*` incl. `_generate`, `maintenanceworkorder_*` incl. all ten
+    verbs, `meterreading_list/_create/_detail`, `pm_forecast`, `sparepart_list`, `asset_depreciation_report`
+  - content assertions: page titles present, a seeded `AST-`/`PM-`/`MWO-` number visible on its list page,
+    **no `{#` or `{% comment` leaks**, no `badge-success`/`badge-warning`/`badge-danger` anywhere in the new
+    templates
+  - **cross-tenant IDOR → 404** on every detail / edit / delete / verb route, children included (reached via
+    `asset__tenant` / `work_order__tenant` / `plan__tenant`)
+  - **GET to every POST-only verb → 405**
+  - a plain (non-admin) member → **403** on all five deletes and on `_approve` / `_cancel` / `_issue_parts` /
+    `maintenanceplan_generate`
+  - junk filter values (`?asset=abc`, `?asset=²`, `?asset=99999999999999999999`, `?days=-1`, `?days=abc`)
+    leave the filter OFF and return **200, never 500** (L11)
+  - both report pages render **200 on an empty tenant** without a 500 and report coverage rather than a
+    confident zero
+- [ ] **Regression checks specific to the two additive changes:**
+  - `scm:workorder_list` (4.8 production) still resolves and is untouched; `scm:asset_list` and
+    `scm:workorder_list` are distinct pages
+  - `COGS_MOVE_TYPES` is still exactly `("issue", "consumption")` — assert it in a test
+  - after `_issue_parts`, the part **does** disappear from `scm:valuation_report` / `scm:on_hand_by_location`
+    (it left stock) and **does not** appear as COGS in `scm:margin_analytics`, nor as demand in
+    `scm:forecast_accuracy_report` / `scm:safety_stock_report`
+  - `scm:item_list` still renders with the new `is_spare_part` column/filter and no existing item's behaviour
+    changed
+- [ ] Sidebar shows **4.13 Asset Management** as Live with all **five** bullets linked (parse
+      `NavERP.md:817-822` through `parse_catalog()` — the bullet text must match `LIVE_LINKS` exactly or the
+      link silently does not render)
+
+---
+
+## Close-out
+
+- [ ] `code-reviewer` → apply → commit (one file per commit)
+- [ ] `explorer` → apply → commit
+- [ ] `frontend-reviewer` → apply → commit
+- [ ] `performance-reviewer` → apply → commit
+- [ ] `qa-smoke-tester` → apply → commit
+- [ ] `security-reviewer` → apply → commit
+- [ ] `test-writer` → apply → commit. Minimum coverage: model tests (auto-number, the `downtime_minutes`
+      derivation, the parent-cycle guard, the trigger `clean()` contract, MTBF/MTTR **None** on a zero
+      denominator, the plan `advance()` floating-vs-fixed arithmetic); form tests (whitelist coverage, tenant
+      stamping, FK querysets scoped, a crafted cross-tenant FK rejected by `clean()`, a crafted `status=` on
+      the MWO form absent from `cleaned_data`); view tests (every list with and without each filter incl. junk
+      values, the full CRUD round trip, the complete verb ladder, `_issue_parts` posting exactly one
+      `maintenance` StockMove of the right sign and refusing on a shortfall, the generate action snapshotting
+      tasks and advancing the plan, 405 on GET to every verb); security tests (cross-tenant 404 on every
+      detail/edit/verb, 403 for a plain member on every tenant-admin route, `MeterReading` having no
+      edit/delete route at all).
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — it **exists** (verified), so this is an update, not a
+      creation. Add 4.13's models, the `scm:*` url names (including all ten MWO verbs and the three report
+      pages), the `templates/scm/assets/` tree, the `_seed_asset_tenant` rows, the `LIVE_LINKS["4.13"]` block,
+      and — importantly — a **"`MaintenanceWorkOrder` vs `WorkOrder`" gotcha section** plus the `maintenance`
+      move-type / `COGS_MOVE_TYPES` rule, so the next session cannot re-conflate them.
+- [ ] `README.md` — add 4.13 to the SCM feature list (line ~71-77) and move 4.13 out of the "remaining
+      4.13–4.19" sentence.
+- [ ] Reconcile `NavERP-ERD.md:473` + `:490-491` to name `scm.Asset` as the shared asset anchor that
+      Accounting's `FixedAsset` links to (the L36 "reconcile the ERD for BOTH modules in the same pass" rule).
+- [ ] **One file per commit, PowerShell-safe (`;` not `&&`). Never `git push`.**
+
+---
+
+## Later passes / deferred
+
+Carried over from `research-scm-4.13.md` so nothing is lost, plus what this plan itself cut.
+
+**Cut by this plan (a decision, not an omission):**
+- **A `current_reading` column on `Asset`** — the research's 3-model fallback. Rejected: it is a mutable number
+  with two writers and no history, which is the exact drift 4.3/4.8 were built to avoid. `MeterReading` stays.
+- **Drafting an `accounting.Bill` from `external_cost`** — the `FreightInvoice.bill` pattern is proven and
+  small, but this pass already carries one accounting hand-off (`FixedAsset`). Next pass.
+- **A hard `NonConformance.source = "maintenance"` value** — `non_conformance` is a nullable FK out; 4.13 does
+  not refactor a shipped 4.9 model for a convenience link (the 4.11 posture). Price it first:
+  `NonConformance.source` is `max_length=14`.
+
+**Deferred from the research (later passes / integrations):**
+- IoT / sensor ingestion and automatic condition alerts (Maximo Condition Monitoring, eMaint+Fluke, UpKeep
+  sensors, Fiix+Rockwell) — needs an external feed; `MeterReading.source="sensor"` and the `condition` trigger
+  leave the seam open. 11.7 owns it.
+- Predictive/AI failure diagnostics and expected-next-failure dates — Odoo's MTBF-derived estimate is the one
+  cheap piece and is a candidate for a follow-up derived chip; Fiix Foresight / Tractian is Module 10.13, and
+  a NavERP page never says "AI".
+- Multi-technician labour intervals per job (the `ProductionTimeLog` shape applied to maintenance) — one
+  assignee + header hours covers this pass.
+- Nested / multi-asset PM plans and PM route sheets (Fiix) — needs a plan↔asset M2M. One plan = one asset here;
+  a fleet is N plans.
+- Parts-need forecasting from the PM schedule (Fiix parts forecaster, Limble bulk-buy forecast) — needs
+  plan-level parts lists; revisit once `MaintenancePlanTask` and `AssetSparePart` carry real data.
+- Auto-creating a `PurchaseRequisition` from a per-work-order parts shortage — 4.3's storeroom reorder-alert
+  hand-off already exists; wiring it from an individual job is a follow-up.
+- QR/barcode scanning, mobile offline execution, digital signatures — the loudest CMMS differentiators and all
+  client-side. `tag_code` is stored and printable now.
+- User-defined custom fields on assets — a platform feature (11.3), not a 4.13 table; `specifications` covers
+  the need.
+- Calibration certificates, as-found/as-left values, out-of-tolerance impact — `work_type="calibration"`
+  reserves the slot; the certificate model lands with 11.7 or 12.10.
+- Safety plans, permits-to-work, LOTO — `MaintenancePlanTask.is_safety_step` carries them as steps until 11.11.
+- Asset depreciation *forecast* schedule (period-by-period) — accounting 2.6's backlog, not SCM's.
+
+**Parked for a named sibling sub-module (not this one):**
+- Warranty **claim** submission / supplier recovery / credit → **4.10** (`scm.WarrantyClaim` [WTY-] with typed
+  cost lines already exists). 4.13 stores the *expiry* on the asset and links out.
+- Root-cause analysis, CAPA, repeat-failure investigation → **4.9** (`NonConformance` + `CapaAction`).
+- Purchasing spare parts (requisition → RFQ → PO → GRN, three-way match) → **4.1**. 4.13 adds no purchasing
+  document.
+- Vendor qualification / service-provider scorecards / maintenance-vendor risk → **4.2**.
+- Stock on hand, storeroom transfers, cycle counting the parts crib, FIFO/LIFO/WAC valuation → **4.3** (and
+  **4.4** for count tasks). 4.13 reads them.
+- Production capacity, OEE decomposition, shop-floor time booking → **4.8**. 4.13 supplies the *asset* view of
+  downtime, not a second OEE engine.
+- Maintenance-service contracts and SLAs with third parties → **4.12 / 4.2** (`SupplierContract` [SC-] already
+  carries type incl. `sla`, status, dates, value, renewal window).
+- Fleet/vehicle telematics, driver assignment, fuel → **4.6** for the transport leg, **11.19** for fleet asset
+  management proper.
+- Reefer / cold-storage unit maintenance schedules → **4.15** ("Maintenance of Reefers" is its own bullet,
+  `NavERP.md:836`) — it reuses 4.13's plans rather than forking them.
+- Labour scheduling and technician productivity → **4.14**.
+- Cross-supply-chain asset uptime and maintenance-cost dashboards → **4.11** (which parked them here); a
+  `maintenance_*` metric key is a 4.11 edit, not a 4.13 dashboard.
+- Full EAM (check-in/check-out tool crib, physical verification audits, FMEA/RCM, lease & rental, ITAM, space
+  & facility assets, asset disposal accounting) → **Module 11** (11.2, 11.7, 11.9, 11.10, 11.17, 11.18), which
+  extends `scm.Asset` rather than duplicating it.
+- Depreciation posting, revaluation, impairment, disposal journals, tax vs. book schedules → **accounting 2.6 /
+  11.4**. SCM posts no `JournalEntry`.
+
+---
+
+## Review notes
+
+(filled in at the end)
