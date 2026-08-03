@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — shared create/edit form for MaintenancePlan and its inline job-plan
+(MaintenancePlanTask) formset.
+
+Context contract — apps/scm/views/AssetManagement/MaintenancePlans.py::_maintenanceplan_form, which
+renders this page directly rather than through crud_create / crud_edit so that the plan and its
+steps commit inside ONE transaction.atomic(). Everything this page may read, and nothing else:
+
+  * form     — MaintenancePlanForm (bound on POST)
+  * formset  — MaintenancePlanTaskFormSet, inlineformset_factory(extra=3, can_delete=True),
+               prefix "tasks" (the related_name), per-form fields sequence / description /
+               expected_result / is_mandatory / is_safety_step, plus the hidden id and DELETE
+  * is_edit  — False on create, True on edit
+  * obj      — the MaintenancePlan on the EDIT path and None on create, so every use of it below is
+               guarded by is_edit and never rendered bare
+
+Header fields are rendered BY NAME so the four triggers can be separated from each other, which
+couples this page to MaintenancePlanForm's field set: Meta.fields is a WHITELIST of 18 names and all
+18 are below. A field added to the model and to that whitelist but not to a group here would never
+reach the POST — on edit it would be silently blanked on every save.
+
+The four columns the form deliberately omits are tenant and number (both stamped on save) and
+last_completed_on / last_generated_on, which are editable=False system stamps: a planner who could
+type a completion date could type a service that was never performed, and the PM-compliance figure
+would believe it. next_due_on / next_due_reading ARE here, and that is the opposite case — they are
+the schedule itself, an input a planner may legitimately shift.
+
+The trigger contract lives in MaintenancePlan.clean(), NOT here and not in the form: a calendar or
+combined plan needs an interval; a meter or combined plan needs a meter interval AND an asset with a
+meter named on it; a condition plan needs both an operator and a threshold. Those refusals arrive as
+FIELD errors on interval_days / meter_interval / condition_operator / condition_threshold (and on
+asset / assigned_to / parts_location for the cross-tenant guard), so every field below renders its
+own errors and form.non_field_errors is rendered at the top of the first card.
+
+The formset needs {{ formset.management_form }} rendered or Django raises ManagementForm-tampering
+on POST and every step silently disappears. Each row also renders its hidden fields (which is where
+the `id` lives — without it an edit re-creates rows instead of updating them) and, on saved rows,
+the DELETE checkbox.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Maintenance Plan{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Maintenance Plan</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:maintenanceplan_list' %}">Maintenance Plans</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">A plan is a <span class="fw-600">definition</span> — everything on this form is an input, and nothing here executes. The trigger decides <em>when</em> the work comes due, the schedule fields decide <em>where the cadence currently stands</em>, and the last group is what a generated job gets stamped with. A plan is editable at any time, including once it has raised jobs: what a job already asked a technician to check is a snapshot with no link back, so an edit can only change what this plan <em>will</em> ask.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the plan is</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The PM- number is assigned on save, so there is no number field here. Prose <span class="fw-600">instructions</span> describe the job as a whole; step-by-step checks belong in the job plan at the bottom of this page, because those are what a generated work order snapshots and a technician ticks off one at a time. Untick <span class="fw-600">active</span> to retire a schedule: an inactive plan never comes due and cannot generate a job, while keeping every job it ever raised — it is the honest alternative to deleting the plan.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.asset %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.instructions %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How it comes due</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">Each trigger reads only its own inputs, and the save is refused if they are missing</span> — a plan that cannot come due is worse than no plan, because it sits on the register looking like the machine is covered and never raises a single job. The three axis blocks below say which trigger uses them; a block greyed out is not used by the trigger currently selected and is left alone rather than cleared, so switching back does not lose what you typed.
+        </p>
+        <div class="table-wrap" style="margin-bottom:1rem;">
+          <table class="table">
+            <thead><tr><th>Trigger</th><th>What it requires</th><th>What it ignores</th></tr></thead>
+            <tbody>
+              <tr><td class="fw-600">Calendar</td><td>An interval in days</td><td>The meter and condition blocks</td></tr>
+              <tr><td class="fw-600">Meter</td><td>A meter interval <span class="fw-600">and</span> an asset with a meter named on its own record</td><td>The interval in days and the condition block</td></tr>
+              <tr><td class="fw-600">Combined</td><td>Both of the above — due is whichever axis arrives first</td><td>The condition block</td></tr>
+              <tr><td class="fw-600">Condition</td><td>An operator <span class="fw-600">and</span> a threshold</td><td>Both cadences — the machine decides the next occurrence, so there is no cycle to roll</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.trigger_type %}
+          {% include "partials/form_field.html" with field=form.schedule_basis %}
+          {% include "partials/form_field.html" with field=form.lead_time_days %}
+        </div>
+        <p class="form-help" style="margin:.35rem 0 1rem;">
+          <span class="fw-600">Floating</span> measures the next occurrence from the last completion, so a service done a fortnight late pushes the whole future schedule a fortnight out — right for wear-driven work. <span class="fw-600">Fixed</span> measures from the calendar the plan already published, so a late job does not drag every future cycle late with it — right for a statutory inspection due in January whatever happened in December. The <span class="fw-600">call horizon</span> is how far ahead of the due date a job may be raised so the storeroom and the technician have notice; it is what the “Due soon” chip means, and it never makes work <em>owed</em>.
+        </p>
+
+        {% comment %}
+          data-axis-for carries the space-delimited trigger values that USE this block. The script at
+          the bottom of the page dims the blocks a trigger does not read — progressive enhancement
+          only: with scripting off every block renders normally, the form still submits, and
+          MaintenancePlan.clean() still refuses a trigger whose arithmetic has nothing to read.
+
+          Nothing is CLEARED, unlike the 4.12 requirement form's scope pointers. There the model
+          refuses a pointer that contradicts the scope, so a hidden select still POSTing its old
+          value would refuse the save on a field the operator cannot see. Here the model requires the
+          relevant inputs and ignores the rest, so clearing would only destroy a stored cadence the
+          moment somebody toggled the dropdown to look at another trigger.
+        {% endcomment %}
+        <div data-axis-for="calendar combined" style="margin-bottom:1rem;">
+          <h3 class="card-title" style="margin:0 0 .35rem;">Calendar axis <span class="badge badge-info">Calendar · Combined</span> <span class="badge badge-muted" data-axis-off hidden>Not used by the selected trigger</span></h3>
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.interval_days %}
+          </div>
+        </div>
+
+        <div data-axis-for="meter combined" style="margin-bottom:1rem;">
+          <h3 class="card-title" style="margin:0 0 .35rem;">Meter axis <span class="badge badge-slate">Meter · Combined</span> <span class="badge badge-muted" data-axis-off hidden>Not used by the selected trigger</span></h3>
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.meter_interval %}
+          </div>
+          <div class="form-help">The cadence is in the asset's <span class="fw-600">own</span> meter units, and the asset must have a meter named on its record — a meter plan on a machine with no meter is an empty claim, because readings would have nothing to attach to and the gap would answer blank forever. Readings are taken from the asset's <span class="fw-600">primary</span> meter only: an odometer figure handed to a plan whose interval is in running hours would schedule a service roughly never, and silently.</div>
+        </div>
+
+        <div data-axis-for="condition" style="margin-bottom:.25rem;">
+          <h3 class="card-title" style="margin:0 0 .35rem;">Condition axis <span class="badge badge-amber">Condition</span> <span class="badge badge-muted" data-axis-off hidden>Not used by the selected trigger</span></h3>
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.condition_operator %}
+            {% include "partials/form_field.html" with field=form.condition_threshold %}
+          </div>
+          <div class="form-help">Both halves or neither: a threshold with no operator cannot be evaluated, and an operator with no threshold has nothing to compare against. There is deliberately no “equals” — a continuous reading almost never lands exactly on a threshold, so an equality trigger would look configured and never fire. A condition plan with no reading at all stays quiet rather than raising a job off silence: an unmeasured machine is unknown, not healthy and not failing.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Where the schedule stands now</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">These two are the <span class="fw-600">schedule itself</span>, not a derivation — which is why they are editable at all. Set the first occurrence here; afterwards the generate action and the work-order complete verb roll them forward by exactly one cycle each, even when several were missed, so a plan three cycles behind stays visibly behind rather than being silently caught up. A planner may still shift either by hand, and that is the point of them being fields. A calendar plan needs only the date; a meter plan only the reading; a combined plan both.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.next_due_on %}
+          {% include "partials/form_field.html" with field=form.next_due_reading %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What a generated job inherits</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Every generated work order is stamped with these. <span class="fw-600">Planned labour</span> is carried onto the job as a stated line in its description and is never written into the job's labour hours — labour hours are the <em>actual</em> figure the job's cost, the asset's maintenance-cost-to-date and the depreciation report's repair-vs-replace ratio are all computed from, and pre-filling it would put a real cost on a job nobody has worked yet. The storeroom is only <span class="fw-600">named</span> here: parts leave stock at the job's own issue action, never from this form.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.work_type %}
+          {% include "partials/form_field.html" with field=form.priority %}
+          {% include "partials/form_field.html" with field=form.estimated_hours %}
+          {% include "partials/form_field.html" with field=form.assigned_to %}
+          {% include "partials/form_field.html" with field=form.parts_location %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The job plan</h2>
+        <span class="badge badge-slate">Snapshotted onto every job</span>
+      </div>
+      <div class="table-wrap">
+        {% comment %}
+          management_form FIRST and unconditionally — without it Django raises a ManagementForm
+          tampering error on POST and the whole formset is dropped. non_form_errors carries the
+          formset-level refusals; each field also renders its own errors, because a step refused with
+          no visible message looks exactly like a step that simply did not save.
+        {% endcomment %}
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>What to check</th>
+              <th>What good looks like</th>
+              <th>Mandatory</th>
+              <th>Safety step</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tf in formset %}
+              <tr>
+                {% comment %}
+                  hidden_fields is where the row's `id` lives. Without it Django cannot tell an edit
+                  from an insert and every save re-creates the checklist instead of updating it.
+                {% endcomment %}
+                {% for hidden in tf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>{% for e in tf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}{{ tf.sequence }}{% for e in tf.sequence.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ tf.description }}{% for e in tf.description.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ tf.expected_result }}{% for e in tf.expected_result.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ tf.is_mandatory }}{% for e in tf.is_mandatory.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ tf.is_safety_step }}{% for e in tf.is_safety_step.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                {% comment %}
+                  DELETE is offered only on a SAVED row — ticking "remove" on a blank extra row means
+                  nothing, and a checkbox that does nothing is worse than no checkbox. Leave an extra
+                  row entirely blank to skip it.
+                {% endcomment %}
+                <td>{% if tf.instance.pk %}{{ tf.DELETE }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Three blank rows are always offered, so a step can be added by hand or re-added after deletion and a brand-new plan can gain its first one. Leave a row blank to skip it; tick Remove to delete a saved step. Number the steps in <span class="fw-600">tens</span> — 10, 20, 30 — so one can be inserted between two later without renumbering the sheet. A <span class="fw-600">mandatory</span> step is one the job cannot be signed off without; optional steps exist so a technician is never forced to tick something that did not apply, which is what keeps the ticks on the mandatory ones worth reading. A <span class="fw-600">safety step</span> — isolation, lock-out/tag-out, permit — is flagged rather than filed in a separate permit register, so it stays visible and printable on the job itself. These steps are <span class="fw-600">copied</span> onto a generated job with no link back, so editing them next month cannot rewrite what a job three weeks ago actually asked somebody to check and sign against. Deleting a plan cascades them away and they cannot be reconstructed.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:maintenanceplan_detail' obj.pk %}{% else %}{% url 'scm:maintenanceplan_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    // Progressive enhancement ONLY. With scripting off all three axis blocks render at full
+    // strength, the form still submits, and MaintenancePlan.clean() still refuses a trigger whose
+    // own arithmetic has nothing to read — a dimmed block was never the guard, it is the courtesy.
+    var triggerSelect = document.getElementById("{{ form.trigger_type.id_for_label }}");
+    var blocks = Array.prototype.slice.call(document.querySelectorAll("[data-axis-for]"));
+    if (!triggerSelect || !blocks.length) { return; }
+
+    function sync() {
+      var chosen = triggerSelect.value;
+      blocks.forEach(function (block) {
+        var uses = block.getAttribute("data-axis-for").split(" ").indexOf(chosen) !== -1;
+        // A block holding a server-side error stays at full strength whatever the trigger now says
+        // — dimming it would bury the message explaining why the save was refused.
+        var hasError = !!block.querySelector(".form-error");
+        var on = uses || hasError;
+        block.style.opacity = on ? "" : "0.5";
+        var note = block.querySelector("[data-axis-off]");
+        if (note) { note.hidden = on; }
+        // Deliberately NOT cleared and NOT disabled. The model requires the axis it reads and
+        // ignores the rest, so wiping the inputs here would only destroy a stored cadence the
+        // moment somebody toggled the dropdown to look at another trigger — and a disabled input
+        // POSTs nothing, which on edit would blank the column outright.
+      });
+    }
+
+    triggerSelect.addEventListener("change", sync);
+    sync();
+  })();
+</script>
+{% endblock %}
