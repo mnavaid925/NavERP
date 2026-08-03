@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — record one meter reading. Create only; there is no edit path.
+
+Renders apps/scm/views/AssetManagement/MeterReadings.py::meterreading_create. Everything this page
+may read, and nothing else:
+
+  form              MeterReadingForm (bound on POST) — exactly eight fields:
+                    asset, meter_name, unit, reading, read_at, source, reference, notes
+  is_edit           always False. There is no meterreading_edit view and no route into this template
+                    from one, so nothing below branches on it: the view puts no `obj` in the context,
+                    which means an "edit" branch would have no object to build a Cancel URL from and
+                    would fail the moment somebody wired one up. The flag is honoured by this page
+                    NEVER claiming to edit anything.
+  asset             the Asset named by ?asset=<pk>, or None — a convenience pre-fill, resolved with
+                    .first() rather than get_object_or_404 so a stale bookmark lands on a blank form
+                    instead of a 404
+  append_only_note  the one sentence-set that explains why this form has no editable counterpart
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to MeterReadingForm's
+whitelist: Meta.fields is the eight names above and nothing else. A field added to the model and to
+the form but not added to a group here would never reach the POST.
+
+Deliberately absent, and must not be added: `recorded_by` (stamped by the view from the signed-in
+user's core.Party after validation — who took a reading is an audit fact, not an input) and `tenant`.
+Both are editable only by the server, so this template's omission documents a boundary the view and
+the form already enforce.
+
+Every rule stated in the operator notes below is enforced by MeterReading.clean() and by the form's
+tenant-scoped asset queryset, never by this template — so the words somebody reads and the validation
+that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}Record a Meter Reading{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Record a Meter Reading</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:meterreading_list' %}">Meter Readings</a><span class="sep">›</span><span>New</span></div>
+    <p class="text-muted">One observation of one meter at one moment. Saving it makes it the machine's current value for that meter straight away — every meter-based maintenance plan and every condition trigger reads the newest row.</p>
+  </div></div>
+
+  {% comment %}
+    Shown only when ?asset=<pk> resolved to a real asset in this workspace. It is a courtesy, not a
+    constraint: the asset dropdown in the form is still live and the pre-filled meter name and unit
+    are still editable, because a machine legitimately carries several meters and only its primary
+    one is pre-filled here.
+  {% endcomment %}
+  {% if asset %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recording against {{ asset.code }}</h2>
+        <span class="badge badge-info">Pre-filled</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Asset</dt><dd><a href="{% url 'scm:asset_detail' asset.pk %}" class="fw-600 mono">{{ asset.code }}</a> <span class="text-muted">{{ asset.name }}</span></dd></div>
+          <div class="detail-item"><dt>Declared primary meter</dt><dd>{{ asset.meter_name|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Declared unit</dt><dd>{{ asset.meter_unit|default:"—" }}</dd></div>
+        </dl>
+        <div class="form-help">The meter name and unit below are filled from this asset's <span class="fw-600">primary</span> meter and stay fully editable. A secondary meter on the same machine — a bearing temperature, a pressure gauge — is an ordinary reading and belongs here too; type its own name and unit over the pre-fill. Only readings logged under the asset's primary meter name feed its meter-based plans, which is precisely why the two are not forced to match.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The observation</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">meter name</span> is free text on purpose: an asset commonly carries hours <em>and</em> an odometer <em>and</em> a temperature, and each is its own series. Keep the spelling consistent for a given meter — a reading filed as "Hours" and one filed as "Running hours" are two meters as far as this system, and every trend and due date built on them, is concerned. The <span class="fw-600">reading</span> is an assertion about the world, so it is bounded and rejected on the way in rather than quietly clamped: a silently corrected odometer would corrupt every due date derived from it while looking like a successful save.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.asset %}
+          {% include "partials/form_field.html" with field=form.meter_name %}
+          {% include "partials/form_field.html" with field=form.unit %}
+          {% include "partials/form_field.html" with field=form.reading %}
+          {% include "partials/form_field.html" with field=form.read_at %}
+        </div>
+        <div class="form-help">Leave <span class="fw-600">read at</span> as it is for a reading taken just now, or set it back for one taken earlier — back-dating an observation is supported and ordinary. It cannot be set in the <span class="fw-600">future</span>: the save is refused, because a reading dated ahead would sort to the top of the log and become the current value for a machine that has not reached it yet, advancing every meter-based due date off a number nobody observed.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Provenance</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Where the figure came from, and what it can be traced back to. <span class="fw-600">Source</span> is provenance, not authorisation — nothing reads it to decide what anybody may do — and it keeps all three of its options here, including the one a maintenance work order stamps when it captures a reading on the job and the one reserved for a future sensor feed. Put the source document's number in <span class="fw-600">reference</span>: the MWO- number when the reading was taken during work, the inspection sheet otherwise.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.source %}
+          {% include "partials/form_field.html" with field=form.reference %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">Who took the reading is <span class="fw-600">not</span> asked for — it is stamped from your signed-in party when the reading saves, because that is an audit fact rather than something worth letting anyone type.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Before you save</h2>
+        <span class="badge badge-info">No edit · No delete</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">{{ append_only_note }}</p>
+        <p class="text-muted" style="margin-top:.75rem;">
+          In practice that means this is the only screen in the module where a reading can be typed. Once it is saved there is no Edit button and no Delete button anywhere — a wrong figure is answered by recording the right one afterwards, which takes effect immediately and leaves the mistake visible. Worth a second look at the reading and the timestamp before pressing Save; not because a mistake is unfixable, but because the fix is a second row rather than a quiet rewrite of this one.
+        </p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Record reading</button>
+      {% comment %}
+        Cancel goes back where the user most likely came from: the asset's page when this form was
+        opened with ?asset=<pk>, the reading log otherwise. It never points at an edit or detail page
+        for `obj` — there is no `obj` in this template's context, on create or on any other path,
+        because there is no other path.
+      {% endcomment %}
+      <a href="{% if asset %}{% url 'scm:asset_detail' asset.pk %}{% else %}{% url 'scm:meterreading_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
