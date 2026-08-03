@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the preventive-maintenance forecast board.
+
+Renders apps/scm/views/AssetManagement/Reports.py::pm_forecast. Everything this page may read,
+and nothing else:
+
+  days days_raw days_invalid day_options min_days max_days   the ?days=N horizon, clamped 1..365
+  today horizon                                              date objects bounding the window
+  overdue due_today due_soon                                 lists of ROW DICTS (keys below)
+  open_jobs open_jobs_truncated board_cap                    the dispatch board, DB-sliced at board_cap
+  open_by_status open_job_count                              per-status chips over the WHOLE queue
+  stats                                                      overdue due_today due_soon total_due
+                                                             plans_considered open_jobs (all int)
+
+Row dict (identical in all three buckets):
+  plan asset due_status due_status_label due_status_css days_until_due meter_gap latest_reading
+  due_reason reason_kind usage_due within_lead_time has_open_job
+
+NOT PAGINATED, deliberately — there is no page_obj in the context, so this page includes no
+pagination partial. The buckets and the header counts have to describe the same set the tables
+show; a paginated board whose chips counted something else would contradict itself.
+
+days_until_due and meter_gap are BOTH None-able by design and neither is ever 0-by-accident:
+None means "this plan has no date" / "this plan is not meter-driven or has never been read", which
+is a different fact from "due today" / "on target". Every test below is `is not None`, never
+truthiness, and never |default (which would swallow a real 0).
+
+The overdue rows deliberately print `due_reason` rather than `days_until_due`: the view already
+composes the arithmetic into a sentence ("Was due Mar 04, 2026 — 14 day(s) overdue", "Meter is
+40.0000 hr past the 500.0000 hr target"), and a raw negative integer would render as "-14 days
+left". A plan with a FUTURE date can legitimately sit in the overdue bucket — on a combined plan
+due is whichever axis arrives first — and the sentence is what says so.
+
+Generate is @tenant_admin_required + @require_POST, so it is a POST form wrapped in the
+superuser-or-tenant-admin gate the shipped 4.12 detail templates use. It is further gated on
+within_lead_time (the plan's OWN call horizon) and on has_open_job — _generate_block_reason refuses
+a duplicate outright, and offering a one-click failure is worse than not offering it. Only the
+system-generated PM- number goes into the confirm string; the plan name is user-typed and an
+apostrophe in it would break the dialog.
+
+Badge classes come from the row's due_status_css (MaintenancePlan.DUE_STATUS_CSS) and from the
+models' priority_css / work_type_css / status_css. theme.css ships badge-green / badge-red /
+badge-amber / badge-info / badge-muted / badge-slate ONLY — badge-success / badge-warning /
+badge-danger do not exist and render completely unstyled (L33).
+{% endcomment %}
+{% block title %}PM Forecast{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PM Forecast</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:maintenanceplan_list' %}">Maintenance Plans</a><span class="sep">›</span>
+        <span>PM Forecast</span>
+      </div>
+      <p class="text-muted">
+        Preventive work owed inside the next <span class="fw-600">{{ days }} day{{ days|pluralize }}</span>,
+        computed live from every active plan's own due arithmetic — nothing here is stored and nothing
+        here is a prediction. A plan is <span class="fw-600">due when whichever axis arrives first</span>
+        says so: the calendar, the meter, or a condition threshold. Each row shows which one fired and
+        the sum behind it.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Plans</a>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Work Orders</a>
+      <a href="{% url 'scm:maintenanceworkorder_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Job</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="calendar"></i>
+          {{ today|date:"M d, Y" }} – {{ horizon|date:"M d, Y" }}</span>
+        <span class="badge badge-info">{{ stats.plans_considered }} active plan{{ stats.plans_considered|pluralize }} evaluated</span>
+        {% if days_invalid %}
+          {% comment %} A value WAS typed and was rejected or clamped — say so rather than silently ignoring it. {% endcomment %}
+          <span class="badge badge-amber">
+            "{{ days_raw }}" is not a usable horizon — showing {{ days }} day{{ days|pluralize }}
+            (allowed: {{ min_days }}–{{ max_days }})
+          </span>
+        {% endif %}
+        <span class="badge badge-muted">Live computation — no forecast is stored</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="pm-days">Horizon (days)</label>
+          {% comment %}
+            Bound to the RESOLVED `days`, not to days_raw: an out-of-range value is clamped by the
+            view, and echoing the rejected string back into the box would make the page disagree
+            with the rows below it. min/max mirror the view's own clamp, so the browser refuses the
+            obvious mistakes and the view still refuses everything else.
+          {% endcomment %}
+          <input type="number" id="pm-days" name="days" value="{{ days }}"
+                 min="{{ min_days }}" max="{{ max_days }}" step="1" class="form-input">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:pm_forecast' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        Quick horizons:
+        {% for opt in day_options %}
+          <a href="{% url 'scm:pm_forecast' %}?days={{ opt }}">{% if days == opt %}<span class="fw-600">{{ opt }}d</span>{% else %}{{ opt }}d{% endif %}</a>{% if not forloop.last %} · {% endif %}
+        {% endfor %}
+      </div>
+      <div class="form-help">
+        <span class="fw-600">Overdue</span> and <span class="fw-600">due today</span> come from each plan's own
+        due status, so they mean here exactly what they mean everywhere else in the module.
+        <span class="fw-600">Due soon</span> is this page's horizon, not the plan's private lead time — you asked
+        what is owed in {{ days }} day{{ days|pluralize }}, and answering with each plan's own call window would
+        hide a service due in three weeks because its lead time happens to be seven days. Each row still says
+        whether a job may legitimately be raised right now.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.overdue }}</div>
+      <div class="stat-label">Overdue</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="calendar-check"></i></div>
+      <div class="stat-value">{{ stats.due_today }}</div>
+      <div class="stat-label">Due today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ stats.due_soon }}</div>
+      <div class="stat-label">Due in the next {{ days }} day{{ days|pluralize }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.open_jobs }}</div>
+      <div class="stat-label">Open jobs (whole queue)</div>
+    </div>
+  </div>
+
+  {% comment %} ============================ bucket 1 — overdue ============================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Overdue</h2>
+      <div class="badge-group">
+        {% if stats.overdue %}<span class="badge badge-red">{{ stats.overdue }} owed now</span>
+        {% else %}<span class="badge badge-green">Nothing overdue</span>{% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Asset</th>
+            <th>Status</th>
+            <th>Why it is due</th>
+            <th>Meter gap</th>
+            <th>Assigned</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in overdue %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceplan_detail' row.plan.pk %}" class="fw-600 mono">{{ row.plan.number }}</a>
+                <div class="text-muted">{{ row.plan.name }}</div>
+                <div class="badge-group">
+                  <span class="badge {{ row.plan.trigger_css }}">{{ row.plan.get_trigger_type_display }}</span>
+                  <span class="badge {{ row.plan.priority_css }}">{{ row.plan.get_priority_display }}</span>
+                </div>
+              </td>
+              <td>
+                <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="fw-600 mono">{{ row.asset.code }}</a>
+                <div class="text-muted">{{ row.asset.name }}</div>
+                <span class="badge {{ row.asset.criticality_css }}">{{ row.asset.get_criticality_display }}</span>
+              </td>
+              <td><span class="badge {{ row.due_status_css }}">{{ row.due_status_label }}</span></td>
+              <td>
+                {{ row.due_reason }}
+                {% if row.usage_due %}
+                  <div class="form-help">Usage-driven — the machine passed the target, so this is owed whatever the calendar says.</div>
+                {% endif %}
+                {% if row.latest_reading %}
+                  <div class="form-help">
+                    Last read {{ row.latest_reading.reading }}{% if row.asset.meter_unit %} {{ row.asset.meter_unit }}{% endif %}
+                    on {{ row.latest_reading.read_at|date:"M d, Y H:i" }}
+                  </div>
+                {% endif %}
+              </td>
+              {% comment %}
+                meter_gap is None for a calendar or condition plan, for a plan with no target
+                reading, and for an asset that has never been read — three different "no answer"s,
+                none of which is 0. A 0 here would read as "on target right now", which is a claim
+                the data does not support.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.meter_gap is not None %}
+                  {{ row.meter_gap }}{% if row.asset.meter_unit %} <span class="text-muted">{{ row.asset.meter_unit }}</span>{% endif %}
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if row.plan.assigned_to %}{{ row.plan.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                {% if row.plan.parts_location %}<div class="form-help">Parts: {{ row.plan.parts_location.code }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceplan_detail' row.plan.pk %}" class="btn-icon" title="View plan"><i data-lucide="eye"></i></a>
+                  {% if row.has_open_job %}
+                    <span class="badge badge-info" title="A job is already outstanding for this plan">Job open</span>
+                  {% elif request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:maintenanceplan_generate' row.plan.pk %}" onsubmit="return confirm('Raise the next job for {{ row.plan.number }}? This snapshots the plan checklist onto a new work order and rolls the schedule forward by exactly one cycle.');">
+                      {% csrf_token %}
+                      <button class="btn btn-primary btn-sm" type="submit"><i data-lucide="plus"></i> Generate</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="check-circle"></i>
+                  <h3>Nothing overdue</h3>
+                  <p>Every active plan is either scheduled ahead or not yet owed. This is a live reading of the plans that exist — an empty board on a workspace with no plans yet means there is nothing to forecast, not that everything is up to date.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %} ============================ bucket 2 — due today ============================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Due today</h2>
+      <div class="badge-group">
+        {% if stats.due_today %}<span class="badge badge-amber">{{ stats.due_today }} today</span>
+        {% else %}<span class="badge badge-muted">Nothing due today</span>{% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Asset</th>
+            <th>Due</th>
+            <th>Why it is due</th>
+            <th>Assigned</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in due_today %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceplan_detail' row.plan.pk %}" class="fw-600 mono">{{ row.plan.number }}</a>
+                <div class="text-muted">{{ row.plan.name }}</div>
+                <span class="badge {{ row.plan.work_type_css }}">{{ row.plan.get_work_type_display }}</span>
+              </td>
+              <td>
+                <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="fw-600 mono">{{ row.asset.code }}</a>
+                <div class="text-muted">{{ row.asset.name }}</div>
+              </td>
+              <td class="nowrap">
+                {% if row.plan.next_due_on %}{{ row.plan.next_due_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                <div><span class="badge {{ row.due_status_css }}">{{ row.due_status_label }}</span></div>
+              </td>
+              <td>
+                {{ row.due_reason }}
+                {% if row.meter_gap is not None %}
+                  <div class="form-help mono">Meter gap {{ row.meter_gap }}{% if row.asset.meter_unit %} {{ row.asset.meter_unit }}{% endif %}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.plan.assigned_to %}{{ row.plan.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceplan_detail' row.plan.pk %}" class="btn-icon" title="View plan"><i data-lucide="eye"></i></a>
+                  {% if row.has_open_job %}
+                    <span class="badge badge-info" title="A job is already outstanding for this plan">Job open</span>
+                  {% elif request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:maintenanceplan_generate' row.plan.pk %}" onsubmit="return confirm('Raise the next job for {{ row.plan.number }}? This snapshots the plan checklist onto a new work order and rolls the schedule forward by exactly one cycle.');">
+                      {% csrf_token %}
+                      <button class="btn btn-primary btn-sm" type="submit"><i data-lucide="plus"></i> Generate</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="calendar-check"></i>
+                  <h3>Nothing falls due today</h3>
+                  <p>No active plan reaches its date, its meter target or its condition threshold today.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %} ============================ bucket 3 — due soon ============================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Due in the next {{ days }} day{{ days|pluralize }}</h2>
+      <div class="badge-group">
+        {% if stats.due_soon %}<span class="badge badge-info">{{ stats.due_soon }} upcoming</span>
+        {% else %}<span class="badge badge-muted">Nothing in this window</span>{% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Asset</th>
+            <th>Due</th>
+            <th>Days left</th>
+            <th>Why it is due</th>
+            <th>Assigned</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in due_soon %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceplan_detail' row.plan.pk %}" class="fw-600 mono">{{ row.plan.number }}</a>
+                <div class="text-muted">{{ row.plan.name }}</div>
+                <span class="badge {{ row.plan.trigger_css }}">{{ row.plan.get_trigger_type_display }}</span>
+              </td>
+              <td>
+                <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="fw-600 mono">{{ row.asset.code }}</a>
+                <div class="text-muted">{{ row.asset.name }}</div>
+              </td>
+              <td class="nowrap">
+                {% if row.plan.next_due_on %}{{ row.plan.next_due_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                <div><span class="badge {{ row.due_status_css }}">{{ row.due_status_label }}</span></div>
+              </td>
+              {% comment %} 0 is a real answer here and is never reached (0 lives in the due-today bucket), but the test is still `is not None` so a date-less plan prints a dash rather than a blank cell. {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.days_until_due is not None %}{{ row.days_until_due }}{% else %}—{% endif %}
+              </td>
+              <td>
+                {{ row.due_reason }}
+                {% if row.meter_gap is not None %}
+                  <div class="form-help mono">Meter gap {{ row.meter_gap }}{% if row.asset.meter_unit %} {{ row.asset.meter_unit }}{% endif %}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.plan.assigned_to %}{{ row.plan.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceplan_detail' row.plan.pk %}" class="btn-icon" title="View plan"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    within_lead_time is the PLAN's own answer to "may a job be raised now". A row
+                    inside this page's horizon but outside the plan's call window is shown with the
+                    reason instead of a button the view would be right to refuse.
+                  {% endcomment %}
+                  {% if row.has_open_job %}
+                    <span class="badge badge-info" title="A job is already outstanding for this plan">Job open</span>
+                  {% elif not row.within_lead_time %}
+                    <span class="badge badge-muted" title="Outside this plan's own call horizon">Too early</span>
+                  {% elif request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:maintenanceplan_generate' row.plan.pk %}" onsubmit="return confirm('Raise the next job for {{ row.plan.number }} ahead of its date? This snapshots the plan checklist onto a new work order and rolls the schedule forward by exactly one cycle.');">
+                      {% csrf_token %}
+                      <button class="btn btn-outline btn-sm" type="submit"><i data-lucide="plus"></i> Generate</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="calendar-off"></i>
+                  <h3>Nothing owed in this window</h3>
+                  <p>No active plan comes due between {{ today|date:"M d, Y" }} and {{ horizon|date:"M d, Y" }}. Widen the horizon above, or add a maintenance plan to a machine that does not have one yet.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body form-help">
+      "Too early" means the plan's own <span class="fw-600">lead time</span> has not opened yet — the work is inside
+      your {{ days }}-day question but outside the window the plan says a job may be raised in. Widening the
+      horizon does not widen that; it is a property of the plan, edited on the plan.
+    </div>
+  </div>
+
+  {% comment %} ============================ the open-jobs board ============================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Open jobs</h2>
+      <div class="badge-group">
+        {% for bucket in open_by_status %}
+          <span class="badge {{ bucket.css }}">{{ bucket.count }} {{ bucket.label|lower }}</span>
+        {% empty %}
+          <span class="badge badge-green">Queue is clear</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-body form-help">
+      Every job still live — requested, approved, scheduled, in progress <span class="fw-600">and on hold</span> — urgent
+      first, so dispatch reads one board rather than two. The chips above count the
+      <span class="fw-600">whole queue</span> ({{ open_job_count }} job{{ open_job_count|pluralize }}); the table below
+      shows at most {{ board_cap }} of them.
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Asset</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Type</th>
+            <th>Scheduled</th>
+            <th>Assigned</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in open_jobs %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceworkorder_detail' job.pk %}" class="fw-600 mono">{{ job.number }}</a>
+                <div class="text-muted">{{ job.title }}</div>
+                {% if job.plan %}<div class="form-help">From plan <span class="mono">{{ job.plan.number }}</span></div>{% endif %}
+              </td>
+              <td>
+                <a href="{% url 'scm:asset_detail' job.asset.pk %}" class="mono">{{ job.asset.code }}</a>
+                <div class="text-muted">{{ job.asset.name }}</div>
+              </td>
+              <td><span class="badge {{ job.status_css }}">{{ job.get_status_display }}</span></td>
+              <td><span class="badge {{ job.priority_css }}">{{ job.get_priority_display }}</span></td>
+              <td><span class="badge {{ job.work_type_css }}">{{ job.get_work_type_display }}</span></td>
+              <td class="nowrap">
+                {% if job.scheduled_start %}{{ job.scheduled_start|date:"M d, Y H:i" }}
+                {% else %}<span class="badge badge-muted">Not scheduled</span>{% endif %}
+                <div class="form-help">Reported {{ job.reported_at|date:"M d, Y" }}</div>
+              </td>
+              <td>
+                {% if job.assigned_to %}{{ job.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceworkorder_detail' job.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:maintenanceworkorder_edit' job.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="clipboard-check"></i>
+                  <h3>No open jobs</h3>
+                  <p>Nothing is requested, approved, scheduled, in progress or on hold. Generate a job from a due plan above, or raise an ad-hoc one for a breakdown.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if open_jobs_truncated %}
+      <div class="card-body">
+        <p class="text-muted">
+          <i data-lucide="alert-triangle"></i>
+          Showing the first <span class="fw-600">{{ board_cap }}</span> of
+          <span class="fw-600">{{ open_job_count }}</span> open jobs, urgent first. The chips above count all of
+          them — use the <a href="{% url 'scm:maintenanceworkorder_list' %}">work-order list</a>, which is
+          filterable and paginated, to work through the rest.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How this board is worked out</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        Nothing on this page is stored. Each active plan is asked for its own due status, and the answer is
+        <span class="fw-600">whichever axis arrives first</span>: a calendar plan compares
+        <span class="mono">next_due_on</span> against today, a meter plan compares
+        <span class="mono">next_due_reading</span> against the asset's latest reading, a condition plan compares
+        that reading against its threshold, and a combined plan takes the earlier of the calendar and the meter.
+        That is why a plan with a date still in the future can sit in <span class="fw-600">Overdue</span> — the
+        machine has already passed the usage target — and the row's reason says exactly that.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Generate</span> is the only action here that creates anything, and it is one
+        deliberate press: it snapshots the plan's checklist onto a new work order as plain copies (so editing the
+        plan next month never rewrites what a technician was asked to check), stamps the captured due date as the
+        job's scheduled start, and advances the schedule by <span class="fw-600">exactly one cycle</span> even if
+        several were missed — erasing the gap would erase the fact that cycles were missed. It refuses outright
+        for an inactive plan or one that already has an outstanding job, because a duplicate splits one service's
+        checklist, parts and cost across two documents that nothing afterwards can pair back up.
+      </p>
+      <p class="text-muted">
+        This page moves no stock and posts no journal entry. Parts leave the storeroom when a job
+        <span class="fw-600">issues</span> them, which writes a negative movement into 4.3's ledger; the money
+        belongs to Accounting.
+      </p>
+    </div>
+  </div>
+{% endblock %}
