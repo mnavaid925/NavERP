@@ -24,6 +24,15 @@ class StockMove(TenantOwned):
         # still participate correctly in the FIFO/LIFO layer walk, which excludes only 'transfer'.
         ("consumption", "Consumption"),  # components drawn to a work order (outbound)
         ("production", "Production"),    # finished goods reported from a work order (inbound)
+        # 4.13 Asset Management. An MRO draw is deliberately neither of the two outbound types that
+        # already exist: 4.7's demand_series reads move_type='issue' as CUSTOMER demand, so booking
+        # a bearing drawn for a repair as an issue would inflate every forecast built on the
+        # stock-issues source; and 'consumption' means a PRODUCTION draw against a work order, which
+        # 4.8's WIP costing aggregates by (consumption, production) pair — a maintenance part landing
+        # there would charge a repair to the cost of a manufacturing run. It still participates
+        # correctly in the FIFO/LIFO layer walk (which excludes only 'transfer'), because the part
+        # genuinely leaves stock and genuinely has to be paid for out of a cost layer.
+        ("maintenance", "Maintenance"),  # spare parts issued to a maintenance work order (outbound)
     ]
 
     item = models.ForeignKey("scm.Item", on_delete=models.PROTECT, related_name="stock_moves")
