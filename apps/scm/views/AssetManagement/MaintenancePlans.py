@@ -664,14 +664,28 @@ def maintenanceplan_generate(request, pk):
         if snapshot:
             MaintenanceWorkOrderTask.objects.bulk_create(snapshot)
 
-        # (4) — one round trip. advance() owns the floating-vs-fixed arithmetic and rolls exactly ONE
-        # cycle even when several were missed, so a plan that is three cycles behind stays visibly
-        # behind instead of being silently caught up.
-        before_due_on, before_due_reading = plan.next_due_on, plan.next_due_reading
-        written = plan.advance()
+        # (4) — stamp the event we actually observed, and NOTHING else.
+        #
+        # Generating a job does NOT roll the schedule. `advance()` has exactly one caller — the
+        # work-order complete verb — because the schedule must have exactly one writer, the same rule
+        # `Asset.status` and `downtime_minutes` follow. Rolling here as well used to advance a
+        # `fixed` plan by TWO cycles per occurrence: `advance()` anchors a fixed plan on its own
+        # published `next_due_on` (MaintenancePlans.py:436), so the second call compounds the first.
+        # Measured on a quarterly plan: Jan 1 -> generate Apr 1 -> complete Jun 30. The April
+        # inspection silently never came due, and the identical compounding hit `next_due_reading`
+        # on a fixed meter plan (1000 -> 1250 -> 1500).
+        #
+        # Completion is the right owner even setting that bug aside:
+        #   * `floating` is DEFINED as "measured from the last completion". Rolling at generate time
+        #     measured it from the generate date instead — a plan generated in August and completed
+        #     in October would publish a date anchored on August.
+        #   * a generated job that is later CANCELLED must not consume a cycle. With the roll here,
+        #     cancelling left the schedule already advanced past an occurrence nobody performed.
+        # The plan therefore stays visibly due until the work is actually done, which is what the
+        # forecast board should say; `generate` already refuses while an open job exists, so it
+        # cannot double-generate in the meantime.
         plan.last_generated_on = timezone.localdate()
-        plan.save(update_fields=list(dict.fromkeys(
-            written + ["last_generated_on", "updated_at"])))
+        plan.save(update_fields=["last_generated_on", "updated_at"])
 
     # Two audit rows because two records genuinely moved: a job was created, and the plan's published
     # schedule changed. Written after the commit, and every value forced through _audit_value —
@@ -686,9 +700,8 @@ def maintenanceplan_generate(request, pk):
     write_audit_log(request.user, plan, "update", {
         "action": "generate",
         "work_order": job.number,
-        "next_due_on": [_audit_value(before_due_on), _audit_value(plan.next_due_on)],
-        "next_due_reading": [_audit_value(before_due_reading),
-                             _audit_value(plan.next_due_reading)],
+        # The published schedule is deliberately NOT part of this diff — generating a job does not
+        # move it (see (4) above). The roll is audited by the complete verb, which owns it.
         "last_generated_on": _audit_value(plan.last_generated_on),
     })
 
@@ -696,16 +709,17 @@ def maintenanceplan_generate(request, pk):
                               + (f" with {len(snapshot)} checklist step(s)." if snapshot
                                  else " — this plan has no job-plan steps, so the job carries no "
                                       "checklist."))
-    if written:
-        rolled = []
-        if "next_due_on" in written:
-            rolled.append(f"next due {plan.next_due_on}")
-        if "next_due_reading" in written:
-            rolled.append(f"next reading {plan.next_due_reading}")
-        messages.info(request, f"{plan.number} rolled forward one cycle — {', '.join(rolled)}.")
-    else:
-        # A condition plan has no cycle to roll: its next occurrence is decided by the machine.
+    # Said out loud, because "I generated the job but the plan still shows as due" is otherwise read
+    # as a bug rather than as the design. The schedule moves when the work is finished, not when it
+    # is raised.
+    if plan.trigger_type == "condition":
+        # A condition plan has no cycle to roll at all: its next occurrence is decided by the
+        # machine, not by a schedule.
         messages.info(request, f"{plan.number} keeps its trigger — a "
                                f"'{plan.get_trigger_type_display()}' plan has no cycle to roll "
                                "forward, so it will come due again when the reading says so.")
+    else:
+        messages.info(request, f"{plan.number} stays due until {job.number} is completed — the "
+                               "schedule rolls forward on completion, so a job that is cancelled "
+                               "does not consume a cycle.")
     return redirect("scm:maintenanceworkorder_detail", pk=job.pk)
