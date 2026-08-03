@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the plant register (list).
+
+Renders apps/scm/views/AssetManagement/Assets.py::asset_list, which returns crud_list(...).
+Everything this page may read, and nothing else:
+
+  object_list / page_obj / q      from crud_list (apps/core/crud.py:106), 15 per page
+  status_choices                  [(value, label), …] — Asset.STATUS_CHOICES
+  criticality_choices             [(value, label), …] — the shared CRITICALITY_CHOICES vocabulary
+  asset_type_choices              [(value, label), …] — Asset.ASSET_TYPE_CHOICES
+  warranty_choices                [(value, label), …] — expired / expiring / in_force
+  warranty                        the RESOLVED warranty-filter value — NOT request.GET.warranty
+  warranty_notice_days            int, for the filter's help text
+  locations / work_centers        querysets for two of the three pk dropdowns
+  org_units                       queryset for the third
+  down_count / warranty_expiring_count / warranty_expired_count / critical_count
+                                  the four header tiles, counted over the WHOLE workspace
+
+The view passes no `stats` dict, so the four tiles below read those four scalars by name. A tile
+bound to a key the view does not pass renders blank with no error anywhere, which is this codebase's
+most repeated frontend bug.
+
+TWO ROW FIGURES ARE ANNOTATIONS, NOT METHODS. `row.down_now` is an Exists() subquery and
+`row.open_jobs_count` is one grouped Count, both computed in the SAME query that fetched the page.
+Asset.is_down_now() and Asset.open_job_count() are one query EACH, so calling either in this loop
+would turn a page of fifteen rows into thirty extra queries for two chips. Never call them here.
+
+`row.warranty_chip` IS called per row and that is deliberate: it is pure date arithmetic on a column
+this page already has, touches no table, and reading it here is what keeps the chip on a row and the
+bucket the warranty filter put it in from disagreeing — both are written from the same
+Asset.WARRANTY_NOTICE_DAYS. Every FK printed below (location / work_center / org_unit / custodian /
+parent) is covered by the view's select_related, so none of them is a query either.
+
+Filter params: q / status / criticality / asset_type / location / work_center / org_unit / warranty
+/ is_active. The three pk selects compare with |stringformat:"d" — |slugify would agree only by
+accident. `is_active` option values are the strings True / False, which is what crud_list maps to
+booleans.
+{% endcomment %}
+{% block title %}Assets{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Asset Register</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Assets</span></div>
+      <p class="text-muted">Every maintainable thing the plant owns — machine, vehicle, rack, facility — and its place in the plant. An asset's <span class="fw-600">status is a human statement of intent</span> and no work order ever changes it; whether a machine is <em>down right now</em> is derived instead, from the open downtime windows on its jobs. Reliability, cost and availability have no columns here at all: they are recomputed from the jobs and meter readings that produce them, which is why nothing on this page can quietly go stale.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Maintenance Plans</a>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Work Orders</a>
+      <a href="{% url 'scm:asset_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Asset</a>
+    </div>
+  </div>
+
+  {% comment %}
+    All four tiles are counted over the WHOLE workspace, never over the filtered page — "6 warranties
+    expiring" is a fact somebody has to act on, and a number that re-scoped itself as you browsed
+    would report all-clear the moment you filtered to one asset type. The "matching" badge in the
+    card header below IS the filtered count, and says so.
+
+    stat-icon ships blue / green / orange / purple / slate only; there is no `red` and no `amber`
+    variant, so a bad-news tile takes `orange` and the badge underneath carries the actual colour.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ down_count }}</div>
+      <div class="stat-label">Down right now</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-alert"></i></div>
+      <div class="stat-value">{{ warranty_expiring_count }}</div>
+      <div class="stat-label">Warranty expiring ({{ warranty_notice_days }} days)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="shield-off"></i></div>
+      <div class="stat-value">{{ warranty_expired_count }}</div>
+      <div class="stat-label">Warranty expired</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="zap"></i></div>
+      <div class="stat-value">{{ critical_count }}</div>
+      <div class="stat-label">Critical &amp; active</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Plant</h2>
+      <div class="badge-group">
+        {% if down_count %}<a href="{% url 'scm:maintenanceworkorder_list' %}" class="badge badge-red">{{ down_count }} down</a>{% endif %}
+        {% if warranty_expired_count %}<a href="{% url 'scm:asset_list' %}?warranty=expired" class="badge badge-red">{{ warranty_expired_count }} warranty expired</a>{% endif %}
+        {% if warranty_expiring_count %}<a href="{% url 'scm:asset_list' %}?warranty=expiring" class="badge badge-amber">{{ warranty_expiring_count }} expiring</a>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search plant code, name, serial, tag, manufacturer or model…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="criticality" aria-label="Criticality" class="form-select">
+            <option value="">Any criticality</option>
+            {% for val, label in criticality_choices %}
+              <option value="{{ val }}" {% if request.GET.criticality == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="asset_type" aria-label="Asset type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in asset_type_choices %}
+              <option value="{{ val }}" {% if request.GET.asset_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The warranty select reflects `warranty` — the value the VIEW resolved — and not
+          request.GET.warranty. A hand-edited or unknown bucket is rewritten to "" and narrows
+          nothing, so binding the select to the raw parameter would leave it showing a filter that
+          was never applied while the whole register renders underneath it.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="warranty" aria-label="Warranty state" class="form-select">
+            <option value="">Any warranty state</option>
+            {% for val, label in warranty_choices %}
+              <option value="{{ val }}" {% if warranty == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The next three are int FK lookups, so each option compares against the pk through
+          stringformat:"d" — slugify would agree only by accident and is banned here. The view guards
+          every one of them with the L11 as_db_int() check before it reaches .filter(), so a
+          hand-typed ?location=abc, ?work_center=² or ?org_unit=99999999999999999999 skips its filter
+          rather than 500ing.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="work_center" aria-label="Work centre" class="form-select">
+            <option value="">All work centres</option>
+            {% for wc in work_centers %}
+              <option value="{{ wc.pk }}" {% if request.GET.work_center == wc.pk|stringformat:"d" %}selected{% endif %}>{{ wc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Owning department" class="form-select">
+            <option value="">All departments</option>
+            {% for ou in org_units %}
+              <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The option values are exactly the strings True / False — crud_list maps those two to real
+          booleans, because .filter(is_active="False") would otherwise coerce through bool("False")
+          and silently return every row.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">Active and inactive</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:asset_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">A warranty starts reading as <span class="fw-600">expiring</span> {{ warranty_notice_days }} days before it lapses, and the filter's buckets are derived from that same number as the chip on each row — so a row this filter calls expiring always shows the amber chip. An asset with <span class="fw-600">no warranty date</span> is in none of the three buckets on purpose: "not recorded" is its own state, and it is never green.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Criticality</th>
+            <th>Where</th>
+            <th>Warranty</th>
+            <th>Open jobs</th>
+            <th>Custodian</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:asset_detail' row.pk %}" class="fw-600 mono">{{ row.code }}</a>
+                <div class="text-muted">{{ row.name }}</div>
+                <div class="form-help mono">{{ row.number }}{% if row.tag_code %} · tag {{ row.tag_code }}{% endif %}</div>
+                {% if row.parent %}<div class="form-help">Component of {{ row.parent.code }}</div>{% endif %}
+              </td>
+              <td>
+                <span class="badge badge-slate">{{ row.get_asset_type_display }}</span>
+                {% if row.manufacturer or row.model_number %}
+                  <div class="form-help">{{ row.manufacturer }}{% if row.manufacturer and row.model_number %} · {% endif %}{{ row.model_number }}</div>
+                {% endif %}
+              </td>
+              {% comment %}
+                Colour comes from the model's own STATUS_CSS / CRITICALITY_CSS through status_css /
+                criticality_css, so this row and the asset's own page cannot disagree, and the label
+                is always get_*_display — which is what makes an unmapped value degrade to a muted
+                pill with the right words rather than an unstyled one with none. theme.css ships
+                COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+                and render completely unstyled (L33).
+
+                The Down chip is the ANNOTATION row.down_now — an open job with a downtime window
+                that has started and not ended. It sits beside status rather than replacing it
+                because the two say different things: a machine can read "In Service" and still be in
+                pieces this afternoon, and the whole reason downtime is derived is so nobody has to
+                remember to flip a column back.
+              {% endcomment %}
+              <td class="nowrap">
+                <span class="badge {{ row.status_css }}">{{ row.get_status_display }}</span>
+                {% if row.down_now %}<div class="form-help"><span class="badge badge-red"><i data-lucide="siren"></i> Down now</span></div>{% endif %}
+                {% if not row.is_active %}<div class="form-help"><span class="badge badge-muted">Inactive</span></div>{% endif %}
+              </td>
+              <td><span class="badge {{ row.criticality_css }}">{{ row.get_criticality_display }}</span></td>
+              <td>
+                {% if row.location %}{{ row.location }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if row.work_center %}<div class="form-help"><i data-lucide="factory"></i> {{ row.work_center }}</div>{% endif %}
+                {% if row.org_unit %}<div class="form-help">{{ row.org_unit }}</div>{% endif %}
+              </td>
+              {% comment %}
+                warranty_chip() is a no-required-argument method returning a plain (label, css)
+                2-tuple, so the template reads .0 and .1. It is pure date arithmetic — no query — and
+                "Not recorded" is its own muted state, never green: not knowing whether an asset is
+                under warranty is not the same as knowing it is.
+              {% endcomment %}
+              <td class="nowrap">
+                <span class="badge {{ row.warranty_chip.1 }}">{{ row.warranty_chip.0 }}</span>
+                {% if row.warranty_expires_on %}<div class="form-help">{{ row.warranty_expires_on|date:"M d, Y" }}</div>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  A real 0 — no open jobs is a fact, not a missing figure, so this one is never an em
+                  dash. The count is the annotation, and it counts every job whose status is not one
+                  of the terminal three: an unknown status therefore counts as OPEN, which errs
+                  towards showing work rather than hiding it.
+                {% endcomment %}
+                {% if row.open_jobs_count %}
+                  <a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ row.pk }}" class="badge badge-amber">{{ row.open_jobs_count }} open</a>
+                {% else %}
+                  <span class="badge badge-muted">None</span>
+                {% endif %}
+              </td>
+              <td>{% if row.custodian %}{{ row.custodian.name }}{% else %}<span class="text-muted">Nobody accountable</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:asset_detail' row.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:asset_edit' row.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Same gate as asset_delete's @tenant_admin_required, so a member is never offered a
+                    button they will 403 on. Only the system-generated AST- number goes into the
+                    confirm string — never the plant code or the name, both of which are user-typed:
+                    an apostrophe would be escaped to &#x27;, which the HTML parser hands to
+                    JavaScript as a bare quote and the dialog breaks.
+
+                    An asset that any maintenance job references is REFUSED by the view
+                    (MaintenanceWorkOrder.asset is PROTECT) and comes back with a message naming the
+                    blocker. The button stays visible here because this page has no total job count
+                    to gate on — open_jobs_count counts only what is still open, and a closed job
+                    blocks the delete just as hard — and faking a total would be a query per row. The
+                    asset's own page, which has the real count, hides Delete outright.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:asset_delete' row.pk %}" onsubmit="return confirm('Delete {{ row.number }}? It is refused outright if any maintenance work order has ever referenced it — that history is what every reliability and cost figure is derived from. Its maintenance plans, its parts list and its entire append-only meter log go with it and cannot be reconstructed. To keep the record, set the status to Retired instead.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="factory"></i>
+                  <h3>No assets</h3>
+                  <p>Nothing maintainable is registered yet. An asset is any thing that can be serviced or can fail — a machine, a fork truck, a conveyor, a rack, a facility — and once one exists it can carry a maintenance plan, raise work orders, log a meter and accumulate the failure history that MTBF, availability and the repair-vs-replace ratio are all derived from. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">plant code</span>, which is unique per workspace and therefore a total order — page 2 is stable. Nothing on this screen posts a stock movement or drafts an accounting document: a machine's <span class="fw-600">book value</span> belongs to the capitalised record in Accounting and is only ever <em>read</em> here, and the parts a service consumes leave stock through the work order that issues them, in 4.3's append-only ledger. The <span class="fw-600">Down</span> chip and the four tiles above are both counted from the same open-downtime rule, so a chip on a row and the count at the top of the page can never disagree.
+    </div>
+  </div>
+{% endblock %}
