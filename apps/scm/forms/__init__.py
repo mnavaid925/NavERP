@@ -274,3 +274,27 @@ from .ContractCompliance.TradeDocuments import (  # noqa: F401
 from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
     SustainabilityAssessmentForm,
 )
+
+# --- 4.13 Asset Management -------------------------------------------------------------------
+# `Assets` FIRST: it owns the three scoping helpers (`_scope_to_tenant` / `_keep_current` /
+# `_reject_foreign`) the other three modules import, so this order keeps the dependency edge running
+# one way. There is deliberately NO MeterReading EDIT form — the model is append-only (the
+# `scm.StockMove` posture) and a wrong reading is corrected by posting a later, correct one.
+from .AssetManagement.Assets import (  # noqa: F401
+    AssetForm,
+    AssetSparePartForm,
+)
+from .AssetManagement.MaintenancePlans import (  # noqa: F401
+    MaintenancePlanForm,
+    MaintenancePlanTaskForm,
+    MaintenancePlanTaskFormSet,
+)
+from .AssetManagement.MaintenanceWorkOrders import (  # noqa: F401
+    MaintenanceWorkOrderForm,
+    MaintenanceWorkOrderPartForm,
+    BaseMaintenanceWorkOrderPartFormSet,
+    MaintenanceWorkOrderPartFormSet,
+)
+from .AssetManagement.MeterReadings import (  # noqa: F401
+    MeterReadingForm,
+)
