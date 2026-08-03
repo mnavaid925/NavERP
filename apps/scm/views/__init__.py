@@ -347,3 +347,41 @@ from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
 from .ContractCompliance.Reports import (  # noqa: F401
     carbon_footprint_report, carbon_footprint_report_export,
 )
+
+# --- 4.13 Asset Management --------------------------------------------------------------------
+# 36 callables (8 asset + 6 plan + 16 work order + 3 reading + 3 report). Every one is referenced as
+# `views.<name>` from apps/scm/urls/AssetManagement/*, so a name missing from this block does NOT
+# fail at import of this module — it fails when the URLconf is built, as
+# `AttributeError: module 'apps.scm.views' has no attribute '…'`, i.e. at STARTUP and for the whole
+# site, not as a 404 on one page.
+#
+# Deliberately absent, and absent on purpose rather than by oversight: there is no
+# `meterreading_edit` and no `meterreading_delete`. MeterReading is append-only (the `scm.StockMove`
+# posture) — a wrong reading is corrected by recording a later, correct one, so the routes, the
+# templates and the forms for those two do not exist either.
+from .AssetManagement.Assets import (  # noqa: F401
+    asset_list, asset_create, asset_detail, asset_edit, asset_delete,
+    asset_add_spare_part, assetsparepart_edit, assetsparepart_delete,
+)
+from .AssetManagement.MaintenancePlans import (  # noqa: F401
+    maintenanceplan_list, maintenanceplan_create, maintenanceplan_detail, maintenanceplan_edit,
+    maintenanceplan_delete, maintenanceplan_generate,
+)
+# The ten verbs are listed one per concept rather than folded into the CRUD line: they ARE the
+# module (status is `editable=False`, so the ladder is the only thing that can move it), and a verb
+# that quietly stopped being exported would take its button's route down with it.
+from .AssetManagement.MaintenanceWorkOrders import (  # noqa: F401
+    maintenanceworkorder_list, maintenanceworkorder_create, maintenanceworkorder_detail,
+    maintenanceworkorder_edit, maintenanceworkorder_delete,
+    maintenanceworkorder_approve, maintenanceworkorder_schedule, maintenanceworkorder_start,
+    maintenanceworkorder_hold, maintenanceworkorder_resume, maintenanceworkorder_complete,
+    maintenanceworkorder_close, maintenanceworkorder_cancel, maintenanceworkorder_issue_parts,
+    maintenanceworkorder_record_reading,
+    maintenanceworkordertask_toggle,
+)
+from .AssetManagement.MeterReadings import (  # noqa: F401
+    meterreading_list, meterreading_create, meterreading_detail,
+)
+from .AssetManagement.Reports import (  # noqa: F401
+    pm_forecast, sparepart_list, asset_depreciation_report,
+)
