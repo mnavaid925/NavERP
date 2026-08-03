@@ -260,3 +260,31 @@ from .ContractCompliance.TradeDocuments import (  # noqa: F401
 from .ContractCompliance.SustainabilityAssessments import (  # noqa: F401
     SustainabilityAssessment,
 )
+
+# --- 4.13 Asset Management --------------------------------------------------------------------
+# _choices FIRST — it owns the vocabularies read from more than one direction (criticality,
+# priority, work type, the Maximo failure hierarchy, the meter source) and it deliberately imports
+# no sibling model, so the edge runs one way and there is no cycle (the 4.10 ReturnReasons-first /
+# 4.11 _choices-first precedent).
+#
+# Assets before the rest, for the reader rather than for Django: every FK below is declared by
+# string so the ORM does not care, but MaintenancePlan, MaintenanceWorkOrder and MeterReading all
+# point at scm.Asset, and Asset.maintenance_cost_to_date() reaches MaintenanceWorkOrderPart through
+# a LOCAL import for exactly this reason.
+from .AssetManagement._choices import *  # noqa: F401,F403
+from .AssetManagement.Assets import (  # noqa: F401
+    Asset,
+    AssetSparePart,
+)
+from .AssetManagement.MaintenancePlans import (  # noqa: F401
+    MaintenancePlan,
+    MaintenancePlanTask,
+)
+from .AssetManagement.MaintenanceWorkOrders import (  # noqa: F401
+    MaintenanceWorkOrder,
+    MaintenanceWorkOrderPart,
+    MaintenanceWorkOrderTask,
+)
+from .AssetManagement.MeterReadings import (  # noqa: F401
+    MeterReading,
+)
