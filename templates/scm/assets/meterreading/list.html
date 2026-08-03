@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the append-only meter reading log.
+
+Renders apps/scm/views/AssetManagement/MeterReadings.py::meterreading_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py:106) — 30 rows a page, not the
+                               app-wide 15 (the stock_ledger precedent: this is a trail people SCAN
+                               for a trend, not a register paged through one record at a time)
+  assets                       this tenant's Asset queryset — the asset dropdown
+  source_choices               [(value, label), …] = METER_SOURCE_CHOICES
+  date_from / date_to          the RAW GET strings, echoed back into the two date inputs
+  append_only_note             the one sentence-set that explains the missing Edit and Delete
+
+The view passes no `stats` dict and no per-source counters, so this page renders no stat tiles — a
+tile bound to a key the view does not pass renders blank with no error anywhere, which is this
+codebase's most repeated frontend bug. The only count below comes from page_obj.paginator, which
+crud_list really does pass.
+
+Filter params are q / asset / source / date_from / date_to. `asset` is a PK, so its options compare
+with |stringformat:"d" — never |slugify, which would mangle the value and silently deselect the
+option. `source` is a string column and compares directly.
+
+THE ACTIONS COLUMN IS VIEW ONLY, AND THAT IS THE DESIGN. MeterReading is append-only — there is no
+meterreading_edit view, no meterreading_delete view, no edit form and no route for either
+(apps/scm/urls/AssetManagement/MeterReadings.py). Hence `append_only_note` is printed on the page
+rather than left implicit: a reader who finds two of the three usual buttons missing must be able to
+see that it was decided, not forgotten.
+
+Every row value below is a plain column or a select_related FK — the view joins asset and
+recorded_by, so a page of 30 rows costs one query rather than sixty.
+{% endcomment %}
+{% block title %}Meter Readings{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Meter Readings</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Meter Readings</span></div>
+      <p class="text-muted">Every observation of every meter: the odometer at 41 200 km, the hour counter at 8 640 hours, the bearing temperature at 78 °C. A meter's <span class="fw-600">current value is the newest row here</span>, never a column somebody overwrites — which is what makes "how many hours did this machine run last month" answerable at all, and what lets a meter-based maintenance plan and a condition trigger compare a real observation against a target.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Assets</a>
+      <a href="{% url 'scm:pm_forecast' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> PM Forecast</a>
+      <a href="{% url 'scm:meterreading_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Record a Reading</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The append-only note gets a card of its own, at the top, above the table. It is printed from
+    `append_only_note` — the same string the create page and the detail page print — so the three
+    screens cannot explain the missing Edit and Delete three different ways (or, worse, two of them
+    not at all).
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">This log is append-only</h2>
+      <span class="badge badge-info">No edit · No delete</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ append_only_note }}</p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        So rows below carry a <span class="fw-600">View</span> action and nothing else. To fix a reading that was typed wrong, press <span class="fw-600">Record a Reading</span> and post the right figure — it becomes the current value immediately, and the mistake stays on the record where an auditor, and the next person to wonder why a service came due early, can still see it. That is the same posture the stock ledger takes with a compensating movement and the general ledger takes with a reversal.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Readings</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search meter name or reference…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `asset` is a pk, so every option compares with |stringformat:"d". |slugify here would
+            render "12" unchanged but is wrong in principle and has silently broken this comparison
+            elsewhere in the codebase — it is banned on pk params.
+          {% endcomment %}
+          <select name="asset" aria-label="Asset" class="form-select">
+            <option value="">All assets</option>
+            {% for a in assets %}
+              <option value="{{ a.pk }}" {% if request.GET.asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.code }} · {{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">All sources</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ date_from }}" aria-label="Read on or after" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to }}" aria-label="Read on or before" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:meterreading_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">Both date bounds are <span class="fw-600">inclusive of the whole day</span> — a reading taken at 16:00 on the closing date is inside the window, not dropped at midnight. The search box covers the meter name and the reference only: the asset is the dropdown beside it, so folding an asset code into the free-text box would make one field mean two things at once.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Read at</th>
+            <th>Asset</th>
+            <th>Meter</th>
+            <th class="text-right">Reading</th>
+            <th>Source</th>
+            <th>Reference</th>
+            <th>Recorded by</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in object_list %}
+            <tr>
+              <td class="nowrap">
+                <a href="{% url 'scm:meterreading_detail' r.pk %}" class="fw-600">{{ r.read_at|date:"M d, Y" }}</a>
+                <div class="form-help mono">{{ r.read_at|date:"H:i" }}</div>
+              </td>
+              <td>
+                <a href="{% url 'scm:asset_detail' r.asset.pk %}" class="fw-600 mono">{{ r.asset.code }}</a>
+                <div class="text-muted">{{ r.asset.name }}</div>
+              </td>
+              <td>{{ r.meter_name }}</td>
+              {% comment %}
+                `reading` is a non-null DecimalField with a MinValue/MaxValue validator, so it is
+                always a real figure here — floatformat:4 matches the column's decimal_places. The
+                unit is optional free text and simply prints nothing when blank.
+              {% endcomment %}
+              <td class="nowrap text-right mono">
+                <span class="fw-600">{{ r.reading|floatformat:4 }}</span>
+                {% if r.unit %} <span class="text-muted">{{ r.unit }}</span>{% endif %}
+              </td>
+              {% comment %}
+                There is no METER_SOURCE_CSS dict on the model, so this badge takes ONE neutral class
+                for every value rather than inventing a per-value colour here — provenance is not a
+                status and nothing reads it to decide what somebody may do. If a CSS dict is ever
+                added to models/AssetManagement/_choices.py, this page and the detail page should both
+                switch to `{{ r.source_css }}` together. theme.css ships badge-green / badge-red /
+                badge-amber / badge-info / badge-muted / badge-slate ONLY (L33).
+              {% endcomment %}
+              <td><span class="badge badge-slate">{{ r.get_source_display }}</span></td>
+              <td>
+                {{ r.reference|default:"—" }}
+                {% if r.notes %}<div class="form-help">{{ r.notes|truncatechars:60 }}</div>{% endif %}
+              </td>
+              <td>{% if r.recorded_by %}{{ r.recorded_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% comment %}
+                  VIEW ONLY — see the block comment at the top of this file. There is deliberately no
+                  Edit link and no Delete form: neither route exists, and adding a button here would
+                  be a guaranteed NoReverseMatch as well as a lie about how this log works.
+                {% endcomment %}
+                <div class="table-actions">
+                  <a href="{% url 'scm:meterreading_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>No meter readings</h3>
+                  <p>Nothing has been observed yet. Record the hour counter, the odometer, a bearing temperature or a pressure gauge and this becomes the trend line every meter-based maintenance plan and every condition trigger reads from. If you were expecting rows here, try clearing the filters or widening the date window.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered <span class="fw-600">newest first</span>, thirty to a page — the order a trend is read in, and the order that puts the current value of every meter at the top. An asset legitimately carries several meters at once (hours <em>and</em> temperature <em>and</em> pressure), so the meter name is part of the row rather than a property of the machine: only the asset's own <span class="fw-600">primary</span> meter feeds its plans, and a reading logged under another name is kept and charted without ever being mistaken for it. Recording a reading posts no stock movement and drafts no accounting document — it states what a gauge said, and nothing else.
+    </div>
+  </div>
+{% endblock %}
