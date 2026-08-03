@@ -26,5 +26,9 @@ class ItemForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = Item
         # `average_cost` EXCLUDED — it's a derived cached figure maintained by the posting service.
+        # `is_spare_part` is 4.13's MRO marker and is the SOLE selector for the spare-parts
+        # storeroom page (`views/AssetManagement/Reports.py` `sparepart_list`). Without it on this
+        # whitelist no tenant user could ever flag a part, so that page would be permanently empty
+        # outside `seed_scm` and the Django admin — a live feature reachable only by staff.
         fields = ["sku", "name", "category", "uom", "item_type", "tracking", "costing_method",
-                  "standard_cost", "reorder_point", "description", "is_active"]
+                  "standard_cost", "reorder_point", "is_spare_part", "description", "is_active"]
