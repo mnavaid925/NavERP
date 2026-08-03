@@ -91,6 +91,15 @@ class Item(TenantOwned):
                                         help_text="Item-wide default; a ReorderRule can override per location")
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    # 4.13 Asset Management. A one-column marker, NOT a SparePart table: UoM, category, costing
+    # method, average cost, reorder point and the derived on-hand all already live here, and a
+    # parallel parts master would fork every one of them and then need reconciling with the very
+    # stock ledger a maintenance issue posts into (L29). An MRO part is an Item that happens to be
+    # fitted to a machine. Additive and all-default — the 4.4 precedent that added the bin
+    # attributes to Location — so no existing row changes meaning and nothing needs backfilling.
+    is_spare_part = models.BooleanField(
+        default=False,
+        help_text="MRO part held for maintenance; shown on the spare-parts storeroom page")
 
     class Meta:
         ordering = ["sku"]
