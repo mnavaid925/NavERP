@@ -1,0 +1,967 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the 360° view of one asset: what it is, how it has behaved, what it
+costs and what it owes.
+
+Renders apps/scm/views/AssetManagement/Assets.py::asset_detail. Everything this page may read, and
+nothing else (the 33 keys that view's render() actually passes):
+
+  obj                        the Asset — select_related on parent, location, work_center, org_unit,
+                             custodian, supplier, service_vendor, fixed_asset. Reading any OTHER FK
+                             (e.g. part.item.uom) is a fresh query, so this page does not.
+  warranty_chip              a plain 2-TUPLE — .0 is the label, .1 is the badge class
+  days_to_warranty_expiry    int, NEGATIVE once past, None when no warranty date is recorded
+  mtbf_hours                 Decimal | None   -- em dash, NEVER 0
+  mttr_hours                 Decimal | None   -- em dash, NEVER 0
+  availability_pct           Decimal | None   -- em dash, NEVER 0
+  maintenance_cost_to_date   Decimal | None   -- em dash, NEVER 0
+  downtime_minutes           int              (includes any window still running)
+  downtime_hours             Decimal, 2dp
+  failure_count              int
+  is_down_now                bool
+  open_job_count             int
+  spare_parts                list of AssetSparePart, item joined, each carrying an ATTACHED
+                             part.on_hand Decimal. part.item.on_hand() is a fresh aggregate per row
+                             and is never called here.
+  spare_part_count           int
+  work_orders                list of MaintenanceWorkOrder, newest first, `parts` prefetched — so
+                             wo.parts_cost / wo.total_cost are safe, and wo.open_task_count is NOT
+                             (it walks `tasks`, which is not prefetched). It is not referenced below.
+  work_orders_truncated      bool
+  work_order_count           int
+  open_work_order_count      int
+  readings                   list of MeterReading, newest first, recorded_by joined
+  readings_truncated         bool
+  reading_count              int
+  latest_reading             MeterReading on the asset's PRIMARY meter, or None
+  children                   list of Asset, location joined
+  children_truncated         bool
+  child_count                int — the true count, not the slice length
+  plans                      list of MaintenancePlan, primed by the view with this asset and the one
+                             reading it already fetched, so due_status_label / due_status_css /
+                             days_until_due / meter_gap are all safe per row
+  plan_count                 int
+  next_pm_due                date | None
+  acquisition_cost           Decimal | None   -- None means NO LINK, not a worthless asset
+  accumulated_depreciation   Decimal | None   -- ditto
+  book_value                 Decimal | None   -- ditto
+  failure_codes              list of dicts {code, label, jobs, downtime_minutes}, busiest first, []
+  can_delete                 bool — True only when work_order_count == 0
+
+THE FOUR None-ABLE RELIABILITY FIGURES ARE TESTED WITH `is not None`, NEVER FOR TRUTHINESS, and
+|default_if_none is used in preference to |default — which would also swallow a real 0. An MTBF of
+0 h reads as "this thing fails constantly", the exact opposite of an asset that has never failed,
+and it is the number that would sit in a tile and start a conversation about a machine that is fine.
+The same applies to the three accounting figures: a missing LINK is not a zero book value.
+
+EVERY DERIVED FIGURE SHOWS ITS ARITHMETIC in small print beside it. A reliability number nobody can
+derive gets quoted in a report, and then argued with; the formula is what makes it checkable.
+
+Badge classes come from Asset.STATUS_CSS via obj.status_css, CRITICALITY_CSS via obj.criticality_css,
+warranty_chip.1, and the work-order / plan models' own *_css properties — one place per vocabulary
+decides a colour. theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted /
+badge-slate ONLY; badge-success / badge-warning / badge-danger do not exist and render completely
+unstyled (L33). Stat icons are blue / green / orange / purple / slate only — there is no amber and
+no red.
+
+Delete is @tenant_admin_required AND refused while any work order references the asset, so the
+button is wrapped in the superuser-or-tenant-admin gate AND gated on can_delete — the exact
+condition asset_delete enforces. Offering a one-click failure is worse than not offering it.
+Adding and editing a spare-part line are @login_required and are not wrapped; deleting one is
+@tenant_admin_required and is.
+{% endcomment %}
+{% block title %}{{ obj.code }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} · {{ obj.name }}</h1>
+      <div class="badge-group" style="margin:.4rem 0 .5rem;">
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.criticality_css }}">{{ obj.get_criticality_display }} criticality</span>
+        <span class="badge {{ warranty_chip.1 }}">Warranty: {{ warranty_chip.0 }}</span>
+        {% if is_down_now %}
+          <span class="badge badge-red"><i data-lucide="alert-octagon"></i> Down now</span>
+        {% else %}
+          <span class="badge badge-green">No open outage</span>
+        {% endif %}
+        {% if open_job_count %}<span class="badge badge-amber">{{ open_job_count }} open job{{ open_job_count|pluralize }}</span>{% endif %}
+        {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </div>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:asset_list' %}">Assets</a><span class="sep">›</span>
+        <span>{{ obj.code }}</span>
+      </div>
+      <p class="text-muted">
+        Everything on this page below the record itself is <span class="fw-600">derived</span> — from the
+        maintenance jobs raised against this asset, the meter readings logged on it and the accounting row it
+        points at. Nothing here is a stored summary, so nothing here can go stale. "Down now" is an open
+        downtime window on an open job, not a column something has to remember to flip.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:meterreading_create' %}?asset={{ obj.pk }}" class="btn btn-outline"><i data-lucide="gauge"></i> Record reading</a>
+      <a href="{% url 'scm:maintenanceworkorder_create' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Raise work order</a>
+      <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The headline four. Each stat-label carries the arithmetic in shorthand; the panel underneath
+    states it in full with this asset's own numbers substituted in. All four are tested with
+    `is not None` — see the header comment for why a 0 here would be a lie rather than a rounding.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="activity"></i></div>
+      <div class="stat-value">{% if mtbf_hours is not None %}{{ mtbf_hours|floatformat:2 }} h{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Mean time between failures
+        {% if mtbf_hours is not None %}
+          <div class="form-help mono">uptime ÷ {{ failure_count }} failure{{ failure_count|pluralize }}</div>
+        {% else %}
+          <div class="form-help">{% if failure_count %}No observation window could be established{% else %}No failures recorded yet{% endif %}</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="timer"></i></div>
+      <div class="stat-value">{% if mttr_hours is not None %}{{ mttr_hours|floatformat:2 }} h{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Mean time to repair
+        {% if mttr_hours is not None %}
+          <div class="form-help mono">repair downtime ÷ finished breakdowns</div>
+        {% else %}
+          <div class="form-help">No breakdown has been finished yet</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="percent"></i></div>
+      <div class="stat-value">{% if availability_pct is not None %}{{ availability_pct|floatformat:2 }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Availability
+        {% if availability_pct is not None %}
+          <div class="form-help mono">(window − {{ downtime_hours|floatformat:2 }} h down) ÷ window × 100</div>
+        {% else %}
+          <div class="form-help">No observation window could be established</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{% if maintenance_cost_to_date is not None %}{{ maintenance_cost_to_date|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        Maintenance cost to date
+        {% if maintenance_cost_to_date is not None %}
+          <div class="form-help mono">issued parts + labour + contractors</div>
+        {% else %}
+          <div class="form-help">Nothing has been costed against this asset yet</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Reliability — and how each number is derived</h2>
+      <span class="badge badge-info">Computed on read · nothing below is stored</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>MTBF</dt>
+          <dd>
+            {% if mtbf_hours is not None %}<span class="mono fw-600">{{ mtbf_hours|floatformat:2 }} h</span>{% else %}<span class="text-muted">—</span>{% endif %}
+            <div class="form-help">
+              <span class="mono">(observation window − downtime) ÷ failures</span> — uptime over failures, not
+              elapsed time over failures, so an asset that spent half the window in pieces is not flattered for
+              having been broken.
+              {% if mtbf_hours is None %}
+                {% if failure_count %}
+                  There are {{ failure_count }} failure{{ failure_count|pluralize }} on record but the observation
+                  window could not be established — nothing gives the clock a start earlier than now, which usually
+                  means the commissioning date is set in the future. <span class="fw-600">Not zero</span> —
+                  unmeasured.
+                {% else %}
+                  <span class="fw-600">No failures recorded yet</span>, so there is no denominator. A 0 h MTBF
+                  would read as "fails constantly", which is the exact opposite of the truth.
+                {% endif %}
+              {% endif %}
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>MTTR</dt>
+          <dd>
+            {% if mttr_hours is not None %}<span class="mono fw-600">{{ mttr_hours|floatformat:2 }} h</span>{% else %}<span class="text-muted">—</span>{% endif %}
+            <div class="form-help">
+              <span class="mono">downtime on completed and closed breakdowns ÷ the count of those breakdowns</span>.
+              A repair still in progress has no repair time yet, so it is excluded from both sides rather than
+              divided into the average — otherwise the figure would sag every time something is currently broken,
+              which is the moment it is most looked at.
+              {% if mttr_hours is None %}
+                <span class="fw-600">No breakdown has been finished yet</span> — the honest answer is "not enough
+                history", and a 0 h MTTR would read as instant repairs.
+              {% endif %}
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Availability</dt>
+          <dd>
+            {% if availability_pct is not None %}<span class="mono fw-600">{{ availability_pct|floatformat:2 }}%</span>{% else %}<span class="text-muted">—</span>{% endif %}
+            <div class="form-help">
+              <span class="mono">(window − {{ downtime_hours|floatformat:2 }} h) ÷ window × 100</span>. It is not
+              clamped to anything but zero: when the recorded downtime exceeds the window the answer is 0%, which
+              is visibly wrong and sends somebody to look at the data — silently rounding it up to something
+              plausible would not.
+              {% if availability_pct is None %}
+                <span class="fw-600">No observation window</span> could be established — nothing gives the clock a
+                start earlier than now — so there is nothing to measure against. Blank, not 0%.
+              {% endif %}
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Observation window</dt>
+          <dd>
+            {% if obj.commissioned_on %}
+              Opens <span class="mono">{{ obj.commissioned_on|date:"M d, Y" }}</span>
+            {% else %}
+              Opens <span class="mono">{{ obj.created_at|date:"M d, Y" }}</span>
+            {% endif %}
+            <span class="text-muted">→ now</span>
+            <div class="form-help">
+              {% if obj.commissioned_on %}
+                The commissioning date — when the asset entered service and the reliability clock started.
+              {% else %}
+                <span class="badge badge-muted">No commissioning date</span> so the window falls back to when this
+                record was created. Set <span class="fw-600">Commissioned on</span> to measure from the day the
+                machine actually entered service.
+              {% endif %}
+              The window is deliberately <em>not</em> "since the first work order", which would give an asset with
+              no jobs a zero-length window and therefore 100% availability by construction.
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Total downtime</dt>
+          <dd>
+            <span class="mono fw-600">{{ downtime_hours|floatformat:2 }} h</span>
+            {% if is_down_now %}<span class="badge badge-red">Still down</span>{% endif %}
+            <div class="form-help">
+              <span class="mono">{{ downtime_minutes }} min ÷ 60</span>. Includes any window that is
+              <span class="fw-600">still open</span>, measured to right now — a job stores its downtime when the
+              window closes, so a machine that has been down three days would otherwise report none at all while
+              the chip above said it was down.
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Failures</dt>
+          <dd>
+            <span class="mono fw-600">{{ failure_count }}</span>
+            <div class="form-help">
+              Work orders of type <span class="fw-600">Breakdown</span>, cancelled ones excluded, counted on the
+              date the fault was <em>reported</em>. Planned corrective work — a scheduled bearing change — is
+              repair, not breakdown, and counting it would depress MTBF for doing maintenance properly.
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Maintenance cost to date</dt>
+          <dd>
+            {% if maintenance_cost_to_date is not None %}<span class="mono fw-600">{{ maintenance_cost_to_date|floatformat:2 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+            <div class="form-help">
+              <span class="mono">Σ(issued part qty × unit cost at issue) + Σ(labour hours × rate) + Σ(contractor cost)</span>
+              across every non-cancelled job. Only <span class="fw-600">issued</span> parts count: a reserved line
+              still carries 0.00 because its cost is stamped at issue time, and no stock has moved for it either.
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Jobs</dt>
+          <dd>
+            <span class="mono fw-600">{{ open_work_order_count }}</span> open <span class="text-muted">of {{ work_order_count }}</span>
+            <div class="form-help">
+              Open means <em>not</em> completed, closed or cancelled. Stated as the terminal set rather than the
+              open one on purpose, so a status added later counts as open and shows up here — erring towards
+              putting a job in front of somebody.
+            </div>
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Failure analysis</h2>
+      <span class="badge badge-slate">Problem codes, busiest first</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Problem code</th><th>Jobs</th><th>Downtime</th><th>Share of recorded downtime</th></tr>
+        </thead>
+        <tbody>
+          {% for row in failure_codes %}
+            <tr>
+              <td>
+                <span class="fw-600">{{ row.label }}</span>
+                <div class="form-help mono">{{ row.code }}</div>
+              </td>
+              <td class="nowrap"><span class="mono">{{ row.jobs }}</span></td>
+              <td class="nowrap"><span class="mono">{{ row.downtime_minutes }}</span> <span class="text-muted">min</span></td>
+              <td>
+                {% comment %}
+                  widthratio, not arithmetic in the view: the denominator is this page's own total
+                  downtime figure, and the bar is presentation. When the total is 0 widthratio yields
+                  0 and the bar simply does not draw.
+                {% endcomment %}
+                <div class="progress" style="max-width:260px;">
+                  <div class="progress-bar" style="width:{% widthratio row.downtime_minutes downtime_minutes 100 %}%;"></div>
+                </div>
+                <div class="form-help">{% widthratio row.downtime_minutes downtime_minutes 100 %}% of the {{ downtime_minutes }} minutes recorded against this asset</div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4">
+                <div class="empty-state">
+                  <i data-lucide="search-x"></i>
+                  <h3>Nothing has been coded yet</h3>
+                  <p>
+                    The problem / cause / remedy vocabulary is a closed list precisely so that "which fault costs
+                    us the most downtime on this machine?" is answerable by grouping rows rather than by reading
+                    free text. Set a <span class="fw-600">problem code</span> when you raise or complete a
+                    breakdown job and this panel fills itself in.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if failure_codes %}
+      <div class="card-body text-muted">
+        Cancelled jobs are excluded: a job called off can still carry a downtime window typed before it was
+        cancelled, and counting it would charge this asset for work nobody did. The shares above are measured
+        against the asset's <span class="fw-600">total recorded downtime</span>, which also includes uncoded jobs
+        and any window still running — so they do not add to 100%, and are not meant to.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The asset</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Plant code</dt><dd class="fw-600 mono">{{ obj.code }}</dd></div>
+        <div class="detail-item"><dt>Reference</dt><dd class="mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd><span class="badge badge-slate">{{ obj.get_asset_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Criticality</dt><dd><span class="badge {{ obj.criticality_css }}">{{ obj.get_criticality_display }}</span></dd></div>
+        <div class="detail-item"><dt>Family</dt><dd>{{ obj.category|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Manufacturer</dt><dd>{{ obj.manufacturer|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Model</dt><dd class="mono">{{ obj.model_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Serial</dt><dd class="mono">{{ obj.serial_number|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Tag / barcode</dt><dd class="mono">{{ obj.tag_code|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.specifications %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Specifications.</span> {{ obj.specifications }}</p>
+      {% endif %}
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;">{{ obj.notes }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where it sits, and who answers for it</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Parent assembly</dt><dd>
+          {% if obj.parent %}<a href="{% url 'scm:asset_detail' obj.parent.pk %}" class="mono">{{ obj.parent.code }}</a> <span class="text-muted">{{ obj.parent.name }}</span>{% else %}<span class="text-muted">Top level</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}{{ obj.location.code }} <span class="text-muted">{{ obj.location.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Work centre</dt><dd>
+          {% if obj.work_center %}{{ obj.work_center.code }} <span class="text-muted">{{ obj.work_center.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+          <div class="form-help">Taking this machine down is a capacity fact as much as a maintenance one — this is the link that lets a repair explain a hole in the production plan.</div>
+        </dd></div>
+        <div class="detail-item"><dt>Owning department</dt><dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Custodian</dt><dd>{% if obj.custodian %}{{ obj.custodian.name }}{% else %}<span class="text-muted">Nobody accountable</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Supplier</dt><dd>{% if obj.supplier %}{{ obj.supplier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Default service vendor</dt><dd>{% if obj.service_vendor %}{{ obj.service_vendor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Components below</dt><dd><span class="mono">{{ child_count }}</span></dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Commercial and warranty</h2>
+      <span class="badge {{ warranty_chip.1 }}">{{ warranty_chip.0 }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Purchased</dt><dd>{{ obj.purchase_date|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Commissioned</dt><dd>
+          {% if obj.commissioned_on %}{{ obj.commissioned_on|date:"M d, Y" }}{% else %}<span class="text-muted">Not recorded</span>{% endif %}
+          <div class="form-help">The reliability clock starts here.</div>
+        </dd></div>
+        <div class="detail-item"><dt>Purchase cost</dt><dd class="mono">{{ obj.purchase_cost|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Warranty expires</dt><dd>
+          {% if obj.warranty_expires_on %}{{ obj.warranty_expires_on|date:"M d, Y" }}{% else %}<span class="badge badge-muted">Not recorded</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Days to expiry</dt><dd>
+          {% comment %}
+            days_to_warranty_expiry is None when no date is recorded, and NEGATIVE once past — so it
+            is tested with `is not None` and then for sign. "Not recorded" is deliberately its own
+            muted state and never green: not knowing whether an asset is under warranty is not the
+            same as knowing that it is.
+          {% endcomment %}
+          {% if days_to_warranty_expiry is not None %}
+            {% if days_to_warranty_expiry < 0 %}
+              <span class="badge badge-red">Lapsed {{ days_to_warranty_expiry|stringformat:"d"|cut:"-" }} day{{ days_to_warranty_expiry|pluralize }} ago</span>
+            {% elif days_to_warranty_expiry == 0 %}
+              <span class="badge badge-amber">Expires today</span>
+            {% else %}
+              <span class="mono">{{ days_to_warranty_expiry }}</span> day{{ days_to_warranty_expiry|pluralize }}
+            {% endif %}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+          <div class="form-help">Derived from the date every time this page is opened, never stored — a stored warranty flag would need something to run every night to stay true, and a lapsed warranty still reading green is the one state that actually costs money.</div>
+        </dd></div>
+        <div class="detail-item"><dt>Registered</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Book value</h2>
+      <span class="badge badge-info">Read from Accounting · 4.13 owns none of these figures</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        All three are None when there is no fixed_asset link — a MISSING LINK, not a worthless
+        asset — so all three are tested with `is not None` and the whole card degrades to a prompt
+        rather than to three confident zeros.
+      {% endcomment %}
+      {% if obj.fixed_asset %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Fixed asset</dt><dd>
+            <a href="{% url 'accounting:fixed_asset_detail' obj.fixed_asset.pk %}" class="fw-600 mono">{{ obj.fixed_asset.number }}</a>
+            <div class="form-help">{{ obj.fixed_asset.name }}</div>
+          </dd></div>
+          {% comment %}
+            Explicit `is not None` rather than |default_if_none:"—"|floatformat:2 — floatformat
+            cannot parse an em dash and would return the EMPTY STRING, turning an honest blank into
+            a missing cell. And |default:"—" is wrong here for the opposite reason: it would also
+            swallow a real 0.00, which on a fully depreciated asset is a true and important figure.
+          {% endcomment %}
+          <div class="detail-item"><dt>Acquisition cost</dt><dd class="mono">{% if acquisition_cost is not None %}{{ acquisition_cost|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Accumulated depreciation</dt><dd class="mono">{% if accumulated_depreciation is not None %}{{ accumulated_depreciation|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Book value</dt><dd class="mono fw-600">{% if book_value is not None %}{{ book_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Depreciation method</dt><dd>{{ obj.fixed_asset.get_method_display }}</dd></div>
+          <div class="detail-item"><dt>Useful life</dt><dd><span class="mono">{{ obj.fixed_asset.useful_life_months }}</span> months</dd></div>
+          <div class="detail-item"><dt>In service</dt><dd>{{ obj.fixed_asset.in_service_date|date:"M d, Y"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Last depreciated</dt><dd>{{ obj.fixed_asset.last_depreciation_date|date:"M d, Y"|default:"—" }}</dd></div>
+          <div class="detail-item"><dt>Financial status</dt><dd><span class="badge badge-slate">{{ obj.fixed_asset.get_status_display }}</span></dd></div>
+        </dl>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Every figure here is <span class="fw-600">read</span> from the Accounting module's fixed-asset register,
+          which owns the acquisition cost, the method, the life and the accumulated depreciation, and which posts
+          the depreciation journal. This module stores none of them and builds no second depreciation ledger —
+          two writers of one accumulated figure is precisely how the number on this page and the number on the
+          balance sheet come to disagree. The operational status above (<span class="fw-600">{{ obj.get_status_display }}</span>)
+          is a different question from the financial one and neither column writes the other.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="unlink"></i>
+          <h3>Not linked to a fixed asset</h3>
+          <p>
+            No acquisition cost, accumulated depreciation or book value can be shown, because this module holds
+            none of them — they live on the capitalised record in Accounting. That is a
+            <span class="fw-600">missing link, not a zero</span>: this asset may well be worth a great deal.
+            Edit the asset and point <span class="fw-600">Fixed asset</span> at its register entry to show a book
+            value here and a repair-versus-replace ratio on the depreciation report.
+          </p>
+          <a href="{% url 'scm:asset_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="link"></i> Link a fixed asset</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Maintenance programme</h2>
+      <div class="page-actions">
+        <a href="{% url 'scm:maintenanceplan_list' %}?asset={{ obj.pk }}" class="btn btn-outline"><i data-lucide="calendar-check"></i> All plans for this asset</a>
+        <a href="{% url 'scm:maintenanceplan_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> New plan</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Plans on this asset</dt><dd><span class="mono">{{ plan_count }}</span></dd></div>
+        <div class="detail-item"><dt>Next PM due</dt><dd>
+          {% if next_pm_due %}{{ next_pm_due|date:"M d, Y" }}{% else %}<span class="text-muted">Nothing scheduled</span>{% endif %}
+          <div class="form-help">The earliest date any <span class="fw-600">active</span> plan here falls due.</div>
+        </dd></div>
+      </dl>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Plan</th><th>Trigger</th><th>Work</th><th>Next due</th><th>Meter gap</th><th>Assigned</th><th>Due</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for plan in plans %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceplan_detail' plan.pk %}" class="fw-600 mono">{{ plan.number }}</a>
+                <div class="text-muted">{{ plan.name }}</div>
+                {% if not plan.is_active %}<div class="form-help"><span class="badge badge-muted">Inactive</span></div>{% endif %}
+              </td>
+              <td>
+                <span class="badge {{ plan.trigger_css }}">{{ plan.get_trigger_type_display }}</span>
+                <div class="form-help">
+                  {% if plan.interval_days %}every {{ plan.interval_days }} day{{ plan.interval_days|pluralize }}{% endif %}
+                  {% if plan.meter_interval %}{% if plan.interval_days %} · {% endif %}every {{ plan.meter_interval|floatformat:2 }} {{ obj.meter_unit|default:"units" }}{% endif %}
+                  {% if not plan.interval_days and not plan.meter_interval %}—{% endif %}
+                </div>
+              </td>
+              <td>
+                <span class="badge {{ plan.work_type_css }}">{{ plan.get_work_type_display }}</span>
+                <div class="form-help"><span class="badge {{ plan.priority_css }}">{{ plan.get_priority_display }}</span></div>
+              </td>
+              <td class="nowrap">
+                {% if plan.next_due_on %}
+                  {{ plan.next_due_on|date:"M d, Y" }}
+                  {% comment %}
+                    days_until_due is None when no date is set and NEGATIVE once past — never
+                    truthiness-tested, since 0 means "due today", which is a real and urgent answer.
+                  {% endcomment %}
+                  {% if plan.days_until_due is not None %}
+                    <div class="form-help">
+                      {% if plan.days_until_due < 0 %}{{ plan.days_until_due|stringformat:"d"|cut:"-" }} day{{ plan.days_until_due|pluralize }} late
+                      {% elif plan.days_until_due == 0 %}today
+                      {% else %}in {{ plan.days_until_due }} day{{ plan.days_until_due|pluralize }}{% endif %}
+                    </div>
+                  {% endif %}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  meter_gap is None — never 0 — when the plan is not meter-driven, has no target
+                  reading, or the asset has never been read. A confident zero would say "due right
+                  now", which is a different fact from "no answer".
+                {% endcomment %}
+                {% if plan.meter_gap is not None %}
+                  <span class="mono">{{ plan.meter_gap|floatformat:2 }}</span> <span class="text-muted">{{ obj.meter_unit }}</span>
+                  {% if plan.meter_gap <= 0 %}<div class="form-help"><span class="badge badge-red">Meter reached</span></div>{% endif %}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>{% if plan.assigned_to %}{{ plan.assigned_to.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {{ plan.due_status_css }}">{{ plan.due_status_label }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceplan_detail' plan.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="calendar-off"></i>
+                  <h3>No maintenance plan covers this asset</h3>
+                  <p>
+                    Every job on it will be reactive until one does. A plan can fall due on the calendar, on the
+                    meter, on both, or on a condition threshold — and it is what puts this machine on the PM
+                    forecast board instead of on the breakdown queue.
+                  </p>
+                  <a href="{% url 'scm:maintenanceplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Create a plan</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Maintenance history</h2>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ obj.pk }}" class="btn btn-outline"><i data-lucide="wrench"></i> All work orders for this asset</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Job</th><th>Type</th><th>Priority</th><th>Reported</th><th>Downtime</th><th>Parts</th><th>Total cost</th><th>Status</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% comment %}
+            `parts` is prefetched, so wo.parts_cost and wo.total_cost reuse this page's cache and
+            cost nothing extra. wo.open_task_count is NOT prefetched — it walks `tasks` and would be
+            one query per row — so it is deliberately absent from this loop.
+          {% endcomment %}
+          {% for wo in work_orders %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceworkorder_detail' wo.pk %}" class="fw-600 mono">{{ wo.number }}</a>
+                <div class="text-muted">{{ wo.title }}</div>
+                {% if wo.problem_code %}<div class="form-help">{{ wo.get_problem_code_display }}</div>{% endif %}
+                {% if wo.plan %}<div class="form-help">From plan <span class="mono">{{ wo.plan.number }}</span></div>{% endif %}
+              </td>
+              <td><span class="badge {{ wo.work_type_css }}">{{ wo.get_work_type_display }}</span></td>
+              <td><span class="badge {{ wo.priority_css }}">{{ wo.get_priority_display }}</span></td>
+              <td class="nowrap">
+                {{ wo.reported_at|date:"M d, Y" }}
+                <div class="form-help">
+                  {% if wo.assigned_to %}{{ wo.assigned_to.name }}
+                  {% elif wo.service_vendor %}{{ wo.service_vendor.name }}
+                  {% else %}Unassigned{% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {% if wo.is_down_now %}
+                  <span class="badge badge-red">Outage open</span>
+                  <div class="form-help">running — counted to now</div>
+                {% elif wo.downtime_minutes %}
+                  <span class="mono">{{ wo.downtime_minutes }}</span> <span class="text-muted">min</span>
+                  {% if wo.is_unplanned_downtime %}<div class="form-help"><span class="badge badge-amber">Unplanned</span></div>{% endif %}
+                {% else %}
+                  <span class="text-muted">None</span>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">{{ wo.parts_cost|floatformat:2 }}</td>
+              <td class="nowrap mono fw-600">{{ wo.total_cost|floatformat:2 }}</td>
+              <td><span class="badge {{ wo.status_css }}">{{ wo.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceworkorder_detail' wo.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="clipboard-list"></i>
+                  <h3>No work has been raised against this asset</h3>
+                  <p>
+                    Which is why the reliability figures above are largely blank rather than perfect: with no jobs
+                    there are no failures to average and no repairs to time. Every number on this page is derived
+                    from these rows.
+                  </p>
+                  <a href="{% url 'scm:maintenanceworkorder_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Raise a work order</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if work_orders_truncated %}
+        Showing the newest {{ work_orders|length }} of <span class="fw-600">{{ work_order_count }}</span> — the cap
+        is applied by the database, so it bounds what is fetched rather than what is drawn. Open the full list to
+        see the rest.
+      {% else %}
+        {{ work_order_count }} work order{{ work_order_count|pluralize }} in total, {{ open_work_order_count }} still open.
+      {% endif %}
+      <span class="fw-600">Total cost</span> is issued parts + labour (hours × rate) + contractor cost, recomputed
+      on read for each job; none of the three is a stored total. Deleting this asset is
+      <span class="fw-600">refused</span> while any of these exist — this history is what every reliability and
+      cost figure above is derived from.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Meter</h2>
+      <div class="page-actions">
+        <a href="{% url 'scm:meterreading_list' %}?asset={{ obj.pk }}" class="btn btn-outline"><i data-lucide="list"></i> All readings</a>
+        <a href="{% url 'scm:meterreading_create' %}?asset={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Record reading</a>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Primary meter</dt><dd>
+          {% if obj.meter_name %}{{ obj.meter_name }}{% if obj.meter_unit %} <span class="text-muted">({{ obj.meter_unit }})</span>{% endif %}
+          {% else %}<span class="text-muted">Not declared</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Latest reading</dt><dd>
+          {% if latest_reading %}
+            <span class="mono fw-600">{{ latest_reading.reading|floatformat:2 }}</span> <span class="text-muted">{{ latest_reading.unit }}</span>
+            <div class="form-help">{{ latest_reading.read_at|date:"M d, Y H:i" }} · {{ latest_reading.get_source_display }}</div>
+          {% else %}
+            <span class="text-muted">—</span>
+            <div class="form-help">
+              {% if obj.meter_name %}
+                Nothing has been logged on <span class="fw-600">{{ obj.meter_name }}</span> yet. A reading filed
+                under a different meter name does <em>not</em> count here on purpose — an odometer value handed to
+                a plan whose interval is in running hours would schedule a service roughly never, and the failure
+                would be silent.
+              {% else %}
+                No primary meter is declared on this asset, so there is no series to read a current value from.
+              {% endif %}
+            </div>
+          {% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Readings on record</dt><dd><span class="mono">{{ reading_count }}</span></dd></div>
+      </dl>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Read at</th><th>Meter</th><th>Reading</th><th>Source</th><th>Recorded by</th><th>Reference</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for r in readings %}
+            <tr>
+              <td class="nowrap">{{ r.read_at|date:"M d, Y H:i" }}</td>
+              <td>
+                {{ r.meter_name }}
+                {% if obj.meter_name and r.meter_name != obj.meter_name %}
+                  <div class="form-help"><span class="badge badge-slate">Secondary meter</span></div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono fw-600">{{ r.reading|floatformat:2 }} <span class="text-muted">{{ r.unit }}</span></td>
+              <td><span class="badge badge-info">{{ r.get_source_display }}</span></td>
+              <td>{% if r.recorded_by %}{{ r.recorded_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono">{{ r.reference|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:meterreading_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>No readings logged</h3>
+                  <p>
+                    Meter-driven and condition-driven maintenance plans have nothing to fire against until this
+                    series exists, and usage trends cannot be drawn from a single current value — which is why
+                    there is no "current reading" field on the asset at all.
+                  </p>
+                  <a href="{% url 'scm:meterreading_create' %}?asset={{ obj.pk }}" class="btn btn-primary"><i data-lucide="plus"></i> Record the first reading</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if readings_truncated %}
+        Showing the newest {{ readings|length }} of <span class="fw-600">{{ reading_count }}</span> — this panel is
+        a "what does it say lately" strip, not the register. Open the readings list for the full history.
+      {% endif %}
+      The meter log is <span class="fw-600">append-only</span>: readings are never edited and never deleted, in
+      the same spirit as the stock ledger. A wrong value is corrected by recording the right one, so the
+      observation and the correction both survive.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Spare parts</h2>
+      <a href="{% url 'scm:asset_add_spare_part' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add part</a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Item</th><th>Per service</th><th>On hand</th><th>Reorder point</th><th>Critical</th><th>Notes</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% comment %}
+            part.on_hand is ATTACHED by the view from one grouped aggregate over the whole list.
+            part.item.on_hand() would be a fresh aggregate per row and is never called here. Nor is
+            part.item.uom, which is not select_related and would be a query per row.
+          {% endcomment %}
+          {% for part in spare_parts %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:item_detail' part.item.pk %}" class="fw-600 mono">{{ part.item.sku }}</a>
+                <div class="text-muted">{{ part.item.name }}</div>
+              </td>
+              <td class="nowrap mono">{{ part.quantity_per_service|floatformat:2 }}</td>
+              <td class="nowrap">
+                <span class="mono fw-600">{{ part.on_hand|floatformat:2 }}</span>
+                {% if part.on_hand < part.quantity_per_service %}
+                  <div class="form-help"><span class="badge badge-red">Short of one service</span></div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">{{ part.item.reorder_point|floatformat:2 }}</td>
+              <td>{% if part.is_critical %}<span class="badge badge-red">Stops the job</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td class="text-muted">{{ part.notes|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:item_detail' part.item.pk %}" class="btn-icon" title="View item"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:assetsparepart_edit' part.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Adding and editing a parts line are @login_required; DELETING one is
+                    @tenant_admin_required + @require_POST, so only the bin is wrapped in the admin
+                    gate and only the bin is a POST form.
+
+                    Nothing user-typed goes into the confirm string — an apostrophe in an item SKU
+                    or name would be escaped to &#x27;, decoded back to ' by the HTML parser and then
+                    terminate the JavaScript string, breaking the dialog (the 4.12 rule).
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:assetsparepart_delete' part.pk %}" onsubmit="return confirm('Remove this item from the asset parts list? The item itself and its stock are untouched — only the association is removed.');" style="display:inline;">
+                      {% csrf_token %}<button type="submit" class="btn-icon danger" title="Remove from parts list"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="package"></i>
+                  <h3>No parts list yet</h3>
+                  <p>
+                    Record which items this machine consumes when it is serviced, and how many. There is no
+                    separate spare-parts master — these are ordinary inventory items, so their on-hand, cost and
+                    reorder point are the same figures the storeroom already works from, and a maintenance issue
+                    posts against the same stock ledger.
+                  </p>
+                  <a href="{% url 'scm:asset_add_spare_part' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add the first part</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if spare_parts %}
+      <div class="card-body text-muted">
+        {{ spare_part_count }} part{{ spare_part_count|pluralize }} on this asset's list. <span class="fw-600">On hand</span>
+        is derived across every location from the append-only stock ledger — the same number 4.3 reports — and is
+        read here from a single grouped query for the whole table rather than one per row.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Components</h2>
+      <span class="badge badge-slate">{{ child_count }} below this asset</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Asset</th><th>Type</th><th>Location</th><th>Criticality</th><th>Status</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for child in children %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:asset_detail' child.pk %}" class="fw-600 mono">{{ child.code }}</a>
+                <div class="text-muted">{{ child.name }}</div>
+              </td>
+              <td>{{ child.get_asset_type_display }}</td>
+              <td>{% if child.location %}{{ child.location.code }} <span class="text-muted">{{ child.location.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="badge {{ child.criticality_css }}">{{ child.get_criticality_display }}</span></td>
+              <td><span class="badge {{ child.status_css }}">{{ child.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:asset_detail' child.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="git-branch"></i>
+                  <h3>No components recorded below this asset</h3>
+                  <p>
+                    Set this asset as another one's <span class="fw-600">parent assembly</span> to build the
+                    hierarchy. It is what lets a repair on a sub-assembly be read against the machine it belongs to.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if children_truncated %}
+      <div class="card-body text-muted">
+        Showing {{ children|length }} of <span class="fw-600">{{ child_count }}</span> — the cap is applied by the
+        database. Filter the asset list by parent to see them all.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:asset_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% comment %}
+          Two gates, both of them the view's own. asset_delete is @tenant_admin_required, so the
+          button is wrapped in the superuser-or-tenant-admin idiom; and it refuses while any work
+          order references the asset, which is exactly what can_delete carries. Showing a button
+          that is certain to fail — or that a member is certain to 403 on — is worse than not
+          showing one, so the explanation replaces it rather than accompanying it. Only the
+          system-assigned AST- number goes into the confirm string — the code and the name are both
+          user-typed, and an apostrophe in either would be escaped to &#x27;, decoded back to ' by
+          the HTML parser and terminate the JavaScript string, breaking the dialog.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:asset_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? No maintenance job references it, so no cost or downtime history is lost. Its maintenance plans, its parts list and its entire meter log go with it — the meter log is append-only and cannot be reconstructed. Component assets survive and become top-level.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if not can_delete %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-muted">Delete unavailable</span>
+            {{ work_order_count }} maintenance work order{{ work_order_count|pluralize }}
+            {{ work_order_count|pluralize:"references,reference" }} this asset, and that history carries the cost,
+            the downtime and the failure codes every reliability figure on this page is derived from — so losing it
+            is deliberately not one click away. Set the status to <span class="fw-600">Retired</span> or
+            <span class="fw-600">Disposed</span> instead: a retired asset stops reading as live plant and keeps its
+            whole record. That is what those two statuses exist for.
+          </p>
+        {% else %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            Deleting takes the maintenance plans, the parts list and the whole meter history with it, and the meter
+            log cannot be reconstructed from anything. Component assets are re-pointed to nothing rather than
+            deleted — they survive and become top-level.
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          Deleting an asset destroys its meter history irreversibly, so it is a workspace-administrator action. Ask
+          an administrator, or edit the asset and set its status to Retired — which is the move that keeps the
+          record.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
