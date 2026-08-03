@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — shared create/edit form for Asset.
+
+Renders apps/scm/views/AssetManagement/Assets.py::asset_create and ::asset_edit, both of which
+delegate to apps/core/crud.py. Everything this page may read, and nothing else:
+
+  form      AssetForm (bound on POST)
+  is_edit   False on create, True on edit
+  obj       the Asset, ON THE EDIT PATH ONLY — crud_create does not put it in the context, so every
+            reference to it below sits inside an `is_edit` branch
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to AssetForm's
+whitelist: Meta.fields is the 27 names below and nothing else. A field added to the model and to the
+form but never added to a group here would silently never reach the POST — and a required one would
+then fail validation with no visible cause.
+
+WHAT IS DELIBERATELY ABSENT, and must not be added: `number` (assigned on save by
+TenantNumbered.save — the AST- reference), `tenant` (stamped by the form's TenantUniqueMixin so the
+model's own guards can read it, and again by crud_create after is_valid), and every reliability,
+downtime and cost figure — MTBF, MTTR, availability, downtime minutes, failure count and maintenance
+cost to date have NO COLUMNS AT ALL. They are recomputed on read from the work orders and meter
+readings that produce them, so there is nothing here for a form to restate and nothing that can
+drift. The warranty chip is the same: derived from `warranty_expires_on` every time it is drawn,
+never stored, because a stored flag would need something to run every night to stay true.
+
+`status` IS on this form and that is the design, not an oversight. Asset.status has exactly one
+writer and it is the user; no work-order verb touches it. "Is this machine down right now" is
+answered instead from the open downtime windows on its jobs, which is why the operational state can
+stay an editable statement of intent.
+
+Every rule stated in the operator notes below is enforced by Asset.clean() and by the form's
+TenantUniqueMixin, never by this template — so the words somebody reads and the validation that
+refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Asset{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}Register{% endif %} Asset</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:asset_list' %}">Assets</a><span class="sep">›</span>
+      <span>{% if is_edit %}Edit {{ obj.code }}{% else %}New{% endif %}</span>
+    </div>
+    <p class="text-muted">What you type here is the asset <span class="fw-600">as the plant knows it</span> — what it is, where it sits, who looks after it, what it cost and which meter it runs on. Nothing the module <em>derives</em> is on this form: reliability, availability, downtime and maintenance cost are recomputed from the jobs and readings that produce them, so there is no figure here for anyone to disagree with. An asset stays editable at <span class="fw-600">any status</span>, deliberately — a retired machine is often the row that most needs correcting.</p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Identity</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">Two references, on purpose. The internal <span class="fw-600">AST-</span> number is assigned on save; the <span class="fw-600">plant code</span> is what is painted on the machine and shouted across the floor, and it is unique per workspace — a second asset entered under the same code is refused rather than accepted and left to have its history split between two rows. <span class="fw-600">Criticality</span> is not decoration: it is how much it hurts when this thing stops, and it orders the maintenance queue and the PM board.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.asset_type %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.criticality %}
+          {% include "partials/form_field.html" with field=form.category %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Make, model and markings</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">tag</span> is the QR or barcode value physically on the asset, and it must resolve to exactly one machine: a save that would put the same tag on a second asset is refused and the message names the one already carrying it. Leave it blank on anything untagged — a blank tag is not a clash, and any number of assets may be untagged. <span class="fw-600">Specifications</span> is free text on purpose: capacity, voltage, rated output, ratings. A real user-defined-field engine belongs to Module 11, and inventing half of one here would be a schema everybody then has to migrate off.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.manufacturer %}
+          {% include "partials/form_field.html" with field=form.model_number %}
+          {% include "partials/form_field.html" with field=form.serial_number %}
+          {% include "partials/form_field.html" with field=form.tag_code %}
+          {% include "partials/form_field.html" with field=form.specifications %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Where it sits, who looks after it</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">parent</span> makes this a component of a larger assembly. The asset itself is never offered as its own parent, and a longer loop — A under B under A — is refused on save with the row that would close it named, because an ancestry walk through a cycle never finishes. The <span class="fw-600">work centre</span> is the link that lets a repair explain a capacity hole: taking a machine down is not only a maintenance fact, it is a production one, and the load board reads the centre. <span class="fw-600">Custodian</span> is narrowed to people, <span class="fw-600">supplier</span> and <span class="fw-600">service vendor</span> to commercial counterparties — but a narrowed dropdown is a courtesy, and every one of these is re-checked against this workspace on save.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.parent %}
+          {% include "partials/form_field.html" with field=form.location %}
+          {% include "partials/form_field.html" with field=form.org_unit %}
+          {% include "partials/form_field.html" with field=form.work_center %}
+          {% include "partials/form_field.html" with field=form.custodian %}
+          {% include "partials/form_field.html" with field=form.supplier %}
+          {% include "partials/form_field.html" with field=form.service_vendor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Commercial</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;"><span class="fw-600">Commissioned on</span> is where the reliability clock starts: availability and MTBF are measured against the window that opens on that date, so an asset without one is measured from the day its record was created instead — which is honest but usually flatters it. The <span class="fw-600">warranty date</span> drives a derived chip and the renewal buckets on the register; leave it blank and the asset reads "Not recorded", which is muted and never green, because not knowing whether something is under warranty is not the same as knowing it is. The <span class="fw-600">capitalised record</span> is a pointer at Accounting and nothing more — 4.13 stores no cost basis, no useful life and no accumulated depreciation, posts no journal entry, and only ever <em>reads</em> the book value it shows.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.purchase_date %}
+          {% include "partials/form_field.html" with field=form.commissioned_on %}
+          {% include "partials/form_field.html" with field=form.warranty_expires_on %}
+          {% include "partials/form_field.html" with field=form.purchase_cost %}
+          {% include "partials/form_field.html" with field=form.fixed_asset %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The meter</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">This declares the meter; it does <span class="fw-600">not</span> record a value. There is no "current reading" column anywhere in the module — readings live in their own append-only log, in exactly the spirit of the stock ledger, because a single mutable number cannot answer a meter-based service interval, a usage trend or a condition trigger, and it would have two writers the moment a technician can type one on a work order as well. Name the <span class="fw-600">primary meter</span> and a plan measured in those units will find its readings; a reading logged under a different name is deliberately never substituted, since an odometer figure handed to a running-hours interval would schedule a service roughly never and fail silently.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.meter_name %}
+          {% include "partials/form_field.html" with field=form.meter_unit %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Housekeeping</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Clearing <span class="fw-600">Active</span> takes the asset out of the live-plant filters without touching a single job, reading or plan hanging off it. That is the move to reach for instead of deleting: a delete is refused outright the moment any work order references the asset, and where it is allowed it takes the PM programme, the parts list and the whole meter history with it.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:asset_detail' obj.pk %}{% else %}{% url 'scm:asset_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
