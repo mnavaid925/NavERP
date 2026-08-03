@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the preventive-maintenance programme (the PM register).
+
+Renders apps/scm/views/AssetManagement/MaintenancePlans.py::maintenanceplan_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py) — page_obj.window drives the
+                               shared pagination partial
+  trigger_choices              MaintenancePlan.TRIGGER_CHOICES  (calendar / meter / combined / condition)
+  basis_choices                MaintenancePlan.SCHEDULE_BASIS_CHOICES  (floating / fixed)
+  priority_choices             PRIORITY_CHOICES  (urgent / high / medium / low)
+  due_choices                  the view's own three views of the queue — NOT a model vocabulary
+  assets                       Asset queryset, only machines that actually carry a plan
+  assignees                    core.Party queryset, only parties named on a plan in this workspace
+  due                          the ACCEPTED due value ("" when absent or junk) — the select below
+                               renders its `selected` from THIS, never from request.GET.due, so a
+                               hand-edited ?due=nonsense shows "Any due state", not a phantom pick
+  overdue_count / due_soon_count / active_count   counted over the WHOLE workspace, not the page
+
+Each ROW additionally carries two Exists() annotations the view adds:
+  plan.has_open_job   — a job from this plan is still live, so Generate would be refused
+  plan.has_tasks      — the plan has a job-plan checklist to snapshot
+
+The view passes no `stats` dict; the four tiles below are built from the three counts it really does
+pass plus page_obj.paginator.count. A tile bound to a key the view does not pass renders blank with
+no error anywhere, which is this codebase's most repeated frontend bug.
+
+Filter params: q / trigger_type / schedule_basis / priority / asset / assigned_to / due / is_active.
+The four string params compare against request.GET.<param> directly. `asset` and `assigned_to` are
+PKs and compare with |stringformat:"d" — never |slugify. `is_active` renders exactly value="True" /
+value="False", which is what crud_list maps onto real booleans.
+
+Every badge class comes from a model property (plan.due_status_css / trigger_css / priority_css /
+work_type_css), never invented here: theme.css ships COLOUR-named badges only, and
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+
+Nothing in a row is a query: the view's select_related covers asset / assigned_to / parts_location,
+and due_status_label / due_status_css recompute on the instance (a meter-driven row costs one
+memoised, indexed point lookup for its latest reading — shared by every reader on the row).
+{% endcomment %}
+{% block title %}Maintenance Plans{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Maintenance Plans</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Maintenance Plans</span></div>
+      <p class="text-muted">A plan is a <span class="fw-600">definition</span>, not an event: one row per recurring job a machine owes — the greasing round, the quarterly inspection, the 500-hour service, the vibration threshold that says <em>look at it now</em>. Nothing here executes. Pressing <span class="fw-600">Generate</span> snapshots a work order, and that job is what gets scheduled, worked and costed, which is what makes “the plan changed last month” and “this is what the job actually said in March” both answerable.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:pm_forecast' %}" class="btn btn-outline"><i data-lucide="calendar-range"></i> PM Forecast</a>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Work Orders</a>
+      <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Assets</a>
+      <a href="{% url 'scm:maintenanceplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Plan</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The first three tiles are counted over the whole workspace on purpose — "4 overdue" is a fact
+    somebody has to act on, and a number that re-scoped itself as you browsed would report all-clear
+    the moment you filtered to one trigger type. The fourth tile IS the filtered count and says so.
+    stat-icon ships blue / green / orange / purple / slate only; there is no red and no amber, so
+    overdue takes orange.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ overdue_count }}</div>
+      <div class="stat-label">Overdue on the date axis, workspace-wide</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{{ due_soon_count }}</div>
+      <div class="stat-label">Inside their own call horizon — may be raised now</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="repeat"></i></div>
+      <div class="stat-value">{{ active_count }}</div>
+      <div class="stat-label">Active plans — an inactive one never comes due</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="list-filter"></i></div>
+      <div class="stat-value">{{ page_obj.paginator.count }}</div>
+      <div class="stat-label">Matching the filters below</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Plans</h2>
+      <div class="badge-group">
+        {% if overdue_count %}<span class="badge badge-red">{{ overdue_count }} overdue</span>{% endif %}
+        {% if due_soon_count %}<span class="badge badge-amber">{{ due_soon_count }} due soon</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search PM- number, plan name, asset code or asset name…">
+        </div>
+        <div class="form-group">
+          <select name="trigger_type" aria-label="Trigger" class="form-select">
+            <option value="">All triggers</option>
+            {% for val, label in trigger_choices %}
+              <option value="{{ val }}" {% if request.GET.trigger_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="schedule_basis" aria-label="Schedule basis" class="form-select">
+            <option value="">Any basis</option>
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if request.GET.schedule_basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="priority" aria-label="Priority" class="form-select">
+            <option value="">Any priority</option>
+            {% for val, label in priority_choices %}
+              <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A pk filter, so the comparison is |stringformat:"d" — |slugify would agree only by
+            accident and would silently drop the selection on any pk it renders differently. The
+            list offers only assets that actually carry a plan; the whole register would be
+            thousands of options of which all but a handful select nothing.
+          {% endcomment %}
+          <select name="asset" aria-label="Asset" class="form-select">
+            <option value="">All assets</option>
+            {% for a in assets %}
+              <option value="{{ a.pk }}" {% if request.GET.asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.code }} · {{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="assigned_to" aria-label="Assigned crew" class="form-select">
+            <option value="">Anyone</option>
+            {% for p in assignees %}
+              <option value="{{ p.pk }}" {% if request.GET.assigned_to == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `due` is the value the VIEW accepted, not the raw query string — ?due=junk is skipped by
+            the view and must show "Any due state" here rather than a phantom selection.
+          {% endcomment %}
+          <select name="due" aria-label="Due state" class="form-select">
+            <option value="">Any due state</option>
+            {% for val, label in due_choices %}
+              <option value="{{ val }}" {% if due == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">Active and inactive</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        The <span class="fw-600">due</span> filter is a date query and says so: a plan is due because of its <span class="fw-600">next due date</span> and its own call horizon, both of which are columns. The usage axes cannot be expressed in SQL at all — a meter or condition plan is due because of the asset's latest <em>reading</em>, which lives in another table at another grain. So a plan that is overdue only on its meter still renders its own red chip in the unfiltered list and is simply not reachable through <span class="fw-600">?due=overdue</span>. The chip per row tells the whole truth; the filter narrows on the date.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Asset</th>
+            <th>Trigger</th>
+            <th>Next due</th>
+            <th>Due</th>
+            <th>Job it raises</th>
+            <th>Crew / storeroom</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for plan in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:maintenanceplan_detail' plan.pk %}" class="fw-600 mono">{{ plan.number }}</a>
+                <div class="text-muted">{{ plan.name }}</div>
+                <div class="form-help">
+                  {% if plan.has_tasks %}<span class="badge badge-slate">Checklist</span>{% else %}<span class="badge badge-muted">No checklist</span>{% endif %}
+                  {% if not plan.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+                  {% if plan.has_open_job %}<span class="badge badge-amber">Job open</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                <a href="{% url 'scm:asset_detail' plan.asset.pk %}" class="mono">{{ plan.asset.code }}</a>
+                <div class="text-muted">{{ plan.asset.name }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  TRIGGER_CSS is taxonomy, not severity — badge-red is deliberately unused on this
+                  column, because on this model red means overdue and a trigger badge must never be
+                  mistaken for a state badge.
+                {% endcomment %}
+                <span class="badge {{ plan.trigger_css }}">{{ plan.get_trigger_type_display }}</span>
+                <div class="form-help">
+                  {% if plan.trigger_type == "calendar" or plan.trigger_type == "combined" %}
+                    {% if plan.interval_days %}Every {{ plan.interval_days }} day{{ plan.interval_days|pluralize }}{% endif %}
+                  {% endif %}
+                  {% if plan.trigger_type == "combined" %} · {% endif %}
+                  {% if plan.trigger_type == "meter" or plan.trigger_type == "combined" %}
+                    {% if plan.meter_interval %}Every {{ plan.meter_interval|floatformat:"-4" }}{% if plan.asset.meter_unit %} {{ plan.asset.meter_unit }}{% endif %}{% endif %}
+                  {% endif %}
+                  {% if plan.trigger_type == "condition" %}
+                    {% if plan.condition_operator and plan.condition_threshold is not None %}
+                      {{ plan.get_condition_operator_display }} {{ plan.condition_threshold|floatformat:"-4" }}{% if plan.asset.meter_unit %} {{ plan.asset.meter_unit }}{% endif %}
+                    {% endif %}
+                  {% endif %}
+                </div>
+                <div class="form-help">{{ plan.get_schedule_basis_display }}</div>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  Both halves of the schedule are None-able and mean different things blank: a meter
+                  plan has no date and a calendar plan has no target reading. Neither renders a 0.
+                {% endcomment %}
+                {% if plan.next_due_on %}
+                  {{ plan.next_due_on|date:"M d, Y" }}
+                {% else %}
+                  <span class="badge badge-muted">No date</span>
+                {% endif %}
+                {% if plan.next_due_reading is not None %}
+                  <div class="form-help mono">at {{ plan.next_due_reading|floatformat:"-4" }}{% if plan.asset.meter_unit %} {{ plan.asset.meter_unit }}{% endif %}</div>
+                {% endif %}
+                <div class="form-help">Call horizon {{ plan.lead_time_days }} day{{ plan.lead_time_days|pluralize }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  One lookup, on the model: DUE_STATUS_CSS via plan.due_status_css, with the label
+                  from DUE_STATUS_LABELS so no page ever prints the raw token "not_scheduled".
+                {% endcomment %}
+                <span class="badge {{ plan.due_status_css }}">{{ plan.due_status_label }}</span>
+              </td>
+              <td>
+                <span class="badge {{ plan.work_type_css }}">{{ plan.get_work_type_display }}</span>
+                <div class="form-help"><span class="badge {{ plan.priority_css }}">{{ plan.get_priority_display }}</span></div>
+                <div class="form-help">{{ plan.estimated_hours|floatformat:2 }} h planned</div>
+              </td>
+              <td>
+                {% if plan.assigned_to %}{{ plan.assigned_to.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                {% if plan.parts_location %}<div class="form-help">{{ plan.parts_location.code }} · {{ plan.parts_location.name }}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:maintenanceplan_detail' plan.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:maintenanceplan_edit' plan.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Generate and Delete are both @tenant_admin_required, so both sit behind the house
+                    gate — offering a member a one-click 403 is worse than not offering the button.
+
+                    Generate is offered only when the view would accept the press: the two refusals
+                    _generate_block_reason() states are "the plan is inactive" and "it already has an
+                    open job", and has_open_job is the Exists() annotation for the second. NOT due
+                    yet is deliberately not a refusal — lead_time_days exists so a job may legitimately
+                    be raised ahead of its date.
+
+                    Only the system-generated PM- number goes into either confirm string; the plan
+                    name is user-typed and an apostrophe in it would be escaped to &#x27;, which the
+                    HTML parser hands to JavaScript as a bare quote and the dialog breaks.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if plan.is_active and not plan.has_open_job %}
+                      <form method="post" action="{% url 'scm:maintenanceplan_generate' plan.pk %}" onsubmit="return confirm('Raise the next job from {{ plan.number }}? A work order is created with a snapshot of this plan checklist, and the schedule rolls forward exactly one cycle.');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Generate work order"><i data-lucide="clipboard-plus"></i></button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'scm:maintenanceplan_delete' plan.pk %}" onsubmit="return confirm('Delete {{ plan.number }}? Its job-plan steps go with it and cannot be reconstructed. Every job it ever raised survives with its own snapshotted checklist and costs, and simply loses the link. Deactivating instead stops the schedule coming due and keeps everything.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="calendar-check"></i>
+                  <h3>No maintenance plans</h3>
+                  <p>Nothing is scheduled against a machine yet, so nothing will ever come due on its own. Author a plan on an asset — every N days, every N meter units, both (whichever arrives first), or when a reading crosses a threshold — give it a checklist, and its jobs can be raised from one button with the steps already on them. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Nothing on this screen writes: there is no stored “is overdue” flag for a page load to catch up, because every chip above is recomputed from the schedule and the machine's latest reading on every read. <span class="fw-600">Generate is the only action here that creates anything</span> — one explicit human press, inside one transaction, never a background auto-post; an ERP that quietly raises work orders overnight produces a queue nobody trusts. A plan with an open job refuses a second generate, because a duplicate would split one service's checklist, parts and cost across two documents with nothing afterwards able to tell they were the same occurrence.
+    </div>
+  </div>
+{% endblock %}
