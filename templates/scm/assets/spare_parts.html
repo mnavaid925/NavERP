@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — the MRO storeroom.
+
+Renders apps/scm/views/AssetManagement/Reports.py::sparepart_list. Everything this page may read,
+and nothing else:
+
+  rows          list of ROW DICTS — ITERATE THIS. There is deliberately no `object_list`: every row
+                is a computed bundle (derived on-hand + the reorder policy + the window's draw), not
+                a bare model instance, and looping the page's object_list would silently render a
+                table with every derived column blank.
+  page_obj      the Page the rows were built from — pagination controls only (15/page)
+  q             search echo
+  categories    ItemCategory queryset (the pk dropdown)
+  stock stock_choices        resolved value + [(below|zero|in_stock, label)]
+  is_active active_choices   resolved value + [(active|inactive, label)]
+  date_from date_to          RESOLVED date objects (the window actually applied)
+  date_from_raw date_to_raw  the raw GET strings, echoed back into the two inputs
+  window_invalid             a date was typed and rejected, or the window was reversed and swapped
+  stats         total below_count zero_count (int) · stock_value consumed_value (Decimal)
+                consumed_moves (int) — WORKSPACE-WIDE, not the filtered page
+  ledger_note   printed verbatim below; it is the design decision this whole page rests on
+
+Row dict: item on_hand value reorder_point has_rule max_level is_below shortfall
+          locations[{location_id, code, name, qty}]
+          rules[{rule, location, on_hand, min, max, is_below, suggested}]
+          consumed = {quantity, value, moves} or None
+
+`consumed` is None when NO maintenance draw was recorded in the window. Unlike the depreciation
+report's None that is a genuine coverage gap, this one is a true zero — the ledger is complete for
+that question — and it is passed as None purely so the cell prints an em dash instead of a column of
+0.0000s. `max_level` and `shortfall` are likewise None-able; every test below is `is not None`.
+
+`category` is the ONLY pk filter on this page and it compares with |stringformat:"d" against
+request.GET.category — never |slugify. `stock` / `is_active` are strings and bind to the RESOLVED
+`stock` / `is_active` the view returns, not to request.GET, so a junk value that the view dropped
+does not leave the dropdown showing a filter that is not in force.
+
+ACTIONS. View and Edit deep-link into 4.3's item pages, because the row IS a 4.3 item — that is the
+point of the page. There is deliberately NO delete form here: the view passes no per-row deletability
+gate (an Item with movements is PROTECTed by its own ledger), so a bin icon on this report would be a
+one-click failure offered on somebody else's record. Removing a part from the item master is an
+inventory decision and it is taken on the item's own page, which the eye and pencil reach in one hop.
+The copy below says so rather than leaving the absence to be guessed at.
+
+Badge classes: badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY.
+badge-success / badge-warning / badge-danger do not exist in theme.css and render unstyled (L33).
+{% endcomment %}
+{% block title %}Spare Parts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Spare Parts &amp; MRO Storeroom</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:asset_list' %}">Assets</a><span class="sep">›</span>
+        <span>Spare Parts</span>
+      </div>
+      <p class="text-muted">
+        <span class="fw-600">This is 4.3's inventory, filtered — not a second parts catalogue.</span>
+        Every row below is an <span class="mono">scm.Item</span> flagged <em>is spare part</em>: the same
+        record the buyer purchases, the storeman receives and the valuation report costs. On-hand is summed
+        live from the append-only stock ledger, and the min/max is the buyer's own reorder rule. 4.13 adds one
+        boolean column to that item and nothing else.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% comment %} No ?is_spare_part= here: item_list filters on item_type / category / tracking only, and a query string it ignores would look like a filter that silently did nothing. {% endcomment %}
+      <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Item Master</a>
+      <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Reorder Rules</a>
+      <a href="{% url 'scm:requisition_create' %}" class="btn btn-primary"><i data-lucide="shopping-cart"></i> Raise Requisition</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The design decision, stated in visible copy rather than buried in a code comment — a reader who
+    does not understand that this page is a VIEW of 4.3 will eventually try to keep a second parts
+    master in step with the stock ledger by hand.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">One parts master, not two</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ ledger_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">Live from the stock ledger — no stored quantity anywhere</span>
+        <span class="badge badge-slate">Min / max read from the buyer's ReorderRule</span>
+        <span class="badge badge-muted">This page moves no stock and posts no journal entry</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Storeroom</h2>
+      {% comment %}
+        Chips are WORKSPACE-WIDE, not page-wide — "6 below reorder point" is a fact somebody has to
+        act on, and a number that re-scoped itself as you filtered would report all-clear the moment
+        you narrowed to one category. The "matching" badge IS the filtered count and says so.
+      {% endcomment %}
+      <div class="badge-group">
+        {% if stats.below_count %}<span class="badge badge-amber">{{ stats.below_count }} below reorder point</span>{% endif %}
+        {% if stats.zero_count %}<span class="badge badge-red">{{ stats.zero_count }} out of stock</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="sp-q">Search</label>
+          <input type="text" id="sp-q" name="q" value="{{ q }}" class="form-input" placeholder="SKU, name or description…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sp-cat">Category</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="category" id="sp-cat" class="form-select">
+            <option value="">All categories</option>
+            {% for c in categories %}
+              <option value="{{ c.pk }}" {% if request.GET.category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sp-stock">Stock state</label>
+          <select name="stock" id="sp-stock" class="form-select">
+            <option value="">Any stock state</option>
+            {% for val, label in stock_choices %}
+              <option value="{{ val }}" {% if stock == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sp-active">Active</label>
+          <select name="is_active" id="sp-active" class="form-select">
+            <option value="">Active and inactive</option>
+            {% for val, label in active_choices %}
+              <option value="{{ val }}" {% if is_active == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sp-from">Consumption from</label>
+          <input type="date" id="sp-from" name="date_from" value="{{ date_from_raw }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sp-to">Consumption to</label>
+          <input type="date" id="sp-to" name="date_to" value="{{ date_to_raw }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:sparepart_list' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="calendar"></i>
+          Consumption window {{ date_from|date:"M d, Y" }} – {{ date_to|date:"M d, Y" }}</span>
+        {% if window_invalid %}
+          <span class="badge badge-amber">That date range was not usable — showing the window above</span>
+        {% endif %}
+      </div>
+      <div class="form-help">
+        The window applies to the <span class="fw-600">consumption</span> column only. On-hand, the reorder
+        policy and the location breakdown are always <span class="fw-600">as at now</span> — a stock level as of
+        a past date is the 4.3 valuation report's question, not this one's.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Part</th>
+            <th>Category / UoM</th>
+            <th>On hand</th>
+            <th>Min / max</th>
+            <th>Held at</th>
+            <th>Consumed in window</th>
+            <th>Value</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600 mono">{{ row.item.sku }}</a>
+                <div class="text-muted">{{ row.item.name }}</div>
+                <div class="badge-group">
+                  {% if row.is_below %}<span class="badge badge-amber">Below reorder point</span>{% endif %}
+                  {% if not row.item.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if row.item.category %}{{ row.item.category.name }}{% else %}<span class="text-muted">Uncategorised</span>{% endif %}
+                <div class="form-help">{% if row.item.uom %}{{ row.item.uom.code }}{% else %}—{% endif %} · {{ row.item.get_costing_method_display }}</div>
+              </td>
+              {% comment %}
+                Derived on-hand: the live SUM of the append-only ledger, not a stored column. A real
+                0 is printed as 0 — it means "we counted, and there are none", which is exactly the
+                signal this page exists to give.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.on_hand <= 0 %}<span class="badge badge-red">{{ row.on_hand }}</span>
+                {% elif row.is_below %}<span class="badge badge-amber">{{ row.on_hand }}</span>
+                {% else %}{{ row.on_hand }}{% endif %}
+                {% if row.shortfall is not None %}
+                  <div class="form-help">Short by {{ row.shortfall }}</div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {{ row.reorder_point }} <span class="text-muted">/</span>
+                {% if row.max_level is not None %}{{ row.max_level }}{% else %}—{% endif %}
+                {% if row.has_rule %}
+                  <div class="form-help">From {{ row.rules|length }} reorder rule{{ row.rules|length|pluralize }}</div>
+                {% else %}
+                  <div class="form-help">Item-wide default — no reorder rule configured</div>
+                {% endif %}
+                {% for r in row.rules %}
+                  <div class="form-help">
+                    <a href="{% url 'scm:reorderrule_detail' r.rule.pk %}">{{ r.location.code }}</a>:
+                    {{ r.on_hand }} vs {{ r.min }}–{{ r.max }}
+                    {% if r.is_below %}<span class="badge badge-amber">order {{ r.suggested }}</span>{% endif %}
+                  </div>
+                {% endfor %}
+              </td>
+              <td>
+                {% for loc in row.locations %}
+                  <div class="form-help mono" title="{{ loc.name }}">{{ loc.code }} · {{ loc.qty }}</div>
+                {% empty %}
+                  <span class="text-muted">Nowhere</span>
+                {% endfor %}
+              </td>
+              {% comment %}
+                None = no maintenance draw in this window. An em dash, not a 0 — a column of
+                0.0000s would bury the parts that actually moved.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.consumed is not None %}
+                  {{ row.consumed.quantity }}
+                  <div class="form-help">{{ row.consumed.value }} over {{ row.consumed.moves }} issue{{ row.consumed.moves|pluralize }}</div>
+                {% else %}
+                  —
+                  <div class="form-help">No maintenance issue in this window</div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {{ row.value }}
+                <div class="form-help">@ {{ row.item.average_cost }} avg</div>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:item_detail' row.item.pk %}" class="btn-icon" title="View in the item master"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:item_edit' row.item.pk %}" class="btn-icon" title="Edit in the item master"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="package-search"></i>
+                  <h3>No spare parts</h3>
+                  <p>Nothing in this workspace is flagged as an MRO part yet. A spare part is not a new record you create here — it is an existing <a href="{% url 'scm:item_list' %}">inventory item</a> with <span class="fw-600">is spare part</span> ticked, so it keeps the SKU, unit of measure, costing method and stock history it already has. Tick it on the item, give it a reorder rule, and it appears on this page. If you were expecting rows, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body form-help">
+      Actions here open the part in <span class="fw-600">4.3's item master</span>, which owns the record. There is
+      no delete on this page on purpose: a part with any stock movement is protected by its own ledger, and
+      removing one from the catalogue is an inventory decision taken on the item's own page rather than a bin
+      icon on a maintenance report.
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Parts in the storeroom</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-down"></i></div>
+      <div class="stat-value">{{ stats.below_count }}</div>
+      <div class="stat-label">At or below reorder point</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ stats.stock_value }}</div>
+      <div class="stat-label">Stock value at average cost</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.consumed_value }}</div>
+      <div class="stat-label">Consumed by maintenance ({{ stats.consumed_moves }} issue{{ stats.consumed_moves|pluralize }})</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where every figure comes from</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        <span class="fw-600">On hand</span> is the sum of every movement in 4.3's append-only
+        <span class="mono">StockMove</span> ledger for that item. There is no stored quantity column anywhere in
+        this application, which is precisely why this page cannot drift from the storeman's count — there is
+        nothing to drift from. <span class="fw-600">Value</span> is that quantity at the item's cached average
+        cost; the authoritative FIFO/LIFO layer walk is the
+        <a href="{% url 'scm:valuation_report' %}">valuation report</a>'s job and is not repeated here.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Min / max</span> is the buyer's own <span class="mono">ReorderRule</span>: the min is
+        the reorder point, the max is the level a suggested order brings stock back up to. The headline figure
+        compares network-wide on-hand against the strictest configured point (falling back to the item's own
+        default when no rule exists); the per-location chips beside it are the finer answer, each computed
+        against that rule's own location. A part with 0 on hand and no policy configured is not flagged as
+        below point — it is simply unstocked, and flagging it would drown the one signal this page exists to
+        give. Shortages are actioned through
+        <a href="{% url 'scm:reorder_alerts' %}">reorder alerts</a> and a
+        <a href="{% url 'scm:requisition_create' %}">purchase requisition</a>, exactly as any other item.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Consumed</span> counts movements of type <span class="mono">maintenance</span> inside
+        the window above — the negative ledger entries a work order writes when it
+        <span class="fw-600">issues</span> parts. That is the whole loop: a job issues a part, the ledger records
+        it, this column counts it and the asset's repair spend picks it up on the
+        <a href="{% url 'scm:asset_depreciation_report' %}">depreciation report</a>. Nothing on this page moves
+        stock; issuing does, and it happens on the job.
+      </p>
+    </div>
+  </div>
+{% endblock %}
