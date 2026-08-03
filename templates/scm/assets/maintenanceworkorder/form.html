@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.13 Asset Management — shared create/edit form for MaintenanceWorkOrder and its parts formset.
+
+Context contract — apps/scm/views/AssetManagement/MaintenanceWorkOrders.py::_maintenanceworkorder_form,
+which renders this page directly rather than through crud_create / crud_edit so that the header and
+the part lines commit inside ONE transaction.atomic(). Everything this page may read, and nothing
+else:
+  * form     — MaintenanceWorkOrderForm (bound on POST)
+  * formset  — MaintenanceWorkOrderPartFormSet, inlineformset_factory(extra=3, can_delete=True).
+               Its prefix is the FK's accessor name, "parts", and Django supplies it — the view
+               constructs the formset without an explicit prefix, so nothing here may set one either.
+  * is_edit  — False on create, True on edit
+  * obj      — the MaintenanceWorkOrder on the EDIT path, and None on create, so every use of it is
+               guarded by is_edit and never rendered bare
+
+THERE IS NO STATUS FIELD ON THIS PAGE, and that absence is the mechanism rather than an oversight.
+`status` is editable=False on the model and is deliberately absent from MaintenanceWorkOrderForm's
+Meta.fields whitelist, so a crafted status=completed in a POST body has nowhere to land — not
+because a view checks for it, but because there is no path from form data to the column at all. The
+ten verbs on the job's own page are the only writers. `started_at` / `completed_at` are system stamps
+for the same reason, and `downtime_minutes` is derived in save() from the window below — typing it
+would be typing a subtraction.
+
+Header fields are rendered BY NAME so they can be grouped, which couples this page to
+MaintenanceWorkOrderForm's field set: Meta.fields is a WHITELIST of 25 names and all 25 are below. A
+field added to the model and to that whitelist but not to a group here would never reach the POST —
+on edit it would be silently blanked on every save.
+
+The formset needs {{ formset.management_form }} rendered or Django raises ManagementForm-tampering
+on POST and every part line silently disappears. formset.non_form_errors() is where the "these parts
+have already been issued from stock and can no longer be changed or removed here" refusal appears —
+a line refused with no visible message looks exactly like a line that simply did not save.
+
+unit_cost / is_issued / issued_at are NOT fields on the part form. All three are editable=False and
+written only by the issue verb, which stamps the cost from the item's average cost at the instant it
+posts the negative maintenance stock movement. A form field for any of them would be a way to claim
+a consumption the stock ledger never saw — so they are rendered here as read-only text off
+pf.instance, never as inputs.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Maintenance Work Order{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Maintenance Work Order{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:maintenanceworkorder_list' %}">Maintenance Work Orders</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">A job raised here starts as a <span class="fw-600">request</span> — that plus whoever reported it <em>is</em> the maintenance notification, and approving it is a button on the job's own page rather than a conversion between two tables. There is deliberately <span class="fw-600">no status field on this form</span>: the ladder is owned by the verbs, so nothing typed here can move the job. Only an open job can be edited; once it is completed, closed or cancelled it is the record of what happened.</p>
+  </div></div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the job is</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The MWO- number is assigned on save. <span class="fw-600">Work type</span> is what kind of work this is — preventive, corrective, a breakdown, an inspection, a calibration; <span class="fw-600">source</span> is where it came from. A job generated from a preventive plan arrives with both already stamped from the plan, so the two vocabularies are shared rather than copied.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.title %}
+          {% include "partials/form_field.html" with field=form.work_type %}
+          {% include "partials/form_field.html" with field=form.priority %}
+          {% include "partials/form_field.html" with field=form.source %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The machine and the people</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">plan</span> list offers every plan in the workspace rather than only the chosen asset's: on a new job no asset has been picked yet, and a dropdown narrowed to "plans for this asset" would render permanently empty on the screen that matters. A plan that maintains a <em>different</em> machine is refused on save instead — which also holds against a crafted request, as a narrowed dropdown never did. <span class="fw-600">Reported by</span> and <span class="fw-600">assigned to</span> offer people on the payroll; the contractor takes the commercial party list. The <span class="fw-600">parts storeroom</span> is where spares are drawn from, and without it the Issue Parts button on the job's page is refused outright — there is no sensible default, because guessing a storeroom would draw stock out of a bin that never held it.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.asset %}
+          {% include "partials/form_field.html" with field=form.plan %}
+          {% include "partials/form_field.html" with field=form.reported_by %}
+          {% include "partials/form_field.html" with field=form.assigned_to %}
+          {% include "partials/form_field.html" with field=form.service_vendor %}
+          {% include "partials/form_field.html" with field=form.parts_location %}
+          {% include "partials/form_field.html" with field=form.non_conformance %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">When</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;"><span class="fw-600">Reported at</span> is editable because an operator routinely logs a fault that happened on the night shift. <span class="fw-600">Scheduled start</span> is the date the job is committed to, and it is what on-time performance is measured against — it can also be set, or moved, with the Schedule button on the job's page. The <em>started</em> and <em>completed</em> stamps are not on this form at all: they are written by the Start and Complete buttons, because the moment work began is an event rather than an opinion.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.reported_at %}
+          {% include "partials/form_field.html" with field=form.scheduled_start %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The outage</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">These two <span class="fw-600">are</span> editable, unlike the start and completion stamps, and that is deliberate: discovering afterwards that the machine actually went down at 02:10 is the normal case, and a window that could only be set by a button could never be corrected. The end may not precede the start, and the total downtime is <span class="fw-600">derived from the pair on save</span> — it is never typed, because typing it would be typing a subtraction that could then disagree with its own two inputs. Tick <span class="fw-600">unplanned</span> for a genuine failure: that is the figure availability and mean time between failures are actually about, and counting a planned shutdown as one would make every well-maintained machine look unreliable.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.downtime_start %}
+          {% include "partials/form_field.html" with field=form.downtime_end %}
+          {% include "partials/form_field.html" with field=form.is_unplanned_downtime %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Failure chain</h2>
+        <span class="badge badge-slate">Problem → cause → remedy</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Three <span class="fw-600">closed</span> vocabularies — the symptom observed, why it happened, and what was done about it. A closed list is the entire reason "which cause costs us the most downtime this year?" is a single grouped query rather than a text-mining project, which is why free text is not offered here. Each list carries an honest <span class="fw-600">Other</span>, because a technician forced into a wrong code makes all the other codes untrustworthy. All three are optional: the cause and the remedy are usually only knowable once the job is done.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.problem_code %}
+          {% include "partials/form_field.html" with field=form.cause_code %}
+          {% include "partials/form_field.html" with field=form.remedy_code %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What it costs</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Labour is hours × the charge-out rate, and the rate is <span class="fw-600">capped rather than clamped</span> — an absurd figure does not stay local, it flows into this job's total, into the asset's maintenance cost to date and into the repair-versus-replace ratio on the depreciation report, so it is refused on the way in rather than quietly trimmed on the way out. The contractor's charge is <span class="fw-600">recorded here and nowhere else</span>: Asset Management drafts no accounting document and posts no journal entry. The parts cost is not on this form at all — it comes from the lines below, and only once they have actually been issued from stock.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.labour_hours %}
+          {% include "partials/form_field.html" with field=form.labour_rate %}
+          {% include "partials/form_field.html" with field=form.external_cost %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Meter capture</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">A capture field, not a stored meter. When the job completes, a value here becomes a <span class="fw-600">reading</span> filed against the asset with this job as its reference — the reading log stays the single place a meter is ever read from, and this column is never read back. If the asset names no meter the capture cannot be filed and the Complete button says so out loud rather than saving it under an invented name.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.meter_reading_at_work %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The narrative</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">What was observed, and what was actually done. The resolution can also be written straight into the <span class="fw-600">Complete</span> button on the job's page — which is where it usually arrives, because completing the job is exactly when the technician has something to say and is also the moment this form stops being reachable.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.resolution_notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Parts the job needs</h2>
+        <span class="badge badge-slate">Planned here · issued from the job's page</span>
+      </div>
+      <div class="table-wrap">
+        {% comment %}
+          management_form FIRST and unconditionally — without it Django raises a ManagementForm
+          tampering error on POST and the whole formset is dropped. non_form_errors carries the
+          formset-level refusal (an already-issued line that somebody tried to retype or remove);
+          each field also renders its own errors underneath, because a line refused with no visible
+          message looks exactly like a line that simply did not save.
+        {% endcomment %}
+        {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Part</th>
+              <th>Lot / serial</th>
+              <th>Quantity</th>
+              <th>Unit cost at issue</th>
+              <th>State</th>
+              <th>Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for pf in formset %}
+              <tr>
+                {% for hidden in pf.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>
+                  {% for e in pf.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                  {{ pf.item }}{% for e in pf.item.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                </td>
+                <td>{{ pf.lot_serial }}{% for e in pf.lot_serial.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                <td>{{ pf.quantity }}{% for e in pf.quantity.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                {% comment %}
+                  READ-ONLY TEXT off the stored instance, never an input. The cost is stamped from
+                  the item's average cost at the instant the issue verb posts the movement, and it is
+                  genuinely 0 on a line that has only been planned — so an unissued row says so in
+                  words rather than printing a zero that reads like a free part.
+                {% endcomment %}
+                <td class="nowrap mono">
+                  {% if pf.instance.pk and pf.instance.is_issued %}{{ pf.instance.unit_cost|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td class="nowrap">
+                  {% if pf.instance.pk and pf.instance.is_issued %}
+                    <span class="badge badge-green">Issued</span>
+                    <div class="form-help">{{ pf.instance.issued_at|date:"M d, Y H:i" }}</div>
+                  {% elif pf.instance.pk %}
+                    <span class="badge badge-slate">Planned</span>
+                  {% else %}
+                    <span class="text-muted">New line</span>
+                  {% endif %}
+                </td>
+                <td>{% if pf.instance.pk and not pf.instance.is_issued %}{{ pf.DELETE }}{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Leave a row blank to skip it; tick Remove to drop a line that has not been issued yet. A line is <span class="fw-600">planned</span> here and <span class="fw-600">issued</span> from the job's own page — two separate facts, which is why the flag exists rather than the row's mere presence meaning the stock has moved. Once a line is issued it may be neither retyped nor removed on this form: issuing posted a real negative stock movement and stamped the cost, so deleting the line would leave that movement standing in an append-only ledger with nothing to explain it and would silently drop the cost off this job, off the asset's maintenance cost to date and off the repair-versus-replace ratio in the depreciation report. An over-issue is corrected with a stock adjustment, the way every other posted movement is. There is deliberately <span class="fw-600">no "at least one part" rule</span> — a labour-only repair consumes nothing.
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:maintenanceworkorder_detail' obj.pk %}{% else %}{% url 'scm:maintenanceworkorder_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
