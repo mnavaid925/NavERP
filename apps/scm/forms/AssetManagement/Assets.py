@@ -75,13 +75,28 @@ def _keep_current(queryset, tenant, current_id):
     an asset quietly loses its custodian because somebody edited its notes. The union keeps the
     stored option selectable without widening the list for anybody else.
 
-    Still tenant-scoped in both legs, so this cannot re-admit another workspace's party. ``pk=None``
-    resolves to ``id IS NULL`` and matches nothing, so on a create form the OR is simply inert — the
+    Still tenant-scoped in both legs, so this cannot re-admit another workspace's party. On a create
+    form ``current_id`` is None and the widening is skipped entirely — the
     ``ComplianceRequirementForm.owner`` reading of the same situation.
+
+    **Why this is one ``filter(Q | Q)`` and NOT ``queryset | Party.objects.filter(...)``.** The
+    obvious union raises ``TypeError: Cannot combine a unique query with a non-unique query`` the
+    moment it is reached: every caller passes a role-narrowed queryset, those all end in
+    ``.distinct()`` (``_supplier_parties`` / ``_employee_parties`` / ``_carrier_parties`` in
+    ``apps/scm/forms/_common.py`` — the join through ``PartyRole`` makes it necessary), and Django
+    refuses to OR a distinct queryset with a plain one. It is a live 500 rather than a latent one,
+    and specifically on the EDIT path only: the ``current_id is None`` guard makes every create form
+    return early, so the failure hides from any test that does not first store a party.
+    Re-deriving from the model with a ``pk__in`` subquery sidesteps the combination rule altogether
+    and does not care whether the caller's queryset is distinct — which is the point, since the
+    alternative fix (``.distinct()`` on the right-hand side too) only holds for as long as every
+    future caller remembers to keep both sides in the same mode.
     """
     if current_id is None or tenant is None:
         return queryset
-    return queryset | Party.objects.filter(tenant=tenant, pk=current_id)
+    return Party.objects.filter(
+        Q(pk__in=queryset.values("pk")) | Q(pk=current_id), tenant=tenant
+    ).distinct()
 
 
 def _reject_foreign(form, cleaned, names):
