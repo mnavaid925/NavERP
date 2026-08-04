@@ -5,8 +5,13 @@ SCM 4.13 Asset Management — record one meter reading. Create only; there is no
 Renders apps/scm/views/AssetManagement/MeterReadings.py::meterreading_create. Everything this page
 may read, and nothing else:
 
-  form              MeterReadingForm (bound on POST) — exactly eight fields:
-                    asset, meter_name, unit, reading, read_at, source, reference, notes
+  form              MeterReadingForm (bound on POST) — exactly six fields:
+                    asset, meter_name, unit, reading, read_at, notes
+                    NOT source/reference: those are the reading's PROVENANCE and are stamped by
+                    whichever code path files it (this page = manual + blank; the work-order verbs =
+                    work_order + the MWO number). They were form fields until a review found that
+                    letting a user type them let any member forge a verb-filed reading onto somebody
+                    else's job, on a log with no edit route to correct it.
   is_edit           always False. There is no meterreading_edit view and no route into this template
                     from one, so nothing below branches on it: the view puts no `obj` in the context,
                     which means an "edit" branch would have no object to build a Cancel URL from and
@@ -84,13 +89,11 @@ that refuses their save cannot drift apart.
     <div class="card">
       <div class="card-header"><h2 class="card-title">Provenance</h2></div>
       <div class="card-body">
-        <p class="form-help" style="margin:0 0 .9rem;">Where the figure came from, and what it can be traced back to. <span class="fw-600">Source</span> is provenance, not authorisation — nothing reads it to decide what anybody may do — and it keeps all three of its options here, including the one a maintenance work order stamps when it captures a reading on the job and the one reserved for a future sensor feed. Put the source document's number in <span class="fw-600">reference</span>: the MWO- number when the reading was taken during work, the inspection sheet otherwise.</p>
+        <p class="form-help" style="margin:0 0 .9rem;">A reading filed here is recorded as a <span class="fw-600">manual</span> observation with no source document, because that is what it is. Neither the source nor the reference is asked for: they are the reading's provenance, and they are stamped by whatever files the reading — a reading captured while completing a maintenance job is stamped by that job and carries its MWO- number, which is how the job's own readings panel finds it. Letting either be typed here would let a hand-entered figure claim to have come from work that never happened, on a log that is append-only and has no edit route to take it back.</p>
         <div class="form-grid">
-          {% include "partials/form_field.html" with field=form.source %}
-          {% include "partials/form_field.html" with field=form.reference %}
           {% include "partials/form_field.html" with field=form.notes %}
         </div>
-        <div class="form-help">Who took the reading is <span class="fw-600">not</span> asked for — it is stamped from your signed-in party when the reading saves, because that is an audit fact rather than something worth letting anyone type.</div>
+        <div class="form-help">Who took the reading is <span class="fw-600">not</span> asked for either — it is stamped from your signed-in party when the reading saves, because that is an audit fact rather than something worth letting anyone type.</div>
       </div>
     </div>
 
