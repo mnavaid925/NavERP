@@ -975,10 +975,15 @@ def _r_inv_turnover(tenant, start, end, scope, params=DEFAULT_PARAMS):
         "window_days": span,
         "annualised": True,
         "move_types": list(COGS_MOVE_TYPES),
-        "excludes": "transfer",
+        # Named in visible copy, not only in a code comment. `maintenance` joined the ledger with
+        # 4.13 and is excluded from COGS on purpose; a caveat that still said only "transfer" would
+        # under-state what the figure leaves out, and this block exists precisely so the number on
+        # screen carries its own definition.
+        "excludes": "transfer, maintenance",
         "note": ("Counts issues (customer demand) AND consumption (work-order draws); transfers are "
                  "excluded because an internal relocation is posted as a signed pair and would be "
-                 "counted twice."),
+                 "counted twice, and maintenance draws are excluded because a spare fitted to a "
+                 "machine is upkeep of your own plant, not the cost of any good you sold."),
         "valuation": "on-hand x cached average cost",
         "truncated": figures["truncated"],
         "window_note": figures["window_note"],
