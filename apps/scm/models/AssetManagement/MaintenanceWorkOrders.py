@@ -241,7 +241,26 @@ class MaintenanceWorkOrder(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="scm_mwo_tnt_status_idx"),
             # The asset detail page's job history, and every MTTR/MTBF roll-up.
-            models.Index(fields=["tenant", "asset"], name="scm_mwo_tnt_asset_idx"),
+            #
+            # ``-reported_at`` is the third column and it is not decoration: Meta.ordering above is
+            # ``["-reported_at", "-id"]``, so a two-column ``(tenant, asset)`` index could find the
+            # asset's jobs and then had to FILESORT every one of them to answer "newest 25 first".
+            # Measured on nav_erp by migrating 0023 back and forth over the SAME query and data:
+            # two columns gave ``key: scm_mwo_tnt_asset_idx, key_len 16, Using where; Using
+            # filesort``; three gave the same key with the filesort GONE.
+            #
+            # Declared DESCENDING to state the intent, though this database does not yet store it
+            # that way — MariaDB gained descending indexes in 10.8 and XAMPP ships 10.4, where SHOW
+            # CREATE TABLE reports a plain ascending ``(tenant_id, asset_id, reported_at)``. The
+            # ordering is served anyway, by a BACKWARD index scan: with the first two columns pinned
+            # to constants the third is already in order, and every ORDER BY term points the same
+            # way, so reading the index in reverse IS the answer. The declaration costs nothing here
+            # and starts paying the moment the server is newer.
+            #
+            # Still a valid prefix for the index's other users: anything filtering ``tenant`` alone
+            # or ``(tenant, asset)`` reads it exactly as before, because a B-tree's leading prefix is
+            # usable on its own. Widening it therefore cost nothing that was already working.
+            models.Index(fields=["tenant", "asset", "-reported_at"], name="scm_mwo_tnt_asset_idx"),
             models.Index(fields=["tenant", "work_type"], name="scm_mwo_tnt_type_idx"),
             # Matches the default ordering, so the list page's first screen is an index scan.
             models.Index(fields=["tenant", "reported_at"], name="scm_mwo_tnt_rep_idx"),
