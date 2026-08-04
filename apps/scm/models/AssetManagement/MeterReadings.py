@@ -101,6 +101,14 @@ class MeterReading(TenantOwned):
         indexes = [
             # The workhorse: Asset.latest_reading() and the per-asset trend both filter asset and
             # order by read_at, so the sort is served by the index rather than a filesort per asset.
+            #
+            # ONLY WHEN THE QUERY CARRIES A TENANT PREDICATE. ``tenant_id`` is the LEADING column,
+            # so a query that reaches this table through the related manager alone
+            # (``asset.meter_readings...``) states no tenant, cannot open this index, and falls back
+            # to the plain FK index on ``asset_id`` plus a filesort. That is exactly what
+            # ``Asset.latest_reading()`` used to do — measured, not theorised — which is why it and
+            # the two panels that read this table now state a "redundant" ``tenant=`` that narrows
+            # nothing and buys the whole index. A reader adding a third caller owes the same line.
             models.Index(fields=["tenant", "asset", "read_at"], name="scm_mtr_tnt_asset_idx"),
             # Whole-workspace views (the readings list, a date-range export) cannot use the index
             # above — asset is not a prefix of the filter.
