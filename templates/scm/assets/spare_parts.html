@@ -65,8 +65,13 @@ badge-success / badge-warning / badge-danger do not exist in theme.css and rende
       </p>
     </div>
     <div class="page-actions">
-      {% comment %} No ?is_spare_part= here: item_list filters on item_type / category / tracking only, and a query string it ignores would look like a filter that silently did nothing. {% endcomment %}
-      <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Item Master</a>
+      {% comment %}
+        ?spare=1 is a REAL filter on item_list (view: filters=[..., ("spare", "is_spare_part", False)]),
+        added alongside this page so the link lands on the MRO subset rather than the whole master.
+        Do not point it at a param the item list does not parse — a query string it ignores looks
+        like a filter that silently did nothing.
+      {% endcomment %}
+      <a href="{% url 'scm:item_list' %}?spare=1" class="btn btn-outline"><i data-lucide="package"></i> Item Master</a>
       <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Reorder Rules</a>
       <a href="{% url 'scm:requisition_create' %}" class="btn btn-primary"><i data-lucide="shopping-cart"></i> Raise Requisition</a>
     </div>
