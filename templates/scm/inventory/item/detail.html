@@ -36,6 +36,7 @@
       <div class="detail-item"><dt>Standard Cost</dt><dd>{{ obj.standard_cost|floatformat:2 }}</dd></div>
       <div class="detail-item"><dt>Average Cost</dt><dd>{{ obj.average_cost|floatformat:4 }}</dd></div>
       <div class="detail-item"><dt>Reorder Point</dt><dd>{{ obj.reorder_point|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Spare Part (MRO)</dt><dd>{% if obj.is_spare_part %}<span class="badge badge-info">Yes</span> <a href="{% url 'scm:sparepart_list' %}">Storeroom</a>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—"|linebreaksbr }}</dd></div>
     </dl>
