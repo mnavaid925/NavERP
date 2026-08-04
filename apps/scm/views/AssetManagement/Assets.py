@@ -500,10 +500,15 @@ def asset_detail(request, pk):
         "warranty_chip": obj.warranty_chip(),
         "days_to_warranty_expiry": obj.days_to_warranty_expiry(),
 
-        # None is passed straight through on all four — see the docstring. Never substitute 0.
+        # None is passed straight through on the first THREE — never substitute 0, which on a
+        # reliability page reads as "fails constantly" / "instant repairs" / "never available", the
+        # exact opposite of "not enough history yet".
         "mtbf_hours": obj.mtbf_hours(),
         "mttr_hours": obj.mttr_hours(),
         "availability_pct": obj.availability_pct(),
+        # NOT None-able: this one returns q2(...) unconditionally, so a fresh asset reports 0.00 —
+        # and that is a REAL zero (nothing has been spent on it yet), not an unmeasurable. The
+        # template still carries an em-dash branch as defensive rendering; it is simply never taken.
         "maintenance_cost_to_date": obj.maintenance_cost_to_date(),
         "downtime_minutes": downtime_minutes,
         "downtime_hours": _hours(downtime_minutes),
