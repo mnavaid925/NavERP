@@ -21,9 +21,11 @@ in a red tile (the 4.11 lesson).
 
 **It never asks a per-row method a question the database can answer once.** ``Asset.is_down_now()``
 and ``Asset.open_job_count()`` are one query EACH, so calling them inside a 15-row list loop is 30
-queries for two chips. :func:`asset_list` therefore annotates both — ``down_now`` as an
-``Exists()`` subquery and ``open_jobs_count`` as ONE grouped ``Count``. ``warranty_chip()`` is called
-per row and that is fine: it is pure date arithmetic and touches no table.
+queries for two chips. :func:`asset_list` therefore annotates both — ``down_now`` as an ``Exists()``
+subquery and ``open_jobs_count`` as a correlated scalar ``Subquery``, never as a joined ``Count``
+(see :data:`_OPEN_JOB_COUNT` for what the join form did to the paginator's COUNT).
+``warranty_chip()`` is called per row and that is fine: it is pure date arithmetic and touches no
+table.
 
 **It writes no stock move and drafts no accounting document** (L29). ``fixed_asset`` is READ for the
 book-value card and nothing here writes back to it — ``accounting.FixedAsset`` owns the acquisition
@@ -76,6 +78,9 @@ Badge colours come from the models' own ``status_css`` / ``criticality_css`` / `
 from datetime import timedelta
 
 from django.db.models import ProtectedError
+# Same import shape the 4.13 spare-parts report uses — views/_common.py deliberately does not
+# re-export the functions module.
+from django.db.models.functions import Coalesce
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
@@ -198,6 +203,39 @@ def _open_downtime_jobs(tenant):
             .exclude(status__in=Asset.CLOSED_JOB_STATUSES))
 
 
+#: One asset's outstanding-job count, as a CORRELATED SCALAR SUBQUERY — the shape
+#: ``Reports._spare_part_qs`` documents as the one that behaves under filtering, ordering,
+#: pagination AND ``.count()``.
+#:
+#: **Why not the obvious ``Count("work_orders", filter=~Q(...))``.** The joined form makes the whole
+#: asset query an aggregate query, which forces a ``GROUP BY scm_asset.id`` — and a GROUP BY is
+#: something ``.count()`` cannot collapse. Django wraps the statement in a derived table and keeps
+#: the ``down_now`` EXISTS in the inner select list, so the PAGINATOR's count alone became: one
+#: correlated EXISTS probe per asset in the whole workspace, plus a full LEFT OUTER JOIN of the
+#: work-order table, plus ``Using temporary; Using filesort``. Every page load, to learn a number.
+#: Measured against ``nav_erp`` with EXPLAIN; the subquery form collapses it to
+#: ``SELECT COUNT(*) FROM scm_asset WHERE tenant_id = %s``.
+#:
+#: ``.order_by()`` is load-bearing: ``MaintenanceWorkOrder.Meta.ordering`` is
+#: ``["-reported_at", "-id"]`` and an inherited ORDER BY column would be dragged into the GROUP BY,
+#: splitting the count per timestamp (the ``pm_forecast`` chip note, same trap).
+#:
+#: The negation is written as ``exclude(CLOSED_JOB_STATUSES)`` rather than as an open-status list so
+#: it matches ``Asset.open_jobs()`` token for token: an unknown status counts as OPEN, which errs
+#: towards showing a job.
+#:
+#: ``tenant`` is correlated with ``OuterRef("tenant_id")`` rather than closed over as a literal
+#: because this is a module-level constant with no request in scope. It resolves to the outer row's
+#: own tenant, so the subquery can never reach across a workspace.
+_OPEN_JOB_COUNT = (MaintenanceWorkOrder.objects
+                   .filter(tenant=OuterRef("tenant_id"), asset=OuterRef("pk"))
+                   .exclude(status__in=Asset.CLOSED_JOB_STATUSES)
+                   .order_by()
+                   .values("asset")
+                   .annotate(n=Count("id"))
+                   .values("n")[:1])
+
+
 def _apply_warranty_filter(queryset, value, today):
     """Narrow to one warranty bucket, derived from the date — see :data:`WARRANTY_CHOICES`.
 
@@ -247,35 +285,41 @@ def asset_list(request):
     ``int()`` says no) and ``?location=99999999999999999999`` (converts fine, then overflows inside
     the driver) all SKIP the filter rather than raise on a URL anybody can type into the address bar.
 
-    **Two annotations, and neither is a per-row method call.** ``down_now`` is an ``Exists()``
-    subquery — a correlated EXISTS stops at the first matching row, where a ``Count`` would GROUP BY
-    the whole child table to answer a yes/no. ``open_jobs_count`` is ONE grouped ``Count``, and it is
-    one deliberately: a SECOND aggregate over a second reverse relation would LEFT JOIN both children
-    into a cartesian product per asset and multiply both figures (the 4.8 WorkCenter finding, and the
-    same fan-out ``Asset.maintenance_cost_to_date`` documents). The negated filter is safe here —
-    ``Q.resolve_expression`` passes ``split_subq=False``, so ``~Q(...)`` inside an aggregate ``filter``
-    compiles inline rather than into an exclusion subquery — and it is written as the negation of
-    ``CLOSED_JOB_STATUSES`` rather than as ``OPEN_STATUSES`` so it matches ``Asset.open_jobs()``
-    token for token: an unknown status counts as OPEN, which errs towards showing a job.
+    **Two annotations, and NEITHER is a join.** ``down_now`` is an ``Exists()`` subquery — a
+    correlated EXISTS stops at the first matching row, where a ``Count`` would read the whole child
+    table to answer a yes/no. ``open_jobs_count`` is a correlated scalar ``Subquery``
+    (:data:`_OPEN_JOB_COUNT`) for the reason set out there: the joined ``Count`` it replaced forced a
+    GROUP BY that the paginator's ``.count()`` could not collapse, so every page load ran one EXISTS
+    probe per asset in the workspace just to learn how many rows there were.
+
+    Both are also, incidentally, immune to the fan-out that a SECOND joined aggregate over a second
+    reverse relation would cause (the 4.8 WorkCenter finding, and the trap
+    ``Asset.maintenance_cost_to_date`` documents) — a correlated subquery cannot multiply the outer
+    row.
+
+    ``.defer("specifications", "notes")`` drops two ``TextField``s the list template renders nowhere
+    (only the detail page and the form read them). ``defer`` touches the SELECT list ONLY, so the
+    search on ``serial_number`` / ``tag_code`` and every filter below are completely unaffected —
+    and those two columns must NOT be deferred, because they are searched.
     """
     today = timezone.localdate()
     horizon = today + timedelta(days=Asset.WARRANTY_NOTICE_DAYS)
 
     queryset = (Asset.objects.filter(tenant=request.tenant)
                 .select_related(*_ASSET_LIST_SELECT)
+                .defer("specifications", "notes")
                 .annotate(
                     down_now=Exists(_open_downtime_jobs(request.tenant)
                                     .filter(asset=OuterRef("pk"))),
-                    open_jobs_count=Count(
-                        "work_orders",
-                        filter=~Q(work_orders__status__in=Asset.CLOSED_JOB_STATUSES)),
+                    # Coalesced because the subquery answers NULL, not 0, for an asset with no open
+                    # job at all — and the template prints this as a queue badge.
+                    open_jobs_count=Coalesce(
+                        models.Subquery(_OPEN_JOB_COUNT, output_field=models.IntegerField()),
+                        models.Value(0), output_field=models.IntegerField()),
                 )
-                # STATED, not inherited, and this line is load-bearing. Django IGNORES Meta.ordering
-                # on any query carrying an aggregate (3.1+), so the moment the Count above was added
-                # this queryset became genuinely unordered — `QuerySet.ordered` goes False, the
-                # Paginator raises UnorderedObjectListWarning, and page 2 is whatever the database
-                # felt like returning. `code` is unique per tenant, so it is a total order and needs
-                # no tie-break. (Caught by the smoke run, and exactly the 4.8 WorkCenter note.)
+                # STATED, not inherited. `code` is unique per tenant, so it is a total order and
+                # needs no tie-break; saying so here keeps page 2 deterministic without the reader
+                # having to go and check Meta.ordering.
                 .order_by("code"))
 
     # The one filter crud_list's equality spec cannot express — a derived date bucket, not a column.
@@ -411,9 +455,16 @@ def asset_detail(request, pk):
       ``part.on_hand``. The template must read that attribute and **must not** call
       ``part.item.on_hand()``, which is a fresh aggregate per row.
 
-    The reliability block itself is around a dozen small queries (each model method owns its own
-    arithmetic and re-derives what it needs). That is the deliberate trade: one page, one asset, and
-    the alternative is a view that re-implements MTBF and drifts from the model that defines it.
+    **The reliability block is THREE queries, not a dozen**, and the view still does none of the
+    arithmetic. Every figure on that card sits on the same job-header grain, so ``Asset`` derives
+    them all in one memoised ``aggregate()`` (``Asset._reliability_agg``) plus one scan of the open
+    downtime windows; the parts total stays its own query because it is a different grain and folding
+    it in would fan the job rows out. This view calls the same six methods it always did — the saving
+    is entirely inside the model, which is where the definitions belong.
+
+    That memo is also what makes the card INTERNALLY CONSISTENT: the still-running downtime is
+    measured against one clock read once, so the downtime tile and ``availability_pct`` can no longer
+    print figures a minute apart from each other.
     """
     obj = get_object_or_404(
         Asset.objects.select_related(*_ASSET_DETAIL_SELECT), pk=pk, tenant=request.tenant)
@@ -435,7 +486,13 @@ def asset_detail(request, pk):
     # `parts` prefetched because MaintenanceWorkOrder.parts_cost iterates self.parts.all() by design
     # (it reuses the page's cache rather than firing a Sum per print). One extra query for the whole
     # panel instead of one per row.
-    work_orders = list(obj.work_orders
+    #
+    # The explicit `tenant=` narrows nothing (the related manager already constrains by asset, which
+    # implies the tenant) and is the house idiom for a reason: `scm_mwo_tnt_asset_idx` is
+    # (tenant, asset, -reported_at) and `tenant_id` is its LEADING column, so without a predicate on
+    # it MariaDB cannot open the index at all and falls back to the plain FK index plus a filesort of
+    # the asset's whole job history. Same line, same reason, as the readings panel below.
+    work_orders = list(obj.work_orders.filter(tenant=request.tenant)
                        .select_related("plan", "assigned_to", "service_vendor")
                        .prefetch_related("parts")[:MAX_PANEL_ROWS + 1])
     work_orders_truncated = len(work_orders) > MAX_PANEL_ROWS
@@ -446,7 +503,11 @@ def asset_detail(request, pk):
         open=Count("id", filter=~Q(status__in=Asset.CLOSED_JOB_STATUSES)))
 
     # --- the meter --------------------------------------------------------------------------------
-    readings = list(obj.meter_readings.select_related("recorded_by")[:MAX_READING_ROWS + 1])
+    # The `tenant=` is redundant and load-bearing, exactly as on the job panel above:
+    # `scm_mtr_tnt_asset_idx` is (tenant, asset, read_at), so without it this is a filesort over the
+    # asset's entire meter history — which is the fastest-growing table hanging off an asset.
+    readings = list(obj.meter_readings.filter(tenant=request.tenant)
+                    .select_related("recorded_by")[:MAX_READING_ROWS + 1])
     readings_truncated = len(readings) > MAX_READING_ROWS
     del readings[MAX_READING_ROWS:]
     # The asset's own answer to "what does the meter say now" — which, when a primary meter is named,
@@ -526,7 +587,11 @@ def asset_detail(request, pk):
 
         "readings": readings,
         "readings_truncated": readings_truncated,
-        "reading_count": obj.meter_readings.count(),
+        # Same rule as `child_count` above: the COUNT is only paid for when the slice actually hid
+        # something. Otherwise the list length IS the count, and a round trip to learn what we
+        # already hold is a query for nothing.
+        "reading_count": (obj.meter_readings.filter(tenant=request.tenant).count()
+                          if readings_truncated else len(readings)),
         "latest_reading": latest_reading,
 
         "children": children,
@@ -535,7 +600,12 @@ def asset_detail(request, pk):
 
         "plans": plans,
         "plan_count": len(plans),
-        "next_pm_due": obj.next_pm_due(),
+        # NOT obj.next_pm_due(), which would query for data this page is already holding — `plans`
+        # is the same rows, fetched above. The method stays on the model for callers that do not
+        # hold them (a list column, an API), and it applies the identical rule: the earliest
+        # next_due_on across the ACTIVE plans that have one, or None when there is none.
+        "next_pm_due": min((plan.next_due_on for plan in plans
+                            if plan.is_active and plan.next_due_on), default=None),
 
         # None, not 0, when there is no book record: a missing LINK is not a worthless asset.
         "acquisition_cost": book.acquisition_cost if book else None,
