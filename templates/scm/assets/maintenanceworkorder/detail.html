@@ -128,7 +128,7 @@ NOT EXIST in theme.css and render completely unstyled (L33).
       {% endcomment %}
       {% if can_approve %}
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
-          <form method="post" action="{% url 'scm:maintenanceworkorder_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}? Approving is what commits somebody&#39;s time and the money this job will spend.');" style="margin-bottom:1rem;">
+          <form method="post" action="{% url 'scm:maintenanceworkorder_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}? Approving is what commits somebody\'s time and the money this job will spend.');" style="margin-bottom:1rem;">
             {% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Approve this request</button>
             <div class="form-help">A request plus whoever raised it <span class="fw-600">is</span> the maintenance notification — there is no second table to convert from. Approving moves it one rung up the ladder and nothing else; it schedules no date and reserves no part.</div>
@@ -139,7 +139,7 @@ NOT EXIST in theme.css and render completely unstyled (L33).
       {% endif %}
 
       {% if can_schedule %}
-        <form method="post" action="{% url 'scm:maintenanceworkorder_schedule' obj.pk %}" onsubmit="return confirm('Commit {{ obj.number }} to this start date? This is the date the job&#39;s on-time performance is measured against.');" style="margin-bottom:1rem;">
+        <form method="post" action="{% url 'scm:maintenanceworkorder_schedule' obj.pk %}" onsubmit="return confirm('Commit {{ obj.number }} to this start date? This is the date the job\'s on-time performance is measured against.');" style="margin-bottom:1rem;">
           {% csrf_token %}
           <div class="form-group">
             <label class="form-label" for="id_scheduled_start">Scheduled start</label>
@@ -151,7 +151,7 @@ NOT EXIST in theme.css and render completely unstyled (L33).
       {% endif %}
 
       {% if can_start %}
-        <form method="post" action="{% url 'scm:maintenanceworkorder_start' obj.pk %}" onsubmit="return confirm('Start work on {{ obj.number }}? The start time is stamped now and is what the job&#39;s duration is measured from.');" style="margin-bottom:1rem;">
+        <form method="post" action="{% url 'scm:maintenanceworkorder_start' obj.pk %}" onsubmit="return confirm('Start work on {{ obj.number }}? The start time is stamped now and is what the job\'s duration is measured from.');" style="margin-bottom:1rem;">
           {% csrf_token %}
           <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Start work</button>
           <div class="form-help">Accepted from <span class="fw-600">approved</span> as well as from scheduled, on purpose: a breakdown is worked the moment somebody walks to the machine, and forcing a scheduling step first would only ever produce a fake date. Resuming from a hold deliberately does <em>not</em> re-stamp this, so duration stays measured from when work first began.</div>
@@ -418,7 +418,7 @@ NOT EXIST in theme.css and render completely unstyled (L33).
       {% endcomment %}
       {% if can_issue_parts %}
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
-          <form method="post" action="{% url 'scm:maintenanceworkorder_issue_parts' obj.pk %}" onsubmit="return confirm('Issue the {{ unissued_part_count }} un-issued part line(s) on {{ obj.number }} from store {{ obj.parts_location.code }}? This draws the stock out of that storeroom for real and cannot be undone by pressing back — an over-issue is corrected with a stock adjustment.');">
+          <form method="post" action="{% url 'scm:maintenanceworkorder_issue_parts' obj.pk %}" onsubmit="return confirm('Issue the {{ unissued_part_count }} un-issued part line(s) on {{ obj.number }} from the job\'s storeroom? This draws the stock out of that storeroom for real and cannot be undone by pressing back — an over-issue is corrected with a stock adjustment.');">
             {% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="package-minus"></i> Issue {{ unissued_part_count }} part line{{ unissued_part_count|pluralize }} from {{ obj.parts_location.code }}</button>
             <div class="form-help">Posts one negative <span class="fw-600">maintenance</span> stock movement per un-issued line through the shared posting service, so on-hand stays a pure sum of one append-only ledger. A line the storeroom cannot cover is <span class="fw-600">named and skipped</span>, not thrown — refusing an eight-line issue over one missing washer helps nobody. Each line's unit cost is stamped from the item's average cost at this instant and never read live again.</div>
@@ -684,7 +684,7 @@ NOT EXIST in theme.css and render completely unstyled (L33).
         {% endcomment %}
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
           {% if can_delete %}
-            <form method="post" action="{% url 'scm:maintenanceworkorder_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Nothing has been issued against it, so no stock movement is orphaned — but the job disappears from this machine&#39;s history. Cancelling keeps the record.');">
+            <form method="post" action="{% url 'scm:maintenanceworkorder_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Nothing has been issued against it, so no stock movement is orphaned — but the job disappears from this machine\'s history. Cancelling keeps the record.');">
               {% csrf_token %}
               <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
             </form>
