@@ -14,12 +14,18 @@ def item_list(request):
     return crud_list(
         request, qs, "scm/inventory/item/list.html",
         search_fields=["sku", "name", "description"],
+        # `spare` maps the strings "1"/"0" onto the boolean column, the same shape the shipped
+        # is_active filters use. Added with 4.13: `is_spare_part` became settable on ItemForm, and a
+        # flag a user can tick with no readback anywhere is indistinguishable from one that did not
+        # save. This is the readback, and it is also how the buyer finds the MRO subset of a
+        # thousand-line item master.
         filters=[("item_type", "item_type", False), ("category", "category_id", True),
-                 ("tracking", "tracking", False)],
+                 ("tracking", "tracking", False), ("spare", "is_spare_part", False)],
         extra_context={
             "type_choices": Item.ITEM_TYPES,
             "tracking_choices": Item.TRACKING_CHOICES,
             "categories": ItemCategory.objects.filter(tenant=request.tenant),
+            "spare_choices": [("1", "Spare parts only"), ("0", "Excluding spare parts")],
         },
     )
 
