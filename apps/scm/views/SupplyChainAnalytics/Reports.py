@@ -820,7 +820,10 @@ def _inventory_context(request, spec):
         # Rendered as visible page text, not a comment: what turnover counts and what it excludes.
         "turnover_note": _breakdown(turnover, "note", TURNOVER_BASIS_NOTE),
         "turnover_move_types": list(analytics.COGS_MOVE_TYPES),
-        "turnover_excludes": "transfer",
+        # Kept in step with the resolver's own `excludes` string. 4.13 added `maintenance` to the
+        # ledger and deliberately kept it out of COGS, so the page has to say so — an exclusion that
+        # is real but unnamed is exactly what this block of visible notices exists to prevent.
+        "turnover_excludes": "transfer, maintenance",
         "demand_netting_note": DEMAND_NETTING_NOTE,
         "carrying_pct": _breakdown(tile_map.get("inv_carrying_cost"), "parameter_pct",
                                    analytics.CARRYING_PCT),
