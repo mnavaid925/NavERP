@@ -898,7 +898,12 @@ LIVE_LINKS = {
     # ReorderRule / ReturnReason precedent), and the alert inbox `scm:supplychainalert_list` is
     # reached from the open-count chip in every analytics page header.
     #
-    # 4.11 is READ-ONLY over 4.1-4.10: it writes no StockMove and no JournalEntry. "Financial
+    # 4.11 is READ-ONLY over every sub-module that precedes it: it writes no StockMove and no
+    # JournalEntry. (Written as "4.1-4.10" when 4.11 shipped; 4.12 and 4.13 have landed since and
+    # the statement still holds, so the range is now stated as a rule rather than a list that goes
+    # stale on every release.) 4.13's `maintenance` moves are visible to 4.11's inventory
+    # recency metrics and deliberately excluded from its COGS ones — see
+    # `apps/scm/analytics.py` OUTBOUND_MOVE_TYPES vs COGS_MOVE_TYPES. "Financial
     # Reporting" is an OPERATIONAL margin estimate over SCM rows and says so on the page — the
     # statutory P&L belongs to apps.accounting (L29). "Predictive Analytics" is a deterministic,
     # fully explainable weighted composite rendered with its own component arithmetic; genuine
