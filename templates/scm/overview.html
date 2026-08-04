@@ -257,4 +257,65 @@
       </div>
     </div>
   </div>
+
+  {% comment %}
+    One card per sub-module is this page's convention. It had been left at 4.9 for four releases,
+    so 4.10-4.12 are restored here alongside 4.13 rather than shipping the new card next to a
+    three-sub-module hole. Every target is the same url name that sub-module's LIVE_LINKS entry
+    points at, so the landing page and the sidebar cannot disagree about where a feature lives.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Returns</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="undo-2"></i> RMAs</a>
+        <a href="{% url 'scm:returndisposition_list' %}" class="btn btn-outline"><i data-lucide="package-open"></i> Dispositions</a>
+        <a href="{% url 'scm:refund_queue' %}" class="btn btn-outline"><i data-lucide="banknote"></i> Refund Queue</a>
+        <a href="{% url 'scm:warrantyclaim_list' %}" class="btn btn-outline"><i data-lucide="badge-check"></i> Warranty Claims</a>
+        <a href="{% url 'scm:returnreason_list' %}" class="btn btn-outline"><i data-lucide="list"></i> Return Reasons</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Analytics</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:inventory_analytics' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Inventory</a>
+        <a href="{% url 'scm:spend_analytics' %}" class="btn btn-outline"><i data-lucide="pie-chart"></i> Spend</a>
+        <a href="{% url 'scm:logistics_kpis' %}" class="btn btn-outline"><i data-lucide="truck"></i> Logistics KPIs</a>
+        <a href="{% url 'scm:margin_analytics' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Margin</a>
+        <a href="{% url 'scm:disruption_risk' %}" class="btn btn-outline"><i data-lucide="activity"></i> Disruption Risk</a>
+        <a href="{% url 'scm:supplychainalert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alerts</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Contract &amp; Compliance</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="file-signature"></i> Contracts</a>
+        <a href="{% url 'scm:compliancerequirement_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Compliance</a>
+        <a href="{% url 'scm:tradedocument_list' %}" class="btn btn-outline"><i data-lucide="file-text"></i> Trade Documents</a>
+        <a href="{% url 'scm:tradelicense_list' %}" class="btn btn-outline"><i data-lucide="stamp"></i> Licences</a>
+        <a href="{% url 'scm:sustainabilityassessment_list' %}" class="btn btn-outline"><i data-lucide="leaf"></i> Sustainability</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Asset Management</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:asset_list' %}" class="btn btn-outline"><i data-lucide="hard-drive"></i> Asset Registry</a>
+        <a href="{% url 'scm:maintenanceplan_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> PM Plans</a>
+        <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Maintenance Jobs</a>
+        <a href="{% url 'scm:pm_forecast' %}" class="btn btn-outline"><i data-lucide="calendar-check"></i> PM Forecast</a>
+        <a href="{% url 'scm:sparepart_list' %}" class="btn btn-outline"><i data-lucide="package-search"></i> Spare Parts</a>
+        <a href="{% url 'scm:meterreading_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Meter Readings</a>
+        <a href="{% url 'scm:asset_depreciation_report' %}" class="btn btn-outline"><i data-lucide="trending-down"></i> Depreciation</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
