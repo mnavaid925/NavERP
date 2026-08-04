@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from django.db.models import Exists, OuterRef
+from django.db.models.functions import Coalesce
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _location_qs, _need_tenant
@@ -86,14 +87,29 @@ def workcenter_detail(request, pk):
     # The reliability figures (MTBF/MTTR/availability) are NOT shown here for the same reason —
     # each is a further per-row aggregate, and they belong to the asset's own 360 view anyway. This
     # panel answers "is anything stopping me right now", not "how reliable is this fleet".
+    #
+    # `open_jobs` is a CORRELATED SCALAR SUBQUERY, not a joined Count (the 4.13 asset_list finding,
+    # same shape). A Count over a reverse relation forces a GROUP BY on the asset query, which drags
+    # the `down_now` EXISTS into the grouped inner select and makes MariaDB materialise a temporary
+    # table. This panel is capped at 25 and pays no paginator COUNT, so the cost is smaller than on
+    # asset_list — but the fix is one expression and the two pages now read the same way.
+    open_jobs_count = (MaintenanceWorkOrder.objects
+                       .filter(tenant=OuterRef("tenant_id"), asset=OuterRef("pk"),
+                               status__in=MaintenanceWorkOrder.OPEN_STATUSES)
+                       # Load-bearing: Meta.ordering is ["-reported_at", "-id"] and an inherited
+                       # ORDER BY column would be dragged into the GROUP BY, splitting the count.
+                       .order_by().values("asset").annotate(n=Count("id")).values("n")[:1])
     assets = list(Asset.objects.filter(tenant=request.tenant, work_center=obj)
                   .annotate(
                       down_now=Exists(MaintenanceWorkOrder.objects.filter(
                           asset=OuterRef("pk"),
                           status__in=MaintenanceWorkOrder.OPEN_STATUSES,
                           downtime_start__isnull=False, downtime_end__isnull=True)),
-                      open_jobs=Count("work_orders", distinct=True, filter=Q(
-                          work_orders__status__in=MaintenanceWorkOrder.OPEN_STATUSES)))
+                      # NULL, not 0, comes back for a machine with no open job — coalesced, because
+                      # the template prints this as a queue badge.
+                      open_jobs=Coalesce(
+                          models.Subquery(open_jobs_count, output_field=models.IntegerField()),
+                          models.Value(0), output_field=models.IntegerField()))
                   .order_by("code")[:25])
     return render(request, "scm/manufacturing/workcenter/detail.html", {
         "obj": obj,
