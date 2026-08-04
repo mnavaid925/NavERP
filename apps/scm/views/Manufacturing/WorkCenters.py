@@ -5,7 +5,8 @@ from django.db.models import Exists, OuterRef
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _location_qs, _need_tenant
-from apps.scm.models import ProductionTimeLog, WorkCenter, WorkOrder
+from apps.scm.models import (Asset, MaintenanceWorkOrder, ProductionTimeLog, WorkCenter,
+                             WorkOrder)
 from apps.scm.forms import WorkCenterForm
 
 ZERO = Decimal("0")
@@ -75,9 +76,30 @@ def workcenter_detail(request, pk):
     # three scans of the module's fastest-growing table to fill three chips off the same rows.
     oee = obj.oee_chip(since, until)
     actual_hours = oee["booked_hours"]
+
+    # 4.13's assets, mounted at this centre. Taking a machine down is not only a maintenance fact,
+    # it is a CAPACITY fact — this is the page where an unexplained hole in the utilisation figure
+    # above gets explained, which is precisely what `Asset.work_center` exists to make possible.
+    #
+    # Both columns are ANNOTATIONS, and deliberately so: `is_down_now()` and `open_job_count()`
+    # each query per row, which on a centre with 25 machines is 25+ round trips on a shipped page.
+    # The reliability figures (MTBF/MTTR/availability) are NOT shown here for the same reason —
+    # each is a further per-row aggregate, and they belong to the asset's own 360 view anyway. This
+    # panel answers "is anything stopping me right now", not "how reliable is this fleet".
+    assets = list(Asset.objects.filter(tenant=request.tenant, work_center=obj)
+                  .annotate(
+                      down_now=Exists(MaintenanceWorkOrder.objects.filter(
+                          asset=OuterRef("pk"),
+                          status__in=MaintenanceWorkOrder.OPEN_STATUSES,
+                          downtime_start__isnull=False, downtime_end__isnull=True)),
+                      open_jobs=Count("work_orders", distinct=True, filter=Q(
+                          work_orders__status__in=MaintenanceWorkOrder.OPEN_STATUSES)))
+                  .order_by("code")[:25])
     return render(request, "scm/manufacturing/workcenter/detail.html", {
         "obj": obj,
         "open_orders": open_orders,
+        "assets": assets,
+        "assets_down_now": sum(1 for a in assets if a.down_now),
         # workcenter_delete refuses a centre with either kind of history, so the template hides the
         # button rather than offering an action that always bounces with an error.
         "can_delete": not (obj.work_orders.exists() or obj.time_logs.exists()),
