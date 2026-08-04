@@ -47,8 +47,17 @@ class MeterReadingForm(TenantModelForm):
         # `crud_create`, and in __init__ below so clean() can read it), `created_at` / `updated_at`.
         # `MeterReading` is `TenantOwned` and carries no `number` — a reading is a data point in a
         # series, not a document anybody quotes.
-        fields = ["asset", "meter_name", "unit", "reading", "read_at", "source", "reference",
-                  "notes"]
+        #
+        # `source` and `reference` are ABSENT too, and that is a security decision rather than a
+        # tidiness one: together they are the reading's PROVENANCE. The work-order complete and
+        # record-reading verbs file a reading as `source="work_order"` with `reference=<MWO number>`,
+        # and the job's readings panel selects on exactly that reference. Leaving both on the human
+        # form let any logged-in member post a reading claiming to have been filed by a verb, onto
+        # somebody else's job — on an append-only log with no edit route to correct it. Both are now
+        # stamped by whichever code path actually files the reading, after `save(commit=False)`,
+        # exactly as `recorded_by` already was and for the same reason. A manual capture keeps the
+        # model default `manual` and a blank reference, which is the truth about where it came from.
+        fields = ["asset", "meter_name", "unit", "reading", "read_at", "notes"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
