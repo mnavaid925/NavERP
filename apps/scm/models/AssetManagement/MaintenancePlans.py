@@ -261,6 +261,17 @@ class MaintenancePlan(TenantNumbered):
                 raise ValidationError(
                     {"meter_interval": f"A '{self.get_trigger_type_display()}' plan needs a meter "
                                        "interval, or it can never come due."})
+            # The cadence alone is not a schedule — the axis also needs a TARGET to count down to.
+            # `meter_gap()` is `next_due_reading - latest_reading`, so with no target it answers None
+            # forever, `_meter_axis_due()` is permanently False, and the plan sits in exactly the
+            # "configured but can never fire" state the rest of this method exists to refuse. The
+            # interval says how often; this says when next.
+            if self.next_due_reading is None:
+                raise ValidationError(
+                    {"next_due_reading": f"A '{self.get_trigger_type_display()}' plan needs the "
+                                         "reading at which the work first falls due — the interval "
+                                         "sets the cadence after that, but without a first target "
+                                         "the meter has nothing to count down to."})
             asset = getattr(self, "asset", None) if self.asset_id else None
             if asset is not None and not (asset.meter_name or "").strip():
                 raise ValidationError(
@@ -340,6 +351,23 @@ class MaintenancePlan(TenantNumbered):
         gap = self.meter_gap()
         return gap is not None and gap <= ZERO
 
+    def _has_live_usage_axis(self):
+        """True when a non-calendar axis is configured well enough to ever fire.
+
+        Distinguishes "scheduled against usage rather than a date" from "not watched at all", which
+        :meth:`due_status` needs in order not to give both the same chip. Deliberately checks the
+        CONFIGURATION, not the current reading: a meter plan whose asset has no readings logged yet
+        is still scheduled — nobody has taken a measurement, which is a data-entry gap, not an
+        absence of a schedule.
+        """
+        if self.trigger_type in ("meter", "combined"):
+            if self.meter_interval and self.next_due_reading is not None:
+                return True
+        if self.trigger_type == "condition":
+            if self.condition_operator and self.condition_threshold is not None:
+                return True
+        return False
+
     def _condition_axis_due(self):
         """True when a condition plan's latest reading satisfies ``operator`` against ``threshold``.
 
@@ -381,6 +409,14 @@ class MaintenancePlan(TenantNumbered):
             return "overdue"
         days = self.days_until_due(today)
         if days is None:
+            # No date axis. A pure meter/condition plan legitimately has none, and if its usage axis
+            # is LIVE — a target to count down to, or a threshold to cross — it is genuinely
+            # scheduled, just not against a calendar. Answering `not_scheduled` here gave a correctly
+            # configured meter plan the same muted "Not scheduled" chip as a broken one, which is the
+            # one reading a planner must be able to trust: it is the chip that says "nobody is
+            # watching this machine".
+            if self._has_live_usage_axis():
+                return "scheduled"
             return "not_scheduled"
         if days < 0:
             return "overdue"
