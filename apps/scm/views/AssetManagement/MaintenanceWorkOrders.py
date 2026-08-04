@@ -263,8 +263,23 @@ def _reported_window(qs, data):
     return _date_window(qs, window, "reported_at")
 
 
+def _issued_parts_refusal(obj):
+    """The one sentence that refuses a job whose parts are already on the ledger, or ``""``.
+
+    Written once and passed as a ``precheck`` to both the cancel verb and the delete view, because
+    the two refuse for the same reason and must refuse identically. Callers must evaluate it INSIDE
+    the row lock — see :func:`_transition`.
+    """
+    if obj.parts.filter(is_issued=True).exists():
+        return (f"{obj.number} has parts already issued from stock and cannot be "
+                f"{'deleted' if obj.status in MaintenanceWorkOrder.OPEN_STATUSES else 'changed'} — "
+                "that consumption would be left attached to a job claiming nothing happened. "
+                "Complete and close it, or post a stock adjustment to return the parts first.")
+    return ""
+
+
 def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None, audit=None,
-                message=None):
+                message=None, precheck=None):
     """Guard, stamp, audit, redirect — the shape every plain status verb in this file shares.
 
     ``action`` and ``verb`` are two different things and both are needed. ``action`` is the SLUG the
@@ -290,6 +305,22 @@ def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=N
             messages.error(request, f"{obj.number} cannot be {verb} — it is "
                                     f"{obj.get_status_display().lower()}.")
             return _detail(pk)
+        # Cross-ROW guards belong here, inside the lock — not in the caller before it.
+        #
+        # `select_for_update()` above protects this row's own columns, but a guard that reads a
+        # CHILD table (a part line's `is_issued`) is a plain snapshot read: run before the lock, it
+        # answers about the state the transaction started in, and the write then simply waits for
+        # the lock and lands the moment the competing transaction commits. That is not a narrow
+        # window either — `_issue_parts` holds this row locked for its whole per-line loop, so an
+        # attacker firing issue-parts and cancel back to back wins it reliably. The end state was a
+        # `cancelled` job carrying posted `maintenance` StockMoves: `Asset._jobs()` excludes
+        # cancelled jobs, so the consumption vanished from maintenance_cost_to_date(), from the
+        # repair-vs-replace ratio and from MTTR/MTBF, while the stock was genuinely gone.
+        if precheck is not None:
+            refusal = precheck(obj)
+            if refusal:
+                messages.error(request, refusal)
+                return _detail(pk)
 
         fields = ["status", "updated_at"]
         obj.status = to_status
@@ -520,20 +551,39 @@ def maintenanceworkorder_delete(request, pk):
     pages, so it is refused here for the same reason ``BaseMaintenanceWorkOrderPartFormSet`` refuses
     to remove an issued line. The ledger is corrected with a stock adjustment, never by deletion.
     """
-    obj = get_object_or_404(MaintenanceWorkOrder, pk=pk, tenant=request.tenant)
-    if not obj.is_editable:
-        messages.error(request, f"{obj.number} is {obj.get_status_display().lower()} and cannot be "
-                                "deleted — a finished job is history. Cancel an open job instead.")
-        return _detail(pk)
-    # Exists-shaped, not a Count: the page only asks "are there any?" (views/_common.py:20-23).
-    if obj.parts.filter(is_issued=True).exists():
-        messages.error(request, f"{obj.number} has parts already issued from stock and cannot be "
-                                "deleted — the ledger movement would be left with nothing to "
-                                "explain it. Cancel the job, or post a stock adjustment to return "
-                                "the parts first.")
-        return _detail(pk)
-    return crud_delete(request, model=MaintenanceWorkOrder, pk=pk,
-                       success_url="scm:maintenanceworkorder_list")
+    # Hand-rolled rather than delegated to crud_delete, and the reason is the whole point of this
+    # view: crud_delete re-fetches the row by pk WITHOUT a lock and re-checks neither guard, because
+    # it cannot know about guards it was never told about. Both guards below were therefore
+    # advisory — read from an unlocked snapshot, they answered about the state this request started
+    # in, and the DELETE then waited on the lock and executed anyway.
+    #
+    # The loss was irreversible in a way the other TOCTOU sites are not. MaintenanceWorkOrderPart is
+    # CASCADE, so deleting the job destroyed the record of WHAT was drawn and AT WHAT COST, while
+    # the negative `maintenance` StockMove rows survived in the append-only ledger pointing at a
+    # document that no longer existed — unreconstructable from anything, and silently gone from
+    # maintenance_cost_to_date(), the depreciation report and the parts panel.
+    with transaction.atomic():
+        obj = get_object_or_404(MaintenanceWorkOrder.objects.select_for_update(),
+                                pk=pk, tenant=request.tenant)
+        if not obj.is_editable:
+            messages.error(request, f"{obj.number} is {obj.get_status_display().lower()} and cannot "
+                                    "be deleted — a finished job is history. Cancel an open job "
+                                    "instead.")
+            return _detail(pk)
+        # Exists-shaped, not a Count: the page only asks "are there any?" (views/_common.py:20-23).
+        if obj.parts.filter(is_issued=True).exists():
+            messages.error(request, f"{obj.number} has parts already issued from stock and cannot "
+                                    "be deleted — the ledger movement would be left with nothing "
+                                    "to explain it. Cancel the job, or post a stock adjustment to "
+                                    "return the parts first.")
+            return _detail(pk)
+        # Inside the transaction so it rolls back with a failed delete rather than recording a
+        # deletion that did not happen.
+        write_audit_log(request.user, obj, "delete")
+        number = obj.number
+        obj.delete()
+    messages.success(request, f"{number} deleted.")
+    return redirect("scm:maintenanceworkorder_list")
 
 
 # ============================================================ the ladder (no stock effect below)
@@ -780,15 +830,11 @@ def maintenanceworkorder_cancel(request, pk):
     reasoning that makes ``StockMove`` append-only.
     """
     reason = (request.POST.get("reason") or "").strip()
-    obj = get_object_or_404(MaintenanceWorkOrder, pk=pk, tenant=request.tenant)
-    if obj.parts.filter(is_issued=True).exists():
-        messages.error(request, f"{obj.number} has parts already issued from stock and cannot be "
-                                "cancelled — that consumption would be left attached to a job "
-                                "claiming nothing happened. Complete and close it, or post a stock "
-                                "adjustment to return the parts first.")
-        return _detail(pk)
+    # Handed to _transition as a precheck so it runs INSIDE the row lock. Read here, before the
+    # lock, it was advisory: a concurrent _issue_parts committed in the gap and the cancel landed
+    # anyway. See _transition's precheck block for what that produced.
     return _transition(request, pk, from_statuses=CANCELLABLE_STATUSES, to_status="cancelled",
-                       action="cancel", verb="cancelled",
+                       action="cancel", verb="cancelled", precheck=_issued_parts_refusal,
                        audit={"reason": reason[:200]} if reason else None)
 
 
@@ -917,8 +963,9 @@ def maintenanceworkorder_record_reading(request, pk):
         # behind `now()` so MeterReading.clean()'s no-future-dates rule cannot trip on itself.
         "read_at": (request.POST.get("read_at")
                     or timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M:%S")),
-        "source": "work_order",
-        "reference": obj.number,
+        # `source` / `reference` are NOT here: they are provenance and are no longer form fields at
+        # all (leaving them on the form let a member forge a verb-filed reading onto any job). They
+        # are stamped on the instance below, after validation, exactly like `recorded_by`.
         "notes": (request.POST.get("notes") or "").strip()[:255],
     }
     form = MeterReadingForm(data, tenant=request.tenant)
@@ -930,6 +977,11 @@ def maintenanceworkorder_record_reading(request, pk):
     reading = form.save(commit=False)
     reading.tenant = request.tenant
     reading.recorded_by = _acting_party(request)   # AFTER is_valid() — see the docstring
+    # Provenance, stamped by the verb that is actually filing this reading rather than accepted from
+    # the request. These two are what the job's readings panel selects on, so a user able to type
+    # them could attribute a hand-typed number to a work order they never touched.
+    reading.source = "work_order"
+    reading.reference = obj.number
     reading.save()
     write_audit_log(request.user, reading, "create",
                     {"action": "record_reading", "work_order": obj.number,
