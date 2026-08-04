@@ -337,31 +337,114 @@ class Asset(TenantNumbered):
         """
         return self.work_orders.exclude(status="cancelled")
 
+    def _reliability_agg(self, since=None):
+        """Every job-header figure the reliability block needs, from ONE aggregate. Memoised.
+
+        **Why this exists.** The six public figures below (:meth:`downtime_minutes`,
+        :meth:`failure_count`, :meth:`mtbf_hours`, :meth:`mttr_hours`, :meth:`availability_pct`,
+        :meth:`maintenance_cost_to_date`) each used to own their own ``aggregate()``, and the asset's
+        360° page asks for all six. Measured on ``nav_erp``: ``downtime_minutes()`` ran its two
+        queries THREE times and ``failure_count()`` ran twice — eleven round trips over one small
+        table to fill one card. Every one of those figures sits on the SAME ``_jobs()`` base with NO
+        child join, so they combine into a single statement with a ``filter=`` per figure and no
+        fan-out risk whatsoever.
+
+        **The parts total is deliberately NOT in here.** ``MaintenanceWorkOrderPart`` is a different
+        GRAIN; folding its ``Sum`` into this aggregate would join the child rows in, fan the job rows
+        out and multiply ``labour`` and ``external`` by each job's part count — a three-part repair
+        charged three times its labour, silently, forever. :meth:`maintenance_cost_to_date` keeps it
+        as its own query, and says so.
+
+        **The windows differ per figure, on purpose, and each carries its own.** ``downtime`` is
+        windowed on ``downtime_start`` (an outage is attributed in full to the period it BEGAN in —
+        no proration across a boundary, which is a reporting engine's job); everything else is
+        windowed on ``reported_at`` (a failure happened when it happened, and hanging it off the
+        repair date would move failures between periods every time a job stayed open over a month
+        end).
+
+        **``now`` is read ONCE**, and that is a correctness fix rather than a saving. Open downtime
+        windows contribute ``now - downtime_start``, and when three callers each read their own clock
+        a currently-down machine could print "412 min" in the downtime tile while ``availability_pct``
+        had already divided by 413. One aggregate, one clock, one answer.
+
+        The second query — the open windows' start times — is only paid for when the aggregate has
+        already counted at least one of them, the same "don't ask what we already know" rule the
+        detail page's ``child_count`` follows. ``MaintenanceWorkOrder.downtime_minutes`` is derived in
+        ``save()`` from the start/end pair, so a window still open contributes ZERO to the stored
+        column; without this pass a machine down for three days would report no downtime at all while
+        :meth:`is_down_now` said it was down.
+
+        Memoised per ``since`` on the instance (the ``MaintenancePlan._latest_reading_cache``
+        precedent). The cache lives as long as the instance does, which for every caller in the
+        project is one request — re-read the row to see writes made after it was loaded.
+        """
+        if not hasattr(self, "_reliability_cache"):
+            self._reliability_cache = {}
+        if since in self._reliability_cache:
+            return self._reliability_cache[since]
+
+        jobs = self._jobs()
+        # Each figure's own window, as a `filter=` on its own aggregate — see the docstring. None
+        # rather than an empty Q(): `filter=None` IS the no-filter default, and reads as one.
+        downtime_window = Q(downtime_start__gte=since) if since is not None else None
+        reported_window = Q(reported_at__gte=since) if since is not None else None
+
+        # What counts as a failure, in ONE place, so the count and the MTTR denominator cannot end
+        # up describing different rows (:attr:`FAILURE_WORK_TYPES`'s whole reason for existing).
+        failure = Q(work_type__in=self.FAILURE_WORK_TYPES)
+        if reported_window is not None:
+            failure &= reported_window
+        # MTTR counts only breakdowns whose window was RECORDED AND CLOSED — see :meth:`mttr_hours`
+        # for why an untimed repair is excluded from BOTH halves rather than just the numerator.
+        repair = failure & Q(status__in=("completed", "closed"),
+                             downtime_start__isnull=False, downtime_end__isnull=False)
+        running = Q(downtime_start__isnull=False, downtime_end__isnull=True)
+        if downtime_window is not None:
+            running &= downtime_window
+
+        now = timezone.now()
+        agg = jobs.aggregate(
+            downtime=Sum("downtime_minutes", filter=downtime_window),
+            # Count(filter=...) answers 0, never None, when nothing matches — which is what keeps
+            # `if not failures: return None` and `if not repairs: return None` firing below.
+            failures=models.Count("id", filter=failure),
+            repair_minutes=Sum("downtime_minutes", filter=repair),
+            repairs=models.Count("id", filter=repair),
+            open_windows=models.Count("id", filter=running),
+            labour=Sum(F("labour_hours") * F("labour_rate"), filter=reported_window,
+                       output_field=models.DecimalField(max_digits=20, decimal_places=4)),
+            external=Sum("external_cost", filter=reported_window),
+        )
+
+        downtime = agg["downtime"] or 0
+        if agg["open_windows"]:
+            for start in jobs.filter(running).values_list("downtime_start", flat=True):
+                if start < now:
+                    downtime += int((now - start).total_seconds() // 60)
+
+        result = {
+            "downtime": downtime,
+            "failures": agg["failures"] or 0,
+            "repair_minutes": agg["repair_minutes"] or 0,
+            "repairs": agg["repairs"] or 0,
+            "labour": agg["labour"] or ZERO,
+            "external": agg["external"] or ZERO,
+        }
+        self._reliability_cache[since] = result
+        return result
+
     def downtime_minutes(self, since=None):
         """Total minutes this asset has been down, INCLUDING any window still running.
-
-        Two queries, and the second one is the point. ``MaintenanceWorkOrder.downtime_minutes`` is
-        derived in ``save()`` from the start/end pair, so a window that is still open contributes
-        ZERO to the stored column — a machine that has been down for three days would report no
-        downtime at all while :meth:`is_down_now` said it was down. The running windows are therefore
-        added here as ``now - downtime_start``. There are never many of them (one per open job).
 
         ``since`` filters on ``downtime_start``, so a window is attributed in full to the period it
         BEGAN in. No proration across a period boundary: splitting a window between two months is a
         reporting engine's job (4.11), and doing half of it here would produce a figure that does not
         add up to the total on any other page.
-        """
-        rows = self._jobs()
-        if since is not None:
-            rows = rows.filter(downtime_start__gte=since)
-        total = rows.aggregate(m=Sum("downtime_minutes"))["m"] or 0
 
-        now = timezone.now()
-        for start in rows.filter(downtime_start__isnull=False, downtime_end__isnull=True
-                                 ).values_list("downtime_start", flat=True):
-            if start < now:
-                total += int((now - start).total_seconds() // 60)
-        return total
+        The arithmetic — stored totals plus the still-running windows against a single clock — lives
+        in :meth:`_reliability_agg`, which every figure on the reliability card shares.
+        """
+        return self._reliability_agg(since)["downtime"]
 
     def failure_count(self, since=None):
         """Breakdowns recorded against this asset — the denominator of MTBF and MTTR.
@@ -370,10 +453,7 @@ class Asset(TenantNumbered):
         happened when it happened, and hanging it off the repair date would move failures between
         periods every time a job stayed open over a month end.
         """
-        rows = self._jobs().filter(work_type__in=self.FAILURE_WORK_TYPES)
-        if since is not None:
-            rows = rows.filter(reported_at__gte=since)
-        return rows.count()
+        return self._reliability_agg(since)["failures"]
 
     def _observed_hours(self, since=None):
         """Hours in the reliability observation window, or ``None`` when it cannot be established.
@@ -411,13 +491,14 @@ class Asset(TenantNumbered):
         asset that has never failed, and it is the number that would sit in a red tile on a
         reliability page and start a conversation about a machine that is fine.
         """
-        failures = self.failure_count(since=since)
+        agg = self._reliability_agg(since)
+        failures = agg["failures"]
         if not failures:
             return None
         observed = self._observed_hours(since)
         if observed is None:
             return None
-        downtime = Decimal(self.downtime_minutes(since=since)) / Decimal("60")
+        downtime = Decimal(agg["downtime"]) / Decimal("60")
         uptime = max(observed - downtime, ZERO)
         return q2(uptime / Decimal(failures))
 
@@ -440,16 +521,11 @@ class Asset(TenantNumbered):
         ``None``, not ``0``, when no breakdown has been finished: the honest answer is "not enough
         history", and a 0 h MTTR reads as instant repairs.
         """
-        rows = self._jobs().filter(work_type__in=self.FAILURE_WORK_TYPES,
-                                   status__in=("completed", "closed"),
-                                   downtime_start__isnull=False, downtime_end__isnull=False)
-        if since is not None:
-            rows = rows.filter(reported_at__gte=since)
-        agg = rows.aggregate(m=Sum("downtime_minutes"), n=models.Count("id"))
-        repairs = agg["n"] or 0
+        agg = self._reliability_agg(since)
+        repairs = agg["repairs"]
         if not repairs:
             return None
-        return q2(Decimal(agg["m"] or 0) / Decimal("60") / Decimal(repairs))
+        return q2(Decimal(agg["repair_minutes"]) / Decimal("60") / Decimal(repairs))
 
     def availability_pct(self, since=None):
         """Share of the observation window the asset was NOT down, as a percentage.
@@ -465,31 +541,36 @@ class Asset(TenantNumbered):
         observed = self._observed_hours(since)
         if observed is None:
             return None
-        downtime = Decimal(self.downtime_minutes(since=since)) / Decimal("60")
+        downtime = Decimal(self._reliability_agg(since)["downtime"]) / Decimal("60")
         uptime = max(observed - downtime, ZERO)
         return q2(uptime / observed * Decimal("100"))
 
     def maintenance_cost_to_date(self, since=None):
         """Everything this asset has cost to keep running: issued parts + labour + contractors.
 
-        TWO aggregates over TWO grains, never one. Asking for the parts total in the same
-        ``aggregate()`` as the labour and contractor totals joins the child rows in, which FANS THE
-        JOB ROWS OUT and multiplies every ``labour_cost`` and ``external_cost`` by that job's part
-        count — a three-part repair would be charged three times its labour, silently, forever. This
-        is the same trap ``TradeLicense.recompute_usage`` documents; the fix is one query per grain.
+        TWO aggregates over TWO grains, never one — and that is why the parts ``Sum`` stayed HERE
+        when the header figures moved into the shared :meth:`_reliability_agg`. Asking for the parts
+        total in the same ``aggregate()`` as the labour and contractor totals joins the child rows
+        in, which FANS THE JOB ROWS OUT and multiplies every ``labour_cost`` and ``external_cost`` by
+        that job's part count — a three-part repair would be charged three times its labour,
+        silently, forever. This is the same trap ``TradeLicense.recompute_usage`` documents; the fix
+        is one query per grain, and no amount of query-count tidying is allowed to undo it.
 
         Only ISSUED parts count. ``unit_cost`` is stamped from the item's average cost at issue time,
         so a part that is merely reserved still carries 0.00 — counting it would add a real line at a
         fake price, and the job has not consumed any stock yet either.
+
+        **NOT None-able**, unlike the three figures above it: this returns ``q2(...)``
+        unconditionally, so a fresh asset reports ``0.00`` — and that is a REAL zero (nothing has
+        been spent on it yet), not an unmeasurable.
         """
+        # Labour and contractor charges come off the JOB HEADER, which is the grain
+        # _reliability_agg() already aggregates — no second scan of the same rows.
+        header = self._reliability_agg(since)
+
         jobs = self._jobs()
         if since is not None:
             jobs = jobs.filter(reported_at__gte=since)
-
-        header = jobs.aggregate(
-            labour=Sum(F("labour_hours") * F("labour_rate"),
-                       output_field=models.DecimalField(max_digits=20, decimal_places=4)),
-            external=Sum("external_cost"))
 
         # Local import for the reason given above the section: this module is imported before its
         # siblings, so the symbol cannot be pulled in at module level.
@@ -502,7 +583,7 @@ class Asset(TenantNumbered):
         # q2 rather than a bare sum: it clamps an over-range total to what the column shape holds, so
         # one poisoned rate can only degrade this asset's figure instead of raising inside a report
         # that is rendering a hundred rows.
-        return q2((header["labour"] or ZERO) + (header["external"] or ZERO) + (parts or ZERO))
+        return q2(header["labour"] + header["external"] + (parts or ZERO))
 
     # ---------------------------------------------------------------------------------------------
     # Maintenance plans and meters
@@ -531,8 +612,18 @@ class Asset(TenantNumbered):
 
         Ordering is stated explicitly rather than inherited from ``MeterReading.Meta`` — a reader of
         this method should not have to open another file to know which row comes back.
+
+        The ``tenant_id=`` is REDUNDANT and load-bearing (the house idiom — see the readings panel in
+        ``views/AssetManagement/Assets.py`` and the job panel in ``MaintenancePlans.py``). The related
+        manager already constrains by ``asset``, which implies the tenant, so it narrows nothing. What
+        it does is make the query REACHABLE by ``scm_mtr_tnt_asset_idx``, which is
+        ``(tenant, asset, read_at)`` — ``tenant_id`` is the LEADING column, so without a predicate on
+        it MariaDB falls back to the plain FK index on ``asset_id`` and then filesorts the whole
+        asset's meter history to find one row. Measured on ``nav_erp``: ``Using where; Using
+        filesort`` becomes ``key: scm_mtr_tnt_asset_idx, key_len 16, Using where``. ``self.tenant_id``
+        is already loaded on the instance, so it costs no query to state it.
         """
-        rows = self.meter_readings.all()
+        rows = self.meter_readings.filter(tenant_id=self.tenant_id)
         name = meter_name if meter_name is not None else self.meter_name
         if name:
             rows = rows.filter(meter_name=name)
@@ -613,7 +704,15 @@ class AssetSparePart(models.Model):
     class Meta:
         unique_together = ("asset", "item")
         ordering = ["item__sku"]
-        indexes = [models.Index(fields=["asset"], name="scm_asp_asset_idx")]
+        # NO declared index on ``asset``, deliberately. ``unique_together`` already builds
+        # ``(asset_id, item_id)``, and a B-tree's LEADING PREFIX is usable on its own — so every
+        # lookup by asset (the parts panel, the cascade on delete) is already served by it. A second
+        # index on ``asset`` alone was a pure duplicate of that prefix: write cost on every insert,
+        # update and delete, and not one query it could serve that the unique index could not.
+        # Verified with SHOW INDEX against nav_erp before removing it. Contrast the three sibling
+        # child indexes — ``scm_mwop_wo_idx``, ``scm_mwot_wo_seq_idx``, ``scm_pmt_plan_seq_idx`` —
+        # which are NOT redundant: each REPLACED the auto FK index on its table (there is no unique
+        # constraint leading with that column), so dropping one of those would cost a scan.
 
     def __str__(self):
         return f"{self.item} × {self.quantity_per_service}"
