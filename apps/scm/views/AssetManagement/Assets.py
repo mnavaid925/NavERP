@@ -553,6 +553,15 @@ def asset_detail(request, pk):
 
     # --- the accounting link, READ ONLY (4.13 owns no depreciation figure — L29) --------------------
     book = obj.fixed_asset
+    # Defence in depth, and consistency with the sibling report shipped alongside it
+    # (Reports.py `asset_depreciation_report` makes exactly this check and says why). There is no
+    # HTTP write path that could set a cross-tenant link — `fixed_asset` is in
+    # `Asset.TENANT_SCOPED_FKS`, so both `Asset.clean()` and `AssetForm.clean()` reject a crafted
+    # pk — but this page READS money out of another app's table, and a row that predates that guard
+    # (a fixture, a data migration, a future importer, a direct DB edit) must render as UNLINKED
+    # rather than quietly printing another workspace's capitalised cost and book value.
+    if book is not None and book.tenant_id != obj.tenant_id:
+        book = None
     downtime_minutes = obj.downtime_minutes()
 
     return render(request, "scm/assets/asset/detail.html", {
