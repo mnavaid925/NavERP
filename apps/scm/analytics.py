@@ -179,6 +179,22 @@ MIN_TAIL_SUPPLIERS = 10
 #: it in here would inflate COGS and understate gross margin on every product it never touched.
 COGS_MOVE_TYPES = ("issue", "consumption")
 
+#: Outbound move types that count as the stock having MOVED. Deliberately a different set from
+#: :data:`COGS_MOVE_TYPES`, because they answer different questions and one constant cannot serve
+#: both: "what did this cost us?" is a valuation question that must exclude maintenance opex, while
+#: "has anybody touched this in 90 days?" is a recency question that must include it.
+#:
+#: Sharing the COGS tuple was a live bug. A spare part drawn every week to repair machines posts
+#: only ``maintenance`` moves, so it never appeared in the dead-stock resolver's "moved" set and
+#: EVERY actively-consumed spare was classified as dead stock — and the classification does not stop
+#: at a dashboard: ``_detect_dead_stock`` turns those rows into persisted ``SupplyChainAlert``
+#: records reading "<SKU> has not moved for 90 days" about a part issued last week. Reproducible
+#: with the shipped seeder.
+#:
+#: ``transfer`` stays out for the same reason it is out of the COGS tuple — an internal relocation is
+#: not consumption, and a part shuffled between bins has not been used.
+OUTBOUND_MOVE_TYPES = COGS_MOVE_TYPES + ("maintenance",)
+
 #: PO statuses that represent committed money. Draft and pending-approval are not spend yet, and a
 #: cancelled order never was.
 SPEND_PO_STATUSES = ("approved", "sent", "acknowledged", "partially_received", "received", "closed")
@@ -1007,7 +1023,9 @@ def _r_inv_dead_stock_value(tenant, start, end, scope, params=DEFAULT_PARAMS):
     if not position:
         return _unavailable("inv_dead_stock_value", "Nothing is on hand in this scope.",
                             parameter_days=days)
-    moved = StockMove.objects.filter(tenant=tenant, move_type__in=COGS_MOVE_TYPES,
+    # OUTBOUND_MOVE_TYPES, not COGS_MOVE_TYPES: "has it moved?" is a recency question, so a spare
+    # drawn for maintenance is emphatically alive even though its cost is not COGS.
+    moved = StockMove.objects.filter(tenant=tenant, move_type__in=OUTBOUND_MOVE_TYPES,
                                      item_id__in=list(position.keys()))
     moved = _in_moments(scope.narrow_item_rows(moved), "moved_at", cutoff, end)
     live_ids = set(moved.values_list("item_id", flat=True).distinct()[:MAX_ITEM_ROWS])
@@ -1026,11 +1044,11 @@ def _r_inv_dead_stock_value(tenant, start, end, scope, params=DEFAULT_PARAMS):
         "items_on_hand": len(position),
         "stock_value": _f(on_hand_total),
         "dead_share_pct": _f(_safe_div(total * HUNDRED, on_hand_total)),
-        "move_types": list(COGS_MOVE_TYPES),
+        "move_types": list(OUTBOUND_MOVE_TYPES),
         "valuation": "on-hand x cached average cost",
         "truncated": position.truncated,
-        "note": (f"Dead = on hand at {end.isoformat()} with no issue or consumption movement since "
-                 f"{cutoff.isoformat()}."),
+        "note": (f"Dead = on hand at {end.isoformat()} with no issue, consumption or maintenance "
+                 f"movement since {cutoff.isoformat()}."),
     }, rows=rows)
 
 
