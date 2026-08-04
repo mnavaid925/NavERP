@@ -101,8 +101,13 @@ def workcenter_detail(request, pk):
                        .order_by().values("asset").annotate(n=Count("id")).values("n")[:1])
     assets = list(Asset.objects.filter(tenant=request.tenant, work_center=obj)
                   .annotate(
+                      # Correlates `tenant` as well as `asset`, matching the `open_jobs` subquery
+                      # below. Not exploitable — the outer Asset queryset is already tenant-scoped
+                      # and a work order cannot legitimately point at a foreign asset — but two
+                      # annotations in one function reading differently invites a reader to assume
+                      # one of them knows something the other does not.
                       down_now=Exists(MaintenanceWorkOrder.objects.filter(
-                          asset=OuterRef("pk"),
+                          tenant=OuterRef("tenant_id"), asset=OuterRef("pk"),
                           status__in=MaintenanceWorkOrder.OPEN_STATUSES,
                           downtime_start__isnull=False, downtime_end__isnull=True)),
                       # NULL, not 0, comes back for a machine with no open job — coalesced, because
