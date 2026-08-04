@@ -428,11 +428,21 @@ class Asset(TenantNumbered):
         yet; including it would divide a partial numerator by a full denominator and pull the average
         down every time something is currently broken — the moment the figure is most looked at.
 
+        Counts only breakdowns whose downtime window was actually RECORDED AND CLOSED. A finished
+        repair that nobody timed carries ``downtime_minutes = 0`` (it is derived in ``save()`` from
+        the start/end pair, and an unset pair derives to zero), so leaving it in would add nothing to
+        the numerator and one to the denominator — every untimed repair silently dragging the mean
+        toward zero and making the fleet look faster to fix the worse the record-keeping got. It is
+        excluded from BOTH halves instead, so the figure means "mean over the repairs we timed"
+        rather than "mean over the repairs we know about". A genuine same-instant repair still
+        counts: the window was recorded, it was simply short.
+
         ``None``, not ``0``, when no breakdown has been finished: the honest answer is "not enough
         history", and a 0 h MTTR reads as instant repairs.
         """
         rows = self._jobs().filter(work_type__in=self.FAILURE_WORK_TYPES,
-                                   status__in=("completed", "closed"))
+                                   status__in=("completed", "closed"),
+                                   downtime_start__isnull=False, downtime_end__isnull=False)
         if since is not None:
             rows = rows.filter(reported_at__gte=since)
         agg = rows.aggregate(m=Sum("downtime_minutes"), n=models.Count("id"))
