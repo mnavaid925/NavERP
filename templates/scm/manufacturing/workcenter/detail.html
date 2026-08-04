@@ -100,6 +100,48 @@
     </div>
   </div>
 
+  {% comment %}
+    4.13 assets mounted at this centre. This panel is the reason Asset.work_center exists: an
+    unexplained hole in the utilisation figure above is usually a machine that was down, and this is
+    where that becomes visible without leaving the capacity page. Read-only — the asset record and
+    its maintenance history are owned by 4.13, so every action links out rather than duplicating it.
+    `a.down_now` is the view's EXISTS annotation, not the per-row is_down_now() method.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Assets at this centre</h2>
+      {% if assets_down_now %}<span class="badge badge-red">{{ assets_down_now }} down now</span>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Asset</th><th>Name</th><th>Criticality</th><th>Status</th><th>Open jobs</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for a in assets %}
+            <tr>
+              <td><a href="{% url 'scm:asset_detail' a.pk %}" class="fw-600">{{ a.code }}</a></td>
+              <td>{{ a.name }}</td>
+              <td><span class="badge {{ a.criticality_css }}">{{ a.get_criticality_display }}</span></td>
+              <td>
+                {% if a.down_now %}<span class="badge badge-red">Down now</span>
+                {% else %}<span class="badge {{ a.status_css }}">{{ a.get_status_display }}</span>{% endif %}
+              </td>
+              {% comment %} a.open_jobs is the view's annotation. Never a.open_job_count, which queries per row. {% endcomment %}
+              <td>{% if a.open_jobs %}<a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ a.pk }}">{{ a.open_jobs }}</a>{% else %}—{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:asset_detail' a.pk %}" class="btn-icon" title="View asset"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ a.pk }}" class="btn-icon" title="Maintenance jobs"><i data-lucide="wrench"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="hard-drive"></i><h3>No assets linked to this centre</h3><p>Point an asset's Work Centre field at this centre on the asset record, and downtime here will explain the capacity figures above.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
