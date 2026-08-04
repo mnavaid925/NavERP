@@ -108,7 +108,7 @@ def _horizon(request):
     return clamped, raw, clamped != number
 
 
-def _newest_reading_case():
+def _newest_reading_case(tenant):
     """The pk of the asset's latest reading, as a scalar expression to annotate onto a plan row.
 
     Paired with the priming loop in :func:`pm_forecast`, this is how a board of plans answers the
@@ -133,12 +133,22 @@ def _newest_reading_case():
 
     The cache is set on EVERY plan, including to ``None``. Leaving it unset on the plans with no
     reading would put the per-row query straight back for exactly the rows most likely to have one.
+
+    **``tenant`` narrows nothing and is stated anyway.** The plans are already this workspace's and
+    an asset's readings are its own tenant's, so the predicate cannot change a single row. What it
+    does is make ``scm_mtr_tnt_asset_idx`` — ``(tenant, asset, read_at)`` — REACHABLE: ``tenant_id``
+    is its leading column, so a subquery filtering on ``asset_id`` alone falls back to the plain FK
+    index and then filesorts, per plan on the board. Passed as a LITERAL rather than
+    ``OuterRef("tenant_id")`` for the reason :func:`_spare_part_qs` gives: the scoping is identical
+    and a correlated tenant reference is one more outer column MySQL must resolve inside a
+    dependent subquery.
     """
     named = (MeterReading.objects
-             .filter(asset_id=OuterRef("asset_id"), meter_name=OuterRef("asset__meter_name"))
+             .filter(tenant=tenant, asset_id=OuterRef("asset_id"),
+                     meter_name=OuterRef("asset__meter_name"))
              .order_by("-read_at", "-id"))
     any_meter = (MeterReading.objects
-                 .filter(asset_id=OuterRef("asset_id"))
+                 .filter(tenant=tenant, asset_id=OuterRef("asset_id"))
                  .order_by("-read_at", "-id"))
     return models.Case(
         models.When(asset__meter_name="",
@@ -235,7 +245,7 @@ def pm_forecast(request):
                          | Q(trigger_type__in=usage_triggers))
                  .select_related("asset", "assigned_to", "parts_location")
                  .annotate(has_open_job=has_open_job,
-                           newest_reading_pk=_newest_reading_case())
+                           newest_reading_pk=_newest_reading_case(request.tenant))
                  .order_by(F("next_due_on").asc(nulls_last=True), "-id"))
 
     reading_ids = {p.newest_reading_pk for p in plans if p.newest_reading_pk}
@@ -513,7 +523,9 @@ def sparepart_list(request):
 
     THE HEADER CHIPS ARE WORKSPACE-WIDE, not page-wide — "6 below reorder point" is a fact somebody
     has to act on, and recomputing it per filter would make the number change as you browse (the
-    ``tradelicense_list`` posture).
+    ``tradelicense_list`` posture). All three counts come from ONE ``aggregate()``: they were three
+    ``.count()`` calls, and two of them carried the correlated on-hand ledger subquery in their
+    WHERE, so the strip cost three scans of the item table to print three numbers.
     """
     date_from, date_to, raw_from, raw_to, window_invalid = _window(request)
     start_dt, end_dt = _aware_range(date_from, date_to)
@@ -645,7 +657,18 @@ def sparepart_list(request):
         })
 
     # --- workspace-wide chips -------------------------------------------------------------------
-    chip_base = _spare_part_qs(request.tenant)
+    # ONE aggregate for the three counts, not three `.count()` calls — and two of those three
+    # carried the correlated on-hand ledger subquery in their WHERE, so this is three scans of the
+    # item table (each re-running that subquery per item) collapsed into one. The same shape
+    # `asset_list` and `maintenanceplan_list` already use for their header strips.
+    counts = _spare_part_qs(request.tenant).aggregate(
+        total=Count("id"),
+        # `effective_point > 0` is not decoration — see the `stock=below` filter above for why an
+        # unstocked part with no policy configured must not read as "below reorder point".
+        below=Count("id", filter=Q(effective_point__gt=ZERO,
+                                   derived_on_hand__lte=F("effective_point"))),
+        zero=Count("id", filter=Q(derived_on_hand__lte=ZERO)),
+    )
     # One aggregate over the LEDGER rather than over the annotated item queryset: Django refuses to
     # aggregate an aggregate ("Cannot compute Sum(<aggregate>)"), and Σ(quantity × the item's cached
     # average) over every move is arithmetically the same figure as Σ(on-hand × average) per item.
@@ -676,10 +699,9 @@ def sparepart_list(request):
         "date_to_raw": raw_to,
         "window_invalid": window_invalid,
         "stats": {
-            "total": chip_base.count(),
-            "below_count": chip_base.filter(effective_point__gt=ZERO,
-                                            derived_on_hand__lte=F("effective_point")).count(),
-            "zero_count": chip_base.filter(derived_on_hand__lte=ZERO).count(),
+            "total": counts["total"] or 0,
+            "below_count": counts["below"] or 0,
+            "zero_count": counts["zero"] or 0,
             "stock_value": q2(stock_value or ZERO),
             "consumed_value": q2(-(window_agg["v"] or ZERO)),
             "consumed_moves": window_agg["n"],
