@@ -8431,9 +8431,20 @@ class TestManufacturingQueryCounts:
     def test_workcenter_detail_aggregates_the_time_logs_once(self, client_a, work_center_a,
                                                              time_log_a,
                                                              django_assert_max_num_queries):
-        with django_assert_max_num_queries(12):
+        # 13, not the 12 this budget was written at in 4.8. 4.13 later added the assets-mounted-here
+        # panel to this page (`Asset.work_center`'s reader), which is ONE flat query — it does not
+        # grow with the number of machines and it fires even when there are none, as here. The
+        # budget was never re-cut for it, so the assertion had been failing since that panel landed.
+        # What the test is actually locking is unchanged and still holds: the time-log table is
+        # scanned exactly ONCE, with oee_chip's aggregate feeding actual_hours and utilization_pct
+        # rather than each re-running the same Sum.
+        with django_assert_max_num_queries(13) as captured:
             assert client_a.get(reverse("scm:workcenter_detail",
                                         args=[work_center_a.pk])).status_code == 200
+        # Asserted directly rather than inferred from the total, so a future budget bump cannot
+        # quietly give the page back the three scans this test exists to forbid.
+        assert sum(1 for q in captured.captured_queries
+                   if "scm_productiontimelog" in q["sql"]) == 1
 
     def test_billofmaterials_detail_explodes_once(self, client_a, tenant_a, bom_a,
                                                   component_bolt_a, component_plate_a,
