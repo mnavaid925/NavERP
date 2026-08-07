@@ -6187,3 +6187,763 @@ class TestSustainabilityAssessmentForm:
         offered = {value for value, _ in
                    SustainabilityAssessmentForm(tenant=None).fields["status"].choices if value}
         assert offered == {value for value, _ in SustainabilityAssessment.STATUS_CHOICES}
+
+
+# =================================================================================================
+# SCM 4.13 Asset Management — seven ModelForms and two inline formsets.
+#
+# Nothing here re-implements a model rule: the hierarchy cycle walk, the tag-uniqueness rule, the
+# trigger contract, the downtime ordering and the no-future-reading rule all live on the models and
+# are tested in ``test_models.py``. What IS tested here is the BOUNDARY each form draws, because that
+# boundary is the only thing between a crafted POST and a column nobody may write:
+#
+#   * L20/L22 — ``MaintenanceWorkOrder.status`` is ``editable=False`` and ABSENT from
+#     ``Meta.fields``, so ``status=completed`` in a POST body has no path to the column at all. Same
+#     for ``started_at`` / ``completed_at`` / ``downtime_minutes``, for the plan's two event stamps,
+#     and for the part line's ``unit_cost`` / ``is_issued`` / ``issued_at``.
+#   * ``MeterReadingForm`` drops ``source`` AND ``reference``. Together they are the reading's
+#     PROVENANCE: the two work-order verbs file a capture as ``source="work_order"`` with
+#     ``reference=<MWO number>`` and the job's readings panel selects on exactly that reference, so
+#     leaving them on the human form let any member post a reading claiming to have been filed by a
+#     verb, onto somebody else's job, on an append-only log with no edit route to correct it.
+#   * ``_keep_current`` — a role-narrowed ``core.Party`` queryset ends in ``.distinct()``, and the
+#     obvious ``queryset | Party.objects.filter(...)`` union raises ``TypeError: Cannot combine a
+#     unique query with a non-unique query``. It fires ONLY on the edit path with a stored party,
+#     which is why every create-path test missed it.
+#   * every FK is re-checked against the workspace at the FORM boundary as well as the model one, so
+#     the error is keyed on a field the form actually has and is therefore renderable.
+# =================================================================================================
+def _asset_form_payload(**overrides):
+    """A complete, VALID ``AssetForm`` POST body — every declared field present, blank if optional.
+
+    A ModelForm treats an ABSENT field exactly like an empty one, so a payload that quietly omits
+    ``criticality`` would fail for a reason the test was not written to measure.
+    """
+    data = {
+        "code": "PUMP-9", "name": "Coolant pump", "asset_type": "machine", "status": "in_service",
+        "criticality": "medium", "category": "", "manufacturer": "", "model_number": "",
+        "serial_number": "", "tag_code": "", "specifications": "",
+        "parent": "", "location": "", "org_unit": "", "work_center": "",
+        "custodian": "", "supplier": "", "service_vendor": "",
+        "purchase_date": "", "commissioned_on": "", "warranty_expires_on": "",
+        "purchase_cost": "0.00", "fixed_asset": "",
+        "meter_name": "", "meter_unit": "", "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _spare_line_payload(**overrides):
+    """A complete ``AssetSparePartForm`` body. ``asset`` is deliberately NOT a key — it comes from
+    the route, and putting it here would be the exact grafting attack the design refuses."""
+    data = {"item": "", "quantity_per_service": "2", "is_critical": "", "notes": ""}
+    data.update(overrides)
+    return data
+
+
+def _plan_form_payload(**overrides):
+    """A complete, VALID ``MaintenancePlanForm`` body for a calendar plan."""
+    data = {
+        "name": "Monthly greasing", "asset": "", "instructions": "", "is_active": "on",
+        "trigger_type": "calendar", "schedule_basis": "floating", "interval_days": "30",
+        "lead_time_days": "7", "meter_interval": "", "next_due_on": _localdate_iso(15),
+        "next_due_reading": "", "condition_operator": "", "condition_threshold": "",
+        "priority": "medium", "work_type": "preventive", "estimated_hours": "1.00",
+        "assigned_to": "", "parts_location": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _job_form_payload(**overrides):
+    """A complete, VALID ``MaintenanceWorkOrderForm`` body.
+
+    ``status`` is NOT a key here on purpose — the tests that try to force it add it explicitly, so
+    the crafted value is visible at the call site rather than buried in a helper.
+    """
+    data = {
+        "title": "Bearing replacement", "work_type": "corrective", "priority": "medium",
+        "source": "request", "asset": "", "plan": "", "reported_by": "", "assigned_to": "",
+        "service_vendor": "", "parts_location": "", "non_conformance": "",
+        "reported_at": _localdate_iso(0), "scheduled_start": "",
+        "downtime_start": "", "downtime_end": "", "is_unplanned_downtime": "",
+        "problem_code": "", "cause_code": "", "remedy_code": "",
+        "labour_hours": "0.00", "labour_rate": "0.0000", "external_cost": "0.00",
+        "meter_reading_at_work": "", "description": "", "resolution_notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _reading_form_payload(**overrides):
+    """A complete, VALID ``MeterReadingForm`` body. ``source`` / ``reference`` / ``recorded_by`` are
+    absent because they are not fields — the tests that try to force them add them explicitly."""
+    data = {"asset": "", "meter_name": "Running Hours", "unit": "h", "reading": "1300",
+            "read_at": _localdate_iso(0) + " 08:00:00", "notes": ""}
+    data.update(overrides)
+    return data
+
+
+# ================================================================ 4.13 · what is OFF the seven forms
+class TestAssetManagementFormsMassAssignmentExclusions:
+    @pytest.mark.parametrize("field", ["tenant", "number", "created_at", "updated_at"])
+    def test_the_asset_form_cannot_reach_the_system_columns(self, field):
+        from apps.scm.forms import AssetForm
+        assert field not in AssetForm.Meta.fields
+
+    def test_the_asset_form_whitelists_the_models_full_editable_set(self):
+        """A WHITELIST, never ``Meta.exclude`` — a blacklist means the next column added to ``Asset``
+        joins this form silently."""
+        from apps.scm.models import Asset
+        from apps.scm.forms import AssetForm
+        editable = {f.name for f in Asset._meta.fields
+                    if f.editable and f.name not in ("id", "tenant", "number")}
+        assert set(AssetForm.Meta.fields) == editable
+
+    def test_status_IS_on_the_asset_form_and_that_is_the_design(self):
+        """``Asset.status`` has exactly one writer and it is the user — no work-order verb touches
+        it, because "is this machine down right now" is answered from the open downtime windows."""
+        from apps.scm.forms import AssetForm
+        assert "status" in AssetForm.Meta.fields
+
+    def test_the_spare_part_form_has_no_parent_pointer(self):
+        """A parent pk in the POST body is how a caller grafts a line onto somebody else's machine,
+        and the child carries no ``tenant`` column of its own to catch it."""
+        from apps.scm.forms import AssetSparePartForm
+        assert "asset" not in AssetSparePartForm.Meta.fields
+        assert list(AssetSparePartForm.Meta.fields) == ["item", "quantity_per_service",
+                                                        "is_critical", "notes"]
+
+    @pytest.mark.parametrize("field", ["tenant", "number", "last_completed_on",
+                                       "last_generated_on", "created_at", "updated_at"])
+    def test_the_plan_form_cannot_reach_a_system_stamp(self, field):
+        """A planner who could type ``last_completed_on`` could type a service that was never
+        performed, and the PM-compliance report would believe it."""
+        from apps.scm.forms import MaintenancePlanForm
+        assert field not in MaintenancePlanForm.Meta.fields
+
+    def test_the_schedule_itself_IS_on_the_plan_form(self):
+        """``next_due_on`` / ``next_due_reading`` are the opposite case from the two stamps: they
+        are an INPUT a planner may legitimately shift, and ``advance()`` rolls them afterwards."""
+        from apps.scm.forms import MaintenancePlanForm
+        assert {"next_due_on", "next_due_reading"} <= set(MaintenancePlanForm.Meta.fields)
+
+    def test_the_plan_task_form_has_no_parent_pointer(self):
+        from apps.scm.forms import MaintenancePlanTaskForm
+        assert "plan" not in MaintenancePlanTaskForm.Meta.fields
+
+    @pytest.mark.parametrize("field", ["status", "started_at", "completed_at", "downtime_minutes",
+                                       "tenant", "number", "created_at", "updated_at"])
+    def test_the_job_form_cannot_reach_the_verb_driven_columns(self, field):
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        assert field not in MaintenanceWorkOrderForm.Meta.fields
+
+    def test_the_downtime_window_IS_on_the_job_form(self):
+        """A technician recording the outage afterwards ("it actually went down at 02:10") is the
+        normal case; forcing the window through a verb would mean it could never be corrected."""
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        assert {"downtime_start", "downtime_end"} <= set(MaintenanceWorkOrderForm.Meta.fields)
+
+    @pytest.mark.parametrize("field", ["work_order", "unit_cost", "is_issued", "issued_at"])
+    def test_the_parts_formset_cannot_claim_a_consumption(self, field):
+        from apps.scm.forms import MaintenanceWorkOrderPartForm
+        assert field not in MaintenanceWorkOrderPartForm.Meta.fields
+
+    @pytest.mark.parametrize("field", ["source", "reference", "recorded_by", "tenant",
+                                       "created_at", "updated_at"])
+    def test_the_reading_form_carries_no_provenance_field(self, field):
+        """THE REGRESSION (bug 7). ``source`` + ``reference`` ARE the provenance the job's readings
+        panel selects on; on the human form they let a member forge a verb-filed reading onto any
+        job, on an append-only log with no edit route to correct it."""
+        from apps.scm.forms import MeterReadingForm
+        assert field not in MeterReadingForm.Meta.fields
+
+    def test_the_reading_form_whitelist_is_exactly_the_six_observation_fields(self):
+        from apps.scm.forms import MeterReadingForm
+        assert list(MeterReadingForm.Meta.fields) == ["asset", "meter_name", "unit", "reading",
+                                                      "read_at", "notes"]
+
+    def test_a_crafted_status_never_reaches_cleaned_data_or_the_row(self, tenant_a, asset_a):
+        """Not because a view checks for it — because there is no path from form data to the
+        column at all."""
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        form = MaintenanceWorkOrderForm(
+            _job_form_payload(asset=str(asset_a.pk), status="completed"), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert "status" not in form.cleaned_data
+        job = form.save(commit=False)
+        job.tenant = tenant_a
+        job.save()
+        job.refresh_from_db()
+        assert job.status == "requested"
+
+    def test_a_crafted_system_stamp_never_lands_either(self, tenant_a, asset_a):
+        from django.utils import timezone
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        stamp = timezone.now().isoformat()
+        form = MaintenanceWorkOrderForm(
+            _job_form_payload(asset=str(asset_a.pk), started_at=stamp, completed_at=stamp,
+                              downtime_minutes="9999"), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        job = form.save(commit=False)
+        job.tenant = tenant_a
+        job.save()
+        job.refresh_from_db()
+        assert job.started_at is None and job.completed_at is None
+        assert job.downtime_minutes == 0
+
+    def test_a_crafted_plan_stamp_never_lands(self, tenant_a, asset_a):
+        from apps.scm.forms import MaintenancePlanForm
+        form = MaintenancePlanForm(
+            _plan_form_payload(asset=str(asset_a.pk), last_completed_on=_localdate_iso(-1),
+                               last_generated_on=_localdate_iso(-1)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        plan = form.save(commit=False)
+        plan.tenant = tenant_a
+        plan.save()
+        plan.refresh_from_db()
+        assert plan.last_completed_on is None and plan.last_generated_on is None
+
+    def test_a_crafted_issue_stamp_on_a_part_line_never_lands(self, tenant_a, maintenance_order_a,
+                                                              spare_item_a):
+        from apps.scm.forms import MaintenanceWorkOrderPartForm
+        form = MaintenanceWorkOrderPartForm(
+            {"item": str(spare_item_a.pk), "lot_serial": "", "quantity": "2",
+             "unit_cost": "999.0000", "is_issued": "on"}, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        line = form.save(commit=False)
+        line.work_order = maintenance_order_a
+        line.save()
+        line.refresh_from_db()
+        assert line.is_issued is False
+        assert line.unit_cost == Decimal("0")
+
+
+# ================================================================ 4.13 · the asset form
+class TestAssetForm:
+    def test_a_minimal_payload_saves_with_the_request_tenant(self, tenant_a):
+        from apps.scm.forms import AssetForm
+        form = AssetForm(_asset_form_payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        asset = form.save(commit=False)
+        assert asset.tenant_id == tenant_a.pk       # TenantUniqueMixin stamps it pre-validation
+        asset.save()
+        assert asset.number.startswith("AST-")
+
+    def test_code_and_name_are_required(self, tenant_a):
+        from apps.scm.forms import AssetForm
+        form = AssetForm(_asset_form_payload(code="", name=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert {"code", "name"} <= set(form.errors)
+
+    def test_a_duplicate_code_is_a_field_error_not_an_integrityerror(self, tenant_a, asset_a):
+        """``TenantUniqueMixin``: without it a duplicate plant code passes ``is_valid()`` and then
+        raises an uncaught ``IntegrityError`` — a 500 on an everyday user mistake."""
+        from apps.scm.forms import AssetForm
+        form = AssetForm(_asset_form_payload(code="CNC-1"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "code" in form.errors or "__all__" in form.errors
+
+    def test_a_duplicate_tag_code_is_a_field_error(self, tenant_a, asset_a):
+        from apps.scm.forms import AssetForm
+        form = AssetForm(_asset_form_payload(tag_code="QR-CNC-1"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "tag_code" in form.errors
+
+    def test_every_fk_dropdown_is_scoped_to_the_workspace(self, tenant_a, location_a, location_b,
+                                                          work_center_a, work_center_b, org_unit_a,
+                                                          org_unit_b, fixed_asset_a,
+                                                          fixed_asset_b, asset_a, asset_b):
+        from apps.scm.forms import AssetForm
+        form = AssetForm(tenant=tenant_a)
+        for name, mine, theirs in (("location", location_a, location_b),
+                                   ("work_center", work_center_a, work_center_b),
+                                   ("org_unit", org_unit_a, org_unit_b),
+                                   ("fixed_asset", fixed_asset_a, fixed_asset_b),
+                                   ("parent", asset_a, asset_b)):
+            options = list(form.fields[name].queryset)
+            assert mine in options, name
+            assert theirs not in options, name
+
+    def test_a_tenant_less_form_offers_nothing_at_all(self, location_a):
+        """``TenantModelForm`` only scopes ``if tenant is not None``; re-filtering from the model
+        makes the scoping true by construction rather than true by the caller behaving."""
+        from apps.scm.forms import AssetForm
+        form = AssetForm(tenant=None)
+        assert list(form.fields["location"].queryset) == []
+        assert list(form.fields["custodian"].queryset) == []
+
+    def test_the_parent_dropdown_never_offers_the_row_being_edited(self, asset_a, child_asset_a,
+                                                                    tenant_a):
+        from apps.scm.forms import AssetForm
+        form = AssetForm(instance=asset_a, tenant=tenant_a)
+        options = list(form.fields["parent"].queryset)
+        assert asset_a not in options
+        assert child_asset_a in options
+
+    def test_the_party_dropdowns_are_narrowed_by_role(self, tenant_a, employee_party_a,
+                                                      supplier_a, customer_a):
+        """A "person or team accountable" dropdown listing the customer book is noise, and a
+        supplier dropdown listing employees is the same mistake the other way round."""
+        from apps.scm.forms import AssetForm
+        form = AssetForm(tenant=tenant_a)
+        assert employee_party_a in list(form.fields["custodian"].queryset)
+        assert customer_a not in list(form.fields["custodian"].queryset)
+        assert supplier_a in list(form.fields["supplier"].queryset)
+        assert employee_party_a not in list(form.fields["supplier"].queryset)
+
+    @pytest.mark.parametrize("field", ["location", "work_center", "org_unit", "custodian",
+                                       "supplier", "service_vendor", "fixed_asset", "parent"])
+    def test_a_crafted_cross_tenant_pk_is_a_field_error(self, tenant_a, field, location_b,
+                                                        work_center_b, org_unit_b, supplier_b,
+                                                        fixed_asset_b, asset_b):
+        """A narrowed ``<select>`` is UX and has never held against a crafted POST (L39 §2)."""
+        from apps.scm.forms import AssetForm
+        foreign = {"location": location_b, "work_center": work_center_b, "org_unit": org_unit_b,
+                   "custodian": supplier_b, "supplier": supplier_b, "service_vendor": supplier_b,
+                   "fixed_asset": fixed_asset_b, "parent": asset_b}[field]
+        form = AssetForm(_asset_form_payload(**{field: str(foreign.pk)}), tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_editing_an_asset_whose_custodian_lost_the_employee_role_still_renders(
+            self, tenant_a, asset_a, employee_party_a):
+        """THE REGRESSION (bug 3, form half). ``_employee_parties`` ends in ``.distinct()`` and the
+        obvious ``queryset | Party.objects.filter(...)`` union raises ``TypeError: Cannot combine a
+        unique query with a non-unique query`` — on the EDIT path only, which is why every
+        create-path test missed it."""
+        from apps.core.models import PartyRole
+        from apps.scm.forms import AssetForm
+        PartyRole.objects.filter(party=employee_party_a, role="employee").delete()
+        form = AssetForm(instance=asset_a, tenant=tenant_a)
+        assert employee_party_a in list(form.fields["custodian"].queryset)
+
+    def test_the_same_union_holds_for_supplier_and_service_vendor(self, tenant_a, asset_a,
+                                                                   supplier_a):
+        from apps.core.models import PartyRole
+        from apps.scm.forms import AssetForm
+        PartyRole.objects.filter(party=supplier_a).delete()
+        form = AssetForm(instance=asset_a, tenant=tenant_a)
+        assert supplier_a in list(form.fields["supplier"].queryset)
+        assert supplier_a in list(form.fields["service_vendor"].queryset)
+
+    def test_the_widened_dropdown_still_refuses_another_workspaces_party(self, tenant_a, asset_a,
+                                                                          supplier_b):
+        """``_keep_current`` is tenant-scoped in BOTH legs — it re-admits the stored option, never
+        a stranger."""
+        from apps.scm.forms import AssetForm
+        form = AssetForm(instance=asset_a, tenant=tenant_a)
+        assert supplier_b not in list(form.fields["custodian"].queryset)
+
+    def test_saving_an_unrelated_edit_does_not_null_the_stored_custodian(self, tenant_a, asset_a,
+                                                                         employee_party_a):
+        """The failure the union exists to stop: an asset quietly loses its custodian because
+        somebody edited its notes."""
+        from apps.core.models import PartyRole
+        from apps.scm.forms import AssetForm
+        PartyRole.objects.filter(party=employee_party_a, role="employee").delete()
+        payload = _asset_form_payload(
+            code=asset_a.code, name=asset_a.name, criticality=asset_a.criticality,
+            custodian=str(employee_party_a.pk), meter_name=asset_a.meter_name,
+            meter_unit=asset_a.meter_unit, tag_code=asset_a.tag_code, notes="Edited the notes")
+        form = AssetForm(payload, instance=asset_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert form.save().custodian_id == employee_party_a.pk
+
+
+# ================================================================ 4.13 · the parts-list line form
+class TestAssetSparePartForm:
+    def test_a_valid_line_saves_against_the_route_supplied_asset(self, tenant_a, asset_a,
+                                                                 spare_item_a):
+        from apps.scm.forms import AssetSparePartForm
+        form = AssetSparePartForm(_spare_line_payload(item=str(spare_item_a.pk)),
+                                  tenant=tenant_a, asset=asset_a)
+        assert form.is_valid(), form.errors
+        assert form.save().asset_id == asset_a.pk
+
+    def test_the_item_dropdown_is_scoped_to_the_workspace(self, tenant_a, asset_a, spare_item_a,
+                                                          spare_item_b):
+        from apps.scm.forms import AssetSparePartForm
+        form = AssetSparePartForm(tenant=tenant_a, asset=asset_a)
+        options = list(form.fields["item"].queryset)
+        assert spare_item_a in options and spare_item_b not in options
+
+    def test_a_crafted_cross_tenant_item_is_a_field_error(self, tenant_a, asset_a, spare_item_b):
+        """The one field a crafted request could point elsewhere — ``asset`` comes from the route."""
+        from apps.scm.forms import AssetSparePartForm
+        form = AssetSparePartForm(_spare_line_payload(item=str(spare_item_b.pk)),
+                                  tenant=tenant_a, asset=asset_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_an_unparented_form_is_itself_a_refusal(self, tenant_a, spare_item_a):
+        from apps.scm.forms import AssetSparePartForm
+        form = AssetSparePartForm(_spare_line_payload(item=str(spare_item_a.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "item" in form.errors
+
+    def test_a_duplicate_line_is_a_field_error_and_never_an_integrityerror(
+            self, tenant_a, asset_a, spare_item_a, asset_spare_part_a):
+        """Django skips a ``unique_together`` entirely if ANY of its fields is excluded from
+        validation, and a field not on the form is always excluded — so out of the box listing the
+        same part twice passes ``is_valid()`` and then 500s. ``validate_unique`` is the repair."""
+        from apps.scm.forms import AssetSparePartForm
+        form = AssetSparePartForm(_spare_line_payload(item=str(spare_item_a.pk)),
+                                  tenant=tenant_a, asset=asset_a)
+        assert not form.is_valid()
+        assert form.errors
+
+    def test_the_constructor_never_repoints_an_existing_line_at_another_asset(
+            self, tenant_a, asset_a, asset_a2, asset_spare_part_a):
+        """The stamp only fires when the parent is UNSET."""
+        from apps.scm.forms import AssetSparePartForm
+        form = AssetSparePartForm(instance=asset_spare_part_a, tenant=tenant_a, asset=asset_a2)
+        assert form.instance.asset_id == asset_a.pk
+
+
+# ================================================================ 4.13 · the plan form + job plan
+class TestMaintenancePlanForm:
+    def test_a_valid_calendar_plan_saves(self, tenant_a, asset_a):
+        from apps.scm.forms import MaintenancePlanForm
+        form = MaintenancePlanForm(_plan_form_payload(asset=str(asset_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        plan = form.save(commit=False)
+        assert plan.tenant_id == tenant_a.pk
+        plan.save()
+        assert plan.number.startswith("PM-")
+
+    def test_name_and_asset_are_required(self, tenant_a):
+        from apps.scm.forms import MaintenancePlanForm
+        form = MaintenancePlanForm(_plan_form_payload(name="", asset=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert {"name", "asset"} <= set(form.errors)
+
+    def test_the_model_trigger_contract_surfaces_as_a_form_error(self, tenant_a, asset_a):
+        """``MaintenancePlan.clean()`` owns the rule and ``_post_clean`` invokes it — the form does
+        NOT carry a second copy, which is exactly the drift the model docstring refuses."""
+        from apps.scm.forms import MaintenancePlanForm
+        form = MaintenancePlanForm(
+            _plan_form_payload(asset=str(asset_a.pk), interval_days=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "interval_days" in form.errors
+
+    def test_a_meter_plan_on_a_meterless_asset_is_refused_through_the_form(self, tenant_a,
+                                                                          asset_a2):
+        from apps.scm.forms import MaintenancePlanForm
+        form = MaintenancePlanForm(
+            _plan_form_payload(asset=str(asset_a2.pk), trigger_type="meter", interval_days="",
+                               next_due_on="", meter_interval="250", next_due_reading="500"),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "meter_interval" in form.errors
+
+    def test_the_fk_dropdowns_are_scoped(self, tenant_a, asset_a, asset_b, location_a, location_b,
+                                         employee_party_a):
+        from apps.scm.forms import MaintenancePlanForm
+        form = MaintenancePlanForm(tenant=tenant_a)
+        assert asset_a in list(form.fields["asset"].queryset)
+        assert asset_b not in list(form.fields["asset"].queryset)
+        assert location_a in list(form.fields["parts_location"].queryset)
+        assert location_b not in list(form.fields["parts_location"].queryset)
+        assert employee_party_a in list(form.fields["assigned_to"].queryset)
+
+    @pytest.mark.parametrize("field", ["asset", "assigned_to", "parts_location"])
+    def test_a_crafted_cross_tenant_pk_is_a_field_error(self, tenant_a, asset_a, field, asset_b,
+                                                        supplier_b, location_b):
+        from apps.scm.forms import MaintenancePlanForm
+        foreign = {"asset": asset_b, "assigned_to": supplier_b, "parts_location": location_b}[field]
+        payload = _plan_form_payload(asset=str(asset_a.pk))
+        payload[field] = str(foreign.pk)
+        form = MaintenancePlanForm(payload, tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_editing_a_plan_whose_crew_lost_the_employee_role_still_renders(
+            self, tenant_a, maintenance_plan_a, employee_party_a):
+        """THE REGRESSION (bug 3), on the plan's ``assigned_to``."""
+        from apps.core.models import PartyRole
+        from apps.scm.forms import MaintenancePlanForm
+        PartyRole.objects.filter(party=employee_party_a, role="employee").delete()
+        form = MaintenancePlanForm(instance=maintenance_plan_a, tenant=tenant_a)
+        assert employee_party_a in list(form.fields["assigned_to"].queryset)
+
+    def test_the_task_formset_takes_the_related_name_as_its_prefix(self):
+        from apps.scm.forms import MaintenancePlanTaskFormSet
+        assert MaintenancePlanTaskFormSet.get_default_prefix() == "tasks"
+
+    def test_the_task_formset_offers_three_blank_rows(self, tenant_a, maintenance_plan_a):
+        """With ``extra=0`` a step could never be hand-added, or re-added after deletion."""
+        from apps.scm.forms import MaintenancePlanTaskFormSet
+        formset = MaintenancePlanTaskFormSet(instance=maintenance_plan_a,
+                                             form_kwargs={"tenant": tenant_a})
+        assert formset.extra == 3
+
+    def test_the_task_formset_saves_its_steps_against_the_parent(self, tenant_a, asset_a):
+        from apps.scm.forms import MaintenancePlanForm, MaintenancePlanTaskFormSet
+        form = MaintenancePlanForm(_plan_form_payload(asset=str(asset_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        plan = form.save(commit=False)
+        plan.tenant = tenant_a
+        plan.save()
+        data = formset_data("tasks", [{"sequence": "10", "description": "Grease",
+                                       "expected_result": "", "is_mandatory": "on",
+                                       "is_safety_step": ""}])
+        formset = MaintenancePlanTaskFormSet(data, instance=plan,
+                                             form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+        formset.save()
+        assert plan.tasks.count() == 1
+
+
+# ================================================================ 4.13 · the job form + parts
+class TestMaintenanceWorkOrderForm:
+    def test_a_valid_job_saves(self, tenant_a, asset_a):
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        form = MaintenanceWorkOrderForm(_job_form_payload(asset=str(asset_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        job = form.save(commit=False)
+        job.tenant = tenant_a
+        job.save()
+        assert job.number.startswith("MWO-")
+
+    def test_title_and_asset_are_required(self, tenant_a):
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        form = MaintenanceWorkOrderForm(_job_form_payload(title="", asset=""), tenant=tenant_a)
+        assert not form.is_valid()
+        assert {"title", "asset"} <= set(form.errors)
+
+    def test_the_plan_dropdown_is_offered_whole_and_the_model_refuses_the_mismatch(
+            self, tenant_a, asset_a, asset_a2, maintenance_plan_a):
+        """A create form is unbound, so no asset has been chosen yet — narrowing the plan list to
+        "plans for this asset" would render a permanently empty select on the screen that matters."""
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        unbound = MaintenanceWorkOrderForm(tenant=tenant_a)
+        assert maintenance_plan_a in list(unbound.fields["plan"].queryset)
+        form = MaintenanceWorkOrderForm(
+            _job_form_payload(asset=str(asset_a2.pk), plan=str(maintenance_plan_a.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "plan" in form.errors
+
+    def test_a_backwards_downtime_window_is_a_form_error(self, tenant_a, asset_a):
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        form = MaintenanceWorkOrderForm(
+            _job_form_payload(asset=str(asset_a.pk),
+                              downtime_start=_localdate_iso(0) + " 10:00:00",
+                              downtime_end=_localdate_iso(0) + " 08:00:00"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "downtime_end" in form.errors
+
+    @pytest.mark.parametrize("field", ["asset", "plan", "parts_location", "non_conformance",
+                                       "reported_by", "assigned_to", "service_vendor"])
+    def test_a_crafted_cross_tenant_pk_is_a_field_error(self, tenant_a, asset_a, field, asset_b,
+                                                        maintenance_plan_b, location_b,
+                                                        nonconformance_b, supplier_b):
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        foreign = {"asset": asset_b, "plan": maintenance_plan_b, "parts_location": location_b,
+                   "non_conformance": nonconformance_b, "reported_by": supplier_b,
+                   "assigned_to": supplier_b, "service_vendor": supplier_b}[field]
+        payload = _job_form_payload(asset=str(asset_a.pk))
+        payload[field] = str(foreign.pk)
+        form = MaintenanceWorkOrderForm(payload, tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_editing_a_job_whose_reporter_lost_the_employee_role_still_renders(
+            self, tenant_a, maintenance_order_a, employee_party_a):
+        """THE REGRESSION (bug 3), on ``reported_by`` — where a silent NULL would erase who raised
+        the fault."""
+        from apps.core.models import PartyRole
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        PartyRole.objects.filter(party=employee_party_a, role="employee").delete()
+        form = MaintenanceWorkOrderForm(instance=maintenance_order_a, tenant=tenant_a)
+        assert employee_party_a in list(form.fields["reported_by"].queryset)
+        assert employee_party_a in list(form.fields["assigned_to"].queryset)
+
+    def test_the_service_vendor_union_holds_too(self, tenant_a, asset_a, supplier_a):
+        from apps.core.models import PartyRole
+        from apps.scm.models import MaintenanceWorkOrder
+        from apps.scm.forms import MaintenanceWorkOrderForm
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a,
+                                                  title="Outsourced", service_vendor=supplier_a)
+        PartyRole.objects.filter(party=supplier_a).delete()
+        form = MaintenanceWorkOrderForm(instance=job, tenant=tenant_a)
+        assert supplier_a in list(form.fields["service_vendor"].queryset)
+
+
+class TestMaintenanceWorkOrderPartFormSet:
+    def test_the_formset_takes_the_related_name_as_its_prefix(self):
+        from apps.scm.forms import MaintenanceWorkOrderPartFormSet
+        assert MaintenanceWorkOrderPartFormSet.get_default_prefix() == "parts"
+
+    def test_the_child_dropdowns_are_scoped_only_because_the_tenant_is_handed_in(
+            self, tenant_a, spare_item_a, spare_item_b):
+        """``MaintenanceWorkOrderPart`` carries no ``tenant`` column, so nothing about being an
+        inline of a tenant-scoped parent narrows these two."""
+        from apps.scm.forms import MaintenanceWorkOrderPartForm
+        scoped = MaintenanceWorkOrderPartForm(tenant=tenant_a)
+        assert spare_item_a in list(scoped.fields["item"].queryset)
+        assert spare_item_b not in list(scoped.fields["item"].queryset)
+        unscoped = MaintenanceWorkOrderPartForm(tenant=None)
+        assert list(unscoped.fields["item"].queryset) == []
+
+    def test_a_zero_quantity_line_is_refused(self, tenant_a, spare_item_a):
+        """The model validator allows zero; a zero line is a no-op the issue verb would post as a
+        zero-quantity StockMove."""
+        from apps.scm.forms import MaintenanceWorkOrderPartForm
+        form = MaintenanceWorkOrderPartForm(
+            {"item": str(spare_item_a.pk), "lot_serial": "", "quantity": "0"}, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "quantity" in form.errors
+
+    def test_a_lot_belonging_to_another_item_is_refused(self, tenant_a, spare_item_a, lot_a):
+        """A crafted pairing would draw item A's stock against item B's lot in the append-only
+        ledger, permanently corrupting both items' lot history."""
+        from apps.scm.forms import MaintenanceWorkOrderPartForm
+        form = MaintenanceWorkOrderPartForm(
+            {"item": str(spare_item_a.pk), "lot_serial": str(lot_a.pk), "quantity": "1"},
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "lot_serial" in form.errors
+
+    @pytest.mark.parametrize("field", ["item", "lot_serial"])
+    def test_a_crafted_cross_tenant_child_pk_is_a_field_error(self, tenant_a, spare_item_a, field,
+                                                              spare_item_b, lot_b):
+        from apps.scm.forms import MaintenanceWorkOrderPartForm
+        data = {"item": str(spare_item_a.pk), "lot_serial": "", "quantity": "1"}
+        data[field] = str({"item": spare_item_b, "lot_serial": lot_b}[field].pk)
+        form = MaintenanceWorkOrderPartForm(data, tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_an_issued_line_may_not_be_edited(self, tenant_a, maintenance_order_a,
+                                              issued_part_line_a, component_bolt_a):
+        """Re-typing an issued line's quantity would restate a consumption the ledger never saw."""
+        from apps.scm.forms import MaintenanceWorkOrderPartFormSet
+        data = formset_data("parts", [{"id": issued_part_line_a.pk,
+                                       "item": str(component_bolt_a.pk), "lot_serial": "",
+                                       "quantity": "99"}], initial=1)
+        formset = MaintenanceWorkOrderPartFormSet(data, instance=maintenance_order_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "already been issued" in str(formset.non_form_errors())
+
+    def test_an_issued_line_may_not_be_deleted(self, tenant_a, maintenance_order_a,
+                                               issued_part_line_a, spare_item_a):
+        """Deleting it would leave the ledger movement standing with nothing to explain it and
+        silently drop the cost off three pages."""
+        from apps.scm.forms import MaintenanceWorkOrderPartFormSet
+        data = formset_data("parts", [{"id": issued_part_line_a.pk,
+                                       "item": str(spare_item_a.pk), "lot_serial": "",
+                                       "quantity": str(issued_part_line_a.quantity),
+                                       "DELETE": "on"}], initial=1)
+        formset = MaintenanceWorkOrderPartFormSet(data, instance=maintenance_order_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert not formset.is_valid()
+        assert "already been issued" in str(formset.non_form_errors())
+
+    def test_an_unissued_line_may_still_be_edited_and_deleted(self, tenant_a,
+                                                              maintenance_order_a, part_line_a,
+                                                              spare_item_a):
+        from apps.scm.forms import MaintenanceWorkOrderPartFormSet
+        data = formset_data("parts", [{"id": part_line_a.pk, "item": str(spare_item_a.pk),
+                                       "lot_serial": "", "quantity": "5"}], initial=1)
+        formset = MaintenanceWorkOrderPartFormSet(data, instance=maintenance_order_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+        formset.save()
+        part_line_a.refresh_from_db()
+        assert part_line_a.quantity == Decimal("5.0000")
+
+    def test_leaving_an_issued_line_untouched_is_not_blocked(self, tenant_a, maintenance_order_a,
+                                                             issued_part_line_a, spare_item_a):
+        from apps.scm.forms import MaintenanceWorkOrderPartFormSet
+        data = formset_data("parts", [{"id": issued_part_line_a.pk,
+                                       "item": str(spare_item_a.pk), "lot_serial": "",
+                                       "quantity": str(issued_part_line_a.quantity)}], initial=1)
+        formset = MaintenanceWorkOrderPartFormSet(data, instance=maintenance_order_a,
+                                                  form_kwargs={"tenant": tenant_a})
+        assert formset.is_valid(), formset.errors
+
+
+# ================================================================ 4.13 · the meter reading form
+class TestMeterReadingForm:
+    def test_a_valid_reading_saves_with_the_default_provenance(self, tenant_a, asset_a):
+        from apps.scm.forms import MeterReadingForm
+        form = MeterReadingForm(_reading_form_payload(asset=str(asset_a.pk)), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        row = form.save(commit=False)
+        row.tenant = tenant_a
+        row.save()
+        assert row.source == "manual"
+        assert row.reference == ""
+
+    def test_a_crafted_provenance_pair_is_ignored_entirely(self, tenant_a, asset_a,
+                                                           maintenance_order_a):
+        """THE REGRESSION (bug 7). Both keys are simply not fields, so they never reach
+        ``cleaned_data`` and never reach the row."""
+        from apps.scm.forms import MeterReadingForm
+        form = MeterReadingForm(
+            _reading_form_payload(asset=str(asset_a.pk), source="work_order",
+                                  reference=maintenance_order_a.number), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        assert "source" not in form.cleaned_data and "reference" not in form.cleaned_data
+        row = form.save(commit=False)
+        row.tenant = tenant_a
+        row.save()
+        row.refresh_from_db()
+        assert row.source == "manual"
+        assert row.reference == ""
+
+    def test_the_tenant_is_stamped_before_validation_so_the_model_guard_is_live(self, tenant_a):
+        """``crud_create`` assigns the tenant only AFTER ``is_valid()``, so without this stamp the
+        model's cross-tenant guard would be dead code on the only path this model has."""
+        from apps.scm.forms import MeterReadingForm
+        assert MeterReadingForm(tenant=tenant_a).instance.tenant_id == tenant_a.pk
+
+    def test_a_crafted_cross_tenant_asset_is_a_field_error(self, tenant_a, asset_b):
+        from apps.scm.forms import MeterReadingForm
+        form = MeterReadingForm(_reading_form_payload(asset=str(asset_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "asset" in form.errors
+
+    def test_the_asset_dropdown_is_not_narrowed_to_assets_that_declare_a_meter(self, tenant_a,
+                                                                               asset_a, asset_a2):
+        """An asset legitimately carries SEVERAL meters while ``meter_name`` marks only the primary
+        one, and a secondary reading on an asset with no primary named is still worth logging."""
+        from apps.scm.forms import MeterReadingForm
+        options = list(MeterReadingForm(tenant=tenant_a).fields["asset"].queryset)
+        assert asset_a in options and asset_a2 in options
+
+    def test_asset_meter_name_and_reading_are_required(self, tenant_a):
+        from apps.scm.forms import MeterReadingForm
+        form = MeterReadingForm(_reading_form_payload(asset="", meter_name="", reading=""),
+                                tenant=tenant_a)
+        assert not form.is_valid()
+        assert {"asset", "meter_name", "reading"} <= set(form.errors)
+
+    def test_a_future_reading_is_refused_through_the_form(self, tenant_a, asset_a):
+        from django.utils import timezone
+        from apps.scm.forms import MeterReadingForm
+        future = (timezone.localtime(timezone.now()) + datetime.timedelta(days=1)
+                  ).strftime("%Y-%m-%d %H:%M:%S")
+        form = MeterReadingForm(_reading_form_payload(asset=str(asset_a.pk), read_at=future),
+                                tenant=tenant_a)
+        assert not form.is_valid()
+        assert "read_at" in form.errors
+
+    def test_an_over_range_reading_is_refused_rather_than_clamped(self, tenant_a, asset_a):
+        from apps.scm.models import MAX_Q4
+        from apps.scm.forms import MeterReadingForm
+        form = MeterReadingForm(
+            _reading_form_payload(asset=str(asset_a.pk), reading=str(MAX_Q4 + Decimal("1"))),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "reading" in form.errors
+
+    def test_there_is_no_meter_reading_edit_form_at_all(self):
+        """The absent sibling is a DECISION: an editable reading is a number a scheduler already
+        acted on, changed after the fact, with no trace that it ever said anything else."""
+        import apps.scm.forms as forms_pkg
+        assert not hasattr(forms_pkg, "MeterReadingEditForm")
+        assert not hasattr(forms_pkg, "MeterReadingUpdateForm")
