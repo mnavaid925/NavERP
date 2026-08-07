@@ -38,9 +38,8 @@ which means the view MUST construct the formset with
 ``WorkOrderComponentFormSet`` contract.
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
-from apps.scm.forms._common import _employee_parties
-from apps.scm.forms.AssetManagement.Assets import (_keep_current, _reject_foreign,
-                                                   _scope_to_tenant)
+from apps.scm.forms._common import _employee_parties, _reject_foreign
+from apps.scm.forms.AssetManagement.Assets import _keep_current, _scope_to_tenant
 
 from apps.scm.models import Asset, Location, MaintenancePlan, MaintenancePlanTask
 
