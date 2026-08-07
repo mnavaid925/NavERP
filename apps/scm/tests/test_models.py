@@ -9904,15 +9904,21 @@ class TestAssetReliabilityFigures:
         assert observed < Decimal("8760")
 
     def test_an_uncommissioned_asset_falls_back_to_when_the_record_was_created(self, tenant_a):
-        """A machine with no commissioning date still has a window — a short one — rather than
-        none, so ``availability_pct`` can answer at all. It is minutes old in a test, which is why
-        the assertion is on the SHAPE (positive, tiny) rather than on a figure."""
+        """A machine with no commissioning date still has a window, measured from ``created_at``.
+
+        ``created_at`` is pushed back explicitly rather than trusting the clock: it is
+        ``auto_now_add``, so a freshly created row is microseconds old, and Windows resolves
+        ``timezone.now()`` to roughly 15 ms — two calls inside one tick return the SAME instant, the
+        window measures zero, and ``_observed_hours`` correctly answers ``None`` for it. That would
+        make the assertion a coin toss on the clock rather than a statement about the fallback.
+        """
         from apps.scm.models import Asset
         asset = Asset.objects.create(tenant=tenant_a, code="NOCOMM-1", name="No commissioning date")
         assert asset.commissioned_on is None
-        observed = asset._observed_hours()
-        assert observed is not None and observed > Decimal("0")
-        assert observed < Decimal("1")
+        Asset.objects.filter(pk=asset.pk).update(created_at=_asset_hours_ago(48))
+        observed = _reload_asset(asset)._observed_hours()
+        assert observed is not None
+        assert Decimal("47.9") <= observed <= Decimal("48.1")
 
     def test_availability_floors_at_zero_rather_than_going_negative(self, tenant_a):
         """Visibly wrong beats plausibly wrong: recorded downtime exceeding the window sends
