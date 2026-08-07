@@ -982,6 +982,50 @@ LIVE_LINKS = {
         "Spare Parts Inventory":  "scm:sparepart_list",               # bullet (COMPUTED over 4.3 — no table)
         "Asset Depreciation":     "scm:asset_depreciation_report",    # bullet (COMPUTED over accounting)
     },
+    # 4.14 Labor Management. Five bullets, five staff-facing pages, and three of the five are worth
+    # explaining because the obvious reading of each is the wrong one.
+    #
+    # **"Time & Attendance" does NOT point at an attendance table, because HRM already owns one.**
+    # `hrm.AttendanceRecord` is unique per (tenant, employee, date) with punch times, derived hours,
+    # geofence and biometric source — it answers "did this person come to work today". A second table
+    # answering the same question is how two systems come to disagree about whether somebody was
+    # there. `scm:laborsession_list` is the layer BENEATH it: a shift at a warehouse whose minutes are
+    # split into booked activity intervals, which is what an LMS measures and what a one-row-per-day
+    # attendance record structurally cannot hold. `LaborSession.work_date` is deliberately the same
+    # grain as `AttendanceRecord.date` so the two can be reconciled in a report — WITHOUT a FK.
+    # `apps/scm` contains zero `hrm.*` references and this sub-module did not add the first.
+    #
+    # **"Payroll Integration" is a read-only CSV hand-off, not a posting.** `scm:labor_payroll_export`
+    # aggregates approved sessions per worker per period and writes NOTHING — not to `hrm.*`, not to
+    # `accounting.*`. It is not merely being cautious: `accounting.PayrollRun` is a whole-company
+    # period ACCRUAL with no employee lines and no hours columns, so "drafting" one from warehouse
+    # labour would be wrong rather than redundant. Contrast 4.6's freight audit, which DOES draft an
+    # `accounting.Bill` — because a Bill is a document with lines and a payee, and a PayrollRun isn't.
+    #
+    # **"Task Assignment" is a COMPUTED console over 4.4's EXISTING tables.** `PickTask`,
+    # `PutawayTask` and `CycleCountTask` already carry `assigned_to`, a status and lifecycle stamps,
+    # so `scm:labor_board` groups and re-assigns those rows and 4.14 declares NO task table and adds
+    # NO second assignee column (migration 0024 has no `AddField` at all, which is the evidence).
+    # Same precedent as 4.13's "Spare Parts Inventory" computing over 4.3 and 4.4's "Bin/Location
+    # Management" pointing at 4.3's `scm:location_list`.
+    #
+    # **"Performance Tracking" points at the standards library** rather than at a figures page,
+    # because the engineered standard is what makes productivity measurable at all — units per hour
+    # with nothing to compare it against is trivia. The scorecard itself (`scm:labor_scorecard`) is
+    # reached from a chip in that list's header, the `pm_forecast` precedent.
+    #
+    # NO sidebar key for `LaborActivity` or `LaborPlanLine` — NavERP.md gives 4.14 five bullets and
+    # the sidebar mirrors it exactly. Activities are a panel on their session (and have their own
+    # list page reached from there); plan lines are the grid on their plan. That is the established
+    # WorkCenter / ReorderRule / ReturnReason / InspectionPlan / KpiTarget rule: a child or master
+    # reached from the page that uses it takes no bullet of its own.
+    "4.14": {
+        "Labor Planning":       "scm:laborplan_list",         # bullet (volume -> required headcount)
+        "Time & Attendance":    "scm:laborsession_list",      # bullet (the warehouse SHIFT, not HR)
+        "Task Assignment":      "scm:labor_board",            # bullet (COMPUTED over 4.4 - no table)
+        "Performance Tracking": "scm:laborstandard_list",     # bullet (the library + scorecard chip)
+        "Payroll Integration":  "scm:labor_payroll_export",   # bullet (CSV hand-off - zero writes)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
