@@ -37,9 +37,8 @@ cost at the moment the negative ``maintenance`` ``StockMove`` is posted. A form 
 would be a way to claim a consumption the stock ledger never saw.
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
-from apps.scm.forms._common import _employee_parties, _supplier_parties
-from apps.scm.forms.AssetManagement.Assets import (_keep_current, _reject_foreign,
-                                                   _scope_to_tenant)
+from apps.scm.forms._common import _employee_parties, _reject_foreign, _supplier_parties
+from apps.scm.forms.AssetManagement.Assets import _keep_current, _scope_to_tenant
 
 from apps.scm.models import (Asset, Item, Location, LotSerial, MaintenancePlan,
                              MaintenanceWorkOrder, MaintenanceWorkOrderPart, NonConformance)
