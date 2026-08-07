@@ -801,3 +801,108 @@ class TestSupplierStatsParityWithTheScorecard:
         stats = supplier_delivery_stats(tenant_a, None, start, end)
         assert (stats["datable"], stats["on_time"]) == (2, 1)
         assert stats["pct"] == Decimal("50")
+
+
+# ============ 4.13 · REGRESSION LOCK — dead stock is a RECENCY question, not a COGS question
+class TestMaintenanceDrawsCountAsMovement:
+    """``OUTBOUND_MOVE_TYPES`` and ``COGS_MOVE_TYPES`` are DIFFERENT sets on purpose, and sharing
+    one of them was a live bug.
+
+    "What did this cost us?" is a valuation question that must EXCLUDE maintenance opex — a spare
+    fitted to our own machine is upkeep, not the cost of any good we sold. "Has anybody touched this
+    in 90 days?" is a recency question that must INCLUDE it.
+
+    While the dead-stock resolver read the COGS tuple, a spare part drawn every week to repair
+    machines posted only ``maintenance`` moves, never appeared in the "moved" set, and EVERY actively
+    consumed spare was classified as dead stock. The classification does not stop at a dashboard:
+    ``_detect_dead_stock`` turns those rows into persisted ``SupplyChainAlert`` records reading
+    "<SKU> has not moved for 90 days" about a part issued last week.
+    """
+
+    def test_the_cogs_tuple_is_unchanged_and_still_excludes_maintenance(self):
+        """The fix widened the RECENCY set and deliberately left valuation alone — a spare fitted to
+        a machine must never inflate COGS and understate gross margin on every product it never
+        touched."""
+        from apps.scm import analytics
+        assert analytics.COGS_MOVE_TYPES == ("issue", "consumption")
+        assert "maintenance" not in analytics.COGS_MOVE_TYPES
+        assert "transfer" not in analytics.COGS_MOVE_TYPES
+
+    def test_the_recency_set_includes_maintenance_and_is_a_superset_of_cogs(self):
+        from apps.scm import analytics
+        assert "maintenance" in analytics.OUTBOUND_MOVE_TYPES
+        assert set(analytics.COGS_MOVE_TYPES) < set(analytics.OUTBOUND_MOVE_TYPES)
+        assert "transfer" not in analytics.OUTBOUND_MOVE_TYPES
+
+    def test_a_spare_whose_only_outbound_move_is_maintenance_is_not_dead(self, tenant_a,
+                                                                        spare_item_a,
+                                                                        location_a):
+        """The whole bug in one assertion: the part was drawn today and would have been reported as
+        untouched for 90 days."""
+        from apps.scm.analytics import compute_metric, range_bounds
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=spare_item_a, location=location_a,
+                         quantity=Decimal("-2"), move_type="maintenance",
+                         unit_cost=Decimal("25.0000"), reference="MWO-00001",
+                         reason="Maintenance issue")
+        result = compute_metric(tenant_a, "inv_dead_stock_value", *range_bounds("last_90"))
+        assert spare_item_a.sku not in {row["sku"] for row in result["rows"]}
+        assert result["breakdown"]["dead_items"] == 0
+
+    def test_the_same_spare_IS_dead_once_nothing_has_drawn_it(self, tenant_a, spare_item_a):
+        """The counterweight — without it the test above would pass on a resolver that reported
+        nothing at all as dead."""
+        from apps.scm.analytics import compute_metric, range_bounds
+        result = compute_metric(tenant_a, "inv_dead_stock_value", *range_bounds("last_90"))
+        assert spare_item_a.sku in {row["sku"] for row in result["rows"]}
+        assert result["breakdown"]["dead_items"] == 1
+
+    def test_a_maintenance_draw_older_than_the_tail_does_not_revive_it(self, tenant_a,
+                                                                       spare_item_a, location_a):
+        """The recency window still applies: including ``maintenance`` widened WHAT counts as a
+        movement, not WHEN one counts."""
+        from apps.scm.analytics import compute_metric, range_bounds
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=spare_item_a, location=location_a,
+                         quantity=Decimal("-2"), move_type="maintenance",
+                         unit_cost=Decimal("25.0000"), reference="MWO-OLD",
+                         moved_at=timezone.now() - datetime.timedelta(days=200))
+        result = compute_metric(tenant_a, "inv_dead_stock_value", *range_bounds("last_90"))
+        assert spare_item_a.sku in {row["sku"] for row in result["rows"]}
+
+    def test_the_breakdown_names_the_move_types_it_actually_used(self, tenant_a, spare_item_a):
+        """The figure on screen carries its own definition, so a reader is never guessing which
+        movements counted."""
+        from apps.scm import analytics
+        from apps.scm.analytics import compute_metric, range_bounds
+        result = compute_metric(tenant_a, "inv_dead_stock_value", *range_bounds("last_90"))
+        assert result["breakdown"]["move_types"] == list(analytics.OUTBOUND_MOVE_TYPES)
+        assert "maintenance" in result["breakdown"]["note"]
+
+    def test_turnover_still_reports_the_cogs_tuple_and_names_its_exclusions(self, tenant_a,
+                                                                            spare_item_a,
+                                                                            location_a):
+        """The valuation side, unchanged — and the caveat says ``maintenance`` out loud in visible
+        copy rather than only in a code comment."""
+        from apps.scm import analytics
+        from apps.scm.analytics import compute_metric, range_bounds
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=spare_item_a, location=location_a,
+                         quantity=Decimal("-2"), move_type="maintenance",
+                         unit_cost=Decimal("25.0000"), reference="MWO-00001")
+        result = compute_metric(tenant_a, "inv_turnover", *range_bounds("last_90"))
+        breakdown = result.get("breakdown") or {}
+        assert breakdown.get("move_types") == list(analytics.COGS_MOVE_TYPES)
+        assert "maintenance" in (breakdown.get("excludes") or "")
+
+    def test_a_maintenance_draw_never_lands_in_the_cost_of_goods_issued(self, tenant_a,
+                                                                        spare_item_a,
+                                                                        location_a):
+        from apps.scm.analytics import compute_metric, range_bounds
+        from apps.scm.views._helpers import _post_stock_move
+        _post_stock_move(tenant_a, item=spare_item_a, location=location_a,
+                         quantity=Decimal("-2"), move_type="maintenance",
+                         unit_cost=Decimal("25.0000"), reference="MWO-00001")
+        result = compute_metric(tenant_a, "inv_turnover", *range_bounds("last_90"))
+        assert (result.get("breakdown") or {}).get("cost_issued") in (None, 0, Decimal("0"),
+                                                                      Decimal("0.00"))
