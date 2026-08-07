@@ -35,13 +35,21 @@ form is absent from ``_get_validation_exclusions``' inverse, so Django skips the
 ``unique_together ("asset", "item")`` check entirely and a duplicate parts line becomes an
 ``IntegrityError`` rather than a field error. See :meth:`AssetSparePartForm.validate_unique`.
 
-**The three shared helpers below live here rather than in a fifth module** because ``Assets.py`` is
+**The two shared helpers below live here rather than in a fifth module** because ``Assets.py`` is
 this sub-package's root entity — the other three modules already point at ``Asset`` — so importing
 from it adds no dependency edge that did not exist, and the alternative was the same six lines
 copied four times. ``apps/scm/forms/__init__.py`` imports this module first, so no cycle is possible.
+
+That argument holds only while the helper is used by THIS sub-module. ``_reject_foreign`` was the
+third of them and has moved to ``apps/scm/forms/_common.py``, because 4.14 Labor Management is a
+second consumer and a helper shared across sub-modules belongs in the shared module (Backend Package
+Structure rule 5) — importing it from a sibling sub-package's entity file would have made 4.14's
+forms depend on 4.13's asset register for a rule that has nothing to do with assets. ``_scope_to_tenant``
+and ``_keep_current`` stay put; move either the day a second sub-module wants it, not before.
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
-from apps.scm.forms._common import TenantUniqueMixin, _employee_parties, _supplier_parties
+from apps.scm.forms._common import (TenantUniqueMixin, _employee_parties, _reject_foreign,
+                                    _supplier_parties)
 
 from apps.accounting.models import FixedAsset
 from apps.core.models import OrgUnit
@@ -97,31 +105,6 @@ def _keep_current(queryset, tenant, current_id):
     return Party.objects.filter(
         Q(pk__in=queryset.values("pk")) | Q(pk=current_id), tenant=tenant
     ).distinct()
-
-
-def _reject_foreign(form, cleaned, names):
-    """Field-error any chosen FK whose row belongs to another workspace.
-
-    The dropdowns above are already narrowed, but **a narrowed ``<select>`` is UX and has never held
-    against a crafted POST** (L39 §2) — every one of these forms is reachable by any logged-in member
-    of any workspace. The models' own ``clean()`` methods carry the same guard and it is the one that
-    holds at the database boundary; this repeats it at the FORM boundary for two reasons a reviewer
-    should not have to rediscover:
-
-    * it does not depend on the instance's tenant having been stamped before validation, so it is
-      live on the create path whether or not a given form mixes in the stamp; and
-    * it keys the error on a field the FORM has, which is what makes it renderable. A model error
-      keyed on a column that is not on the form raises ``ValueError`` out of ``add_error`` — a 500
-      instead of a field error. (``MeterReading.clean()``'s ``recorded_by`` leg is exactly that
-      shape, which is why the view must stamp that field AFTER ``is_valid()``.)
-    """
-    tenant_id = form.tenant.pk if form.tenant is not None else None
-    for name in names:
-        chosen = cleaned.get(name)
-        if chosen is None:
-            continue
-        if getattr(chosen, "tenant_id", None) != tenant_id:
-            form.add_error(name, "That record belongs to another workspace.")
 
 
 class AssetForm(TenantUniqueMixin, TenantModelForm):
