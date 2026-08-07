@@ -5690,3 +5690,770 @@ class TestComplianceXss:
         body = client_a.get(reverse("scm:carbon_footprint_report")).content.decode()
         assert "<script>alert('carbon')</script>" not in body
         assert "&lt;script&gt;" in body
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.13 date basis for the security payloads. timezone.localdate(), NEVER
+# datetime.date.today(): every 4.13 clean() compares a posted date against the LOCAL date, so a body
+# built on the other basis flakes for the hours after local midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _asset_sec_day(days=0):
+    """Today (or days from it) on the basis the 4.13 models validate against."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+# =================================================================================================
+# SCM 4.13 Asset Management — auth, tenant isolation, CSRF, method gates and hostile input.
+#
+# Three things need naming before the tests below make sense:
+#
+#   * THREE of the seven tables carry NO tenant column. ``AssetSparePart`` is reached through
+#     ``asset__tenant``, ``MaintenancePlanTask`` through ``plan__tenant`` and
+#     ``MaintenanceWorkOrderPart`` / ``MaintenanceWorkOrderTask`` through ``work_order__tenant``. A
+#     bare pk lookup on any of them is a cross-tenant read or WRITE with no query anywhere that
+#     would reveal it, so the parent join IS the authorization check.
+#   * EIGHT routes are ``@tenant_admin_required``: the three deletes plus the spare-part delete, the
+#     plan's generate action, and the job's approve / cancel / issue-parts. The last is admin-gated
+#     because it is the only thing in the whole sub-module that writes a ledger.
+#   * ``MeterReading`` has NO edit route and NO delete route AT ALL — not a missing feature, a
+#     decision. The suite asserts the absence with ``NoReverseMatch``, which is the only assertion
+#     that actually fails if somebody adds one back.
+# =================================================================================================
+_ASSET_GET_ROUTES = (
+    "scm:asset_list", "scm:asset_create",
+    "scm:maintenanceplan_list", "scm:maintenanceplan_create",
+    "scm:maintenanceworkorder_list", "scm:maintenanceworkorder_create",
+    "scm:meterreading_list", "scm:meterreading_create",
+    "scm:pm_forecast", "scm:sparepart_list", "scm:asset_depreciation_report",
+)
+
+#: ``(url_name, fixture_name)`` for every detail/edit page that takes a pk.
+_ASSET_PK_PAGES = (
+    ("scm:asset_detail", "asset_b"),
+    ("scm:asset_edit", "asset_b"),
+    ("scm:asset_add_spare_part", "asset_b"),
+    ("scm:maintenanceplan_detail", "maintenance_plan_b"),
+    ("scm:maintenanceplan_edit", "maintenance_plan_b"),
+    ("scm:maintenanceworkorder_detail", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_edit", "maintenance_order_b"),
+    ("scm:meterreading_detail", "meter_reading_b"),
+)
+
+#: The SIXTEEN POST-only routes and the tenant_b fixture each one is aimed at.
+_ASSET_POST_ONLY = (
+    ("scm:asset_delete", "asset_b"),
+    ("scm:assetsparepart_delete", "spare_part_b"),
+    ("scm:maintenanceplan_delete", "maintenance_plan_b"),
+    ("scm:maintenanceplan_generate", "maintenance_plan_b"),
+    ("scm:maintenanceworkorder_delete", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_approve", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_schedule", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_start", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_hold", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_resume", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_complete", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_close", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_cancel", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_issue_parts", "maintenance_order_b"),
+    ("scm:maintenanceworkorder_record_reading", "maintenance_order_b"),
+    ("scm:maintenanceworkordertask_toggle", "job_task_b"),
+)
+
+#: The eight routes a plain member must be 403'd from.
+_ASSET_ADMIN_ONLY = (
+    ("scm:asset_delete", "asset_a2"),
+    ("scm:assetsparepart_delete", "asset_spare_part_a"),
+    ("scm:maintenanceplan_delete", "maintenance_plan_a"),
+    ("scm:maintenanceplan_generate", "maintenance_plan_a"),
+    ("scm:maintenanceworkorder_delete", "maintenance_order_a"),
+    ("scm:maintenanceworkorder_approve", "maintenance_order_a"),
+    ("scm:maintenanceworkorder_cancel", "maintenance_order_a"),
+    ("scm:maintenanceworkorder_issue_parts", "maintenance_order_a"),
+)
+
+#: The routes an ORDINARY member may press — the counterweight, so the gate above is a boundary
+#: rather than a wall. Every one of these is ``@login_required`` only.
+_ASSET_MEMBER_ALLOWED = ("scm:maintenanceworkorder_schedule", "scm:maintenanceworkorder_start",
+                         "scm:maintenanceworkorder_hold", "scm:maintenanceworkorder_resume",
+                         "scm:maintenanceworkorder_complete", "scm:maintenanceworkorder_close",
+                         "scm:maintenanceworkorder_record_reading")
+
+
+@pytest.fixture
+def spare_part_b(db, asset_b, spare_item_b):
+    """A tenant_b parts-list line — the tenant-LESS child every ``asset__tenant`` assertion needs."""
+    from apps.scm.models import AssetSparePart
+    return AssetSparePart.objects.create(asset=asset_b, item=spare_item_b,
+                                         quantity_per_service=Decimal("1"))
+
+
+def _asset_sec_body(**overrides):
+    """A complete, VALID ``AssetForm`` POST body."""
+    data = {
+        "code": "SEC-1", "name": "Security probe", "asset_type": "machine",
+        "status": "in_service", "criticality": "medium", "category": "", "manufacturer": "",
+        "model_number": "", "serial_number": "", "tag_code": "", "specifications": "",
+        "parent": "", "location": "", "org_unit": "", "work_center": "", "custodian": "",
+        "supplier": "", "service_vendor": "", "purchase_date": "", "commissioned_on": "",
+        "warranty_expires_on": "", "purchase_cost": "0.00", "fixed_asset": "", "meter_name": "",
+        "meter_unit": "", "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _job_sec_body(**overrides):
+    """A complete ``MaintenanceWorkOrderForm`` POST body with its (empty) parts formset."""
+    data = {
+        "title": "Security probe", "work_type": "corrective", "priority": "medium",
+        "source": "request", "asset": "", "plan": "", "reported_by": "", "assigned_to": "",
+        "service_vendor": "", "parts_location": "", "non_conformance": "",
+        "reported_at": _asset_sec_day(0).isoformat(), "scheduled_start": "", "downtime_start": "",
+        "downtime_end": "", "is_unplanned_downtime": "", "problem_code": "", "cause_code": "",
+        "remedy_code": "", "labour_hours": "0.00", "labour_rate": "0.0000",
+        "external_cost": "0.00", "meter_reading_at_work": "", "description": "",
+        "resolution_notes": "",
+    }
+    data.update(overrides)
+    data.update(formset_data("parts", []))
+    return data
+
+
+def _plan_sec_body(**overrides):
+    """A complete ``MaintenancePlanForm`` POST body with its (empty) task formset."""
+    data = {
+        "name": "Security probe", "asset": "", "instructions": "", "is_active": "on",
+        "trigger_type": "calendar", "schedule_basis": "floating", "interval_days": "30",
+        "lead_time_days": "7", "meter_interval": "", "next_due_on": _asset_sec_day(10).isoformat(),
+        "next_due_reading": "", "condition_operator": "", "condition_threshold": "",
+        "priority": "medium", "work_type": "preventive", "estimated_hours": "1.00",
+        "assigned_to": "", "parts_location": "",
+    }
+    data.update(overrides)
+    data.update(formset_data("tasks", []))
+    return data
+
+
+# ================================================================ 4.13 · anonymous is turned away
+class TestAssetManagementAnonymousRedirect:
+    @pytest.mark.parametrize("url_name", _ASSET_GET_ROUTES)
+    def test_every_get_route_redirects_to_login(self, url_name):
+        resp = Client().get(reverse(url_name))
+        assert resp.status_code == 302
+        assert "login" in resp["Location"]
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:asset_detail", "asset_a"), ("scm:asset_edit", "asset_a"),
+        ("scm:asset_add_spare_part", "asset_a"),
+        ("scm:assetsparepart_edit", "asset_spare_part_a"),
+        ("scm:maintenanceplan_detail", "maintenance_plan_a"),
+        ("scm:maintenanceplan_edit", "maintenance_plan_a"),
+        ("scm:maintenanceworkorder_detail", "maintenance_order_a"),
+        ("scm:maintenanceworkorder_edit", "maintenance_order_a"),
+        ("scm:meterreading_detail", "meter_reading_a"),
+    ])
+    def test_every_pk_page_redirects_before_it_resolves_a_pk(self, request, url_name,
+                                                             fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        resp = Client().get(reverse(url_name, args=[obj.pk]))
+        assert resp.status_code == 302 and "login" in resp["Location"]
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:asset_delete", "asset_a2"),
+        ("scm:assetsparepart_delete", "asset_spare_part_a"),
+        ("scm:maintenanceplan_delete", "maintenance_plan_a"),
+        ("scm:maintenanceplan_generate", "maintenance_plan_a"),
+        ("scm:maintenanceworkorder_delete", "maintenance_order_a"),
+        ("scm:maintenanceworkorder_approve", "maintenance_order_a"),
+        ("scm:maintenanceworkorder_cancel", "maintenance_order_a"),
+        ("scm:maintenanceworkorder_issue_parts", "maintenance_order_a"),
+        ("scm:maintenanceworkordertask_toggle", "job_task_a"),
+    ])
+    def test_every_verb_rejects_anonymous_and_writes_nothing(self, request, url_name,
+                                                             fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        before = getattr(obj, "status", None)
+        resp = Client().post(reverse(url_name, args=[obj.pk]),
+                             {"reason": "x", "reading": "1", "scheduled_start": "2026-01-01"})
+        assert resp.status_code == 302 and "login" in resp["Location"]
+        obj.refresh_from_db()
+        assert getattr(obj, "status", None) == before
+
+    def test_anonymous_cannot_create_any_413_row(self, tenant_a, asset_a):
+        from apps.scm.models import Asset, MaintenancePlan, MaintenanceWorkOrder, MeterReading
+        c = Client()
+        assert c.post(reverse("scm:asset_create"), _asset_sec_body()).status_code == 302
+        assert c.post(reverse("scm:maintenanceplan_create"),
+                      _plan_sec_body(asset=str(asset_a.pk))).status_code == 302
+        assert c.post(reverse("scm:maintenanceworkorder_create"),
+                      _job_sec_body(asset=str(asset_a.pk))).status_code == 302
+        assert not Asset.objects.filter(code="SEC-1").exists()
+        assert not MaintenancePlan.objects.exists()
+        assert not MaintenanceWorkOrder.objects.exists()
+        assert not MeterReading.objects.exists()
+
+
+# ================================================================ 4.13 · cross-tenant IDOR
+class TestAssetManagementCrossTenantIsolation:
+    """Tenant A's admin pointed at tenant B's pk. Every one of these must be a 404."""
+
+    @pytest.mark.parametrize("url_name,fixture_name", _ASSET_PK_PAGES)
+    def test_every_detail_and_edit_page_is_404_across_tenants(self, client_a, request, url_name,
+                                                              fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 404
+
+    def test_the_three_tenant_less_children_are_404_through_their_parent(self, client_a,
+                                                                        spare_part_b,
+                                                                        job_task_b):
+        """``AssetSparePart`` has no tenant column, so ``asset__tenant`` IS the check; the same for
+        ``MaintenanceWorkOrderTask`` through ``work_order__tenant``. Resolving either on its own pk
+        would be a cross-tenant write with no query anywhere that would reveal it."""
+        assert client_a.get(reverse("scm:assetsparepart_edit",
+                                    args=[spare_part_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:assetsparepart_delete",
+                                     args=[spare_part_b.pk])).status_code == 404
+        assert client_a.post(reverse("scm:maintenanceworkordertask_toggle",
+                                     args=[job_task_b.pk])).status_code == 404
+
+    @pytest.mark.parametrize("url_name,fixture_name", _ASSET_POST_ONLY)
+    def test_every_verb_is_404_across_tenants_and_changes_nothing(self, client_a, request,
+                                                                  url_name, fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        before = {name: getattr(obj, name, None)
+                  for name in ("status", "title", "next_due_on", "next_due_reading",
+                               "last_generated_on", "is_done", "quantity_per_service")}
+        resp = client_a.post(reverse(url_name, args=[obj.pk]),
+                             {"reason": "x", "reading": "1",
+                              "scheduled_start": _asset_sec_day(1).isoformat()})
+        assert resp.status_code == 404, url_name
+        obj.refresh_from_db()
+        for name, value in before.items():
+            assert getattr(obj, name, None) == value, (url_name, name)
+
+    def test_a_generate_across_tenants_raises_no_job_at_all(self, client_a, maintenance_plan_b):
+        from apps.scm.models import MaintenanceWorkOrder
+        before = MaintenanceWorkOrder.objects.count()
+        assert client_a.post(reverse("scm:maintenanceplan_generate",
+                                     args=[maintenance_plan_b.pk])).status_code == 404
+        assert MaintenanceWorkOrder.objects.count() == before
+
+    def test_an_issue_parts_across_tenants_writes_no_stock_move(self, client_a, tenant_b,
+                                                                maintenance_order_b,
+                                                                spare_item_b):
+        from apps.scm.models import MaintenanceWorkOrderPart, StockMove
+        MaintenanceWorkOrderPart.objects.create(work_order=maintenance_order_b, item=spare_item_b,
+                                                quantity=Decimal("1"))
+        assert client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                     args=[maintenance_order_b.pk])).status_code == 404
+        assert not StockMove.objects.filter(tenant=tenant_b, move_type="maintenance").exists()
+
+    def test_a_record_reading_across_tenants_writes_no_reading(self, client_a, tenant_b,
+                                                               maintenance_order_b):
+        from apps.scm.models import MeterReading
+        before = MeterReading.objects.filter(tenant=tenant_b).count()
+        assert client_a.post(reverse("scm:maintenanceworkorder_record_reading",
+                                     args=[maintenance_order_b.pk]),
+                             {"reading": "500"}).status_code == 404
+        assert MeterReading.objects.filter(tenant=tenant_b).count() == before
+
+    def test_a_tenant_less_superuser_gets_404_rather_than_somebody_elses_child(
+            self, db, asset_spare_part_a, job_task_a):
+        """``request.tenant`` of ``None`` resolves to ``asset__tenant IS NULL``, and that column is
+        NOT NULL — so the tenant-less superuser gets a 404, never a foreign row."""
+        from apps.accounts.models import User
+        superuser = User.objects.create_superuser(email="root413@naverp.test", username="root413",
+                                                  password="TestPass123!")
+        c = Client()
+        c.force_login(superuser)
+        assert c.get(reverse("scm:assetsparepart_edit",
+                             args=[asset_spare_part_a.pk])).status_code == 404
+        assert c.post(reverse("scm:maintenanceworkordertask_toggle",
+                              args=[job_task_a.pk])).status_code == 404
+
+    def test_no_list_page_ever_shows_the_other_tenants_rows(self, client_a, asset_a, asset_b,
+                                                            maintenance_plan_a,
+                                                            maintenance_plan_b,
+                                                            maintenance_order_a,
+                                                            maintenance_order_b, meter_reading_a,
+                                                            meter_reading_b):
+        for url_name, mine, theirs in (
+                ("scm:asset_list", asset_a, asset_b),
+                ("scm:maintenanceplan_list", maintenance_plan_a, maintenance_plan_b),
+                ("scm:maintenanceworkorder_list", maintenance_order_a, maintenance_order_b),
+                ("scm:meterreading_list", meter_reading_a, meter_reading_b)):
+            rows = client_a.get(reverse(url_name)).context["object_list"]
+            assert mine in rows and theirs not in rows, url_name
+
+    def test_neither_computed_report_leaks_a_foreign_row(self, client_a, asset_b,
+                                                         maintenance_plan_b, spare_item_b):
+        assert client_a.get(reverse("scm:pm_forecast")).context["stats"]["plans_considered"] == 0
+        assert client_a.get(reverse("scm:sparepart_list")).context["rows"] == []
+        assert client_a.get(reverse("scm:asset_depreciation_report")).context["rows"] == []
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("location", "location_b"), ("work_center", "work_center_b"), ("org_unit", "org_unit_b"),
+        ("custodian", "supplier_b"), ("supplier", "supplier_b"), ("service_vendor", "supplier_b"),
+        ("fixed_asset", "fixed_asset_b"), ("parent", "asset_b"),
+    ])
+    def test_a_crafted_foreign_pk_in_an_asset_fk_is_rejected(self, client_a, request, field,
+                                                             fixture_name):
+        """A narrowed ``<select>`` is UX; the guard is the form's and the model's ``clean()``."""
+        from apps.scm.models import Asset
+        foreign = request.getfixturevalue(fixture_name)
+        resp = client_a.post(reverse("scm:asset_create"),
+                             _asset_sec_body(**{field: str(foreign.pk)}))
+        assert resp.status_code == 200
+        assert not Asset.objects.filter(code="SEC-1").exists()
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("asset", "asset_b"), ("plan", "maintenance_plan_b"), ("parts_location", "location_b"),
+        ("non_conformance", "nonconformance_b"), ("reported_by", "supplier_b"),
+        ("assigned_to", "supplier_b"), ("service_vendor", "supplier_b"),
+    ])
+    def test_a_crafted_foreign_pk_in_a_job_fk_is_rejected(self, client_a, asset_a, request, field,
+                                                          fixture_name):
+        from apps.scm.models import MaintenanceWorkOrder
+        foreign = request.getfixturevalue(fixture_name)
+        body = _job_sec_body(asset=str(asset_a.pk))
+        body[field] = str(foreign.pk)
+        resp = client_a.post(reverse("scm:maintenanceworkorder_create"), body)
+        assert resp.status_code == 200
+        assert not MaintenanceWorkOrder.objects.filter(title="Security probe").exists()
+
+    @pytest.mark.parametrize("field,fixture_name", [
+        ("asset", "asset_b"), ("assigned_to", "supplier_b"), ("parts_location", "location_b"),
+    ])
+    def test_a_crafted_foreign_pk_in_a_plan_fk_is_rejected(self, client_a, asset_a, request,
+                                                           field, fixture_name):
+        from apps.scm.models import MaintenancePlan
+        foreign = request.getfixturevalue(fixture_name)
+        body = _plan_sec_body(asset=str(asset_a.pk))
+        body[field] = str(foreign.pk)
+        resp = client_a.post(reverse("scm:maintenanceplan_create"), body)
+        assert resp.status_code == 200
+        assert not MaintenancePlan.objects.filter(name="Security probe").exists()
+
+    def test_a_crafted_foreign_item_on_a_parts_list_line_is_rejected(self, client_a, asset_a,
+                                                                     spare_item_b):
+        from apps.scm.models import AssetSparePart
+        resp = client_a.post(reverse("scm:asset_add_spare_part", args=[asset_a.pk]),
+                             {"item": str(spare_item_b.pk), "quantity_per_service": "1"})
+        assert resp.status_code == 200
+        assert not AssetSparePart.objects.filter(item=spare_item_b, asset=asset_a).exists()
+
+    def test_a_crafted_foreign_item_in_the_parts_formset_is_rejected(self, client_a, asset_a,
+                                                                     spare_item_b):
+        from apps.scm.models import MaintenanceWorkOrder
+        body = _job_sec_body(asset=str(asset_a.pk))
+        body.update(formset_data("parts", [{"id": "", "item": str(spare_item_b.pk),
+                                            "lot_serial": "", "quantity": "1"}]))
+        resp = client_a.post(reverse("scm:maintenanceworkorder_create"), body)
+        assert resp.status_code == 200
+        assert not MaintenanceWorkOrder.objects.filter(title="Security probe").exists()
+
+    def test_a_crafted_foreign_asset_on_a_manual_reading_is_rejected(self, client_a, asset_b,
+                                                                     tenant_b):
+        from apps.scm.models import MeterReading
+        before = MeterReading.objects.filter(tenant=tenant_b).count()
+        resp = client_a.post(reverse("scm:meterreading_create"),
+                             {"asset": str(asset_b.pk), "meter_name": "Cycles", "unit": "",
+                              "reading": "1", "read_at": _asset_sec_day(0).isoformat() + " 08:00",
+                              "notes": ""})
+        assert resp.status_code == 200
+        assert MeterReading.objects.filter(tenant=tenant_b).count() == before
+
+
+# ================================================================ 4.13 · the admin gates
+class TestAssetManagementTenantAdminGates:
+    @pytest.mark.parametrize("url_name,fixture_name", _ASSET_ADMIN_ONLY)
+    def test_a_plain_member_is_403_on_every_admin_route(self, member_client, request, url_name,
+                                                        fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        assert member_client.post(reverse(url_name, args=[obj.pk]),
+                                  {"reason": "x"}).status_code == 403
+
+    def test_there_are_exactly_eight_of_them(self):
+        assert len({name for name, _ in _ASSET_ADMIN_ONLY}) == 8
+
+    def test_a_403_writes_nothing(self, member_client, maintenance_plan_a, maintenance_order_a,
+                                  part_line_a, tenant_a):
+        from apps.scm.models import MaintenanceWorkOrder, StockMove
+        published = maintenance_plan_a.next_due_on
+        member_client.post(reverse("scm:maintenanceplan_generate", args=[maintenance_plan_a.pk]))
+        member_client.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                   args=[maintenance_order_a.pk]))
+        member_client.post(reverse("scm:maintenanceworkorder_approve",
+                                   args=[maintenance_order_a.pk]))
+        maintenance_plan_a.refresh_from_db()
+        maintenance_order_a.refresh_from_db()
+        assert maintenance_plan_a.next_due_on == published
+        assert maintenance_plan_a.last_generated_on is None
+        assert maintenance_order_a.status == "requested"
+        assert MaintenanceWorkOrder.objects.filter(plan=maintenance_plan_a).count() == 0
+        assert not StockMove.objects.filter(tenant=tenant_a, move_type="maintenance").exists()
+
+    @pytest.mark.parametrize("url_name", _ASSET_MEMBER_ALLOWED)
+    def test_ordinary_shop_floor_verbs_stay_open_to_a_member(self, member_client,
+                                                             maintenance_order_a, url_name):
+        """The counterweight: the gate is a boundary, not a wall. A member 403'd from starting the
+        job they were assigned would simply stop recording work."""
+        resp = member_client.post(reverse(url_name, args=[maintenance_order_a.pk]),
+                                  {"reading": "1", "scheduled_start": _asset_sec_day(1).isoformat()})
+        assert resp.status_code != 403
+
+    def test_a_member_may_still_read_every_page_and_edit_the_ordinary_records(
+            self, member_client, asset_a, maintenance_plan_a, maintenance_order_a,
+            meter_reading_a):
+        for url_name in _ASSET_GET_ROUTES:
+            assert member_client.get(reverse(url_name)).status_code == 200, url_name
+        for url_name, obj in (("scm:asset_edit", asset_a),
+                              ("scm:maintenanceplan_edit", maintenance_plan_a),
+                              ("scm:maintenanceworkorder_edit", maintenance_order_a)):
+            assert member_client.get(reverse(url_name, args=[obj.pk])).status_code == 200
+
+    def test_a_member_may_create_the_ordinary_records(self, member_client, tenant_a, asset_a):
+        from apps.scm.models import Asset, MaintenanceWorkOrder
+        member_client.post(reverse("scm:asset_create"), _asset_sec_body(), follow=True)
+        member_client.post(reverse("scm:maintenanceworkorder_create"),
+                           _job_sec_body(asset=str(asset_a.pk)), follow=True)
+        assert Asset.objects.filter(tenant=tenant_a, code="SEC-1").exists()
+        assert MaintenanceWorkOrder.objects.filter(title="Security probe").exists()
+
+
+# ================================================================ 4.13 · the absent CRUD routes
+class TestMeterReadingHasNoEditOrDeleteRoute:
+    """The absence is a DECISION, not an omission, and this is the only assertion that fails if
+    somebody adds one back.
+
+    A wrong reading is corrected by posting a LATER, correct one — the ``scm.StockMove`` posture. An
+    editable reading is a number a scheduler already acted on, changed after the fact, with no trace
+    that it ever said anything else, on a log every meter-based due date is derived from.
+    """
+
+    @pytest.mark.parametrize("url_name", ["scm:meterreading_edit", "scm:meterreading_delete",
+                                          "scm:meterreading_update", "scm:meterreading_remove"])
+    def test_reversing_an_edit_or_delete_route_raises(self, url_name, meter_reading_a):
+        from django.urls import NoReverseMatch
+        with pytest.raises(NoReverseMatch):
+            reverse(url_name, args=[meter_reading_a.pk])
+
+    def test_the_view_layer_exports_no_such_callable(self):
+        import apps.scm.views as views_pkg
+        assert not hasattr(views_pkg, "meterreading_edit")
+        assert not hasattr(views_pkg, "meterreading_delete")
+
+    def test_the_three_routes_it_DOES_have_all_resolve(self, meter_reading_a):
+        assert reverse("scm:meterreading_list")
+        assert reverse("scm:meterreading_create")
+        assert reverse("scm:meterreading_detail", args=[meter_reading_a.pk])
+
+    def test_the_detail_page_offers_no_edit_or_delete_form(self, client_a, meter_reading_a):
+        """Back to List only — and the page prints the note that explains why."""
+        content = client_a.get(reverse("scm:meterreading_detail",
+                                       args=[meter_reading_a.pk])).content.decode()
+        assert "append-only" in content.lower()
+        assert "meter-readings/%d/edit" % meter_reading_a.pk not in content
+        assert "meter-readings/%d/delete" % meter_reading_a.pk not in content
+
+    def test_there_is_no_checklist_create_or_delete_route_either(self, job_task_a):
+        """The checklist is a SNAPSHOT written by ``maintenanceplan_generate``; ticking a step is
+        the only change a job's checklist accepts."""
+        from django.urls import NoReverseMatch
+        for url_name in ("scm:maintenanceworkordertask_create",
+                         "scm:maintenanceworkordertask_delete",
+                         "scm:maintenanceworkordertask_edit"):
+            with pytest.raises(NoReverseMatch):
+                reverse(url_name, args=[job_task_a.pk])
+
+
+# ================================================================ 4.13 · CSRF
+class TestAssetManagementCSRF:
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:maintenanceplan_generate", "maintenance_plan_a"),
+        ("scm:maintenanceworkorder_approve", "maintenance_order_a"),
+        ("scm:maintenanceworkorder_issue_parts", "maintenance_order_a"),
+        ("scm:maintenanceworkordertask_toggle", "job_task_a"),
+        ("scm:asset_delete", "asset_a2"),
+        ("scm:assetsparepart_delete", "asset_spare_part_a"),
+    ])
+    def test_a_post_without_a_token_is_refused(self, admin_user, request, url_name,
+                                               fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse(url_name, args=[obj.pk]), {"reason": "x"}).status_code == 403
+
+    def test_the_three_create_screens_refuse_a_tokenless_post(self, admin_user, tenant_a,
+                                                              asset_a):
+        from apps.scm.models import Asset, MaintenancePlan, MaintenanceWorkOrder
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        assert c.post(reverse("scm:asset_create"), _asset_sec_body()).status_code == 403
+        assert c.post(reverse("scm:maintenanceplan_create"),
+                      _plan_sec_body(asset=str(asset_a.pk))).status_code == 403
+        assert c.post(reverse("scm:maintenanceworkorder_create"),
+                      _job_sec_body(asset=str(asset_a.pk))).status_code == 403
+        assert not Asset.objects.filter(code="SEC-1").exists()
+        assert not MaintenancePlan.objects.filter(name="Security probe").exists()
+        assert not MaintenanceWorkOrder.objects.filter(title="Security probe").exists()
+
+    def test_the_refused_verb_wrote_nothing(self, admin_user, maintenance_plan_a):
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(admin_user)
+        c.post(reverse("scm:maintenanceplan_generate", args=[maintenance_plan_a.pk]))
+        maintenance_plan_a.refresh_from_db()
+        assert maintenance_plan_a.last_generated_on is None
+
+    def test_every_rendered_form_carries_a_token(self, client_a, asset_a, maintenance_plan_a,
+                                                 maintenance_order_a):
+        for url_name, args in (("scm:asset_create", []), ("scm:maintenanceplan_create", []),
+                               ("scm:maintenanceworkorder_create", []),
+                               ("scm:meterreading_create", []),
+                               ("scm:asset_detail", [asset_a.pk]),
+                               ("scm:maintenanceplan_detail", [maintenance_plan_a.pk]),
+                               ("scm:maintenanceworkorder_detail",
+                                [maintenance_order_a.pk])):
+            content = client_a.get(reverse(url_name, args=args)).content.decode()
+            assert "csrfmiddlewaretoken" in content, url_name
+
+
+# ================================================================ 4.13 · hostile query strings
+class TestAssetManagementHostileFilters:
+    """Every one of these is a URL anybody can type into the address bar."""
+
+    _JUNK = ("abc", "²", "99999999999999999999", "-1", "0", "'; DROP TABLE scm_asset; --",
+             "<script>alert(1)</script>", "NaN", "Infinity")
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    @pytest.mark.parametrize("param", ["location", "work_center", "org_unit", "status",
+                                       "criticality", "asset_type", "is_active", "warranty", "q"])
+    def test_the_asset_register_lands_on_a_page(self, client_a, asset_a, param, junk):
+        assert client_a.get(reverse("scm:asset_list"), {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    @pytest.mark.parametrize("param", ["asset", "assigned_to", "trigger_type", "schedule_basis",
+                                       "priority", "is_active", "due", "q"])
+    def test_the_pm_programme_lands_on_a_page(self, client_a, maintenance_plan_a, param, junk):
+        assert client_a.get(reverse("scm:maintenanceplan_list"),
+                            {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    @pytest.mark.parametrize("param", ["asset", "assigned_to", "status", "work_type", "priority",
+                                       "problem_code", "date_from", "date_to", "q"])
+    def test_the_job_queue_lands_on_a_page(self, client_a, maintenance_order_a, param, junk):
+        assert client_a.get(reverse("scm:maintenanceworkorder_list"),
+                            {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    @pytest.mark.parametrize("param", ["asset", "source", "date_from", "date_to", "q"])
+    def test_the_reading_log_lands_on_a_page(self, client_a, meter_reading_a, param, junk):
+        assert client_a.get(reverse("scm:meterreading_list"), {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    def test_the_pm_board_horizon_lands_on_a_page(self, client_a, maintenance_plan_a, junk):
+        resp = client_a.get(reverse("scm:pm_forecast"), {"days": junk})
+        assert resp.status_code == 200
+        assert 1 <= resp.context["days"] <= 365
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    @pytest.mark.parametrize("param", ["category", "stock", "is_active", "date_from", "date_to",
+                                       "q"])
+    def test_the_storeroom_lands_on_a_page(self, client_a, spare_item_a, param, junk):
+        assert client_a.get(reverse("scm:sparepart_list"), {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("junk", _JUNK)
+    @pytest.mark.parametrize("param", ["location", "status", "asset_type", "criticality",
+                                       "linked", "q"])
+    def test_the_depreciation_report_lands_on_a_page(self, client_a, asset_a, param, junk):
+        assert client_a.get(reverse("scm:asset_depreciation_report"),
+                            {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("page", ["0", "-1", "abc", "99999", "99999999999999999999"])
+    def test_every_paginated_page_survives_a_hostile_page_number(self, client_a, asset_a,
+                                                                 maintenance_plan_a,
+                                                                 maintenance_order_a,
+                                                                 meter_reading_a, page):
+        for url_name in ("scm:asset_list", "scm:maintenanceplan_list",
+                         "scm:maintenanceworkorder_list", "scm:meterreading_list",
+                         "scm:sparepart_list"):
+            assert client_a.get(reverse(url_name),
+                                {"page": page}).status_code == 200, (url_name, page)
+
+
+# ================================================================ 4.13 · hostile POST values
+class TestAssetManagementHostileNumbers:
+    """Anywhere a decimal is hand-parsed from a POST body, junk must be a friendly error."""
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "abc", "-1",
+                                       "99999999999999999999", "1e400", ""])
+    def test_a_hostile_meter_capture_never_500s(self, client_a, maintenance_order_a, value):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_record_reading",
+                                     args=[maintenance_order_a.pk]), {"reading": value},
+                             follow=True)
+        assert resp.status_code == 200
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "lastweek", "9999-99-99",
+                                       "0000-01-01", "-1"])
+    def test_a_hostile_scheduled_start_never_500s(self, client_a, approved_order_a, value):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_schedule",
+                                     args=[approved_order_a.pk]),
+                             {"scheduled_start": value}, follow=True)
+        assert resp.status_code == 200
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-5", "99999999999999999999"])
+    def test_a_hostile_purchase_cost_is_a_field_error_and_not_a_500(self, client_a, value):
+        from apps.scm.models import Asset
+        resp = client_a.post(reverse("scm:asset_create"), _asset_sec_body(purchase_cost=value))
+        assert resp.status_code == 200
+        assert not Asset.objects.filter(code="SEC-1").exists()
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-5", "4294967295"])
+    def test_a_hostile_interval_is_a_field_error_and_not_a_500(self, client_a, asset_a, value):
+        """``interval_days`` is fed straight to ``timedelta(days=...)`` — an unbounded value is an
+        ``OverflowError``, i.e. a 500, on the very next list page load."""
+        from apps.scm.models import MaintenancePlan
+        resp = client_a.post(reverse("scm:maintenanceplan_create"),
+                             _plan_sec_body(asset=str(asset_a.pk), interval_days=value))
+        assert resp.status_code == 200
+        assert not MaintenancePlan.objects.filter(name="Security probe").exists()
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-1", "999999"])
+    def test_a_hostile_labour_rate_is_a_field_error_and_not_a_500(self, client_a, asset_a, value):
+        """The ceiling is on the way IN because an absurd rate flows into three other pages."""
+        from apps.scm.models import MaintenanceWorkOrder
+        resp = client_a.post(reverse("scm:maintenanceworkorder_create"),
+                             _job_sec_body(asset=str(asset_a.pk), labour_rate=value))
+        assert resp.status_code == 200
+        assert not MaintenanceWorkOrder.objects.filter(title="Security probe").exists()
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-1"])
+    def test_a_hostile_spare_quantity_is_a_field_error_and_not_a_500(self, client_a, asset_a,
+                                                                     spare_item_a, value):
+        from apps.scm.models import AssetSparePart
+        resp = client_a.post(reverse("scm:asset_add_spare_part", args=[asset_a.pk]),
+                             {"item": str(spare_item_a.pk), "quantity_per_service": value})
+        assert resp.status_code == 200
+        assert not AssetSparePart.objects.filter(asset=asset_a).exists()
+
+    def test_an_absent_prerequisite_is_refused_and_never_falls_through(self, client_a,
+                                                                       maintenance_order_a,
+                                                                       part_line_a):
+        """L35: the issue verb with NO storeroom must REFUSE, not guess one and post the ledger
+        against a location that never held the stock."""
+        from apps.scm.models import StockMove
+        maintenance_order_a.parts_location = None
+        maintenance_order_a.save(update_fields=["parts_location", "updated_at"])
+        client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                              args=[maintenance_order_a.pk]), follow=True)
+        assert not StockMove.objects.filter(reference=maintenance_order_a.number).exists()
+        part_line_a.refresh_from_db()
+        assert part_line_a.is_issued is False
+
+
+# ================================================================ 4.13 · XSS
+class TestAssetManagementXss:
+    _PAYLOAD = "<script>alert('xss')</script>"
+
+    def test_an_asset_name_is_escaped_on_every_page_that_renders_it(self, client_a, tenant_a,
+                                                                    asset_a):
+        asset_a.name = self._PAYLOAD
+        asset_a.save(update_fields=["name", "updated_at"])
+        for url_name, args in (("scm:asset_list", []), ("scm:asset_detail", [asset_a.pk]),
+                               ("scm:asset_depreciation_report", [])):
+            content = client_a.get(reverse(url_name, args=args)).content.decode()
+            assert self._PAYLOAD not in content, url_name
+            assert "&lt;script&gt;" in content, url_name
+
+    def test_a_job_title_is_escaped(self, client_a, maintenance_order_a):
+        maintenance_order_a.title = self._PAYLOAD
+        maintenance_order_a.save(update_fields=["title", "updated_at"])
+        for url_name, args in (("scm:maintenanceworkorder_list", []),
+                               ("scm:maintenanceworkorder_detail",
+                                [maintenance_order_a.pk])):
+            content = client_a.get(reverse(url_name, args=args)).content.decode()
+            assert self._PAYLOAD not in content, url_name
+
+    def test_a_plan_name_and_a_meter_name_are_escaped(self, client_a, maintenance_plan_a,
+                                                      meter_reading_a):
+        maintenance_plan_a.name = self._PAYLOAD
+        maintenance_plan_a.save(update_fields=["name", "updated_at"])
+        meter_reading_a.meter_name = self._PAYLOAD[:40]
+        meter_reading_a.save(update_fields=["meter_name", "updated_at"])
+        for url_name, args in (("scm:maintenanceplan_list", []),
+                               ("scm:maintenanceplan_detail", [maintenance_plan_a.pk]),
+                               ("scm:meterreading_list", []),
+                               ("scm:meterreading_detail", [meter_reading_a.pk]),
+                               ("scm:pm_forecast", [])):
+            content = client_a.get(reverse(url_name, args=args)).content.decode()
+            assert "<script>alert(" not in content, url_name
+
+
+# ================================================================ 4.13 · the inline-formset children
+class TestAssetManagementInlineChildIsolation:
+    """``MaintenancePlanTask`` and ``MaintenanceWorkOrderPart`` have NO route of their own — the
+    only way to reach either is the parent's inline formset, which is exactly why the crafted ``id``
+    has to be tested there.
+
+    Both carry no ``tenant`` column (``plan__tenant`` / ``work_order__tenant``), so a formset row
+    that named another workspace's child pk and was accepted would RE-PARENT that row into this
+    workspace — a cross-tenant write with no query anywhere that would reveal it.
+    """
+
+    def test_a_foreign_plan_task_id_cannot_be_grafted_onto_this_workspaces_plan(
+            self, client_a, maintenance_plan_a, plan_task_b, maintenance_plan_b):
+        body = _plan_sec_body(asset=str(maintenance_plan_a.asset_id),
+                              name=maintenance_plan_a.name)
+        body.update(formset_data("tasks", [{"id": str(plan_task_b.pk), "sequence": "10",
+                                            "description": "Stolen step", "expected_result": "",
+                                            "is_mandatory": "on", "is_safety_step": ""}],
+                                 initial=1))
+        resp = client_a.post(reverse("scm:maintenanceplan_edit", args=[maintenance_plan_a.pk]),
+                             body)
+        plan_task_b.refresh_from_db()
+        assert plan_task_b.plan_id == maintenance_plan_b.pk
+        assert plan_task_b.description == "Globex step"
+        assert not maintenance_plan_a.tasks.filter(description="Stolen step").exists()
+        assert resp.status_code in (200, 302)
+
+    def test_a_foreign_part_line_id_cannot_be_grafted_onto_this_workspaces_job(
+            self, client_a, maintenance_order_a, maintenance_order_b, spare_item_a,
+            spare_item_b):
+        from apps.scm.models import MaintenanceWorkOrderPart
+        foreign = MaintenanceWorkOrderPart.objects.create(
+            work_order=maintenance_order_b, item=spare_item_b, quantity=Decimal("1"))
+        body = _job_sec_body(asset=str(maintenance_order_a.asset_id),
+                             title=maintenance_order_a.title)
+        body.update(formset_data("parts", [{"id": str(foreign.pk), "item": str(spare_item_a.pk),
+                                            "lot_serial": "", "quantity": "99"}], initial=1))
+        resp = client_a.post(reverse("scm:maintenanceworkorder_edit",
+                                     args=[maintenance_order_a.pk]), body)
+        foreign.refresh_from_db()
+        assert foreign.work_order_id == maintenance_order_b.pk
+        assert foreign.item_id == spare_item_b.pk
+        assert foreign.quantity == Decimal("1.0000")
+        assert resp.status_code in (200, 302)
+
+    def test_deleting_a_foreign_child_through_the_formset_is_refused(self, client_a,
+                                                                     maintenance_plan_a,
+                                                                     plan_task_b):
+        from apps.scm.models import MaintenancePlanTask
+        body = _plan_sec_body(asset=str(maintenance_plan_a.asset_id),
+                              name=maintenance_plan_a.name)
+        body.update(formset_data("tasks", [{"id": str(plan_task_b.pk), "sequence": "10",
+                                            "description": "Globex step", "expected_result": "",
+                                            "is_mandatory": "on", "is_safety_step": "",
+                                            "DELETE": "on"}], initial=1))
+        client_a.post(reverse("scm:maintenanceplan_edit", args=[maintenance_plan_a.pk]), body)
+        assert MaintenancePlanTask.objects.filter(pk=plan_task_b.pk).exists()
+
+    def test_neither_child_has_a_route_of_its_own(self, plan_task_a, part_line_a):
+        """The absence IS the design: a child pk with its own route is one more surface that has to
+        remember to join back to the parent for authorization."""
+        from django.urls import NoReverseMatch
+        for url_name in ("scm:maintenanceplantask_edit", "scm:maintenanceplantask_delete",
+                         "scm:maintenanceworkorderpart_edit",
+                         "scm:maintenanceworkorderpart_delete"):
+            with pytest.raises(NoReverseMatch):
+                reverse(url_name, args=[1])
