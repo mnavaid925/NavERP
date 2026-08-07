@@ -470,7 +470,7 @@ them) and **adds** only its own domain tables. This is what keeps NavERP one ERP
 | 8 | Sales | `Party` (customer) · `SalesOrder` · `Invoice` · `Activity` · `PriceList` · `Contract` | Opportunity, Quote, Forecast, Territory, CommissionPlan |
 | 9 | eCommerce | `Item` · `PriceList` · `SalesOrder` · `Payment` · `Party` (customer) · `StockMove` | Storefront, ProductListing, Cart, Promotion, ProductReview |
 | 10 | Business Intelligence | *read-only over all spine entities (the two ledgers + masters)* | DataSource, Dashboard, Report, KpiDefinition, ScheduledReport |
-| 11 | Asset Management | `Asset` · `WorkOrder` · `Item` · `Location` · `Party` (custodian/vendor) · `GLAccount` · `JournalEntry` (depreciation) | AssetCategory, DepreciationSchedule, AssetDisposal, WarrantyClaim, LeaseContract |
+| 11 | Asset Management | **`scm.Asset` (AS BUILT — 4.13 owns it; extend by string FK, do NOT re-declare)** · `scm.MaintenanceWorkOrder` · `scm.MaintenancePlan` · `scm.MeterReading` · `Item` · `Location` · `Party` (custodian/vendor) · `accounting.FixedAsset` (depreciation lives there, not here) | AssetCategory, DepreciationSchedule, AssetDisposal, LeaseContract *(WarrantyClaim already exists as `scm.WarrantyClaim` from 4.10)* |
 | 12 | Quality (QMS) | `QualityRecord` · `Party` (supplier) · `Item` · `LotSerial` · `WorkOrder` · `Document` | NonConformance (NCR), CapaAction, Inspection, QualityAudit, Calibration |
 | 13 | Document Management (DMS) | `Document` (+ classification/version) · `Contract` · `Activity` · `AuditLog` | Folder, DocumentVersion, ApprovalRequest, RetentionPolicy, eForm |
 
@@ -492,6 +492,28 @@ them) and **adds** only its own domain tables. This is what keeps NavERP one ERP
   Management bills the *same* `Project` that Accounting job-costs. Module-specific detail (a `Quote`, a `Lead`, a
   `LeaveRequest`) FKs **by string** into these anchors and into the masters (`models.ForeignKey('core.Party', …)`)
   rather than re-declaring them.
+
+  **AS BUILT — where the `Asset` anchor actually lives: `scm.Asset`.** SCM 4.13 built it, on the same
+  reasoning that made 4.3 the owner of `Item`/`Location`/`StockMove`: Module 11 is the eventual home of full
+  EAM but is unbuilt, a maintenance work order needed something to point at, and grep confirmed no `Asset`
+  row existed anywhere (`core.Asset`, `scm.Asset`, `scm.Equipment` all absent). Module 11 **extends
+  `scm.Asset` by string FK** (11.2 tracking, 11.7 condition monitoring, 11.19 fleet) rather than
+  re-declaring it — a throwaway table that Module 11 later duplicates is the second-parallel-schema bug.
+
+  The financial half is **not** merged into it: `accounting.FixedAsset` keeps acquisition cost, salvage,
+  useful life, method and accumulated depreciation, and it alone posts the depreciation journal.
+  `scm.Asset.fixed_asset` is a **nullable pointer and nothing more** — SCM stores no depreciation figure and
+  posts no `JournalEntry`; it READS the accounting row to show a book value and a repair-vs-replace ratio.
+  The two `status` vocabularies are deliberately different (`scm.Asset`: planned / in_service /
+  under_maintenance / standby / idle / retired / disposed — operational; `accounting.FixedAsset`: cip /
+  active / disposed — financial). An asset can be operationally `standby` while financially `active`;
+  merging them would force one page to lie, and two writers of one accumulated figure is exactly how the
+  two numbers come to disagree.
+
+  Likewise `WorkOrder` is **two anchors, not one**: `scm.WorkOrder` [WO-] is the 4.8 production run
+  (item, BOM, quantities, component/output locations) and `scm.MaintenanceWorkOrder` [MWO-] is the 4.13
+  repair job (downtime window, failure codes, parts issued, labour). They are separate documents with
+  separate URL prefixes; overloading one would corrupt 4.8's MRP netting, load board and OEE.
 - **Generic relations** — `Document`, `Activity`, `QualityRecord`, `AuditLog`, and the `source` on each ledger row
   use Django's `contenttypes` framework (`GenericForeignKey`), so any model gets attachments / a task timeline / a
   quality record / history / traceability. Consider **django-auditlog** or **django-simple-history** for audit;
