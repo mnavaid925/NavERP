@@ -14636,7 +14636,51 @@ and `{% include "partials/…" %}` unchanged.
 
 ## Review notes
 
-(filled in at the end)
+**Delivered.** 4.13 is Live in the sidebar with all five NavERP.md bullets linked, across 105 commits
+from the plan commit to close-out. Migrations `0022` (additive-only: 8 CreateModel, 1 AddField,
+1 choices-only AlterField, 20 AddIndex, 4 AlterUniqueTogether) and `0023` (index-only: 2 RemoveIndex
++ 1 AddIndex). `manage.py check` clean; `seed_scm` idempotent (90 rows identical across two runs,
+including exactly 4 `maintenance` StockMoves); the `apps/scm` suite is green with ~1,224 tests
+touching 4.13 and 98% coverage of the new code.
+
+### What the review agents actually found — the value of the pass was the bugs, not the polish
+
+| # | Severity | Found by | Defect |
+|---|---|---|---|
+| 1 | Critical | code-reviewer | **The PM schedule advanced two cycles per occurrence.** Both `maintenanceplan_generate` and `maintenanceworkorder_complete` called `advance()`, and `advance()` anchors a `fixed` plan on its own `next_due_on`, so the calls compounded. Measured: a quarterly plan went Jan 1 → Apr 1 at generate → Jun 30 at completion, so the April inspection silently never came due. Same on meter (1000 → 1250 → 1500). Fixed by giving the schedule exactly ONE writer. |
+| 2 | Important | code-reviewer | **Completion filed the meter capture AFTER the roll read it**, so a floating meter plan advanced from the pre-work reading — 1468.5 instead of 1500, every service 31.5h early, compounding. |
+| 3 | Important | code-reviewer | `Item.is_spare_part` had **no writer in the tenant UI**, so the storeroom page could only ever be populated by the seeder. |
+| 4 | Critical | (own repro) | **Every 4.13 edit form 500'd** whenever a party FK was set — `_keep_current` OR'd a `.distinct()` queryset with a plain one. Hidden from the create path by an early return, which is why the forms test pass missed it. |
+| 5 | P1 | explorer | **4.11 classified every actively-consumed MRO spare as dead stock** and wrote persisted `SupplyChainAlert` rows saying so, because one constant served both a valuation question and a recency question. |
+| 6 | Critical | frontend-reviewer | **Five `confirm()` dialogs silently disabled, one of them stored XSS.** HTML decodes `&#39;` inside an attribute before the JS engine sees it, so the guard vanished rather than failing loudly. Now lesson **L42**. |
+| 7 | Critical | performance-reviewer | `asset_list`'s paginator COUNT ran **one correlated EXISTS per asset in the whole tenant** — 5,000 probes to render 15 rows on the most-opened page. |
+| 8 | Medium ×2 | security-reviewer | **Two TOCTOU windows** on the guards protecting the ledger: cancel and delete both read `is_issued` outside the row lock, so a concurrent issue-parts orphaned StockMoves — irreversibly on delete, since the part lines CASCADE. |
+
+Also fixed: `latest_reading()` could not use its own index (no tenant predicate → filesort on the
+fastest-growing table); `asset_detail` ran the same aggregate 5 times and read `now` three times, so
+a currently-down machine could print 412 min while availability used 413; MTTR counted untimed
+repairs, making the fleet look *faster* to fix the worse the record-keeping got; a member could forge
+a system-filed meter reading onto somebody else's job.
+
+**Query budgets after the pass:** `asset_detail` 31 → **21 with zero duplicate SQL**; `sparepart_list`
+19 → 17; `asset_list` **flat at 14** whether the register holds 4 assets or 44.
+
+### Scope calls worth recording
+- **Built beyond the plan, deliberately:** the work-centre assets panel (4.8's `workcenter_detail`) —
+  `Asset.work_center` had zero readers despite its own docstring calling it the SCM differentiator;
+  and the SCM landing page's missing sub-module cards, which had been stuck at 4.9 for four releases.
+- **Explicitly deferred:** CSV export on the three report pages (4.11 ships it on five, 4.12 on one —
+  a real convention drift, not built here); drafting an `accounting.Bill` from `external_cost`;
+  fleet-level reliability KPIs in 4.11's closed registry.
+- **Flagged, not fixed:** `_insufficient_stock` permits a concurrent bin over-draw. Inherited, shared
+  by five callers across 4.3/4.4/4.13, and the fix belongs in the helper — spun out as its own task
+  rather than widened into this run.
+
+### One process note
+A parallel session began building **4.14 Labor Management** in the same working tree during close-out
+(it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
+`forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
 
 ## Review notes — 4.8 Manufacturing / Production delivered (2026-07-28)
 
@@ -15912,7 +15956,51 @@ row. Badges use ONLY `badge-green/red/amber/info/muted/slate` (`static/css/theme
 
 ## Review notes
 
-(filled in at the end)
+**Delivered.** 4.13 is Live in the sidebar with all five NavERP.md bullets linked, across 105 commits
+from the plan commit to close-out. Migrations `0022` (additive-only: 8 CreateModel, 1 AddField,
+1 choices-only AlterField, 20 AddIndex, 4 AlterUniqueTogether) and `0023` (index-only: 2 RemoveIndex
++ 1 AddIndex). `manage.py check` clean; `seed_scm` idempotent (90 rows identical across two runs,
+including exactly 4 `maintenance` StockMoves); the `apps/scm` suite is green with ~1,224 tests
+touching 4.13 and 98% coverage of the new code.
+
+### What the review agents actually found — the value of the pass was the bugs, not the polish
+
+| # | Severity | Found by | Defect |
+|---|---|---|---|
+| 1 | Critical | code-reviewer | **The PM schedule advanced two cycles per occurrence.** Both `maintenanceplan_generate` and `maintenanceworkorder_complete` called `advance()`, and `advance()` anchors a `fixed` plan on its own `next_due_on`, so the calls compounded. Measured: a quarterly plan went Jan 1 → Apr 1 at generate → Jun 30 at completion, so the April inspection silently never came due. Same on meter (1000 → 1250 → 1500). Fixed by giving the schedule exactly ONE writer. |
+| 2 | Important | code-reviewer | **Completion filed the meter capture AFTER the roll read it**, so a floating meter plan advanced from the pre-work reading — 1468.5 instead of 1500, every service 31.5h early, compounding. |
+| 3 | Important | code-reviewer | `Item.is_spare_part` had **no writer in the tenant UI**, so the storeroom page could only ever be populated by the seeder. |
+| 4 | Critical | (own repro) | **Every 4.13 edit form 500'd** whenever a party FK was set — `_keep_current` OR'd a `.distinct()` queryset with a plain one. Hidden from the create path by an early return, which is why the forms test pass missed it. |
+| 5 | P1 | explorer | **4.11 classified every actively-consumed MRO spare as dead stock** and wrote persisted `SupplyChainAlert` rows saying so, because one constant served both a valuation question and a recency question. |
+| 6 | Critical | frontend-reviewer | **Five `confirm()` dialogs silently disabled, one of them stored XSS.** HTML decodes `&#39;` inside an attribute before the JS engine sees it, so the guard vanished rather than failing loudly. Now lesson **L42**. |
+| 7 | Critical | performance-reviewer | `asset_list`'s paginator COUNT ran **one correlated EXISTS per asset in the whole tenant** — 5,000 probes to render 15 rows on the most-opened page. |
+| 8 | Medium ×2 | security-reviewer | **Two TOCTOU windows** on the guards protecting the ledger: cancel and delete both read `is_issued` outside the row lock, so a concurrent issue-parts orphaned StockMoves — irreversibly on delete, since the part lines CASCADE. |
+
+Also fixed: `latest_reading()` could not use its own index (no tenant predicate → filesort on the
+fastest-growing table); `asset_detail` ran the same aggregate 5 times and read `now` three times, so
+a currently-down machine could print 412 min while availability used 413; MTTR counted untimed
+repairs, making the fleet look *faster* to fix the worse the record-keeping got; a member could forge
+a system-filed meter reading onto somebody else's job.
+
+**Query budgets after the pass:** `asset_detail` 31 → **21 with zero duplicate SQL**; `sparepart_list`
+19 → 17; `asset_list` **flat at 14** whether the register holds 4 assets or 44.
+
+### Scope calls worth recording
+- **Built beyond the plan, deliberately:** the work-centre assets panel (4.8's `workcenter_detail`) —
+  `Asset.work_center` had zero readers despite its own docstring calling it the SCM differentiator;
+  and the SCM landing page's missing sub-module cards, which had been stuck at 4.9 for four releases.
+- **Explicitly deferred:** CSV export on the three report pages (4.11 ships it on five, 4.12 on one —
+  a real convention drift, not built here); drafting an `accounting.Bill` from `external_cost`;
+  fleet-level reliability KPIs in 4.11's closed registry.
+- **Flagged, not fixed:** `_insufficient_stock` permits a concurrent bin over-draw. Inherited, shared
+  by five callers across 4.3/4.4/4.13, and the fix belongs in the helper — spun out as its own task
+  rather than widened into this run.
+
+### One process note
+A parallel session began building **4.14 Labor Management** in the same working tree during close-out
+(it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
+`forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
 
 ---
 
@@ -17253,7 +17341,51 @@ Deferred (later passes / integrations):
 
 ## Review notes
 
-(filled in at the end)
+**Delivered.** 4.13 is Live in the sidebar with all five NavERP.md bullets linked, across 105 commits
+from the plan commit to close-out. Migrations `0022` (additive-only: 8 CreateModel, 1 AddField,
+1 choices-only AlterField, 20 AddIndex, 4 AlterUniqueTogether) and `0023` (index-only: 2 RemoveIndex
++ 1 AddIndex). `manage.py check` clean; `seed_scm` idempotent (90 rows identical across two runs,
+including exactly 4 `maintenance` StockMoves); the `apps/scm` suite is green with ~1,224 tests
+touching 4.13 and 98% coverage of the new code.
+
+### What the review agents actually found — the value of the pass was the bugs, not the polish
+
+| # | Severity | Found by | Defect |
+|---|---|---|---|
+| 1 | Critical | code-reviewer | **The PM schedule advanced two cycles per occurrence.** Both `maintenanceplan_generate` and `maintenanceworkorder_complete` called `advance()`, and `advance()` anchors a `fixed` plan on its own `next_due_on`, so the calls compounded. Measured: a quarterly plan went Jan 1 → Apr 1 at generate → Jun 30 at completion, so the April inspection silently never came due. Same on meter (1000 → 1250 → 1500). Fixed by giving the schedule exactly ONE writer. |
+| 2 | Important | code-reviewer | **Completion filed the meter capture AFTER the roll read it**, so a floating meter plan advanced from the pre-work reading — 1468.5 instead of 1500, every service 31.5h early, compounding. |
+| 3 | Important | code-reviewer | `Item.is_spare_part` had **no writer in the tenant UI**, so the storeroom page could only ever be populated by the seeder. |
+| 4 | Critical | (own repro) | **Every 4.13 edit form 500'd** whenever a party FK was set — `_keep_current` OR'd a `.distinct()` queryset with a plain one. Hidden from the create path by an early return, which is why the forms test pass missed it. |
+| 5 | P1 | explorer | **4.11 classified every actively-consumed MRO spare as dead stock** and wrote persisted `SupplyChainAlert` rows saying so, because one constant served both a valuation question and a recency question. |
+| 6 | Critical | frontend-reviewer | **Five `confirm()` dialogs silently disabled, one of them stored XSS.** HTML decodes `&#39;` inside an attribute before the JS engine sees it, so the guard vanished rather than failing loudly. Now lesson **L42**. |
+| 7 | Critical | performance-reviewer | `asset_list`'s paginator COUNT ran **one correlated EXISTS per asset in the whole tenant** — 5,000 probes to render 15 rows on the most-opened page. |
+| 8 | Medium ×2 | security-reviewer | **Two TOCTOU windows** on the guards protecting the ledger: cancel and delete both read `is_issued` outside the row lock, so a concurrent issue-parts orphaned StockMoves — irreversibly on delete, since the part lines CASCADE. |
+
+Also fixed: `latest_reading()` could not use its own index (no tenant predicate → filesort on the
+fastest-growing table); `asset_detail` ran the same aggregate 5 times and read `now` three times, so
+a currently-down machine could print 412 min while availability used 413; MTTR counted untimed
+repairs, making the fleet look *faster* to fix the worse the record-keeping got; a member could forge
+a system-filed meter reading onto somebody else's job.
+
+**Query budgets after the pass:** `asset_detail` 31 → **21 with zero duplicate SQL**; `sparepart_list`
+19 → 17; `asset_list` **flat at 14** whether the register holds 4 assets or 44.
+
+### Scope calls worth recording
+- **Built beyond the plan, deliberately:** the work-centre assets panel (4.8's `workcenter_detail`) —
+  `Asset.work_center` had zero readers despite its own docstring calling it the SCM differentiator;
+  and the SCM landing page's missing sub-module cards, which had been stuck at 4.9 for four releases.
+- **Explicitly deferred:** CSV export on the three report pages (4.11 ships it on five, 4.12 on one —
+  a real convention drift, not built here); drafting an `accounting.Bill` from `external_cost`;
+  fleet-level reliability KPIs in 4.11's closed registry.
+- **Flagged, not fixed:** `_insufficient_stock` permits a concurrent bin over-draw. Inherited, shared
+  by five callers across 4.3/4.4/4.13, and the fix belongs in the helper — spun out as its own task
+  rather than widened into this run.
+
+### One process note
+A parallel session began building **4.14 Labor Management** in the same working tree during close-out
+(it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
+`forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
 
 ---
 
@@ -18395,7 +18527,51 @@ Carried over from `research-scm-4.12.md` so nothing is lost, plus what this plan
 
 ## Review notes
 
-(filled in at the end)
+**Delivered.** 4.13 is Live in the sidebar with all five NavERP.md bullets linked, across 105 commits
+from the plan commit to close-out. Migrations `0022` (additive-only: 8 CreateModel, 1 AddField,
+1 choices-only AlterField, 20 AddIndex, 4 AlterUniqueTogether) and `0023` (index-only: 2 RemoveIndex
++ 1 AddIndex). `manage.py check` clean; `seed_scm` idempotent (90 rows identical across two runs,
+including exactly 4 `maintenance` StockMoves); the `apps/scm` suite is green with ~1,224 tests
+touching 4.13 and 98% coverage of the new code.
+
+### What the review agents actually found — the value of the pass was the bugs, not the polish
+
+| # | Severity | Found by | Defect |
+|---|---|---|---|
+| 1 | Critical | code-reviewer | **The PM schedule advanced two cycles per occurrence.** Both `maintenanceplan_generate` and `maintenanceworkorder_complete` called `advance()`, and `advance()` anchors a `fixed` plan on its own `next_due_on`, so the calls compounded. Measured: a quarterly plan went Jan 1 → Apr 1 at generate → Jun 30 at completion, so the April inspection silently never came due. Same on meter (1000 → 1250 → 1500). Fixed by giving the schedule exactly ONE writer. |
+| 2 | Important | code-reviewer | **Completion filed the meter capture AFTER the roll read it**, so a floating meter plan advanced from the pre-work reading — 1468.5 instead of 1500, every service 31.5h early, compounding. |
+| 3 | Important | code-reviewer | `Item.is_spare_part` had **no writer in the tenant UI**, so the storeroom page could only ever be populated by the seeder. |
+| 4 | Critical | (own repro) | **Every 4.13 edit form 500'd** whenever a party FK was set — `_keep_current` OR'd a `.distinct()` queryset with a plain one. Hidden from the create path by an early return, which is why the forms test pass missed it. |
+| 5 | P1 | explorer | **4.11 classified every actively-consumed MRO spare as dead stock** and wrote persisted `SupplyChainAlert` rows saying so, because one constant served both a valuation question and a recency question. |
+| 6 | Critical | frontend-reviewer | **Five `confirm()` dialogs silently disabled, one of them stored XSS.** HTML decodes `&#39;` inside an attribute before the JS engine sees it, so the guard vanished rather than failing loudly. Now lesson **L42**. |
+| 7 | Critical | performance-reviewer | `asset_list`'s paginator COUNT ran **one correlated EXISTS per asset in the whole tenant** — 5,000 probes to render 15 rows on the most-opened page. |
+| 8 | Medium ×2 | security-reviewer | **Two TOCTOU windows** on the guards protecting the ledger: cancel and delete both read `is_issued` outside the row lock, so a concurrent issue-parts orphaned StockMoves — irreversibly on delete, since the part lines CASCADE. |
+
+Also fixed: `latest_reading()` could not use its own index (no tenant predicate → filesort on the
+fastest-growing table); `asset_detail` ran the same aggregate 5 times and read `now` three times, so
+a currently-down machine could print 412 min while availability used 413; MTTR counted untimed
+repairs, making the fleet look *faster* to fix the worse the record-keeping got; a member could forge
+a system-filed meter reading onto somebody else's job.
+
+**Query budgets after the pass:** `asset_detail` 31 → **21 with zero duplicate SQL**; `sparepart_list`
+19 → 17; `asset_list` **flat at 14** whether the register holds 4 assets or 44.
+
+### Scope calls worth recording
+- **Built beyond the plan, deliberately:** the work-centre assets panel (4.8's `workcenter_detail`) —
+  `Asset.work_center` had zero readers despite its own docstring calling it the SCM differentiator;
+  and the SCM landing page's missing sub-module cards, which had been stuck at 4.9 for four releases.
+- **Explicitly deferred:** CSV export on the three report pages (4.11 ships it on five, 4.12 on one —
+  a real convention drift, not built here); drafting an `accounting.Bill` from `external_cost`;
+  fleet-level reliability KPIs in 4.11's closed registry.
+- **Flagged, not fixed:** `_insufficient_stock` permits a concurrent bin over-draw. Inherited, shared
+  by five callers across 4.3/4.4/4.13, and the fix belongs in the helper — spun out as its own task
+  rather than widened into this run.
+
+### One process note
+A parallel session began building **4.14 Labor Management** in the same working tree during close-out
+(it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
+`forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
 
 
 ---
@@ -19257,7 +19433,51 @@ Carried over from `research-scm-4.13.md` so nothing is lost, plus what this plan
 
 ## Review notes
 
-(filled in at the end)
+**Delivered.** 4.13 is Live in the sidebar with all five NavERP.md bullets linked, across 105 commits
+from the plan commit to close-out. Migrations `0022` (additive-only: 8 CreateModel, 1 AddField,
+1 choices-only AlterField, 20 AddIndex, 4 AlterUniqueTogether) and `0023` (index-only: 2 RemoveIndex
++ 1 AddIndex). `manage.py check` clean; `seed_scm` idempotent (90 rows identical across two runs,
+including exactly 4 `maintenance` StockMoves); the `apps/scm` suite is green with ~1,224 tests
+touching 4.13 and 98% coverage of the new code.
+
+### What the review agents actually found — the value of the pass was the bugs, not the polish
+
+| # | Severity | Found by | Defect |
+|---|---|---|---|
+| 1 | Critical | code-reviewer | **The PM schedule advanced two cycles per occurrence.** Both `maintenanceplan_generate` and `maintenanceworkorder_complete` called `advance()`, and `advance()` anchors a `fixed` plan on its own `next_due_on`, so the calls compounded. Measured: a quarterly plan went Jan 1 → Apr 1 at generate → Jun 30 at completion, so the April inspection silently never came due. Same on meter (1000 → 1250 → 1500). Fixed by giving the schedule exactly ONE writer. |
+| 2 | Important | code-reviewer | **Completion filed the meter capture AFTER the roll read it**, so a floating meter plan advanced from the pre-work reading — 1468.5 instead of 1500, every service 31.5h early, compounding. |
+| 3 | Important | code-reviewer | `Item.is_spare_part` had **no writer in the tenant UI**, so the storeroom page could only ever be populated by the seeder. |
+| 4 | Critical | (own repro) | **Every 4.13 edit form 500'd** whenever a party FK was set — `_keep_current` OR'd a `.distinct()` queryset with a plain one. Hidden from the create path by an early return, which is why the forms test pass missed it. |
+| 5 | P1 | explorer | **4.11 classified every actively-consumed MRO spare as dead stock** and wrote persisted `SupplyChainAlert` rows saying so, because one constant served both a valuation question and a recency question. |
+| 6 | Critical | frontend-reviewer | **Five `confirm()` dialogs silently disabled, one of them stored XSS.** HTML decodes `&#39;` inside an attribute before the JS engine sees it, so the guard vanished rather than failing loudly. Now lesson **L42**. |
+| 7 | Critical | performance-reviewer | `asset_list`'s paginator COUNT ran **one correlated EXISTS per asset in the whole tenant** — 5,000 probes to render 15 rows on the most-opened page. |
+| 8 | Medium ×2 | security-reviewer | **Two TOCTOU windows** on the guards protecting the ledger: cancel and delete both read `is_issued` outside the row lock, so a concurrent issue-parts orphaned StockMoves — irreversibly on delete, since the part lines CASCADE. |
+
+Also fixed: `latest_reading()` could not use its own index (no tenant predicate → filesort on the
+fastest-growing table); `asset_detail` ran the same aggregate 5 times and read `now` three times, so
+a currently-down machine could print 412 min while availability used 413; MTTR counted untimed
+repairs, making the fleet look *faster* to fix the worse the record-keeping got; a member could forge
+a system-filed meter reading onto somebody else's job.
+
+**Query budgets after the pass:** `asset_detail` 31 → **21 with zero duplicate SQL**; `sparepart_list`
+19 → 17; `asset_list` **flat at 14** whether the register holds 4 assets or 44.
+
+### Scope calls worth recording
+- **Built beyond the plan, deliberately:** the work-centre assets panel (4.8's `workcenter_detail`) —
+  `Asset.work_center` had zero readers despite its own docstring calling it the SCM differentiator;
+  and the SCM landing page's missing sub-module cards, which had been stuck at 4.9 for four releases.
+- **Explicitly deferred:** CSV export on the three report pages (4.11 ships it on five, 4.12 on one —
+  a real convention drift, not built here); drafting an `accounting.Bill` from `external_cost`;
+  fleet-level reliability KPIs in 4.11's closed registry.
+- **Flagged, not fixed:** `_insufficient_stock` permits a concurrent bin over-draw. Inherited, shared
+  by five callers across 4.3/4.4/4.13, and the fix belongs in the helper — spun out as its own task
+  rather than widened into this run.
+
+### One process note
+A parallel session began building **4.14 Labor Management** in the same working tree during close-out
+(it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
+`forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
 
 
 ---
@@ -20255,4 +20475,48 @@ Carried over from `research-scm-4.14.md` so nothing is lost, plus what this plan
 
 ## Review notes
 
-(filled in at the end)
+**Delivered.** 4.13 is Live in the sidebar with all five NavERP.md bullets linked, across 105 commits
+from the plan commit to close-out. Migrations `0022` (additive-only: 8 CreateModel, 1 AddField,
+1 choices-only AlterField, 20 AddIndex, 4 AlterUniqueTogether) and `0023` (index-only: 2 RemoveIndex
++ 1 AddIndex). `manage.py check` clean; `seed_scm` idempotent (90 rows identical across two runs,
+including exactly 4 `maintenance` StockMoves); the `apps/scm` suite is green with ~1,224 tests
+touching 4.13 and 98% coverage of the new code.
+
+### What the review agents actually found — the value of the pass was the bugs, not the polish
+
+| # | Severity | Found by | Defect |
+|---|---|---|---|
+| 1 | Critical | code-reviewer | **The PM schedule advanced two cycles per occurrence.** Both `maintenanceplan_generate` and `maintenanceworkorder_complete` called `advance()`, and `advance()` anchors a `fixed` plan on its own `next_due_on`, so the calls compounded. Measured: a quarterly plan went Jan 1 → Apr 1 at generate → Jun 30 at completion, so the April inspection silently never came due. Same on meter (1000 → 1250 → 1500). Fixed by giving the schedule exactly ONE writer. |
+| 2 | Important | code-reviewer | **Completion filed the meter capture AFTER the roll read it**, so a floating meter plan advanced from the pre-work reading — 1468.5 instead of 1500, every service 31.5h early, compounding. |
+| 3 | Important | code-reviewer | `Item.is_spare_part` had **no writer in the tenant UI**, so the storeroom page could only ever be populated by the seeder. |
+| 4 | Critical | (own repro) | **Every 4.13 edit form 500'd** whenever a party FK was set — `_keep_current` OR'd a `.distinct()` queryset with a plain one. Hidden from the create path by an early return, which is why the forms test pass missed it. |
+| 5 | P1 | explorer | **4.11 classified every actively-consumed MRO spare as dead stock** and wrote persisted `SupplyChainAlert` rows saying so, because one constant served both a valuation question and a recency question. |
+| 6 | Critical | frontend-reviewer | **Five `confirm()` dialogs silently disabled, one of them stored XSS.** HTML decodes `&#39;` inside an attribute before the JS engine sees it, so the guard vanished rather than failing loudly. Now lesson **L42**. |
+| 7 | Critical | performance-reviewer | `asset_list`'s paginator COUNT ran **one correlated EXISTS per asset in the whole tenant** — 5,000 probes to render 15 rows on the most-opened page. |
+| 8 | Medium ×2 | security-reviewer | **Two TOCTOU windows** on the guards protecting the ledger: cancel and delete both read `is_issued` outside the row lock, so a concurrent issue-parts orphaned StockMoves — irreversibly on delete, since the part lines CASCADE. |
+
+Also fixed: `latest_reading()` could not use its own index (no tenant predicate → filesort on the
+fastest-growing table); `asset_detail` ran the same aggregate 5 times and read `now` three times, so
+a currently-down machine could print 412 min while availability used 413; MTTR counted untimed
+repairs, making the fleet look *faster* to fix the worse the record-keeping got; a member could forge
+a system-filed meter reading onto somebody else's job.
+
+**Query budgets after the pass:** `asset_detail` 31 → **21 with zero duplicate SQL**; `sparepart_list`
+19 → 17; `asset_list` **flat at 14** whether the register holds 4 assets or 44.
+
+### Scope calls worth recording
+- **Built beyond the plan, deliberately:** the work-centre assets panel (4.8's `workcenter_detail`) —
+  `Asset.work_center` had zero readers despite its own docstring calling it the SCM differentiator;
+  and the SCM landing page's missing sub-module cards, which had been stuck at 4.9 for four releases.
+- **Explicitly deferred:** CSV export on the three report pages (4.11 ships it on five, 4.12 on one —
+  a real convention drift, not built here); drafting an `accounting.Bill` from `external_cost`;
+  fleet-level reliability KPIs in 4.11's closed registry.
+- **Flagged, not fixed:** `_insufficient_stock` permits a concurrent bin over-draw. Inherited, shared
+  by five callers across 4.3/4.4/4.13, and the fix belongs in the helper — spun out as its own task
+  rather than widened into this run.
+
+### One process note
+A parallel session began building **4.14 Labor Management** in the same working tree during close-out
+(it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
+`forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
