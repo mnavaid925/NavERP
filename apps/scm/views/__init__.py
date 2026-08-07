@@ -385,3 +385,40 @@ from .AssetManagement.MeterReadings import (  # noqa: F401
 from .AssetManagement.Reports import (  # noqa: F401
     pm_forecast, sparepart_list, asset_depreciation_report,
 )
+
+# --- 4.14 Labor Management --------------------------------------------------------------------
+# The verbs are listed one per concept for the same reason 4.13's are: `status` is `editable=False`
+# on LaborStandard, LaborSession and LaborPlan, so the ladder is the ONLY thing that can move it, and
+# a verb that quietly stopped being exported would take its button's route down with it — as an
+# AttributeError at startup, since the URLconf resolves these as `views.<name>`.
+from .LaborManagement.LaborStandards import (  # noqa: F401
+    laborstandard_list, laborstandard_create, laborstandard_detail,
+    laborstandard_edit, laborstandard_delete,
+    laborstandard_activate, laborstandard_archive,
+)
+from .LaborManagement.LaborSessions import (  # noqa: F401
+    laborsession_list, laborsession_create, laborsession_detail,
+    laborsession_edit, laborsession_delete,
+    laborsession_clock_in, laborsession_clock_out, laborsession_close,
+    laborsession_approve, laborsession_reopen, laborsession_cancel,
+)
+# `laborsession_add_activity` lives in the ACTIVITY module, not the session one, even though it is
+# named for its parent: it creates a LaborActivity and the session only supplies the route. Keeping
+# it beside the thing it creates is what stops a future reader looking for it in LaborSessions.py
+# and concluding the child has no create path.
+from .LaborManagement.LaborActivities import (  # noqa: F401
+    laboractivity_list, laboractivity_detail, laboractivity_edit, laboractivity_delete,
+    laborsession_add_activity,
+)
+from .LaborManagement.LaborPlans import (  # noqa: F401
+    laborplan_list, laborplan_create, laborplan_detail, laborplan_edit, laborplan_delete,
+    laborplan_generate, laborplan_approve, laborplan_archive,
+    laborplanline_edit,
+)
+# Three COMPUTED pages over tables that already exist — no model of their own. The board reads and
+# writes 4.4's PickTask / PutawayTask / CycleCountTask `assigned_to`; the export and the scorecard
+# aggregate 4.14's own sessions and activities and write nothing at all.
+from .LaborManagement.Reports import (  # noqa: F401
+    labor_board, labor_board_assign, labor_board_unassign,
+    labor_payroll_export, labor_scorecard,
+)
