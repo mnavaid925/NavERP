@@ -19258,3 +19258,1001 @@ Carried over from `research-scm-4.13.md` so nothing is lost, plus what this plan
 ## Review notes
 
 (filled in at the end)
+
+
+---
+# Sub-module 4.14 — Labor Management (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.14.md  (2026-08-08)
+
+**EXTEND run, not a scaffold run.** `apps/scm` exists and ships 4.1–4.13. **No `config/settings.py` and no
+`config/urls.py` change.**
+
+- New backend sub-package: **`LaborManagement/`** in all four layers (`models` / `forms` / `views` / `urls`) —
+  PascalCase of the NavERP.md title, the `AssetManagement/` precedent.
+- New template sub-module slug: **`labor/`** — RESOLVED in favour of convention. Every one of the thirteen
+  shipped `scm` template folders is a *short* slug (`procurement/ srm/ inventory/ warehouse/ orders/
+  transportation/ demandplanning/ manufacturing/ quality/ returns/ analytics/ compliance/ assets/` — verified
+  on disk), i.e. the convention drops "Management" (`Inventory Management` → `inventory/`, `Warehouse
+  Management` → `warehouse/`, `Asset Management` → `assets/`). The brief's `labormanagement/` was the odd one
+  out and the plan was find/replaced to `labor/` before any file existed. **Note the deliberate asymmetry: the
+  BACKEND package stays `LaborManagement/`** (PascalCase of the full NavERP.md title, the `AssetManagement/`
+  precedent) **while the TEMPLATE folder is `labor/`** — that split is exactly what 4.13 already does
+  (`models/AssetManagement/` ↔ `templates/scm/assets/`), so the two layers are consistent with their own
+  siblings rather than with each other. Do not let a review agent "fix" either one into matching the other.
+- Migration will be **`0024_…`** (latest on disk is `0023_remove_assetsparepart_scm_asp_asset_idx_and_more.py`).
+
+**Shape of the sub-module.** **4 primary models + 1 child (5 tables) + 3 computed pages.** 4.14 writes **no
+`StockMove`**, **no `JournalEntry`**, and **nothing at all outside `apps/scm`**. It is the only SCM sub-module
+since 4.11 with zero ledger effect, and that is deliberate — see the three hard constraints below.
+
+---
+
+## The three hard constraints (state them in the docstrings; the build cannot drift past them)
+
+1. **`apps/scm` keeps its ZERO `hrm.*` references.** Verified at plan time: `grep -rn '"hrm\.' apps/scm` and
+   `grep -rn 'from apps.hrm' apps/scm` both return **nothing**, and no app outside `apps/hrm` FKs into HRM.
+   The payroll and attendance hand-offs are a **report + CSV**, never a FK and never a write into `hrm.*`.
+   (`FreightInvoice` → `accounting.Bill` is the "hand off, don't be a second writer" precedent —
+   `TransportationManagement/FreightInvoices.py:8-11`; 4.14 hands off even more thinly, with no target row
+   at all.)
+2. **HRM already owns daily attendance.** `hrm.AttendanceRecord` is `unique_together ("tenant","employee",
+   "date")` — strictly ONE row per employee per day, with `check_in`/`check_out` as **TimeField**s and a
+   derived `hours_worked`. 4.14 ships the **warehouse-shift EXECUTION layer**, not a second attendance table:
+   a session at a *warehouse* whose minutes are broken into *booked activity intervals* (direct and indirect),
+   which is what an LMS measures and what a one-row-per-day HR record structurally cannot hold. Geofencing,
+   biometric punches, regularisation, overtime approval, timesheets, skills and pay rates all stay in HRM.
+3. **Every productivity figure is a DERIVED aggregate — no stored editable column.** Units per hour,
+   performance %, utilisation %, accuracy %, earned minutes, gap time, required headcount, coverage %: all are
+   methods/properties, never columns anyone can type. Same house rule as 4.3 on-hand (`Item.on_hand()` over the
+   append-only `StockMove`) and 4.13 reliability (`Asset.mtbf_hours()` / `mttr_hours()`), and it is what makes
+   "two writers for one quantity" (`ProductionTimeLogs.py:8-13`) impossible here.
+   **Every one of them returns `None`, never `0`, on a zero denominator** (the 4.13 MTBF guard), and every
+   template renders that as "—", never as a confident zero.
+
+### The two decisions the research left open — RESOLVED, do not re-open
+
+**A. Worker identity: keep BOTH vocabularies. They are different facts.**
+- 4.4's `PickTask.assigned_to` / `PutawayTask.assigned_to` / `CycleCountTask.assigned_to` stay
+  `settings.AUTH_USER_MODEL` and mean **who was given the work** (a login).
+  **Do NOT add a second assignee column to any 4.4 table.** The migration must contain zero `AddField` on
+  `picktask` / `putawaytask` / `cyclecounttask` — assert that when reading `0024_…`.
+- `LaborSession.worker` is **`core.Party`** with the `employee` `PartyRole` and means **whose minutes these
+  are**. Warehouse associates routinely have no ERP login. This is SCM's established way of naming a person,
+  stated in four as-built comments: `Manufacturing/WorkCenters.py:44-45` (`supervisor`),
+  `Manufacturing/ProductionTimeLogs.py:52-53` (`operator`), `AssetManagement/MaintenanceWorkOrders.py:163-169`
+  (`reported_by`/`assigned_to`/`service_vendor`), `AssetManagement/MeterReadings.py:70-73` (`recorded_by`).
+- **Research correction, verified at plan time:** the research says "core.Party has **no** `user` FK … no
+  built-in bridge". Half true — the FK exists on the **other** side: **`accounts.User.party` →
+  `core.Party`** (`apps/accounts/models.py:58`, `related_name="users"`), and `apps/scm/views/_helpers.py:73`
+  already exposes **`_acting_party(request)`**, which returns the logged-in user's Party *re-checked against
+  `request.tenant`*. So the bridge is real, one-directional and already tenant-safe. Use it; do not invent a
+  second one.
+- `LaborSession.login` → `AUTH_USER_MODEL`, `null=True`, `blank=True`, **`editable=False`** — stamped by the
+  **self-service clock-in verb only** (`request.user`, when `_acting_party(request)` IS the chosen worker), and
+  left `None` when a supervisor files a session on someone else's behalf. **It degrades gracefully when
+  absent, and the plan says so in words:** every report, aggregate, filter and export keys on `worker`; `login`
+  is used in exactly one place — enriching the labor board with "this assignee's currently-open session" — and
+  that panel falls back to `User.party → LaborSession.worker` and then to showing nothing. A null `login` is
+  never an error, never a missing row, and never changes a number.
+
+**B. No `LaborProfile` warehouse-worker master this pass — DEFERRED.**
+The legitimate shape for one later is `SupplierProfile`
+(`SupplierRelationshipManagement/SupplierProfiles.py:12`, a `TenantOwned` model hanging SCM-specific
+attributes off `core.Party`) — record that precedent in the `_choices.py` / package docstring so the next pass
+does not re-derive it. It is not needed now because **no NavERP.md 4.14 bullet requires it**, HRM already owns
+skills (`hrm.EmployeeSkill`) and compensation (`hrm.SalaryStructureTemplate`/`Line`), and it would be a fifth
+model. `_employee_parties(tenant)` (`apps/scm/forms/_common.py:69`) already gives every worker dropdown the
+right, tenant-scoped, role-filtered queryset with no new table.
+
+---
+
+## Pre-flight (do these BEFORE writing a single file)
+
+- [ ] `grep -n '\.badge-\|detail-item\|detail-grid\|stat-icon' static/css/theme.css` — **mandatory pre-write
+      step, not a pre-ship check** (L33, now at six recurrences). Badges are **`badge-green / badge-red /
+      badge-amber / badge-info / badge-muted / badge-slate` ONLY**; `badge-success` / `badge-warning` /
+      `badge-danger` **DO NOT EXIST** and render unstyled. Layout is
+      `<dl class="detail-grid"><div class="detail-item"><dt>Label</dt><dd>Value</dd></div></dl>` —
+      `.detail-label` / `.detail-value` do not exist. `stat-icon` has `blue/green/orange/purple/slate` only.
+- [ ] Re-run the spine grep before FK-ing anything (L28). **All verified present at plan time — re-check
+      rather than trusting this list:**
+      - `grep -rn "^class Labor" apps/` → **nothing.** All five 4.14 tables are genuinely new. (`labor` appears
+        in `scm` only as `WorkCenter.labor_cost_per_hour`, `ProductionTimeLog.entry_type="labor"` and
+        `SustainabilityAssessment.labor_human_rights_score` / `forced_labor_attested` — none is a model.)
+      - `core.Party` `apps/core/models/Party.py:5` · `core.PartyRole` `PartyRole.py:5` with
+        `ROLE_CHOICES` containing **`("employee","Employee")`** at `:12`.
+      - `accounts.User.party` → `core.Party` `apps/accounts/models.py:58` (`related_name="users"`).
+      - `scm.Location` `InventoryManagement/Locations.py:10` — `code`, `name`, `location_type`
+        (`warehouse|zone|bin|staging|transit`), self-FK `parent` `:30`, `is_active`, + the 4.4 bin attrs
+        `capacity`/`pick_sequence`/`abc_class`/`is_pickable`. **There is no `Warehouse` class — a warehouse IS
+        a `Location`.** It has **no coordinates**, which is why distance-driven travel standards are deferred.
+      - `scm.ItemCategory` `InventoryManagement/Items.py:17` (`name`, self-FK `parent`, `is_active`).
+      - `scm.StockMove` `InventoryManagement/StockMoves.py:13` — append-only, **signed** `quantity`,
+        `move_type` ∈ `receipt|issue|transfer|adjustment|consumption|production|maintenance` (`:16-35`),
+        `moved_at`, `reference`, indexes on `(tenant, moved_at)` `:59` and `(tenant, reference)` `:60`.
+      - `scm.PickTask` `WarehouseManagement/PickTasks.py:16` — `status`
+        `pending|released|picking|picked|packed|cancelled`, `EDITABLE_STATUSES=("pending","released")`,
+        `zone`→`Location`, `wave_ref`, **`assigned_to`→`AUTH_USER_MODEL` `:47` (`related_name="scm_pick_tasks"`)**,
+        `picked_at`/`packed_at` (`editable=False`), `is_short()`, `line_count()`.
+        `PickTaskLine` `:84` — `quantity_requested`, **`quantity_picked` `:95`**, `shortfall` `:103`.
+      - `scm.PutawayTask` `PutawayTasks.py:16` — `status` `pending|in_progress|completed|cancelled`,
+        `OPEN_STATUSES=("pending","in_progress")` `:29`, single header **`quantity` `:49`**,
+        **`assigned_to` `:53` (`related_name="scm_putaway_tasks"`)**, `completed_at` (`editable=False`).
+      - `scm.CycleCountTask` `CycleCountTasks.py:16` — `status`
+        `scheduled|in_progress|counted|reconciled|cancelled`, `EDITABLE_STATUSES=("scheduled","in_progress")`,
+        **`assigned_to` `:42` (`related_name="scm_cycle_counts"`)**, `started_at`/`counted_at`/`reconciled_at`
+        (`editable=False`). `CycleCountTaskLine` `:90` — `expected_quantity` (`editable=False`),
+        `counted_quantity` (nullable = *not yet counted*), `variance` `:107`, `has_variance` `:114`.
+      - `scm.GoodsReceiptNote` `ProcurementManagement/GoodsReceiptNotes.py:15` — **`receipt_date` `:43`**,
+        `status` `draft|received|cancelled`, index on `(tenant, receipt_date)` `:66`.
+        `GoodsReceiptLine` `:166` — **`quantity_received` `:171`**.
+      - `scm.DemandForecast` `DemandPlanning/DemandForecasts.py:43` + `DemandForecastPeriod` `:408`;
+        **`MAX_HORIZON_PERIODS = 520` `:91` and `MIN_HORIZON_YEAR = 1900` `:93`** — the bound precedent, with
+        its "one DB row per bucket, so an unbounded span is an unbounded `bulk_create`" comment at `:87-90`.
+      - `scm.ProductionTimeLog` `Manufacturing/ProductionTimeLogs.py:21` — **the shape to copy**:
+        `MAX_LOG_MINUTES = 60*24*31` `:27`, `operator`→`core.Party` `:53`, `started_at`/`ended_at`,
+        `duration_minutes` `PositiveIntegerField(default=0, editable=False)` `:59` derived in `save()`
+        `:102-115` **with the `update_fields` ride-along at `:109-115`**, and the paired downtime validation
+        `:97-100`.
+      - `select_policy` `ReturnsManagement/ReturnPolicies.py:223` — the most-specific-wins resolver to model
+        `select_standard()` on.
+      - `TENANT_SCOPED_FKS` idiom — `ContractCompliance/TradeLicenses.py:107` + `:214`,
+        `AssetManagement/MaintenancePlans.py:127` + `:239`, `AssetManagement/Assets.py:123` + `:238`.
+      - Toolkit: `apps/scm/models/_base.py` — `TenantOwned` `:53`, `TenantNumbered` `:66` (auto `number` with
+        retry-on-collision `:77-86`), `ZERO` `:30`, `MAX_Q2`/`MAX_Q4` `:34-35`, `q2()` `:38`, **`q4()` `:48`
+        which CLAMPS as well as quantizes**.
+      - Helpers already built and reusable: `apps/scm/forms/_common.py` — **`_employee_parties(tenant)` `:69`**
+        (exactly the `worker` dropdown), `TenantUniqueMixin` `:81`, `_scope_to_parent` `:111`;
+        `apps/scm/views/_helpers.py` — **`_acting_party(request)` `:73`**, `_date_window(...)` `:88`,
+        `_location_qs(tenant)` `:65`.
+- [ ] **Auto-number prefix collision check — done, all four are FREE.** `NUMBER_PREFIX` values already in
+      `scm`: `PR RFQ QT PO GRN SC SCR SRA CAT ADJ TRF PUT PIK CC YRD SO CAR LD SHP FRT SEA DF DS FA WO BOM WC
+      PRD QC QA NCR CAPA RMA WTY KPI ALR LIC CR TD ESG AST PM MWO`. **`LST`, `LSN`, `LAB`, `LPL` do not
+      appear.** Near-misses that are NOT collisions and must not be "tidied": `LST` ≠ `LD` ≠ `LIC`;
+      `LAB` ≠ `ALR`. `LaborPlanLine` takes **no prefix** (it is a plain `models.Model` child).
+- [ ] **Index-name collision check — done, all four prefixes FREE.** The only `scm_l*` index names on disk are
+      `scm_lic_tnt_*` (TradeLicense), `scm_load_tnt_status_idx`, `scm_loc_tnt_type_idx`, `scm_lot_tnt_status_idx`.
+      **No `scm_lst_`, `scm_lsn_`, `scm_lab_`, `scm_lpl_`, `scm_lpll_` exists.** Keep every new name globally
+      unique **AND ≤ 30 chars**.
+- [ ] **`related_name` collision check** — a duplicate reverse accessor is a `SystemCheckError`, not a runtime
+      surprise. Known taken and NOT reusable: on `core.Party` — `scm_production_time_logs`,
+      `scm_supervised_work_centers`, `scm_custodian_assets`, `scm_supplied_assets`, `scm_serviced_assets`,
+      `demand_forecasts`, `users`; on `AUTH_USER_MODEL` — `scm_pick_tasks`, `scm_putaway_tasks`,
+      `scm_cycle_counts`, `scm_goods_receipts`, `scm_forecasts_approved`; on `scm.Location` — `pick_tasks`,
+      `cycle_counts`, `putaways_in`, `putaways_out`, `pick_lines`, `stock_moves`, `assets`, `goods_receipts`,
+      `demand_forecasts`, `children`. Use only the `scm_labor_*` / `labor_*` names listed per model below.
+- [ ] Confirm `apps/scm/models/LaborManagement/` does not exist and that `apps/core/navigation.py` has
+      **`"4.13"` as its LAST `LIVE_LINKS` key** (verified: block at `navigation.py:978-984`, dict closes at
+      `:985`).
+- [ ] Read `apps/scm/models/AssetManagement/` + `apps/scm/views/AssetManagement/MaintenanceWorkOrders.py` +
+      `apps/scm/views/_common.py` + `apps/scm/views/_helpers.py` as the shape reference. Note that
+      **`apps/scm/models/AssetManagement/__init__.py` is EMPTY** — the re-export block lives in
+      `apps/scm/models/__init__.py`. Same for forms/views/urls. Create the four `LaborManagement/__init__.py`
+      files empty (each still gets its own commit).
+
+---
+
+## Models (4 primary + 1 child, in `apps/scm/models/LaborManagement/`)
+
+Shared conventions for every file: `from apps.scm.models._base import *`. **Every FK by string.** Every
+*primary* model carries `tenant` via `TenantNumbered`; `LaborPlanLine` is tenant-less and reached through
+`plan__tenant` (the `ComplianceCheck` / `MaintenancePlanTask` precedent) — **its views must scope on the
+parent's tenant, never on the child alone.** Quantities = `DecimalField(16, 4)` written through `q4()`;
+percentages = `(6, 2)`; minutes = `(12, 4)` or `PositiveIntegerField` for a derived count.
+**Every model gets `TENANT_SCOPED_FKS` listing EVERY FK it declares**, and a `clean()` loop that rejects a
+crafted cross-tenant pk (`TradeLicenses.py:214` shape). Colour-named `*_CSS` dicts live in `_choices.py` so a
+badge colour is decided in exactly one place, and only the six real classes may appear (L33).
+
+### File 0 — `models/LaborManagement/_choices.py` (shared vocabularies, imports NO sibling model)
+
+- [ ] Create it **FIRST** — the 4.10 `ReturnReasons` / 4.11 `_choices` / 4.12 `_choices` / 4.13 `_choices`
+      precedent. Pure data: no queries, no model imports, not even `_base`. `__all__` is explicit.
+- [ ] **Re-export it by NAME, not `import *`.** `AssetManagement/_choices.py` is star-imported into
+      `apps/scm/models/__init__.py` (`:274`) and already exports **`MAX_LABOUR_RATE`**. A second star-imported
+      `_choices` re-declaring that exact token would **silently shadow** 4.13's depending on import order.
+      4.14's rate ceiling is therefore named **`MAX_STANDARD_RATE`** (a distinct token), and the re-export
+      block uses `from .LaborManagement._choices import (…)` with the names spelled out.
+- [ ] `ACTIVITY_CHOICES` (`max_length=18`) — **direct:** `receive`, `putaway`, `pick`, `pack`, `load`,
+      `replenish`, `cycle_count`, `vas`. **Indirect:** `break`, `meeting`, `training`, `cleaning`,
+      `equipment_wait`, `system_down`, `waiting_for_work`, `safety`, `other_indirect`.
+      *(driver: the direct-vs-indirect-vs-lost-time split, present in **all ten** surveyed products — SAP EWM's
+      indirect labor task, Infios "direct, indirect and lost time", Easy Metrics Indirect Time Insights, TZA
+      delays/indirect, Softeon idle time. Longest value `waiting_for_work` is 16; 18 is deliberate headroom.)*
+- [ ] `DIRECT_ACTIVITIES` / `INDIRECT_ACTIVITIES` — `frozenset`s, the single source of truth for "is this row
+      productive". Every aggregate branches on these, never on a hand-typed tuple.
+- [ ] `ACTIVITY_CSS` — direct → `badge-green`, indirect → `badge-amber`, `system_down`/`equipment_wait`/
+      `waiting_for_work` → `badge-red` (lost time is the one worth seeing across a room).
+- [ ] `INDIRECT_REASON_CHOICES` (`max_length=20`) = `scheduled_break | sanctioned_meeting | training |
+      housekeeping | equipment_failure | system_outage | no_work_available | safety_incident |
+      supervisor_directed | other` *(driver: SAP EWM's **indirect labor task requires a reason**; Infios; TZA
+      delay coding. A closed vocabulary is what makes "what is our biggest indirect bucket?" a `GROUP BY`.)*
+- [ ] `STANDARD_BASIS_CHOICES` (`max_length=10`) = `per_unit | per_line | per_task | per_case | per_pallet`
+      *(driver: TZA single- vs multi-determinant standards; SAP EWM ELS.)*
+- [ ] `STANDARD_SOURCE_CHOICES` (`max_length=12`) = `engineered | observed | benchmark | learned` — `learned`
+      is the seam left open for an ML-derived standard (Lucas, Easy Metrics, CognitOps); **nothing writes it
+      this pass**, exactly as `METER_SOURCE_CHOICES` reserves `sensor` for 11.7.
+      *(driver: Softeon's honest "team-defined reasonable expectancies" vs Blue Yonder physics-based vs
+      ML-derived — the provenance is a real difference a supervisor must be able to see.)*
+- [ ] `SESSION_SOURCE_CHOICES` (`max_length=12`) = `web | badge | mobile | biometric | supervisor` — `badge`,
+      `mobile` and `biometric` are hardware seams; this pass writes only `web` (self-service) and `supervisor`.
+      *(driver: punch provenance in Infios / Made4net / Easy Metrics.)*
+- [ ] `SESSION_STATUS_CHOICES` = `open | closed | approved | cancelled` + `SESSION_STATUS_CSS`
+      *(driver: approve-then-export locking — Infios, TZA, Made4net; the `Timesheet` / `FreightInvoice`
+      approval precedents.)*
+- [ ] `PLAN_STATUS_CHOICES` = `draft | planned | approved | archived` + `PLAN_STATUS_CSS`;
+      `PLAN_BUCKET_CHOICES` = `day | week`;
+      `VOLUME_SOURCE_CHOICES` (`max_length=16`) = `stock_moves | pick_tasks | goods_receipts |
+      demand_forecast | manual`; `PLAN_METHOD_CHOICES` (`max_length=24`) = `naive | moving_average |
+      same_period_last_year | manual`
+      *(drivers: Made4net verbatim "forecast labor needs based on inbound/outbound volume"; SAP EWM's planned
+      workload document; Blue Yonder / Easy Metrics / CognitOps demand-driven staffing.)*
+- [ ] **Bounds — all constants, none computed from the thing it bounds (L40).**
+  - `MAX_SESSION_MINUTES = 60 * 24 * 2` (2 days). Bounds the session's **LENGTH**, not just the order of its
+    two ends — the `ProductionTimeLog.MAX_LOG_MINUTES` reasoning at `ProductionTimeLogs.py:86-96`: attended
+    minutes are `editable=False`-derived and feed cost, headcount and payroll-export maths, and a
+    `1000-01-01 → 9999-12-31` interval derives ~4.7e9 minutes — past what the column holds, i.e. a 500 rather
+    than a rejection. A warehouse shift is at most a day; two days covers an overnight closed late.
+  - `MAX_ACTIVITY_MINUTES = 60 * 24` (1 day). **Explicitly a constant, NOT "the session's remaining minutes"
+    and NOT "attended minus booked-so-far"** — a bound derived from the set the new row is joining is not a
+    bound (L40), and while a session is `open` there is no `clock_out` to derive it from at all.
+  - `MAX_HORIZON_PERIODS = 366` and `MAX_PLAN_LINES = 2000` on the plan generator. **The period count is
+    computed by integer arithmetic on the two dates —
+    `(period_end - period_start).days // (1 if bucket == "day" else 7) + 1` — never by building the range and
+    taking its `len()`** (that is precisely the L40 defect: `DemandForecast.clean()` `:166-172` uses
+    `period_count(...)`, *not* `len(period_range(...))`, and says why). The grid is one row per
+    (bucket × in-scope standard), so `generate` re-checks `periods * standards.count()` against
+    `MAX_PLAN_LINES` **before allocating anything** — one `COUNT(*)`, not the grid.
+  - `MIN_PLAN_YEAR = 1900` — guards the history-window date arithmetic (`DemandForecast.MIN_HORIZON_YEAR`).
+  - `MAX_BULK_ASSIGN = 200` — ids per labor-board bulk-assign POST. Measured as `len(request.POST.getlist(...))`
+    **before** any DB work; an unbounded id list is an unbounded UPDATE loop any logged-in planner can fire.
+- [ ] `MAX_STANDARD_RATE = Decimal("100000")` — ceiling on `LaborStandard.labour_rate`, a `MaxValueValidator`
+      **on the way in**, not a clamp on the way out. Same reasoning as `AssetManagement/_choices.py:160-166`:
+      `q4()` clamps rather than raising and editing is only `@login_required`, so an absurd rate would flow
+      into cost-per-unit on every report that reads it. **This is a CHARGE-OUT rate on a standard, never a
+      person's wage** — `hrm.SalaryStructureTemplate` owns compensation and SCM does not read it.
+- [ ] `MAX_ALLOWANCE_PCT = Decimal("100")` (a PF&D allowance may at most double the standard) ·
+      `MAX_PRODUCTIVITY_PCT = Decimal("200")` · `MAX_HOURS_PER_SHIFT = Decimal("24")` ·
+      `MIN_RANKED_MINUTES = 60` (a worker with three booked minutes at 900% must not top a scorecard) ·
+      `COACHING_THRESHOLD_PCT = Decimal("80")` *(driver: Blue Yonder — below 80% of standard prompts
+      on-the-floor coaching. A **report band only**; an alert ROW is 4.11's `SupplyChainAlert` table and adding
+      a labor metric to its deliberately closed registry is 4.11's call, not 4.14's.)*
+
+### Model 1 — `LaborStandard` [`LST-`] · `models/LaborManagement/LaborStandards.py`
+
+*Realizes **Performance Tracking**. Drivers: engineered labor standards (**all ten** leaders — without this the
+module is a timeclock, not an LMS); multi-determinant standards with fixed setup + per-unit + travel + PF&D
+allowance (TZA XYZ travel, SAP EWM normal time incl. travel/personal needs/fatigue/unavoidable delay, Blue
+Yonder); scoped + dated standard libraries (Blue Yonder "configure or use a predefined library", TZA); standard
+provenance (Softeon "reasonable expectancies" vs Lucas/Easy Metrics ML-derived); cost-per-unit (Easy Metrics
+headline, TZA).*
+
+- [ ] `class LaborStandard(TenantNumbered)` — `NUMBER_PREFIX = "LST"`
+  - `name = CharField(max_length=255)`
+  - `activity` ← `ACTIVITY_CHOICES` (`max_length=18`) · `basis` ← `STANDARD_BASIS_CHOICES`
+    (`max_length=10`, default `per_unit`) · `source` ← `STANDARD_SOURCE_CHOICES` (default `engineered`)
+  - `minutes_per_unit` / `setup_minutes` / `travel_minutes` = `DecimalField(10, 4, default=0,
+    validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("10000"))])`
+    *(driver: the three determinants TZA and SAP EWM both publish. Distance-derived travel is **deferred** —
+    `scm.Location` has `pick_sequence` but no coordinates.)*
+  - `allowance_pct = DecimalField(6, 2, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_ALLOWANCE_PCT)])` — PF&D
+  - `labour_rate = DecimalField(14, 4, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_STANDARD_RATE)])`, `help_text` stating **charge-out per hour, not a person's wage**
+  - `status` ← `draft | active | archived` (`max_length=8`, default `draft`, **`editable=False`**),
+    `EDITABLE_STATUSES = ("draft", "active")` — an *active* standard stays editable **because every
+    `LaborActivity` snapshots it** (see Model 3); `archived` is frozen.
+  - `effective_from = DateField()` · `effective_to = DateField(null=True, blank=True)` · `notes = TextField(blank=True)`
+  - **Verified FKs:** `location` → `"scm.Location"` `SET_NULL, null, blank, related_name="labor_standards"`
+    (blank = the whole network) · `item_category` → `"scm.ItemCategory"` `SET_NULL, null, blank,
+    related_name="labor_standards"` (blank = all items)
+  - `TENANT_SCOPED_FKS = ("location", "item_category")`
+  - `Meta`: `ordering = ["activity", "-effective_from", "-id"]`, `unique_together = ("tenant", "number")`,
+    indexes `scm_lst_tnt_act_idx` (tenant, activity) · `scm_lst_tnt_status_idx` (tenant, status) ·
+    `scm_lst_tnt_eff_idx` (tenant, effective_from)
+  - **Derived, never stored:** `minutes_for(quantity)` =
+    `q4((setup_minutes + travel_minutes + quantity * minutes_per_unit) * (1 + allowance_pct / 100))` —
+    the whole earned-minutes formula, in one documented place · `cost_for(quantity)` =
+    `q4(minutes_for(q) / 60 * labour_rate)` · `is_effective_on(day)`
+  - `clean()`:
+    - `effective_to >= effective_from`; `effective_from.year >= MIN_PLAN_YEAR`
+    - **`setup + travel + minutes_per_unit > 0`** — a zero standard makes every `performance_pct` infinite
+    - **paired**: `basis == "per_task"` requires `minutes_per_unit == 0` and `setup_minutes > 0` (the fixed
+      time IS the standard); every other basis requires `minutes_per_unit > 0`. Same shape as
+      `ProductionTimeLog`'s downtime/reason pairing (`ProductionTimeLogs.py:97-100`).
+    - **refuse an OVERLAPPING effective range** for the same `(tenant, activity, location_id,
+      item_category_id)` scope among non-archived rows, `.exclude(pk=self.pk)` — otherwise
+      `select_standard()` has no deterministic answer and last month's number stops being reproducible
+    - the `TENANT_SCOPED_FKS` loop
+  - **Form excludes:** `tenant`, `number`, `status` (verb-controlled — activating a standard changes what
+    every FUTURE activity snapshots, so it is not a dropdown), `created_at`, `updated_at`.
+- [ ] Module-level **`select_standard(tenant, activity, location=None, item_category=None, on_date=None)`** —
+      most-specific-wins, modelled on `ReturnPolicies.py:223::select_policy`. Order:
+      (location + category) → category only → location only → network-wide; ties broken by the latest
+      `effective_from`. Considers only `status="active"` rows effective on `on_date` (default today).
+      **Returns `None` when nothing matches, and every caller must handle `None`** — an activity with no
+      standard has `earned_minutes = None` and `performance_pct() = None`, **never `0`**, or an unmeasured job
+      would read as a failing one.
+
+### Model 2 — `LaborSession` [`LSN-`] · `models/LaborManagement/LaborSessions.py`
+
+*Realizes **Time & Attendance** — the warehouse-shift EXECUTION layer, deliberately not a second attendance
+table (constraint 2). Drivers: clock-in/out at a facility for a shift (SAP EWM time-and-attendance recording,
+Infios, Made4net, TZA/Easy Metrics); attended vs booked time, utilisation and missing/gap time (Easy Metrics
+**Missing/Gap Time Insights** as a named product, TZA delays, Softeon idle time); punch provenance (Infios,
+Made4net, Easy Metrics); approve-then-export locking (Infios, TZA, Made4net).*
+
+- [ ] `class LaborSession(TenantNumbered)` — `NUMBER_PREFIX = "LSN"`
+  - **`worker` → `"core.Party"` `PROTECT, related_name="scm_labor_sessions"`** — `on_delete=PROTECT` because
+    the worker is the SUBJECT of the row (contrast `MeterReading.recorded_by`, which is `SET_NULL` because
+    "the observation outlives the observer"). **Never `hrm.EmployeeProfile`.**
+  - `location` → `"scm.Location"` `PROTECT, related_name="labor_sessions"` (the warehouse/zone worked)
+  - `work_date = DateField()` — deliberately the **same grain as `hrm.AttendanceRecord.date`** so the two
+    reconcile in a later report **without a FK**
+  - `shift_label = CharField(max_length=60, blank=True)` — mirrors `hrm.Shift.name` **by convention, not by
+    FK**; say so in the `help_text`
+  - `clock_in = DateTimeField()` · `clock_out = DateTimeField(null=True, blank=True)`
+  - `status` ← `SESSION_STATUS_CHOICES` (default `open`, **`editable=False`**),
+    `EDITABLE_STATUSES = ("open",)` — `closed` and `approved` freeze the session **and its activities**
+  - **Provenance, all `editable=False` and OFF the form (L20/L22, the 4.13 `MeterReading` fix):**
+    `source` ← `SESSION_SOURCE_CHOICES` (default `web`) · `recorded_by` → `AUTH_USER_MODEL` `SET_NULL, null,
+    blank, editable=False, related_name="scm_labor_sessions_recorded"` · **`login`** → `AUTH_USER_MODEL`
+    `SET_NULL, null, blank, editable=False, related_name="scm_labor_sessions_started"` (decision A above) ·
+    `closed_at` / `approved_at` `DateTimeField(null, blank, editable=False)` · `approved_by` →
+    `AUTH_USER_MODEL` `SET_NULL, null, blank, editable=False, related_name="scm_labor_sessions_approved"`
+  - `notes = TextField(blank=True)`
+  - **No `exported_at` column — a decision, not an omission.** `approved` IS the export lock; stamping a
+    column from the CSV page would make a GET perform a write.
+  - `TENANT_SCOPED_FKS = ("worker", "location")`
+  - `Meta`: `ordering = ["-work_date", "-clock_in", "-id"]`, `unique_together = ("tenant", "number")`,
+    indexes `scm_lsn_tnt_wkdate_idx` (tenant, work_date) · `scm_lsn_tnt_wkr_dt_idx` (tenant, worker, work_date)
+    · `scm_lsn_tnt_status_idx` (tenant, status) · `scm_lsn_tnt_loc_idx` (tenant, location)
+  - **Derived, NEVER stored — each with its arithmetic in the docstring, each `None` (not `0`) on a zero
+    denominator, and each accepting a pre-fetched `activities=None` list** (the
+    `CycleCountTask.variance_count(lines=None)` perf idiom at `CycleCountTasks.py:64-71` — the detail page
+    needs six of these figures and must not scan the child table six times):
+    `attended_minutes` (`None` while `clock_out` is null) · `booked_minutes()` · `direct_minutes()` ·
+    `indirect_minutes()` · **`unaccounted_minutes()`** = `max(0, attended − booked)` (gap time) ·
+    **`over_booked_minutes()`** = `max(0, booked − attended)` (the other half, so the exception queue can name
+    it instead of printing a negative gap) · `earned_minutes()` (Σ over activities that HAVE a standard;
+    activities without one are excluded from both sides of the ratio, never counted as zero) ·
+    `performance_pct()` = earned ÷ **direct** minutes × 100 · `utilisation_pct()` = booked ÷ attended × 100 ·
+    `units_per_hour()` · `accuracy_pct()` = (units − errors) ÷ units × 100 · `is_editable`
+  - `clean()`:
+    - `clock_out > clock_in`
+    - **bound the LENGTH** with `MAX_SESSION_MINUTES` (reasoning above)
+    - **`work_date == timezone.localtime(clock_in).date()`** — an overnight shift keeps the START date, and a
+      session dated last March holding this week's clock times would poison every period aggregate and the
+      payroll export
+    - `work_date.year >= MIN_PLAN_YEAR`
+    - **refuse a second `open` session for the same `(tenant, worker)`**, `.exclude(pk=self.pk)`
+    - **refuse sessions OVERLAPPING in time for the same `(tenant, worker)`** (excluding `cancelled` and self)
+      — double-counted minutes are double-counted payroll hours
+    - `worker` must hold the **`employee` `PartyRole`** (`roles__role="employee"` existence check) — the same
+      posture as the seeder's "an inspector invented by a seeder would be a person nobody hired"
+    - the `TENANT_SCOPED_FKS` loop
+  - **Form fields (whitelist):** `worker`, `location`, `work_date`, `shift_label`, `clock_in`, `clock_out`,
+    `notes`. **Form excludes:** `tenant`, `number`, `status`, `source`, `recorded_by`, `login`, `closed_at`,
+    `approved_at`, `approved_by`, `created_at`, `updated_at`.
+    **`clock_in` / `clock_out` are a legitimate exception to L22** — they are the human-entered subject of the
+    record (a supervisor filing a shift), not a system stamp. L22's actual failure mode was a
+    `DateInput(type=date)` silently truncating the time, so use
+    `forms.DateTimeInput(attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M")` **and** set the field's
+    `input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]`.
+    (4.8's `ProductionTimeLogForm` `:25-28` sets the widget `type` but **not** `format`/`input_formats`, so its
+    bound value renders empty on edit — a latent bug; noted under Later passes, not fixed here.)
+
+### Model 3 — `LaborActivity` [`LAB-`] · `models/LaborManagement/LaborActivities.py`
+
+*Realizes **Performance Tracking** and the measurement half of **Task Assignment**. Drivers: SAP EWM's
+**executed workload / employee performance documents**; direct vs indirect vs lost time (Infios, Easy Metrics,
+TZA, Softeon); indirect labor task **with a required reason** (SAP EWM ILT); time booked against a specific
+warehouse task (SAP EWM, TZA, Easy Metrics); accuracy (TZA quality levels, Lucas picking accuracy, Manhattan);
+performance vs goal (Blue Yonder "Performance vs Goal", Manhattan). **Shape it on `ProductionTimeLog`.***
+
+- [ ] `class LaborActivity(TenantNumbered)` — `NUMBER_PREFIX = "LAB"`
+  - `session` → `"scm.LaborSession"` `CASCADE, related_name="activities"`
+  - `activity_type` ← `ACTIVITY_CHOICES` (`max_length=18`) · `indirect_reason` ←
+    `INDIRECT_REASON_CHOICES` (`max_length=20`, `blank=True`)
+  - `started_at = DateTimeField()` · `ended_at = DateTimeField(null=True, blank=True)` ·
+    **`duration_minutes = PositiveIntegerField(default=0, editable=False)`** derived in `save()`
+    **with the `update_fields` ride-along copied from `ProductionTimeLogs.py:109-115`** — a caller passing
+    `update_fields=["ended_at"]` must not persist a new interval beside a stale duration
+  - `quantity = DecimalField(16, 4, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(MAX_Q4)])` (units done) · `error_quantity = DecimalField(16, 4, default=0,
+    validators=[MinValueValidator(ZERO)])` (**the accuracy input** — the one recorded number; accuracy % is
+    derived)
+  - **Task links (all `SET_NULL, null, blank`, at most one set):** `pick_task` → `"scm.PickTask"`
+    `related_name="labor_activities"` · `putaway_task` → `"scm.PutawayTask"`
+    `related_name="labor_activities"` · `cycle_count_task` → `"scm.CycleCountTask"`
+    `related_name="labor_activities"` · plus `reference = CharField(max_length=40, blank=True)` for work with
+    no task document
+  - **Standard snapshot — `editable=False`, all four, and the reason is one sentence in the docstring:
+    editing a standard next month must not silently rewrite last month's measured performance** (the
+    `MaintenanceWorkOrderTask` / `InspectionResult` / `CycleCountTaskLine.expected_quantity` snapshot rule):
+    - `standard` → `"scm.LaborStandard"` `SET_NULL, null, blank, editable=False, related_name="activities"`
+      — traceability only
+    - `standard_fixed_snapshot = DecimalField(12, 4, null=True, blank=True, editable=False)` —
+      `setup_minutes + travel_minutes` at file time
+    - `standard_rate_snapshot = DecimalField(12, 4, null=True, blank=True, editable=False)` —
+      `minutes_per_unit` at file time
+    - `standard_allowance_snapshot = DecimalField(6, 2, null=True, blank=True, editable=False)`
+    - `standard_minutes_snapshot = DecimalField(12, 4, null=True, blank=True, editable=False)` — **the derived
+      earned minutes**
+    - **Resolution happens ONCE, in the create view/form** via `select_standard(...)`; `save()` never
+      re-resolves. `save()` recomputes `standard_minutes_snapshot` from **the three snapshots and the current
+      `quantity`** — so correcting a quantity while the session is still `open` updates earned minutes
+      correctly, and editing the `LaborStandard` row changes nothing. One writer, one direction.
+  - `notes = TextField(blank=True)`
+  - `TENANT_SCOPED_FKS = ("session", "pick_task", "putaway_task", "cycle_count_task", "standard")`
+  - `Meta`: `ordering = ["-started_at", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+    `scm_lab_tnt_sess_idx` (tenant, session) · `scm_lab_tnt_type_idx` (tenant, activity_type) ·
+    `scm_lab_tnt_start_idx` (tenant, started_at)
+  - **Derived:** `earned_minutes` (= `standard_minutes_snapshot`, **`None` when no standard**) ·
+    `performance_pct()` (earned ÷ duration × 100; `None` when duration is 0 or there is no standard) ·
+    `units_per_hour()` · `accuracy_pct()` · `is_direct` / `is_indirect` (branch on `DIRECT_ACTIVITIES`) ·
+    `duration_hours`
+  - `clean()`:
+    - **direct**: requires `quantity > 0`, **forbids** `indirect_reason`
+    - **indirect**: **requires** `indirect_reason`, requires `quantity == 0` and `error_quantity == 0`
+      (paired validation, exactly `ProductionTimeLog.downtime_reason`'s shape)
+    - `error_quantity <= quantity`
+    - `ended_at > started_at`; bound the interval LENGTH with `MAX_ACTIVITY_MINUTES`
+    - **the interval must fall INSIDE the session's clock window** —
+      `started_at >= session.clock_in` and `ended_at <= (session.clock_out or now)` (the `TimesheetEntry`
+      date-in-period precedent)
+    - **the session must be `open`** — no writes to a `closed` / `approved` / `cancelled` session
+    - **at most one** of the three task FKs is set
+    - **a task FK must match the activity type**: `pick_task` ↔ `pick`/`pack`, `putaway_task` ↔ `putaway`,
+      `cycle_count_task` ↔ `cycle_count`. Otherwise a pick task carries cleaning minutes and the board lies.
+    - the `TENANT_SCOPED_FKS` loop (`session` via `session.tenant_id`; each task FK via its own tenant)
+  - **Form fields (whitelist):** `activity_type`, `indirect_reason`, `started_at`, `ended_at`, `quantity`,
+    `error_quantity`, `pick_task`, `putaway_task`, `cycle_count_task`, `reference`, `notes`.
+    **Form excludes:** `tenant`, `number`, `session` (taken from the parent route, **never from POST** — a pk
+    in the body would let a caller graft minutes onto somebody else's shift), `duration_minutes`, `standard`
+    and all four `*_snapshot`, `created_at`, `updated_at`. Same `datetime-local` widget + `input_formats`
+    treatment as the session form.
+
+### Model 4 — `LaborPlan` [`LPL-`] + child `LaborPlanLine` · `models/LaborManagement/LaborPlans.py`
+
+*Realizes **Labor Planning**. Drivers: Made4net's verbatim "forecast labor needs based on inbound/outbound
+volume"; SAP EWM's **planned workload document** (a persisted artefact with a status, not an ad-hoc screen);
+required-vs-scheduled headcount gap (Blue Yonder proactive balancing, Lucas "eliminating overstaffing and
+understaffing", CognitOps rebalancing recommendations); per-activity breakdown (SAP EWM, Blue Yonder, Infios,
+Made4net); seasonal/surge forecasting weeks ahead (Blue Yonder, Easy Metrics). **Follow the 4.7
+`DemandForecast` + `DemandForecastPeriod` generate-then-review shape.***
+
+- [ ] `class LaborPlan(TenantNumbered)` — `NUMBER_PREFIX = "LPL"`
+  - `name = CharField(max_length=255)` · `location` → `"scm.Location"` `SET_NULL, null, blank,
+    related_name="labor_plans"` (blank = the whole network)
+  - `period_start` / `period_end` = `DateField()` · `bucket` ← `PLAN_BUCKET_CHOICES` (default `day`)
+  - `volume_source` ← `VOLUME_SOURCE_CHOICES` (default `stock_moves`) · `method` ← `PLAN_METHOD_CHOICES`
+    (default `moving_average`)
+  - `history_days = PositiveIntegerField(default=28, validators=[MinValueValidator(1),
+    MaxValueValidator(730)])` — **capped**, because it is fed straight to `datetime.timedelta(days=…)` and a
+    bare `PositiveIntegerField` accepts 4294967295 on MariaDB, which is an uncaught `OverflowError` (a 500),
+    not a validation error (the 4.10 finding)
+  - `hours_per_shift = DecimalField(5, 2, default=8, validators=[MinValueValidator(Decimal("0.25")),
+    MaxValueValidator(MAX_HOURS_PER_SHIFT)])`
+  - `productivity_pct = DecimalField(6, 2, default=100, validators=[MinValueValidator(Decimal("1")),
+    MaxValueValidator(MAX_PRODUCTIVITY_PCT)])` — **minimum 1, not 0**: it is a divisor in
+    `required_headcount`
+  - `demand_forecast` → `"scm.DemandForecast"` `SET_NULL, null, blank, related_name="labor_plans"` — required
+    **only** when `volume_source == "demand_forecast"`, forbidden otherwise (paired validation).
+    *(4.14 CONSUMES 4.7's forecast and its `SeasonalityProfile`; it must not re-derive seasonality — that is
+    4.7's job and the research parks it there explicitly.)*
+  - **No activity-selector column.** The generator emits one line per (bucket × **every in-scope active
+    `LaborStandard` for a DIRECT activity**), so the covered set is a consequence of the standards library, not
+    a sixth table or a comma-separated string. This is also what makes the `MAX_PLAN_LINES` check a single
+    `COUNT(*)`.
+  - `status` ← `PLAN_STATUS_CHOICES` (default `draft`, **`editable=False`**),
+    `EDITABLE_STATUSES = ("draft", "planned")` · `generated_at` / `approved_at`
+    `DateTimeField(null, blank, editable=False)` · `approved_by` → `AUTH_USER_MODEL` `SET_NULL, null, blank,
+    editable=False, related_name="scm_labor_plans_approved"` · `notes = TextField(blank=True)`
+  - Class constants pulled from `_choices`: `MAX_HORIZON_PERIODS`, `MAX_PLAN_LINES`, `MIN_PLAN_YEAR`
+  - `TENANT_SCOPED_FKS = ("location", "demand_forecast")`
+  - `Meta`: `ordering = ["-period_start", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+    `scm_lpl_tnt_status_idx` (tenant, status) · `scm_lpl_tnt_start_idx` (tenant, period_start)
+  - `clean()`: `period_end >= period_start`; `period_start.year >= MIN_PLAN_YEAR`; **the L40-safe span check**
+    (integer arithmetic on the two dates, `MAX_HORIZON_PERIODS`, with the computed span in the message);
+    the `volume_source` ↔ `demand_forecast` pairing both ways; the `TENANT_SCOPED_FKS` loop.
+    **The bound lives in `clean()`, not in the view**, so the form, the seeder and any future revise action all
+    inherit it (`DemandForecast.clean()` `:163-165` says exactly this).
+  - **Form excludes:** `tenant`, `number`, `status`, `generated_at`, `approved_by`, `approved_at`,
+    `created_at`, `updated_at`.
+- [ ] `class LaborPlanLine(models.Model)` — tenant-less child, reached through `plan__tenant`
+  - `plan` → `"scm.LaborPlan"` `CASCADE, related_name="lines"` · `period_start = DateField()` (the bucket's
+    first day) · `activity` ← `ACTIVITY_CHOICES` (`max_length=18`)
+  - **Generated, all `editable=False`:** `forecast_volume = DecimalField(16, 4, default=0)` ·
+    `standard` → `"scm.LaborStandard"` `SET_NULL, null, blank, editable=False, related_name="plan_lines"` ·
+    `standard_minutes_snapshot = DecimalField(12, 4, null=True, blank=True, editable=False)` (**glass-box:
+    which standard produced this number**, the 4.7 "the decomposition IS the feature" rule) ·
+    `required_minutes = DecimalField(14, 2, default=0)` · `required_headcount = DecimalField(8, 2, default=0)`
+  - **`planned_headcount = DecimalField(8, 2, default=0, validators=[MinValueValidator(ZERO),
+    MaxValueValidator(Decimal("9999"))])`** — the planner's override and **the ONLY editable column on the
+    line**
+  - `notes = CharField(max_length=255, blank=True)`
+  - **Derived:** `headcount_variance` = planned − required · `coverage_pct()` = planned ÷ required × 100
+    (**`None` when required is 0**) · `is_short` / `is_over`
+  - `Meta`: `unique_together = ("plan", "period_start", "activity")`, `ordering = ["period_start", "activity"]`,
+    index `scm_lpll_plan_idx` (plan, period_start)
+  - **Form fields:** `planned_headcount`, `notes` — nothing else.
+
+---
+
+## Backend (`apps/scm/{models,forms,views,urls}/LaborManagement/`)
+
+One `LaborManagement/` folder per layer, one `<Entity>.py` per entity, the four layers lining up one-to-one.
+**Absolute imports only** (`from apps.scm.models import LaborStandard`); a relative `from .models import X`
+resolves one package too deep. Entity modules pull the toolkit via `from apps.scm.models._base import *` /
+`from apps.scm.forms._common import *` / `from apps.scm.views._common import *`.
+
+- [ ] `apps/scm/models/LaborManagement/__init__.py` (empty — the `AssetManagement` precedent)
+- [ ] `apps/scm/models/LaborManagement/_choices.py`
+- [ ] `apps/scm/models/LaborManagement/LaborStandards.py` — `LaborStandard` + `select_standard()`
+- [ ] `apps/scm/models/LaborManagement/LaborSessions.py` — `LaborSession`
+- [ ] `apps/scm/models/LaborManagement/LaborActivities.py` — `LaborActivity`
+- [ ] `apps/scm/models/LaborManagement/LaborPlans.py` — `LaborPlan` + `LaborPlanLine`
+- [ ] **No change to any shipped model file.** 4.14 adds no column to `PickTask` / `PutawayTask` /
+      `CycleCountTask` / `StockMove` / `Item` — verify that in the migration.
+
+- [ ] `apps/scm/forms/LaborManagement/__init__.py` (empty)
+- [ ] `apps/scm/forms/LaborManagement/LaborStandards.py` — `LaborStandardForm`
+- [ ] `apps/scm/forms/LaborManagement/LaborSessions.py` — `LaborSessionForm`
+- [ ] `apps/scm/forms/LaborManagement/LaborActivities.py` — `LaborActivityForm`
+- [ ] `apps/scm/forms/LaborManagement/LaborPlans.py` — `LaborPlanForm`, `LaborPlanLineForm`
+- [ ] **Move `_reject_foreign` from `apps/scm/forms/AssetManagement/Assets.py:102` to
+      `apps/scm/forms/_common.py`** and re-point 4.13's three call sites
+      (`AssetManagement/Assets.py:212`, `AssetManagement/MaintenancePlans.py:109`,
+      `AssetManagement/MaintenanceWorkOrders.py:134`). Backend Package Structure rule 5: a private helper used
+      by **more than one** sub-module belongs in the shared module. 4.14 is the second consumer, so this is the
+      moment. Forms-only change — **no migration impact**; each file still gets its own commit.
+- [ ] **Every form subclasses `TenantModelForm`** (`apps/core/forms/_common.py`), takes `tenant=`, and
+      **narrows every FK queryset to that tenant**: `worker` via **`_employee_parties(self.tenant)`**
+      (`forms/_common.py:69`), `location` via `_location_qs`, plus `item_category`, `demand_forecast`,
+      `pick_task` / `putaway_task` / `cycle_count_task` (narrowed further to their models' OPEN statuses, with
+      the instance's own current pk kept selectable on edit — the `ProductionTimeLogForm:37-42` idiom).
+      Then **`clean()` re-checks the tenant of every chosen FK via `_reject_foreign`** — a narrowed dropdown is
+      a UI convenience, not an authorization boundary.
+- [ ] `Meta.fields` is an explicit **whitelist** on every form — never `exclude`, never `"__all__"`. The
+      excluded-by-design set per model is listed above (tenant / number / status / every `*_snapshot` /
+      `duration_minutes` / `source` / `recorded_by` / `login` / `approved_by` / every `*_at` stamp / the whole
+      generated half of `LaborPlanLine`).
+
+- [ ] `apps/scm/views/LaborManagement/__init__.py` (empty)
+- [ ] `apps/scm/views/LaborManagement/LaborStandards.py` — `laborstandard_list` (search + filters +
+      pagination), `_create`, `_detail`, `_edit`, `_delete`, + verbs `laborstandard_activate`,
+      `laborstandard_archive`
+- [ ] `apps/scm/views/LaborManagement/LaborSessions.py` — full CRUD + the verbs `laborsession_clock_in`
+      (**self-service**: `worker = _acting_party(request)`, `login = request.user`, `source = "web"`, all
+      stamped after `save(commit=False)`), `laborsession_clock_out`, `laborsession_close`,
+      `laborsession_approve`, `laborsession_reopen`, `laborsession_cancel`
+- [ ] `apps/scm/views/LaborManagement/LaborActivities.py` — `laboractivity_list` (all activities, filtered),
+      `laborsession_add_activity` (create under the parent route — `session` never from POST),
+      `laboractivity_detail`, `_edit`, `_delete`
+- [ ] `apps/scm/views/LaborManagement/LaborPlans.py` — full CRUD + `laborplan_generate`, `laborplan_approve`,
+      `laborplan_archive`, `laborplanline_edit`
+- [ ] `apps/scm/views/LaborManagement/Reports.py` — `labor_board`, `labor_board_assign`,
+      `labor_board_unassign`, `labor_payroll_export`, `labor_scorecard`
+- [ ] **Every view:** function-based, `@login_required`, `Model.objects.filter(tenant=request.tenant)` with no
+      exceptions, `get_object_or_404(..., tenant=request.tenant)` on every pk lookup (`LaborPlanLine` via
+      `plan__tenant`, `LaborActivity` via its own tenant AND `session__tenant`). Audit via `write_audit_log`
+      (`apps/core/utils.py`) — the `crud_*` helpers in `apps/core/crud.py` call it automatically, but **every
+      hand-rolled save path and every verb must call it itself**, the labor-board bulk verbs included.
+- [ ] **`@tenant_admin_required` on the privileged writes:** all five delete views, `laborsession_approve`,
+      `laborsession_reopen` (it un-freezes an approved period), `laborsession_cancel`,
+      `laborstandard_activate` / `_archive` (they change what every future activity snapshots),
+      `laborplan_generate`, `laborplan_approve`, and **both labor-board assign verbs** (they write another
+      sub-module's table). Everything else is `@login_required`.
+- [ ] **Every verb is `@require_POST`** so a GET is a 405, not a silent state change. Each validates its status
+      transition and answers with a message + redirect rather than a 500 on an illegal move; a cross-tenant pk
+      must be **404 before any 302**.
+- [ ] **`laborplan_generate` detail** — `@require_POST`, `@tenant_admin_required`, inside
+      `transaction.atomic()`:
+      1. `periods` by integer arithmetic on the two dates (**never `len(period_range(...))`** — L40);
+      2. `standards = LaborStandard.objects.filter(tenant=…, status="active", activity__in=DIRECT_ACTIVITIES,
+         …scope…)`; **refuse when `periods * standards.count() > MAX_PLAN_LINES`**, naming both numbers in the
+         message — this is one `COUNT(*)`, and it happens **before** any row is built;
+      3. derive volume from the chosen source **at generate time, never a stored history table** (the 4.7
+         rule): `stock_moves` → `StockMove` filtered on `(tenant, moved_at)` with `move_type="receipt"` for
+         inbound activities and `"issue"` for outbound, summing `Abs(quantity)` — **`consumption`,
+         `production` and `maintenance` are deliberately EXCLUDED** (they are manufacturing and MRO draws, not
+         warehouse in/out work, exactly as 4.7's `demand_series` excludes them); `pick_tasks` → `PickTaskLine`
+         summing `quantity_picked` over `pick_task__picked_at`; `goods_receipts` → `GoodsReceiptLine` summing
+         `quantity_received` over `goods_receipt__receipt_date` with `status="received"`; `demand_forecast` →
+         the linked forecast's `DemandForecastPeriod` rows; `manual` → zero volume, the planner types
+         `planned_headcount`;
+      4. one `bulk_create` of `LaborPlanLine`, after deleting this plan's previous generation (so regenerate is
+         idempotent), snapshotting each line's `standard` + `standard_minutes_snapshot`;
+      5. `required_headcount = required_minutes / 60 / hours_per_shift / (productivity_pct / 100)`, through
+         `q2()`;
+      6. stamp `generated_at`, set `status="planned"`, `write_audit_log`.
+- [ ] **`labor_board` detail** — reads the three **existing** 4.4 tables (`PickTask` in
+      `pending|released|picking`, `PutawayTask` in `OPEN_STATUSES`, `CycleCountTask` in
+      `scheduled|in_progress`), grouped by assignee / zone / kind, each row showing age (`now − created_at`)
+      and progress (`PickTask.line_count()`/`is_short()`, `CycleCountTask.variance_count(lines)`).
+      `labor_board_assign` / `_unassign` write **only the existing `assigned_to` column** —
+      **no new column, no new table.** They must: cap `len(ids)` at `MAX_BULK_ASSIGN` **before** touching the
+      DB; re-fetch every id with `tenant=request.tenant` and **silently skip + count** foreign or
+      non-open ids rather than 500; verify the target assignee is a `User` with `tenant=request.tenant`
+      (a field error, never a saved cross-tenant assignment); and `write_audit_log` per changed row.
+      The optional "assignee's currently-open session" panel joins via `LaborSession.login`, falls back to
+      `User.party → LaborSession.worker`, and **renders fine with neither**.
+- [ ] **`labor_payroll_export` detail** — aggregates **only `status="approved"` sessions** per worker per
+      period into work days / attended / direct / indirect / unaccounted / earned hours + performance % +
+      utilisation %. `?format=csv` streams a CSV (the 4.11 export precedent). **It performs no writes at all**,
+      and the page carries a standing note naming `hrm.AttendanceRecord`, `hrm.Timesheet` and
+      `accounting.PayrollRun` as the systems of record it deliberately does not touch — `PayrollRun` is a
+      whole-company period ACCRUAL with no employee lines and no hours columns
+      (`accounting/models/PayrollIntegration/PayrollRuns.py:6`), so "drafting" one from warehouse labor would
+      be wrong, not merely redundant.
+- [ ] **`labor_scorecard` detail** — the third page, and the reason it exists is stated on it: the
+      **Performance Tracking** bullet points at `laborstandard_list`, which is master data, so the productivity
+      figures the bullet names live one click away (the `pm_forecast` header-chip precedent). Per worker over a
+      `?date_from`/`?date_to` window: booked/direct/indirect hours, units, units per hour, performance vs
+      standard, accuracy %, utilisation %, and the sub-`COACHING_THRESHOLD_PCT` band as a **chip, not an alert
+      row**. Ranked rows require `MIN_RANKED_MINUTES`. **No new table.**
+- [ ] **List filters (mandatory on every list page — pass every choice list and queryset from the view, and
+      compare pk params with `|stringformat:"d"`, never `|slugify`):**
+  - `laborstandard_list` — `q` (name / number), `activity`, `basis`, `source`, `status`, `location` (int),
+    `item_category` (int), `effective` (`current` / `future` / `expired`, derived — not a column)
+  - `laborsession_list` — `q` (number / worker name / shift_label), `status`, `worker` (int),
+    `location` (int), `date_from`/`date_to` on `work_date` (the shared `_date_window` helper,
+    `views/_helpers.py:88`), `gap` (`has_gap` / `over_booked`, derived)
+  - `laboractivity_list` — `q` (number / reference), `activity_type`, `direction` (`direct` / `indirect`,
+    derived from the two frozensets), `indirect_reason`, `session` (int), `worker` (int, via
+    `session__worker`), `date_from`/`date_to` on `started_at`
+  - `laborplan_list` — `q` (name / number), `status`, `bucket`, `volume_source`, `method`, `location` (int),
+    `date_from`/`date_to` on `period_start`
+  - `labor_board` — `kind` (`pick`/`putaway`/`count`), `assignee` (int), `zone` (int), `unassigned` (bool),
+    `q`
+  - Every int-valued param goes through `as_db_int` / the `crud_list` `(param, lookup, is_int)` spec so
+    `?worker=abc`, `?worker=²` and `?worker=999999999999999999999` **skip the filter rather than 500** (L11).
+    Every `?days=` / `?threshold=` is **clamped**, not trusted.
+- [ ] **Query hygiene** — `select_related("worker", "location", "session", "session__worker", "standard",
+      "plan", "assigned_to", "zone")` on every list/detail; `prefetch_related("activities")` on
+      `laborsession_detail` and **pass the fetched list into every derived method** (`booked_minutes(acts)`,
+      `direct_minutes(acts)`, …) so one render is one scan, not eight; the scorecard and payroll export are
+      **grouped aggregates over `LaborActivity`/`LaborSession`**, never a per-worker Python loop calling
+      properties; `Exists()/OuterRef` rather than `Count()` where a template only asks "are there any?".
+
+- [ ] `apps/scm/urls/LaborManagement/__init__.py` (empty)
+- [ ] `apps/scm/urls/LaborManagement/LaborStandards.py` — prefix `labor-standards/`
+- [ ] `apps/scm/urls/LaborManagement/LaborSessions.py` — prefix `labor-sessions/`
+- [ ] `apps/scm/urls/LaborManagement/LaborActivities.py` — prefix `labor-activities/`
+- [ ] `apps/scm/urls/LaborManagement/LaborPlans.py` — prefixes `labor-plans/` + `labor-plan-lines/`
+- [ ] `apps/scm/urls/LaborManagement/Reports.py` — prefixes `labor-board/`, `labor-payroll-export/`,
+      `labor-scorecard/`
+- [ ] **COLLISION CHECK, to be written into `urls/__init__.py` as a comment and re-verified against the WHOLE
+      concatenated urlconf (not just the 4.14 block):** seven new first segments, all free — **nothing anywhere
+      in `scm` starts with `labor`** (verified). Django matches **whole path components** and never splits one
+      at a hyphen, so `labor-standards` / `labor-sessions` / `labor-activities` / `labor-plans` /
+      `labor-plan-lines` / `labor-board` / `labor-payroll-export` / `labor-scorecard` are eight unrelated
+      components and none can shadow another — and none may ever be "tidied" to look like another. Near
+      neighbours that are NOT collisions: 4.6's `loads/`, 4.3's `locations/` and `lot-serials/`.
+      **4.14 introduces NO greedy `<str:…>` converter** — 4.10's `return-tracking/<str:token>/` remains the
+      app's only one. Within every module, literal routes (`add/`, `export/`, `assign/`) precede every
+      `<int:pk>/` route, or the create page is swallowed and 404s as "labor standard 'add' not found".
+      **4.14 adds no route under `pick-tasks/`, `putaway-tasks/` or `cycle-counts/`** — the board's bulk verbs
+      live on `labor-board/assign/` and `labor-board/unassign/`, so 4.4's urlconf is untouched.
+- [ ] `laborplanline_edit` hangs off its **own** pk (`labor-plan-lines/<int:pk>/edit/`), not nested under the
+      plan — a child pk already identifies it, and nesting invites a caller to pair a real child with somebody
+      else's parent id (the `compliance-checks/` rationale).
+
+### Re-export blocks — **forgetting one is an ImportError at runtime, not at import time**
+
+- [ ] `apps/scm/models/__init__.py` — append a `# --- 4.14 Labor Management ---` block after the 4.13 block:
+      **`from .LaborManagement._choices import (…names spelled out…)` FIRST** (it imports no sibling, so the
+      edge runs one way and no cycle is possible — and the named import is what stops `MAX_STANDARD_RATE`'s
+      neighbours shadowing 4.13's `MAX_LABOUR_RATE`), then `LaborStandards` (`LaborStandard`,
+      **`select_standard`** — export the function too, like `select_policy` at `:191`), `LaborSessions`
+      (`LaborSession`), `LaborActivities` (`LaborActivity`), `LaborPlans` (`LaborPlan`, `LaborPlanLine`).
+- [ ] `apps/scm/forms/__init__.py` — the five form classes
+- [ ] `apps/scm/views/__init__.py` — **every** view name, including all nine verbs, the two board verbs and
+      the three report views (they are referenced as `views.<name>` from the urlconf; a missing name is an
+      `AttributeError` at startup)
+- [ ] `apps/scm/urls/__init__.py` — the six `from .LaborManagement.<X> import urlpatterns as _lm_<x>` lines,
+      the six `*_lm_<x>,` entries at the END of `urlpatterns`, and the collision-check comment block above them
+- [ ] `apps/scm/admin.py` — register `LaborStandard`, `LaborSession` (with a `LaborActivity` inline),
+      `LaborActivity`, `LaborPlan` (with a `LaborPlanLine` inline). Mark every `editable=False` column
+      `readonly_fields` so the admin cannot forge a snapshot either.
+- [ ] `python manage.py makemigrations scm` → expect **`0024_…`**. **Read the generated file before applying**:
+      it must be `CreateModel` × 5 + `AddIndex` × 13 and **NOTHING ELSE** — **zero `AddField`, zero
+      `AlterField`, zero `RemoveField`, zero `DeleteModel`, zero `RunPython`.** 4.14 is purely additive and
+      touches no shipped model; in particular **no `AddField` on `picktask` / `putawaytask` / `cyclecounttask`**
+      (decision A) and no change to `stockmove`.
+
+- [ ] **Extend `apps/scm/management/commands/seed_scm.py`** — a new `_seed_labor_tenant(tenant)` called from
+      `handle()` **after `_seed_asset_tenant(tenant)`** (line ~135), with the same comment style explaining the
+      dependency: it books minutes against 4.4's existing pick/putaway/count tasks, plans from 4.3's
+      `StockMove` ledger, and names workers from the spine's `employee` parties — so all of those must exist
+      first. **Unlike 4.13 it writes NO `StockMove` and NO `JournalEntry`; its only cross-sub-module write is
+      setting `assigned_to` on a couple of existing 4.4 tasks.**
+  - **Prerequisite guard:** if the tenant has no `Location` (4.3), no 4.4 task, or no `employee` Party, it must
+    **warn and RETURN rather than half-seed** (the 4.10–4.13 posture).
+  - **Idempotent:** `if LaborStandard.objects.filter(tenant=tenant).exists(): print + return`. Auto-numbered
+    rows use the "check existence before creating" pattern. The `assigned_to` back-fill is guarded so a second
+    run is a no-op.
+  - **Reuses existing seeded rows only** — `self._employee(tenant, name=…)` (`seed_scm.py:2002`; `seed_core`
+    creates Olivia Martin, Liam Johnson, Emma Williams, Sophia Miller) for the workers, `self._admin(tenant)`
+    for `recorded_by`, existing `Location` rows for the warehouse/zone, existing `PickTask` /
+    `CycleCountTask` rows for the activity task links. **It creates no Party** (an associate invented by a
+    seeder is a person nobody hired).
+  - **Demo data:** 5 `active` `LaborStandard`s (`receive` / `putaway` / `pick` / `pack` / `cycle_count`) — one
+    scoped to a `Location`, one to an `ItemCategory`, three network-wide — **plus one `draft`**, so
+    `select_standard()` demonstrably skips drafts and the activate verb has something to act on.
+    3 `LaborSession`s: one **approved** and fully booked (the payroll export needs a row), one **closed** with
+    a deliberate ~45-minute **gap** (so `unaccounted_minutes` is exercised rather than a flat zero), one
+    **open** with `clock_out=None` (so every "None while open" guard is exercised). 8–10 `LaborActivity` rows
+    across them — direct rows with real quantities and **two carrying `error_quantity`** so accuracy % is not a
+    flat 100 %, at least one linked to a real `PickTask` and one to a real `CycleCountTask`, and 3 indirect
+    rows (`break`, `meeting`, `equipment_wait`) with reasons. 1 `LaborPlan` over a 14-day daily horizon from
+    `stock_moves`, generated to `status="planned"`, with **one line deliberately SHORT and one OVER** on
+    `planned_headcount` so both variance chips render. Finally, assign **two** existing 4.4 tasks to a user and
+    leave others unassigned, so the board's grouped-by-assignee **and** unassigned buckets both render.
+  - Update the final `SUCCESS` string (`seed_scm.py:137-141`) to mention 4.14.
+  - **`_flush()`** — add a 4.14 block **FIRST** (newest sub-module, the existing convention): delete
+    `LaborActivity`, `LaborSession`, `LaborPlan` (lines cascade), `LaborStandard`, and **clear the
+    `assigned_to` it set** on the two 4.4 tasks. There is **no `StockMove` to unwind** — say so in the comment,
+    so the next reader does not go looking.
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py` — **one new `LIVE_LINKS["4.14"]` entry**, appended after the `"4.13"` block
+      (which closes at `:984`; the dict closes at `:985`). The five keys are the **exact `**Feature**` bullet
+      text from `NavERP.md:825-829`**, verbatim:
+
+      "4.14": {
+          "Labor Planning":      "scm:laborplan_list",
+          "Time & Attendance":   "scm:laborsession_list",
+          "Task Assignment":     "scm:labor_board",
+          "Performance Tracking": "scm:laborstandard_list",
+          "Payroll Integration": "scm:labor_payroll_export",
+      },
+
+      Plus the block comment recording the decisions, in the house style: **HRM owns daily attendance and
+      `apps/scm` keeps zero `hrm.*` references** — Time & Attendance here is the warehouse-shift execution
+      layer, and Payroll Integration is a **read-only CSV hand-off**, not a write into `hrm.*` or
+      `accounting.*`; **Task Assignment is a COMPUTED console over 4.4's EXISTING `assigned_to` columns — 4.14
+      declares no task table and adds no assignee column** (the 4.13 "Spare Parts Inventory is computed over
+      4.3" and 4.4 "Bin/Location Management → 4.3's `scm:location_list`" precedents); **Performance Tracking
+      points at the standards library** because the engineered standard is what makes productivity measurable
+      at all, with `scm:labor_scorecard` reached from its header chip (the `pm_forecast` precedent);
+      `LaborActivity` and `LaborPlanLine` take **no sidebar key** (the `WorkCenter` / `ReorderRule` /
+      `InspectionPlan` / `ReturnReason` / `KpiTarget` precedent); every bullet points at a **staff-facing**
+      management page (L32).
+- [ ] **No `config/settings.py` change and no `config/urls.py` change** — `apps.scm` is already installed and
+      already included. Touching either on an extend run is the error this line exists to prevent.
+
+---
+
+## Templates (`templates/scm/labor/`)
+
+Two levels — sub-module folder then entity folder — with **bare page filenames**. Never a flat
+`<entity>_<page>.html`. All extend `base.html` and `{% include %}` the shared partials at the templates root.
+(See the naming NOTE at the top of this section before creating the first folder.)
+
+- [ ] `templates/scm/labor/laborstandard/list.html`
+- [ ] `templates/scm/labor/laborstandard/detail.html` — **the formula spelled out**:
+      `(setup + travel + qty × minutes_per_unit) × (1 + allowance%)`, worked through for a sample quantity;
+      the scope (location / item category / network-wide) and the effective window in words; the provenance
+      (`source`) explained; a "standards this one would lose to / beat" note describing `select_standard()`'s
+      most-specific-wins rule; the Activate / Archive POST buttons; the Actions sidebar
+- [ ] `templates/scm/labor/laborstandard/form.html`
+- [ ] `templates/scm/labor/laborsession/list.html`
+- [ ] `templates/scm/labor/laborsession/detail.html` — the minutes waterfall
+      (**attended → direct + indirect → unaccounted**) with each figure's arithmetic shown and **"—" wherever
+      the denominator is zero or the session is still open**; the activity table with add/edit/delete (only
+      while `open`); the status ladder (clock-out → close → approve, reopen/cancel for a tenant admin) as
+      POST+confirm forms rendering **only the legal next moves**; a provenance card stating that `source`,
+      `recorded_by` and `login` are stamped by whichever verb filed the record and are **not typeable**, and
+      what a blank `login` means; the Actions sidebar
+- [ ] `templates/scm/labor/laborsession/form.html`
+- [ ] `templates/scm/labor/laboractivity/list.html`
+- [ ] `templates/scm/labor/laboractivity/detail.html` — earned vs actual minutes with the
+      snapshotted determinants shown beside the live standard, and **a sentence saying the snapshot is why
+      editing the standard later cannot change this row**
+- [ ] `templates/scm/labor/laboractivity/form.html`
+- [ ] `templates/scm/labor/laborplan/list.html`
+- [ ] `templates/scm/labor/laborplan/detail.html` — the bucket × activity grid with
+      forecast volume → standard minutes → required minutes → required headcount **beside** the planner's
+      `planned_headcount`, the variance/coverage chip per row, the **Generate** POST button with the horizon
+      and line-count bound stated in the UI *before* it is pressed, and the Approve / Archive verbs
+- [ ] `templates/scm/labor/laborplan/form.html`
+- [ ] `templates/scm/labor/laborplanline/form.html` — `planned_headcount` + `notes` only, with the
+      derived figures shown read-only beside them
+- [ ] `templates/scm/labor/labor_board.html` — **standalone report at the sub-module root** (rule 6):
+      open pick / putaway / count work grouped by assignee, zone and kind, each row with age and progress; the
+      bulk assign / unassign forms (checkbox list + assignee select + `{% csrf_token %}`), stating the
+      `MAX_BULK_ASSIGN` cap; an "unassigned" bucket; and a note that this page writes **4.4's** `assigned_to`
+      column and that 4.14 owns no task table
+- [ ] `templates/scm/labor/labor_payroll_export.html` — the per-worker per-period hours table with
+      the CSV download link, the "approved sessions only" statement, and the standing note naming
+      `hrm.AttendanceRecord` / `hrm.Timesheet` / `accounting.PayrollRun` as the systems of record this page
+      **reads nothing from and writes nothing to**
+- [ ] `templates/scm/labor/labor_scorecard.html` — per-worker report card + the coaching band chip,
+      with `MIN_RANKED_MINUTES` stated so a short-session outlier's absence reads as a decision
+- [ ] **Every list template:** filter bar reflecting `request.GET` (string params
+      `{% if request.GET.x == v %}`, pk params `{% if request.GET.x == o.pk|stringformat:"d" %}`), an
+      **Actions column** with View (eye) / Edit (pencil) / Delete (bin, POST form +
+      `onclick="return confirm(...)"` + `{% csrf_token %}`) — Edit/Delete wrapped in
+      `{% if obj.is_editable %}` where status-dependent — pagination guarded with
+      `{% if page_obj.has_previous %}` / `{% if page_obj.has_next %}` (**L9**), and an empty-state row.
+      Badges use **only** `badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate`,
+      driven by the `_choices.py` `*_CSS` dicts, always with an `{% else %}` fallback to
+      `{{ obj.get_<field>_display }}`.
+- [ ] **Every detail template:** an Actions sidebar with Edit, Delete (POST+confirm+csrf) and Back to List.
+- [ ] **Every derived figure renders "—" when it is `None`** — never `0`, never `0.00`, never blank.
+
+---
+
+## Verify
+
+- [ ] `python manage.py makemigrations scm` — read `0024_…` before applying; confirm the exact operation list
+      above (5 × `CreateModel` + 13 × `AddIndex`, nothing else)
+- [ ] `python manage.py migrate` against `nav_erp`
+- [ ] `python manage.py seed_scm` **twice** — the second run is a no-op: no duplicate `LaborStandard`, no
+      second `LaborSession`, no re-assignment of the 4.4 tasks
+- [ ] `python manage.py check` — clean (in particular: no `fields.E304/E305` reverse-accessor clash from the
+      new `related_name`s, no `models.E006` field clash, no index-name collision)
+- [ ] **The constraint greps, as an explicit gate (and as a test):**
+  - `grep -rn '"hrm\.' apps/scm` → **no matches** · `grep -rn 'from apps.hrm' apps/scm` → **no matches**
+  - `grep -rn 'StockMove\|JournalEntry' apps/scm/views/LaborManagement apps/scm/models/LaborManagement` →
+    reads only (the plan generator's history query); **no write, no create**
+  - `hrm.AttendanceRecord.objects.count()` is unchanged after `seed_scm` and after every 4.14 verb
+- [ ] `temp/` smoke sweep, logged in as **`admin_acme` / `password`**:
+  - every new `scm:*` url returns **200** (GET pages) or **302** (verb POSTs) — `laborstandard_*` incl.
+    `_activate`/`_archive`, `laborsession_*` incl. `_clock_in`/`_clock_out`/`_close`/`_approve`/`_reopen`/
+    `_cancel`, `laboractivity_*` + `laborsession_add_activity`, `laborplan_*` incl. `_generate`/`_approve`/
+    `_archive`, `laborplanline_edit`, `labor_board` + `_assign`/`_unassign`, `labor_payroll_export`
+    (both HTML and `?format=csv`), `labor_scorecard`
+  - content assertions: page titles present, a seeded `LST-`/`LSN-`/`LAB-`/`LPL-` number visible on its list
+    page, **no `{#` or `{% comment` leaks**, no `badge-success`/`badge-warning`/`badge-danger` anywhere in the
+    new templates
+  - **cross-tenant IDOR → 404** on every detail / edit / delete / verb route, children included
+    (`LaborPlanLine` via `plan__tenant`, `LaborActivity` via `session__tenant`)
+  - **GET to every POST-only verb → 405**
+  - a plain (non-admin) member → **403** on all five deletes and on `laborsession_approve` / `_reopen` /
+    `_cancel`, `laborstandard_activate` / `_archive`, `laborplan_generate` / `_approve`,
+    `labor_board_assign` / `_unassign`
+  - junk filter values (`?worker=abc`, `?worker=²`, `?worker=99999999999999999999`, `?date_from=lastweek`,
+    `?threshold=-1`) leave the filter OFF and return **200, never 500** (L11)
+  - all three report pages render **200 on an empty tenant** without a 500 and report coverage rather than a
+    confident zero
+- [ ] **Provenance (the 4.13 `MeterReading` fix, re-proved here):** a POST to `laborsession_create` carrying
+      `source=biometric&status=approved&recorded_by=<pk>&login=<pk>` must set **none** of them — they are not
+      in `cleaned_data`; the saved row comes out `source` from the verb, `status="open"`,
+      `recorded_by=request.user`, `login=None` (or `request.user` on the self-service path only). Same for
+      `laboractivity_create` carrying `standard=<pk>&standard_minutes_snapshot=1&duration_minutes=1`.
+- [ ] **Snapshot immutability (the headline correctness test):** file a `LaborActivity`, record its
+      `standard_minutes_snapshot` and `performance_pct()`, then edit the `LaborStandard`'s `minutes_per_unit`
+      and `allowance_pct` — **both figures are unchanged**, and the payroll export's earned hours are unchanged.
+- [ ] **Bounds (L40):**
+  - a `LaborPlan` POST spanning `1900-01-01 → 9999-12-31` with `bucket="day"` is **refused with a message**,
+    and `LaborPlanLine.objects.count()` is unchanged — assert the refusal costs no allocation (the span is
+    measured by arithmetic, not by building the range)
+  - a `laborplan_generate` whose `periods × standards` exceeds `MAX_PLAN_LINES` is refused, naming both numbers
+  - a `LaborSession` with a 40-year interval is refused by `clean()`, not by a column overflow
+  - a `labor_board_assign` POST carrying 5000 ids is refused **before** any UPDATE
+- [ ] **Derived-figure guards:** every ratio returns `None` (rendering "—") on a zero denominator — an open
+      session's `attended_minutes`, a session with zero direct minutes, an activity with no standard, a plan
+      line with `required_headcount == 0`, a worker with zero units.
+- [ ] **Regression checks specific to the decisions:**
+  - `scm:productiontimelog_list` (4.8) still resolves, is untouched, and is a **distinct page** from
+    `scm:laboractivity_list`
+  - `scm:picktask_list` / `scm:putawaytask_list` / `scm:cyclecounttask_list` still resolve; the three tables
+    gained **no new column** (assert against the migration and with a field-name test)
+  - `COGS_MOVE_TYPES` and every 4.7/4.11 aggregate are unchanged — 4.14 posts no `StockMove` at all
+- [ ] Sidebar shows **4.14 Labor Management** as Live with all **five** bullets linked (parse
+      `NavERP.md:824-829` through `parse_catalog()` — the bullet text must match `LIVE_LINKS` exactly or the
+      link silently does not render)
+
+---
+
+## Close-out
+
+- [ ] `code-reviewer` → apply → commit (one file per commit)
+- [ ] `explorer` → apply → commit
+- [ ] `frontend-reviewer` → apply → commit
+- [ ] `performance-reviewer` → apply → commit
+- [ ] `qa-smoke-tester` → apply → commit
+- [ ] `security-reviewer` → apply → commit
+- [ ] `test-writer` → apply → commit. Minimum coverage: **model** tests (auto-number for all four prefixes;
+      `duration_minutes` derivation incl. the `update_fields` ride-along; the direct/indirect paired
+      validation both ways; the task-FK ↔ activity-type pairing; the interval-inside-the-session rule; the
+      second-open-session and overlapping-session refusals; `work_date` ↔ `clock_in` alignment;
+      `select_standard()` most-specific-wins **and its `None` return**; the overlapping-effective-range
+      refusal; snapshot immutability; every ratio returning `None` on a zero denominator; all four bounds);
+      **form** tests (whitelist coverage, tenant stamping, FK querysets scoped, a crafted cross-tenant FK
+      rejected by `clean()`, a crafted `status=`/`source=`/`login=`/`*_snapshot=` absent from `cleaned_data`,
+      the `datetime-local` round-trip on edit); **view** tests (every list with and without each filter incl.
+      junk values, the full CRUD round trip, the whole session verb ladder, `laborplan_generate` producing a
+      correct grid from each `volume_source` and refusing over the bound, the board verbs writing **only**
+      `assigned_to` and skipping foreign ids, the CSV export's columns and its approved-only rule, 405 on GET
+      to every verb); **security** tests (cross-tenant 404 on every detail/edit/verb, 403 for a plain member on
+      every tenant-admin route); and **one architectural test asserting `apps/scm` contains zero `hrm.*`
+      references and that 4.14 creates no `StockMove` and no `JournalEntry`.**
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — it **exists**, so this is an update. Add 4.14's five models,
+      the `scm:*` url names (all nine verbs, the two board verbs, the three report pages), the
+      `templates/scm/labor/` tree, the `_seed_labor_tenant` rows, the `LIVE_LINKS["4.14"]` block,
+      and — importantly — a **"worker identity" gotcha section** (`assigned_to` = a login = *who was given the
+      work*; `LaborSession.worker` = a `core.Party` = *whose minutes these are*; `login` is the optional
+      bridge) plus the **"SCM never touches `hrm.*`"** rule, so the next session cannot re-conflate them.
+- [ ] `README.md` — add 4.14 to the SCM feature list and move 4.14 out of the "remaining 4.14–4.19" sentence.
+- [ ] **One file per commit, PowerShell-safe (`;` not `&&`). Never `git push`.**
+
+---
+
+## Later passes / deferred
+
+Carried over from `research-scm-4.14.md` so nothing is lost, plus what this plan itself cut.
+
+**Cut by this plan (a decision, not an omission):**
+- **`LaborProfile` warehouse-worker master** (home warehouse, badge ID, default shift, user link) — decision B
+  above. The `SupplierProfile` OneToOne-on-`core.Party` shape (`SupplierProfiles.py:12`) is the template when a
+  bullet finally needs one.
+- **A second assignee column on 4.4's task tables** — decision A. `assigned_to` (a login) and
+  `LaborSession.worker` (a Party) are different facts and both stay.
+- **`LaborSession.exported_at`** — `approved` IS the export lock; a column stamped from the CSV page would make
+  a GET perform a write.
+- **Per-activity stored labour cost** — cost-per-unit stays a **report** figure computed from
+  `LaborStandard.labour_rate` and labelled as a charge-out rate. SCM does not own compensation.
+- **`scm:labor_gap_report`** (the missing/gap-time exception queue) and **`scm:labor_leaderboard`** — both are
+  template-only follow-ups now: `unaccounted_minutes()`, `over_booked_minutes()` and `performance_pct()` are
+  built by this pass, and `MIN_RANKED_MINUTES` / `COACHING_THRESHOLD_PCT` are already declared. The gap
+  condition is surfaced as a `laborsession_list` filter (`?gap=has_gap` / `over_booked`) in the meantime.
+
+**Deferred from the research (later passes / integrations):**
+- **Incentive / pay-for-performance engine** (Manhattan, Blue Yonder, TZA multi-plan, Infios, Easy Metrics) —
+  it computes money per person and needs a pay rate SCM does not own. This pass exports performance %; payroll
+  decides what it is worth. Ownership to be settled with HRM.
+- **Persisted gamification** (points, badges, awards, team competitions, peer messaging) — the derived
+  leaderboard is free; an award table is a later pass.
+- **ML / AI-derived self-recalibrating standards** (Lucas, Easy Metrics, CognitOps) —
+  `STANDARD_SOURCE_CHOICES` reserves `learned` so a trained standard has somewhere to land; the pipeline is
+  later, and a NavERP page never says "AI".
+- **Distance / XYZ travel-driven standards** (TZA, Blue Yonder) — `scm.Location` has `pick_sequence` but no
+  coordinates; a coordinate model is a 4.3/4.4 change, not a 4.14 one.
+- **Intraday dynamic rebalancing and cutoff-risk alerting** (CognitOps, Lucas, Blue Yonder) — needs an
+  optimiser and 4.11's alert table.
+- **Standard-setting observation studies** (industrial-engineering time studies) — `source="observed"` + notes
+  carries the provenance for now; a study table with observed readings is later.
+- **Skills / certification-based assignment and planning** (Blue Yonder, Made4net) — HRM owns
+  `hrm.EmployeeSkill`; a cross-app read is a reporting question, not a FK.
+- **Mobile associate self-service app, badge / biometric clocks, voice terminals** — hardware and integration;
+  `SESSION_SOURCE_CHOICES` (`badge`/`mobile`/`biometric`) is the seam and nothing writes those values yet.
+- **Two-way reconciliation with `hrm.AttendanceRecord`** — buildable later on the `work_date` grain chosen
+  here (session hours vs HR attendance hours for the same person-day). **An automatic write into HRM is not on
+  the table.**
+- **Fix `ProductionTimeLogForm`'s `datetime-local` widgets** (`forms/Manufacturing/ProductionTimeLogs.py:25-28`
+  sets `type` but not `format`/`input_formats`, so the bound value renders empty on edit) — a real 4.8 bug
+  found while planning 4.14; a one-file follow-up, not a 4.14 change.
+
+**Parked for a named sibling sub-module (not this one):**
+- **Task interleaving, wave/batch release strategy, pick-path optimisation, voice/RF picking UX, real-time
+  task prioritisation** → **4.4** (owns `PickTask.strategy`, `wave_ref`, `zone`, `Location.pick_sequence`).
+  4.14 records the sequence of activities; it does not optimise it.
+- **Slotting / bin capacity / ABC placement** → **4.4 / 4.3**.
+- **The demand/volume forecast itself (statistical models, seasonality)** → **4.7**. `LaborPlan` *consumes*
+  `scm.DemandForecast` / `scm.SeasonalityProfile`; it must not re-derive them.
+- **Labor KPI tiles, thresholds and alerts on the analytics dashboards** → **4.11**, which owns `KpiTarget` /
+  `KpiSnapshot` / `SupplyChainAlert` and a deliberately **closed** metric registry currently containing no
+  labor metrics. Adding one is 4.11's decision.
+- **Forklift / equipment maintenance, downtime, meter-driven service** → **4.13** (`Asset`,
+  `MaintenanceWorkOrder`, `MeterReading`). A nullable `equipment → scm.Asset` on `LaborActivity` would be one
+  field, but no bullet requires it.
+- **Production operator time at a work centre** → **4.8** (`ProductionTimeLog` already does this for
+  manufacturing). 4.14 covers warehouse activities and must not absorb it.
+- **3PL labor billing / cost-to-serve per client** → **4.17**.
+- **Daily attendance records, geofenced/biometric punches, shift masters and rosters, attendance
+  regularisation, overtime approval, project timesheets, employee skills, pay rates and salary structures** →
+  **HRM 3.9 / 3.11 / 3.x** (`AttendanceRecord`, `Shift`, `ShiftAssignment`, `AttendanceRegularization`,
+  `GeoFence`, `Timesheet`, `TimesheetEntry`, `OvertimeRequest`, `EmployeeSkill`, `SalaryStructureTemplate`).
+- **Payroll calculation, payslips, the payroll journal entry** → **HRM 3.14 + `accounting.PayrollRun`**
+  (L29 — accounting owns the ledger). 4.14 exports and stops.
+
+---
+
+## Review notes
+
+(filled in at the end)
