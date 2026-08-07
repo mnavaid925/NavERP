@@ -16031,3 +16031,2324 @@ class TestComplianceVerbEdgeBranches:
         # Widened, not narrowed: every future-dated row inside the WIDEST window is offered.
         assert resp.context["due_soon_count"] >= _MAX_NOTICE_WINDOWS
         assert len(resp.context["object_list"]) > 0
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.13 date basis for the view tests. timezone.localdate(), NEVER datetime.date.today(): the
+# complete verb stamps ``timezone.localdate()``, ``advance()`` anchors on it and the forecast
+# horizon is built from it, so an exact-date assertion on the other basis flakes for the hours after
+# local midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _asset_view_day(days=0):
+    """Today (or days from it) on the basis the 4.13 views stamp and window against."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+# =================================================================================================
+# SCM 4.13 Asset Management — views.
+#
+# One plant register, one PM programme, one job ladder, one append-only meter log and three computed
+# reports. The classes marked REGRESSION LOCK each pin a defect the review pass found and fixed;
+# every one of them fails against the pre-fix behaviour, which is the whole point of writing them.
+#
+# The two module-level message helpers this file already carries are REUSED, never redefined:
+# ``_messages(resp)`` returns a LIST of strings, ``_message_blob(response)`` returns ONE joined
+# lowercase string, and ``_returns_query_count(client, url, params)`` is the shared query counter.
+# A duplicate definition of any of them silently rebinds it for every caller above — the exact
+# failure ``test_suite_hygiene.py`` exists to catch.
+# =================================================================================================
+_ASSET_LIST_PAGES = ("scm:asset_list", "scm:maintenanceplan_list",
+                     "scm:maintenanceworkorder_list", "scm:meterreading_list")
+
+#: Every 4.13 GET page: four registers, three create screens and three computed reports.
+_ASSET_GET_PAGES = _ASSET_LIST_PAGES + (
+    "scm:asset_create", "scm:maintenanceplan_create", "scm:maintenanceworkorder_create",
+    "scm:meterreading_create", "scm:pm_forecast", "scm:sparepart_list",
+    "scm:asset_depreciation_report",
+)
+
+#: The SIXTEEN POST-only routes. ``status`` is ``editable=False`` and these are the only things that
+#: can move it, which is exactly why none of them may be reachable by following a link.
+_ASSET_VERB_ROUTES = (
+    "scm:asset_delete", "scm:assetsparepart_delete",
+    "scm:maintenanceplan_delete", "scm:maintenanceplan_generate",
+    "scm:maintenanceworkorder_delete", "scm:maintenanceworkorder_approve",
+    "scm:maintenanceworkorder_schedule", "scm:maintenanceworkorder_start",
+    "scm:maintenanceworkorder_hold", "scm:maintenanceworkorder_resume",
+    "scm:maintenanceworkorder_complete", "scm:maintenanceworkorder_close",
+    "scm:maintenanceworkorder_cancel", "scm:maintenanceworkorder_issue_parts",
+    "scm:maintenanceworkorder_record_reading", "scm:maintenanceworkordertask_toggle",
+)
+
+#: The junk pk values every int-valued filter must SKIP rather than raise on (L11). ``abc`` fails
+#: ``isdecimal()``, the superscript passes ``isdigit()`` but not ``int()``, and the 20-digit value
+#: converts cleanly and then overflows inside the driver.
+_ASSET_JUNK_PKS = ("abc", "²", "99999999999999999999", "-1", "")
+
+
+
+def _asset_hours_back(hours):
+    """An aware datetime hours in the past — the basis a downtime window is measured on."""
+    from django.utils import timezone
+    return timezone.now() - datetime.timedelta(hours=hours)
+
+def _asset_view_post(**overrides):
+    """A complete, VALID ``AssetForm`` POST body for the create/edit screens."""
+    data = {
+        "code": "PUMP-9", "name": "Coolant pump", "asset_type": "machine", "status": "in_service",
+        "criticality": "medium", "category": "", "manufacturer": "", "model_number": "",
+        "serial_number": "", "tag_code": "", "specifications": "",
+        "parent": "", "location": "", "org_unit": "", "work_center": "",
+        "custodian": "", "supplier": "", "service_vendor": "",
+        "purchase_date": "", "commissioned_on": "", "warranty_expires_on": "",
+        "purchase_cost": "0.00", "fixed_asset": "", "meter_name": "", "meter_unit": "",
+        "is_active": "on", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _plan_view_post(rows=(), initial=0, **overrides):
+    """A complete ``MaintenancePlanForm`` body WITH its job-plan formset.
+
+    ``MaintenancePlanTask.plan`` declares ``related_name="tasks"`` and
+    ``BaseInlineFormSet.get_default_prefix()`` returns that related name, so the prefix is ``tasks``.
+    """
+    data = {
+        "name": "Monthly greasing", "asset": "", "instructions": "", "is_active": "on",
+        "trigger_type": "calendar", "schedule_basis": "floating", "interval_days": "30",
+        "lead_time_days": "7", "meter_interval": "", "next_due_on": _asset_view_day(15).isoformat(),
+        "next_due_reading": "", "condition_operator": "", "condition_threshold": "",
+        "priority": "medium", "work_type": "preventive", "estimated_hours": "1.00",
+        "assigned_to": "", "parts_location": "",
+    }
+    data.update(overrides)
+    data.update(formset_data("tasks", list(rows), initial=initial))
+    return data
+
+
+def _job_view_post(rows=(), initial=0, **overrides):
+    """A complete ``MaintenanceWorkOrderForm`` body WITH its parts formset (prefix ``parts``)."""
+    data = {
+        "title": "Bearing replacement", "work_type": "corrective", "priority": "medium",
+        "source": "request", "asset": "", "plan": "", "reported_by": "", "assigned_to": "",
+        "service_vendor": "", "parts_location": "", "non_conformance": "",
+        "reported_at": _asset_view_day(0).isoformat(), "scheduled_start": "",
+        "downtime_start": "", "downtime_end": "", "is_unplanned_downtime": "",
+        "problem_code": "", "cause_code": "", "remedy_code": "",
+        "labour_hours": "0.00", "labour_rate": "0.0000", "external_cost": "0.00",
+        "meter_reading_at_work": "", "description": "", "resolution_notes": "",
+    }
+    data.update(overrides)
+    data.update(formset_data("parts", list(rows), initial=initial))
+    return data
+
+
+def _part_row(item, **overrides):
+    row = {"id": "", "item": str(item.pk), "lot_serial": "", "quantity": "2"}
+    row.update(overrides)
+    return row
+
+
+def _reading_view_post(**overrides):
+    """A complete ``MeterReadingForm`` body for ``meterreading_create``."""
+    from django.utils import timezone
+    data = {"asset": "", "meter_name": "Running Hours", "unit": "h", "reading": "1300",
+            "read_at": timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M:%S"),
+            "notes": ""}
+    data.update(overrides)
+    return data
+
+
+def _walk_job_to(client, job, target):
+    """Drive a work order UP THE REAL LADDER with the shipped verbs — never by writing ``status``.
+
+    The column is ``editable=False`` and the ten verbs are the only things that move it, so a test
+    that assigned it directly would assert a state no button in the product can produce.
+    """
+    from django.urls import reverse as _reverse
+    ladder = {"approved": ["approve"], "scheduled": ["approve", "schedule"],
+              "in_progress": ["approve", "start"],
+              "completed": ["approve", "start", "complete"],
+              "closed": ["approve", "start", "complete", "close"]}
+    for verb in ladder[target]:
+        data = {}
+        if verb == "schedule":
+            data = {"scheduled_start": _asset_view_day(1).isoformat()}
+        resp = client.post(_reverse(f"scm:maintenanceworkorder_{verb}", args=[job.pk]), data,
+                           follow=True)
+        assert resp.status_code == 200, verb
+    job.refresh_from_db()
+    assert job.status == target, f"{job.number} stalled at {job.status}"
+    return job
+
+
+def _confirm_bodies(content):
+    """Every ``onsubmit="return confirm('...')"`` handler on a page, as its JS string LITERAL body.
+
+    HTML-decoded first (Django escapes ``'`` to ``&#x27;`` inside an attribute), then matched
+    against the exact handler shape. A handler that is not a well-formed
+    ``return confirm('...');`` is itself the failure — a broken one throws, returns ``undefined``,
+    and the form submits with NO confirmation at all.
+    """
+    import html as _htmllib
+    import re as _re
+    bodies = []
+    for raw in _re.findall(r'onsubmit="([^"]*)"', content):
+        decoded = _htmllib.unescape(raw)
+        match = _re.match(r"^return confirm\('(.*)'\);?\s*$", decoded, _re.DOTALL)
+        assert match is not None, f"not a well-formed confirm() handler: {decoded!r}"
+        bodies.append(match.group(1))
+    return bodies
+
+
+def _unescaped_quote_at(body):
+    """The index of the first UNESCAPED ``'`` inside a single-quoted JS literal body, or ``None``.
+
+    ``\\'`` is fine and is how the templates carry an apostrophe; a bare ``'`` closes the string
+    early and makes the rest of the handler a syntax error.
+    """
+    index, backslashes = 0, 0
+    for index, char in enumerate(body):
+        if char == "\\":
+            backslashes += 1
+            continue
+        if char == "'" and backslashes % 2 == 0:
+            return index
+        backslashes = 0
+    return None
+
+
+# ================================================================ 4.13 · every page renders
+class TestAssetManagementPagesRender:
+    def test_every_page_renders_200_for_a_tenant_admin(self, client_a, asset_a,
+                                                       asset_spare_part_a, maintenance_plan_a,
+                                                       maintenance_order_a, meter_reading_a,
+                                                       fixed_asset_a):
+        for url_name in _ASSET_GET_PAGES:
+            assert client_a.get(reverse(url_name)).status_code == 200, url_name
+
+    def test_every_page_renders_for_a_workspace_that_owns_nothing(self, client_b):
+        """The very first page load: no assets, no plans, no jobs, no readings, no spares. Every
+        one of these has been a 500 in an earlier sub-module."""
+        for url_name in _ASSET_GET_PAGES:
+            assert client_b.get(reverse(url_name)).status_code == 200, url_name
+
+    @pytest.mark.parametrize("url_name,template", [
+        ("scm:asset_list", "scm/assets/asset/list.html"),
+        ("scm:maintenanceplan_list", "scm/assets/maintenanceplan/list.html"),
+        ("scm:maintenanceworkorder_list", "scm/assets/maintenanceworkorder/list.html"),
+        ("scm:meterreading_list", "scm/assets/meterreading/list.html"),
+        ("scm:pm_forecast", "scm/assets/pm_forecast.html"),
+        ("scm:sparepart_list", "scm/assets/spare_parts.html"),
+        ("scm:asset_depreciation_report", "scm/assets/asset_depreciation.html"),
+    ])
+    def test_each_page_renders_the_template_its_docstring_names(self, client_a, url_name,
+                                                                template):
+        resp = client_a.get(reverse(url_name))
+        assert template in [t.name for t in resp.templates]
+
+    def test_every_detail_page_renders_its_object(self, client_a, asset_a, maintenance_plan_a,
+                                                  maintenance_order_a, meter_reading_a):
+        for url_name, obj in (("scm:asset_detail", asset_a),
+                              ("scm:maintenanceplan_detail", maintenance_plan_a),
+                              ("scm:maintenanceworkorder_detail", maintenance_order_a),
+                              ("scm:meterreading_detail", meter_reading_a)):
+            resp = client_a.get(reverse(url_name, args=[obj.pk]))
+            assert resp.status_code == 200, url_name
+            assert resp.context["obj"] == obj, url_name
+
+    def test_every_edit_form_renders_pre_filled(self, client_a, asset_a, asset_spare_part_a,
+                                                maintenance_plan_a, maintenance_order_a):
+        for url_name, obj in (("scm:asset_edit", asset_a),
+                              ("scm:assetsparepart_edit", asset_spare_part_a),
+                              ("scm:maintenanceplan_edit", maintenance_plan_a),
+                              ("scm:maintenanceworkorder_edit", maintenance_order_a)):
+            resp = client_a.get(reverse(url_name, args=[obj.pk]))
+            assert resp.status_code == 200, url_name
+            assert resp.context["is_edit"] is True, url_name
+
+    def test_the_spare_part_add_screen_carries_its_parent(self, client_a, asset_a):
+        """The child form has no ``asset`` field, so the breadcrumb and the cancel link can only get
+        the parent from the context."""
+        resp = client_a.get(reverse("scm:asset_add_spare_part", args=[asset_a.pk]))
+        assert resp.status_code == 200
+        assert resp.context["asset"] == asset_a
+        assert resp.context["is_edit"] is False
+
+
+# =========================================== 4.13 · REGRESSION LOCK — the _keep_current edit union
+class TestKeepCurrentUnionOnTheEditPath:
+    """A role-narrowed ``core.Party`` queryset ends in ``.distinct()``, and OR-ing it with a plain
+    one raises ``TypeError: Cannot combine a unique query with a non-unique query``.
+
+    It fires ONLY when a party is already STORED — ``_keep_current`` returns early on
+    ``current_id is None`` — so every create-path test in the suite walked straight past it and the
+    three edit screens 500'd on an ordinary GET.
+    """
+
+    def test_the_asset_edit_form_renders_with_a_stored_custodian(self, client_a, asset_a,
+                                                                 employee_party_a):
+        assert asset_a.custodian_id == employee_party_a.pk
+        assert client_a.get(reverse("scm:asset_edit", args=[asset_a.pk])).status_code == 200
+
+    def test_the_asset_edit_form_renders_with_a_stored_supplier_and_service_vendor(
+            self, client_a, asset_a, supplier_a):
+        assert asset_a.supplier_id == supplier_a.pk == asset_a.service_vendor_id
+        assert client_a.get(reverse("scm:asset_edit", args=[asset_a.pk])).status_code == 200
+
+    def test_the_plan_edit_form_renders_with_a_stored_crew(self, client_a, maintenance_plan_a,
+                                                           employee_party_a):
+        assert maintenance_plan_a.assigned_to_id == employee_party_a.pk
+        resp = client_a.get(reverse("scm:maintenanceplan_edit", args=[maintenance_plan_a.pk]))
+        assert resp.status_code == 200
+
+    def test_the_job_edit_form_renders_with_a_stored_reporter_and_assignee(
+            self, client_a, maintenance_order_a, employee_party_a):
+        assert maintenance_order_a.reported_by_id == employee_party_a.pk
+        resp = client_a.get(reverse("scm:maintenanceworkorder_edit",
+                                    args=[maintenance_order_a.pk]))
+        assert resp.status_code == 200
+
+    def test_it_still_renders_once_the_role_has_actually_been_removed(self, client_a, asset_a,
+                                                                      maintenance_plan_a,
+                                                                      maintenance_order_a,
+                                                                      employee_party_a):
+        """The situation the union exists FOR: the stored party is gone from the role-narrowed set
+        and must still be offered, or saving an unrelated change silently NULLs the FK."""
+        from apps.core.models import PartyRole
+        PartyRole.objects.filter(party=employee_party_a).delete()
+        for url_name, obj in (("scm:asset_edit", asset_a),
+                              ("scm:maintenanceplan_edit", maintenance_plan_a),
+                              ("scm:maintenanceworkorder_edit", maintenance_order_a)):
+            assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 200, url_name
+
+
+# ================================================================ 4.13 · the plant register
+class TestAssetViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a, asset_a):
+        """A filter with no context to render from is the single most common defect in this
+        codebase: the select comes out empty and the filter is unreachable."""
+        resp = client_a.get(reverse("scm:asset_list"))
+        for key in ("object_list", "page_obj", "q", "status_choices", "criticality_choices",
+                    "asset_type_choices", "warranty_choices", "warranty", "warranty_notice_days",
+                    "locations", "work_centers", "org_units", "down_count",
+                    "warranty_expiring_count", "warranty_expired_count", "critical_count"):
+            assert key in resp.context, key
+
+    def test_the_two_row_annotations_replace_a_query_per_row(self, client_a, asset_a,
+                                                             maintenance_order_a):
+        """The template must render the Down chip and the queue badge from THESE, never from
+        ``asset.is_down_now`` / ``asset.open_job_count()``, which are one query each per row."""
+        maintenance_order_a.downtime_start = _asset_hours_back(hours=2)
+        maintenance_order_a.save(update_fields=["downtime_start"])
+        row = client_a.get(reverse("scm:asset_list")).context["object_list"][0]
+        assert row.down_now is True
+        assert row.open_jobs_count == 1
+
+    def test_an_asset_with_no_open_job_annotates_zero_not_none(self, client_a, asset_a):
+        row = client_a.get(reverse("scm:asset_list")).context["object_list"][0]
+        assert row.open_jobs_count == 0
+        assert row.down_now is False
+
+    def test_the_list_never_shows_another_workspaces_rows(self, client_a, asset_a, asset_b):
+        rows = client_a.get(reverse("scm:asset_list")).context["object_list"]
+        assert asset_a in rows and asset_b not in rows
+
+    @pytest.mark.parametrize("field", ["code", "name", "serial_number", "tag_code", "manufacturer",
+                                       "model_number"])
+    def test_search_covers_every_field_the_view_declares(self, client_a, asset_a, asset_a2, field):
+        term = getattr(asset_a, field)
+        rows = client_a.get(reverse("scm:asset_list"), {"q": term}).context["object_list"]
+        assert asset_a in rows and asset_a2 not in rows
+
+    @pytest.mark.parametrize("param,value", [("status", "in_service"), ("criticality", "critical"),
+                                             ("asset_type", "machine"), ("is_active", "True")])
+    def test_each_string_filter_narrows_to_the_matching_rows(self, client_a, asset_a, asset_a2,
+                                                             param, value):
+        rows = client_a.get(reverse("scm:asset_list"), {param: value}).context["object_list"]
+        assert asset_a in rows
+
+    def test_the_is_active_false_filter_is_mapped_to_a_real_boolean(self, client_a, asset_a,
+                                                                    asset_a2):
+        """``.filter(is_active="False")`` would coerce via ``bool("False") is True`` and silently
+        return every row."""
+        asset_a2.is_active = False
+        asset_a2.save(update_fields=["is_active", "updated_at"])
+        rows = client_a.get(reverse("scm:asset_list"),
+                            {"is_active": "False"}).context["object_list"]
+        assert asset_a2 in rows and asset_a not in rows
+
+    @pytest.mark.parametrize("param", ["location", "work_center", "org_unit"])
+    def test_each_pk_filter_narrows(self, client_a, asset_a, asset_a2, param, location_a,
+                                    work_center_a, org_unit_a):
+        target = {"location": location_a, "work_center": work_center_a,
+                  "org_unit": org_unit_a}[param]
+        rows = client_a.get(reverse("scm:asset_list"),
+                            {param: str(target.pk)}).context["object_list"]
+        assert asset_a in rows and asset_a2 not in rows
+
+    @pytest.mark.parametrize("param", ["location", "work_center", "org_unit"])
+    @pytest.mark.parametrize("junk", _ASSET_JUNK_PKS)
+    def test_a_junk_pk_filter_lands_on_a_page_rather_than_a_500(self, client_a, asset_a, param,
+                                                                junk):
+        """L11: ``abc`` fails ``isdecimal()``, ``²`` passes ``isdigit()`` but not ``int()``, and a
+        20-digit value converts cleanly and then overflows inside the driver. All three SKIP."""
+        resp = client_a.get(reverse("scm:asset_list"), {param: junk})
+        assert resp.status_code == 200
+        assert asset_a in resp.context["object_list"]
+
+    @pytest.mark.parametrize("bucket,offset", [("expired", -1), ("expiring", 10),
+                                               ("in_force", 300)])
+    def test_the_warranty_bucket_filter_agrees_with_the_chip_it_renders(self, client_a, asset_a,
+                                                                        bucket, offset):
+        """A row the filter puts in a bucket must render that bucket's chip, or the page argues with
+        itself — both are written from ``Asset.WARRANTY_NOTICE_DAYS``."""
+        asset_a.warranty_expires_on = _asset_view_day(offset)
+        asset_a.save(update_fields=["warranty_expires_on", "updated_at"])
+        resp = client_a.get(reverse("scm:asset_list"), {"warranty": bucket})
+        assert resp.context["warranty"] == bucket
+        assert asset_a in resp.context["object_list"]
+
+    def test_an_asset_with_no_warranty_date_matches_no_bucket(self, client_a, asset_a2):
+        """"Not recorded" is its own state and is never green — so it belongs in none of the three."""
+        for bucket in ("expired", "expiring", "in_force"):
+            rows = client_a.get(reverse("scm:asset_list"),
+                                {"warranty": bucket}).context["object_list"]
+            assert asset_a2 not in rows, bucket
+
+    def test_a_junk_warranty_value_narrows_nothing_and_is_echoed_back_blank(self, client_a,
+                                                                            asset_a):
+        """The select must show "All" rather than an option that did not happen."""
+        resp = client_a.get(reverse("scm:asset_list"), {"warranty": "sometime"})
+        assert resp.status_code == 200
+        assert resp.context["warranty"] == ""
+        assert asset_a in resp.context["object_list"]
+
+    def test_the_header_chips_are_workspace_wide_and_not_page_wide(self, client_a, asset_a,
+                                                                    asset_a2):
+        """"6 warranties expiring" is a fact somebody has to act on; recomputing it per filter would
+        make the number change as you browse."""
+        asset_a2.warranty_expires_on = _asset_view_day(-5)
+        asset_a2.save(update_fields=["warranty_expires_on", "updated_at"])
+        resp = client_a.get(reverse("scm:asset_list"), {"criticality": "critical"})
+        assert resp.context["warranty_expired_count"] == 1
+        assert resp.context["critical_count"] == 1
+
+    def test_the_down_chip_counts_machines_and_not_jobs(self, client_a, asset_a):
+        """Two open outages on one machine is ONE machine down; counting jobs would print a number
+        the Down chips on the rows cannot add up to."""
+        from apps.scm.models import MaintenanceWorkOrder
+        for index in range(2):
+            MaintenanceWorkOrder.objects.create(
+                tenant=asset_a.tenant, asset=asset_a, title=f"Outage {index}",
+                downtime_start=_asset_hours_back(hours=2))
+        assert client_a.get(reverse("scm:asset_list")).context["down_count"] == 1
+
+    def test_page_two_and_a_page_past_the_end_both_render(self, client_a, tenant_a):
+        """L9: the paginator guard. Twenty rows against a page size of fifteen."""
+        from apps.scm.models import Asset
+        for index in range(20):
+            Asset.objects.create(tenant=tenant_a, code=f"PAGE-{index:02d}", name="Paged")
+        second = client_a.get(reverse("scm:asset_list"), {"page": "2"})
+        assert second.status_code == 200 and len(second.context["object_list"]) == 5
+        past = client_a.get(reverse("scm:asset_list"), {"page": "999"})
+        assert past.status_code == 200 and past.context["page_obj"].number == 2
+        assert client_a.get(reverse("scm:asset_list"), {"page": "abc"}).status_code == 200
+
+    def test_create_saves_against_the_request_tenant(self, client_a, tenant_a):
+        from apps.scm.models import Asset
+        resp = client_a.post(reverse("scm:asset_create"), _asset_view_post(), follow=True)
+        assert resp.status_code == 200
+        asset = Asset.objects.get(code="PUMP-9")
+        assert asset.tenant_id == tenant_a.pk
+        assert asset.number.startswith("AST-")
+
+    def test_create_re_renders_the_form_on_a_duplicate_code(self, client_a, asset_a):
+        from apps.scm.models import Asset
+        resp = client_a.post(reverse("scm:asset_create"), _asset_view_post(code="CNC-1"))
+        assert resp.status_code == 200
+        assert Asset.objects.filter(code="CNC-1").count() == 1
+
+    def test_a_crafted_cross_tenant_fk_is_rejected_on_create(self, client_a, location_b):
+        from apps.scm.models import Asset
+        resp = client_a.post(reverse("scm:asset_create"),
+                             _asset_view_post(location=str(location_b.pk)))
+        assert resp.status_code == 200
+        assert not Asset.objects.filter(code="PUMP-9").exists()
+
+    def test_edit_saves_and_is_allowed_at_any_status(self, client_a, asset_a):
+        """A retired machine is often the row that most needs correcting, and nothing an edit can
+        reach is a derived figure."""
+        asset_a.status = "retired"
+        asset_a.save(update_fields=["status", "updated_at"])
+        payload = _asset_view_post(code=asset_a.code, name="CNC Lathe mk2", status="retired",
+                                   criticality="critical", tag_code=asset_a.tag_code,
+                                   meter_name="Running Hours", meter_unit="h")
+        resp = client_a.post(reverse("scm:asset_edit", args=[asset_a.pk]), payload, follow=True)
+        assert resp.status_code == 200
+        asset_a.refresh_from_db()
+        assert asset_a.name == "CNC Lathe mk2"
+
+    def test_the_detail_page_carries_every_key_its_docstring_pins(self, client_a, asset_a,
+                                                                  asset_spare_part_a,
+                                                                  maintenance_plan_a,
+                                                                  maintenance_order_a,
+                                                                  meter_reading_a, child_asset_a):
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        for key in ("obj", "warranty_chip", "days_to_warranty_expiry", "mtbf_hours", "mttr_hours",
+                    "availability_pct", "maintenance_cost_to_date", "downtime_minutes",
+                    "downtime_hours", "failure_count", "is_down_now", "open_job_count",
+                    "spare_parts", "spare_part_count", "work_orders", "work_orders_truncated",
+                    "work_order_count", "open_work_order_count", "readings", "readings_truncated",
+                    "reading_count", "latest_reading", "children", "children_truncated",
+                    "child_count", "plans", "plan_count", "next_pm_due", "acquisition_cost",
+                    "accumulated_depreciation", "book_value", "failure_codes", "can_delete"):
+            assert key in resp.context, key
+
+    def test_the_detail_page_passes_none_straight_through(self, client_a, asset_a):
+        """A view that helpfully substituted ``0`` would put a confident, wrong number in a red
+        tile — and ``maintenance_cost_to_date`` is the deliberate exception."""
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        assert resp.context["mtbf_hours"] is None
+        assert resp.context["mttr_hours"] is None
+        assert resp.context["maintenance_cost_to_date"] == Decimal("0.00")
+
+    def test_the_book_value_block_is_none_when_no_fixed_asset_is_linked(self, client_a, asset_a):
+        """A missing LINK is not a worthless asset."""
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        assert resp.context["acquisition_cost"] is None
+        assert resp.context["book_value"] is None
+
+    def test_the_book_value_block_reads_accountings_row(self, client_a, asset_a, fixed_asset_a):
+        asset_a.fixed_asset = fixed_asset_a
+        asset_a.save(update_fields=["fixed_asset", "updated_at"])
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        assert resp.context["acquisition_cost"] == Decimal("48000.00")
+        assert resp.context["book_value"] == Decimal("40000.00")
+
+    def test_a_cross_workspace_book_link_renders_as_unlinked(self, client_a, asset_a,
+                                                             fixed_asset_b):
+        """Defence in depth: this page READS money out of another app's table, and a row that
+        predates the guard must render as UNLINKED rather than print a stranger's book value."""
+        from apps.scm.models import Asset
+        Asset.objects.filter(pk=asset_a.pk).update(fixed_asset=fixed_asset_b)
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        assert resp.context["book_value"] is None
+
+    def test_the_parts_panel_attaches_on_hand_without_a_query_per_row(self, client_a, asset_a,
+                                                                      asset_spare_part_a):
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        assert resp.context["spare_parts"][0].on_hand == Decimal("10.0000")
+
+    def test_the_failure_panel_groups_by_problem_code_with_labels_resolved(self, client_a,
+                                                                          asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        for _ in range(2):
+            MaintenanceWorkOrder.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                                title="Noise", work_type="breakdown",
+                                                problem_code="noise")
+        rows = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk])).context["failure_codes"]
+        assert rows[0]["code"] == "noise"
+        assert rows[0]["label"] == "Abnormal noise"
+        assert rows[0]["jobs"] == 2
+
+    def test_can_delete_matches_exactly_what_delete_enforces(self, client_a, asset_a,
+                                                             maintenance_order_a):
+        """Offering a one-click failure is worse than not offering the button."""
+        resp = client_a.get(reverse("scm:asset_detail", args=[asset_a.pk]))
+        assert resp.context["can_delete"] is False
+
+    def test_delete_is_refused_while_a_job_references_the_asset(self, client_a, asset_a,
+                                                                maintenance_order_a):
+        from apps.scm.models import Asset
+        resp = client_a.post(reverse("scm:asset_delete", args=[asset_a.pk]), follow=True)
+        assert Asset.objects.filter(pk=asset_a.pk).exists()
+        assert "cannot be deleted" in _message_blob(resp)
+
+    def test_delete_says_out_loud_what_goes_with_it(self, client_a, asset_a, maintenance_plan_a,
+                                                    asset_spare_part_a, meter_reading_a,
+                                                    child_asset_a):
+        from apps.scm.models import Asset
+        resp = client_a.post(reverse("scm:asset_delete", args=[asset_a.pk]), follow=True)
+        assert not Asset.objects.filter(pk=asset_a.pk).exists()
+        blob = _message_blob(resp)
+        assert "meter reading" in blob and "cannot be reconstructed" in blob
+        assert "top-level" in blob
+        child_asset_a.refresh_from_db()
+        assert child_asset_a.parent_id is None          # SET_NULL: children survive
+
+    def test_a_get_to_delete_never_deletes(self, client_a, asset_a2):
+        from apps.scm.models import Asset
+        assert client_a.get(reverse("scm:asset_delete", args=[asset_a2.pk])).status_code == 405
+        assert Asset.objects.filter(pk=asset_a2.pk).exists()
+
+
+class TestAssetSparePartViews:
+    def test_add_takes_the_parent_from_the_route(self, client_a, asset_a, spare_item_a):
+        from apps.scm.models import AssetSparePart
+        resp = client_a.post(reverse("scm:asset_add_spare_part", args=[asset_a.pk]),
+                             {"item": str(spare_item_a.pk), "quantity_per_service": "3",
+                              "is_critical": "on", "notes": ""}, follow=True)
+        assert resp.status_code == 200
+        line = AssetSparePart.objects.get(asset=asset_a, item=spare_item_a)
+        assert line.quantity_per_service == Decimal("3.0000")
+
+    def test_a_crafted_asset_pk_in_the_body_is_ignored(self, client_a, asset_a, asset_a2,
+                                                       spare_item_a):
+        """``asset`` is not a form field at all, so the POST key has nowhere to land."""
+        from apps.scm.models import AssetSparePart
+        client_a.post(reverse("scm:asset_add_spare_part", args=[asset_a.pk]),
+                      {"item": str(spare_item_a.pk), "quantity_per_service": "1",
+                       "asset": str(asset_a2.pk)}, follow=True)
+        assert AssetSparePart.objects.get(item=spare_item_a).asset_id == asset_a.pk
+
+    def test_a_duplicate_line_re_renders_the_form_rather_than_500ing(self, client_a, asset_a,
+                                                                     spare_item_a,
+                                                                     asset_spare_part_a):
+        from apps.scm.models import AssetSparePart
+        resp = client_a.post(reverse("scm:asset_add_spare_part", args=[asset_a.pk]),
+                             {"item": str(spare_item_a.pk), "quantity_per_service": "1"})
+        assert resp.status_code == 200
+        assert AssetSparePart.objects.filter(asset=asset_a).count() == 1
+
+    def test_edit_updates_the_line_and_returns_to_the_parent(self, client_a, asset_spare_part_a,
+                                                             spare_item_a, asset_a):
+        resp = client_a.post(reverse("scm:assetsparepart_edit", args=[asset_spare_part_a.pk]),
+                             {"item": str(spare_item_a.pk), "quantity_per_service": "7",
+                              "is_critical": "", "notes": "Rear bearing"}, follow=True)
+        assert resp.status_code == 200
+        asset_spare_part_a.refresh_from_db()
+        assert asset_spare_part_a.quantity_per_service == Decimal("7.0000")
+        assert asset_spare_part_a.is_critical is False
+
+    def test_delete_removes_the_association_and_nothing_else(self, client_a, asset_spare_part_a,
+                                                             spare_item_a):
+        from apps.scm.models import AssetSparePart, Item
+        resp = client_a.post(reverse("scm:assetsparepart_delete", args=[asset_spare_part_a.pk]),
+                             follow=True)
+        assert not AssetSparePart.objects.filter(pk=asset_spare_part_a.pk).exists()
+        assert Item.objects.filter(pk=spare_item_a.pk).exists()
+        assert "untouched" in _message_blob(resp)
+
+
+# ================================================================ 4.13 · the PM programme
+class TestMaintenancePlanViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    maintenance_plan_a):
+        resp = client_a.get(reverse("scm:maintenanceplan_list"))
+        for key in ("object_list", "page_obj", "q", "trigger_choices", "basis_choices",
+                    "priority_choices", "due_choices", "assets", "assignees", "due",
+                    "overdue_count", "due_soon_count", "active_count"):
+            assert key in resp.context, key
+
+    def test_the_row_annotations_gate_the_row_actions(self, client_a, maintenance_plan_a):
+        row = client_a.get(reverse("scm:maintenanceplan_list")).context["object_list"][0]
+        assert row.has_tasks is True
+        assert row.has_open_job is False
+
+    def test_the_list_never_shows_another_workspaces_plans(self, client_a, maintenance_plan_a,
+                                                           maintenance_plan_b):
+        rows = client_a.get(reverse("scm:maintenanceplan_list")).context["object_list"]
+        assert maintenance_plan_a in rows and maintenance_plan_b not in rows
+
+    @pytest.mark.parametrize("param,value", [("trigger_type", "calendar"),
+                                             ("schedule_basis", "floating"),
+                                             ("priority", "high"), ("is_active", "True")])
+    def test_each_string_filter_narrows(self, client_a, maintenance_plan_a, meter_plan_a, param,
+                                        value):
+        rows = client_a.get(reverse("scm:maintenanceplan_list"),
+                            {param: value}).context["object_list"]
+        assert maintenance_plan_a in rows
+
+    def test_the_asset_and_assignee_filters_narrow(self, client_a, maintenance_plan_a, asset_a,
+                                                   employee_party_a):
+        for param, target in (("asset", asset_a), ("assigned_to", employee_party_a)):
+            rows = client_a.get(reverse("scm:maintenanceplan_list"),
+                                {param: str(target.pk)}).context["object_list"]
+            assert maintenance_plan_a in rows, param
+
+    @pytest.mark.parametrize("param", ["asset", "assigned_to"])
+    @pytest.mark.parametrize("junk", _ASSET_JUNK_PKS)
+    def test_a_junk_pk_filter_lands_on_a_page(self, client_a, maintenance_plan_a, param, junk):
+        resp = client_a.get(reverse("scm:maintenanceplan_list"), {param: junk})
+        assert resp.status_code == 200
+        assert maintenance_plan_a in resp.context["object_list"]
+
+    def test_the_overdue_bucket_narrows_on_the_date_axis(self, client_a, maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_view_day(-3)
+        maintenance_plan_a.save(update_fields=["next_due_on", "updated_at"])
+        resp = client_a.get(reverse("scm:maintenanceplan_list"), {"due": "overdue"})
+        assert resp.context["due"] == "overdue"
+        assert maintenance_plan_a in resp.context["object_list"]
+        assert resp.context["overdue_count"] == 1
+
+    def test_the_due_soon_bucket_reads_each_rows_own_call_horizon(self, client_a,
+                                                                  maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_view_day(3)
+        maintenance_plan_a.save(update_fields=["next_due_on", "updated_at"])
+        resp = client_a.get(reverse("scm:maintenanceplan_list"), {"due": "due_soon"})
+        assert maintenance_plan_a in resp.context["object_list"]
+
+    def test_the_scheduled_bucket_is_the_strict_remainder(self, client_a, maintenance_plan_a):
+        resp = client_a.get(reverse("scm:maintenanceplan_list"), {"due": "scheduled"})
+        assert maintenance_plan_a in resp.context["object_list"]
+        soon = client_a.get(reverse("scm:maintenanceplan_list"), {"due": "due_soon"})
+        assert maintenance_plan_a not in soon.context["object_list"]
+
+    def test_an_inactive_plan_is_never_counted_as_overdue(self, client_a, maintenance_plan_a):
+        """A plan that cannot generate a job cannot be overdue for one."""
+        maintenance_plan_a.next_due_on = _asset_view_day(-30)
+        maintenance_plan_a.is_active = False
+        maintenance_plan_a.save(update_fields=["next_due_on", "is_active", "updated_at"])
+        resp = client_a.get(reverse("scm:maintenanceplan_list"))
+        assert resp.context["overdue_count"] == 0
+        assert resp.context["active_count"] == 0
+
+    def test_a_junk_due_value_narrows_nothing_and_is_echoed_back_blank(self, client_a,
+                                                                       maintenance_plan_a):
+        resp = client_a.get(reverse("scm:maintenanceplan_list"), {"due": "whenever"})
+        assert resp.status_code == 200 and resp.context["due"] == ""
+        assert maintenance_plan_a in resp.context["object_list"]
+
+    def test_the_due_soon_condition_never_matches_everything_on_an_empty_workspace(self,
+                                                                                    client_b):
+        """A bare ``Q()`` matches EVERY row — the never-matching sentinel is what stops an empty
+        chip becoming the whole register."""
+        resp = client_b.get(reverse("scm:maintenanceplan_list"), {"due": "due_soon"})
+        assert resp.status_code == 200
+        assert list(resp.context["object_list"]) == []
+
+    def test_page_two_and_a_page_past_the_end_both_render(self, client_a, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        for index in range(20):
+            MaintenancePlan.objects.create(tenant=tenant_a, name=f"Plan {index}", asset=asset_a,
+                                           interval_days=30, next_due_on=_asset_view_day(20))
+        assert client_a.get(reverse("scm:maintenanceplan_list"),
+                            {"page": "2"}).status_code == 200
+        assert client_a.get(reverse("scm:maintenanceplan_list"),
+                            {"page": "999"}).status_code == 200
+
+    def test_create_saves_the_plan_and_its_job_plan_in_one_go(self, client_a, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        payload = _plan_view_post(
+            asset=str(asset_a.pk),
+            rows=[{"id": "", "sequence": "10", "description": "Grease the ways",
+                   "expected_result": "Two shots", "is_mandatory": "on", "is_safety_step": ""}])
+        resp = client_a.post(reverse("scm:maintenanceplan_create"), payload, follow=True)
+        assert resp.status_code == 200
+        plan = MaintenancePlan.objects.get(name="Monthly greasing")
+        assert plan.tenant_id == tenant_a.pk
+        assert plan.tasks.count() == 1
+
+    def test_an_invalid_trigger_re_renders_the_form_and_saves_nothing(self, client_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        resp = client_a.post(reverse("scm:maintenanceplan_create"),
+                             _plan_view_post(asset=str(asset_a.pk), interval_days=""))
+        assert resp.status_code == 200
+        assert not MaintenancePlan.objects.filter(name="Monthly greasing").exists()
+
+    def test_edit_saves_and_is_allowed_after_the_plan_has_raised_jobs(self, client_a,
+                                                                      maintenance_plan_a,
+                                                                      asset_a):
+        payload = _plan_view_post(
+            asset=str(asset_a.pk), name="Quarterly service (revised)", interval_days="90",
+            next_due_on=maintenance_plan_a.next_due_on.isoformat(),
+            rows=[{"id": str(task.pk), "sequence": str(task.sequence),
+                   "description": task.description, "expected_result": task.expected_result,
+                   "is_mandatory": "on" if task.is_mandatory else "",
+                   "is_safety_step": "on" if task.is_safety_step else ""}
+                  for task in maintenance_plan_a.tasks.all()],
+            initial=maintenance_plan_a.tasks.count())
+        resp = client_a.post(reverse("scm:maintenanceplan_edit", args=[maintenance_plan_a.pk]),
+                             payload, follow=True)
+        assert resp.status_code == 200
+        maintenance_plan_a.refresh_from_db()
+        assert maintenance_plan_a.name == "Quarterly service (revised)"
+
+    def test_the_detail_page_carries_every_key_its_docstring_pins(self, client_a,
+                                                                  maintenance_plan_a):
+        resp = client_a.get(reverse("scm:maintenanceplan_detail", args=[maintenance_plan_a.pk]))
+        for key in ("obj", "tasks", "task_count", "safety_task_count", "jobs", "jobs_truncated",
+                    "job_count", "open_job", "latest_reading", "meter_gap", "days_until_due",
+                    "due_status", "due_label", "due_css", "is_due", "can_generate",
+                    "generate_block_reason"):
+            assert key in resp.context, key
+        assert resp.context["task_count"] == 2
+        assert resp.context["safety_task_count"] == 1
+        assert resp.context["can_generate"] is True
+        assert resp.context["generate_block_reason"] == ""
+
+    def test_meter_gap_is_none_and_never_zero_on_a_calendar_plan(self, client_a,
+                                                                 maintenance_plan_a):
+        resp = client_a.get(reverse("scm:maintenanceplan_detail", args=[maintenance_plan_a.pk]))
+        assert resp.context["meter_gap"] is None
+
+    def test_the_generate_gate_and_the_verb_refuse_for_the_same_reason(self, client_a,
+                                                                       maintenance_plan_a):
+        maintenance_plan_a.is_active = False
+        maintenance_plan_a.save(update_fields=["is_active", "updated_at"])
+        page = client_a.get(reverse("scm:maintenanceplan_detail", args=[maintenance_plan_a.pk]))
+        assert page.context["can_generate"] is False
+        assert "inactive" in page.context["generate_block_reason"]
+        resp = client_a.post(reverse("scm:maintenanceplan_generate",
+                                     args=[maintenance_plan_a.pk]), follow=True)
+        assert "inactive" in _message_blob(resp)
+
+    def test_delete_reports_both_cascades(self, client_a, maintenance_plan_a, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan, MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a, title="From plan",
+                                                  plan=maintenance_plan_a, source="plan")
+        resp = client_a.post(reverse("scm:maintenanceplan_delete", args=[maintenance_plan_a.pk]),
+                             follow=True)
+        assert not MaintenancePlan.objects.filter(pk=maintenance_plan_a.pk).exists()
+        blob = _message_blob(resp)
+        assert "job-plan step" in blob and "lost the link" in blob
+        job.refresh_from_db()
+        assert job.plan_id is None       # SET_NULL: the history survives
+
+
+# ============================== 4.13 · REGRESSION LOCK — generate must not move the schedule
+class TestGenerateDoesNotRollTheSchedule:
+    """The schedule has exactly ONE writer, and it is the complete verb.
+
+    Rolling at generate time as well advanced a ``fixed`` plan by TWO cycles per occurrence, because
+    ``advance()`` anchors a fixed plan on its own published ``next_due_on`` and the second call
+    compounds the first. Measured on a quarterly plan: Jan 1 -> generate Apr 1 -> complete Jun 30 —
+    the April inspection silently never came due. The identical compounding hit
+    ``next_due_reading`` on a fixed meter plan (1000 -> 1250 -> 1500).
+    """
+
+    def test_generate_leaves_next_due_on_exactly_where_it_was(self, client_a,
+                                                              maintenance_plan_a):
+        published = maintenance_plan_a.next_due_on
+        resp = client_a.post(reverse("scm:maintenanceplan_generate",
+                                     args=[maintenance_plan_a.pk]), follow=True)
+        assert resp.status_code == 200
+        maintenance_plan_a.refresh_from_db()
+        assert maintenance_plan_a.next_due_on == published
+
+    def test_generate_leaves_next_due_reading_exactly_where_it_was(self, client_a, meter_plan_a):
+        published = meter_plan_a.next_due_reading
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[meter_plan_a.pk]), follow=True)
+        meter_plan_a.refresh_from_db()
+        assert meter_plan_a.next_due_reading == published
+
+    def test_generate_stamps_only_the_event_it_actually_observed(self, client_a,
+                                                                 maintenance_plan_a):
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[maintenance_plan_a.pk]),
+                      follow=True)
+        maintenance_plan_a.refresh_from_db()
+        assert maintenance_plan_a.last_generated_on == _asset_view_day(0)
+        assert maintenance_plan_a.last_completed_on is None
+
+    def test_the_plan_stays_visibly_due_and_the_page_says_so(self, client_a, maintenance_plan_a):
+        """"I generated the job but the plan still shows as due" is otherwise read as a bug rather
+        than as the design."""
+        maintenance_plan_a.next_due_on = _asset_view_day(-1)
+        maintenance_plan_a.save(update_fields=["next_due_on", "updated_at"])
+        resp = client_a.post(reverse("scm:maintenanceplan_generate",
+                                     args=[maintenance_plan_a.pk]), follow=True)
+        maintenance_plan_a.refresh_from_db()
+        assert maintenance_plan_a.due_status() == "overdue"
+        assert "rolls forward on completion" in _message_blob(resp)
+
+    def test_a_condition_plan_is_told_it_has_no_cycle_to_roll(self, client_a, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Vibration", asset=asset_a, trigger_type="condition",
+            condition_operator="gte", condition_threshold=Decimal("78"))
+        resp = client_a.post(reverse("scm:maintenanceplan_generate", args=[plan.pk]), follow=True)
+        assert "no cycle to roll" in _message_blob(resp)
+
+    def test_generate_snapshots_the_checklist_and_stamps_the_job(self, client_a,
+                                                                 maintenance_plan_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        published = maintenance_plan_a.next_due_on
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[maintenance_plan_a.pk]),
+                      follow=True)
+        job = MaintenanceWorkOrder.objects.get(plan=maintenance_plan_a)
+        assert job.source == "plan"
+        assert job.status == "requested"          # generating is not approving
+        assert job.work_type == maintenance_plan_a.work_type
+        assert job.priority == maintenance_plan_a.priority
+        assert job.assigned_to_id == maintenance_plan_a.assigned_to_id
+        assert job.parts_location_id == maintenance_plan_a.parts_location_id
+        assert job.asset_id == asset_a.pk
+        assert asset_a.code in job.title
+        assert job.tasks.count() == 2
+        # THE SNAPSHOT DATE: the due date BEFORE any roll, which is what is_on_time measures against.
+        from django.utils import timezone
+        assert timezone.localtime(job.scheduled_start).date() == published
+
+    def test_editing_the_plan_afterwards_never_rewrites_a_raised_jobs_checklist(
+            self, client_a, maintenance_plan_a):
+        """The snapshot has NO FK back on purpose: editing a plan next month must not rewrite what
+        a job three weeks ago actually asked a technician to check and sign against."""
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[maintenance_plan_a.pk]),
+                      follow=True)
+        job = MaintenanceWorkOrder.objects.get(plan=maintenance_plan_a)
+        before = sorted(job.tasks.values_list("description", flat=True))
+        maintenance_plan_a.tasks.all().delete()
+        maintenance_plan_a.tasks.create(sequence=10, description="Completely different step")
+        assert sorted(job.tasks.values_list("description", flat=True)) == before
+
+    def test_a_second_generate_is_refused_while_a_job_is_open(self, client_a,
+                                                              maintenance_plan_a):
+        """A duplicate PM job splits the checklist, the parts and the cost of one service across two
+        documents, and nothing afterwards can tell they were the same occurrence."""
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[maintenance_plan_a.pk]),
+                      follow=True)
+        resp = client_a.post(reverse("scm:maintenanceplan_generate",
+                                     args=[maintenance_plan_a.pk]), follow=True)
+        assert "already has an open job" in _message_blob(resp)
+        assert MaintenanceWorkOrder.objects.filter(plan=maintenance_plan_a).count() == 1
+
+    def test_a_plan_with_no_steps_says_so_rather_than_pretending(self, client_a, tenant_a,
+                                                                 asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan.objects.create(tenant=tenant_a, name="Bare", asset=asset_a,
+                                              interval_days=30, next_due_on=_asset_view_day(5))
+        resp = client_a.post(reverse("scm:maintenanceplan_generate", args=[plan.pk]), follow=True)
+        assert "no job-plan steps" in _message_blob(resp)
+
+
+# ================ 4.13 · REGRESSION LOCK — complete rolls the schedule exactly ONE cycle
+class TestCompleteRollsTheScheduleExactlyOnce:
+    """All four combinations of ``schedule_basis`` x trigger axis, driven through the REAL views.
+
+    Before the fix a fixed quarterly plan went Jan 1 -> Apr 1 at generate -> Jun 30 at complete,
+    silently skipping April.
+    """
+
+    def _plan(self, tenant, asset, **kwargs):
+        from apps.scm.models import MaintenancePlan
+        defaults = {"tenant": tenant, "name": "Cycle", "asset": asset, "lead_time_days": 7}
+        defaults.update(kwargs)
+        return MaintenancePlan.objects.create(**defaults)
+
+    def _generate_and_complete(self, client, plan):
+        from apps.scm.models import MaintenanceWorkOrder
+        client.post(reverse("scm:maintenanceplan_generate", args=[plan.pk]), follow=True)
+        job = MaintenanceWorkOrder.objects.get(plan=plan)
+        _walk_job_to(client, job, "completed")
+        plan.refresh_from_db()
+        return job
+
+    def test_fixed_calendar_rolls_from_the_published_date(self, client_a, tenant_a, asset_a):
+        published = _asset_view_day(-30)
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="fixed",
+                          interval_days=90, next_due_on=published)
+        self._generate_and_complete(client_a, plan)
+        assert plan.next_due_on == published + datetime.timedelta(days=90)
+        assert plan.last_completed_on == _asset_view_day(0)
+
+    def test_floating_calendar_rolls_from_the_completion_date(self, client_a, tenant_a, asset_a):
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="floating",
+                          interval_days=90, next_due_on=_asset_view_day(-30))
+        self._generate_and_complete(client_a, plan)
+        assert plan.next_due_on == _asset_view_day(0) + datetime.timedelta(days=90)
+
+    def test_fixed_meter_rolls_from_the_published_target(self, client_a, tenant_a, asset_a,
+                                                         meter_reading_a):
+        plan = self._plan(tenant_a, asset_a, trigger_type="meter", schedule_basis="fixed",
+                          meter_interval=Decimal("250"), next_due_reading=Decimal("1000"))
+        self._generate_and_complete(client_a, plan)
+        assert plan.next_due_reading == Decimal("1250.0000")
+
+    def test_floating_meter_rolls_from_the_meter_as_it_reads(self, client_a, tenant_a, asset_a,
+                                                             meter_reading_a):
+        plan = self._plan(tenant_a, asset_a, trigger_type="meter", schedule_basis="floating",
+                          meter_interval=Decimal("250"), next_due_reading=Decimal("1000"))
+        self._generate_and_complete(client_a, plan)
+        assert plan.next_due_reading == Decimal("1468.5000")
+
+    def test_exactly_one_cycle_moves_and_not_two(self, client_a, tenant_a, asset_a):
+        """The whole bug in one assertion: generate + complete together move a FIXED plan by ONE
+        interval, never by two."""
+        published = _asset_view_day(-30)
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="fixed",
+                          interval_days=90, next_due_on=published)
+        self._generate_and_complete(client_a, plan)
+        assert (plan.next_due_on - published).days == 90
+
+    def test_a_cancelled_job_never_consumes_a_cycle(self, client_a, tenant_a, asset_a):
+        """With the roll at generate time, cancelling left the schedule already advanced past an
+        occurrence nobody performed."""
+        from apps.scm.models import MaintenanceWorkOrder
+        published = _asset_view_day(5)
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="fixed",
+                          interval_days=90, next_due_on=published)
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[plan.pk]), follow=True)
+        job = MaintenanceWorkOrder.objects.get(plan=plan)
+        client_a.post(reverse("scm:maintenanceworkorder_cancel", args=[job.pk]), follow=True)
+        plan.refresh_from_db()
+        assert plan.next_due_on == published
+
+    def test_completing_a_job_with_no_plan_rolls_nothing_and_does_not_500(self, client_a,
+                                                                          maintenance_order_a):
+        job = _walk_job_to(client_a, maintenance_order_a, "completed")
+        assert job.plan_id is None
+        assert job.status == "completed"
+
+
+# ==================== 4.13 · REGRESSION LOCK — the meter capture is filed BEFORE the plan roll
+class TestMeterCaptureIsFiledBeforeTheRoll:
+    """``advance()`` on a FLOATING meter plan takes its base from ``plan.latest_reading()``, so a
+    capture filed after the roll is invisible to the very roll it should drive.
+
+    Measured on a forklift last read at 1218.5 h, completed with a 1250 h capture and a 250 h
+    interval: the roll published 1468.5 instead of 1500 — the next service falling 31.5 h early,
+    every cycle, compounding.
+    """
+
+    def test_the_roll_reads_the_capture_and_not_the_stale_prior_reading(self, client_a, tenant_a,
+                                                                        asset_a, meter_plan_a,
+                                                                        meter_reading_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[meter_plan_a.pk]), follow=True)
+        job = MaintenanceWorkOrder.objects.get(plan=meter_plan_a)
+        job.meter_reading_at_work = Decimal("1250")
+        job.save(update_fields=["meter_reading_at_work", "updated_at"])
+        _walk_job_to(client_a, job, "completed")
+        meter_plan_a.refresh_from_db()
+        assert meter_plan_a.next_due_reading == Decimal("1500.0000")   # 1250 + 250, NOT 1468.5
+
+    def test_the_capture_becomes_a_reading_row_with_verb_stamped_provenance(self, client_a,
+                                                                            asset_a,
+                                                                            maintenance_order_a):
+        from apps.scm.models import MeterReading
+        maintenance_order_a.meter_reading_at_work = Decimal("1300")
+        maintenance_order_a.save(update_fields=["meter_reading_at_work", "updated_at"])
+        _walk_job_to(client_a, maintenance_order_a, "completed")
+        row = MeterReading.objects.get(asset=asset_a, reference=maintenance_order_a.number)
+        assert row.reading == Decimal("1300.0000")
+        assert row.source == "work_order"
+        assert row.meter_name == asset_a.meter_name
+        assert row.unit == asset_a.meter_unit
+
+    def test_a_capture_against_a_meterless_asset_is_refused_out_loud(self, client_a, tenant_a,
+                                                                     asset_a2):
+        """A reading nobody can identify is worse than no reading, so it is said out loud rather
+        than saved under an invented meter name."""
+        from apps.scm.models import MaintenanceWorkOrder, MeterReading
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a2, title="Service",
+                                                  meter_reading_at_work=Decimal("500"))
+        _walk_job_to(client_a, job, "in_progress")
+        resp = client_a.post(reverse("scm:maintenanceworkorder_complete", args=[job.pk]),
+                             follow=True)
+        assert "names no meter" in _message_blob(resp)
+        assert not MeterReading.objects.filter(asset=asset_a2).exists()
+
+    def test_completing_without_a_capture_files_nothing(self, client_a, asset_a,
+                                                        maintenance_order_a):
+        from apps.scm.models import MeterReading
+        _walk_job_to(client_a, maintenance_order_a, "completed")
+        assert not MeterReading.objects.filter(reference=maintenance_order_a.number).exists()
+
+    def test_a_double_submitted_completion_files_exactly_one_reading(self, client_a, asset_a,
+                                                                     maintenance_order_a):
+        """The capture is filed ONCE, and the guard is the ladder rather than a dedupe query.
+
+        ``status`` is re-read inside ``select_for_update()`` and the only transition into
+        ``completed`` is from ``in_progress`` with no route back, so the second POST of a
+        double-submit is refused before it reaches any of the three steps. Two rows here would be
+        two contradictory "current values" on an append-only log with no edit route to take either
+        of them back — and on a floating meter plan the second would silently re-anchor the whole
+        future schedule.
+        """
+        from apps.scm.models import MeterReading
+        maintenance_order_a.meter_reading_at_work = Decimal("1300")
+        maintenance_order_a.save(update_fields=["meter_reading_at_work", "updated_at"])
+        _walk_job_to(client_a, maintenance_order_a, "in_progress")
+        url = reverse("scm:maintenanceworkorder_complete", args=[maintenance_order_a.pk])
+        client_a.post(url, follow=True)
+        second = client_a.post(url, follow=True)
+        assert second.status_code == 200
+        assert "cannot be completed" in _message_blob(second)
+        assert MeterReading.objects.filter(asset=asset_a,
+                                           reference=maintenance_order_a.number).count() == 1
+
+    def test_a_double_submitted_completion_rolls_the_plan_exactly_once(self, client_a, tenant_a,
+                                                                       asset_a, meter_plan_a,
+                                                                       meter_reading_a):
+        """The other half of the same guard: the roll is inside the transaction the status guard
+        protects, so a replayed POST cannot advance ``next_due_reading`` a second interval."""
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceplan_generate", args=[meter_plan_a.pk]), follow=True)
+        job = MaintenanceWorkOrder.objects.get(plan=meter_plan_a)
+        job.meter_reading_at_work = Decimal("1250")
+        job.save(update_fields=["meter_reading_at_work", "updated_at"])
+        _walk_job_to(client_a, job, "in_progress")
+        url = reverse("scm:maintenanceworkorder_complete", args=[job.pk])
+        client_a.post(url, follow=True)
+        client_a.post(url, follow=True)
+        meter_plan_a.refresh_from_db()
+        assert meter_plan_a.next_due_reading == Decimal("1500.0000")   # 1250 + 250, once
+
+
+# ================================================================ 4.13 · the job ladder
+class TestMaintenanceWorkOrderViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    maintenance_order_a):
+        resp = client_a.get(reverse("scm:maintenanceworkorder_list"))
+        for key in ("object_list", "page_obj", "q", "status_choices", "work_type_choices",
+                    "priority_choices", "problem_code_choices", "assets", "assignees", "stats"):
+            assert key in resp.context, key
+        for key in ("open", "in_progress", "on_hold", "down_now", "unplanned_downtime_minutes"):
+            assert key in resp.context["stats"], key
+
+    def test_the_cost_columns_come_from_one_grouped_aggregate(self, client_a,
+                                                              maintenance_order_a,
+                                                              issued_part_line_a):
+        row = client_a.get(reverse("scm:maintenanceworkorder_list")).context["object_list"][0]
+        assert row.issued_parts_cost == Decimal("50.0000")
+        assert row.job_cost == Decimal("230.0000")
+
+    def test_a_labour_only_job_annotates_a_real_zero_not_none(self, client_a,
+                                                              maintenance_order_a):
+        """Without the ``Coalesce`` a job with no parts annotates ``None`` and ``job_cost`` silently
+        becomes ``None`` too, blanking a labour-only repair's cost on the list."""
+        row = client_a.get(reverse("scm:maintenanceworkorder_list")).context["object_list"][0]
+        assert row.issued_parts_cost == Decimal("0.0000")
+        assert row.job_cost == Decimal("180.0000")
+
+    def test_the_unplanned_downtime_chip_is_none_and_never_zero(self, client_a,
+                                                                maintenance_order_a):
+        """A zero in a tile reads as a measurement; a blank makes somebody go and look."""
+        stats = client_a.get(reverse("scm:maintenanceworkorder_list")).context["stats"]
+        assert stats["unplanned_downtime_minutes"] is None
+
+    def test_the_list_never_shows_another_workspaces_jobs(self, client_a, maintenance_order_a,
+                                                          maintenance_order_b):
+        rows = client_a.get(reverse("scm:maintenanceworkorder_list")).context["object_list"]
+        assert maintenance_order_a in rows and maintenance_order_b not in rows
+
+    @pytest.mark.parametrize("param,value", [("status", "requested"), ("work_type", "corrective"),
+                                             ("priority", "high")])
+    def test_each_string_filter_narrows(self, client_a, maintenance_order_a, param, value):
+        rows = client_a.get(reverse("scm:maintenanceworkorder_list"),
+                            {param: value}).context["object_list"]
+        assert maintenance_order_a in rows
+
+    def test_the_problem_code_filter_narrows(self, client_a, maintenance_order_a):
+        maintenance_order_a.problem_code = "noise"
+        maintenance_order_a.save(update_fields=["problem_code", "updated_at"])
+        rows = client_a.get(reverse("scm:maintenanceworkorder_list"),
+                            {"problem_code": "noise"}).context["object_list"]
+        assert maintenance_order_a in rows
+
+    @pytest.mark.parametrize("param", ["asset", "assigned_to"])
+    @pytest.mark.parametrize("junk", _ASSET_JUNK_PKS)
+    def test_a_junk_pk_filter_lands_on_a_page(self, client_a, maintenance_order_a, param, junk):
+        resp = client_a.get(reverse("scm:maintenanceworkorder_list"), {param: junk})
+        assert resp.status_code == 200
+        assert maintenance_order_a in resp.context["object_list"]
+
+    def test_the_reported_window_covers_the_whole_closing_day(self, client_a,
+                                                              maintenance_order_a):
+        """On a DATETIME column a bare ``2026-08-04`` upper bound resolves to midnight and silently
+        drops every job reported during the day somebody asked for."""
+        today = _asset_view_day(0).isoformat()
+        rows = client_a.get(reverse("scm:maintenanceworkorder_list"),
+                            {"date_from": today, "date_to": today}).context["object_list"]
+        assert maintenance_order_a in rows
+
+    @pytest.mark.parametrize("param", ["date_from", "date_to"])
+    def test_a_junk_date_window_skips_the_filter(self, client_a, maintenance_order_a, param):
+        resp = client_a.get(reverse("scm:maintenanceworkorder_list"), {param: "lastweek"})
+        assert resp.status_code == 200
+        assert maintenance_order_a in resp.context["object_list"]
+
+    def test_page_two_and_a_page_past_the_end_both_render(self, client_a, tenant_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        for index in range(20):
+            MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a,
+                                                title=f"Job {index}")
+        assert client_a.get(reverse("scm:maintenanceworkorder_list"),
+                            {"page": "2"}).status_code == 200
+        assert client_a.get(reverse("scm:maintenanceworkorder_list"),
+                            {"page": "999"}).status_code == 200
+
+    def test_create_saves_the_header_and_its_parts_in_one_go(self, client_a, tenant_a, asset_a,
+                                                             spare_item_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        payload = _job_view_post(asset=str(asset_a.pk), rows=[_part_row(spare_item_a)])
+        resp = client_a.post(reverse("scm:maintenanceworkorder_create"), payload, follow=True)
+        assert resp.status_code == 200
+        job = MaintenanceWorkOrder.objects.get(title="Bearing replacement")
+        assert job.tenant_id == tenant_a.pk
+        assert job.status == "requested"
+        assert job.parts.count() == 1
+
+    def test_a_crafted_status_in_the_create_body_never_lands(self, client_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceworkorder_create"),
+                      _job_view_post(asset=str(asset_a.pk), status="completed"), follow=True)
+        assert MaintenanceWorkOrder.objects.get(title="Bearing replacement").status == "requested"
+
+    def test_edit_is_refused_once_the_job_is_terminal(self, client_a, completed_order_a):
+        """A finished job is the record of what happened; editing one would silently restate a cost
+        already reported on the asset and on the depreciation report."""
+        resp = client_a.get(reverse("scm:maintenanceworkorder_edit", args=[completed_order_a.pk]),
+                            follow=True)
+        assert "can no longer be edited" in _message_blob(resp)
+
+    def test_the_detail_page_carries_every_key_and_action_gate(self, client_a,
+                                                               maintenance_order_a, part_line_a,
+                                                               job_task_a):
+        resp = client_a.get(reverse("scm:maintenanceworkorder_detail",
+                                    args=[maintenance_order_a.pk]))
+        for key in ("obj", "parts", "tasks", "moves", "readings", "parts_cost", "labour_cost",
+                    "total_cost", "duration_hours", "is_on_time", "open_task_count",
+                    "issued_part_count", "unissued_part_count", "has_issued_parts", "can_edit",
+                    "can_delete", "can_approve", "can_schedule", "can_start", "can_hold",
+                    "can_resume", "can_complete", "can_close", "can_cancel", "can_issue_parts",
+                    "can_record_reading", "parts_location_missing", "asset_meter_name",
+                    "asset_meter_unit"):
+            assert key in resp.context, key
+        assert resp.context["can_approve"] is True
+        assert resp.context["can_start"] is False
+        assert resp.context["duration_hours"] is None
+        assert resp.context["is_on_time"] is None
+
+    def test_the_issue_gate_says_why_it_is_unavailable(self, client_a, maintenance_order_a,
+                                                       part_line_a):
+        maintenance_order_a.parts_location = None
+        maintenance_order_a.save(update_fields=["parts_location", "updated_at"])
+        resp = client_a.get(reverse("scm:maintenanceworkorder_detail",
+                                    args=[maintenance_order_a.pk]))
+        assert resp.context["can_issue_parts"] is False
+        assert resp.context["parts_location_missing"] is True
+
+    def test_the_reading_gate_closes_on_an_asset_with_no_meter(self, client_a, tenant_a,
+                                                               asset_a2):
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a2, title="Service")
+        resp = client_a.get(reverse("scm:maintenanceworkorder_detail", args=[job.pk]))
+        assert resp.context["can_record_reading"] is False
+        assert resp.context["asset_meter_name"] == ""
+
+    def test_the_full_verb_ladder_walks_to_closed(self, client_a, maintenance_order_a):
+        job = _walk_job_to(client_a, maintenance_order_a, "closed")
+        assert job.status == "closed"
+        assert job.started_at is not None and job.completed_at is not None
+
+    def test_start_stamps_and_resume_deliberately_does_not_restamp(self, client_a,
+                                                                   maintenance_order_a):
+        """The duration a job took is measured from when work FIRST began, not from the last coffee
+        break."""
+        job = _walk_job_to(client_a, maintenance_order_a, "in_progress")
+        first = job.started_at
+        client_a.post(reverse("scm:maintenanceworkorder_hold", args=[job.pk]),
+                      {"reason": "Waiting on a permit"}, follow=True)
+        client_a.post(reverse("scm:maintenanceworkorder_resume", args=[job.pk]), follow=True)
+        job.refresh_from_db()
+        assert job.status == "in_progress"
+        assert job.started_at == first
+
+    def test_complete_refuses_a_held_job_and_says_to_resume_it(self, client_a,
+                                                               maintenance_order_a):
+        job = _walk_job_to(client_a, maintenance_order_a, "in_progress")
+        client_a.post(reverse("scm:maintenanceworkorder_hold", args=[job.pk]), follow=True)
+        resp = client_a.post(reverse("scm:maintenanceworkorder_complete", args=[job.pk]),
+                             follow=True)
+        assert "resume it first" in _message_blob(resp)
+        job.refresh_from_db()
+        assert job.status == "on_hold"
+
+    def test_complete_collects_the_resolution_notes(self, client_a, maintenance_order_a):
+        """Collected HERE because ``is_editable`` is the open statuses only — the moment this verb
+        lands the edit form can no longer reach the field."""
+        job = _walk_job_to(client_a, maintenance_order_a, "in_progress")
+        client_a.post(reverse("scm:maintenanceworkorder_complete", args=[job.pk]),
+                      {"resolution_notes": "Replaced the front bearing."}, follow=True)
+        job.refresh_from_db()
+        assert job.resolution_notes == "Replaced the front bearing."
+
+    @pytest.mark.parametrize("verb", ["schedule", "start", "hold", "resume", "complete", "close"])
+    def test_every_illegal_transition_is_a_message_and_a_redirect_not_a_500(
+            self, client_a, maintenance_order_a, verb):
+        """A crafted or stale POST must never 500 and must never be a silent no-op."""
+        resp = client_a.post(reverse(f"scm:maintenanceworkorder_{verb}",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert resp.status_code == 200
+        assert "cannot be" in _message_blob(resp) or "give the scheduled start" in _message_blob(
+            resp)
+        maintenance_order_a.refresh_from_db()
+        assert maintenance_order_a.status == "requested"
+
+    def test_approving_twice_is_refused_the_second_time(self, client_a, maintenance_order_a):
+        client_a.post(reverse("scm:maintenanceworkorder_approve",
+                              args=[maintenance_order_a.pk]), follow=True)
+        resp = client_a.post(reverse("scm:maintenanceworkorder_approve",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert "cannot be approved" in _message_blob(resp)
+
+    def test_schedule_refuses_a_commitment_to_nothing(self, client_a, approved_order_a):
+        """``is_on_time`` is measured against ``scheduled_start``, so a job put into ``scheduled``
+        with no date is a commitment to nothing."""
+        resp = client_a.post(reverse("scm:maintenanceworkorder_schedule",
+                                     args=[approved_order_a.pk]), follow=True)
+        assert "give the scheduled start" in _message_blob(resp)
+        approved_order_a.refresh_from_db()
+        assert approved_order_a.status == "approved"
+
+    def test_schedule_rejects_an_unparseable_date_with_a_friendly_message(self, client_a,
+                                                                          approved_order_a):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_schedule",
+                                     args=[approved_order_a.pk]),
+                             {"scheduled_start": "lastweek"}, follow=True)
+        assert resp.status_code == 200
+        assert "not a date and time" in _message_blob(resp)
+
+    def test_schedule_accepts_a_bare_date_and_localises_it(self, client_a, approved_order_a):
+        from django.utils import timezone
+        target = _asset_view_day(3)
+        client_a.post(reverse("scm:maintenanceworkorder_schedule", args=[approved_order_a.pk]),
+                      {"scheduled_start": target.isoformat()}, follow=True)
+        approved_order_a.refresh_from_db()
+        assert approved_order_a.status == "scheduled"
+        assert timezone.localtime(approved_order_a.scheduled_start).date() == target
+
+    def test_a_scheduled_job_may_be_rescheduled_without_walking_backwards(self, client_a,
+                                                                          approved_order_a):
+        url = reverse("scm:maintenanceworkorder_schedule", args=[approved_order_a.pk])
+        client_a.post(url, {"scheduled_start": _asset_view_day(3).isoformat()}, follow=True)
+        resp = client_a.post(url, {"scheduled_start": _asset_view_day(5).isoformat()}, follow=True)
+        assert resp.status_code == 200
+        approved_order_a.refresh_from_db()
+        assert approved_order_a.status == "scheduled"
+
+    def test_start_accepts_approved_as_well_as_scheduled(self, client_a, approved_order_a):
+        """A breakdown is worked the moment somebody walks to the machine; a reactive job forced
+        through a scheduling step would only ever be given a fake date."""
+        client_a.post(reverse("scm:maintenanceworkorder_start", args=[approved_order_a.pk]),
+                      follow=True)
+        approved_order_a.refresh_from_db()
+        assert approved_order_a.status == "in_progress"
+
+    def test_delete_removes_an_open_job_with_no_issued_parts(self, client_a, maintenance_order_a,
+                                                             part_line_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceworkorder_delete", args=[maintenance_order_a.pk]),
+                      follow=True)
+        assert not MaintenanceWorkOrder.objects.filter(pk=maintenance_order_a.pk).exists()
+
+    def test_delete_is_refused_once_the_job_is_terminal(self, client_a, completed_order_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        resp = client_a.post(reverse("scm:maintenanceworkorder_delete",
+                                     args=[completed_order_a.pk]), follow=True)
+        assert MaintenanceWorkOrder.objects.filter(pk=completed_order_a.pk).exists()
+        assert "cancel an open job instead" in _message_blob(resp)
+
+
+class TestMaintenanceWorkOrderTaskToggle:
+    def test_ticking_a_step_stamps_the_moment(self, client_a, job_task_a):
+        resp = client_a.post(reverse("scm:maintenanceworkordertask_toggle", args=[job_task_a.pk]),
+                             {"actual_result": "Padlock fitted"}, follow=True)
+        assert resp.status_code == 200
+        job_task_a.refresh_from_db()
+        assert job_task_a.is_done is True
+        assert job_task_a.completed_at is not None
+        assert job_task_a.actual_result == "Padlock fitted"
+
+    def test_unticking_clears_the_stamp(self, client_a, job_task_a):
+        url = reverse("scm:maintenanceworkordertask_toggle", args=[job_task_a.pk])
+        client_a.post(url, follow=True)
+        client_a.post(url, follow=True)
+        job_task_a.refresh_from_db()
+        assert job_task_a.is_done is False
+        assert job_task_a.completed_at is None
+
+    def test_an_absent_actual_result_leaves_the_stored_one_alone(self, client_a, job_task_a):
+        url = reverse("scm:maintenanceworkordertask_toggle", args=[job_task_a.pk])
+        client_a.post(url, {"actual_result": "Padlock fitted"}, follow=True)
+        client_a.post(url, follow=True)
+        job_task_a.refresh_from_db()
+        assert job_task_a.actual_result == "Padlock fitted"
+
+    def test_a_terminal_jobs_checklist_can_no_longer_be_changed(self, client_a,
+                                                                maintenance_order_a, job_task_a):
+        """The checklist on a finished job is evidence of what was actually signed off."""
+        _walk_job_to(client_a, maintenance_order_a, "completed")
+        resp = client_a.post(reverse("scm:maintenanceworkordertask_toggle", args=[job_task_a.pk]),
+                             follow=True)
+        assert "can no longer be changed" in _message_blob(resp)
+        job_task_a.refresh_from_db()
+        assert job_task_a.is_done is False
+
+
+# ================================================================ 4.13 · the ONE ledger write
+class TestIssuePartsPostsTheLedger:
+    def test_it_posts_exactly_one_negative_maintenance_move_per_line(self, client_a, tenant_a,
+                                                                     maintenance_order_a,
+                                                                     part_line_a, spare_item_a,
+                                                                     location_a):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                              args=[maintenance_order_a.pk]), follow=True)
+        moves = StockMove.objects.filter(tenant=tenant_a, reference=maintenance_order_a.number)
+        assert moves.count() == 1
+        move = moves.first()
+        assert move.move_type == "maintenance"
+        assert move.quantity == Decimal("-2.0000")
+        assert move.location_id == location_a.pk
+        assert move.unit_cost == spare_item_a.average_cost == Decimal("25.0000")
+
+    def test_the_line_is_stamped_at_issue_time_and_never_re_read(self, client_a,
+                                                                 maintenance_order_a,
+                                                                 part_line_a, spare_item_a):
+        """``average_cost`` moves with every receipt, so a live read would quietly restate the cost
+        of a repair closed last quarter every time a new delivery landed."""
+        from apps.scm.tests._helpers import seed_stock
+        client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                              args=[maintenance_order_a.pk]), follow=True)
+        part_line_a.refresh_from_db()
+        assert part_line_a.is_issued is True
+        assert part_line_a.unit_cost == Decimal("25.0000")
+        seed_stock(spare_item_a.tenant, spare_item_a, spare_item_a.stock_moves.first().location,
+                   "100", "90.0000", reference="LATER")
+        part_line_a.refresh_from_db()
+        assert part_line_a.unit_cost == Decimal("25.0000")
+
+    def test_a_double_post_issues_nothing_the_second_time(self, client_a, tenant_a,
+                                                          maintenance_order_a, part_line_a):
+        from apps.scm.models import StockMove
+        url = reverse("scm:maintenanceworkorder_issue_parts", args=[maintenance_order_a.pk])
+        client_a.post(url, follow=True)
+        resp = client_a.post(url, follow=True)
+        assert "already been issued" in _message_blob(resp)
+        assert StockMove.objects.filter(tenant=tenant_a,
+                                        reference=maintenance_order_a.number).count() == 1
+
+    def test_a_shortfall_names_the_line_and_skips_it_while_the_rest_are_issued(
+            self, client_a, tenant_a, maintenance_order_a, part_line_a, spare_item_a,
+            component_bolt_a, location_a):
+        """Refusing an eight-line issue over one missing washer helps nobody."""
+        from apps.scm.models import MaintenanceWorkOrderPart, StockMove
+        from apps.scm.tests._helpers import seed_stock
+        seed_stock(tenant_a, component_bolt_a, location_a, "5", "2.0000", reference="OPEN-BOLT")
+        short = MaintenanceWorkOrderPart.objects.create(
+            work_order=maintenance_order_a, item=component_bolt_a, quantity=Decimal("999"))
+        resp = client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        blob = _message_blob(resp)
+        assert component_bolt_a.sku.lower() in blob
+        assert "not issued" in blob
+        part_line_a.refresh_from_db()
+        short.refresh_from_db()
+        assert part_line_a.is_issued is True and short.is_issued is False
+        assert StockMove.objects.filter(tenant=tenant_a,
+                                        reference=maintenance_order_a.number).count() == 1
+
+    def test_a_shortfall_on_every_line_posts_nothing_at_all(self, client_a, tenant_a,
+                                                            maintenance_order_a, part_line_a):
+        from apps.scm.models import StockMove
+        part_line_a.quantity = Decimal("999")
+        part_line_a.save(update_fields=["quantity"])
+        resp = client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert "only" in _message_blob(resp)
+        assert not StockMove.objects.filter(tenant=tenant_a,
+                                            reference=maintenance_order_a.number).exists()
+        part_line_a.refresh_from_db()
+        assert part_line_a.is_issued is False
+
+    def test_it_is_refused_outright_without_a_storeroom(self, client_a, tenant_a,
+                                                        maintenance_order_a, part_line_a):
+        """Guessing a storeroom would draw stock out of a location that never held it, and the
+        tenant-wide figure would stay balanced while the real holding bin was never debited."""
+        from apps.scm.models import StockMove
+        maintenance_order_a.parts_location = None
+        maintenance_order_a.save(update_fields=["parts_location", "updated_at"])
+        resp = client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert "no storeroom set" in _message_blob(resp)
+        assert not StockMove.objects.filter(tenant=tenant_a,
+                                            reference=maintenance_order_a.number).exists()
+
+    def test_it_is_refused_once_the_job_is_terminal(self, client_a, completed_order_a,
+                                                    part_line_a):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                     args=[completed_order_a.pk]), follow=True)
+        assert "only be issued while the job is still open" in _message_blob(resp)
+
+    def test_a_job_with_no_lines_says_so(self, client_a, maintenance_order_a):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert "no part lines to issue" in _message_blob(resp)
+
+    def test_the_posted_move_shows_on_the_jobs_detail_page(self, client_a, maintenance_order_a,
+                                                           part_line_a):
+        client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                              args=[maintenance_order_a.pk]), follow=True)
+        resp = client_a.get(reverse("scm:maintenanceworkorder_detail",
+                                    args=[maintenance_order_a.pk]))
+        assert len(resp.context["moves"]) == 1
+        assert resp.context["has_issued_parts"] is True
+        assert resp.context["can_delete"] is False
+
+    def test_it_posts_no_journal_entry(self, client_a, maintenance_order_a, part_line_a):
+        """The standing L29 rule — the only ledger effect in 4.13 is the StockMove."""
+        from apps.accounting.models import JournalEntry
+        before = JournalEntry.objects.count()
+        client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                              args=[maintenance_order_a.pk]), follow=True)
+        assert JournalEntry.objects.count() == before
+
+
+# ==================== 4.13 · REGRESSION LOCK — the cancel/delete guards run inside the row lock
+class TestIssuedPartsBlockCancelAndDelete:
+    """Read before the lock, both guards were ADVISORY: a concurrent ``issue_parts`` committed in
+    the gap and the write landed anyway.
+
+    The end state was a ``cancelled`` job carrying posted ``maintenance`` StockMoves —
+    ``Asset._jobs()`` excludes cancelled jobs, so the consumption vanished from
+    ``maintenance_cost_to_date()``, from the repair-vs-replace ratio and from MTTR/MTBF, while the
+    stock was genuinely gone.
+    """
+
+    def test_cancel_refuses_a_job_with_issued_parts(self, client_a, maintenance_order_a,
+                                                    issued_part_line_a):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_cancel",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert "parts already issued" in _message_blob(resp)
+        maintenance_order_a.refresh_from_db()
+        assert maintenance_order_a.status == "requested"
+
+    def test_delete_refuses_a_job_with_issued_parts(self, client_a, maintenance_order_a,
+                                                    issued_part_line_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        resp = client_a.post(reverse("scm:maintenanceworkorder_delete",
+                                     args=[maintenance_order_a.pk]), follow=True)
+        assert "parts already issued" in _message_blob(resp)
+        assert MaintenanceWorkOrder.objects.filter(pk=maintenance_order_a.pk).exists()
+
+    def test_the_ledger_move_survives_the_refusal(self, client_a, tenant_a, maintenance_order_a,
+                                                  issued_part_line_a):
+        from apps.scm.models import StockMove
+        client_a.post(reverse("scm:maintenanceworkorder_cancel",
+                              args=[maintenance_order_a.pk]), follow=True)
+        client_a.post(reverse("scm:maintenanceworkorder_delete",
+                              args=[maintenance_order_a.pk]), follow=True)
+        assert StockMove.objects.filter(tenant=tenant_a,
+                                        reference=maintenance_order_a.number).count() == 1
+
+    def test_a_clean_job_still_cancels(self, client_a, maintenance_order_a, part_line_a):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_cancel",
+                                     args=[maintenance_order_a.pk]),
+                             {"reason": "Duplicate request"}, follow=True)
+        assert resp.status_code == 200
+        maintenance_order_a.refresh_from_db()
+        assert maintenance_order_a.status == "cancelled"
+
+    def test_a_clean_job_still_deletes(self, client_a, maintenance_order_a, part_line_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        client_a.post(reverse("scm:maintenanceworkorder_delete",
+                              args=[maintenance_order_a.pk]), follow=True)
+        assert not MaintenanceWorkOrder.objects.filter(pk=maintenance_order_a.pk).exists()
+
+    def test_the_detail_page_gates_both_buttons_on_the_same_condition(self, client_a,
+                                                                      maintenance_order_a,
+                                                                      issued_part_line_a):
+        resp = client_a.get(reverse("scm:maintenanceworkorder_detail",
+                                    args=[maintenance_order_a.pk]))
+        assert resp.context["can_cancel"] is False
+        assert resp.context["can_delete"] is False
+
+
+# ============ 4.13 · REGRESSION LOCK — every confirm() handler stays a valid JS string literal
+class TestConfirmHandlersSurviveAnApostrophe:
+    """A broken ``onsubmit="return confirm('...')"`` throws, returns ``undefined``, and the form
+    submits with NO confirmation — the guard silently vanishes on the only route that writes the
+    ledger.
+    """
+
+    def test_every_handler_on_the_job_page_is_a_well_formed_literal(self, client_a, tenant_a,
+                                                                     location_a,
+                                                                     maintenance_order_a,
+                                                                     part_line_a, job_task_a):
+        location_a.code = "O'BRIEN-1"
+        location_a.save(update_fields=["code", "updated_at"])
+        resp = client_a.get(reverse("scm:maintenanceworkorder_detail",
+                                    args=[maintenance_order_a.pk]))
+        content = resp.content.decode()
+        assert "O&#x27;BRIEN-1" in content or "O&#39;BRIEN-1" in content, \
+            "the hostile location code never reached the page, so this test proves nothing"
+        bodies = _confirm_bodies(content)
+        assert len(bodies) >= 5, "no confirm handlers found — the assertion would be vacuous"
+        for body in bodies:
+            index = _unescaped_quote_at(body)
+            assert index is None, (
+                f"unescaped ' at {index} closes the JS string early: {body[:index + 20]!r}")
+
+    def test_the_same_holds_on_the_asset_and_plan_pages(self, client_a, location_a, asset_a,
+                                                        asset_spare_part_a, maintenance_plan_a):
+        location_a.code = "O'BRIEN-1"
+        location_a.save(update_fields=["code", "updated_at"])
+        for url_name, obj in (("scm:asset_detail", asset_a),
+                              ("scm:maintenanceplan_detail", maintenance_plan_a)):
+            content = client_a.get(reverse(url_name, args=[obj.pk])).content.decode()
+            bodies = _confirm_bodies(content)
+            assert bodies, url_name
+            for body in bodies:
+                assert _unescaped_quote_at(body) is None, (url_name, body)
+
+    def test_the_list_pages_hold_too(self, client_a, location_a, asset_a, maintenance_plan_a,
+                                     maintenance_order_a):
+        location_a.code = "O'BRIEN-1"
+        location_a.save(update_fields=["code", "updated_at"])
+        for url_name in ("scm:asset_list", "scm:maintenanceplan_list",
+                         "scm:maintenanceworkorder_list"):
+            content = client_a.get(reverse(url_name)).content.decode()
+            for body in _confirm_bodies(content):
+                assert _unescaped_quote_at(body) is None, (url_name, body)
+
+    def test_the_checker_itself_catches_a_broken_handler(self):
+        """Guards the guard: without this, a checker that silently found nothing would pass on a
+        page whose handlers were all broken."""
+        broken = "<form onsubmit=\"return confirm('O&#x27;Brien said no');\">"
+        body = _confirm_bodies(broken)[0]
+        assert _unescaped_quote_at(body) is not None
+
+
+# ================================================================ 4.13 · the append-only meter log
+class TestMeterReadingViews:
+    def test_the_list_carries_every_key_its_filter_bar_renders_from(self, client_a,
+                                                                    meter_reading_a):
+        resp = client_a.get(reverse("scm:meterreading_list"))
+        for key in ("object_list", "page_obj", "q", "assets", "source_choices", "date_from",
+                    "date_to", "append_only_note"):
+            assert key in resp.context, key
+
+    def test_the_list_never_shows_another_workspaces_readings(self, client_a, meter_reading_a,
+                                                              meter_reading_b):
+        rows = client_a.get(reverse("scm:meterreading_list")).context["object_list"]
+        assert meter_reading_a in rows and meter_reading_b not in rows
+
+    def test_search_covers_the_meter_name_and_the_reference(self, client_a, meter_reading_a):
+        rows = client_a.get(reverse("scm:meterreading_list"),
+                            {"q": "Running"}).context["object_list"]
+        assert meter_reading_a in rows
+
+    def test_the_asset_and_source_filters_narrow(self, client_a, meter_reading_a, asset_a):
+        for params in ({"asset": str(asset_a.pk)}, {"source": "manual"}):
+            rows = client_a.get(reverse("scm:meterreading_list"), params).context["object_list"]
+            assert meter_reading_a in rows, params
+
+    @pytest.mark.parametrize("junk", _ASSET_JUNK_PKS)
+    def test_a_junk_asset_filter_lands_on_a_page(self, client_a, meter_reading_a, junk):
+        resp = client_a.get(reverse("scm:meterreading_list"), {"asset": junk})
+        assert resp.status_code == 200
+        assert meter_reading_a in resp.context["object_list"]
+
+    def test_the_date_window_covers_the_whole_closing_day(self, client_a, meter_reading_a):
+        """A bare upper bound on a DATETIME column resolves to midnight, silently dropping every
+        reading taken during the day somebody asked for."""
+        today = _asset_view_day(0).isoformat()
+        rows = client_a.get(reverse("scm:meterreading_list"),
+                            {"date_from": _asset_view_day(-2).isoformat(),
+                             "date_to": today}).context["object_list"]
+        assert meter_reading_a in rows
+
+    @pytest.mark.parametrize("param", ["date_from", "date_to"])
+    def test_a_junk_date_is_skipped_and_echoed_back_verbatim(self, client_a, meter_reading_a,
+                                                             param):
+        """Echoed so the input keeps what was typed — silently blanking it looks like the page
+        ignored the request."""
+        resp = client_a.get(reverse("scm:meterreading_list"), {param: "lastweek"})
+        assert resp.status_code == 200
+        assert resp.context[param] == "lastweek"
+        assert meter_reading_a in resp.context["object_list"]
+
+    def test_the_log_pages_thirty_at_a_time(self, client_a, tenant_a, asset_a):
+        """30 rather than the app-wide 15, the ``stock_ledger`` precedent: this is a trail people
+        SCAN for a trend rather than a register they page through one record at a time."""
+        from apps.scm.models import MeterReading
+        for index in range(35):
+            MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Hours",
+                                        reading=Decimal(index))
+        first = client_a.get(reverse("scm:meterreading_list"))
+        assert len(first.context["object_list"]) == 30
+        second = client_a.get(reverse("scm:meterreading_list"), {"page": "2"})
+        assert len(second.context["object_list"]) == 5
+        assert client_a.get(reverse("scm:meterreading_list"),
+                            {"page": "999"}).status_code == 200
+
+    def test_create_stamps_the_tenant_and_the_acting_party(self, client_a, tenant_a, asset_a):
+        from apps.scm.models import MeterReading
+        resp = client_a.post(reverse("scm:meterreading_create"),
+                             _reading_view_post(asset=str(asset_a.pk)), follow=True)
+        assert resp.status_code == 200
+        row = MeterReading.objects.get(asset=asset_a, reading=Decimal("1300"))
+        assert row.tenant_id == tenant_a.pk
+
+    def test_a_crafted_provenance_pair_is_ignored_on_create(self, client_a, asset_a,
+                                                            maintenance_order_a):
+        """THE REGRESSION (bug 7): the human form has no ``source`` and no ``reference`` field, so
+        a POST claiming to be a verb-filed reading lands as an ordinary manual entry."""
+        from apps.scm.models import MeterReading
+        client_a.post(reverse("scm:meterreading_create"),
+                      _reading_view_post(asset=str(asset_a.pk), source="work_order",
+                                         reference=maintenance_order_a.number), follow=True)
+        row = MeterReading.objects.get(asset=asset_a, reading=Decimal("1300"))
+        assert row.source == "manual"
+        assert row.reference == ""
+
+    def test_the_record_reading_verb_still_stamps_the_work_order_provenance(
+            self, client_a, asset_a, maintenance_order_a):
+        """The other half of the same rule: provenance is stamped by whichever code path actually
+        FILES the reading, never accepted from the request."""
+        from apps.scm.models import MeterReading
+        resp = client_a.post(reverse("scm:maintenanceworkorder_record_reading",
+                                     args=[maintenance_order_a.pk]),
+                             {"reading": "1240", "notes": "Taken at the panel"}, follow=True)
+        assert resp.status_code == 200
+        row = MeterReading.objects.get(asset=asset_a, reading=Decimal("1240"))
+        assert row.source == "work_order"
+        assert row.reference == maintenance_order_a.number
+
+    def test_the_record_reading_verb_forces_the_jobs_own_asset(self, client_a, asset_a, asset_a2,
+                                                               maintenance_order_a):
+        """Letting a caller name the asset would make a tenant-scoped dropdown the only thing
+        standing between a crafted POST and another workspace's meter history."""
+        from apps.scm.models import MeterReading
+        client_a.post(reverse("scm:maintenanceworkorder_record_reading",
+                              args=[maintenance_order_a.pk]),
+                      {"reading": "1240", "asset": str(asset_a2.pk)}, follow=True)
+        assert MeterReading.objects.get(reading=Decimal("1240")).asset_id == asset_a.pk
+
+    def test_the_record_reading_verb_reports_a_bad_value_as_a_message(self, client_a,
+                                                                       maintenance_order_a):
+        from apps.scm.models import MeterReading
+        resp = client_a.post(reverse("scm:maintenanceworkorder_record_reading",
+                                     args=[maintenance_order_a.pk]),
+                             {"reading": "NaN"}, follow=True)
+        assert resp.status_code == 200
+        assert "reading" in _message_blob(resp)
+        assert not MeterReading.objects.filter(reference=maintenance_order_a.number).exists()
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "not-a-number", "-5",
+                                       "99999999999999999999"])
+    def test_a_hostile_reading_never_500s(self, client_a, maintenance_order_a, value):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_record_reading",
+                                     args=[maintenance_order_a.pk]), {"reading": value},
+                             follow=True)
+        assert resp.status_code == 200
+
+    def test_the_record_reading_verb_is_refused_on_a_closed_job(self, client_a,
+                                                                maintenance_order_a):
+        job = _walk_job_to(client_a, maintenance_order_a, "closed")
+        resp = client_a.post(reverse("scm:maintenanceworkorder_record_reading", args=[job.pk]),
+                             {"reading": "1240"}, follow=True)
+        assert "already history" in _message_blob(resp)
+
+    def test_the_create_page_pre_fills_from_an_asset_query_string(self, client_a, asset_a):
+        resp = client_a.get(reverse("scm:meterreading_create"), {"asset": str(asset_a.pk)})
+        assert resp.status_code == 200
+        assert resp.context["asset"] == asset_a
+        assert resp.context["form"].initial["meter_name"] == "Running Hours"
+
+    @pytest.mark.parametrize("junk", ["abc", "²", "99999999999999999999", "-3"])
+    def test_a_junk_asset_prefill_lands_on_a_blank_form_not_a_404(self, client_a, junk):
+        """A convenience pre-fill on a CREATE screen — a stale bookmark must not be a 404."""
+        resp = client_a.get(reverse("scm:meterreading_create"), {"asset": junk})
+        assert resp.status_code == 200
+        assert resp.context["asset"] is None
+
+    def test_another_workspaces_asset_pk_also_lands_on_a_blank_form(self, client_a, asset_b):
+        resp = client_a.get(reverse("scm:meterreading_create"), {"asset": str(asset_b.pk)})
+        assert resp.status_code == 200 and resp.context["asset"] is None
+
+    def test_a_back_dated_reading_says_it_did_not_become_the_current_value(self, client_a,
+                                                                          asset_a,
+                                                                          meter_reading_a):
+        from django.utils import timezone
+        older = (timezone.localtime(timezone.now()) - datetime.timedelta(days=3)
+                 ).strftime("%Y-%m-%d %H:%M:%S")
+        resp = client_a.post(reverse("scm:meterreading_create"),
+                             _reading_view_post(asset=str(asset_a.pk), reading="1000",
+                                                read_at=older), follow=True)
+        assert "does not change the current value" in _message_blob(resp)
+
+    def test_the_detail_page_carries_the_three_derived_facts(self, client_a, asset_a,
+                                                             meter_reading_a):
+        from apps.scm.models import MeterReading
+        newer = MeterReading.objects.create(
+            tenant=asset_a.tenant, asset=asset_a, meter_name="Running Hours", unit="h",
+            reading=Decimal("1250"))
+        resp = client_a.get(reverse("scm:meterreading_detail", args=[newer.pk]))
+        for key in ("obj", "previous", "delta", "superseded_by", "is_current",
+                    "append_only_note"):
+            assert key in resp.context, key
+        assert resp.context["previous"].pk == meter_reading_a.pk
+        assert resp.context["delta"] == Decimal("31.5000")
+        assert resp.context["is_current"] is True
+        assert resp.context["superseded_by"] is None
+
+    def test_delta_is_none_and_never_zero_for_the_first_reading(self, client_a, meter_reading_a):
+        """Zero means "the meter did not move", which is a measurement; a blank means "there is
+        nothing to compare against"."""
+        resp = client_a.get(reverse("scm:meterreading_detail", args=[meter_reading_a.pk]))
+        assert resp.context["previous"] is None
+        assert resp.context["delta"] is None
+
+    def test_a_superseded_reading_says_so(self, client_a, asset_a, meter_reading_a):
+        from apps.scm.models import MeterReading
+        newer = MeterReading.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                            meter_name="Running Hours", reading=Decimal("1250"))
+        resp = client_a.get(reverse("scm:meterreading_detail", args=[meter_reading_a.pk]))
+        assert resp.context["is_current"] is False
+        assert resp.context["superseded_by"].pk == newer.pk
+
+    def test_the_previous_row_is_keyed_on_the_same_meter(self, client_a, asset_a,
+                                                         meter_reading_a):
+        """Comparing an odometer row against a bearing-temp row would produce a delta that means
+        nothing at all."""
+        from apps.scm.models import MeterReading
+        MeterReading.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                    meter_name="Bearing Temp", reading=Decimal("78"),
+                                    read_at=_asset_hours_back(hours=48))
+        newer = MeterReading.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                            meter_name="Running Hours", reading=Decimal("1250"))
+        resp = client_a.get(reverse("scm:meterreading_detail", args=[newer.pk]))
+        assert resp.context["previous"].meter_name == "Running Hours"
+
+
+# ================================================================ 4.13 · the three computed reports
+class TestPmForecastReport:
+    def test_it_carries_every_key_its_template_renders_from(self, client_a, maintenance_plan_a,
+                                                            maintenance_order_a):
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        for key in ("days", "days_raw", "days_invalid", "day_options", "min_days", "max_days",
+                    "today", "horizon", "overdue", "due_today", "due_soon", "open_jobs",
+                    "open_jobs_truncated", "board_cap", "open_by_status", "open_job_count",
+                    "stats"):
+            assert key in resp.context, key
+
+    def test_an_overdue_plan_lands_in_the_overdue_bucket_with_its_arithmetic_shown(
+            self, client_a, maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_view_day(-4)
+        maintenance_plan_a.save(update_fields=["next_due_on", "updated_at"])
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        row = resp.context["overdue"][0]
+        assert row["plan"] == maintenance_plan_a
+        assert row["reason_kind"] == "date"
+        assert "4 day(s) overdue" in row["due_reason"]
+
+    def test_a_meter_plan_past_its_target_is_reported_as_usage_due(self, client_a, asset_a,
+                                                                   meter_plan_a):
+        from apps.scm.models import MeterReading
+        MeterReading.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                    meter_name="Running Hours", reading=Decimal("1520"))
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        row = resp.context["overdue"][0]
+        assert row["reason_kind"] == "meter"
+        assert row["usage_due"] is True
+        assert "past the" in row["due_reason"]
+
+    def test_due_today_is_its_own_bucket(self, client_a, maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_view_day(0)
+        maintenance_plan_a.save(update_fields=["next_due_on", "updated_at"])
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        assert len(resp.context["due_today"]) == 1
+        assert resp.context["stats"]["due_today"] == 1
+
+    def test_the_horizon_is_the_page_question_and_not_the_plans_lead_time(self, client_a,
+                                                                          maintenance_plan_a):
+        """Answering with each plan's private call horizon would silently hide a job due in three
+        weeks because its lead time happens to be seven days."""
+        maintenance_plan_a.next_due_on = _asset_view_day(20)
+        maintenance_plan_a.save(update_fields=["next_due_on", "updated_at"])
+        assert len(client_a.get(reverse("scm:pm_forecast"),
+                                {"days": "30"}).context["due_soon"]) == 1
+        assert len(client_a.get(reverse("scm:pm_forecast"),
+                                {"days": "7"}).context["due_soon"]) == 0
+
+    @pytest.mark.parametrize("value,expected_days,invalid", [
+        ("abc", 30, True), ("-1", 30, True), ("²", 30, True),
+        ("99999999999999999999", 30, True), ("100000", 365, True), ("0", 1, True), ("14", 14,
+                                                                                    False)])
+    def test_a_hostile_horizon_is_clamped_and_reported_rather_than_raised(self, client_a, value,
+                                                                          expected_days, invalid):
+        """``today + timedelta(days=N)`` raises ``OverflowError`` past ~2.7 million days — an
+        uncaught 500 from a URL anybody can type."""
+        resp = client_a.get(reverse("scm:pm_forecast"), {"days": value})
+        assert resp.status_code == 200
+        assert resp.context["days"] == expected_days
+        assert resp.context["days_invalid"] is invalid
+        assert resp.context["days_raw"] == value
+
+    def test_the_open_jobs_board_counts_every_live_status(self, client_a, maintenance_order_a):
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        assert resp.context["open_job_count"] == 1
+        assert resp.context["open_by_status"][0]["status"] == "requested"
+        assert resp.context["open_by_status"][0]["label"] == "Requested"
+
+    def test_a_job_parked_on_hold_never_vanishes_from_the_dispatch_board(self, client_a,
+                                                                          maintenance_order_a):
+        job = _walk_job_to(client_a, maintenance_order_a, "in_progress")
+        client_a.post(reverse("scm:maintenanceworkorder_hold", args=[job.pk]), follow=True)
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        assert resp.context["open_job_count"] == 1
+
+    def test_another_workspaces_plans_never_appear(self, client_a, maintenance_plan_b):
+        resp = client_a.get(reverse("scm:pm_forecast"))
+        assert resp.context["stats"]["plans_considered"] == 0
+
+
+class TestSparePartReport:
+    def test_it_carries_every_key_its_filter_bar_renders_from(self, client_a, spare_item_a):
+        resp = client_a.get(reverse("scm:sparepart_list"))
+        for key in ("rows", "page_obj", "q", "categories", "stock", "stock_choices", "is_active",
+                    "active_choices", "date_from", "date_to", "date_from_raw", "date_to_raw",
+                    "window_invalid", "stats", "ledger_note"):
+            assert key in resp.context, key
+
+    def test_on_hand_is_the_live_ledger_sum(self, client_a, spare_item_a):
+        row = client_a.get(reverse("scm:sparepart_list")).context["rows"][0]
+        assert row["on_hand"] == Decimal("10.0000")
+        assert row["value"] == Decimal("250.00")
+
+    def test_only_items_flagged_as_spares_appear(self, client_a, spare_item_a, item_a):
+        rows = client_a.get(reverse("scm:sparepart_list")).context["rows"]
+        assert {r["item"].pk for r in rows} == {spare_item_a.pk}
+
+    @pytest.mark.parametrize("value", ["below", "zero", "in_stock"])
+    def test_each_stock_bucket_filter_renders(self, client_a, spare_item_a, value):
+        resp = client_a.get(reverse("scm:sparepart_list"), {"stock": value})
+        assert resp.status_code == 200
+        assert resp.context["stock"] == value
+
+    @pytest.mark.parametrize("junk", _ASSET_JUNK_PKS)
+    def test_a_junk_category_filter_lands_on_a_page(self, client_a, spare_item_a, junk):
+        resp = client_a.get(reverse("scm:sparepart_list"), {"category": junk})
+        assert resp.status_code == 200
+
+    @pytest.mark.parametrize("param", ["date_from", "date_to"])
+    def test_a_junk_window_falls_back_to_the_default_and_says_so(self, client_a, spare_item_a,
+                                                                  param):
+        resp = client_a.get(reverse("scm:sparepart_list"), {param: "lastweek"})
+        assert resp.status_code == 200
+        assert resp.context["window_invalid"] is True
+
+    def test_a_reversed_window_is_swapped_and_flagged(self, client_a, spare_item_a):
+        resp = client_a.get(reverse("scm:sparepart_list"),
+                            {"date_from": _asset_view_day(0).isoformat(),
+                             "date_to": _asset_view_day(-30).isoformat()})
+        assert resp.context["window_invalid"] is True
+        assert resp.context["date_from"] < resp.context["date_to"]
+
+    def test_consumption_is_none_until_a_maintenance_draw_lands(self, client_a, spare_item_a):
+        """None means NO maintenance draw was recorded in this window — passed as None purely so
+        the template can print an em dash rather than a column of 0.0000s."""
+        assert client_a.get(reverse("scm:sparepart_list")).context["rows"][0]["consumed"] is None
+
+    def test_an_issue_shows_up_as_positive_consumption(self, client_a, maintenance_order_a,
+                                                       part_line_a, spare_item_a):
+        """The ledger stores an outbound draw as a NEGATIVE quantity; the sign is flipped exactly
+        once, in the view, never in the template."""
+        client_a.post(reverse("scm:maintenanceworkorder_issue_parts",
+                              args=[maintenance_order_a.pk]), follow=True)
+        row = client_a.get(reverse("scm:sparepart_list")).context["rows"][0]
+        assert row["consumed"]["quantity"] == Decimal("2.0000")
+        assert row["consumed"]["value"] == Decimal("50.00")
+        assert row["on_hand"] == Decimal("8.0000")
+
+    def test_the_chips_are_workspace_wide(self, client_a, spare_item_a):
+        stats = client_a.get(reverse("scm:sparepart_list")).context["stats"]
+        assert stats["total"] == 1
+        assert stats["stock_value"] == Decimal("250.00")
+
+    def test_it_renders_on_a_workspace_with_no_spares_at_all(self, client_b):
+        resp = client_b.get(reverse("scm:sparepart_list"))
+        assert resp.status_code == 200
+        assert resp.context["rows"] == []
+        assert resp.context["stats"]["total"] == 0
+
+
+class TestAssetDepreciationReport:
+    def test_it_carries_every_key_its_filter_bar_renders_from(self, client_a, asset_a):
+        resp = client_a.get(reverse("scm:asset_depreciation_report"))
+        for key in ("rows", "q", "status", "asset_type", "criticality", "linked", "location",
+                    "status_choices", "type_choices", "criticality_choices", "link_choices",
+                    "locations", "stats", "watch_pct", "replace_pct", "accounting_note"):
+            assert key in resp.context, key
+
+    def test_an_unlinked_asset_is_reported_as_a_coverage_gap_not_a_zero(self, client_a, asset_a):
+        """A green 0 % that actually means "we had no data" is worse than a blank, because a blank
+        makes somebody go and look."""
+        resp = client_a.get(reverse("scm:asset_depreciation_report"))
+        row = resp.context["rows"][0]
+        assert row["book_value"] is None
+        assert row["ratio_pct"] is None
+        assert row["ratio_label"] == "Not comparable"
+        assert row["ratio_css"] == "badge-muted"
+        assert resp.context["stats"]["unlinked_count"] == 1
+        assert resp.context["stats"]["total_acquisition"] is None
+
+    def test_a_linked_asset_gets_a_ratio_from_read_accounting_figures(self, client_a, asset_a,
+                                                                      fixed_asset_a,
+                                                                      maintenance_order_a,
+                                                                      issued_part_line_a):
+        asset_a.fixed_asset = fixed_asset_a
+        asset_a.save(update_fields=["fixed_asset", "updated_at"])
+        row = client_a.get(reverse("scm:asset_depreciation_report")).context["rows"][0]
+        assert row["book_value"] == Decimal("40000.00")
+        assert row["maintenance_spend"] == Decimal("230.00")
+        assert row["parts_spend"] == Decimal("50.00")
+        assert row["labour_spend"] == Decimal("80.00")
+        assert row["ratio_pct"] == Decimal("0.58")
+        assert row["ratio_label"] == "Economic to repair"
+
+    def test_two_part_lines_never_multiply_the_labour_on_this_page_either(self, client_a, asset_a,
+                                                                          fixed_asset_a,
+                                                                          maintenance_order_a,
+                                                                          issued_part_line_a,
+                                                                          component_bolt_a):
+        """TWO grains, TWO queries — one aggregate would fan the job rows out and charge a
+        three-part repair three times its labour, silently, forever."""
+        from django.utils import timezone
+        from apps.scm.models import MaintenanceWorkOrderPart
+        MaintenanceWorkOrderPart.objects.create(
+            work_order=maintenance_order_a, item=component_bolt_a, quantity=Decimal("1"),
+            unit_cost=Decimal("10.0000"), is_issued=True, issued_at=timezone.now())
+        asset_a.fixed_asset = fixed_asset_a
+        asset_a.save(update_fields=["fixed_asset", "updated_at"])
+        row = client_a.get(reverse("scm:asset_depreciation_report")).context["rows"][0]
+        assert row["labour_spend"] == Decimal("80.00")
+        assert row["maintenance_spend"] == Decimal("240.00")
+
+    def test_a_nil_book_value_is_none_and_never_infinity(self, client_a, asset_a, fixed_asset_a,
+                                                         maintenance_order_a):
+        """Reporting it as an enormous percentage would make a healthy, fully-written-down machine
+        the loudest row on a page about replacement decisions."""
+        fixed_asset_a.accumulated_depreciation = fixed_asset_a.acquisition_cost
+        fixed_asset_a.save(update_fields=["accumulated_depreciation", "updated_at"])
+        asset_a.fixed_asset = fixed_asset_a
+        asset_a.save(update_fields=["fixed_asset", "updated_at"])
+        resp = client_a.get(reverse("scm:asset_depreciation_report"))
+        row = resp.context["rows"][0]
+        assert row["ratio_pct"] is None
+        assert "nil" in row["excluded_reason"]
+        assert resp.context["stats"]["zero_book_count"] == 1
+
+    def test_a_cross_workspace_link_is_counted_as_an_anomaly(self, client_a, asset_a,
+                                                             fixed_asset_b):
+        from apps.scm.models import Asset
+        Asset.objects.filter(pk=asset_a.pk).update(fixed_asset=fixed_asset_b)
+        resp = client_a.get(reverse("scm:asset_depreciation_report"))
+        assert resp.context["stats"]["foreign_link_count"] == 1
+        assert resp.context["rows"][0]["foreign_link"] is True
+
+    @pytest.mark.parametrize("params", [{"status": "in_service"}, {"asset_type": "machine"},
+                                        {"criticality": "critical"}, {"linked": "unlinked"},
+                                        {"q": "CNC"}])
+    def test_each_filter_narrows(self, client_a, asset_a, asset_a2, params):
+        rows = client_a.get(reverse("scm:asset_depreciation_report"), params).context["rows"]
+        assert asset_a in [r["asset"] for r in rows]
+
+    @pytest.mark.parametrize("junk", _ASSET_JUNK_PKS)
+    def test_a_junk_location_filter_lands_on_a_page(self, client_a, asset_a, junk):
+        resp = client_a.get(reverse("scm:asset_depreciation_report"), {"location": junk})
+        assert resp.status_code == 200
+
+    def test_coverage_is_none_and_never_zero_percent_on_an_empty_workspace(self, client_b):
+        """A zero coverage figure reads as "0 % of our assets are capitalised", which is a
+        different claim from "there are no assets"."""
+        stats = client_b.get(reverse("scm:asset_depreciation_report")).context["stats"]
+        assert stats["considered_count"] == 0
+        assert stats["coverage_pct"] is None
+        assert stats["total_spend"] == Decimal("0.00")
+
+
+# ================================================================ 4.13 · POST-only method gates
+class TestAssetManagementMethodGates:
+    @pytest.mark.parametrize("url_name", _ASSET_VERB_ROUTES)
+    def test_a_get_to_every_verb_is_a_405(self, client_a, url_name, asset_a, asset_spare_part_a,
+                                          maintenance_plan_a, maintenance_order_a, job_task_a):
+        """``status`` is ``editable=False`` and these routes are the only things that can move it —
+        which is exactly why none of them may be reachable by following a link."""
+        target = {
+            "scm:asset_delete": asset_a,
+            "scm:assetsparepart_delete": asset_spare_part_a,
+            "scm:maintenanceplan_delete": maintenance_plan_a,
+            "scm:maintenanceplan_generate": maintenance_plan_a,
+            "scm:maintenanceworkordertask_toggle": job_task_a,
+        }.get(url_name, maintenance_order_a)
+        assert client_a.get(reverse(url_name, args=[target.pk])).status_code == 405
+
+    def test_there_are_exactly_sixteen_of_them(self):
+        assert len(set(_ASSET_VERB_ROUTES)) == 16
+
+
+# ================================================== 4.13 · a logged-in user with NO workspace
+class TestAssetManagementCreateWithoutTenantWorkspace:
+    """``_need_tenant`` — the bare superuser has ``tenant=None`` BY DESIGN, and every 4.13 view
+    filters on ``tenant=request.tenant``.
+
+    Letting one of them save would produce an orphan row with ``tenant_id`` NULL on a NOT NULL
+    column at best, and a record no workspace can ever see at worst. The three create screens that
+    stamp a tenant therefore refuse up front, with a message, rather than rendering a form whose
+    every dropdown is empty and whose POST cannot succeed.
+    """
+
+    def _asset_tenantless_client(self, db):
+        from django.test import Client
+        from apps.accounts.models import User
+        user = User.objects.create_user(email="orphan413@naverp.test", username="orphan413",
+                                        password="TestPass123!", tenant=None)
+        c = Client()
+        c.force_login(user)
+        return c
+
+    @pytest.mark.parametrize("url_name", ["scm:asset_create", "scm:maintenanceplan_create",
+                                          "scm:maintenanceworkorder_create",
+                                          "scm:meterreading_create"])
+    def test_every_create_screen_redirects_rather_than_rendering_a_dead_form(self, db, url_name):
+        resp = self._asset_tenantless_client(db).get(reverse(url_name))
+        assert resp.status_code == 302
+
+    def test_a_posted_body_creates_nothing_at_all(self, db, tenant_a, asset_a):
+        from apps.scm.models import Asset, MaintenancePlan, MaintenanceWorkOrder, MeterReading
+        c = self._asset_tenantless_client(db)
+        before = Asset.objects.count()
+        c.post(reverse("scm:asset_create"), _asset_view_post())
+        c.post(reverse("scm:maintenanceplan_create"), _plan_view_post(asset=str(asset_a.pk)))
+        c.post(reverse("scm:maintenanceworkorder_create"), _job_view_post(asset=str(asset_a.pk)))
+        c.post(reverse("scm:meterreading_create"), _reading_view_post(asset=str(asset_a.pk)))
+        assert Asset.objects.count() == before
+        assert not MaintenancePlan.objects.filter(name="Monthly greasing").exists()
+        assert not MaintenanceWorkOrder.objects.exists()
+        assert not MeterReading.objects.exists()
+
+    def test_the_read_only_pages_still_render_empty_rather_than_500(self, db):
+        """A tenant-less user gets a page with nothing on it, never an exception — every filter
+        dropdown resolves to ``.none()`` rather than to an unscoped default manager."""
+        c = self._asset_tenantless_client(db)
+        for url_name in _ASSET_LIST_PAGES + ("scm:pm_forecast", "scm:sparepart_list",
+                                             "scm:asset_depreciation_report"):
+            assert c.get(reverse(url_name)).status_code == 200, url_name
+
+    def test_no_dropdown_offers_a_real_workspaces_rows(self, db, asset_a, location_a,
+                                                       work_center_a, org_unit_a):
+        """``_asset_qs`` / ``_work_center_qs`` / ``_org_unit_qs`` / ``_party_qs`` each return
+        ``.none()`` for a tenant-less caller rather than filtering on NULL — a filter that silently
+        matched every workspace's rows would be worse than an empty one."""
+        resp = self._asset_tenantless_client(db).get(reverse("scm:asset_list"))
+        assert list(resp.context["locations"]) == []
+        assert list(resp.context["work_centers"]) == []
+        assert list(resp.context["org_units"]) == []
+        assert list(resp.context["object_list"]) == []
+        assert resp.context["down_count"] == 0
+
+    def test_the_plan_and_job_filter_dropdowns_are_empty_too(self, db, maintenance_plan_a,
+                                                             maintenance_order_a):
+        c = self._asset_tenantless_client(db)
+        plans = c.get(reverse("scm:maintenanceplan_list"))
+        assert list(plans.context["assets"]) == [] and list(plans.context["assignees"]) == []
+        jobs = c.get(reverse("scm:maintenanceworkorder_list"))
+        assert list(jobs.context["assets"]) == [] and list(jobs.context["assignees"]) == []
+
+    def test_the_due_filter_matches_nothing_rather_than_everything(self, db, maintenance_plan_a):
+        """``_lead_window_q`` returns a NEVER-matching Q for a tenant-less caller. A bare ``Q()``
+        matches EVERY row, which would turn an empty chip into another workspace's whole register."""
+        resp = self._asset_tenantless_client(db).get(reverse("scm:maintenanceplan_list"),
+                                                     {"due": "due_soon"})
+        assert resp.status_code == 200
+        assert list(resp.context["object_list"]) == []
+        assert resp.context["due_soon_count"] == 0
+
+
+# ================================================================ 4.13 · the query budgets
+class TestAssetManagementQueryBudgets:
+    def test_the_asset_360_page_stays_under_its_budget(self, client_a, asset_a,
+                                                       asset_spare_part_a, maintenance_plan_a,
+                                                       meter_plan_a, maintenance_order_a,
+                                                       meter_reading_a, child_asset_a,
+                                                       fixed_asset_a,
+                                                       django_assert_max_num_queries):
+        """Every reliability figure comes from ONE memoised aggregate plus one open-window scan, and
+        both plan caches are primed so ``due_status()`` never re-reads the meter per plan."""
+        asset_a.fixed_asset = fixed_asset_a
+        asset_a.save(update_fields=["fixed_asset", "updated_at"])
+        with django_assert_max_num_queries(24):
+            assert client_a.get(reverse("scm:asset_detail",
+                                        args=[asset_a.pk])).status_code == 200
+
+    def test_the_asset_360_page_repeats_no_statement(self, client_a, asset_a, asset_spare_part_a,
+                                                     maintenance_plan_a, meter_plan_a,
+                                                     maintenance_order_a, meter_reading_a,
+                                                     child_asset_a, fixed_asset_a):
+        """The budget above bounds the TOTAL; this bounds the SHAPE.
+
+        Before the consolidation the page asked the same questions over and over —
+        ``downtime_minutes()`` ran its two queries THREE times and ``failure_count()`` twice,
+        because each figure on the reliability card owned its own ``aggregate()`` and the card asks
+        for six. A count that merely stays under a ceiling would pass on a page that had swapped one
+        repeat for another; an IDENTICAL statement issued twice in one request is the fingerprint of
+        a memo that stopped working, and it is invisible to a max-queries assertion.
+
+        Both plan caches are primed for the same reason: ``due_status()`` consults the meter axis
+        before the calendar one, so an unprimed page re-reads the SAME latest-reading row once per
+        plan — two plans here, and the repeat is what this catches.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        asset_a.fixed_asset = fixed_asset_a
+        asset_a.save(update_fields=["fixed_asset", "updated_at"])
+        with CaptureQueriesContext(connection) as ctx:
+            assert client_a.get(reverse("scm:asset_detail",
+                                        args=[asset_a.pk])).status_code == 200
+        seen = {}
+        for query in ctx.captured_queries:
+            sql = query["sql"]
+            # SAVEPOINT / RELEASE bracket the session write and are not the page asking anything.
+            if sql.startswith(("SAVEPOINT", "RELEASE", "ROLLBACK")):
+                continue
+            seen[sql] = seen.get(sql, 0) + 1
+        repeats = {sql[:160]: n for sql, n in seen.items() if n > 1}
+        assert not repeats, repeats
+
+    def test_the_asset_list_costs_the_same_with_five_assets_and_forty_five(self, client_a,
+                                                                           tenant_a, asset_a):
+        """It was running one correlated EXISTS per asset IN THE WHOLE WORKSPACE just to learn how
+        many rows there were — the joined ``Count`` forced a GROUP BY the paginator could not
+        collapse."""
+        from apps.scm.models import Asset
+        for index in range(4):
+            Asset.objects.create(tenant=tenant_a, code=f"SMALL-{index}", name="Small")
+        small = _returns_query_count(client_a, reverse("scm:asset_list"))
+        for index in range(40):
+            Asset.objects.create(tenant=tenant_a, code=f"BIG-{index:02d}", name="Big")
+        big = _returns_query_count(client_a, reverse("scm:asset_list"))
+        assert small == big, f"{small} -> {big}: the list scales with the register"
+
+    def test_the_plan_list_does_not_scale_with_the_programme(self, client_a, tenant_a, asset_a,
+                                                             maintenance_plan_a):
+        from apps.scm.models import MaintenancePlan
+        small = _returns_query_count(client_a, reverse("scm:maintenanceplan_list"))
+        for index in range(40):
+            MaintenancePlan.objects.create(tenant=tenant_a, name=f"Plan {index}", asset=asset_a,
+                                           interval_days=30, next_due_on=_asset_view_day(20))
+        big = _returns_query_count(client_a, reverse("scm:maintenanceplan_list"))
+        assert big <= small + 1
+
+    def test_the_job_list_does_not_scale_with_the_queue(self, client_a, tenant_a, asset_a,
+                                                        maintenance_order_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        small = _returns_query_count(client_a, reverse("scm:maintenanceworkorder_list"))
+        for index in range(40):
+            MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a,
+                                                title=f"Job {index}")
+        big = _returns_query_count(client_a, reverse("scm:maintenanceworkorder_list"))
+        assert small == big
+
+    def test_the_reading_log_does_not_scale_with_the_history(self, client_a, tenant_a, asset_a,
+                                                             meter_reading_a):
+        from apps.scm.models import MeterReading
+        small = _returns_query_count(client_a, reverse("scm:meterreading_list"))
+        for index in range(40):
+            MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Hours",
+                                        reading=Decimal(index))
+        big = _returns_query_count(client_a, reverse("scm:meterreading_list"))
+        assert small == big
+
+    def test_the_storeroom_chips_are_one_aggregate_not_one_per_row(self, client_a, tenant_a,
+                                                                    spare_item_a, uom_each_a):
+        """Three ``.count()`` calls, two of them carrying the correlated on-hand ledger subquery in
+        their WHERE, cost three scans of the item table to print three numbers."""
+        from apps.scm.models import Item
+        small = _returns_query_count(client_a, reverse("scm:sparepart_list"))
+        for index in range(40):
+            Item.objects.create(tenant=tenant_a, sku=f"SPARE-{index:02d}", name="Spare",
+                                uom=uom_each_a, is_spare_part=True)
+        big = _returns_query_count(client_a, reverse("scm:sparepart_list"))
+        assert small == big
+
+    def test_the_pm_board_is_flat_across_plan_count(self, client_a, tenant_a, asset_a,
+                                                    maintenance_plan_a, meter_reading_a):
+        """``due_status()`` reads the asset's latest reading, which is one query PER PLAN unless the
+        board resolves the ids in the same statement and primes the model's own cache."""
+        from apps.scm.models import MaintenancePlan
+        small = _returns_query_count(client_a, reverse("scm:pm_forecast"))
+        for index in range(40):
+            MaintenancePlan.objects.create(
+                tenant=tenant_a, name=f"Meter plan {index}", asset=asset_a, trigger_type="meter",
+                meter_interval=Decimal("250"), next_due_reading=Decimal("9999"))
+        big = _returns_query_count(client_a, reverse("scm:pm_forecast"))
+        assert small == big, f"{small} -> {big}: the board reads a meter per plan"
+
+    def test_the_job_detail_page_stays_under_its_budget(self, client_a, maintenance_order_a,
+                                                        part_line_a, job_task_a,
+                                                        django_assert_max_num_queries):
+        with django_assert_max_num_queries(20):
+            assert client_a.get(reverse("scm:maintenanceworkorder_detail",
+                                        args=[maintenance_order_a.pk])).status_code == 200
+
+
+# ============ 4.13 · REGRESSION LOCK — a well-formatted IMPOSSIBLE date is skipped, never raised
+class TestImpossibleDatesAreSkippedNotRaised:
+    """``parse_date`` and ``parse_datetime`` do NOT return ``None`` on every bad value.
+
+    Django's own docstrings say it: both "raise ValueError if the input is well formatted but not a
+    valid date". ``9999-99-99``, ``0000-01-01`` and ``2026-02-30`` all raise out of ``parse_date``,
+    and ``2026-01-01T25:00:00`` raises out of ``parse_datetime``. ``_posted_moment`` read them as if
+    ``None`` were the only failure mode, so an impossible date was an uncaught 500 on TWO surfaces:
+
+      * ``POST maintenance-work-orders/<pk>/schedule/`` with a hand-edited ``scheduled_start``; and
+      * ``GET maintenance-work-orders/?date_from=9999-99-99`` — an ordinary list page, from a URL
+        anybody can type into the address bar, which is the whole L11 class of defect.
+
+    An impossible date is exactly as much "not a moment" as ``lastweek`` is, and now takes the same
+    answer: the filter is skipped, or the verb says so, and nothing raises.
+    """
+
+    _IMPOSSIBLE = ("9999-99-99", "0000-01-01", "2026-02-30", "2026-13-01",
+                   "2026-01-01T25:00:00", "2026-01-01 24:61:00")
+
+    @pytest.mark.parametrize("value", _IMPOSSIBLE)
+    @pytest.mark.parametrize("param", ["date_from", "date_to"])
+    def test_the_job_queue_window_skips_it_rather_than_500ing(self, client_a,
+                                                              maintenance_order_a, param, value):
+        resp = client_a.get(reverse("scm:maintenanceworkorder_list"), {param: value})
+        assert resp.status_code == 200
+        assert maintenance_order_a in resp.context["object_list"], "the filter must be OFF"
+
+    @pytest.mark.parametrize("value", _IMPOSSIBLE)
+    def test_the_schedule_verb_answers_a_friendly_message(self, client_a, approved_order_a,
+                                                          value):
+        resp = client_a.post(reverse("scm:maintenanceworkorder_schedule",
+                                     args=[approved_order_a.pk]),
+                             {"scheduled_start": value}, follow=True)
+        assert resp.status_code == 200
+        assert "not a date and time" in _message_blob(resp)
+        approved_order_a.refresh_from_db()
+        assert approved_order_a.status == "approved"
+        assert approved_order_a.scheduled_start is None
+
+    def test_a_real_date_still_gets_through(self, client_a, approved_order_a):
+        """Guards the guard: a fix that simply refused every date would pass the two above."""
+        client_a.post(reverse("scm:maintenanceworkorder_schedule", args=[approved_order_a.pk]),
+                      {"scheduled_start": _asset_view_day(2).isoformat()}, follow=True)
+        approved_order_a.refresh_from_db()
+        assert approved_order_a.status == "scheduled"
+        assert approved_order_a.scheduled_start is not None
+
+    @pytest.mark.parametrize("value", _IMPOSSIBLE)
+    def test_the_reading_log_window_holds_too(self, client_a, meter_reading_a, value):
+        """``_reading_window`` has its own parser (``date.fromisoformat`` inside a try) — the same
+        input class, checked on the page that uses the other implementation."""
+        resp = client_a.get(reverse("scm:meterreading_list"), {"date_from": value})
+        assert resp.status_code == 200
+        assert meter_reading_a in resp.context["object_list"]
+
+    @pytest.mark.parametrize("value", _IMPOSSIBLE)
+    def test_the_storeroom_window_holds_too(self, client_a, spare_item_a, value):
+        resp = client_a.get(reverse("scm:sparepart_list"), {"date_from": value})
+        assert resp.status_code == 200
+        assert resp.context["window_invalid"] is True
