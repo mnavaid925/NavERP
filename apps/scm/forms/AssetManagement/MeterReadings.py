@@ -32,7 +32,8 @@ value" for a machine that has not reached it yet, silently advancing every meter
 firing condition triggers off a number nobody observed.
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
-from apps.scm.forms.AssetManagement.Assets import _reject_foreign, _scope_to_tenant
+from apps.scm.forms._common import _reject_foreign
+from apps.scm.forms.AssetManagement.Assets import _scope_to_tenant
 
 from apps.scm.models import Asset, MeterReading
 
