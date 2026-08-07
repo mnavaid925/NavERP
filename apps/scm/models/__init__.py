@@ -288,3 +288,66 @@ from .AssetManagement.MaintenanceWorkOrders import (  # noqa: F401
 from .AssetManagement.MeterReadings import (  # noqa: F401
     MeterReading,
 )
+
+# --- 4.14 Labor Management --------------------------------------------------------------------
+# _choices FIRST and BY NAME, not `import *`. 4.13's AssetManagement/_choices is star-imported a few
+# lines above and already exports MAX_LABOUR_RATE; a second star-imported _choices re-declaring a
+# shared token would silently shadow it, and which one won would depend on import order. Spelling
+# every name out makes that collision a visible edit rather than a runtime coin-flip — 4.14's rate
+# ceiling is deliberately the distinct token MAX_STANDARD_RATE (a standard's charge-out rate, never a
+# person's wage; hrm owns compensation and scm does not read it).
+#
+# LaborStandard before the rest, for the reader rather than for Django: every FK below is declared by
+# string so the ORM does not care, but LaborActivity snapshots a standard's determinants at file time
+# and LaborPlanLine records which standard produced its number, so the standard is what the other two
+# are measured against.
+#
+# `select_standard` is exported alongside its model, exactly as `select_policy` is at :191 — the
+# resolver IS the public interface (most-specific-wins, and None when nothing matches), and a caller
+# that reaches for LaborStandard.objects directly has almost certainly got the precedence wrong.
+#
+# 4.14 declares NO task table and adds NO column to 4.4's PickTask / PutawayTask / CycleCountTask:
+# those already carry an assignee and lifecycle stamps, so Task Assignment is a console over them.
+from .LaborManagement._choices import (  # noqa: F401
+    ACTIVITY_CHOICES,
+    ACTIVITY_CSS,
+    COACHING_THRESHOLD_PCT,
+    DIRECT_ACTIVITIES,
+    INDIRECT_ACTIVITIES,
+    INDIRECT_REASON_CHOICES,
+    MAX_ACTIVITY_MINUTES,
+    MAX_ALLOWANCE_PCT,
+    MAX_BULK_ASSIGN,
+    MAX_HORIZON_PERIODS,
+    MAX_HOURS_PER_SHIFT,
+    MAX_PLAN_LINES,
+    MAX_PRODUCTIVITY_PCT,
+    MAX_SESSION_MINUTES,
+    MAX_STANDARD_RATE,
+    MIN_PLAN_YEAR,
+    MIN_RANKED_MINUTES,
+    PLAN_BUCKET_CHOICES,
+    PLAN_METHOD_CHOICES,
+    PLAN_STATUS_CHOICES,
+    PLAN_STATUS_CSS,
+    SESSION_SOURCE_CHOICES,
+    SESSION_STATUS_CHOICES,
+    SESSION_STATUS_CSS,
+    STANDARD_BASIS_CHOICES,
+    STANDARD_SOURCE_CHOICES,
+    VOLUME_SOURCE_CHOICES,
+)
+from .LaborManagement.LaborStandards import (  # noqa: F401
+    LaborStandard,
+    select_standard,
+)
+from .LaborManagement.LaborSessions import (  # noqa: F401
+    LaborSession,
+)
+from .LaborManagement.LaborActivities import (  # noqa: F401
+    LaborActivity,
+)
+from .LaborManagement.LaborPlans import (  # noqa: F401
+    LaborPlan,
+    LaborPlanLine,
+)
