@@ -215,13 +215,28 @@ def _posted_moment(raw):
     accepted (a ``<input type="date">`` is the normal control) and read as that day's 00:00 in the
     project timezone; a naive datetime is localised for the same reason, because a naive value handed
     to a ``DateTimeField`` under ``USE_TZ`` is read as UTC and silently shifts the whole commitment.
+
+    **Both parsers RAISE on a value that is well FORMATTED but not a real moment**, and that is the
+    one case a "returns None on junk" reading of them misses. ``parse_date("9999-99-99")`` raises
+    ``ValueError: month must be in 1..12`` (so do ``0000-01-01`` and ``2026-02-30``), and
+    ``parse_datetime("2026-01-01T25:00:00")`` raises ``hour must be in 0..23`` — Django's own
+    docstrings say so in as many words. Uncaught, that is a 500 on TWO surfaces: the schedule verb's
+    POST body, and ``?date_from=`` on the work-order list, which is a URL anybody can type into the
+    address bar. An impossible date is exactly as much "not a moment" as ``lastweek`` is, so it takes
+    the same answer: ``None``, the filter is skipped or the verb says so, and nothing raises.
     """
     raw = (raw or "").strip()
     if not raw:
         return None
-    value = parse_datetime(raw)
+    try:
+        value = parse_datetime(raw)
+    except ValueError:
+        value = None
     if value is None:
-        day = parse_date(raw)
+        try:
+            day = parse_date(raw)
+        except ValueError:
+            day = None
         value = datetime.combine(day, time.min) if day is not None else None
     if value is None:
         return None
