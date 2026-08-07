@@ -2503,3 +2503,348 @@ def unmeasurable_shipment_a(db, tenant_a, carrier_a):
     ship.actual_delivery_at = timezone.now() - datetime.timedelta(days=6)
     ship.save(update_fields=["status", "actual_delivery_at", "updated_at"])
     return ship
+
+
+# ------------------------------------------------------------------ SCM 4.13 Asset Management
+# One plant register (``Asset`` + ``AssetSparePart``), one PM programme (``MaintenancePlan`` +
+# ``MaintenancePlanTask``), one job ladder (``MaintenanceWorkOrder`` + its parts and checklist
+# children) and one append-only meter log (``MeterReading``).
+#
+# Every date below is derived from ``timezone.localdate()`` / ``timezone.now()`` — the SAME basis
+# ``Asset.days_to_warranty_expiry``, ``Asset._observed_hours``, ``MaintenancePlan.days_until_due``,
+# ``MaintenancePlan.advance`` and ``MeterReading.clean`` all read (L16). A literal 2026 date would
+# drift out of the warranty notice band and out of the PM forecast horizon the moment the clock
+# passed it, and a hard-coded ``read_at`` would eventually trip the model's no-future-dates rule.
+#
+# ``MaintenanceWorkOrder.status`` is ``editable=False`` and moved ONLY by the ten verbs, so the
+# ladder fixtures walk it exactly as the verbs do (assign + a narrow ``save(update_fields=...)``) —
+# the ``trade_license_a`` posture. A status typed straight into ``objects.create()`` would let a
+# test assert a state no button in the product can actually produce.
+def _asset_date(days):
+    """A date ``days`` from today on the tz-aware basis every 4.13 date reader uses."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+def _asset_moment(hours):
+    """An aware datetime ``hours`` from now — the basis downtime windows and ``read_at`` use."""
+    from django.utils import timezone
+    return timezone.now() + datetime.timedelta(hours=hours)
+
+
+@pytest.fixture
+def fixed_asset_a(db, tenant_a):
+    """The ``accounting.FixedAsset`` 4.13 POINTS AT and never writes (L29).
+
+    48 000.00 acquired, 8 000.00 accumulated -> 40 000.00 book value, which is what the
+    repair-vs-replace ratio on the depreciation report divides by.
+    """
+    from apps.accounting.models import FixedAsset
+    asset = FixedAsset.objects.create(
+        tenant=tenant_a, name="CNC lathe (capitalised)", category="Machinery",
+        acquisition_cost=Decimal("48000.00"), salvage_value=Decimal("3000.00"),
+        useful_life_months=120, status="active", in_service_date=_asset_date(-365),
+    )
+    # ``accumulated_depreciation`` is editable=False and advanced by accounting's own depreciation
+    # run — set through a narrow save() rather than create(), for the same reason the status
+    # fixtures do: the column has exactly one writer in the product.
+    asset.accumulated_depreciation = Decimal("8000.00")
+    asset.save(update_fields=["accumulated_depreciation", "updated_at"])
+    return asset
+
+
+@pytest.fixture
+def fixed_asset_b(db, tenant_b):
+    """The tenant_b book record every cross-workspace ``fixed_asset`` assertion points at."""
+    from apps.accounting.models import FixedAsset
+    return FixedAsset.objects.create(
+        tenant=tenant_b, name="Globex press (capitalised)",
+        acquisition_cost=Decimal("10000.00"), status="active")
+
+
+@pytest.fixture
+def asset_a(db, tenant_a, location_a, work_center_a, org_unit_a, employee_party_a, supplier_a):
+    """The 360-degree fixture: every FK populated, a meter declared, a warranty still in force.
+
+    ``commissioned_on`` is 365 days back because it is what ``_observed_hours`` measures the
+    reliability window from — an asset with no commissioning date falls back to ``created_at``,
+    which in a test is microseconds old and makes every availability figure meaningless.
+    """
+    from apps.scm.models import Asset
+    return Asset.objects.create(
+        tenant=tenant_a, code="CNC-1", name="CNC Lathe", asset_type="machine",
+        status="in_service", criticality="critical", category="Machining",
+        manufacturer="Haas", model_number="ST-20", serial_number="SN-0001", tag_code="QR-CNC-1",
+        specifications="3-axis, 20 kW spindle",
+        location=location_a, org_unit=org_unit_a, work_center=work_center_a,
+        custodian=employee_party_a, supplier=supplier_a, service_vendor=supplier_a,
+        purchase_date=_asset_date(-400), commissioned_on=_asset_date(-365),
+        warranty_expires_on=_asset_date(300), purchase_cost=Decimal("48000.00"),
+        meter_name="Running Hours", meter_unit="h",
+    )
+
+
+@pytest.fixture
+def asset_a2(db, tenant_a, location_a2):
+    """A SECOND tenant_a asset — no meter, no tag, no warranty date.
+
+    Three absences that each carry meaning: a blank ``meter_name`` is what makes a meter plan on it
+    a validation error and a completion capture unfileable, a blank ``tag_code`` is what proves the
+    uniqueness rule allows MANY untagged assets, and a null ``warranty_expires_on`` is the muted
+    "Not recorded" chip that must never read green.
+    """
+    from apps.scm.models import Asset
+    return Asset.objects.create(
+        tenant=tenant_a, code="FORK-2", name="Forklift", asset_type="forklift",
+        status="standby", criticality="low", location=location_a2,
+        commissioned_on=_asset_date(-200),
+    )
+
+
+@pytest.fixture
+def asset_b(db, tenant_b, location_b):
+    """The tenant_b asset every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import Asset
+    return Asset.objects.create(
+        tenant=tenant_b, code="GBX-1", name="Globex Press", asset_type="machine",
+        location=location_b, meter_name="Cycles", meter_unit="cycles",
+        commissioned_on=_asset_date(-100), tag_code="QR-GBX-1",
+    )
+
+
+@pytest.fixture
+def child_asset_a(db, tenant_a, asset_a, location_a):
+    """A component of ``asset_a`` — the hierarchy fixture behind the cycle guard and the orphan
+    message on delete (``Asset.parent`` is SET_NULL, so children survive their assembly)."""
+    from apps.scm.models import Asset
+    return Asset.objects.create(
+        tenant=tenant_a, code="CNC-1-SPINDLE", name="Spindle assembly", asset_type="machine",
+        parent=asset_a, location=location_a, criticality="high",
+    )
+
+
+@pytest.fixture
+def spare_item_a(db, tenant_a, category_a, uom_each_a, location_a):
+    """An MRO item flagged ``is_spare_part`` with REAL on-hand: 10 @ 25.0000 at ``location_a``.
+
+    Stock is posted through ``_post_stock_move`` (via the suite's ``seed_stock``) rather than
+    written as a bare ``StockMove`` row, so the item's cached ``average_cost`` is rolled forward
+    exactly as production would — the issue verb stamps ``unit_cost`` from that cache, and a
+    hand-written ledger row would leave the two disagreeing.
+    """
+    from apps.scm.models import Item
+    from apps.scm.tests._helpers import seed_stock
+    item = Item.objects.create(
+        tenant=tenant_a, sku="BRG-6205", name="Bearing 6205", category=category_a, uom=uom_each_a,
+        item_type="stock", tracking="none", costing_method="weighted_avg",
+        standard_cost=Decimal("20.0000"), reorder_point=Decimal("4"), is_spare_part=True,
+    )
+    seed_stock(tenant_a, item, location_a, quantity="10", unit_cost="25.0000", reference="OPEN-BRG")
+    item.refresh_from_db()
+    return item
+
+
+@pytest.fixture
+def spare_item_b(db, tenant_b, uom_each_b):
+    """The tenant_b spare every cross-workspace parts-line assertion points at."""
+    from apps.scm.models import Item
+    return Item.objects.create(tenant=tenant_b, sku="GBX-BRG", name="Globex bearing",
+                               uom=uom_each_b, is_spare_part=True)
+
+
+@pytest.fixture
+def asset_spare_part_a(db, asset_a, spare_item_a):
+    """One line of ``asset_a``'s parts list. Tenant-less child, reached through ``asset__tenant``."""
+    from apps.scm.models import AssetSparePart
+    return AssetSparePart.objects.create(
+        asset=asset_a, item=spare_item_a, quantity_per_service=Decimal("2"), is_critical=True,
+        notes="Front bearing")
+
+
+@pytest.fixture
+def maintenance_plan_a(db, tenant_a, asset_a, employee_party_a, location_a):
+    """A CALENDAR plan on a FLOATING basis, due in 10 days, with a two-step job plan.
+
+    ``lead_time_days=7`` against a due date 10 days out puts it deliberately OUTSIDE its own call
+    horizon, so ``due_status()`` reads ``scheduled`` — the state the due filter, the forecast board
+    and ``is_due`` are all measured against.
+    """
+    from apps.scm.models import MaintenancePlan, MaintenancePlanTask
+    plan = MaintenancePlan.objects.create(
+        tenant=tenant_a, name="Quarterly service", asset=asset_a,
+        instructions="Grease the ways, check the coolant, log the hour meter.",
+        trigger_type="calendar", schedule_basis="floating", interval_days=90, lead_time_days=7,
+        next_due_on=_asset_date(10), priority="high", work_type="preventive",
+        estimated_hours=Decimal("2.50"), assigned_to=employee_party_a, parts_location=location_a,
+    )
+    MaintenancePlanTask.objects.create(plan=plan, sequence=10, description="Isolate and lock out",
+                                       expected_result="Isolator padlocked", is_safety_step=True)
+    MaintenancePlanTask.objects.create(plan=plan, sequence=20, description="Grease the ways",
+                                       expected_result="Two shots per nipple")
+    return plan
+
+
+@pytest.fixture
+def plan_task_a(db, maintenance_plan_a):
+    """``maintenance_plan_a``'s first job-plan step — a tenant-less child reached via
+    ``plan__tenant``."""
+    return maintenance_plan_a.tasks.order_by("sequence").first()
+
+
+@pytest.fixture
+def meter_plan_a(db, tenant_a, asset_a):
+    """A PURE METER plan: every 250 running hours, next owed at 1500, no calendar axis at all.
+
+    This is the fixture behind "a correctly configured meter plan reads ``scheduled``, not
+    ``not_scheduled``" — the muted chip that says "nobody is watching this machine" must be reserved
+    for plans that genuinely cannot fire.
+    """
+    from apps.scm.models import MaintenancePlan
+    return MaintenancePlan.objects.create(
+        tenant=tenant_a, name="500-hour service", asset=asset_a, trigger_type="meter",
+        schedule_basis="floating", meter_interval=Decimal("250"),
+        next_due_reading=Decimal("1500"), lead_time_days=7, work_type="preventive",
+    )
+
+
+@pytest.fixture
+def maintenance_plan_b(db, tenant_b, asset_b):
+    """The tenant_b plan every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import MaintenancePlan, MaintenancePlanTask
+    plan = MaintenancePlan.objects.create(
+        tenant=tenant_b, name="Globex weekly check", asset=asset_b, trigger_type="calendar",
+        interval_days=7, next_due_on=_asset_date(3),
+    )
+    MaintenancePlanTask.objects.create(plan=plan, sequence=10, description="Globex step")
+    return plan
+
+
+@pytest.fixture
+def plan_task_b(db, maintenance_plan_b):
+    """The tenant_b job-plan step — proves the plan formset resolves through ``plan__tenant``."""
+    return maintenance_plan_b.tasks.first()
+
+
+@pytest.fixture
+def maintenance_order_a(db, tenant_a, asset_a, location_a, employee_party_a):
+    """A tenant_a job at the intake state ``requested`` — the bottom rung of the ladder.
+
+    ``parts_location`` is set because the issue verb refuses outright without a storeroom; the
+    absent-storeroom case is tested by CLEARING it rather than by a second fixture nobody reads.
+    """
+    from apps.scm.models import MaintenanceWorkOrder
+    return MaintenanceWorkOrder.objects.create(
+        tenant=tenant_a, title="Spindle noise", asset=asset_a, work_type="corrective",
+        priority="high", source="request", description="Whine above 4 000 rpm.",
+        reported_by=employee_party_a, assigned_to=employee_party_a, parts_location=location_a,
+        labour_hours=Decimal("2.00"), labour_rate=Decimal("40.0000"),
+        external_cost=Decimal("100.00"),
+    )
+
+
+@pytest.fixture
+def approved_order_a(db, maintenance_order_a):
+    """``maintenance_order_a`` one rung up — the state ``schedule`` and ``start`` both accept."""
+    maintenance_order_a.status = "approved"
+    maintenance_order_a.save(update_fields=["status", "updated_at"])
+    return maintenance_order_a
+
+
+@pytest.fixture
+def in_progress_order_a(db, approved_order_a):
+    """The only state ``complete`` accepts, with ``started_at`` stamped as ``start`` stamps it."""
+    from django.utils import timezone
+    approved_order_a.status = "in_progress"
+    approved_order_a.started_at = timezone.now() - datetime.timedelta(hours=3)
+    approved_order_a.save(update_fields=["status", "started_at", "updated_at"])
+    return approved_order_a
+
+
+@pytest.fixture
+def completed_order_a(db, in_progress_order_a):
+    """A terminal job — no longer editable, no longer cancellable, and the only state ``close``
+    accepts."""
+    from django.utils import timezone
+    in_progress_order_a.status = "completed"
+    in_progress_order_a.completed_at = timezone.now()
+    in_progress_order_a.save(update_fields=["status", "completed_at", "updated_at"])
+    return in_progress_order_a
+
+
+@pytest.fixture
+def maintenance_order_b(db, tenant_b, asset_b, location_b):
+    """The tenant_b job every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import MaintenanceWorkOrder
+    return MaintenanceWorkOrder.objects.create(
+        tenant=tenant_b, title="Globex press jam", asset=asset_b, work_type="breakdown",
+        parts_location=location_b)
+
+
+@pytest.fixture
+def part_line_a(db, maintenance_order_a, spare_item_a):
+    """One PLANNED (not issued) part line: 2 x the stocked bearing. ``unit_cost`` is still 0.0000 —
+    it is stamped only when the issue verb posts the negative ``maintenance`` StockMove."""
+    from apps.scm.models import MaintenanceWorkOrderPart
+    return MaintenanceWorkOrderPart.objects.create(
+        work_order=maintenance_order_a, item=spare_item_a, quantity=Decimal("2"))
+
+
+@pytest.fixture
+def issued_part_line_a(db, part_line_a, maintenance_order_a, spare_item_a, location_a, tenant_a):
+    """A line already drawn from stock, with its ledger move actually posted.
+
+    The ``StockMove`` is REAL rather than implied: the cancel and delete guards refuse on
+    ``is_issued``, and the whole point of the refusal is that a movement exists which would
+    otherwise be left orphaned in an append-only ledger.
+    """
+    from django.utils import timezone
+    from apps.scm.views._helpers import _post_stock_move
+    _post_stock_move(tenant_a, item=spare_item_a, location=location_a, quantity=Decimal("-2"),
+                     move_type="maintenance", unit_cost=Decimal("25.0000"),
+                     reference=maintenance_order_a.number, reason="Maintenance issue")
+    part_line_a.unit_cost = Decimal("25.0000")
+    part_line_a.is_issued = True
+    part_line_a.issued_at = timezone.now()
+    part_line_a.save(update_fields=["unit_cost", "is_issued", "issued_at"])
+    return part_line_a
+
+
+@pytest.fixture
+def job_task_a(db, maintenance_order_a):
+    """One checklist step on a tenant_a job — the tenant-less child reached via
+    ``work_order__tenant``."""
+    from apps.scm.models import MaintenanceWorkOrderTask
+    return MaintenanceWorkOrderTask.objects.create(
+        work_order=maintenance_order_a, sequence=10, description="Isolate and lock out",
+        expected_result="Isolator padlocked", is_safety_step=True)
+
+
+@pytest.fixture
+def job_task_b(db, maintenance_order_b):
+    """The tenant_b checklist step every ``work_order__tenant`` isolation assertion points at."""
+    from apps.scm.models import MaintenanceWorkOrderTask
+    return MaintenanceWorkOrderTask.objects.create(
+        work_order=maintenance_order_b, sequence=10, description="Globex step")
+
+
+@pytest.fixture
+def meter_reading_a(db, tenant_a, asset_a, employee_party_a):
+    """The asset's current running-hours value: 1 218.5 h, read yesterday.
+
+    Deliberately BELOW ``meter_plan_a``'s 1 500 h target, so the meter axis is not yet due — the
+    plan reads ``scheduled``, and a completion capture is what actually moves it.
+    """
+    from apps.scm.models import MeterReading
+    return MeterReading.objects.create(
+        tenant=tenant_a, asset=asset_a, recorded_by=employee_party_a,
+        meter_name="Running Hours", unit="h", reading=Decimal("1218.5"),
+        read_at=_asset_moment(-24), source="manual")
+
+
+@pytest.fixture
+def meter_reading_b(db, tenant_b, asset_b):
+    """The tenant_b reading every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import MeterReading
+    return MeterReading.objects.create(
+        tenant=tenant_b, asset=asset_b, meter_name="Cycles", unit="cycles",
+        reading=Decimal("900"), read_at=_asset_moment(-24))
