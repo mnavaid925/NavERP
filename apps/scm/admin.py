@@ -982,3 +982,90 @@ class MeterReadingAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# --- 4.14 Labor Management --------------------------------------------------------------------
+from apps.scm.models import (  # noqa: E402
+    LaborActivity, LaborPlan, LaborPlanLine, LaborSession, LaborStandard,
+)
+
+
+@admin.register(LaborStandard)
+class LaborStandardAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "name", "activity", "basis", "source", "status",
+                    "minutes_per_unit", "setup_minutes", "travel_minutes", "allowance_pct",
+                    "labour_rate", "location", "item_category", "effective_from", "effective_to")
+    list_filter = ("tenant", "status", "activity", "basis", "source")
+    search_fields = ("number", "name", "notes", "location__name", "item_category__name")
+    date_hierarchy = "effective_from"
+    # `status` moves only through the activate/archive verbs. It is not a cosmetic flag: activating a
+    # standard changes what every FUTURE LaborActivity snapshots, and archiving one removes it from
+    # `select_standard()`'s candidate set, which changes what tomorrow's work is measured against.
+    # An editable dropdown here is a surface that can do both without an audit row.
+    readonly_fields = ("number", "status", "created_at", "updated_at")
+
+
+class LaborActivityInline(admin.TabularInline):
+    model = LaborActivity
+    extra = 0
+    # The four snapshot columns plus the derived duration are read-only for the reason the whole
+    # sub-module turns on: they record what the standard said AT FILE TIME. A snapshot an admin can
+    # retype is not a record of anything — it is last month's performance figure, editable.
+    readonly_fields = ("number", "duration_minutes", "standard", "standard_fixed_snapshot",
+                       "standard_rate_snapshot", "standard_allowance_snapshot",
+                       "standard_minutes_snapshot", "created_at", "updated_at")
+
+
+@admin.register(LaborSession)
+class LaborSessionAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "worker", "location", "work_date", "shift_label",
+                    "clock_in", "clock_out", "status", "source", "recorded_by", "login",
+                    "approved_by", "approved_at")
+    list_filter = ("tenant", "status", "source", "location")
+    search_fields = ("number", "shift_label", "notes", "worker__name", "location__name")
+    date_hierarchy = "work_date"
+    inlines = [LaborActivityInline]
+    # The whole provenance block is read-only, which is the 4.13 MeterReading fix carried through to
+    # the admin. `source` / `recorded_by` / `login` say WHERE a shift record came from, and the
+    # payroll export is built on the claim that they are true. `status` is the export lock — an
+    # editable one could approve a shift without stamping who approved it or when. Every derived
+    # figure (attended/direct/indirect/unaccounted minutes, performance, utilisation, units per hour)
+    # is a METHOD and is deliberately not a column anywhere.
+    readonly_fields = ("number", "status", "source", "recorded_by", "login", "closed_at",
+                       "approved_at", "approved_by", "created_at", "updated_at")
+
+
+@admin.register(LaborActivity)
+class LaborActivityAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "session", "activity_type", "indirect_reason",
+                    "started_at", "ended_at", "duration_minutes", "quantity", "error_quantity",
+                    "standard", "standard_minutes_snapshot")
+    list_filter = ("tenant", "activity_type", "indirect_reason")
+    search_fields = ("number", "reference", "notes", "session__number", "session__worker__name")
+    date_hierarchy = "started_at"
+    readonly_fields = ("number", "duration_minutes", "standard", "standard_fixed_snapshot",
+                       "standard_rate_snapshot", "standard_allowance_snapshot",
+                       "standard_minutes_snapshot", "created_at", "updated_at")
+
+
+class LaborPlanLineInline(admin.TabularInline):
+    model = LaborPlanLine
+    extra = 0
+    # `planned_headcount` and `notes` are the only editable columns — everything else is what
+    # `laborplan_generate` computed, and the variance chip beside them only means something while
+    # the required figure is the arithmetic's and the planned figure is the planner's.
+    readonly_fields = ("period_start", "activity", "forecast_volume", "standard",
+                       "standard_minutes_snapshot", "required_minutes", "required_headcount")
+
+
+@admin.register(LaborPlan)
+class LaborPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "name", "location", "period_start", "period_end",
+                    "bucket", "volume_source", "method", "history_days", "hours_per_shift",
+                    "productivity_pct", "status", "generated_at", "approved_by", "approved_at")
+    list_filter = ("tenant", "status", "bucket", "volume_source", "method")
+    search_fields = ("number", "name", "notes", "location__name")
+    date_hierarchy = "period_start"
+    inlines = [LaborPlanLineInline]
+    readonly_fields = ("number", "status", "generated_at", "approved_by", "approved_at",
+                       "created_at", "updated_at")
