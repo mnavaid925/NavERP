@@ -9,6 +9,20 @@ model has its own ``tenant`` field. Child tables here (``PurchaseOrderLine``, ``
 have no tenant FK — they are reached through their parent — so any dropdown pointing at one MUST be
 scoped by hand to the parent object, or the select would list every tenant's rows. See
 ``_scope_to_parent``.
+
+Boundary note: scoping a dropdown is presentation. ``_reject_foreign`` is the re-check that a
+crafted POST has to get past, and it lives HERE rather than in any one sub-module's entity file
+because more than one sub-module needs it (Backend Package Structure rule 5) — 4.13 Asset Management
+and 4.14 Labor Management both call it, and a copy per sub-package is how two implementations of one
+security rule start disagreeing.
+
+Note on the leading underscores: this module carries no ``__all__``, so ``import *`` skips every
+private name in it. That is deliberate and it is the reason each entity module follows its
+``from apps.scm.forms._common import *`` with an EXPLICIT
+``from apps.scm.forms._common import _helper, _helper`` line — the star pulls the public toolkit
+(``forms``, ``Q``, ``Party``, ``TenantModelForm``, ``inlineformset_factory``, ``Decimal``,
+``TenantUniqueMixin``) and the explicit line names the private helpers the module actually uses, so
+a reader can see at the top of any entity file which shared rules it is subject to.
 """
 from decimal import Decimal
 
@@ -117,3 +131,32 @@ def _scope_to_parent(form, field_name, queryset):
     """
     if field_name in form.fields:
         form.fields[field_name].queryset = queryset
+
+
+def _reject_foreign(form, cleaned, names):
+    """Field-error any chosen FK whose row belongs to another workspace.
+
+    A form's narrowed FK queryset is UX, not an authorization boundary: **a narrowed ``<select>``
+    has never held against a crafted POST** (L39 §2), and every form in this package is reachable by
+    any logged-in member of any workspace. So EVERY tenant-scoped FK is re-checked here, at the form
+    boundary. The models' own ``clean()`` methods carry the same guard and it is the one that holds
+    at the database boundary; this repeats it at the FORM boundary for two reasons a reviewer should
+    not have to rediscover:
+
+    * it does not depend on the instance's tenant having been stamped before validation, so it is
+      live on the create path whether or not a given form mixes in the stamp; and
+    * it keys the error on a field the FORM has, which is what makes it renderable. A model error
+      keyed on a column that is not on the form raises ``ValueError`` out of ``add_error`` — a 500
+      instead of a field error. (``MeterReading.clean()``'s ``recorded_by`` leg is exactly that
+      shape, which is why the view must stamp that field AFTER ``is_valid()``.)
+
+    ``names`` is normally the model's own ``TENANT_SCOPED_FKS`` — one table, read by both boundaries
+    — plus any soft reference (a ``core.Party`` pointer) that table deliberately omits.
+    """
+    tenant_id = form.tenant.pk if form.tenant is not None else None
+    for name in names:
+        chosen = cleaned.get(name)
+        if chosen is None:
+            continue
+        if getattr(chosen, "tenant_id", None) != tenant_id:
+            form.add_error(name, "That record belongs to another workspace.")
