@@ -9428,3 +9428,1328 @@ class TestComplianceNothingIsStored:
         assert EMISSION_FACTORS["air"] > EMISSION_FACTORS["truckload"] > EMISSION_FACTORS["ocean"]
         assert "GLEC" in EMISSION_FACTOR_SOURCE
         assert "Screening estimate only" in CARBON_METHOD_NOTE
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.13 date/time basis for the model tests. timezone.localdate() / timezone.now(), NEVER
+# datetime.date.today(): Asset._observed_hours, Asset.days_to_warranty_expiry,
+# MaintenancePlan.days_until_due, MaintenancePlan.advance and MeterReading.clean all read the
+# tz-aware basis, so a reference date built on the other one flakes for the hours after local
+# midnight (L16).
+# ------------------------------------------------------------------------------------------------
+def _asset_day(days=0):
+    """Today (or days from it) on the basis every 4.13 date reader uses."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+def _asset_hours_ago(hours):
+    """An aware datetime ``hours`` in the past — the basis a downtime window is measured on."""
+    from django.utils import timezone
+    return timezone.now() - datetime.timedelta(hours=hours)
+
+
+def _breakdown(asset, *, status="completed", start_hours_ago=5, end_hours_ago=3, **overrides):
+    """A finished BREAKDOWN with a closed downtime window, the shape MTBF and MTTR both read.
+
+    ``work_type="breakdown"`` is what ``Asset.FAILURE_WORK_TYPES`` counts, and ``downtime_minutes``
+    is DERIVED in ``save()`` from the pair — never passed in, because it is ``editable=False`` and
+    typing it would be typing a subtraction the model already does.
+    """
+    from apps.scm.models import MaintenanceWorkOrder
+    job = MaintenanceWorkOrder(
+        tenant=asset.tenant, asset=asset, title="Breakdown", work_type="breakdown",
+        downtime_start=_asset_hours_ago(start_hours_ago) if start_hours_ago is not None else None,
+        downtime_end=_asset_hours_ago(end_hours_ago) if end_hours_ago is not None else None,
+        **overrides)
+    job.save()
+    if status != job.status:
+        job.status = status
+        job.save(update_fields=["status", "updated_at"])
+    return job
+
+
+def _reload_asset(asset):
+    """Re-read the row. ``Asset._reliability_agg`` MEMOISES per instance (its documented contract),
+    so an instance that answered before a job was written keeps answering the old figure."""
+    from apps.scm.models import Asset
+    return Asset.objects.get(pk=asset.pk)
+
+
+# =================================================================================================
+# SCM 4.13 Asset Management — models.
+#
+# Four tables plus three children. What the tests below are pinned on, in the order it matters:
+#
+#   * the None contract. MTBF, MTTR and availability all divide by something that can legitimately
+#     be zero, and every one of them answers ``None`` rather than ``0`` there — an MTBF of 0 h reads
+#     as "this thing fails constantly", the exact opposite of an asset that has never failed.
+#     ``maintenance_cost_to_date`` is the deliberate exception and returns a REAL ``0.00``;
+#   * ``MaintenancePlan.advance()`` — the ONLY place the floating/fixed x calendar/meter arithmetic
+#     lives, and the site of the double-advance bug. All four combinations are asserted;
+#   * everything DERIVED is derived: downtime minutes from the window, costs from their inputs,
+#     due status from the clock and the meter. No stored copy of any of them exists to drift;
+#   * the guards a crafted POST reaches: cross-tenant FKs, the tag uniqueness rule, the hierarchy
+#     cycle walk under its depth cap, the trigger contract, and no future-dated meter reading.
+# =================================================================================================
+class TestAssetManagementAutoNumbering:
+    def test_asset_takes_the_ast_prefix(self, tenant_a, asset_a):
+        assert asset_a.number == "AST-00001"
+
+    def test_plan_takes_the_pm_prefix(self, maintenance_plan_a):
+        assert maintenance_plan_a.number == "PM-00001"
+
+    def test_work_order_takes_the_mwo_prefix(self, maintenance_order_a):
+        assert maintenance_order_a.number == "MWO-00001"
+
+    def test_numbers_increment_per_tenant_and_never_across_them(self, tenant_a, tenant_b, asset_a,
+                                                                asset_a2, asset_b):
+        """Each workspace owns its own sequence — ``unique_together ("tenant", "number")``."""
+        assert [asset_a.number, asset_a2.number] == ["AST-00001", "AST-00002"]
+        assert asset_b.number == "AST-00001"
+
+    def test_meter_reading_carries_no_number_at_all(self, meter_reading_a):
+        """``TenantOwned``, not ``TenantNumbered`` — the ``StockMove`` posture. A reading is a data
+        point in a series, not a document anybody quotes across a conversation."""
+        from apps.scm.models import MeterReading
+        assert not hasattr(meter_reading_a, "number")
+        assert MeterReading.objects.filter(pk=meter_reading_a.pk).exists()
+
+    def test_the_three_prefixes_are_distinct(self, asset_a, maintenance_plan_a,
+                                             maintenance_order_a):
+        from apps.scm.models import Asset, MaintenancePlan, MaintenanceWorkOrder
+        prefixes = {Asset.NUMBER_PREFIX, MaintenancePlan.NUMBER_PREFIX,
+                    MaintenanceWorkOrder.NUMBER_PREFIX}
+        assert prefixes == {"AST", "PM", "MWO"}
+
+
+class TestAssetManagementStrRepresentations:
+    def test_asset_str_is_code_and_name(self, asset_a):
+        assert str(asset_a) == "CNC-1 · CNC Lathe"
+
+    def test_plan_str_is_number_and_name(self, maintenance_plan_a):
+        assert str(maintenance_plan_a) == f"{maintenance_plan_a.number} · Quarterly service"
+
+    def test_work_order_str_is_number_and_title(self, maintenance_order_a):
+        assert str(maintenance_order_a) == f"{maintenance_order_a.number} · Spindle noise"
+
+    def test_meter_reading_str_carries_its_unit(self, meter_reading_a):
+        """Read back from the database, so the string is the one a PAGE renders — the in-memory
+        Decimal still carries whatever precision the caller typed, which is not what a user sees."""
+        meter_reading_a.refresh_from_db()
+        assert str(meter_reading_a) == "Running Hours 1218.5000 h"
+
+    def test_meter_reading_str_omits_a_blank_unit(self, tenant_a, asset_a):
+        from apps.scm.models import MeterReading
+        row = MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Cycles",
+                                          reading=Decimal("5"))
+        row.refresh_from_db()
+        assert str(row) == "Cycles 5.0000"
+
+    def test_spare_part_str_is_item_and_quantity(self, asset_spare_part_a, spare_item_a):
+        assert str(asset_spare_part_a) == f"{spare_item_a} × 2.0000"
+
+    def test_task_strs_are_sequence_and_description(self, plan_task_a, job_task_a):
+        assert str(plan_task_a) == "10. Isolate and lock out"
+        assert str(job_task_a) == "10. Isolate and lock out"
+
+    def test_a_part_line_str_is_item_and_quantity(self, part_line_a, spare_item_a):
+        """The parts panel and the issue-verb messages both print this, so it has to read as a
+        line rather than as ``MaintenanceWorkOrderPart object (3)``."""
+        part_line_a.refresh_from_db()
+        assert str(part_line_a) == f"{spare_item_a} × 2.0000"
+
+
+class TestAssetDefaultsAndChoices:
+    def test_a_bare_asset_takes_the_documented_defaults(self, tenant_a):
+        from apps.scm.models import Asset
+        asset = Asset.objects.create(tenant=tenant_a, code="BARE-1", name="Bare")
+        assert asset.asset_type == "machine"
+        assert asset.status == "in_service"
+        assert asset.criticality == "medium"
+        assert asset.is_active is True
+        assert asset.purchase_cost == Decimal("0.00")
+        assert asset.meter_name == "" and asset.meter_unit == ""
+
+    def test_status_choices_are_operational_and_not_accounting_states(self):
+        """Deliberately a DIFFERENT vocabulary from ``accounting.FixedAsset.status`` — an asset can
+        be ``standby`` operationally while being perfectly ``active`` financially."""
+        from apps.scm.models import Asset
+        assert [value for value, _ in Asset.STATUS_CHOICES] == [
+            "planned", "in_service", "under_maintenance", "standby", "idle", "retired", "disposed"]
+
+    def test_every_status_has_a_colour_and_they_all_exist_in_theme_css(self):
+        from apps.scm.models import Asset
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        assert set(Asset.STATUS_CSS) == {value for value, _ in Asset.STATUS_CHOICES}
+        assert set(Asset.STATUS_CSS.values()) <= allowed
+
+    def test_status_css_falls_back_to_muted_for_an_unknown_value(self, asset_a):
+        asset_a.status = "not_a_status"
+        assert asset_a.status_css == "badge-muted"
+
+    def test_criticality_css_reads_the_shared_vocabulary(self, asset_a):
+        from apps.scm.models import CRITICALITY_CSS
+        assert asset_a.criticality == "critical"
+        assert asset_a.criticality_css == CRITICALITY_CSS["critical"] == "badge-red"
+
+    def test_code_is_unique_per_tenant_and_free_across_tenants(self, tenant_a, tenant_b, asset_a):
+        from apps.scm.models import Asset
+        with pytest.raises(IntegrityError):
+            Asset.objects.create(tenant=tenant_a, code="CNC-1", name="Duplicate")
+
+    def test_the_same_code_in_another_workspace_is_fine(self, tenant_b, asset_a):
+        from apps.scm.models import Asset
+        assert Asset.objects.create(tenant=tenant_b, code="CNC-1", name="Globex lathe").pk
+
+
+class TestAssetTagCodeUniqueness:
+    def test_a_duplicate_tag_in_one_workspace_is_refused_by_clean(self, tenant_a, asset_a):
+        """Enforced in Python, not by ``unique_together``: a blank CharField stores as ``""`` and a
+        (tenant, tag_code) constraint would allow exactly ONE untagged asset per workspace."""
+        from apps.scm.models import Asset
+        clash = Asset(tenant=tenant_a, code="CNC-9", name="Clash", tag_code="QR-CNC-1")
+        with pytest.raises(ValidationError) as exc:
+            clash.full_clean()
+        assert "tag_code" in exc.value.error_dict
+        assert "CNC-1" in str(exc.value)
+
+    def test_the_same_tag_in_another_workspace_is_accepted(self, tenant_b, asset_a):
+        from apps.scm.models import Asset
+        twin = Asset(tenant=tenant_b, code="GBX-9", name="Globex", tag_code="QR-CNC-1")
+        twin.full_clean()
+
+    def test_many_untagged_assets_are_allowed(self, tenant_a):
+        """The whole reason the rule lives in ``clean()`` rather than in a DB constraint."""
+        from apps.scm.models import Asset
+        for index in range(3):
+            asset = Asset(tenant=tenant_a, code=f"UNTAGGED-{index}", name="No tag")
+            asset.full_clean()
+            asset.save()
+        assert Asset.objects.filter(tenant=tenant_a, tag_code="").count() == 3
+
+    def test_editing_the_row_that_already_owns_the_tag_is_not_a_clash(self, asset_a):
+        asset_a.name = "CNC Lathe (renamed)"
+        asset_a.full_clean()
+
+
+class TestAssetHierarchyGuard:
+    def test_an_asset_cannot_be_its_own_parent(self, asset_a):
+        asset_a.parent = asset_a
+        with pytest.raises(ValidationError) as exc:
+            asset_a.full_clean()
+        assert "own parent" in str(exc.value)
+
+    def test_a_two_hop_cycle_is_refused(self, asset_a, child_asset_a):
+        """A -> B -> A. The obvious typo is self-parenting; THIS is what actually happens when
+        somebody reorganises a plant, and it is invisible on the form that creates it."""
+        asset_a.parent = child_asset_a
+        with pytest.raises(ValidationError) as exc:
+            asset_a.full_clean()
+        assert "loop" in str(exc.value).lower()
+
+    def test_a_three_hop_cycle_is_refused(self, tenant_a, asset_a, child_asset_a):
+        from apps.scm.models import Asset
+        grandchild = Asset.objects.create(tenant=tenant_a, code="CNC-1-BEARING", name="Bearing",
+                                          parent=child_asset_a)
+        asset_a.parent = grandchild
+        with pytest.raises(ValidationError):
+            asset_a.full_clean()
+
+    def test_a_parent_in_another_workspace_is_refused(self, tenant_a, asset_b):
+        from apps.scm.models import Asset
+        stranger = Asset(tenant=tenant_a, code="CNC-X", name="Crafted", parent=asset_b)
+        with pytest.raises(ValidationError) as exc:
+            stranger.full_clean()
+        assert "parent" in exc.value.error_dict
+
+    def test_a_chain_deeper_than_the_cap_is_refused_rather_than_walked_forever(self, tenant_a):
+        """The cap bounds the walk even when the DATA is already broken — without it the edit form
+        that would REPAIR a pre-existing loop hangs on validation before it can save."""
+        from apps.scm.models import Asset
+        node = None
+        for index in range(Asset.MAX_HIERARCHY_DEPTH + 1):
+            node = Asset.objects.create(tenant=tenant_a, code=f"DEEP-{index}", name="Deep",
+                                        parent=node)
+        leaf = Asset(tenant=tenant_a, code="DEEP-LEAF", name="Leaf", parent=node)
+        with pytest.raises(ValidationError) as exc:
+            leaf.full_clean()
+        assert str(Asset.MAX_HIERARCHY_DEPTH) in str(exc.value)
+
+    def test_an_ordinary_two_level_hierarchy_validates(self, asset_a, child_asset_a):
+        child_asset_a.full_clean()
+
+
+class TestAssetCrossTenantFkGuard:
+    @pytest.mark.parametrize("field", ["location", "work_center", "org_unit", "custodian",
+                                       "supplier", "service_vendor", "fixed_asset"])
+    def test_every_scoped_fk_is_refused_when_it_points_at_another_workspace(
+            self, tenant_a, field, location_b, work_center_b, org_unit_b, supplier_b,
+            fixed_asset_b):
+        from apps.scm.models import Asset
+        foreign = {"location": location_b, "work_center": work_center_b, "org_unit": org_unit_b,
+                   "custodian": supplier_b, "supplier": supplier_b, "service_vendor": supplier_b,
+                   "fixed_asset": fixed_asset_b}[field]
+        asset = Asset(tenant=tenant_a, code="CRAFTED-1", name="Crafted", **{field: foreign})
+        with pytest.raises(ValidationError) as exc:
+            asset.full_clean()
+        assert field in exc.value.error_dict
+
+    def test_the_guard_list_names_every_tenant_scoped_pointer(self):
+        """Table-driven so adding a pointer means adding it here, not copying an eighth if-block."""
+        from apps.scm.models import Asset
+        assert set(Asset.TENANT_SCOPED_FKS) == {
+            "parent", "location", "work_center", "org_unit", "custodian", "supplier",
+            "service_vendor", "fixed_asset"}
+
+
+class TestAssetWarrantyChip:
+    def test_no_warranty_date_is_its_own_muted_state_and_never_green(self, asset_a2):
+        """Not knowing whether an asset is under warranty is not the same as knowing it is."""
+        assert asset_a2.days_to_warranty_expiry() is None
+        assert asset_a2.warranty_chip() == ("Not recorded", "badge-muted")
+
+    def test_a_live_warranty_beyond_the_notice_window_is_green(self, asset_a):
+        assert asset_a.days_to_warranty_expiry() == 300
+        assert asset_a.warranty_chip() == ("In warranty", "badge-green")
+
+    def test_a_lapsed_warranty_is_red_with_a_negative_day_count(self, asset_a):
+        asset_a.warranty_expires_on = _asset_day(-1)
+        assert asset_a.days_to_warranty_expiry() == -1
+        assert asset_a.warranty_chip() == ("Expired", "badge-red")
+
+    def test_today_is_its_own_amber_state(self, asset_a):
+        asset_a.warranty_expires_on = _asset_day(0)
+        assert asset_a.warranty_chip() == ("Expires today", "badge-amber")
+
+    def test_inside_the_notice_window_counts_down_in_amber(self, asset_a):
+        from apps.scm.models import Asset
+        asset_a.warranty_expires_on = _asset_day(Asset.WARRANTY_NOTICE_DAYS)
+        label, css = asset_a.warranty_chip()
+        assert css == "badge-amber" and str(Asset.WARRANTY_NOTICE_DAYS) in label
+
+    def test_the_day_after_the_notice_window_is_already_green(self, asset_a):
+        from apps.scm.models import Asset
+        asset_a.warranty_expires_on = _asset_day(Asset.WARRANTY_NOTICE_DAYS + 1)
+        assert asset_a.warranty_chip()[1] == "badge-green"
+
+    def test_the_chip_accepts_an_injected_today(self, asset_a):
+        """Injected, never networked — and derived from ``localdate()`` so it cannot drift (L16)."""
+        assert asset_a.days_to_warranty_expiry(today=_asset_day(300)) == 0
+
+
+class TestAssetReliabilityNoneContract:
+    """Every figure that divides by something legitimately zero answers ``None``, never ``0``.
+
+    A 0 h MTBF reads as "fails constantly", a 0 h MTTR as "instant repairs" and 0 % availability as
+    "never available" — each the exact opposite of "not enough history yet". A blank makes somebody
+    go and look; a confident zero starts a conversation about a machine that is fine.
+    """
+
+    def test_a_fresh_asset_has_no_mtbf_and_no_mttr(self, asset_a):
+        assert asset_a.mtbf_hours() is None
+        assert asset_a.mttr_hours() is None
+
+    def test_an_asset_that_has_never_failed_has_no_mtbf_and_no_mttr(self, asset_a):
+        """Preventive work is not failure — ``FAILURE_WORK_TYPES`` is ``("breakdown",)`` and
+        ``corrective`` is deliberately outside it: counting planned repair would depress MTBF for
+        doing maintenance properly."""
+        from apps.scm.models import MaintenanceWorkOrder
+        for work_type in ("preventive", "corrective", "inspection"):
+            MaintenanceWorkOrder.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                                title=work_type, work_type=work_type)
+        asset = _reload_asset(asset_a)
+        assert asset.failure_count() == 0
+        assert asset.mtbf_hours() is None
+        assert asset.mttr_hours() is None
+
+    def test_an_unfinished_breakdown_leaves_mttr_unanswerable(self, asset_a):
+        """A repair still in progress has no repair time yet; including it would divide a partial
+        numerator by a full denominator and pull the mean down exactly when it is most looked at."""
+        _breakdown(asset_a, status="in_progress", end_hours_ago=None)
+        assert _reload_asset(asset_a).mttr_hours() is None
+
+    def test_mtbf_still_answers_while_a_breakdown_is_open_because_the_failure_happened(self,
+                                                                                       asset_a):
+        """The counterpart of the rule above, stated so nobody "fixes" it: MTBF counts FAILURES,
+        and a machine that is broken right now has certainly failed. Only MTTR waits for the
+        repair to finish."""
+        _breakdown(asset_a, status="in_progress", end_hours_ago=None)
+        asset = _reload_asset(asset_a)
+        assert asset.failure_count() == 1
+        assert asset.mtbf_hours() is not None
+
+    def test_mttr_excludes_a_finished_breakdown_whose_window_was_never_recorded(self, asset_a):
+        """From BOTH halves, not just the numerator. An untimed repair carries 0 downtime minutes
+        (the pair derives to zero), so leaving it in the denominator would drag the mean toward
+        zero and make the fleet look faster to fix the worse the record-keeping got."""
+        _breakdown(asset_a, start_hours_ago=5, end_hours_ago=3)          # 120 min, timed
+        _breakdown(asset_a, start_hours_ago=None, end_hours_ago=None)    # finished, untimed
+        asset = _reload_asset(asset_a)
+        assert asset.failure_count() == 2
+        assert asset.mttr_hours() == Decimal("2.00")
+
+    def test_a_genuine_same_instant_repair_still_counts(self, asset_a):
+        """The window WAS recorded, it was simply short — that is a measurement, not an absence."""
+        from django.utils import timezone
+        moment = timezone.now() - datetime.timedelta(hours=2)
+        job = _breakdown(asset_a, start_hours_ago=None, end_hours_ago=None)
+        job.downtime_start = moment
+        job.downtime_end = moment
+        job.save(update_fields=["downtime_start", "downtime_end"])
+        assert _reload_asset(asset_a).mttr_hours() == Decimal("0.00")
+
+    def test_availability_is_none_when_the_window_cannot_be_established(self, tenant_a):
+        """An asset commissioned TODAY has a zero-length window, and zero hours of observation is
+        not "0 % available" — it is nothing to measure against yet. ``_observed_hours`` refuses to
+        invent one, which is also why the window is not "since the first work order": that would
+        give an asset with no jobs 100 % availability by construction."""
+        from apps.scm.models import Asset
+        asset = Asset.objects.create(tenant=tenant_a, code="TODAY-1", name="Commissioned today",
+                                     commissioned_on=_asset_day(0))
+        _breakdown(asset, start_hours_ago=None, end_hours_ago=None)
+        asset = _reload_asset(asset)
+        assert asset._observed_hours() is None
+        assert asset.availability_pct() is None
+        assert asset.failure_count() == 1        # the failure is real...
+        assert asset.mtbf_hours() is None        # ...but there is no window to divide it into
+
+    def test_maintenance_cost_to_date_is_a_real_zero_and_never_none(self, asset_a):
+        """The deliberate exception to the rule above: nothing has been SPENT on a fresh asset,
+        which is a measurement rather than an unmeasurable."""
+        cost = asset_a.maintenance_cost_to_date()
+        assert cost is not None
+        assert cost == Decimal("0.00")
+        assert isinstance(cost, Decimal)
+
+
+class TestAssetReliabilityFigures:
+    def test_downtime_failures_mtbf_mttr_and_availability_reconcile(self, asset_a):
+        """One 2-hour breakdown against a 365-day observation window, every figure from the same
+        memoised aggregate so the tiles on one card cannot disagree with each other."""
+        _breakdown(asset_a, start_hours_ago=5, end_hours_ago=3)
+        asset = _reload_asset(asset_a)
+        assert asset.downtime_minutes() == 120
+        assert asset.failure_count() == 1
+        assert asset._observed_hours() == Decimal("8760")
+        assert asset.mtbf_hours() == Decimal("8758.00")
+        assert asset.mttr_hours() == Decimal("2.00")
+        assert asset.availability_pct() == Decimal("99.98")
+
+    def test_an_open_downtime_window_still_counts_toward_downtime(self, asset_a):
+        """``downtime_minutes`` is derived in ``save()`` from the PAIR, so a window still open
+        contributes zero to the stored column — without the live pass a machine down for three days
+        would report no downtime at all while ``is_down_now()`` said it was down."""
+        _breakdown(asset_a, status="in_progress", start_hours_ago=4, end_hours_ago=None)
+        asset = _reload_asset(asset_a)
+        assert asset.is_down_now() is True
+        assert 235 <= asset.downtime_minutes() <= 245
+
+    def test_a_cancelled_job_is_charged_to_nobody(self, asset_a):
+        """A cancelled job can still carry a window and a labour figure typed before it was called
+        off; counting it would charge the asset for work nobody did."""
+        _breakdown(asset_a, status="cancelled", start_hours_ago=10, end_hours_ago=8)
+        asset = _reload_asset(asset_a)
+        assert asset.downtime_minutes() == 0
+        assert asset.failure_count() == 0
+        assert asset.mtbf_hours() is None
+
+    def test_is_down_now_is_not_restricted_to_breakdowns(self, asset_a):
+        """What makes an asset down is an OPEN outage, not the label on the job — a preventive
+        service that took the line down is a line that is down."""
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(
+            tenant=asset_a.tenant, asset=asset_a, title="Planned service", work_type="preventive",
+            downtime_start=_asset_hours_ago(2))
+        assert _reload_asset(asset_a).is_down_now() is True
+        job.status = "completed"
+        job.save(update_fields=["status", "updated_at"])
+        assert _reload_asset(asset_a).is_down_now() is False
+
+    def test_open_job_count_treats_an_unknown_status_as_open(self, asset_a):
+        """Stated as the TERMINAL set on purpose — a status added later is far likelier to be a
+        mid-lifecycle state, so an unknown one counts as OPEN and errs towards showing the job."""
+        from apps.scm.models import Asset, MaintenanceWorkOrder
+        assert Asset.CLOSED_JOB_STATUSES == ("completed", "closed", "cancelled")
+        job = MaintenanceWorkOrder.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                                  title="Odd", work_type="corrective")
+        MaintenanceWorkOrder.objects.filter(pk=job.pk).update(status="awaiting_parts")
+        assert _reload_asset(asset_a).open_job_count() == 1
+
+    def test_the_since_window_narrows_failures_on_reported_at(self, asset_a):
+        """Windowed on when the fault was RAISED, not when it was repaired — hanging a failure off
+        the repair date would move failures between periods whenever a job stayed open over a month
+        end."""
+        from django.utils import timezone
+        old = _breakdown(asset_a, start_hours_ago=100, end_hours_ago=99)
+        old.reported_at = timezone.now() - datetime.timedelta(days=400)
+        old.save(update_fields=["reported_at"])
+        _breakdown(asset_a, start_hours_ago=5, end_hours_ago=3)
+        asset = _reload_asset(asset_a)
+        assert asset.failure_count() == 2
+        assert asset.failure_count(since=timezone.now() - datetime.timedelta(days=30)) == 1
+
+    def test_an_explicit_since_is_the_window_in_preference_to_the_commissioning_date(self,
+                                                                                     asset_a):
+        """``_observed_hours`` prefers the caller's window, then the commissioning date, then
+        ``created_at`` — in that order, and never "since the first work order", which would give an
+        asset with no jobs a zero-length window and therefore 100 % availability by construction."""
+        from django.utils import timezone
+        since = timezone.now() - datetime.timedelta(days=10)
+        asset = _reload_asset(asset_a)
+        observed = asset._observed_hours(since=since)
+        assert Decimal("239.9") <= observed <= Decimal("240.1")
+        # The commissioning date (365 days back) is NOT what answered.
+        assert observed < Decimal("8760")
+
+    def test_an_uncommissioned_asset_falls_back_to_when_the_record_was_created(self, tenant_a):
+        """A machine with no commissioning date still has a window — a short one — rather than
+        none, so ``availability_pct`` can answer at all. It is minutes old in a test, which is why
+        the assertion is on the SHAPE (positive, tiny) rather than on a figure."""
+        from apps.scm.models import Asset
+        asset = Asset.objects.create(tenant=tenant_a, code="NOCOMM-1", name="No commissioning date")
+        assert asset.commissioned_on is None
+        observed = asset._observed_hours()
+        assert observed is not None and observed > Decimal("0")
+        assert observed < Decimal("1")
+
+    def test_availability_floors_at_zero_rather_than_going_negative(self, tenant_a):
+        """Visibly wrong beats plausibly wrong: recorded downtime exceeding the window sends
+        somebody to look at the data, where a silently clamped figure would not."""
+        from apps.scm.models import Asset
+        asset = Asset.objects.create(tenant=tenant_a, code="NEW-1", name="Commissioned yesterday",
+                                     commissioned_on=_asset_day(-1))
+        _breakdown(asset, start_hours_ago=100, end_hours_ago=1)
+        assert _reload_asset(asset).availability_pct() == Decimal("0.00")
+
+
+class TestAssetMaintenanceCostToDate:
+    def test_it_sums_issued_parts_plus_labour_plus_contractors(self, asset_a, maintenance_order_a,
+                                                               issued_part_line_a):
+        """2 h @ 40.00 labour (80.00) + 100.00 external + 2 x 25.0000 of issued bearing (50.00)."""
+        assert _reload_asset(asset_a).maintenance_cost_to_date() == Decimal("230.00")
+
+    def test_an_unissued_line_contributes_nothing(self, asset_a, maintenance_order_a, part_line_a):
+        """``unit_cost`` is stamped at ISSUE time, so a merely-planned line carries 0.0000 — adding
+        it would put a real line on the job at a fake price."""
+        assert part_line_a.is_issued is False
+        assert _reload_asset(asset_a).maintenance_cost_to_date() == Decimal("180.00")
+
+    def test_two_part_lines_do_not_multiply_the_labour(self, asset_a, maintenance_order_a,
+                                                       issued_part_line_a, spare_item_a,
+                                                       component_bolt_a):
+        """THE FAN-OUT TRAP, asserted rather than trusted. Parts live at a different GRAIN from the
+        job header; folding their Sum into the header aggregate joins the child rows in and
+        multiplies labour and external cost by the job's part count — a three-part repair charged
+        three times its labour, silently, forever."""
+        from django.utils import timezone
+        from apps.scm.models import MaintenanceWorkOrderPart
+        MaintenanceWorkOrderPart.objects.create(
+            work_order=maintenance_order_a, item=component_bolt_a, quantity=Decimal("1"),
+            unit_cost=Decimal("10.0000"), is_issued=True, issued_at=timezone.now())
+        # labour 80 + external 100 + parts (50 + 10) = 240 — NOT 80*2 + 100*2 + 60.
+        assert _reload_asset(asset_a).maintenance_cost_to_date() == Decimal("240.00")
+
+    def test_a_cancelled_job_costs_the_asset_nothing(self, asset_a, maintenance_order_a,
+                                                     issued_part_line_a):
+        maintenance_order_a.status = "cancelled"
+        maintenance_order_a.save(update_fields=["status", "updated_at"])
+        assert _reload_asset(asset_a).maintenance_cost_to_date() == Decimal("0.00")
+
+    def test_the_since_window_narrows_BOTH_grains_and_not_just_the_header(self, asset_a,
+                                                                          maintenance_order_a,
+                                                                          issued_part_line_a):
+        """Two aggregates, two windows, one answer. A window applied only to the job header would
+        drop the labour and the contractor charge of an old repair while still counting its parts —
+        a figure that is neither the period's spend nor the lifetime one."""
+        from django.utils import timezone
+        maintenance_order_a.reported_at = timezone.now() - datetime.timedelta(days=400)
+        maintenance_order_a.save(update_fields=["reported_at", "updated_at"])
+        asset = _reload_asset(asset_a)
+        assert asset.maintenance_cost_to_date() == Decimal("230.00")
+        recent = timezone.now() - datetime.timedelta(days=30)
+        assert asset.maintenance_cost_to_date(since=recent) == Decimal("0.00")
+
+
+class TestAssetMeterAndPlanAccessors:
+    def test_latest_reading_answers_the_newest_row_on_the_primary_meter(self, asset_a,
+                                                                        meter_reading_a):
+        from apps.scm.models import MeterReading
+        newer = MeterReading.objects.create(
+            tenant=asset_a.tenant, asset=asset_a, meter_name="Running Hours", unit="h",
+            reading=Decimal("1250"), read_at=_asset_hours_ago(1))
+        assert asset_a.latest_reading().pk == newer.pk
+
+    def test_a_named_primary_meter_never_falls_back_to_another_meter(self, asset_a,
+                                                                     meter_reading_a):
+        """An odometer reading handed to a plan whose interval is in running hours would schedule a
+        service roughly never, and the failure would be silent."""
+        from apps.scm.models import MeterReading
+        MeterReading.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                    meter_name="Bearing Temp", unit="C", reading=Decimal("78"),
+                                    read_at=_asset_hours_ago(1))
+        assert asset_a.latest_reading().meter_name == "Running Hours"
+
+    def test_an_asset_with_no_primary_meter_takes_the_newest_row_of_any_meter(self, asset_a2):
+        from apps.scm.models import MeterReading
+        row = MeterReading.objects.create(tenant=asset_a2.tenant, asset=asset_a2,
+                                          meter_name="Odometer", reading=Decimal("41200"))
+        assert asset_a2.latest_reading().pk == row.pk
+
+    def test_latest_reading_is_none_when_nothing_has_been_logged(self, asset_a):
+        assert asset_a.latest_reading() is None
+
+    def test_next_pm_due_is_the_earliest_active_dated_plan(self, asset_a, maintenance_plan_a,
+                                                           meter_plan_a):
+        from apps.scm.models import MaintenancePlan
+        sooner = MaintenancePlan.objects.create(
+            tenant=asset_a.tenant, name="Weekly", asset=asset_a, interval_days=7,
+            next_due_on=_asset_day(2))
+        assert asset_a.next_pm_due() == sooner.next_due_on
+
+    def test_next_pm_due_ignores_an_inactive_plan(self, asset_a, maintenance_plan_a):
+        maintenance_plan_a.is_active = False
+        maintenance_plan_a.save(update_fields=["is_active", "updated_at"])
+        assert asset_a.next_pm_due() is None
+
+    def test_next_pm_due_is_none_with_no_dated_plan(self, asset_a, meter_plan_a):
+        assert asset_a.next_pm_due() is None
+
+
+class TestAssetSparePartModel:
+    def test_the_child_carries_no_tenant_column(self):
+        """Reached through ``asset__tenant`` — a child with its own tenant could disagree with its
+        parent's, and then two rows of one asset would belong to two workspaces."""
+        from apps.scm.models import AssetSparePart
+        assert "tenant" not in {f.name for f in AssetSparePart._meta.get_fields()}
+
+    def test_one_item_may_appear_once_per_asset(self, asset_a, spare_item_a,
+                                                asset_spare_part_a):
+        from apps.scm.models import AssetSparePart
+        with pytest.raises(IntegrityError):
+            AssetSparePart.objects.create(asset=asset_a, item=spare_item_a,
+                                          quantity_per_service=Decimal("1"))
+
+    def test_an_item_from_another_workspace_is_refused(self, asset_a, spare_item_b):
+        from apps.scm.models import AssetSparePart
+        line = AssetSparePart(asset=asset_a, item=spare_item_b, quantity_per_service=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            line.full_clean()
+        assert "item" in exc.value.error_dict
+
+    def test_the_quantity_is_normalised_and_clamped_on_save(self, asset_a, spare_item_a):
+        """``q4`` clamps as well as quantizes: an over-range figure raises ``DataError`` inside a
+        formset save, which fails the whole parts list rather than the one bad line."""
+        from apps.scm.models import AssetSparePart, MAX_Q4
+        line = AssetSparePart.objects.create(asset=asset_a, item=spare_item_a,
+                                             quantity_per_service=Decimal("999999999999999"))
+        assert line.quantity_per_service == MAX_Q4
+
+    def test_deleting_the_asset_takes_its_parts_list_with_it(self, asset_a, asset_spare_part_a):
+        from apps.scm.models import AssetSparePart
+        asset_a.delete()
+        assert not AssetSparePart.objects.filter(pk=asset_spare_part_a.pk).exists()
+
+
+class TestMaintenancePlanTriggerContract:
+    """A plan that cannot come due is worse than no plan: it sits on the register looking like the
+    machine is covered and never raises a single job."""
+
+    def test_a_calendar_plan_needs_an_interval(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="No cadence", asset=asset_a,
+                               trigger_type="calendar")
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "interval_days" in exc.value.error_dict
+
+    def test_a_zero_interval_is_refused_with_the_same_message_as_a_missing_one(self, tenant_a,
+                                                                              asset_a):
+        """An interval of 0 days is due every instant, which is not a schedule."""
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="Zero", asset=asset_a,
+                               trigger_type="calendar", interval_days=0)
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "interval_days" in exc.value.error_dict
+
+    def test_a_meter_plan_needs_a_meter_interval(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="No cadence", asset=asset_a,
+                               trigger_type="meter", next_due_reading=Decimal("100"))
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "meter_interval" in exc.value.error_dict
+
+    def test_a_meter_plan_needs_a_first_target_reading(self, tenant_a, asset_a):
+        """The interval says how OFTEN; ``next_due_reading`` says WHEN NEXT. Without a target
+        ``meter_gap()`` answers None forever and the axis can never fire."""
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="No target", asset=asset_a,
+                               trigger_type="meter", meter_interval=Decimal("250"))
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "next_due_reading" in exc.value.error_dict
+
+    def test_a_meter_plan_needs_an_asset_that_actually_has_a_meter(self, tenant_a, asset_a2):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="No meter", asset=asset_a2,
+                               trigger_type="meter", meter_interval=Decimal("250"),
+                               next_due_reading=Decimal("100"))
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "meter_interval" in exc.value.error_dict
+        assert "no meter defined" in str(exc.value)
+
+    def test_a_combined_plan_needs_both_axes(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="Half configured", asset=asset_a,
+                               trigger_type="combined", interval_days=90)
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "meter_interval" in exc.value.error_dict
+
+    def test_a_condition_plan_needs_an_operator(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="No operator", asset=asset_a,
+                               trigger_type="condition", condition_threshold=Decimal("78"))
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "condition_operator" in exc.value.error_dict
+
+    def test_a_condition_plan_needs_a_threshold(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="No threshold", asset=asset_a,
+                               trigger_type="condition", condition_operator="gte")
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "condition_threshold" in exc.value.error_dict
+
+    def test_a_fully_configured_plan_of_each_trigger_validates(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan
+        for kwargs in (
+            {"trigger_type": "calendar", "interval_days": 90},
+            {"trigger_type": "meter", "meter_interval": Decimal("250"),
+             "next_due_reading": Decimal("1500")},
+            {"trigger_type": "combined", "interval_days": 90,
+             "meter_interval": Decimal("250"), "next_due_reading": Decimal("1500")},
+            {"trigger_type": "condition", "condition_operator": "gte",
+             "condition_threshold": Decimal("78")},
+        ):
+            MaintenancePlan(tenant=tenant_a, name="Configured", asset=asset_a,
+                            **kwargs).full_clean()
+
+    @pytest.mark.parametrize("field", ["asset", "assigned_to", "parts_location"])
+    def test_a_cross_tenant_pointer_is_refused(self, tenant_a, asset_a, field, asset_b,
+                                               supplier_b, location_b):
+        from apps.scm.models import MaintenancePlan
+        foreign = {"asset": asset_b, "assigned_to": supplier_b, "parts_location": location_b}[field]
+        kwargs = {"asset": asset_a, "trigger_type": "calendar", "interval_days": 90}
+        kwargs[field] = foreign
+        plan = MaintenancePlan(tenant=tenant_a, name="Crafted", **kwargs)
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert field in exc.value.error_dict
+
+    def test_the_interval_is_capped_at_ten_years(self, tenant_a, asset_a):
+        """``interval_days`` is fed straight to ``timedelta(days=...)`` and a bare
+        ``PositiveIntegerField`` accepts 4294967295 — an uncaught ``OverflowError``, i.e. a 500."""
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan(tenant=tenant_a, name="Absurd", asset=asset_a,
+                               trigger_type="calendar", interval_days=4294967295)
+        with pytest.raises(ValidationError) as exc:
+            plan.full_clean()
+        assert "interval_days" in exc.value.error_dict
+
+
+class TestMaintenancePlanDueStatus:
+    def test_a_future_dated_plan_beyond_its_horizon_is_scheduled(self, maintenance_plan_a):
+        assert maintenance_plan_a.days_until_due() == 10
+        assert maintenance_plan_a.due_status() == "scheduled"
+        assert maintenance_plan_a.is_due() is False
+
+    def test_inside_the_call_horizon_reads_due_soon(self, maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_day(3)
+        assert maintenance_plan_a.due_status() == "due_soon"
+
+    def test_due_soon_is_deliberately_not_due(self, maintenance_plan_a):
+        """Raising work EARLY and OWING work are different states; merging them would make the PM
+        compliance figure count jobs that were never late."""
+        maintenance_plan_a.next_due_on = _asset_day(3)
+        assert maintenance_plan_a.is_due() is False
+
+    def test_today_and_the_past_are_both_due(self, maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_day(0)
+        assert maintenance_plan_a.due_status() == "due_today"
+        assert maintenance_plan_a.is_due() is True
+        maintenance_plan_a.next_due_on = _asset_day(-1)
+        assert maintenance_plan_a.due_status() == "overdue"
+        assert maintenance_plan_a.is_due() is True
+
+    def test_an_inactive_plan_is_never_evaluated(self, maintenance_plan_a):
+        maintenance_plan_a.next_due_on = _asset_day(-30)
+        maintenance_plan_a.is_active = False
+        assert maintenance_plan_a.due_status() == "not_scheduled"
+        assert maintenance_plan_a.is_due() is False
+
+    def test_a_correctly_configured_pure_meter_plan_reads_scheduled(self, meter_plan_a):
+        """THE REGRESSION. A meter plan carries no date at all, and answering ``not_scheduled``
+        gave it the same muted chip as a broken one — the one reading a planner must be able to
+        trust, because it is the chip that says "nobody is watching this machine"."""
+        assert meter_plan_a.next_due_on is None
+        assert meter_plan_a.due_status() == "scheduled"
+        assert meter_plan_a.is_due() is False
+
+    def test_a_meter_plan_missing_its_target_really_is_not_scheduled(self, meter_plan_a):
+        meter_plan_a.next_due_reading = None
+        assert meter_plan_a.due_status() == "not_scheduled"
+
+    def test_a_meter_plan_past_its_target_is_overdue(self, meter_plan_a, asset_a):
+        from apps.scm.models import MeterReading
+        MeterReading.objects.create(tenant=asset_a.tenant, asset=asset_a,
+                                    meter_name="Running Hours", reading=Decimal("1520"))
+        plan = type(meter_plan_a).objects.get(pk=meter_plan_a.pk)
+        assert plan.meter_gap() == Decimal("-20.0000")
+        assert plan.due_status() == "overdue"
+        assert plan.is_due() is True
+
+    def test_meter_gap_is_none_and_never_zero_without_a_reading(self, meter_plan_a):
+        """"No answer" and "due right now" are different facts, and a confident zero states the
+        second — on a maintenance board that is a blank a planner investigates versus a red chip
+        they act on."""
+        assert meter_plan_a.meter_gap() is None
+
+    def test_meter_gap_is_none_on_a_calendar_plan(self, maintenance_plan_a, meter_reading_a):
+        assert maintenance_plan_a.meter_gap() is None
+
+    def test_a_combined_plan_is_due_when_the_meter_axis_fires_alone(self, tenant_a, asset_a):
+        """"Whichever comes first" — the work was owed at 1 500 h and the machine is at 1 520, so
+        the meter outranks a date that has not arrived. A future date reading overdue is the
+        contract, not a bug."""
+        from apps.scm.models import MaintenancePlan, MeterReading
+        MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Running Hours",
+                                    reading=Decimal("1520"))
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Combined", asset=asset_a, trigger_type="combined",
+            interval_days=90, meter_interval=Decimal("250"), next_due_reading=Decimal("1500"),
+            next_due_on=_asset_day(60))
+        assert plan.due_status() == "overdue"
+        assert plan.is_due() is True
+
+    def test_a_combined_plan_is_due_when_only_the_date_axis_fires(self, tenant_a, asset_a,
+                                                                  meter_reading_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Combined", asset=asset_a, trigger_type="combined",
+            interval_days=90, meter_interval=Decimal("250"), next_due_reading=Decimal("5000"),
+            next_due_on=_asset_day(-1))
+        assert plan.due_status() == "overdue"
+
+    def test_a_combined_plan_with_neither_axis_firing_is_scheduled(self, tenant_a, asset_a,
+                                                                   meter_reading_a):
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Combined", asset=asset_a, trigger_type="combined",
+            interval_days=90, meter_interval=Decimal("250"), next_due_reading=Decimal("5000"),
+            next_due_on=_asset_day(60), lead_time_days=7)
+        assert plan.due_status() == "scheduled"
+
+    def test_a_condition_plan_fires_at_or_above_its_threshold(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan, MeterReading
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Vibration", asset=asset_a, trigger_type="condition",
+            condition_operator="gte", condition_threshold=Decimal("78"))
+        assert plan.due_status() == "scheduled"      # configured, but nothing measured yet
+        MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Running Hours",
+                                    reading=Decimal("78"))
+        plan = MaintenancePlan.objects.get(pk=plan.pk)
+        assert plan.due_status() == "overdue"
+
+    def test_a_condition_plan_fires_at_or_below_for_lte(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenancePlan, MeterReading
+        MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Running Hours",
+                                    reading=Decimal("2"))
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Pressure", asset=asset_a, trigger_type="condition",
+            condition_operator="lte", condition_threshold=Decimal("4"))
+        assert plan.due_status() == "overdue"
+
+    def test_a_condition_plan_never_fires_off_silence(self, tenant_a, asset_a):
+        """An unmeasured machine is unknown, not failing — raising a job off silence would train
+        everybody to ignore the trigger."""
+        from apps.scm.models import MaintenancePlan
+        plan = MaintenancePlan.objects.create(
+            tenant=tenant_a, name="Vibration", asset=asset_a, trigger_type="condition",
+            condition_operator="gte", condition_threshold=Decimal("78"))
+        assert plan._condition_axis_due() is False
+
+    def test_the_five_labels_and_colours_cover_every_answer(self, maintenance_plan_a):
+        from apps.scm.models import MaintenancePlan
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        assert set(MaintenancePlan.DUE_STATUS_LABELS) == set(MaintenancePlan.DUE_STATUS_CSS)
+        assert set(MaintenancePlan.DUE_STATUS_CSS.values()) <= allowed
+        assert maintenance_plan_a.due_status_label == "Scheduled"
+        assert maintenance_plan_a.due_status_css == "badge-green"
+
+    def test_the_trigger_badge_never_borrows_the_overdue_colour(self):
+        """On this model red means OVERDUE; a taxonomy badge must never be mistaken for a state
+        badge."""
+        from apps.scm.models import MaintenancePlan
+        assert "badge-red" not in MaintenancePlan.TRIGGER_CSS.values()
+        assert set(MaintenancePlan.TRIGGER_CSS) == {v for v, _ in MaintenancePlan.TRIGGER_CHOICES}
+
+
+class TestMaintenancePlanAdvance:
+    """The ONLY place the floating/fixed x calendar/meter arithmetic lives — and the site of the
+    double-advance bug. All four combinations are asserted here; that ``generate`` does not call it
+    at all, and ``complete`` calls it exactly once, is locked in ``test_views.py``.
+    """
+
+    def _plan(self, tenant, asset, **kwargs):
+        from apps.scm.models import MaintenancePlan
+        defaults = {"tenant": tenant, "name": "Cycle", "asset": asset, "lead_time_days": 7}
+        defaults.update(kwargs)
+        return MaintenancePlan.objects.create(**defaults)
+
+    def test_fixed_calendar_measures_from_the_published_date(self, tenant_a, asset_a):
+        """A statutory inspection due in January is due in January whatever happened in December —
+        a late job must not drag every future cycle late with it."""
+        published = _asset_day(-30)
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="fixed",
+                          interval_days=90, next_due_on=published)
+        written = plan.advance(from_date=_asset_day(0))
+        assert written == ["next_due_on"]
+        assert plan.next_due_on == published + datetime.timedelta(days=90)
+
+    def test_floating_calendar_measures_from_the_completion(self, tenant_a, asset_a):
+        """Wear-driven work: a service done a fortnight late pushes the whole future schedule out."""
+        completion = _asset_day(0)
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="floating",
+                          interval_days=90, next_due_on=_asset_day(-30))
+        plan.advance(from_date=completion)
+        assert plan.next_due_on == completion + datetime.timedelta(days=90)
+
+    def test_fixed_meter_measures_from_the_published_target(self, tenant_a, asset_a,
+                                                            meter_reading_a):
+        plan = self._plan(tenant_a, asset_a, trigger_type="meter", schedule_basis="fixed",
+                          meter_interval=Decimal("250"), next_due_reading=Decimal("1000"))
+        written = plan.advance(from_date=_asset_day(0))
+        assert written == ["next_due_reading"]
+        assert plan.next_due_reading == Decimal("1250.0000")
+
+    def test_floating_meter_measures_from_the_meter_as_it_actually_reads(self, tenant_a, asset_a,
+                                                                         meter_reading_a):
+        """1 218.5 h on the clock + a 250 h interval = 1 468.5, regardless of the published target."""
+        plan = self._plan(tenant_a, asset_a, trigger_type="meter", schedule_basis="floating",
+                          meter_interval=Decimal("250"), next_due_reading=Decimal("1000"))
+        plan.advance(from_date=_asset_day(0))
+        assert plan.next_due_reading == Decimal("1468.5000")
+
+    def test_a_floating_meter_plan_with_no_reading_falls_back_to_the_published_target(
+            self, tenant_a, asset_a):
+        plan = self._plan(tenant_a, asset_a, trigger_type="meter", schedule_basis="floating",
+                          meter_interval=Decimal("250"), next_due_reading=Decimal("1000"))
+        plan.advance(from_date=_asset_day(0))
+        assert plan.next_due_reading == Decimal("1250.0000")
+
+    def test_a_combined_plan_rolls_both_axes_in_one_call(self, tenant_a, asset_a,
+                                                         meter_reading_a):
+        completion = _asset_day(0)
+        plan = self._plan(tenant_a, asset_a, trigger_type="combined", schedule_basis="floating",
+                          interval_days=90, meter_interval=Decimal("250"),
+                          next_due_reading=Decimal("1000"), next_due_on=_asset_day(-5))
+        written = plan.advance(from_date=completion)
+        assert set(written) == {"next_due_on", "next_due_reading"}
+        assert plan.next_due_on == completion + datetime.timedelta(days=90)
+        assert plan.next_due_reading == Decimal("1468.5000")
+
+    def test_a_condition_plan_has_no_cycle_to_roll(self, tenant_a, asset_a):
+        """Its next occurrence is decided by the machine, not by a schedule."""
+        plan = self._plan(tenant_a, asset_a, trigger_type="condition", condition_operator="gte",
+                          condition_threshold=Decimal("78"))
+        assert plan.advance(from_date=_asset_day(0)) == []
+
+    def test_exactly_one_cycle_is_rolled_even_when_several_were_missed(self, tenant_a, asset_a):
+        """Skipping the gap would erase the fact that cycles WERE missed; the next ``due_status``
+        read correctly re-flags the plan as overdue."""
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", schedule_basis="fixed",
+                          interval_days=30, next_due_on=_asset_day(-95))
+        plan.advance(from_date=_asset_day(0))
+        assert plan.next_due_on == _asset_day(-65)
+        assert plan.due_status() == "overdue"
+
+    def test_advance_never_writes_the_two_event_stamps(self, tenant_a, asset_a):
+        """They record something that HAPPENED, which this method did not observe — the generate
+        action and the complete verb write their own."""
+        plan = self._plan(tenant_a, asset_a, trigger_type="calendar", interval_days=30,
+                          next_due_on=_asset_day(5))
+        plan.advance(from_date=_asset_day(0), save=True)
+        plan.refresh_from_db()
+        assert plan.last_completed_on is None
+        assert plan.last_generated_on is None
+
+    def test_an_absurd_meter_interval_clamps_rather_than_raising(self, tenant_a, asset_a):
+        from apps.scm.models import MAX_Q4
+        plan = self._plan(tenant_a, asset_a, trigger_type="meter", schedule_basis="fixed",
+                          meter_interval=MAX_Q4, next_due_reading=MAX_Q4)
+        plan.advance(from_date=_asset_day(0), save=True)
+        plan.refresh_from_db()
+        assert plan.next_due_reading == MAX_Q4
+
+    def test_the_two_event_stamps_are_off_every_form_by_being_uneditable(self):
+        from apps.scm.models import MaintenancePlan
+        for name in ("last_completed_on", "last_generated_on"):
+            assert MaintenancePlan._meta.get_field(name).editable is False
+
+
+class TestMaintenancePlanTaskModel:
+    def test_the_child_carries_no_tenant_column(self):
+        from apps.scm.models import MaintenancePlanTask
+        assert "tenant" not in {f.name for f in MaintenancePlanTask._meta.get_fields()}
+
+    def test_steps_default_to_mandatory_and_not_a_safety_step(self, maintenance_plan_a):
+        from apps.scm.models import MaintenancePlanTask
+        step = MaintenancePlanTask.objects.create(plan=maintenance_plan_a, description="Check oil")
+        assert step.sequence == 10
+        assert step.is_mandatory is True
+        assert step.is_safety_step is False
+
+    def test_steps_order_by_sequence(self, maintenance_plan_a):
+        assert [t.sequence for t in maintenance_plan_a.tasks.all()] == [10, 20]
+
+    def test_deleting_the_plan_takes_its_checklist_with_it(self, maintenance_plan_a):
+        from apps.scm.models import MaintenancePlanTask
+        maintenance_plan_a.delete()
+        assert not MaintenancePlanTask.objects.filter(plan_id=maintenance_plan_a.pk).exists()
+
+    def test_deleting_the_asset_cascades_to_its_plans(self, asset_a, maintenance_plan_a):
+        """A plan is a standing instruction about a machine: once the machine is gone the
+        instruction is a rule that can never fire — deliberately unlike the JOB, which is history
+        and is PROTECTed."""
+        from apps.scm.models import MaintenancePlan
+        asset_a.delete()
+        assert not MaintenancePlan.objects.filter(pk=maintenance_plan_a.pk).exists()
+
+
+class TestMaintenanceWorkOrderModel:
+    def test_the_defaults_are_a_requested_corrective_job(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a, title="Bare")
+        assert job.status == "requested"
+        assert job.work_type == "corrective"
+        assert job.priority == "medium"
+        assert job.source == "request"
+        assert job.downtime_minutes == 0
+        assert job.is_unplanned_downtime is False
+
+    def test_status_is_uneditable_so_no_form_can_reach_it(self):
+        """The mechanism, not a convention: there is no path from form data to the column at all."""
+        from apps.scm.models import MaintenanceWorkOrder
+        for name in ("status", "started_at", "completed_at", "downtime_minutes"):
+            assert MaintenanceWorkOrder._meta.get_field(name).editable is False
+
+    def test_the_open_and_closed_status_sets_partition_the_vocabulary(self):
+        from apps.scm.models import MaintenanceWorkOrder
+        declared = {value for value, _ in MaintenanceWorkOrder.STATUS_CHOICES}
+        assert set(MaintenanceWorkOrder.OPEN_STATUSES) | set(
+            MaintenanceWorkOrder.CLOSED_STATUSES) == declared
+        assert not set(MaintenanceWorkOrder.OPEN_STATUSES) & set(
+            MaintenanceWorkOrder.CLOSED_STATUSES)
+
+    def test_every_status_has_a_theme_css_colour(self):
+        from apps.scm.models import MaintenanceWorkOrder
+        allowed = {"badge-green", "badge-red", "badge-amber", "badge-info", "badge-muted",
+                   "badge-slate"}
+        assert set(MaintenanceWorkOrder.STATUS_CSS) == {
+            v for v, _ in MaintenanceWorkOrder.STATUS_CHOICES}
+        assert set(MaintenanceWorkOrder.STATUS_CSS.values()) <= allowed
+
+    def test_downtime_minutes_are_derived_from_the_window_in_save(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(
+            tenant=tenant_a, asset=asset_a, title="Outage",
+            downtime_start=_asset_hours_ago(5), downtime_end=_asset_hours_ago(3))
+        assert job.downtime_minutes == 120
+
+    def test_an_open_window_derives_to_zero_stored_minutes(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a, title="Open",
+                                                  downtime_start=_asset_hours_ago(5))
+        assert job.downtime_minutes == 0
+        assert job.is_down_now is True
+
+    def test_the_derived_total_rides_along_with_a_narrow_update_fields_save(self, tenant_a,
+                                                                           asset_a):
+        """A caller passing ``update_fields=["downtime_end"]`` would otherwise persist the new
+        window and leave the stale total behind."""
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a, title="Outage",
+                                                  downtime_start=_asset_hours_ago(5))
+        job.downtime_end = _asset_hours_ago(4)
+        job.save(update_fields=["downtime_end"])
+        job.refresh_from_db()
+        assert job.downtime_minutes == 60
+
+    def test_an_absurd_window_clamps_instead_of_overflowing(self, tenant_a, asset_a):
+        """Two DateTimeFields can legally be 9999 years apart — ~5.3e9 minutes, past what a
+        ``PositiveIntegerField`` holds, and an uncaught ``OverflowError`` from an ordinary edit with
+        a mistyped year."""
+        from django.utils import timezone
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(
+            tenant=tenant_a, asset=asset_a, title="Mistyped year",
+            downtime_start=timezone.now() - datetime.timedelta(days=3000),
+            downtime_end=timezone.now())
+        assert job.downtime_minutes == MaintenanceWorkOrder.MAX_DOWNTIME_MINUTES
+
+    def test_a_window_that_ends_before_it_starts_is_refused(self, tenant_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder(tenant=tenant_a, asset=asset_a, title="Backwards",
+                                   downtime_start=_asset_hours_ago(3),
+                                   downtime_end=_asset_hours_ago(5))
+        with pytest.raises(ValidationError) as exc:
+            job.full_clean()
+        assert "downtime_end" in exc.value.error_dict
+
+    def test_a_plan_for_a_different_machine_is_refused(self, tenant_a, asset_a, asset_a2,
+                                                       maintenance_plan_a):
+        """Without this a mis-picked plan files a job against one machine under another machine's
+        PM schedule, and both assets' compliance percentages are wrong in opposite directions."""
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder(tenant=tenant_a, asset=asset_a2, title="Wrong plan",
+                                   plan=maintenance_plan_a)
+        with pytest.raises(ValidationError) as exc:
+            job.full_clean()
+        assert "plan" in exc.value.error_dict
+
+    @pytest.mark.parametrize("field", ["asset", "plan", "parts_location", "non_conformance"])
+    def test_a_cross_tenant_pointer_is_refused(self, tenant_a, asset_a, field, asset_b,
+                                               maintenance_plan_b, location_b, nonconformance_b):
+        from apps.scm.models import MaintenanceWorkOrder
+        foreign = {"asset": asset_b, "plan": maintenance_plan_b, "parts_location": location_b,
+                   "non_conformance": nonconformance_b}[field]
+        kwargs = {"asset": asset_a}
+        kwargs[field] = foreign
+        job = MaintenanceWorkOrder(tenant=tenant_a, title="Crafted", **kwargs)
+        with pytest.raises(ValidationError) as exc:
+            job.full_clean()
+        assert field in exc.value.error_dict
+
+    def test_the_labour_rate_is_capped_on_the_way_in(self, tenant_a, asset_a):
+        """``q4`` CLAMPS rather than raising, and an absurd rate does not stay local — it flows into
+        ``total_cost``, the asset's maintenance cost to date and the depreciation report's
+        repair-vs-replace ratio. One poisoned row would move three pages."""
+        from apps.scm.models import MAX_LABOUR_RATE, MaintenanceWorkOrder
+        job = MaintenanceWorkOrder(tenant=tenant_a, asset=asset_a, title="Poison",
+                                   labour_rate=MAX_LABOUR_RATE + Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            job.full_clean()
+        assert "labour_rate" in exc.value.error_dict
+
+    def test_costs_are_derived_from_their_inputs(self, maintenance_order_a, issued_part_line_a):
+        assert maintenance_order_a.labour_cost == Decimal("80.00")
+        assert maintenance_order_a.parts_cost == Decimal("50.00")
+        assert maintenance_order_a.total_cost == Decimal("230.00")
+
+    def test_an_unissued_line_contributes_no_parts_cost(self, maintenance_order_a, part_line_a):
+        assert maintenance_order_a.parts_cost == Decimal("0.00")
+        assert part_line_a.line_cost == Decimal("0.00")
+
+    def test_duration_hours_is_none_while_the_job_is_unfinished(self, in_progress_order_a):
+        """Zero is a completed job that took no time; an in-flight repair averaged in as zero would
+        flatter every MTTR figure that reads it."""
+        assert in_progress_order_a.duration_hours is None
+
+    def test_duration_hours_is_the_start_to_finish_span(self, completed_order_a):
+        assert completed_order_a.duration_hours == Decimal("3.00")
+
+    def test_is_on_time_is_none_when_it_cannot_be_answered(self, in_progress_order_a):
+        """None, never False: a caller computing a compliance percentage must be able to leave an
+        unanswered question OUT of the denominator rather than count it as a miss."""
+        assert in_progress_order_a.is_on_time is None
+
+    def test_is_on_time_compares_local_days_not_seconds(self, completed_order_a):
+        from django.utils import timezone
+        completed_order_a.scheduled_start = timezone.localtime(
+            completed_order_a.completed_at).replace(hour=9, minute=0)
+        assert completed_order_a.is_on_time is True
+        completed_order_a.scheduled_start = completed_order_a.completed_at - datetime.timedelta(
+            days=2)
+        assert completed_order_a.is_on_time is False
+
+    def test_is_editable_and_is_open_track_the_open_statuses(self, maintenance_order_a,
+                                                             completed_order_a):
+        assert completed_order_a.is_open is False
+        assert completed_order_a.is_editable is False
+
+    def test_open_task_count_walks_the_prefetched_rows(self, maintenance_order_a, job_task_a):
+        assert maintenance_order_a.open_task_count == 1
+        job_task_a.is_done = True
+        job_task_a.save(update_fields=["is_done"])
+        assert type(maintenance_order_a).objects.get(
+            pk=maintenance_order_a.pk).open_task_count == 0
+
+
+class TestMaintenanceWorkOrderChildren:
+    def test_neither_child_carries_a_tenant_column(self):
+        from apps.scm.models import MaintenanceWorkOrderPart, MaintenanceWorkOrderTask
+        for model in (MaintenanceWorkOrderPart, MaintenanceWorkOrderTask):
+            assert "tenant" not in {f.name for f in model._meta.get_fields()}
+
+    def test_a_part_line_starts_planned_with_no_stamped_cost(self, part_line_a):
+        assert part_line_a.is_issued is False
+        assert part_line_a.issued_at is None
+        assert part_line_a.unit_cost == Decimal("0")
+
+    def test_the_issue_only_columns_are_uneditable(self):
+        """A form field for any of them would be a way to claim a consumption the ledger never saw."""
+        from apps.scm.models import MaintenanceWorkOrderPart
+        for name in ("unit_cost", "is_issued", "issued_at"):
+            assert MaintenanceWorkOrderPart._meta.get_field(name).editable is False
+
+    def test_a_checklist_step_has_no_fk_back_to_the_plan_task(self):
+        """A reference would make a finished record mutable by somebody editing an unrelated
+        schedule months later — and the reason to keep the record at all is that it is evidence."""
+        from apps.scm.models import MaintenanceWorkOrderTask
+        names = {f.name for f in MaintenanceWorkOrderTask._meta.get_fields()}
+        assert "plan_task" not in names and "plan" not in names
+
+    def test_the_tick_stamp_is_uneditable(self):
+        from apps.scm.models import MaintenanceWorkOrderTask
+        assert MaintenanceWorkOrderTask._meta.get_field("completed_at").editable is False
+
+    def test_deleting_a_job_takes_its_parts_and_checklist(self, maintenance_order_a, part_line_a,
+                                                          job_task_a):
+        from apps.scm.models import MaintenanceWorkOrderPart, MaintenanceWorkOrderTask
+        maintenance_order_a.delete()
+        assert not MaintenanceWorkOrderPart.objects.filter(pk=part_line_a.pk).exists()
+        assert not MaintenanceWorkOrderTask.objects.filter(pk=job_task_a.pk).exists()
+
+    def test_a_job_protects_its_asset_from_deletion(self, asset_a, maintenance_order_a):
+        """A finished job carries the cost, the downtime and the failure codes every reliability
+        figure is derived from; losing that must not be one click away."""
+        from django.db.models import ProtectedError
+        with pytest.raises(ProtectedError):
+            asset_a.delete()
+
+    def test_retiring_a_plan_leaves_its_jobs_standing(self, maintenance_plan_a, tenant_a, asset_a):
+        from apps.scm.models import MaintenanceWorkOrder
+        job = MaintenanceWorkOrder.objects.create(tenant=tenant_a, asset=asset_a, title="From plan",
+                                                  plan=maintenance_plan_a, source="plan")
+        maintenance_plan_a.delete()
+        job.refresh_from_db()
+        assert job.plan_id is None
+
+
+class TestMeterReadingModel:
+    def test_a_future_dated_reading_is_refused(self, tenant_a, asset_a):
+        """It would sort to the top of an append-only log and become "the current value" for a
+        machine that has not reached it — silently advancing every meter-based due date."""
+        from django.utils import timezone
+        from apps.scm.models import MeterReading
+        row = MeterReading(tenant=tenant_a, asset=asset_a, meter_name="Running Hours",
+                           reading=Decimal("1"),
+                           read_at=timezone.now() + datetime.timedelta(hours=1))
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean()
+        assert "read_at" in exc.value.error_dict
+
+    def test_back_dating_an_observation_is_supported(self, tenant_a, asset_a):
+        from apps.scm.models import MeterReading
+        MeterReading(tenant=tenant_a, asset=asset_a, meter_name="Running Hours",
+                     reading=Decimal("1"), read_at=_asset_hours_ago(240)).full_clean()
+
+    def test_the_reading_is_bounded_and_never_clamped(self, tenant_a, asset_a):
+        """A reading is an ASSERTION ABOUT THE WORLD, not a computed figure — quietly clamping an
+        odometer would corrupt every due date derived from it while looking like a successful save."""
+        from apps.scm.models import MAX_Q4, MeterReading
+        row = MeterReading(tenant=tenant_a, asset=asset_a, meter_name="Odometer",
+                           reading=MAX_Q4 + Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            row.full_clean()
+        assert "reading" in exc.value.error_dict
+
+    def test_a_negative_reading_is_refused(self, tenant_a, asset_a):
+        from apps.scm.models import MeterReading
+        row = MeterReading(tenant=tenant_a, asset=asset_a, meter_name="Odometer",
+                           reading=Decimal("-1"))
+        with pytest.raises(ValidationError):
+            row.full_clean()
+
+    @pytest.mark.parametrize("field", ["asset", "recorded_by"])
+    def test_a_cross_tenant_pointer_is_refused(self, tenant_a, asset_a, field, asset_b,
+                                               supplier_b):
+        from apps.scm.models import MeterReading
+        foreign = {"asset": asset_b, "recorded_by": supplier_b}[field]
+        kwargs = {"asset": asset_a, "meter_name": "Running Hours", "reading": Decimal("1")}
+        kwargs[field] = foreign
+        row = MeterReading(tenant=tenant_a, **kwargs)
+        with pytest.raises(ValidationError) as exc:
+            row.clean()
+        assert field in exc.value.error_dict
+
+    def test_the_default_source_is_manual(self, tenant_a, asset_a):
+        from apps.scm.models import MeterReading
+        row = MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Hours",
+                                          reading=Decimal("1"))
+        assert row.source == "manual"
+        assert row.reference == ""
+
+    def test_the_source_vocabulary_reserves_the_iot_seam(self):
+        from apps.scm.models import METER_SOURCE_CHOICES
+        assert [v for v, _ in METER_SOURCE_CHOICES] == ["manual", "work_order", "sensor"]
+
+    def test_the_log_is_newest_first_with_a_deterministic_tie_break(self, tenant_a, asset_a):
+        """A bulk import can land several readings on one timestamp, and
+        ``Asset.latest_reading()`` must be deterministic about which one wins."""
+        from apps.scm.models import MeterReading
+        moment = _asset_hours_ago(1)
+        first = MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Hours",
+                                            reading=Decimal("1"), read_at=moment)
+        second = MeterReading.objects.create(tenant=tenant_a, asset=asset_a, meter_name="Hours",
+                                             reading=Decimal("2"), read_at=moment)
+        assert list(MeterReading.objects.filter(tenant=tenant_a))[0].pk == second.pk
+
+    def test_deleting_the_asset_takes_the_whole_meter_log(self, asset_a, meter_reading_a):
+        from apps.scm.models import MeterReading
+        asset_a.delete()
+        assert not MeterReading.objects.filter(pk=meter_reading_a.pk).exists()
+
+
+class TestAssetManagementNothingIsStored:
+    """Every reliability, cost and due figure recomputes on read. There is no column to drift."""
+
+    @pytest.mark.parametrize("name", ["mtbf_hours", "mttr_hours", "availability_pct",
+                                      "downtime_minutes", "failure_count", "open_job_count",
+                                      "maintenance_cost_to_date", "next_pm_due", "is_down_now",
+                                      "current_reading", "warranty_status"])
+    def test_the_asset_stores_none_of_its_derived_answers(self, name):
+        from apps.scm.models import Asset
+        assert name not in {f.name for f in Asset._meta.get_fields()}
+
+    @pytest.mark.parametrize("name", ["due_status", "is_due", "is_overdue", "days_until_due",
+                                      "meter_gap", "latest_reading"])
+    def test_the_plan_stores_no_due_flag(self, name):
+        from apps.scm.models import MaintenancePlan
+        assert name not in {f.name for f in MaintenancePlan._meta.get_fields()}
+
+    @pytest.mark.parametrize("name", ["parts_cost", "labour_cost", "total_cost", "duration_hours",
+                                      "is_on_time", "open_task_count"])
+    def test_the_job_stores_no_total(self, name):
+        from apps.scm.models import MaintenanceWorkOrder
+        assert name not in {f.name for f in MaintenanceWorkOrder._meta.get_fields()}
+
+    def test_the_module_declares_no_journal_entry_pointer_anywhere(self):
+        """The standing 4.9-4.13 rule (L29): the only ledger effect in this sub-module is the
+        issue-parts verb's negative ``maintenance`` StockMove."""
+        from apps.scm.models import (Asset, AssetSparePart, MaintenancePlan, MaintenancePlanTask,
+                                     MaintenanceWorkOrder, MaintenanceWorkOrderPart,
+                                     MaintenanceWorkOrderTask, MeterReading)
+        for model in (Asset, AssetSparePart, MaintenancePlan, MaintenancePlanTask,
+                      MaintenanceWorkOrder, MaintenanceWorkOrderPart, MaintenanceWorkOrderTask,
+                      MeterReading):
+            related = {f.related_model.__name__ for f in model._meta.get_fields()
+                       if getattr(f, "related_model", None) is not None}
+            assert "JournalEntry" not in related, model.__name__
