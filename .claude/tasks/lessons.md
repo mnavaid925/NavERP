@@ -686,3 +686,50 @@ Two failures of trust in one run, neither malicious, both cheap to check:
    cannot collide with the next run.
 
 See [[commit-workflow]], [[next-builds-one-submodule]].
+
+---
+
+## L42 — `&#39;` does NOT escape an apostrophe inside `onclick="return confirm('…')"`; only `\'` does
+
+**Found:** SCM 4.13 frontend review. Five `confirm()` handlers on the work-order page were silently
+disabled, one of them stored XSS.
+
+**The mechanism, and why it is counter-intuitive.** An inline event handler lives inside an HTML
+*attribute value*, and the HTML parser **decodes character references there before the JS engine ever
+sees the text**. So `&#39;` and `&#x27;` decode straight back to a bare `'` and terminate the JS
+string literal. Verified against a spec HTML parser:
+
+| source inside the attribute | what the JS engine receives | result |
+|---|---|---|
+| `somebody&#39;s time` | `confirm('somebody's time')` | **BROKEN** |
+| `somebody&#x27;s time` | `confirm('somebody's time')` | **BROKEN** |
+| `somebody's time` | `confirm('somebody's time')` | **BROKEN** |
+| `somebody\'s time` | `confirm('somebody\'s time')` | VALID |
+
+**Why it is worse than a cosmetic bug.** A broken handler *throws*. A handler that throws returns
+`undefined`. `undefined` does not prevent the default action — so **the form submits with no
+confirmation at all**. The guard does not fail loudly; it vanishes, and it vanishes precisely where
+somebody thought it mattered enough to write one. Four of the five broken ones were apostrophes in
+our own English copy (`somebody's time`, `the job's duration`, `this machine's history`).
+
+**And the injection.** The fifth interpolated `{{ obj.parts_location.code }}` — a bare
+`CharField(max_length=32)` with no validator — into the confirm string on `_issue_parts`, the only
+route in 4.13 that writes the stock ledger. A storeroom named `O'BRIEN-1` removed the confirmation;
+a crafted code fitting in 32 chars executes. Django's autoescaping does **not** save you here: it
+escapes `'` to `&#x27;`, which the table above shows is decoded right back.
+
+**Rules:**
+1. **Never interpolate a user-typed value into a `confirm()` string.** Use the system-assigned
+   document number (`AST-`/`PM-`/`MWO-`) or an integer count. If the page must name a user-typed
+   thing, put it in the button LABEL, which is HTML text context where escaping actually works.
+2. **Escape apostrophes in static copy with `\'`**, never `&#39;`/`&#x27;`, and never leave them raw.
+3. `|escapejs` is the correct filter when a value genuinely must go into JS — but prefer rule 1.
+4. **Grep for this before shipping a page with confirms.** The pattern is a `'` (raw, or as an
+   entity) inside `confirm(…)` that is not preceded by a backslash, or any `{{ }}` of a free-text
+   field. Two false-positive shapes to skip: deliberate JS concatenation
+   (`'… ' + (this.x.value) + ' …'`) and interpolation of a developer-authored choices label.
+
+**Blast radius when found:** 5 in 4.13, 0 elsewhere in `scm` (the two other hits were the two false
+positives above). Fixing the class is cheap; finding it requires knowing the decode order.
+
+See [[commit-workflow]].
