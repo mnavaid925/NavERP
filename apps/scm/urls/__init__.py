@@ -70,6 +70,11 @@ from .AssetManagement.MaintenancePlans import urlpatterns as _am_maintenanceplan
 from .AssetManagement.MaintenanceWorkOrders import urlpatterns as _am_maintenanceworkorders
 from .AssetManagement.MeterReadings import urlpatterns as _am_meterreadings
 from .AssetManagement.Reports import urlpatterns as _am_reports
+from .LaborManagement.LaborStandards import urlpatterns as _lm_laborstandards
+from .LaborManagement.LaborSessions import urlpatterns as _lm_laborsessions
+from .LaborManagement.LaborActivities import urlpatterns as _lm_laboractivities
+from .LaborManagement.LaborPlans import urlpatterns as _lm_laborplans
+from .LaborManagement.Reports import urlpatterns as _lm_reports
 
 
 app_name = "scm"
@@ -255,4 +260,35 @@ urlpatterns = [
     *_am_maintenanceworkorders,          # AssetManagement/MaintenanceWorkOrders (ladder + issue)
     *_am_meterreadings,                  # AssetManagement/MeterReadings (append-only — no edit/delete)
     *_am_reports,                        # AssetManagement/Reports (PM board + MRO + repair-vs-replace)
+
+    # --- 4.14 Labor Management -----------------------------------------------------------------
+    # Eight new first segments, every one free: nothing anywhere in `scm` starts with `labor`.
+    # Django matches WHOLE path components and never splits one at a hyphen, so `labor-standards`,
+    # `labor-sessions`, `labor-activities`, `labor-plans`, `labor-plan-lines`, `labor-board`,
+    # `labor-payroll-export` and `labor-scorecard` are eight unrelated components and none can
+    # shadow another — and none may ever be "tidied" into looking like another.
+    #
+    # Near neighbours that are NOT collisions, checked rather than assumed:
+    #   loads/          — 4.6's transport loads. Shares no whole component with `labor-*`.
+    #   locations/      — 4.3's bin master.
+    #   lot-serials/    — 4.3's lot/serial master.
+    #   production-time-logs/ — 4.8's shop-floor interval. `scm:productiontimelog_list` and
+    #                     `scm:laboractivity_list` are two live, unrelated pages: one books time at a
+    #                     WORK CENTRE against a work order, the other books it in a WAREHOUSE SHIFT
+    #                     against a pick/putaway/count task. Neither is the other's rename.
+    #
+    # 4.14 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` remains
+    # the app's only one. Within each module below, literal routes (`add/`, `clock-in/`, `assign/`,
+    # `export/`) precede every `<int:pk>/` one, or the create page is swallowed and 404s as
+    # "labor standard 'add' not found". Every verb sits under its own route and is POST-only at the
+    # view, so a GET to one is a 405 rather than a silent state change.
+    #
+    # 4.14 adds NO route under `pick-tasks/`, `putaway-tasks/` or `cycle-counts/`. The assignment
+    # board's bulk verbs live on `labor-board/assign/` and `labor-board/unassign/` and write 4.4's
+    # EXISTING `assigned_to` column, so 4.4's urlconf and its three tables are untouched.
+    *_lm_laborstandards,                 # LaborManagement/LaborStandards (library + activate/archive)
+    *_lm_laborsessions,                  # LaborManagement/LaborSessions (the shift + its verb ladder)
+    *_lm_laboractivities,                # LaborManagement/LaborActivities (booked intervals)
+    *_lm_laborplans,                     # LaborManagement/LaborPlans (plan + generate + the line)
+    *_lm_reports,                        # LaborManagement/Reports (board + payroll export + scorecard)
 ]
