@@ -151,7 +151,7 @@ from django.urls import reverse
 from django.utils.http import urlencode
 
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.views._helpers import _location_qs, _need_tenant
+from apps.scm.views._helpers import _report_day, _report_window, _location_qs, _need_tenant
 # The tenant's employee parties — the SAME set the session form's `worker` dropdown offers, so the
 # two report filters cannot list people the module can never have booked a shift for. Imported from
 # the forms toolkit rather than restated, exactly as MaintenanceWorkOrders.py:117 does.
@@ -282,54 +282,6 @@ SCOPE_NOTE = (
 # =================================================================================================
 # Small shared helpers
 # =================================================================================================
-
-def _parse_day(raw):
-    """A ``YYYY-MM-DD`` GET value as a date, or ``None`` if it is anything else.
-
-    Returns None rather than raising, because the window comes out of the query string: a truncated
-    or hand-typed ``?date_from=lastweek`` must drop the filter, never 500 (L11's rule applied to a
-    date instead of an int). ``date.fromisoformat`` also raises ``ValueError`` on a value that is
-    well FORMATTED but not a real day (``2026-02-30``), which is exactly as much "not a date".
-
-    Clamped to the analytics period bounds for a second, separate reason: a date within a year of
-    ``date.min`` makes the ``- timedelta(days=…)`` default-window arithmetic below raise
-    ``OverflowError``, which is an uncaught 500 rather than a validation error.
-    """
-    raw = (raw or "").strip()
-    if not raw:
-        return None
-    try:
-        value = datetime.date.fromisoformat(raw)
-    except (ValueError, TypeError):
-        return None
-    if not (analytics.MIN_PERIOD_DATE <= value <= analytics.MAX_PERIOD_DATE):
-        return None
-    return value
-
-
-def _window(data, default_from, default_to):
-    """Resolve ``?date_from=&date_to=`` against a page's own defaults.
-
-    Reports whether a value was typed and rejected (``window_invalid``) so the page can say "showing
-    the default window" rather than silently ignoring what somebody asked for, and SWAPS a reversed
-    window instead of rendering nothing — a ``from`` after a ``to`` is a typo, not an empty result.
-    """
-    raw_from = (data.get("date_from") or "").strip()
-    raw_to = (data.get("date_to") or "").strip()
-    date_from, date_to = _parse_day(raw_from), _parse_day(raw_to)
-    invalid = bool(raw_from and date_from is None) or bool(raw_to and date_to is None)
-    if date_from is None:
-        date_from = default_from
-    if date_to is None:
-        date_to = default_to
-    if date_from > date_to:
-        date_from, date_to = date_to, date_from
-        invalid = True
-    return {"date_from": date_from, "date_to": date_to,
-            "date_from_raw": raw_from, "date_to_raw": raw_to,
-            "window_invalid": invalid,
-            "period_label": f"{date_from:%d %b %Y} to {date_to:%d %b %Y}"}
-
 
 def _duration_minutes(value):
     """``Sum(clock_out - clock_in)`` as whole minutes, whatever the backend handed back.
@@ -627,7 +579,7 @@ def labor_payroll_export(request):
     attendance fact.
     """
     today = timezone.localdate()
-    window = _window(request.GET, today.replace(day=1), today)
+    window = _report_window(request.GET, today.replace(day=1), today)
     filters = _report_filters(request)
 
     totals_by_worker = _worker_aggregate(
@@ -810,7 +762,7 @@ def labor_scorecard(request):
     minutes at 900% of standard must not top a scorecard.
     """
     today = timezone.localdate()
-    window = _window(request.GET, today - datetime.timedelta(days=29), today)
+    window = _report_window(request.GET, today - datetime.timedelta(days=29), today)
     filters = _report_filters(request)
 
     totals_by_worker = _worker_aggregate(
