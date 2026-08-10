@@ -1,0 +1,571 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — the per-worker productivity scorecard (Performance Tracking bullet).
+
+Renders apps/scm/views/LaborManagement/Reports.py::labor_scorecard. Everything this page may read,
+and nothing else — the view's own pinned context contract, restated here so the two can be diffed:
+
+  date_from date_to (date) · date_from_raw date_to_raw (echoed verbatim) · window_invalid (bool)
+  period_label                                        the ?date_from=&date_to= window
+  location worker                                     RAW echoed pk params — bind the two selects to
+                                                      these and compare with |stringformat:"d",
+                                                      NEVER |slugify
+  locations workers                                   the two dropdown querysets
+  rows row_count totals                               the table; `totals` is None when empty
+  ranked_count unranked_count                         how many rows carry a rank
+  measured_count unmeasured_count coverage_pct        how much of the floor has a standard behind it
+  session_count open_session_count coaching_count     the scope + the coaching band's size
+  min_ranked_minutes min_ranked_hours
+  coaching_threshold_pct                              the two published thresholds
+  ranking_note coaching_note scope_note               the standing prose, printed verbatim
+  generated_at no_tenant no_tenant_note
+
+SCORECARD ROW dict, built by Reports._scorecard_row over Reports._worker_aggregate (the totals line
+by Reports._sum_totals, then back through the SAME _scorecard_row builder). These are the only keys
+that exist on a row — the helper renames most of them away from the column they came from, and a key
+this page invented would render as its own em dash and look deliberate (L41):
+
+  worker_id (int|None)     worker (str)               work_days (int)      session_count (int)
+  open_session_count (int) attended_hours (Dec|None)  booked_minutes (int) booked_hours (Dec)
+  direct_hours (Dec)       indirect_hours (Dec)       measured_direct_hours (Dec)
+  earned_hours (Dec|None)  units (Dec)                errors (Dec)         units_per_hour (Dec|None)
+  performance_pct (Dec|None)  accuracy_pct (Dec|None) utilisation_pct (Dec|None)
+  is_ranked (bool)         rank (int|None)            needs_coaching (bool)
+  band_label (str)         band_css (theme.css class chosen by the VIEW)
+
+There is NO unaccounted_hours and NO over_booked_hours on a scorecard row — both belong to the
+payroll export's row dict, which shares the spelling of the keys above precisely because they mean
+the same thing there.
+
+THE NONE CONTRACT. attended / earned hours, units_per_hour and all three percentages are None
+whenever the question cannot be answered: no shift in the window had a clock-out, nothing carried an
+engineered standard, no direct minute was booked to divide by, no unit was handled. None is NEVER
+rendered as 0 and NEVER as a blank cell. A performance of 0% against a named person is a claim the
+data does not support, and this page carries named people. Percentages therefore use `is not None`
+(a bare |default:"—" would swallow a real 0, and a suffixed "—%" is not a figure) and the plain hour
+columns use |default_if_none:"—" so a genuine 0.00 still prints as 0.00.
+
+THE COACHING BAND IS A CHIP, NOT AN ALERT ROW. Sustained performance below coaching_threshold_pct is
+a conversation a supervisor has, and this page prints it as the row's own band chip plus one header
+count. Nothing is raised, escalated, stored or filed against a person from it — 4.11's alert
+registry is deliberately closed to 4.14, and an "alert row" here would quietly reopen it.
+
+MIN_RANKED_MINUTES IS PRINTED ON THE PAGE, twice. A worker below it keeps every figure they earned
+and simply carries no rank, so their absence from the ordering has to read as a decision rather than
+a bug: three booked minutes and one lucky pick computes at 900% of standard. The threshold is stated
+in the ranking card and again on the unranked rows themselves, in booked_minutes against
+min_ranked_minutes — the two numbers the comparison is actually made on.
+
+NOT PAGINATED, deliberately — there is no page_obj in the context, so this page includes no
+pagination partial and needs no has_previous / has_next guard (L9). The coverage counts, the band
+counts and the totals footer all have to describe exactly the rows the table shows; a paginated
+scorecard whose chips counted a different set would contradict itself.
+
+READ-ONLY. There is no form on this page except the GET filter bar, no POST target, and no action
+button of any kind — the view writes nothing. The only per-row links are READS back into the two
+list pages that can page and filter the underlying shifts and activities.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY
+— badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+Every band colour on this page comes from the row's band_css, i.e. from the view.
+{% endcomment %}
+{% block title %}Productivity Scorecard{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Productivity Scorecard</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:laborstandard_list' %}">Labor Standards</a><span class="sep">›</span>
+        <span>Productivity Scorecard</span>
+      </div>
+      <p class="text-muted">
+        One report card per worker for <span class="fw-600">{{ period_label }}</span>, computed live from the
+        shifts worked and the activities booked against them. <span class="fw-600">Nothing here is stored</span>
+        — no ranking, no band and no score is written anywhere, and re-running this page tomorrow over the same
+        window is the only way to get the same answer twice. Performance is
+        <em>earned minutes over the direct minutes that carried a standard</em>, so work nobody has time-studied
+        yet cannot drag anybody down.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        The round trip. This page is reached from laborstandard_list's header chip (the pm_forecast
+        precedent — the Performance Tracking bullet points at master data, so the figures it names
+        live one click away), and the way back has to exist or the chip is a one-way door.
+      {% endcomment %}
+      <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> Standards Library</a>
+      <a href="{% url 'scm:labor_payroll_export' %}" class="btn btn-outline"><i data-lucide="file-spreadsheet"></i> Payroll Export</a>
+      <a href="{% url 'scm:labor_board' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Labor Board</a>
+      <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Labour Sessions</a>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">No workspace</h2></div>
+      <div class="card-body"><p class="text-muted"><i data-lucide="alert-triangle"></i> {{ no_tenant_note }}</p></div>
+    </div>
+  {% endif %}
+
+  {% comment %} ============ what is scored, stated before any number on the page ============ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this page scores</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ session_count }} shift{{ session_count|pluralize }} scored</span>
+        {% if open_session_count %}
+          <span class="badge badge-amber">{{ open_session_count }} still running — no attended figure yet</span>
+        {% else %}
+          <span class="badge badge-muted">Nothing still on the clock in this window</span>
+        {% endif %}
+        <span class="badge badge-slate">Cancelled shifts excluded</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ scope_note }}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% comment %}
+          Bound to the RESOLVED dates, not to date_from_raw / date_to_raw: an unusable value has
+          already been replaced and a reversed window already swapped by the view, and echoing the
+          rejected string back into the box would make the controls disagree with the rows below
+          them. The rejected text is quoted in the warning instead, so nothing is silently ignored.
+        {% endcomment %}
+        <div class="form-group">
+          <label class="form-label" for="sc-from">From</label>
+          <input type="date" id="sc-from" name="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sc-to">To</label>
+          <input type="date" id="sc-to" name="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sc-loc">Location</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="location" id="sc-loc" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }} · {{ loc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sc-worker">Worker</label>
+          <select name="worker" id="sc-worker" class="form-select">
+            <option value="">All workers</option>
+            {% for w in workers %}
+              <option value="{{ w.pk }}" {% if worker == w.pk|stringformat:"d" %}selected{% endif %}>{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      {% if window_invalid %}
+        <div class="badge-group">
+          <span class="badge badge-amber">
+            <i data-lucide="alert-triangle"></i>
+            The window you asked for could not be used as typed{% if date_from_raw %} (from "{{ date_from_raw }}"){% endif %}{% if date_to_raw %} (to "{{ date_to_raw }}"){% endif %} —
+            a date that is not a real YYYY-MM-DD day is dropped, and a window the wrong way round is swapped.
+            Showing {{ period_label }}.
+          </span>
+        </div>
+      {% endif %}
+      <div class="form-help">
+        The window defaults to the <span class="fw-600">last 30 days</span>, which is long enough for a ratio to
+        settle and short enough to still describe how somebody is working now. It filters on each shift's
+        <span class="fw-600">work date</span> — the day the shift belongs to — not on when it was clocked in or
+        approved.
+      </div>
+      <div class="form-help">
+        This is <span class="fw-600">not</span> the payroll export's scope. Every shift except a cancelled one is
+        scored here, <span class="fw-600">including ones still running</span>, because a supervisor needs today's
+        numbers before anything has been signed off. The
+        <a href="{% url 'scm:labor_payroll_export' %}">payroll export</a> reads approved shifts and nothing else,
+        so the two pages will legitimately disagree while approvals are outstanding.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="users"></i></div>
+      <div class="stat-value">{{ row_count }}</div>
+      <div class="stat-label">Workers with time in this window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="trophy"></i></div>
+      <div class="stat-value">{{ ranked_count }}</div>
+      <div class="stat-label">Ranked — at least {{ min_ranked_minutes }} booked minutes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ unranked_count }}</div>
+      <div class="stat-label">Below the sample size — shown, not ordered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="message-circle"></i></div>
+      <div class="stat-value">{{ coaching_count }}</div>
+      <div class="stat-label">In the coaching band — a conversation, not an incident</div>
+    </div>
+    {% comment %}
+      coverage_pct is None when there is no row at all to divide by — an empty window, not a floor
+      with 0% of its work measured. "0% measured" would report an empty month as a standards crisis.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="percent"></i></div>
+      <div class="stat-value">{% if coverage_pct is not None %}{{ coverage_pct }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">Of these workers have a standard behind them</div>
+    </div>
+  </div>
+
+  {% comment %} ============ the two published thresholds, before the table they shape ============ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Ranking and coaching bands</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">
+          <i data-lucide="hourglass"></i>
+          Ranked from {{ min_ranked_minutes }} booked minutes ({{ min_ranked_hours|default_if_none:"—" }} h)
+        </span>
+        <span class="badge badge-amber">
+          <i data-lucide="message-circle"></i>
+          Coaching band below {{ coaching_threshold_pct }}% of standard
+        </span>
+        {% if coaching_count %}
+          <span class="badge badge-amber">{{ coaching_count }} worker{{ coaching_count|pluralize }} in the band</span>
+        {% else %}
+          <span class="badge badge-green">Nobody in the coaching band</span>
+        {% endif %}
+        {% if unranked_count %}
+          <span class="badge badge-muted">{{ unranked_count }} unranked — figures shown, no position</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ ranking_note }}</p>
+      <p class="text-muted">{{ coaching_note }}</p>
+      <p class="text-muted">
+        <span class="fw-600">The band is a chip on a row, and that is the whole of it.</span> Nothing on this page
+        raises an alert, opens a case, notifies anybody or writes a record against a person — a supervisor reads
+        it, has a conversation, and the figure moves or it does not. It is deliberately not an alert row: alerts
+        are a registry another sub-module owns, and a person is not an exception to be triaged.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">A missing worker is a decision, not a gap.</span> Anybody who booked fewer than
+        {{ min_ranked_minutes }} minutes in this window is still in the table below with every figure they
+        earned; they simply carry no position, and the row says how far short of the threshold they were. That
+        is why a name you expected near the top may not be near the top — not because the page lost them.
+      </p>
+    </div>
+  </div>
+
+  {% comment %} ============ measurement coverage, stated before the table it qualifies ============ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Measurement coverage</h2>
+      <div class="badge-group">
+        {% if coverage_pct is not None %}
+          <span class="badge {% if coverage_pct >= 75 %}badge-green{% elif coverage_pct >= 40 %}badge-amber{% else %}badge-red{% endif %}">
+            {{ coverage_pct }}% of these workers have a performance figure
+          </span>
+        {% else %}
+          <span class="badge badge-muted">Nothing to measure in this window</span>
+        {% endif %}
+        {% if unmeasured_count %}
+          <span class="badge badge-muted">{{ unmeasured_count }} with no standard behind them</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Period</dt><dd>{{ period_label }}</dd></div>
+        <div class="detail-item"><dt>Workers in scope</dt><dd>{{ row_count }}</dd></div>
+        <div class="detail-item"><dt>Shifts scored</dt><dd>{{ session_count }}</dd></div>
+        <div class="detail-item">
+          <dt>Shifts still running</dt>
+          <dd>
+            {% if open_session_count %}
+              <span class="badge badge-amber">{{ open_session_count }}</span>
+            {% else %}
+              <span class="badge badge-green">None</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Ranked</dt><dd>{{ ranked_count }} of {{ row_count }}</dd></div>
+        <div class="detail-item"><dt>With a performance figure</dt><dd>{{ measured_count }} of {{ row_count }}</dd></div>
+        <div class="detail-item"><dt>Generated</dt><dd>{{ generated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if unmeasured_count %}
+        <p class="text-muted">
+          <i data-lucide="alert-triangle"></i>
+          <span class="fw-600">{{ unmeasured_count }} of {{ row_count }}</span>
+          worker{{ unmeasured_count|pluralize }} in this window
+          {{ unmeasured_count|pluralize:"has,have" }} <span class="fw-600">no performance figure at all</span>,
+          because nothing they did carried an active engineered standard. Their row shows a dash, never a zero —
+          an unmeasured week has not been performed badly, it has not been measured. Write or activate the
+          standards those activities need in the
+          <a href="{% url 'scm:laborstandard_list' %}">standards library</a> and this page starts answering for
+          them; a standard only ever measures work booked <em>after</em> it went live, so nothing here is
+          retrospectively re-scored.
+        </p>
+      {% endif %}
+      <p class="text-muted">
+        This figure is what tells you whether the ranking above means anything. A page that reported only the
+        ordering would look equally confident on a workspace with one standard and on one with forty.
+      </p>
+    </div>
+  </div>
+
+  {% comment %} ============================ the per-worker table ============================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Report cards — {{ period_label }}</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ row_count }} worker{{ row_count|pluralize }}</span>
+        <span class="badge badge-slate">Ranked from {{ min_ranked_minutes }} booked minutes</span>
+        <span class="badge badge-muted">Read-only — nothing here is stored</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Worker</th>
+            <th>Band</th>
+            <th>Work days</th>
+            <th>Attended</th>
+            <th>Booked</th>
+            <th>Direct</th>
+            <th>Indirect</th>
+            <th>Units</th>
+            <th>Units / hr</th>
+            <th>Performance</th>
+            <th>Accuracy</th>
+            <th>Utilisation</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              {% comment %}
+                rank is None on every unranked row AND on a ranked row with no performance figure to
+                order by — two different "no position"s, neither of which is rank 0. `is not None`,
+                never |default, which would turn a genuine first place into a dash if rank ever
+                started at 0.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.rank is not None %}
+                  <span class="fw-600">#{{ row.rank }}</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                <span class="fw-600">{{ row.worker }}</span>
+                <div class="form-help">
+                  {{ row.session_count }} shift{{ row.session_count|pluralize }}
+                  {% if row.open_session_count %}· <span class="fw-600">{{ row.open_session_count }} still running</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  band_css and band_label are chosen by the VIEW (Reports._scorecard_row), so this
+                  template invents no judgement of its own about a named person. The {% templatetag openblock %} else {% templatetag closeblock %}
+                  is the house fallback in case a future band ever ships without a class.
+                {% endcomment %}
+                <span class="badge {% if row.band_css %}{{ row.band_css }}{% else %}badge-muted{% endif %}">{{ row.band_label }}</span>
+                {% if row.needs_coaching %}
+                  <div class="form-help">
+                    Below {{ coaching_threshold_pct }}% of standard over a full sample — worth a conversation.
+                    Nothing is filed, raised or escalated from this chip.
+                  </div>
+                {% elif not row.is_ranked %}
+                  {% comment %}
+                    The two numbers the ranking comparison is actually made on, on the row itself.
+                    booked_minutes is the row's own key — the hours columns are a different figure and
+                    the threshold is stated in minutes, so the comparison is shown in minutes.
+                  {% endcomment %}
+                  <div class="form-help">
+                    {{ row.booked_minutes }} booked minute{{ row.booked_minutes|pluralize }} of the
+                    {{ min_ranked_minutes }} needed to be ranked.
+                  </div>
+                {% endif %}
+              </td>
+              {% comment %}
+                work_days is DISTINCT work dates, not shifts: two shifts on one day is one work day.
+                A real 0 cannot occur on a row that exists, and it is a plain count, never a ratio.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.work_days }}</td>
+              {% comment %}
+                attended_hours is None — never 0 — when no shift of theirs in the window had a
+                clock-out, so there is no elapsed time to state. |default_if_none, not |default: a
+                genuine 0.00 is a different fact and must still print as 0.00.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.attended_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.booked_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.direct_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.indirect_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.units }}</td>
+              {% comment %}
+                units_per_hour divides by ALL direct minutes, while performance below divides only by
+                the MEASURED ones. That asymmetry is deliberate and matches the model: units are a
+                fact about every direct minute worked, whereas a ratio against a standard can only be
+                stated over the minutes something was measured against. None when no direct minute
+                was booked — there is no rate over no time.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.units_per_hour|default_if_none:"—" }}</td>
+              <td class="nowrap mono">
+                {% if row.performance_pct is not None %}
+                  {{ row.performance_pct }}%
+                  <div class="form-help">
+                    {{ row.earned_hours|default_if_none:"—" }} earned over
+                    {{ row.measured_direct_hours|default_if_none:"—" }} measured h
+                  </div>
+                {% else %}
+                  —
+                  <div class="form-help">Nothing they did carried a standard</div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if row.accuracy_pct is not None %}
+                  {{ row.accuracy_pct }}%
+                  {% if row.errors %}
+                    <div class="form-help">{{ row.errors }} error unit{{ row.errors|pluralize }}</div>
+                  {% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              {% comment %}
+                utilisation_pct covers CLOSED shifts on both sides — a shift with no clock-out yet has
+                booked minutes and no attended minutes, and dividing one by the other would read as
+                over-100% utilised. None when they have no closed shift in the window at all.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.utilisation_pct is not None %}{{ row.utilisation_pct }}%{% else %}—{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    Both links are READS into the two list pages that can page and filter the rows
+                    behind this line, over the SAME window. There is no detail page for an aggregate,
+                    and no verb is ever offered from a scorecard.
+                  {% endcomment %}
+                  <a href="{% url 'scm:laborsession_list' %}?worker={{ row.worker_id }}&amp;date_from={{ date_from|date:'Y-m-d' }}&amp;date_to={{ date_to|date:'Y-m-d' }}"
+                     class="btn-icon" title="This worker's shifts in this window"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:laboractivity_list' %}?worker={{ row.worker_id }}&amp;date_from={{ date_from|date:'Y-m-d' }}&amp;date_to={{ date_to|date:'Y-m-d' }}"
+                     class="btn-icon" title="Every activity behind these figures"><i data-lucide="list-checks"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="14">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>No worker has time in this window</h3>
+                  <p>
+                    Nothing here is zero — there is simply no shift between {{ date_from|date:"M d, Y" }} and
+                    {{ date_to|date:"M d, Y" }} for this filter, so there is nothing to score.
+                    Widen the dates above, clear the location and worker filters, or
+                    <a href="{% url 'scm:laborsession_clock_in' %}">clock somebody in</a>. Figures appear here as
+                    soon as activities are booked against a shift — a shift with no activity on it yet has
+                    attended time and nothing to compare it with.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if totals %}
+          {% comment %}
+            The footer is the raw MINUTE totals re-added and then put back through the SAME row
+            builder — never the per-worker percentages averaged, which would weight a three-minute
+            worker the same as a full-time one and make the footer disagree with the table above it.
+            work_days is deliberately a SUM, i.e. person-days.
+
+            NO BAND CHIP IN THE FOOTER, deliberately: the totals row carries a band_label like every
+            other row, but "the coaching band" is a prompt about one person's week and a whole floor
+            is not a person. The rank cell is a dash for the same reason — the totals line was built
+            after the ordering and is not in it.
+          {% endcomment %}
+          <tfoot>
+            <tr>
+              <td class="nowrap mono">—</td>
+              <td class="fw-600">{{ totals.worker }}</td>
+              <td></td>
+              <td class="nowrap mono fw-600">{{ totals.work_days }}</td>
+              <td class="nowrap mono fw-600">{{ totals.attended_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.booked_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.direct_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.indirect_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.units }}</td>
+              <td class="nowrap mono fw-600">{{ totals.units_per_hour|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">
+                {% if totals.performance_pct is not None %}{{ totals.performance_pct }}%{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono fw-600">
+                {% if totals.accuracy_pct is not None %}{{ totals.accuracy_pct }}%{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono fw-600">
+                {% if totals.utilisation_pct is not None %}{{ totals.utilisation_pct }}%{% else %}—{% endif %}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      Ranked workers first, then the ones that have a performance figure, then that figure descending, then name.
+      Every hour figure is to two decimals; a dash means the question has no answer for that worker in this
+      window, and is never the same thing as 0.00 — which is why 0.00 is still printed wherever it is the true
+      answer.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How each column is worked out</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Rank</dt><dd>Position among workers who cleared {{ min_ranked_minutes }} booked minutes <em>and</em> have a performance figure. A dash is "not in the ordering", never last place.</dd></div>
+        <div class="detail-item"><dt>Band</dt><dd>Not measured · below sample size · coaching band · at or above standard. Chosen by the report, from the performance figure and the sample size, and stored nowhere.</dd></div>
+        <div class="detail-item"><dt>Work days</dt><dd>Distinct work dates with a scored shift. Two shifts on one day is one work day.</dd></div>
+        <div class="detail-item"><dt>Attended</dt><dd>Clock-out minus clock-in, summed. Blank while no shift of theirs in the window has been clocked out.</dd></div>
+        <div class="detail-item"><dt>Booked</dt><dd>Every minute booked to an activity on those shifts, direct and indirect together.</dd></div>
+        <div class="detail-item"><dt>Direct</dt><dd>Value-adding work — picking, packing, put-away, counting, loading.</dd></div>
+        <div class="detail-item"><dt>Indirect</dt><dd>Necessary time that moves no unit — travel, breaks, training, meetings, waiting, cleaning.</dd></div>
+        <div class="detail-item"><dt>Units</dt><dd>Quantity handled on direct activities. Indirect time moves no unit and contributes none.</dd></div>
+        <div class="detail-item"><dt>Units / hr</dt><dd>Units ÷ <em>all</em> direct hours. A throughput fact about every direct minute worked, whether or not a standard existed for it.</dd></div>
+        <div class="detail-item"><dt>Performance</dt><dd>Earned ÷ the direct time that carried a standard. Unmeasured minutes are excluded from BOTH sides, so work nobody has time-studied yet cannot drag somebody down.</dd></div>
+        <div class="detail-item"><dt>Accuracy</dt><dd>(Units − error units) ÷ units, on direct activities. Blank when no unit was handled — there is no accuracy over no work.</dd></div>
+        <div class="detail-item"><dt>Utilisation</dt><dd>Booked ÷ attended, over closed shifts only. A shift with no clock-out yet has no denominator, so it is left out rather than divided by nothing.</dd></div>
+      </dl>
+      <p class="text-muted">
+        Every one of these is <span class="fw-600">unanswerable rather than zero</span> when its denominator is
+        missing, and prints as a dash. That is not a display nicety: 0% performance against a named person is a
+        statement about how they spent their week, and this page will not make one it cannot support. The
+        distinction survives all the way into the band — <span class="fw-600">"Not measured"</span> and
+        <span class="fw-600">"Coaching band"</span> are different findings, and only one of them is about the
+        worker.
+      </p>
+      <p class="text-muted">
+        The standard behind every earned minute is a <span class="fw-600">snapshot taken when the activity was
+        booked</span>, not a live lookup — so re-timing a job, or archiving the standard entirely, never
+        retrospectively re-scores work that was already measured under the old rule. Change what a job is
+        expected to take in the <a href="{% url 'scm:laborstandard_list' %}">standards library</a>; it applies
+        from the moment it goes live, forwards.
+      </p>
+    </div>
+  </div>
+{% endblock %}
