@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — the worked-shift register, and the exception queue over it.
+
+Renders apps/scm/views/LaborManagement/LaborSessions.py::laborsession_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py)
+  status_choices               [(value, label), …] — SESSION_STATUS_CHOICES, 4 pairs
+  gap_choices                  [(value, label), …] — GAP_CHOICES, 2 pairs. NOT a model vocabulary:
+                               neither bucket is a column and neither could be, because both are
+                               attended-against-booked and booked is a sum over a child table.
+  gap                          the RESOLVED gap-filter value, "" when absent or junk. The select
+                               below binds to THIS and never to request.GET.gap, so the control
+                               shows what was actually applied rather than whatever was typed into
+                               the address bar.
+  workers                      core.Party queryset — the same employee set the form's worker offers
+  locations                    Location queryset, not narrowed to active (a shift worked at a site
+                               since wound down is still a shift somebody was paid for)
+  stats                        {open, running, awaiting_approval, approved} — counted over the WHOLE
+                               workspace, never over the filtered page. All four are real ints.
+
+EVERY ROW carries its activities PREFETCHED, which is what makes obj.booked_minutes,
+obj.unaccounted_minutes, obj.over_booked_minutes and obj.utilisation_pct free to print here: each is
+a method on the model that walks self.activities.all(), and the whole page costs ONE extra query.
+They are the model's own implementations rather than annotations on purpose — the payroll export and
+the scorecard agree with the model, so a second implementation on this page could only ever drift
+from the number that matters.
+
+EVERY DERIVED FIGURE CAN BE None AND None IS NEVER 0. attended / gap / over-booked are None while
+the shift is still running (there is no clock_out to subtract from), and utilisation is None then and
+on a zero-length shift. Each prints an em dash. |default:"—" would be WRONG on all four because it
+also swallows a real 0 — and a real 0 here is meaningful: 0 gap minutes is a perfectly accounted
+shift, which is the opposite of an unmeasured one.
+
+Filter params: q / status are strings and compare against request.GET.<param> directly; gap compares
+against the RESOLVED `gap` variable; worker / location are PKS and compare with |stringformat:"d" —
+|slugify would be wrong on both. date_from / date_to window work_date, which is a DateField, so the
+bare YYYY-MM-DD an <input type="date"> posts is exactly right and junk input skips the filter.
+
+Badge classes come from the model — obj.status_css. theme.css ships COLOUR-named badges only:
+badge-success / badge-warning / badge-danger do not exist and render as unstyled text (L33).
+
+Delete is gated on THREE things, matching exactly what laborsession_delete enforces: the admin gate
+(@tenant_admin_required), obj.is_editable, and "nothing booked against it" — the last one is free
+here because the activities are already prefetched, so `obj.activities.all` reads the cache rather
+than costing a query per row. Offering a one-click failure is worse than not offering the button.
+{% endcomment %}
+{% block title %}Labor Sessions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Labor Sessions</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Labor Sessions</span></div>
+      <p class="text-muted">One worker's shift at one facility, and the minutes it is accountable for. A session says a person was on site between two clock times; the <span class="fw-600">activities</span> booked underneath it say what those minutes went on — direct work, indirect work, lost time. This is the shift <em>execution</em> record and deliberately not a second attendance table: HR still owns daily attendance, and the two reconcile on worker and work date rather than through a foreign key.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:laboractivity_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Booked Activities</a>
+      <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> Labor Standards</a>
+      <a href="{% url 'scm:laborsession_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Session</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, not over the filtered page: "6 shifts awaiting approval" is a
+    fact somebody has to act on this week, and a number that re-scoped itself as you browsed would
+    report all-clear the moment you filtered to one location. The filtered count is the badge in the
+    card header below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="folder-open"></i></div>
+      <div class="stat-value">{{ stats.open }}</div>
+      <div class="stat-label">Open shifts · still writable, activities may still be booked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="play-circle"></i></div>
+      <div class="stat-value">{{ stats.running }}</div>
+      <div class="stat-label">On the floor right now · clocked in and not yet clocked out</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clipboard-check"></i></div>
+      <div class="stat-value">{{ stats.awaiting_approval }}</div>
+      <div class="stat-label">Closed, awaiting sign-off · the queue a supervisor works through</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="badge-check"></i></div>
+      <div class="stat-value">{{ stats.approved }}</div>
+      <div class="stat-label">Approved · the only status the payroll export reads</div>
+    </div>
+  </div>
+
+  {% comment %}
+    The self-service punch. It posts to labor-sessions/clock-in/, which carries NO pk because it
+    CREATES the session — and it takes the worker from the signed-in user's own party record, never
+    from this form. There is deliberately no worker field below: one would simply be ignored, and
+    that is what stops a member filing somebody else's shift as a self-punch. A supervisor keying in
+    somebody else's shift uses New Session instead, and that path stamps its provenance as a
+    supervisor entry rather than as a punch.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Clock yourself in</h2>
+      <span class="badge badge-info">Self-service</span>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'scm:laborsession_clock_in' %}" onsubmit="return confirm('Clock in now? The clock-in time is stamped at this moment and the shift is filed against your own party record.');">
+        {% csrf_token %}
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="id_clockin_location">Where you are working <span class="req">*</span></label>
+            <select name="location" id="id_clockin_location" class="form-select" required>
+              <option value="">Choose a warehouse or zone…</option>
+              {% for loc in locations %}
+                <option value="{{ loc.pk }}">{{ loc }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="id_clockin_shift_label">Shift label</label>
+            <input type="text" name="shift_label" id="id_clockin_shift_label" class="form-input" maxlength="60" placeholder="Nights, Early, Twilight…">
+            <div class="form-help">Free text, and matched against the HR shift name by convention rather than by foreign key.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="id_clockin_notes">Notes</label>
+            <input type="text" name="notes" id="id_clockin_notes" class="form-input" placeholder="Anything worth saying about this shift…">
+          </div>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="log-in"></i> Clock in now</button>
+        <div class="form-help">The time is stamped <span class="fw-600">now</span> and the worker is taken from your signed-in party record — neither is typeable, because a punch that can name a different worker or a different moment is not a punch. A second clock-in while you already have an open shift is refused: two open shifts would have no defined clock-out target and would bill the same minutes twice. If your login is not linked to a party record, or that party does not hold the <span class="fw-600">employee</span> role, this comes back as a message saying so — warehouse associates routinely have no ERP login at all, which is exactly why a supervisor can file the shift instead.</div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Shifts</h2>
+      <div class="badge-group">
+        {% if stats.running %}<span class="badge badge-green">{{ stats.running }} on the floor</span>{% endif %}
+        {% if stats.awaiting_approval %}<span class="badge badge-amber">{{ stats.awaiting_approval }} awaiting sign-off</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search LSN- number, worker name or shift label…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            PK dropdowns — |stringformat:"d" and never |slugify. Both go through crud_list's is_int
+            leg, so ?worker=abc, ?worker=² and an over-range pk all skip the filter instead of 500ing.
+          {% endcomment %}
+          <select name="worker" aria-label="Worker" class="form-select">
+            <option value="">Anyone</option>
+            {% for w in workers %}
+              <option value="{{ w.pk }}" {% if request.GET.worker == w.pk|stringformat:"d" %}selected{% endif %}>{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Bound to the RESOLVED `gap` value the view handed over, never to request.GET.gap: a
+            hand-edited ?gap=whatever narrows nothing, and this control has to agree with what was
+            actually applied rather than echo what was typed.
+          {% endcomment %}
+          <select name="gap" aria-label="Exception" class="form-select">
+            <option value="">No exception filter</option>
+            {% for val, label in gap_choices %}
+              <option value="{{ val }}" {% if gap == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ request.GET.date_from }}" aria-label="Work date from" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ request.GET.date_to }}" aria-label="Work date to" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The two dates window the <span class="fw-600">work date</span> — the calendar day the shift <em>started</em> on, which is the day an overnight shift keeps. Unparseable input skips the filter rather than refusing the page. The <span class="fw-600">exception</span> filter is arithmetic rather than a column: <em>unaccounted time</em> is attended minutes the shift cannot account for, and <em>booked beyond the shift</em> is the reverse. Both need a clock-out, so a shift still running matches neither — it has not gone missing, it is simply not finished.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Shift</th>
+            <th>Worker</th>
+            <th>Location</th>
+            <th>Clock</th>
+            <th>Status</th>
+            <th>Attended</th>
+            <th>Booked</th>
+            <th>Exception</th>
+            <th>Utilisation</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:laborsession_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.work_date|date:"M d, Y" }}</div>
+                <div class="form-help">
+                  {% if obj.shift_label %}<span class="badge badge-slate">{{ obj.shift_label }}</span>{% endif %}
+                  <span class="badge badge-muted">{{ obj.get_source_display }}</span>
+                </div>
+              </td>
+              <td>{{ obj.worker.name }}</td>
+              <td>
+                <span class="mono">{{ obj.location.code }}</span>
+                <div class="text-muted">{{ obj.location.name }}</div>
+              </td>
+              <td class="nowrap">
+                {{ obj.clock_in|date:"M d, H:i" }}
+                {% if obj.clock_out %}
+                  <div class="form-help">to {{ obj.clock_out|date:"M d, H:i" }}</div>
+                {% else %}
+                  <div class="form-help"><span class="badge badge-info">Still running</span></div>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              {% comment %}
+                attended_minutes is None — never 0 — while clock_out is null, and |default:"—" would
+                be wrong because it swallows a real 0 as well. A zero-minute shift is a mis-keyed
+                clock pair somebody should see; an unfinished one is not a measurement at all.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {{ obj.attended_minutes|default_if_none:"—" }}
+                {% if obj.attended_minutes is None %}<div class="form-help text-muted">Not clocked out</div>{% else %}<div class="form-help text-muted">min</div>{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {{ obj.booked_minutes }}
+                <div class="form-help text-muted">{{ obj.direct_minutes }} direct · {{ obj.indirect_minutes }} indirect</div>
+              </td>
+              {% comment %}
+                Two DIFFERENT exceptions, never one signed number. Gap time is paid minutes with no
+                work booked against them; over-booked is minutes booked beyond the shift attended for
+                — usually two people on one badge or a stop nobody ended. Printing the second as
+                negative gap would produce a figure nobody can act on.
+              {% endcomment %}
+              <td class="nowrap">
+                {% if obj.unaccounted_minutes is None %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help text-muted">Unanswerable while running</div>
+                {% elif obj.over_booked_minutes %}
+                  <span class="badge badge-red">{{ obj.over_booked_minutes }} min over-booked</span>
+                {% elif obj.unaccounted_minutes %}
+                  <span class="badge badge-amber">{{ obj.unaccounted_minutes }} min unaccounted</span>
+                {% else %}
+                  <span class="badge badge-green">Fully accounted</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                utilisation_pct is a Decimal or None, and floatformat renders an EMPTY STRING for
+                None rather than an em dash — so the `is None` test has to happen before the filter
+                ever sees the value.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if obj.utilisation_pct is None %}<span class="text-muted">—</span>{% else %}{{ obj.utilisation_pct|floatformat:2 }}%{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:laborsession_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    is_editable is ("open",) and reads `status` alone, so this costs no query. The
+                    edit view redirects a closed, approved or cancelled shift straight back with a
+                    message, so the link would be a one-click failure.
+                  {% endcomment %}
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:laborsession_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    All three of laborsession_delete's conditions, so the button and the route cannot
+                    disagree: the @tenant_admin_required gate, the editable status, and "nothing
+                    booked against it". The third reads the PREFETCHED activities, so it costs no
+                    query — and it matters, because LaborActivity.session is CASCADE and one click
+                    would take the measured minutes, their standard snapshots and their task links
+                    with it. Only the system-generated LSN- number goes into the confirm string;
+                    the shift label is user-typed and an apostrophe in it would break the dialog.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if obj.is_editable and not obj.activities.all %}
+                      <form method="post" action="{% url 'scm:laborsession_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Nothing is booked against it, so no measured minutes are cascaded away — but the shift disappears from this worker\'s history. Cancelling keeps the record.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="clock"></i>
+                  <h3>No labor sessions</h3>
+                  <p>Nobody has clocked a shift here yet. Punch yourself in with the card above, or file one on somebody's behalf with <span class="fw-600">New Session</span> — a warehouse associate routinely has no ERP login at all, which is exactly why the worker is a party record rather than a user. A session starts <span class="fw-600">open</span>; clocking out, closing and approving are buttons on its own page, not a status you type. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">work date, newest first</span>. Attended minutes are the clock pair subtracted, booked minutes are the sum of the activities underneath, and every figure on this page is recomputed on read — none of them is a stored column, which is what makes two writers for one quantity structurally impossible. A running shift shows an em dash rather than a zero for everything derived from attended time: a shift still on the floor has not been measured yet, and a helpful <span class="mono">0</span> in a column is a confident wrong answer. Nothing here writes a stock movement or a journal entry; the payroll hand-off is a separate export page and reads <span class="fw-600">approved</span> sessions only.
+    </div>
+  </div>
+{% endblock %}
