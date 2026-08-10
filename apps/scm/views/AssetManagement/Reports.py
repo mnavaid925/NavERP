@@ -58,6 +58,10 @@ from apps.scm.models import (
     StockMove,
 )
 from apps.scm import analytics
+from apps.scm.views._helpers import _report_day, _report_window  # noqa: F401
+# One parser and one reversed-window rule for every dated report page in the app. This
+# module used to carry its own pair; so did 4.12's and 4.14's, and two of the three were
+# both named `_window` with incompatible signatures.
 
 #: Wide output fields for the multiplied sums below. A ``quantity × unit_cost`` over a whole
 #: workspace routinely exceeds the 14-digit shape of either operand, and Django uses the FIRST
@@ -390,48 +394,6 @@ ACTIVE_CHOICES = [("active", "Active"), ("inactive", "Inactive")]
 DEFAULT_WINDOW_DAYS = 365
 
 
-def _day(raw):
-    """A ``YYYY-MM-DD`` GET value as a date, or ``None`` if it is anything else.
-
-    ``None`` rather than a raise: the window comes out of the query string, so a hand-typed or
-    truncated value must drop the filter, never 500 (L11's rule applied to a date instead of an int).
-    Bounded to ``analytics.MIN_PERIOD_DATE``/``MAX_PERIOD_DATE`` for the same reason 4.12's parser is
-    — a date within a year of ``date.min`` makes the default-window subtraction below raise
-    ``OverflowError``, which is a 500 from a value anybody can type into the address bar.
-    """
-    raw = (raw or "").strip()
-    if not raw:
-        return None
-    try:
-        value = datetime.date.fromisoformat(raw)
-    except (ValueError, TypeError):
-        return None
-    if not (analytics.MIN_PERIOD_DATE <= value <= analytics.MAX_PERIOD_DATE):
-        return None
-    return value
-
-
-def _window(request):
-    """Resolve the consumption window, defaulting to the last twelve months.
-
-    Reports whether a value was typed and REJECTED, so the page can say "showing the default window"
-    instead of silently ignoring what somebody asked for. A reversed window is a typo rather than an
-    empty result, so it is swapped and flagged.
-    """
-    raw_from = (request.GET.get("date_from") or "").strip()
-    raw_to = (request.GET.get("date_to") or "").strip()
-    date_from, date_to = _day(raw_from), _day(raw_to)
-    invalid = bool(raw_from and date_from is None) or bool(raw_to and date_to is None)
-    if date_to is None:
-        date_to = timezone.localdate()
-    if date_from is None:
-        date_from = date_to - datetime.timedelta(days=DEFAULT_WINDOW_DAYS)
-    if date_from > date_to:
-        date_from, date_to = date_to, date_from
-        invalid = True
-    return date_from, date_to, raw_from, raw_to, invalid
-
-
 def _aware_range(date_from, date_to):
     """The window as an inclusive AWARE datetime pair for ``StockMove.moved_at``.
 
@@ -527,7 +489,15 @@ def sparepart_list(request):
     ``.count()`` calls, and two of them carried the correlated on-hand ledger subquery in their
     WHERE, so the strip cost three scans of the item table to print three numbers.
     """
-    date_from, date_to, raw_from, raw_to, window_invalid = _window(request)
+    # Defaults are this page's own and are passed IN rather than baked into the shared
+    # helper — the consumption report looks back twelve months, the payroll export opens on
+    # the 1st. One parser, one swap rule, one clamp; each page keeps its own window.
+    _today = timezone.localdate()
+    _w = _report_window(request.GET, _today - datetime.timedelta(days=DEFAULT_WINDOW_DAYS),
+                        _today)
+    date_from, date_to = _w["date_from"], _w["date_to"]
+    raw_from, raw_to, window_invalid = (_w["date_from_raw"], _w["date_to_raw"],
+                                       _w["window_invalid"])
     start_dt, end_dt = _aware_range(date_from, date_to)
 
     qs = _spare_part_qs(request.tenant)
