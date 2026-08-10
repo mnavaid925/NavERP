@@ -5,6 +5,10 @@ its bin/slotting operations on top of these; Module 5 reuses them. On-hand at a 
 from StockMove, never stored here.
 """
 from apps.scm.models._base import *  # noqa: F401,F403
+# BY NAME, never `import *` — see the identical import in `Items.py` and the docstring of
+# `apps/scm/models/_choices.py` for why the vocabulary lives at the models package root instead of
+# inside 4.15's folder.
+from apps.scm.models._choices import STORAGE_CONDITION_CHOICES
 
 
 class Location(TenantOwned):
@@ -42,6 +46,20 @@ class Location(TenantOwned):
     abc_class = models.CharField(max_length=1, choices=ABC_CHOICES, blank=True,
                                  help_text="Velocity class used for slotting and count frequency")
     is_pickable = models.BooleanField(default=True, help_text="Whether stock here can be picked from")
+
+    # --- 4.15 cold-chain attribute ----------------------------------------------------------
+    # Same precedent as the 4.4 block above, one sub-module on: a chiller zone IS a location of
+    # location_type='zone', and splitting temperature-controlled storage into its own master would
+    # fork the StockMove FK and the on-hand aggregate all over again. The user-defined temperature
+    # zones every cold-storage WMS ships (Made4net, AEB, Datex, Logimax — chiller / deep freeze /
+    # blast / ambient) are exactly this column. Additive, all-default and blank-permitted.
+    #
+    # It is a CLASSIFICATION, not a measurement: what a zone actually reached is a ColdChainMonitor
+    # and its readings. A location claiming to be 'frozen' with no monitor on it is precisely the gap
+    # the Cold Storage Inventory report exists to show.
+    storage_condition = models.CharField(
+        max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True,
+        help_text="Temperature class of this zone or bin; blank = ambient / unclassified")
 
     class Meta:
         ordering = ["code"]
