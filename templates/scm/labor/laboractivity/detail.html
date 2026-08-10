@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — one booked interval, its measurement, and the snapshot beside the live
+standard.
+
+Renders apps/scm/views/LaborManagement/LaborActivities.py::laboractivity_detail. Everything this page
+may read, and nothing else:
+
+  obj                  the LaborActivity (select_related: session, session.worker, session.location,
+                       standard, standard.location, standard.item_category, and all three 4.4 task
+                       pointers plus the second hop each task's __str__ walks)
+  session              obj.session, passed separately — the shift these minutes belong to
+  duration_hours       the booked interval in hours, 2dp
+  earned_minutes       what the SNAPSHOT says this quantity should have taken — None when no
+                       standard covered the work
+  performance_pct      earned over booked, as a percentage — None when either side is missing
+  units_per_hour       units completed per booked hour — None when nothing was booked
+  accuracy_pct         clean units as a percentage of units completed — None when nothing was
+                       completed (indirect time completes nothing, so it is blank here by design)
+  has_standard         asks the SNAPSHOTS, not the FK — a deleted standard does not unmeasure work
+  standard             the live LaborStandard row, or None once it has been deleted
+  standard_gone        measured, but the standard it named is gone (has_standard and no FK)
+  live_fixed_minutes   setup + travel as the standard reads TODAY — None when the standard is gone
+  live_rate            minutes_per_unit as it reads TODAY — None when the standard is gone
+  live_allowance       allowance_pct as it reads TODAY — None when the standard is gone
+  live_earned_minutes  what this quantity WOULD earn under today's standard — the contrast, never
+                       the measurement. None when the standard is gone
+  snapshot_differs     True when the standard has been re-timed since this row was filed
+  linked_task          the ONE 4.4 task these minutes were booked against, or None
+  linked_task_kind     "pick" / "putaway" / "cycle_count" / "" — picks the url name
+  can_edit / can_delete  exactly the conditions the two write views enforce (the parent shift is
+                       still open)
+  frozen_reason        a SENTENCE saying why those buttons are missing, blank when nothing is frozen
+
+EVERY DERIVED FIGURE IS TESTED WITH `is None`, never with |default and never for truthiness. The 4.14
+models return None rather than 0 on a zero denominator on purpose: 0% performance reads as "terrible"
+and the truth is "not measured", which is the opposite claim — and against a named person whose pay
+this record feeds. |default:"—" would also swallow a genuine 0.00, which is a measurement.
+
+THE LIVE-VS-SNAPSHOT COMPARISON IS THE POINT OF THIS PAGE. The three determinants were copied onto
+this row when it was filed; editing the LaborStandard afterwards cannot move a figure here, because
+save() recomputes the earned minutes from those copies and never goes back to the standards table.
+That sentence is printed on the page rather than left implicit — it is what makes a three-month-old
+performance figure something a supervisor can defend in a conversation with the person it is about.
+
+laboractivity_delete is @tenant_admin_required AND @require_POST, so its button is a real
+<form method="post"> with a csrf token, wrapped in the house gate. Offering a member a one-click 403
+is worse than not offering the button (the 4.11 finding).
+
+Badge classes are the six theme.css ships — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate, via obj.activity_css and session.status_css. badge-success /
+badge-warning / badge-danger DO NOT EXIST and render completely unstyled (L33).
+{% endcomment %}
+{% block title %}{{ obj.number }} · {{ obj.get_activity_type_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {{ obj.activity_css }}">{{ obj.get_activity_type_display }}</span>
+        {% if has_standard %}
+          <span class="badge badge-info">Measured</span>
+        {% else %}
+          <span class="badge badge-muted">Unmeasured</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:laboractivity_list' %}">Labor Activities</a><span class="sep">›</span><a href="{% url 'scm:laborsession_detail' session.pk %}">{{ session.number }}</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One stretch of {{ session.worker.name }}'s shift on {{ session.work_date|date:"M d, Y" }}: what was being done, for how long, how much came out of it and how many of those units were wrong.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:laborsession_detail' session.pk %}" class="btn btn-outline"><i data-lucide="clock"></i> {{ session.number }}</a>
+      <a href="{% url 'scm:laboractivity_list' %}?session={{ session.pk }}" class="btn btn-outline"><i data-lucide="list"></i> This shift's activities</a>
+      {% if can_edit %}
+        <a href="{% url 'scm:laboractivity_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="timer"></i></div>
+      <div class="stat-value">
+        {% if obj.ended_at %}{{ obj.duration_minutes }} <span class="text-muted">min</span>{% else %}<span class="text-muted">Running</span>{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if obj.ended_at %}
+          Booked · {{ duration_hours|floatformat:2 }} h
+        {% else %}
+          Still running — nothing is booked until it is given an end time
+        {% endif %}
+      </div>
+    </div>
+    {% comment %}
+      Earned and performance are the two figures that must never read zero on unmeasured work. Both
+      are tested with `is None` and both fall back to an em dash with a sentence underneath saying
+      WHY, because a blank cell with no explanation is what makes people distrust the whole page.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="ruler"></i></div>
+      <div class="stat-value">
+        {% if earned_minutes is None %}—{% else %}{{ earned_minutes|floatformat:2 }} <span class="text-muted">min</span>{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if earned_minutes is None %}
+          Earned minutes — no standard matched this activity
+        {% else %}
+          Earned minutes, from the standard snapshotted at file time
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon {% if performance_pct is None %}slate{% else %}green{% endif %}"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">
+        {% if performance_pct is None %}—{% else %}{{ performance_pct|floatformat:2 }}%{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if performance_pct is None %}
+          Performance — not measured, which is not the same as zero
+        {% else %}
+          Performance vs standard · 100% is exactly to standard
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">
+        {% if units_per_hour is None %}—{% else %}{{ units_per_hour|floatformat:2 }}{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if units_per_hour is None %}
+          Units per hour — nothing booked yet to divide by
+        {% else %}
+          Units per booked hour · shown beside performance, never instead of it
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================================
+    THE MEASUREMENT. This card is the reason the page exists.
+    ============================================================================================
+    Three states, and they are genuinely different rather than variants of each other:
+
+      has_standard False           — no standard covered this work. Every figure is an em dash and
+                                     the page SAYS no standard matched, rather than printing 0%.
+      has_standard True, gone      — measured, and the standard it named has since been deleted. The
+                                     measurement survives (has_standard asks the snapshots), so the
+                                     snapshot column is full and the live column is empty.
+      has_standard True, standard  — the full comparison, with snapshot_differs saying whether the
+                                     standard has been re-timed since this row was filed.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How this activity was measured</h2>
+      <div class="badge-group">
+        {% if not has_standard %}
+          <span class="badge badge-muted">No standard</span>
+        {% elif standard_gone %}
+          <span class="badge badge-amber">Standard deleted</span>
+        {% elif snapshot_differs %}
+          <span class="badge badge-amber">Standard re-timed since</span>
+        {% else %}
+          <span class="badge badge-green">Standard unchanged</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not has_standard %}
+      <div class="card-body">
+        <p class="text-muted">
+          <span class="fw-600">No standard matched this activity</span>, so it carries no earned minutes and no performance figure — every measured cell on this page is an em dash rather than a zero. Not every job in a warehouse has been time-studied, and that is an ordinary state for a booking to be in, not an error and not a failure.
+        </p>
+        <p class="text-muted" style="margin-top:.75rem;">
+          The difference matters: <span class="fw-600">0% performance is a verdict, a blank is an admission</span>. A ratio of zero earned minutes over {{ obj.duration_minutes }} booked minutes would print as a failing shift against {{ session.worker.name }} with no way to argue with it, so this row drops out of <em>both</em> sides of the shift ratio instead of dragging one of them down. To measure work like this in future, publish an active labor standard covering <span class="fw-600">{{ obj.get_activity_type_display|lower }}</span> at {{ session.location.code }} — bookings filed from then on are measured against it. This one is not retro-fitted, deliberately: a measurement that appeared after the fact would be a figure nobody was shown at the time.
+        </p>
+        {% if obj.is_indirect %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            This is <span class="fw-600">indirect</span> time, and indirect time is unmeasured by design — a standard is never resolved for it at all. Break time is not earned time, so crediting it with achievement would be worse than leaving it blank.
+          </p>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Determinant</th>
+              <th class="text-right">Filed with this activity <span class="text-muted">(snapshot)</span></th>
+              <th class="text-right">The standard today <span class="text-muted">(live)</span></th>
+              <th>Moved?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% comment %}
+              Every cell is `is None`-tested. The live column is entirely None when the standard has
+              been deleted, and the snapshot column is what the arithmetic was actually done with —
+              which is why the three inputs are stored beside the derived total rather than only the
+              total: it makes the sum replayable from this row alone, months later, after the
+              standard has been retuned or deleted outright.
+            {% endcomment %}
+            <tr>
+              <td>Fixed minutes <div class="form-help">setup + travel, paid once per task</div></td>
+              <td class="nowrap text-right mono">{% if obj.standard_fixed_snapshot is None %}<span class="text-muted">—</span>{% else %}{{ obj.standard_fixed_snapshot|floatformat:4 }}{% endif %}</td>
+              <td class="nowrap text-right mono">{% if live_fixed_minutes is None %}<span class="text-muted">—</span>{% else %}{{ live_fixed_minutes|floatformat:4 }}{% endif %}</td>
+              <td>
+                {% if live_fixed_minutes is None %}<span class="text-muted">—</span>
+                {% elif obj.standard_fixed_snapshot == live_fixed_minutes %}<span class="badge badge-muted">Unchanged</span>
+                {% else %}<span class="badge badge-amber">Re-timed</span>{% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td>Minutes per unit <div class="form-help">variable time, per unit of the standard's basis</div></td>
+              <td class="nowrap text-right mono">{% if obj.standard_rate_snapshot is None %}<span class="text-muted">—</span>{% else %}{{ obj.standard_rate_snapshot|floatformat:4 }}{% endif %}</td>
+              <td class="nowrap text-right mono">{% if live_rate is None %}<span class="text-muted">—</span>{% else %}{{ live_rate|floatformat:4 }}{% endif %}</td>
+              <td>
+                {% if live_rate is None %}<span class="text-muted">—</span>
+                {% elif obj.standard_rate_snapshot == live_rate %}<span class="badge badge-muted">Unchanged</span>
+                {% else %}<span class="badge badge-amber">Re-timed</span>{% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td>Allowance <div class="form-help">personal, fatigue and delay, added on top</div></td>
+              <td class="nowrap text-right mono">{% if obj.standard_allowance_snapshot is None %}<span class="text-muted">—</span>{% else %}{{ obj.standard_allowance_snapshot|floatformat:2 }}%{% endif %}</td>
+              <td class="nowrap text-right mono">{% if live_allowance is None %}<span class="text-muted">—</span>{% else %}{{ live_allowance|floatformat:2 }}%{% endif %}</td>
+              <td>
+                {% if live_allowance is None %}<span class="text-muted">—</span>
+                {% elif obj.standard_allowance_snapshot == live_allowance %}<span class="badge badge-muted">Unchanged</span>
+                {% else %}<span class="badge badge-amber">Re-timed</span>{% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">Earned minutes for {{ obj.quantity|floatformat:4 }} unit(s)
+                <div class="form-help">(fixed + quantity × rate) × (1 + allowance ÷ 100)</div>
+              </td>
+              <td class="nowrap text-right mono fw-600">{% if earned_minutes is None %}<span class="text-muted">—</span>{% else %}{{ earned_minutes|floatformat:4 }}{% endif %}</td>
+              <td class="nowrap text-right mono">{% if live_earned_minutes is None %}<span class="text-muted">—</span>{% else %}{{ live_earned_minutes|floatformat:4 }}{% endif %}</td>
+              <td>
+                {% if live_earned_minutes is None %}<span class="text-muted">—</span>
+                {% elif earned_minutes == live_earned_minutes %}<span class="badge badge-muted">Same figure</span>
+                {% else %}<span class="badge badge-amber">Would differ today</span>{% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card-body">
+        {% comment %}
+          THE SENTENCE. Everything else on this page is a number; this is the paragraph that makes
+          the numbers trustworthy, so it is printed in every measured state rather than only when
+          snapshot_differs is True — a reader who arrives on an unchanged row must already know why
+          the left-hand column exists, or the day it does differ they will assume the page is broken.
+        {% endcomment %}
+        <p class="text-muted">
+          <span class="fw-600">The left-hand column is why editing the standard later cannot change this row.</span> When this activity was filed, the three determinants above were copied onto it, and the earned figure is recomputed only from those copies and this row's own quantity — it never goes back to the standards library. Re-time a picking standard next March and February's rows keep the numbers they were measured with. Without that, tightening a standard would retroactively turn passing shifts into failing ones, and nobody could reproduce a figure they were shown at the time.
+        </p>
+        <p class="text-muted" style="margin-top:.75rem;">
+          The three inputs are stored beside the total on purpose: a single stored figure would be a number with no visible working. These are the actual operands, so the arithmetic can be replayed from this row alone — months later, after the standard has been retuned, renamed or deleted outright.
+        </p>
+        {% if standard_gone %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Standard deleted</span> The standard this activity named has since been removed from the library, so there is nothing live to compare against and the right-hand column is empty. <span class="fw-600">The measurement itself is untouched</span> — it lives in the snapshot, not in the pointer, so tidying the library never unmeasures a minute of the work a standard governed.
+          </p>
+        {% elif snapshot_differs %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-amber">Standard re-timed since</span> {{ standard.number }} has been changed since this activity was filed, which is exactly the case the snapshot exists for. <span class="fw-600">The figures on this page have not moved and will not move.</span> The live column is shown as a contrast only — it is what this quantity <em>would</em> earn if it were booked today, and it is never the measurement.
+          </p>
+        {% else %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            {{ standard.number }} still reads exactly as it did when this activity was filed, so the two columns agree. That agreement is a coincidence of timing rather than a guarantee — the moment somebody re-times the standard, the left-hand column stays where it is.
+          </p>
+        {% endif %}
+      </div>
+
+      {% if standard %}
+        <div class="card-body">
+          <h3 class="card-title">The standard this was measured against</h3>
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Standard</dt><dd><a href="{% url 'scm:laborstandard_detail' standard.pk %}" class="fw-600 mono">{{ standard.number }}</a> <span class="text-muted">{{ standard.name }}</span></dd></div>
+            <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ standard.status_css }}">{{ standard.get_status_display }}</span></dd></div>
+            <div class="detail-item"><dt>Measures</dt><dd>{{ standard.get_activity_display }}</dd></div>
+            <div class="detail-item"><dt>Basis</dt><dd>{{ standard.get_basis_display }}</dd></div>
+            <div class="detail-item"><dt>Where the number came from</dt><dd>{{ standard.get_source_display }}</dd></div>
+            <div class="detail-item"><dt>Scope · location</dt><dd>{% if standard.location %}<span class="mono">{{ standard.location.code }}</span> {{ standard.location.name }}{% else %}<span class="text-muted">The whole network</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Scope · item class</dt><dd>{% if standard.item_category %}{{ standard.item_category }}{% else %}<span class="text-muted">Every item</span>{% endif %}</dd></div>
+            <div class="detail-item"><dt>Effective</dt><dd class="nowrap">{{ standard.effective_from|date:"M d, Y" }} → {% if standard.effective_to %}{{ standard.effective_to|date:"M d, Y" }}{% else %}<span class="text-muted">open-ended</span>{% endif %}</dd></div>
+          </dl>
+          <div class="form-help">The standard was resolved <span class="fw-600">once</span>, when this activity was created, for the day the work was actually done — the start time, not the shift's work date, so a 02:00 booking on a night shift is measured against the standard in force on the day it was worked rather than the day the shift began. Correcting this activity later does <span class="fw-600">not</span> re-resolve it: an edit made next month must not silently re-measure last month's work.</div>
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">The interval</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Activity</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Work</dt><dd><span class="badge {{ obj.activity_css }}">{{ obj.get_activity_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd>{% if obj.is_direct %}Direct — productive, measured against a standard{% elif obj.is_indirect %}Indirect — paid, but not earned time{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reason</dt><dd>{% if obj.indirect_reason %}{{ obj.get_indirect_reason_display }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd class="nowrap">{{ obj.started_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Ended</dt><dd class="nowrap">{% if obj.ended_at %}{{ obj.ended_at|date:"M d, Y H:i" }}{% else %}<span class="badge badge-info">Still running</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Booked minutes</dt><dd class="mono">{% if obj.ended_at %}{{ obj.duration_minutes }} min · {{ duration_hours|floatformat:2 }} h{% else %}<span class="text-muted">Not booked until it ends</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Filed in the system</dt><dd class="nowrap">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      <div class="form-help">A booked interval has to fall inside its shift's clock window — minutes booked outside it are minutes nobody was on site for, and they would push booked time past attended time until utilisation quietly exceeded 100% with no explanation anywhere on the screen. A single activity is also capped at 24 hours: it is a stretch of a shift, not a geological era.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Output and accuracy</h2>
+      <div class="badge-group">
+        {% if obj.is_direct %}
+          <span class="badge badge-green">Productive work</span>
+        {% else %}
+          <span class="badge {{ obj.activity_css }}">Non-productive time</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Units completed</dt><dd class="mono fw-600">{{ obj.quantity|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Of those, wrong</dt><dd class="mono">{{ obj.error_quantity|floatformat:4 }}</dd></div>
+        {% comment %}
+          accuracy_pct is None — not 0 — when nothing was completed. Zero would read as "0% accurate"
+          on indirect time that never handled a unit, which is a quality verdict on work that never
+          happened. Same reasoning as units_per_hour above.
+        {% endcomment %}
+        <div class="detail-item"><dt>Accuracy</dt><dd class="mono fw-600">{% if accuracy_pct is None %}<span class="text-muted">—</span>{% else %}{{ accuracy_pct|floatformat:2 }}%{% endif %}</dd></div>
+        <div class="detail-item"><dt>Units per booked hour</dt><dd class="mono">{% if units_per_hour is None %}<span class="text-muted">—</span>{% else %}{{ units_per_hour|floatformat:2 }}{% endif %}</dd></div>
+      </dl>
+      <div class="form-help">
+        {% if obj.is_direct %}
+          Accuracy is derived from the two figures above and never stored, so correcting a mis-typed quantity corrects the percentage with it — a stored percentage is a second copy of a fact that moves the moment either input does. Errors can never exceed the units completed; the save is refused rather than allowed to produce a negative accuracy.
+        {% else %}
+          Indirect time completes no units by definition, so the quantity is held at zero and accuracy reads as a blank rather than as 0%. A units-per-hour figure over non-productive minutes would be a numerator with no denominator — which is how such a figure ends up infinite.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Booked against</h2>
+      <div class="badge-group">
+        {% if linked_task %}
+          <span class="badge badge-info">Linked to a warehouse task</span>
+        {% elif obj.reference %}
+          <span class="badge badge-slate">Free-text reference</span>
+        {% else %}
+          <span class="badge badge-muted">No document</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        Exactly ONE of the three task pointers can be set — LaborActivity.clean() enforces it — so the
+        view hands this page the one that IS set plus a `kind` to choose the url name from, rather
+        than three if-blocks and a rule about which wins. An unrecognised kind falls through to the
+        __str__ with no link rather than to a NoReverseMatch.
+      {% endcomment %}
+      {% if linked_task %}
+        <dl class="detail-grid">
+          <div class="detail-item">
+            <dt>
+              {% if linked_task_kind == "pick" %}Pick task
+              {% elif linked_task_kind == "putaway" %}Put-away task
+              {% elif linked_task_kind == "cycle_count" %}Cycle count task
+              {% else %}Warehouse task{% endif %}
+            </dt>
+            <dd>
+              {% if linked_task_kind == "pick" %}
+                <a href="{% url 'scm:picktask_detail' linked_task.pk %}" class="fw-600 mono">{{ linked_task.number }}</a>
+              {% elif linked_task_kind == "putaway" %}
+                <a href="{% url 'scm:putawaytask_detail' linked_task.pk %}" class="fw-600 mono">{{ linked_task.number }}</a>
+              {% elif linked_task_kind == "cycle_count" %}
+                <a href="{% url 'scm:cyclecounttask_detail' linked_task.pk %}" class="fw-600 mono">{{ linked_task.number }}</a>
+              {% else %}
+                <span class="fw-600 mono">{{ linked_task }}</span>
+              {% endif %}
+              <div class="form-help">{{ linked_task }}</div>
+            </dd>
+          </div>
+          <div class="detail-item"><dt>Free-text reference</dt><dd class="mono">{% if obj.reference %}{{ obj.reference }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+        <div class="form-help">The link is a pointer <span class="fw-600">out</span> to the warehouse task and adds no column to it: 4.14 records the minutes spent against a task and never writes back into the tables that own it. The task a booking names has to match the work — a pick task cannot carry cleaning minutes, or every board that reports "time booked against this task" would report a number that was never spent on it.</div>
+      {% elif obj.reference %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Reference</dt><dd class="fw-600 mono">{{ obj.reference }}</dd></div>
+        </dl>
+        <div class="form-help">These minutes name no warehouse task — the reference above is the honest fallback for work with no task record, and it exists precisely so nobody reaches for whichever task pointer was nearest just to have filled something in.</div>
+      {% else %}
+        <p class="text-muted">These minutes are booked against <span class="fw-600">no task and no reference</span>. That is ordinary for indirect time and for work with no document behind it — the shift, the activity type and the interval are the record. If there is a document, adding the reference makes the booking findable later.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The shift these minutes belong to</h2>
+      <div class="badge-group">
+        <span class="badge {{ session.status_css }}">{{ session.get_status_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Shift</dt><dd><a href="{% url 'scm:laborsession_detail' session.pk %}" class="fw-600 mono">{{ session.number }}</a></dd></div>
+        <div class="detail-item"><dt>Worker</dt><dd>{{ session.worker.name }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd><span class="mono">{{ session.location.code }}</span> <span class="text-muted">{{ session.location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Work date</dt><dd class="nowrap">{{ session.work_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Shift label</dt><dd>{% if session.shift_label %}{{ session.shift_label }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Clock in</dt><dd class="nowrap">{{ session.clock_in|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Clock out</dt><dd class="nowrap">{% if session.clock_out %}{{ session.clock_out|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Still on the floor</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Attended minutes</dt><dd class="mono">{% if session.attended_minutes is None %}<span class="text-muted">—</span>{% else %}{{ session.attended_minutes }} min{% endif %}</dd></div>
+      </dl>
+      <div class="form-help">The work date is pinned to the day the shift <span class="fw-600">started</span>, so an overnight shift keeps its opening day even where the minutes land after midnight. Attended minutes are blank rather than zero while the shift is still running: a running shift has no attended figure yet, and answering zero would put everybody currently on the floor at 0% utilisation.</div>
+    </div>
+  </div>
+
+  {% if obj.notes %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body">
+        <p class="text-muted" style="white-space:pre-line;">{{ obj.notes }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Actions</h2>
+      <div class="badge-group">
+        {% if can_edit %}
+          <span class="badge badge-green">Shift open</span>
+        {% else %}
+          <span class="badge badge-muted">Frozen</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        can_edit / can_delete are exactly the conditions laboractivity_edit and laboractivity_delete
+        enforce, so a button is never offered for a press the view will refuse. When they are False,
+        frozen_reason is printed instead — SAY why a button is missing rather than just hiding it.
+
+        The delete route is @tenant_admin_required AND @require_POST, so it is a real form with a
+        csrf token behind the house gate; a GET would be a 405, never a silent state change. Only the
+        system-generated LAB- number goes into the confirm string — the reference and the worker's
+        name are user-typed, and an apostrophe escapes to &#x27;, which the HTML parser hands to
+        JavaScript as a bare quote and the dialog breaks.
+      {% endcomment %}
+      {% if frozen_reason %}
+        <p class="text-muted"><span class="badge badge-muted">No longer editable</span> {{ frozen_reason }}</p>
+        <p class="text-muted" style="margin-top:.75rem;">Reopen the shift if it genuinely needs correcting. Removing an activity from a signed-off shift would restate hours that have already been approved and, once exported, already been paid — the shift's booked minutes would fall while its attended minutes did not, and the difference would surface as invented gap time against {{ session.worker.name }}.</p>
+      {% else %}
+        <p class="text-muted">A booking is a record of minutes, not a document with a lifecycle, so there is no cancel or void here. While the shift is open it can be corrected or removed outright; correcting the quantity re-derives the earned minutes from the snapshot above, which is what makes fixing a typo a genuine fix rather than a second version of the truth.</p>
+        <p class="text-muted" style="margin-top:.75rem;">Changing the <span class="fw-600">activity type</span> on an existing booking is the one edit that does not fully correct itself: the standard filed for the original type stays in place, because the snapshot is never rewritten after the fact. If the work turned out to be a different job, remove this row and book it again so it is measured against the right standard.</p>
+      {% endif %}
+
+      <div class="form-actions">
+        {% if can_edit %}
+          <a href="{% url 'scm:laboractivity_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_delete %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <form method="post" action="{% url 'scm:laboractivity_delete' obj.pk %}" onsubmit="return confirm('Remove {{ obj.number }} from this shift? The minutes go with it and every figure derived from them — booked time, utilisation, gap time, performance — is recalculated. There is no undo.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:laborsession_detail' session.pk %}" class="btn btn-outline"><i data-lucide="clock"></i> Back to {{ session.number }}</a>
+        <a href="{% url 'scm:laboractivity_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      {% if can_delete and not request.user.is_superuser and not request.user.is_tenant_admin %}
+        <p class="text-muted" style="margin-top:.75rem;">Removing a booking changes hours that feed a payroll export, so it is a workspace-administrator action. Ask an administrator — everything else on this page is readable and the booking itself is still editable.</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
