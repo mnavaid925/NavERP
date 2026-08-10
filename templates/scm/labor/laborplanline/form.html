@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — edit one plan line: the roster you intend, against the generator's sums.
+
+Renders apps/scm/views/LaborManagement/LaborPlans.py::laborplanline_edit. Everything this page may
+read, and nothing else:
+
+  form     LaborPlanLineForm (bound on POST) — TWO fields, planned_headcount and notes
+  is_edit  always True. Lines are created by laborplan_generate's bulk_create and by nothing else,
+           so there is no create path through this form at all
+  obj      the LaborPlanLine being edited (select_related: plan, plan__location, standard)
+  plan     THE PARENT LaborPlan. The form has no `plan` field, so the header, the breadcrumb, the
+           Cancel target and the assumptions restated below can only come from here
+
+WHY THE READ-ONLY FIGURES ARE ON THIS PAGE. Everything except the two form fields is editable=False
+and written by the generator: forecast_volume, standard, standard_minutes_snapshot, required_minutes
+and required_headcount. Offering any of them would let a planner close the required-vs-planned gap
+by editing the QUESTION rather than by rostering somebody, and that gap is the one number the whole
+sub-module exists to show. But a roster typed with the required figure off-screen is a number typed
+blind, so the decomposition is restated here — read-only — beside the box being filled in.
+
+WHY THE PARENT IS NOT A FIELD. `plan` comes from the row itself, never from the POST body.
+LaborPlanLine carries NO tenant column — it is a pure child resolved through
+plan__tenant=request.tenant, and that join IS the authorization check — so a parent pk in the body is
+precisely how a crafted request would graft a line onto another workspace's plan, with no column
+left to catch it.
+
+The parent's status is the VIEW's refusal and not a field error: laborplanline_edit redirects to the
+plan with a message once it is approved or archived, because an illegal move must answer with a
+redirect, which a field error cannot do. So this page is only ever reached on an editable plan.
+
+Every derived figure below renders an em dash when it is None — coverage in particular is None,
+never 0%, when nothing is required on this bucket: that is an unanswered question rather than
+catastrophic understaffing, and a confident zero would put a red chip on the emptiest day of the
+plan. The `is None` branches are used rather than |default:"—", which would swallow a true 0.00.
+{% endcomment %}
+{% block title %}Roster {{ obj.get_activity_display }} · {{ plan.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Planned headcount
+      <span class="badge {{ obj.activity_css }}">{{ obj.get_activity_display }}</span>
+      <span class="badge badge-slate">{{ obj.period_start|date:"M d, Y" }}</span>
+    </h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:laborplan_list' %}">Labour Plans</a><span class="sep">›</span>
+      <a href="{% url 'scm:laborplan_detail' plan.pk %}">{{ plan.number }}</a><span class="sep">›</span>
+      <span>{{ obj.get_activity_display }} · {{ obj.period_start|date:"M d, Y" }}</span>
+    </div>
+    <p class="text-muted">One bucket of one activity. The generator has already said what the expected volume costs and how many bodies that implies; this page is where you say what you are <span class="fw-600">actually going to roster</span>, and the difference between the two is the number the plan exists to report. Everything shown alongside is read-only by construction, not by permission — those columns have no path from form data at all.</p>
+  </div></div>
+
+  {% comment %}
+    THE PARENT, restated. The form cannot show it — `plan` is not a field — so this card is the only
+    thing on the page that says which plan is being changed, and getting that wrong is the whole
+    failure mode the row-supplied parent exists to prevent. Every value here is a plain column on the
+    already-fetched plan or its select_related location, so none of it is a query; plan.totals() is
+    an aggregate and is deliberately not asked for on a form page.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ plan.number }} · {{ plan.name }}</h2>
+      <div class="badge-group">
+        <span class="badge {{ plan.status_css }}">{{ plan.get_status_display }}</span>
+        <span class="badge badge-slate">{{ plan.get_bucket_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Site being staffed</dt>
+          <dd>{% if plan.location %}{{ plan.location.code }} <span class="text-muted">{{ plan.location.name }}</span>{% else %}<span class="badge badge-info">Whole network</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Plan period</dt><dd class="mono">{{ plan.period_start|date:"M d, Y" }} → {{ plan.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>This bucket</dt><dd class="mono">{{ obj.period_start|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Volume source</dt><dd>{{ plan.get_volume_source_display }}</dd></div>
+        <div class="detail-item"><dt>Hours per shift</dt><dd class="mono">{{ plan.hours_per_shift|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Productivity</dt><dd class="mono">{{ plan.productivity_pct|floatformat:2 }}%</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        The last two are the plan's own divisors and are shown because they are what turned minutes into the required figure below —
+        <span class="mono">required minutes = standard minutes × 100 ÷ productivity</span>, then
+        <span class="mono">headcount = required minutes ÷ (hours per shift × 60)</span>.
+        They live on the plan, not on this line: changing them is a change to every bucket at once and is made on the plan's own form.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    THE DECOMPOSITION, read-only — what you are overriding, in the order the generator computed it.
+    The `standard` FK says WHICH standard priced this line and the snapshot beside it says what that
+    standard SAID AT THE TIME; only the second half survives somebody re-timing the standard next
+    month, which is why both are kept. `standard` is SET_NULL, so it is guarded rather than
+    dereferenced.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What the generator worked out</h2>
+      <span class="badge badge-muted">Read-only · regenerated, never typed</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Step</th><th>Figure</th><th>Where it came from</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">Forecast volume</td>
+            <td class="mono">{% if obj.forecast_volume is None %}—{% else %}{{ obj.forecast_volume|floatformat:"-4" }}{% endif %}</td>
+            <td class="text-muted">Derived from {{ plan.get_volume_source_display|lower }} when the plan was generated, for the flow this activity belongs to. A manual plan derives nothing and this is a truthful zero rather than a failed derivation.</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Priced from</td>
+            <td>
+              {% if obj.standard %}
+                <a href="{% url 'scm:laborstandard_detail' obj.standard.pk %}" class="mono">{{ obj.standard.number }}</a>
+                <div class="text-muted">{{ obj.standard.name }}</div>
+                <div class="form-help">{{ obj.standard.get_basis_display }} · {{ obj.standard.minutes_per_unit|floatformat:"-4" }} min/unit{% if obj.standard.setup_minutes %} · {{ obj.standard.setup_minutes|floatformat:"-4" }} setup{% endif %}{% if obj.standard.travel_minutes %} · {{ obj.standard.travel_minutes|floatformat:"-4" }} travel{% endif %}{% if obj.standard.allowance_pct %} · +{{ obj.standard.allowance_pct|floatformat:2 }}% allowance{% endif %}</div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-muted">The standard in force at this site on the plan's <em>opening</em> day, resolved most-specific-first, and frozen for the whole plan. A standard re-timed mid-period does not silently restate part of the grid; it is picked up by the next regenerate, which is a decision somebody makes rather than one that happens to them.{% if not obj.standard %} This line's standard row has since been removed — the snapshot below is what it said at the time.{% endif %}</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Minutes at standard</td>
+            <td class="mono">{% if obj.standard_minutes_snapshot is None %}—{% else %}{{ obj.standard_minutes_snapshot|floatformat:"-4" }}{% endif %}</td>
+            <td class="text-muted">Setup + travel + volume × minutes per unit, plus the allowance — <span class="fw-600">frozen at generate time</span>. Editing the standard next month must not rewrite what this roster was decided on.</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Required minutes</td>
+            <td class="mono">{% if obj.required_minutes is None %}—{% else %}{{ obj.required_minutes|floatformat:2 }}{% endif %}</td>
+            <td class="text-muted">The minutes above, inflated by the plan's {{ plan.productivity_pct|floatformat:2 }}% expected achievement against standard.</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Required headcount</td>
+            <td class="mono fw-600">{% if obj.required_headcount is None %}—{% else %}{{ obj.required_headcount|floatformat:2 }}{% endif %}</td>
+            <td class="text-muted">Those minutes over one {{ plan.hours_per_shift|floatformat:2 }}-hour shift. Deliberately fractional: six activities each needing 0.4 of a person share four bodies between them, and rounding here would hide that.</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Currently rostered</td>
+            <td class="mono fw-600">{% if obj.planned_headcount is None %}—{% else %}{{ obj.planned_headcount|floatformat:2 }}{% endif %}</td>
+            <td>
+              <span class="mono">{% if obj.headcount_variance is None %}—{% else %}{{ obj.headcount_variance|floatformat:2 }}{% endif %}</span> variance ·
+              {% comment %}
+                coverage_pct() is None — never 0 — when nothing is required on this bucket, so it is
+                tested with `is None` rather than for truthiness.
+              {% endcomment %}
+              {% if obj.coverage_pct is None %}
+                <span class="badge badge-muted">Not measured</span>
+              {% elif obj.is_short %}
+                <span class="badge badge-red">{{ obj.coverage_pct|floatformat:2 }}% covered</span>
+              {% elif obj.is_over %}
+                <span class="badge badge-amber">{{ obj.coverage_pct|floatformat:2 }}% covered</span>
+              {% else %}
+                <span class="badge badge-green">{{ obj.coverage_pct|floatformat:2 }}% covered</span>
+              {% endif %}
+              <div class="form-help">Coverage answers <span class="fw-600">nothing</span> rather than 0% when no headcount is required here — a bucket with no forecast work is an unanswered question, not a catastrophically understaffed day.</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What you will roster</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">This is the <span class="fw-600">only</span> figure on the line a human may write, and the note beside it is where the reason goes — a training day, a leaver not yet replaced, a cushion held before a peak. Overstaffing is reported and never refused: a deliberate margin is a legitimate plan, and the number exists so it stays a decision somebody made rather than one nobody saw. Fractional values are accepted for the same reason the required figure is fractional — half a person on put-away is half a person, and rounding it at the line would hide how the bodies are actually shared.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.planned_headcount %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">Neither value survives a <span class="fw-600">regenerate</span> of the plan, and that is deliberate rather than an omission: a roster typed against last week's required figures is not an answer to this week's question, and carrying it forward silently would leave the next reader staring at a coverage percentage nobody computed.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save roster</button>
+      <a href="{% url 'scm:laborplan_detail' plan.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
