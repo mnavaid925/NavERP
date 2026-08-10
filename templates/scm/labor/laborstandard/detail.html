@@ -1,0 +1,593 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — one labor standard, explained rather than merely displayed.
+
+An engineered standard nobody can reconstruct is a number people stop trusting, so this page is
+built to answer the four questions a supervisor arguing with a standard actually asks: where did the
+minutes come from, what does it cover and when, where did the number come from, and — the one a
+plain detail page never answers — does this row govern anything at all right now.
+
+Renders apps/scm/views/LaborManagement/LaborStandards.py::laborstandard_detail. Everything this page
+may read, and nothing else:
+
+  obj                       the LaborStandard (select_related: location, item_category). Badge class
+                            is obj.status_css (STATUS_CSS on the model)
+  worked                    _worked_example() — a dict, and the key names are ITS, not the model's:
+                            quantity / setup_minutes / travel_minutes / minutes_per_unit /
+                            variable_minutes / measured_minutes / allowance_pct / allowance_minutes /
+                            total_minutes / total_hours / effective_minutes_per_unit /
+                            units_per_hour / cost / cost_per_unit
+  sample_quantity           the Decimal the example was computed for — the quantity input binds to
+                            THIS, never to request.GET.quantity, which may have been junk or clamped
+  max_sample_quantity       the ceiling a hand-typed ?quantity= is clamped to
+  scope_label               the scope as one already-resolved sentence
+  effective_chip            a plain (label, css) 2-tuple — render .0 and .1
+  effective_state           the raw current / future / expired token, for conditionals
+  is_effective_today        bool
+  today                     the date every figure here was computed against
+  resolved_standard         what select_standard() answers for THIS activity and scope today: a
+                            LaborStandard (possibly this very row) or None
+  governs_now               bool — True when the resolver's answer IS this row
+  resolution_reason         the sentence explaining why it is not; "" when it is
+  scope_siblings            the workspace's other standards for the same ACTIVITY (DB-sliced), each
+                            carrying an ATTACHED effective_chip 2-tuple — read that, never recompute
+  scope_siblings_truncated  True when more exist than the window shows
+  sibling_count             how many there are in total
+  activity_count            booked activity lines snapshotting this standard
+  plan_line_count           plan lines pointing at it
+  can_edit / can_activate / can_archive / can_delete
+                            read from the SAME tuples the four routes guard on, so a button and its
+                            route cannot disagree about whether an action is available
+
+Every derived ratio in `worked` is None — never 0 — when its denominator is zero, and cost /
+cost_per_unit are None when no charge-out rate is set. All four are therefore tested with
+`is not None` and print an em dash, never a confident 0.00: a zero in a cost tile reads as "this
+work is free", which is the opposite of "nobody has priced it". The figures that are NOT None-able
+(the determinants, measured_minutes, allowance_minutes, total_minutes, total_hours) print their real
+zero, because there a 0 is a fact rather than a missing measurement — which is why |default is not
+used anywhere on this page.
+
+Activate, Archive and Delete are @tenant_admin_required and @require_POST, so each is a real POST
+form with a csrf token behind the house gate (is_superuser or is_tenant_admin). Edit is only
+@login_required and is not gated on the role, but IS gated on can_edit — an archived standard is
+frozen. Only the system-generated LST- number goes into a confirm string: the name is user-typed and
+an apostrophe in it would be escaped to &#x27;, which the HTML parser hands to JavaScript as a bare
+quote and the dialog breaks.
+
+MAX_PANEL_ROWS is not in the context, so the ladder panel describes its cap as "the window shown"
+rather than quoting a number this page cannot see.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33). Every badge class here is either a model/view lookup
+(obj.status_css, effective_chip.1, s.status_css, s.effective_chip.1) or one of the six literals.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ effective_chip.1 }}">{{ effective_chip.0 }}</span>
+        {% if governs_now %}
+          <span class="badge badge-green">Governs this scope now</span>
+        {% else %}
+          <span class="badge badge-muted">Not selected today</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:laborstandard_list' %}">Labor Standards</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">A standard is only worth what people can reconstruct from it, so this page spells out the arithmetic rather than printing its answer. Nothing below is stored: the minutes, the cost and the effectivity chip are all recomputed from the four determinants and the two dates every time this page is opened, and the total comes from the sub-module's <span class="fw-600">single</span> earned-minutes definition — this screen lays the named parts around that answer, it does not compute a second one.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:laborstandard_list' %}?activity={{ obj.activity }}" class="btn btn-outline"><i data-lucide="ruler"></i> Standards for this activity</a>
+      <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="timer"></i></div>
+      <div class="stat-value">{{ worked.total_minutes|floatformat:"-4" }}</div>
+      <div class="stat-label">Standard minutes for {{ worked.quantity|floatformat:"-4" }} {{ obj.get_basis_display|lower }} · {{ worked.total_hours|floatformat:2 }} h</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="gauge"></i></div>
+      {% comment %}
+        None — never 0 — when the quantity or the total is zero. 0 units/hour would read as "this
+        work is impossible" rather than "you asked for none of it", so the blank is an em dash.
+      {% endcomment %}
+      <div class="stat-value">{% if worked.units_per_hour is not None %}{{ worked.units_per_hour|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if worked.units_per_hour is not None %}Units per hour at standard{% else %}No units per hour — the example quantity is zero{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{% if worked.cost_per_unit is not None %}{{ worked.cost_per_unit|floatformat:"-4" }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if worked.cost_per_unit is not None %}
+          Standard cost per unit at {{ obj.labour_rate|floatformat:"-4" }} / hour
+        {% elif not obj.labour_rate %}
+          No charge-out rate set — nobody has priced this activity
+        {% else %}
+          No cost per unit — the example quantity is zero
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="scale"></i></div>
+      <div class="stat-value">{{ activity_count }}</div>
+      <div class="stat-label">Booked activity line{{ activity_count|pluralize }} measured against it · {{ plan_line_count }} plan line{{ plan_line_count|pluralize }}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 1. the formula, worked through
+    The TOTAL is the model's own answer, not a second computation. The allowance row below is the
+    RESIDUAL (total − measured) rather than a re-application of × (100 + pct) / 100, so the parts
+    always sum to exactly the figure printed above them — including the rounding step — and this
+    page cannot show a breakdown that argues with the number it is explaining.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The formula, worked through</h2>
+      <span class="badge badge-info">{{ obj.get_basis_display }}</span>
+    </div>
+    <div class="card-body">
+      <p class="mono fw-600" style="margin:0 0 .35rem;">
+        (setup + travel + qty × minutes_per_unit) × (1 + allowance% / 100)
+      </p>
+      <p class="mono" style="margin:0 0 .9rem;">
+        ({{ worked.setup_minutes|floatformat:"-4" }} + {{ worked.travel_minutes|floatformat:"-4" }} + {{ worked.quantity|floatformat:"-4" }} × {{ worked.minutes_per_unit|floatformat:"-4" }})
+        × (1 + {{ worked.allowance_pct|floatformat:"-2" }} / 100)
+        = <span class="fw-600">{{ worked.total_minutes|floatformat:"-4" }}</span> minutes
+      </p>
+
+      <form method="get" class="filter-bar" style="margin-bottom:.9rem;">
+        <div class="form-group">
+          <label class="form-label" for="worked-quantity">Work the example for a quantity of</label>
+          {% comment %}
+            Bound to sample_quantity — the value the VIEW accepted — and never to
+            request.GET.quantity. ?quantity=abc, ?quantity=NaN and ?quantity=1E+600 are all handled
+            on the way in (fall back or clamp, never raise), so echoing the raw parameter back would
+            show a figure the example was not computed for.
+          {% endcomment %}
+          <input class="form-input" type="number" step="any" min="0" max="{{ max_sample_quantity }}"
+                 id="worked-quantity" name="quantity" value="{{ sample_quantity }}">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="calculator"></i> Recompute</button>
+        <a href="{% url 'scm:laborstandard_detail' obj.pk %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help" style="margin-bottom:.9rem;">
+        The example defaults to <span class="fw-600">100</span> rather than 1 on purpose: the entire reason a standard splits fixed time from variable time is that setup and travel <em>amortise</em>, and at a quantity of one they do not — the example would show the one case that makes a per-unit standard look identical to a per-task one. A quantity above {{ max_sample_quantity }} is capped, which keeps a worked example readable; a capped example is still a true statement about the standard.
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Part</th><th>Where it comes from</th><th class="nowrap">Minutes</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Setup</td>
+              <td>Fixed time paid once per task, whatever the quantity</td>
+              <td class="mono nowrap">{{ worked.setup_minutes|floatformat:"-4" }}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Travel</td>
+              <td>Fixed time getting to the work and back, once per task. Distance-derived travel would need bin coordinates the location master does not carry, so this is the typed stand-in</td>
+              <td class="mono nowrap">{{ worked.travel_minutes|floatformat:"-4" }}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Variable</td>
+              <td class="mono">{{ worked.quantity|floatformat:"-4" }} × {{ worked.minutes_per_unit|floatformat:"-4" }} <span class="text-muted">— the work itself, per {{ obj.get_basis_display|lower }}</span></td>
+              <td class="mono nowrap">{{ worked.variable_minutes|floatformat:"-4" }}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">= Measured time</td>
+              <td>What the stopwatch would show — before any allowance</td>
+              <td class="mono nowrap fw-600">{{ worked.measured_minutes|floatformat:"-4" }}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">+ Allowance</td>
+              <td>Personal needs, fatigue and unavoidable delay (PF&amp;D) at {{ worked.allowance_pct|floatformat:"-2" }}%. Shown as the <span class="fw-600">residual</span> — the total minus the measured time — so these rows always add up to exactly what the standard says, rounding included</td>
+              <td class="mono nowrap">{{ worked.allowance_minutes|floatformat:"-4" }}</td>
+            </tr>
+            <tr>
+              <td class="fw-600">= Standard minutes</td>
+              <td>The earned minutes {{ worked.quantity|floatformat:"-4" }} {{ obj.get_basis_display|lower }} is worth. Every performance figure in the sub-module is <em>this</em> over the minutes actually booked</td>
+              <td class="mono nowrap fw-600">{{ worked.total_minutes|floatformat:"-4" }} <span class="text-muted">({{ worked.total_hours|floatformat:2 }} h)</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <dl class="detail-grid" style="margin-top:1rem;">
+        <div class="detail-item">
+          <dt>Effective minutes per unit</dt>
+          <dd class="mono">{% if worked.effective_minutes_per_unit is not None %}{{ worked.effective_minutes_per_unit|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Units per hour at standard</dt>
+          <dd class="mono">{% if worked.units_per_hour is not None %}{{ worked.units_per_hour|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Standard cost for {{ worked.quantity|floatformat:"-4" }}</dt>
+          <dd class="mono">{% if worked.cost is not None %}{{ worked.cost|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Standard cost per unit</dt>
+          <dd class="mono">{% if worked.cost_per_unit is not None %}{{ worked.cost_per_unit|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Effective minutes per unit</span> is what one unit actually costs once the fixed time is spread over the batch — the figure that makes a per-task standard's economics visible, and the reason the example starts at 100 units. Each of the four is <span class="fw-600">blank rather than zero</span> when it has no denominator or no rate: a ratio with nothing under the line and a cost with no rate behind it are <em>unanswered</em>, and an em dash says that where a confident 0.00 would claim the work is instant or free.
+        {% if not obj.labour_rate %}
+          This standard carries <span class="fw-600">no charge-out rate</span>, so the two cost figures are blank on purpose. A rate here is a charge-out rate on the <em>standard</em> and never a person's wage — compensation lives in HR and this module neither reads it nor copies it.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================= 2. scope, window and who governs
+    The headline of the page: a standard can be perfectly configured and still measure nothing, and
+    this is the only screen that says so.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What it covers, and whether it is measuring anything</h2>
+      <span class="badge {{ effective_chip.1 }}">{{ effective_chip.0 }}</span>
+    </div>
+    <div class="card-body">
+      <p class="fw-600" style="margin:0 0 .35rem;">
+        {{ obj.get_activity_display }} work · {{ scope_label }}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        {% if obj.location and obj.item_category %}
+          This standard is measured <span class="fw-600">only</span> for that location <em>and</em> that item category together. Work matching one but not the other never reaches it, which is what lets a site run a slower pick standard than the network without forking the library.
+        {% elif obj.item_category %}
+          Scoped to an item category and to <span class="fw-600">no location</span>, so it applies to that class of item anywhere in the network — and a standard measured at one warehouse can never be selected for work done at another, because a location-scoped row has to match the location exactly.
+        {% elif obj.location %}
+          Scoped to a location and to <span class="fw-600">no item category</span>, so it applies to every item worked at that site.
+        {% else %}
+          Both scope pointers are blank, which is the <span class="fw-600">network-wide default</span> — a first-class answer rather than a gap. It is the last rung the resolver reaches, so it applies wherever nothing more specific does.
+        {% endif %}
+        It is in force
+        {% if obj.effective_to %}
+          from <span class="fw-600">{{ obj.effective_from|date:"M d, Y" }}</span> to <span class="fw-600">{{ obj.effective_to|date:"M d, Y" }}</span>
+        {% else %}
+          from <span class="fw-600">{{ obj.effective_from|date:"M d, Y" }}</span> onwards, open-ended
+        {% endif %}
+        — evaluated against {{ today|date:"M d, Y" }}, which is why the chip above can change with nothing on this row having been touched.
+      </p>
+
+      {% comment %}
+        governs_now is the resolver's own answer for THIS row's activity and THIS row's scope today,
+        so the question it settles is precisely "if somebody books this activity here today, does
+        this standard measure it?". resolution_reason is "" exactly when it does.
+      {% endcomment %}
+      {% if governs_now %}
+        <p style="margin:0 0 .9rem;">
+          <span class="badge badge-green">Selected</span>
+          Work booked for {{ obj.get_activity_display|lower }} in this scope today is measured against <span class="fw-600">this</span> standard. Each such booking snapshots the determinants above at the moment it is filed, so editing this row changes what <em>future</em> work earns and cannot restate a single minute already recorded.
+        </p>
+      {% else %}
+        <p style="margin:0 0 .9rem;">
+          <span class="badge badge-amber">Not selected</span>
+          {{ resolution_reason }}
+        </p>
+        {% if resolved_standard %}
+          <p class="text-muted" style="margin:0 0 .9rem;">
+            The resolver answers with
+            <a href="{% url 'scm:laborstandard_detail' resolved_standard.pk %}" class="mono fw-600">{{ resolved_standard.number }}</a>
+            · {{ resolved_standard.name }} for this activity and scope today.
+          </p>
+        {% else %}
+          <p class="text-muted" style="margin:0 0 .9rem;">
+            <span class="badge badge-red">No standard at all</span>
+            Nothing active covers {{ obj.get_activity_display|lower }} in this scope today, so work booked against it is recorded as <span class="fw-600">unmeasured</span> — earned minutes blank, no performance figure on the scorecard or in any plan, and no error anywhere announcing it. That is the honest answer rather than a zero, and it is also invisible, which is why it is stated here.
+          </p>
+        {% endif %}
+      {% endif %}
+
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Standard</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Activity</dt><dd><span class="badge badge-slate">{{ obj.get_activity_display }}</span></dd></div>
+        <div class="detail-item"><dt>Basis</dt><dd>{{ obj.get_basis_display }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Window</dt><dd><span class="badge {{ effective_chip.1 }}">{{ effective_chip.0 }}</span></dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}<span class="mono">{{ obj.location.code }}</span> <span class="text-muted">{{ obj.location.name }}</span>{% else %}<span class="text-muted">Every location</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Item category</dt><dd>{% if obj.item_category %}{{ obj.item_category.name }}{% else %}<span class="text-muted">Every item category</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Effective from</dt><dd class="mono">{{ obj.effective_from|date:"M d, Y" }}</dd></div>
+        {% comment %}
+          |default and NOT |default_if_none after |date: the date filter turns None into the EMPTY
+          STRING, which default_if_none would then print as nothing at all. `default` is safe here
+          precisely because a date is never a real 0 — the swallowed-zero trap that makes `default`
+          wrong on every numeric figure on this page.
+        {% endcomment %}
+        <div class="detail-item"><dt>Effective to</dt><dd class="mono">{{ obj.effective_to|date:"M d, Y"|default:"Open-ended" }}</dd></div>
+        <div class="detail-item"><dt>Minutes per unit</dt><dd class="mono">{{ obj.minutes_per_unit|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Setup minutes</dt><dd class="mono">{{ obj.setup_minutes|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Travel minutes</dt><dd class="mono">{{ obj.travel_minutes|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Allowance</dt><dd class="mono">{{ obj.allowance_pct|floatformat:"-2" }}%</dd></div>
+        <div class="detail-item"><dt>Charge-out rate</dt><dd class="mono">{% if obj.labour_rate %}{{ obj.labour_rate|floatformat:"-4" }} / hour{% else %}<span class="badge badge-muted">Not priced</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>In force today</dt><dd>{% if is_effective_today %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Notes.</span> {{ obj.notes }}</p>
+      {% endif %}
+
+      {% if obj.status == "active" and effective_state == "expired" %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Active, but its window has closed</span>
+          This row still reads <em>active</em> on every screen and the resolver can never pick it again, because effectivity is checked as well as status. That combination is the one worth acting on: the scope it used to measure is now being measured by something else — or by nothing at all. Archive it, or open the window again by editing the end date.
+        </p>
+      {% elif effective_state == "future" %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-info">Starts {{ obj.effective_from|date:"M d, Y" }}</span>
+          Publishing a standard ahead of its start date is ordinary and deliberate: until that day arrives it measures nothing, and work in this scope keeps being measured against whatever governs it today.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 3. where it came from
+    Provenance is not decoration. A supervisor arguing with a number is entitled to know whether it
+    was time-studied on this floor or lifted from a library, and the three answers carry genuinely
+    different weight.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Where this number came from</h2>
+      <span class="badge badge-muted">{{ obj.get_source_display }}</span>
+    </div>
+    <div class="card-body">
+      <p style="margin:0 0 .35rem;">
+        {% if obj.source == "engineered" %}
+          <span class="fw-600">Engineered.</span> Built from a method — the task broken into its elements and each element given a time, then assembled into the determinants above. It is defensible element by element, which is what makes it arguable: a supervisor who disagrees can point at <em>which</em> element is wrong rather than at the total.
+        {% elif obj.source == "observed" %}
+          <span class="fw-600">Time-studied on this floor.</span> Somebody stood there with a stopwatch and this is what they measured, on this site, with this equipment and this layout. It is the strongest claim of the four for <em>this</em> scope and the weakest for anywhere else — an observed standard should not be widened to the network without re-observing it there.
+        {% elif obj.source == "benchmark" %}
+          <span class="fw-600">Benchmark library.</span> Lifted from published or industry figures rather than measured here, so it is a starting point rather than a finding: it says what the work takes <em>somewhere</em>, under conditions that may or may not resemble this site's layout, equipment and product mix. Treat a persistent gap against it as a question about the standard first and the crew second.
+        {% elif obj.source == "learned" %}
+          <span class="fw-600">Learned from history.</span> Derived from what has actually been booked rather than from a method. It has a circularity a person has to hold in mind: a standard learned from past performance measures the floor against its own habits, so it tracks drift instead of correcting it.
+        {% else %}
+          <span class="fw-600">{{ obj.get_source_display }}.</span>
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:0;">
+        Provenance is a claim made by whoever <span class="fw-600">wrote</span> the standard, and it is on the form for exactly that reason — unlike a session's source, which is stamped by whichever code path filed it, because a provenance a user can type is not a provenance. The difference matters when a figure is challenged: <em>engineered</em> and <em>time-studied</em> invite you to check the method, <em>benchmark</em> invites you to check whether this site resembles the one the figure came from at all. A standard nobody can trace is a standard nobody accepts.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 4. the ladder — who beats whom
+    select_standard() walks four rungs, narrowest first, and each rung matches standards scoped to
+    EXACTLY that shape. The "item category" rung requires the location to be blank on the STANDARD,
+    which is why a standard measured at warehouse B can never be selected for work at warehouse A.
+    This panel is what makes "why does another row win?" answerable on the page rather than by
+    reading the resolver.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Which standard wins — the most-specific-wins ladder</h2>
+      <span class="badge badge-info">This standard sits on rung {% if obj.location and obj.item_category %}1{% elif obj.item_category %}2{% elif obj.location %}3{% else %}4{% endif %}</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        When work is booked, the resolver asks for the <span class="fw-600">narrowest active standard whose window covers that day</span> and stops at the first rung that answers. A standard on a higher rung beats this one for work that matches its scope; this one beats everything on a lower rung. Two live standards on the <em>same</em> rung for the same scope on the same day is what the overlap check refuses at save time — because that has no defined winner, and the same job would earn different minutes on two page loads.
+      </p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rung</th><th>Matches standards scoped to</th><th>Against this standard</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">1 — narrowest</td>
+              <td>A location <span class="fw-600">and</span> an item category, both matching the work</td>
+              <td>
+                {% if obj.location and obj.item_category %}
+                  <span class="badge badge-green">This standard</span> nothing can outrank it for work matching both pointers
+                {% else %}
+                  <span class="badge badge-red">Beats this one</span> for work matching a location + category pair
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">2</td>
+              <td>An item category, with <span class="fw-600">no</span> location on the standard</td>
+              <td>
+                {% if obj.item_category and not obj.location %}
+                  <span class="badge badge-green">This standard</span> beaten only by a location + category row
+                {% elif obj.location and obj.item_category %}
+                  <span class="badge badge-slate">This one wins</span> a rung-1 row is asked first
+                {% else %}
+                  <span class="badge badge-red">Beats this one</span> whenever the work carries that item category
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">3</td>
+              <td>A location, with <span class="fw-600">no</span> item category on the standard</td>
+              <td>
+                {% if obj.location and not obj.item_category %}
+                  <span class="badge badge-green">This standard</span> beaten by any category-scoped row that matches
+                {% elif obj.item_category %}
+                  <span class="badge badge-slate">This one wins</span> a category-scoped row is asked first
+                {% else %}
+                  <span class="badge badge-red">Beats this one</span> whenever the work is done at that location
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">4 — broadest</td>
+              <td>Neither pointer — the network-wide default</td>
+              <td>
+                {% if not obj.location and not obj.item_category %}
+                  <span class="badge badge-green">This standard</span> the last resort, beaten by anything more specific
+                {% else %}
+                  <span class="badge badge-slate">This one wins</span> a network-wide row only applies where nothing narrower does
+                {% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Two things narrow the field before the ladder is walked at all: only <span class="fw-600">active</span> standards are considered — a draft or an archived row is invisible to the resolver whatever its dates say — and only those whose window covers the day the work was booked. Within one rung a tie is broken by the <span class="fw-600">latest start date</span>, then by the newest row, so even a pair that slipped past the overlap check still resolves to exactly one reproducible answer. The overlap check is what keeps that answer <em>arguable</em>; the tie-break is what keeps it <em>reproducible</em>.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Other standards for {{ obj.get_activity_display|lower }}</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ sibling_count }} sibling{{ sibling_count|pluralize }}</span>
+        <a href="{% url 'scm:laborstandard_list' %}?activity={{ obj.activity }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open in the library</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Standard</th><th>Rung / scope</th><th>Status</th><th>Window</th><th class="nowrap">Per unit</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in scope_siblings %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:laborstandard_detail' s.pk %}" class="fw-600 mono">{{ s.number }}</a>
+                <div class="text-muted">{{ s.name }}</div>
+              </td>
+              <td>
+                {% if s.location and s.item_category %}
+                  <span class="badge badge-info">Rung 1</span>
+                  <div class="form-help"><span class="mono">{{ s.location.code }}</span> · {{ s.item_category.name }}</div>
+                {% elif s.item_category %}
+                  <span class="badge badge-info">Rung 2</span>
+                  <div class="form-help">Every location · {{ s.item_category.name }}</div>
+                {% elif s.location %}
+                  <span class="badge badge-info">Rung 3</span>
+                  <div class="form-help"><span class="mono">{{ s.location.code }}</span> · every item category</div>
+                {% else %}
+                  <span class="badge badge-muted">Rung 4</span>
+                  <div class="form-help">Network-wide</div>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ s.status_css }}">{{ s.get_status_display }}</span></td>
+              <td class="nowrap">
+                {% comment %}
+                  The chip is ATTACHED by the view (sibling.effective_chip = _effective_chip(...)),
+                  so it is read here and never recomputed — one bucket rule, one place.
+                {% endcomment %}
+                <span class="badge {{ s.effective_chip.1 }}">{{ s.effective_chip.0 }}</span>
+                <div class="form-help">{{ s.effective_from|date:"M d, Y" }} → {{ s.effective_to|date:"M d, Y"|default:"open" }}</div>
+              </td>
+              <td class="mono nowrap">{{ s.minutes_per_unit|floatformat:"-4" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:laborstandard_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="layers"></i>
+                  <h3>This is the only standard for this activity</h3>
+                  <p>Nothing else in the workspace measures {{ obj.get_activity_display|lower }}, so there is no ladder to walk: wherever this row's scope and window reach, it is the answer, and everywhere else the activity is unmeasured. Add a narrower standard for a site that genuinely runs differently rather than editing this one, and the resolver will prefer it there and keep this row everywhere else.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if scope_siblings_truncated %}
+        Showing the newest {{ scope_siblings|length }} of <span class="fw-600">{{ sibling_count }}</span> — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. Open the library filtered to this activity to see the rest.
+      {% else %}
+        {{ sibling_count }} other standard{{ sibling_count|pluralize }} for this activity.
+      {% endif %}
+      Every scope is shown, not only rows matching this one's, and deliberately: a standard that “should” have won is very often sitting on a different rung, and a panel narrowed to this row's exact scope would hide precisely the rows that explain the answer.
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================= 5. the actions
+    can_activate / can_archive / can_delete / can_edit are read from the SAME tuples the four routes
+    guard on, so a button can never be offered for a press the view will refuse (the 4.10 "two of
+    three shapes" finding). Only the LEGAL next move is rendered: a draft may go either way, an
+    active row may only be archived, an archived row may only be brought back.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if can_activate %}
+          <form method="post" action="{% url 'scm:laborstandard_activate' obj.pk %}" onsubmit="return confirm('Activate {{ obj.number }}? From this moment every new booking for this activity in this scope is measured against these determinants. Nothing already recorded moves.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Activate</button>
+            <div class="form-help">
+              Activating is not cosmetic: the resolver considers <span class="fw-600">active</span> standards and nothing else, so from this moment every activity filed for {{ obj.get_activity_display|lower }} in this scope snapshots the determinants above as its earned minutes — and no page anywhere announces that the measuring stick moved. Nothing already booked changes, because each booking carries its own snapshot.
+              {% if obj.status == "archived" %}
+                <br>Bringing an archived standard back <span class="fw-600">re-runs the overlap check as a live row</span>. That check deliberately ignores archived rows on both sides, so another standard may legitimately have been saved across this one's dates while it was shelved — and re-publishing it would recreate exactly the ambiguity the check exists to prevent, without any save ever having been refused. If it is refused here, the message names the standard that clashes and its date span.
+              {% endif %}
+              {% if effective_state == "future" %}
+                <br>Its window opens on <span class="fw-600">{{ obj.effective_from|date:"M d, Y" }}</span>, so activating it today measures nothing yet — until then this scope keeps being measured against whatever governs it now.
+              {% endif %}
+            </div>
+          </form>
+        {% endif %}
+
+        {% if can_archive %}
+          <form method="post" action="{% url 'scm:laborstandard_archive' obj.pk %}" onsubmit="return confirm('Archive {{ obj.number }}? It leaves the resolver immediately. If nothing else covers this scope, work booked afterwards is recorded as unmeasured with no error anywhere.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+            <div class="form-help">
+              Archiving removes the row from the resolver and keeps the rule last quarter's numbers were measured under readable. Nothing already recorded moves — but from now on, work in this scope with no other standard covering it is booked <span class="fw-600">unmeasured</span>: earned minutes blank, no performance figure, and no error. The message after the press names either the successor that takes over or the gap that has opened, which is the whole reason it spends a resolver call to find out. This is the move to reach for instead of delete, and instead of editing dates on a live row; it is reversible.
+            </div>
+          </form>
+        {% endif %}
+      {% else %}
+        <p class="text-muted" style="margin-bottom:1rem;">
+          Activating a standard redefines what every future booking in its scope earns, and archiving one silently removes that scope's measuring stick — so both are workspace-administrator actions, as is deleting. Ask an administrator; everything else on this page is readable{% if can_edit %} and the standard itself stays editable{% endif %}.
+        </p>
+      {% endif %}
+
+      <div class="form-actions">
+        {% if can_edit %}
+          <a href="{% url 'scm:laborstandard_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% comment %}
+          Delete is gated on can_delete (draft, archived), which is deliberately NOT can_edit: a live
+          standard is what the resolver is answering with right now, so the route refuses to remove
+          it and archive is the reversible move that does the same job.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:laborstandard_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? {{ activity_count }} booked activity line(s) and {{ plan_line_count }} plan line(s) lose their pointer to it. Every recorded figure is unchanged, because each row carries its own snapshot — but the link back to this rule is gone and cannot be restored.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if not can_edit %}
+          <span class="badge badge-slate">Frozen</span>
+          An archived standard can no longer be edited, and the reason is easy to miss: the overlap check ignores archived rows, so editing one back into a live date range would slip past the single guard that keeps the resolver deterministic. Activate it first if it should apply again — that path re-runs the check — or write a new standard starting today.
+        {% else %}
+          An <span class="fw-600">active</span> standard stays editable on purpose. Every booked activity snapshots the determinants at the moment it is filed, so a re-time changes what future work earns and cannot restate a single minute already recorded — there is no history here for an edit to rewrite. Re-timing an activity properly means a <span class="fw-600">new</span> standard starting today rather than an edit to this one, which is what keeps last month's numbers reproducible.
+        {% endif %}
+        {% if not can_delete %}
+          Deleting is refused while a standard is live: archive it first. Archiving is reversible, announces its consequence, and keeps the rule readable.
+        {% else %}
+          Deleting does not corrupt a single recorded figure — every measurement carries its own snapshot and asks that, never this row — but it erases the trail from a measurement back to the rule it was measured under, and nothing reconstructs it.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% endblock %}
