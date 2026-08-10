@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — the payroll export (Payroll Integration bullet).
+
+Renders apps/scm/views/LaborManagement/Reports.py::labor_payroll_export. Everything this page may
+read, and nothing else — the view's own pinned context contract, restated here so the two can be
+diffed:
+
+  date_from date_to (date) · date_from_raw date_to_raw (echoed verbatim) · window_invalid (bool)
+  period_label                                            the ?date_from=&date_to= window
+  location worker                                         RAW echoed pk params — bind the two
+                                                          selects to these and compare with
+                                                          |stringformat:"d", NEVER |slugify
+  locations workers                                       the two dropdown querysets
+  export_qs                                               the current filter re-encoded by _encode,
+                                                          for the ?format=csv link ONLY
+  rows row_count totals worker_count                      the table; `totals` is None when empty
+  approved_session_count pending_session_count
+  considered_count coverage_pct (Decimal|None)            the coverage line
+  approved_only_note no_writes_note gap_note
+  systems_of_record (list of {system, owns})              the standing prose, printed verbatim
+  generated_at no_tenant no_tenant_note
+
+PAYROLL ROW dict, built by Reports._payroll_row over Reports._worker_aggregate (the totals line by
+Reports._sum_totals, then back through the SAME _payroll_row builder). These are the only keys that
+exist on a row — the helper renames several of them away from the model field they came from:
+
+  worker_id (int|None)   worker (str)        work_days (int)      session_count (int)
+  attended_hours (Decimal|None)              booked_hours (Decimal)
+  direct_hours (Decimal)                     indirect_hours (Decimal)
+  unaccounted_hours (Decimal|None)           over_booked_hours (Decimal|None)
+  earned_hours (Decimal|None)                performance_pct (Decimal|None)
+  utilisation_pct (Decimal|None)
+
+There is NO open_session_count and NO band_css on a payroll row — both belong to the scorecard's row
+dict, which shares the spelling of the keys above precisely because they mean the same thing.
+
+THE NONE CONTRACT. attended / unaccounted / over-booked / earned hours and both percentages are None
+whenever the question cannot be answered: no shift in the window had a clock-out, nothing carried an
+engineered standard, nothing was booked to divide by. None is NEVER rendered as 0 and NEVER as a
+blank cell. A utilisation of 0% against a named person is a claim the data does not support, and on
+a page a pay clerk reads that difference is the entire point. Percentages therefore use
+`is not None` (a bare |default:"—" would swallow a real 0 AND a suffixed "—%" is not a figure), and
+the plain hour columns use |default_if_none:"—" so a genuine 0.00 still prints as 0.00.
+
+NOT PAGINATED, deliberately — there is no page_obj in the context, so this page includes no
+pagination partial. The coverage counts and the totals footer have to describe exactly the rows the
+table shows; a paginated payroll page whose footer totalled a different set would be a file somebody
+pays people from.
+
+NO BADGE IS INVENTED HERE. A payroll row carries no *_css key (unlike the scorecard's band_css and
+the board's flag_css), so no per-worker figure on this page is coloured — grading a named person is
+the scorecard's job and it does it with a class the VIEW chose. The only coloured chip is the
+page-level approval-coverage one, which is the asset_depreciation.html precedent and is a statement
+about completeness of data, not about a person. theme.css ships badge-green / badge-red /
+badge-amber / badge-info / badge-muted / badge-slate ONLY — badge-success / badge-warning /
+badge-danger do not exist and render completely unstyled (L33).
+
+READ-ONLY, INCLUDING THE DOWNLOAD. There is no form on this page except the GET filter bar, no POST
+target, and no action button of any kind: the view writes nothing, not even an export stamp. The CSV
+link is the same route with ?format=csv appended to export_qs, so the file is built from the SAME
+aggregate call with the SAME window and cannot show a different number from the page it came off.
+export_qs is a whitelist re-encode (date_from/date_to/location/worker), never an echo of the query
+string, so nothing appended to the URL rides along into the download link.
+{% endcomment %}
+{% block title %}Payroll Export{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Labour Payroll Export</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:laborsession_list' %}">Labour Sessions</a><span class="sep">›</span>
+        <span>Payroll Export</span>
+      </div>
+      <p class="text-muted">
+        Approved warehouse shifts for <span class="fw-600">{{ period_label }}</span>, aggregated per worker
+        per period. Every figure is computed live from the shifts and the activities booked against them —
+        <span class="fw-600">nothing on this page is stored and nothing on this page is written</span>, not even
+        a record that you downloaded it. This is a file for payroll to consume; it is not a payroll posting.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% comment %}
+        format=csv first, then the re-encoded filters, so the link is correct whether or not any filter
+        is in force. export_qs comes from Reports._encode — a WHITELIST of the four filter params, never
+        an echo of request.GET, so nothing an attacker appended to this URL can ride into the download.
+      {% endcomment %}
+      <a href="{% url 'scm:labor_payroll_export' %}?format=csv{% if export_qs %}&amp;{{ export_qs }}{% endif %}"
+         class="btn btn-primary"><i data-lucide="download"></i> Download CSV</a>
+      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Productivity Scorecard</a>
+      <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Labour Sessions</a>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">No workspace</h2></div>
+      <div class="card-body"><p class="text-muted"><i data-lucide="alert-triangle"></i> {{ no_tenant_note }}</p></div>
+    </div>
+  {% endif %}
+
+  {% comment %} ============ approved-only, stated before any number on the page ============ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Approved sessions only</h2>
+      <div class="badge-group">
+        <span class="badge badge-green">{{ approved_session_count }} approved shift{{ approved_session_count|pluralize }} aggregated</span>
+        {% if pending_session_count %}
+          <span class="badge badge-amber">{{ pending_session_count }} not yet approved — excluded</span>
+        {% else %}
+          <span class="badge badge-muted">Nothing awaiting approval in this window</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ approved_only_note }}</p>
+      <p class="text-muted">{{ no_writes_note }}</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% comment %}
+          Bound to the RESOLVED dates, not to date_from_raw / date_to_raw: an unusable or reversed
+          value has already been replaced or swapped by the view, and echoing the rejected string back
+          into the box would make the controls disagree with the rows below them. The rejected text is
+          quoted in the warning instead, so nothing is silently ignored.
+        {% endcomment %}
+        <div class="form-group">
+          <label class="form-label" for="px-from">From</label>
+          <input type="date" id="px-from" name="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="px-to">To</label>
+          <input type="date" id="px-to" name="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="px-loc">Location</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="location" id="px-loc" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }} · {{ loc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="px-worker">Worker</label>
+          <select name="worker" id="px-worker" class="form-select">
+            <option value="">All workers</option>
+            {% for w in workers %}
+              <option value="{{ w.pk }}" {% if worker == w.pk|stringformat:"d" %}selected{% endif %}>{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:labor_payroll_export' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      {% if window_invalid %}
+        <div class="badge-group">
+          <span class="badge badge-amber">
+            <i data-lucide="alert-triangle"></i>
+            The window you asked for could not be used as typed{% if date_from_raw %} (from "{{ date_from_raw }}"){% endif %}{% if date_to_raw %} (to "{{ date_to_raw }}"){% endif %} —
+            a date that is not a real YYYY-MM-DD day is dropped, and a window the wrong way round is swapped.
+            Showing {{ period_label }}.
+          </span>
+        </div>
+      {% endif %}
+      <div class="form-help">
+        The window defaults to the <span class="fw-600">current calendar month to date</span>, which is the period
+        somebody normally arrives here looking for. It filters on each shift's
+        <span class="fw-600">work date</span> — the day the shift belongs to — not on when it was clocked in,
+        approved or exported.
+      </div>
+      <div class="form-help">
+        <span class="fw-600">The CSV is this page.</span> "Download CSV" re-runs the identical aggregate with the
+        identical window and filters, so the file cannot show a different number from the table you are looking
+        at. It carries the window, the approved-only statement and the systems of record in its header rows, so
+        the first person to open it in a payroll office does not have to be told any of that.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="users"></i></div>
+      <div class="stat-value">{{ worker_count }}</div>
+      <div class="stat-label">Workers with approved time</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+      <div class="stat-value">{{ approved_session_count }}</div>
+      <div class="stat-label">Approved shifts in window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ pending_session_count }}</div>
+      <div class="stat-label">Not yet approved — excluded</div>
+    </div>
+    {% comment %}
+      coverage_pct is None when the window contains no scored session at all — no approvals AND no
+      backlog. "0% approved" would report an empty month as an approval crisis, so it prints a dash.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="percent"></i></div>
+      <div class="stat-value">{% if coverage_pct is not None %}{{ coverage_pct }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">Of the window's shifts are approved</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="calendar-days"></i></div>
+      <div class="stat-value">{% if totals %}{{ totals.work_days }}{% else %}—{% endif %}</div>
+      <div class="stat-label">Person-days in this file</div>
+    </div>
+  </div>
+
+  {% comment %} ================= coverage, stated before the table it qualifies ================= {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Coverage</h2>
+      <div class="badge-group">
+        {% if coverage_pct is not None %}
+          <span class="badge {% if coverage_pct >= 95 %}badge-green{% elif coverage_pct >= 75 %}badge-amber{% else %}badge-red{% endif %}">
+            {{ coverage_pct }}% of the window's shifts are approved
+          </span>
+        {% else %}
+          <span class="badge badge-muted">Nothing to measure in this window</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Period</dt><dd>{{ period_label }}</dd></div>
+        <div class="detail-item"><dt>Shifts considered</dt><dd>{{ considered_count }}</dd></div>
+        <div class="detail-item"><dt>Approved — in this file</dt><dd>{{ approved_session_count }}</dd></div>
+        <div class="detail-item">
+          <dt>Not yet approved — excluded</dt>
+          <dd>
+            {% if pending_session_count %}
+              <span class="badge badge-amber">{{ pending_session_count }} shift{{ pending_session_count|pluralize }}</span>
+            {% else %}
+              <span class="badge badge-green">None</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Workers on this file</dt><dd>{{ worker_count }}</dd></div>
+        <div class="detail-item"><dt>Generated</dt><dd>{{ generated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if pending_session_count %}
+        <p class="text-muted">
+          <i data-lucide="alert-triangle"></i>
+          <span class="fw-600">{{ pending_session_count }} of {{ considered_count }}</span>
+          shift{{ pending_session_count|pluralize }} in this window {{ pending_session_count|pluralize:"is,are" }}
+          still open or closed-but-unsigned, and contribute{{ pending_session_count|pluralize:"s," }}
+          <span class="fw-600">nothing</span> to the hours below. A worker whose whole week is sitting unsigned
+          therefore shows less time here than they worked — that is an approval backlog, not an attendance fact,
+          which is exactly why it is counted in front of the table rather than buried behind it. Clear it on the
+          <a href="{% url 'scm:laborsession_list' %}?status=closed">labour session list</a> and re-run this page.
+        </p>
+      {% endif %}
+      <p class="text-muted">
+        Cancelled shifts are counted in <span class="fw-600">neither</span> half — a withdrawn shift is not an
+        approval backlog, and including it would report a correction as a problem.
+      </p>
+    </div>
+  </div>
+
+  {% comment %} ============================ the per-worker table ============================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Hours per worker — {{ period_label }}</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ row_count }} worker{{ row_count|pluralize }}</span>
+        <span class="badge badge-green">Approved sessions only</span>
+        <span class="badge badge-muted">Read-only — nothing here is posted</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Worker</th>
+            <th>Work days</th>
+            <th>Attended</th>
+            <th>Booked</th>
+            <th>Direct</th>
+            <th>Indirect</th>
+            <th>Unaccounted</th>
+            <th>Over-booked</th>
+            <th>Earned</th>
+            <th>Performance</th>
+            <th>Utilisation</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <span class="fw-600">{{ row.worker }}</span>
+                <div class="form-help">{{ row.session_count }} approved shift{{ row.session_count|pluralize }}</div>
+              </td>
+              {% comment %}
+                work_days is DISTINCT work dates, not shifts: two shifts on one day is one work day,
+                and a pay figure that counted it twice would pay a day nobody worked. A real 0 cannot
+                occur on a row that exists, but the column is still a plain integer, never a ratio.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.work_days }}</td>
+              {% comment %}
+                attended_hours is None — never 0 — when no shift of theirs in the window had a
+                clock-out, so there is no elapsed time to state. |default_if_none, not |default: a
+                genuine 0.00 attended is a different fact and must still print as 0.00.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.attended_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.booked_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.direct_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.indirect_hours|default_if_none:"—" }}</td>
+              {% comment %}
+                The two gap columns are PERIOD nets, floored at zero in each direction — see the note
+                below the table. Both are None while there is no attended figure to subtract from, and
+                a zero in either is a real, good answer: the booked time reconciles to the clock.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.unaccounted_hours %}
+                  <span class="badge badge-amber">{{ row.unaccounted_hours }}</span>
+                {% else %}
+                  {{ row.unaccounted_hours|default_if_none:"—" }}
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if row.over_booked_hours %}
+                  <span class="badge badge-red">{{ row.over_booked_hours }}</span>
+                {% else %}
+                  {{ row.over_booked_hours|default_if_none:"—" }}
+                {% endif %}
+              </td>
+              {% comment %}
+                earned_hours is None when NOTHING they did carried an engineered standard. An
+                unmeasured week has not earned zero hours; it has not been measured, and performance
+                drops out with it rather than printing 0%.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.earned_hours|default_if_none:"—" }}</td>
+              {% comment %}
+                No badge on either percentage. A payroll row carries no *_css key, so colouring a
+                named person here would be this template inventing a judgement the view did not make —
+                grading is the scorecard's job, and it does it with a class the view chose.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.performance_pct is not None %}{{ row.performance_pct }}%{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if row.utilisation_pct is not None %}{{ row.utilisation_pct }}%{% else %}—{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    The only link on a row, and it is a READ: the same worker's approved shifts over the
+                    same window, on the list page that can page and filter them. There is no detail page
+                    for an aggregate and no verb offered from a payroll export.
+                  {% endcomment %}
+                  <a href="{% url 'scm:laborsession_list' %}?worker={{ row.worker_id }}&amp;status=approved&amp;date_from={{ date_from|date:'Y-m-d' }}&amp;date_to={{ date_to|date:'Y-m-d' }}"
+                     class="btn-icon" title="View this worker's approved shifts in this window"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="12">
+                <div class="empty-state">
+                  <i data-lucide="file-spreadsheet"></i>
+                  <h3>No approved shifts in this window</h3>
+                  <p>
+                    Nothing here is zero — there is simply nothing approved between
+                    {{ date_from|date:"M d, Y" }} and {{ date_to|date:"M d, Y" }} for this filter.
+                    {% if pending_session_count %}
+                      {{ pending_session_count }} shift{{ pending_session_count|pluralize }} in the window
+                      {{ pending_session_count|pluralize:"is,are" }} still awaiting approval, so the hours exist
+                      and are simply not exportable yet — approve them on the
+                      <a href="{% url 'scm:laborsession_list' %}?status=closed">labour session list</a>.
+                    {% else %}
+                      No shift has been recorded in this window at all. Widen the dates above, clear the location
+                      and worker filters, or <a href="{% url 'scm:laborsession_clock_in' %}">clock somebody in</a>.
+                    {% endif %}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if totals %}
+          {% comment %}
+            The footer is the raw MINUTE totals re-added and then put back through the SAME row
+            builder — never the per-worker percentages averaged, which would weight a three-minute
+            worker the same as a full-time one and make the footer disagree with the table above it.
+            work_days is deliberately a SUM, i.e. person-days: that is what a pay run is computed on.
+          {% endcomment %}
+          <tfoot>
+            <tr>
+              <td class="fw-600">{{ totals.worker }}</td>
+              <td class="nowrap mono fw-600">{{ totals.work_days }}</td>
+              <td class="nowrap mono fw-600">{{ totals.attended_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.booked_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.direct_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.indirect_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.unaccounted_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.over_booked_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">{{ totals.earned_hours|default_if_none:"—" }}</td>
+              <td class="nowrap mono fw-600">
+                {% if totals.performance_pct is not None %}{{ totals.performance_pct }}%{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono fw-600">
+                {% if totals.utilisation_pct is not None %}{{ totals.utilisation_pct }}%{% else %}—{% endif %}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      Sorted by worker name so one period's file diffs cleanly against the previous one. Every hour figure is
+      to two decimals; a dash means the question has no answer for that worker in this window, and is never the
+      same thing as 0.00 — which is why 0.00 is still printed wherever it is the true answer.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How each column is worked out</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Work days</dt><dd>Distinct work dates with an approved shift. Two shifts on one day is one work day.</dd></div>
+        <div class="detail-item"><dt>Attended</dt><dd>Clock-out minus clock-in, summed. Blank while no approved shift in the window has been clocked out.</dd></div>
+        <div class="detail-item"><dt>Booked</dt><dd>Every minute booked to an activity on those shifts, direct and indirect together.</dd></div>
+        <div class="detail-item"><dt>Direct</dt><dd>Value-adding work — picking, packing, put-away, counting, loading.</dd></div>
+        <div class="detail-item"><dt>Indirect</dt><dd>Necessary time that moves no unit — travel, breaks, training, meetings, waiting, cleaning.</dd></div>
+        <div class="detail-item"><dt>Unaccounted</dt><dd>Attended minus booked across the whole period, floored at zero. Time on the clock that nothing was booked against.</dd></div>
+        <div class="detail-item"><dt>Over-booked</dt><dd>Booked minus attended across the whole period, floored at zero. Usually a forgotten stop or a double-scanned badge.</dd></div>
+        <div class="detail-item"><dt>Earned</dt><dd>The engineered standard for the work actually done. Blank when nothing they did carried a standard.</dd></div>
+        <div class="detail-item"><dt>Performance</dt><dd>Earned ÷ the direct time that carried a standard. Unmeasured minutes are excluded from BOTH sides, so work nobody has time-studied yet cannot drag somebody down.</dd></div>
+        <div class="detail-item"><dt>Utilisation</dt><dd>Booked ÷ attended, over closed shifts only. A shift with no clock-out yet has no denominator, so it is left out rather than divided by nothing.</dd></div>
+      </dl>
+      <p class="text-muted">{{ gap_note }}</p>
+      <p class="text-muted">
+        Every one of these is <span class="fw-600">unanswerable rather than zero</span> when its denominator is
+        missing, and prints as a dash. That is not a display nicety: a 0% utilisation against a named person on a
+        page a pay clerk reads is a claim about how they spent their shift, and this page will not make one it
+        cannot support.
+      </p>
+    </div>
+  </div>
+
+  {% comment %} ================= the standing systems-of-record note, printed verbatim ================= {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">This page reads nothing from HR or Payroll, and writes nothing to them</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">hrm.AttendanceRecord</span>
+        <span class="badge badge-slate">hrm.Timesheet</span>
+        <span class="badge badge-slate">accounting.PayrollRun</span>
+        <span class="badge badge-muted">No read · no write · no foreign key</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">
+        <span class="fw-600">This is an export for payroll to consume, not a payroll posting.</span> The three
+        systems named below own pay; SCM 4.14 owns what happened on the warehouse floor. This page queries none
+        of them, writes to none of them, and holds no foreign key into any of them — the hand-off deliberately
+        stops at a file that a person carries across, because a second writer of one hours figure is exactly how
+        two systems come to disagree about what somebody is owed.
+      </p>
+      <dl class="detail-grid">
+        {% for entry in systems_of_record %}
+          <div class="detail-item">
+            <dt class="mono">{{ entry.system }}</dt>
+            <dd>{{ entry.owns }}</dd>
+          </div>
+        {% endfor %}
+      </dl>
+      <p class="text-muted">
+        In particular, nothing here drafts an <a href="{% url 'accounting:payroll_run_list' %}">accounting.PayrollRun</a>.
+        A payroll run is a <span class="fw-600">whole-company period accrual</span> — one document for the period,
+        with no employee lines and no hours columns anywhere on it. There is no field on it for any figure in the
+        table above, so raising one from warehouse labour would not be merely redundant, it would be
+        <span class="fw-600">wrong</span>: it would state a company-wide accrual as though a subset of one
+        department's shifts had produced it. The reconciliation between this file and
+        <span class="mono">hrm.AttendanceRecord</span> happens on (worker, work date) by eye, in the payroll
+        office, by somebody accountable for the result — never by a foreign key drawn between two systems that
+        are counting different things.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Approval is the export lock.</span> There is no "exported" flag and no
+        <span class="mono">exported_at</span> column to set: a download is a GET, and a GET that wrote one would
+        make a refresh, a browser prefetch or a crawler indistinguishable from a second export. "Who downloaded
+        what, and when" is an audit-log question, and it is answered there.
+      </p>
+    </div>
+  </div>
+{% endblock %}
