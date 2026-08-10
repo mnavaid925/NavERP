@@ -3,6 +3,8 @@
 Helpers used by MORE THAN ONE sub-module/entity live here; anything used by a single entity stays in
 that entity's own view module (mirrors apps/accounting/views/_helpers.py).
 """
+import datetime
+
 from apps.scm.views._common import *  # noqa: F401,F403
 
 # Defined once in the forms toolkit and re-exported here rather than duplicated: the buy-from-party
@@ -450,3 +452,64 @@ def _status_transition(request, model, pk, detail, *, from_statuses, to_status, 
                     {"action": action, "status": to_status, **(audit or {})})
     messages.success(request, message or f"{obj.number} {verb}.")
     return detail(pk)
+
+
+def _report_day(raw):
+    """A ``YYYY-MM-DD`` GET value as a date, or ``None`` if it is anything else.
+
+    Promoted from 4.14's report module; 4.12 and 4.13 each had their own copy (``_parse_date`` /
+    ``_day``), all three ending in the identical analytics-bounds clamp.
+
+    Returns None rather than raising, because the window comes out of the query string: a truncated
+    or hand-typed ``?date_from=lastweek`` must drop the filter, never 500 (L11's rule applied to a
+    date instead of an int). ``date.fromisoformat`` ALSO raises ``ValueError`` on a value that is
+    well FORMATTED but not a real day (``2026-02-30``, ``9999-99-99``), which is exactly as much
+    "not a date" and takes the same answer.
+
+    Clamped to the analytics period bounds for a second, separate reason: a date within a year of
+    ``date.min`` makes the ``- timedelta(days=…)`` default-window arithmetic in :func:`_report_window`
+    raise ``OverflowError``, which is an uncaught 500 rather than a validation error.
+    """
+    from apps.scm import analytics
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        value = datetime.date.fromisoformat(raw)
+    except (ValueError, TypeError):
+        return None
+    if not (analytics.MIN_PERIOD_DATE <= value <= analytics.MAX_PERIOD_DATE):
+        return None
+    return value
+
+
+def _report_window(data, default_from, default_to):
+    """Resolve ``?date_from=&date_to=`` against a page's own defaults. Returns a dict.
+
+    One implementation for every dated report page in the app. There were three, and two of them
+    were both called ``_window`` with **incompatible signatures** (``_window(request)`` returning a
+    5-tuple in 4.12 and 4.13, ``_window(data, …)`` returning a dict in 4.14) — which is worse than
+    plain duplication, because code moved between those modules fails in a way that looks like a
+    typo. This is 4.14's shape, which takes the defaults explicitly instead of hard-coding one
+    page's window inside a shared helper.
+
+    ``window_invalid`` reports that a value was typed and REJECTED, so a page can say "showing the
+    default window" rather than silently ignoring what somebody asked for. A reversed window is
+    SWAPPED rather than rendered as nothing — a ``from`` after a ``to`` is a typo, not an empty
+    result — and flagged, so the page can say it was corrected.
+    """
+    raw_from = (data.get("date_from") or "").strip()
+    raw_to = (data.get("date_to") or "").strip()
+    date_from, date_to = _report_day(raw_from), _report_day(raw_to)
+    invalid = bool(raw_from and date_from is None) or bool(raw_to and date_to is None)
+    if date_from is None:
+        date_from = default_from
+    if date_to is None:
+        date_to = default_to
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+        invalid = True
+    return {"date_from": date_from, "date_to": date_to,
+            "date_from_raw": raw_from, "date_to_raw": raw_to,
+            "window_invalid": invalid,
+            "period_label": f"{date_from:%d %b %Y} to {date_to:%d %b %Y}"}
