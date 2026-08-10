@@ -106,7 +106,8 @@ from django.db.models.functions import Coalesce
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _acting_party, _date_window, _location_qs, _need_tenant
+from apps.scm.views._helpers import (_acting_party, _date_window, _location_qs, _need_tenant,
+                                     _status_transition)
 # Views legitimately depend on forms for the shared party querysets — the `_supplier_parties`
 # precedent in views/_helpers.py. The `worker` filter dropdown must offer the same set the form's
 # `worker` field offers, or the filter lists people the field cannot select.
@@ -254,60 +255,21 @@ def _delete_refusal(obj):
     return ""
 
 
-def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None, audit=None,
-                message=None, precheck=None):
-    """Guard, stamp, audit, redirect — the shape every plain status verb in this file shares.
+def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None,
+                audit=None, message=None, precheck=None):
+    """Delegates to the shared :func:`_status_transition` — see it for the locking contract.
 
-    ``action`` and ``verb`` are two different things and both are needed. ``action`` is the SLUG the
-    audit row is keyed on (``close`` / ``reopen`` / …), matching 4.12's and 4.13's trail so the log
-    stays filterable — ``"clocked out"`` as an ``action`` value is a sentence, not a key, and it
-    would be the only entry in the application nobody could query for. ``verb`` is the past
-    participle the two human messages read with ("… cannot be closed", "LSN-00001 closed.").
-
-    The row is taken ``FOR UPDATE`` and its status re-read INSIDE ``transaction.atomic()``: two
-    concurrent POSTs (a double-click at a timeclock, a retry, a replay) would otherwise both see
-    ``closed`` and each stamp ``approved_at``, and the second stamp is the one that survives. The
-    object is resolved BEFORE the status guard so a cross-tenant pk answers 404 rather than a 302
-    that leaks "there is a row there, you just cannot move it" (the 4.12 finding).
-
-    ``precheck`` is evaluated INSIDE the lock, never by the caller before it. A guard that reads
-    anything other than this row's own columns — a sibling session's status, a child activity count —
-    is a plain snapshot read when it runs outside the lock: it answers about the state the request
-    started in, and the write then waits for the lock and lands the moment the competing transaction
-    commits (the 4.13 cancel/delete TOCTOU fix, priced in here from the start).
-
-    ``save(update_fields=…)`` is narrow on purpose — a full ``save()`` would write back every
-    in-memory column, including any a concurrent edit had just changed. ``updated_at`` is
-    ``auto_now``, so it only fires when it is IN the list. A ``None`` in ``stamps`` is a deliberate
-    CLEAR (reopen empties three columns), not an "unset" to be skipped.
+    Kept as a two-line local so every verb below still reads ``_transition(request, pk, ...)`` and
+    neither the model nor ``_detail`` is repeated eleven times. The body used to live here; it was
+    byte-identical to 4.13's and to 4.14's own plan module, and a concurrency guard maintained in
+    three places is a concurrency guard fixed in one and missed in two.
     """
-    with transaction.atomic():
-        obj = get_object_or_404(LaborSession.objects.select_for_update(),
-                                pk=pk, tenant=request.tenant)
-        if obj.status not in from_statuses:
-            messages.error(request, f"{obj.number} cannot be {verb} — it is "
-                                    f"{obj.get_status_display().lower()}.")
-            return _detail(pk)
-        if precheck is not None:
-            refusal = precheck(obj)
-            if refusal:
-                messages.error(request, refusal)
-                return _detail(pk)
-
-        fields = ["status", "updated_at"]
-        obj.status = to_status
-        for field, value in (stamps or {}).items():
-            setattr(obj, field, value)
-            fields.append(field)
-        obj.save(update_fields=list(dict.fromkeys(fields)))
-
-    write_audit_log(request.user, obj, "update",
-                    {"action": action, "status": to_status, **(audit or {})})
-    messages.success(request, message or f"{obj.number} {verb}.")
-    return _detail(pk)
+    return _status_transition(
+        request, LaborSession, pk, _detail,
+        from_statuses=from_statuses, to_status=to_status, action=action, verb=verb,
+        stamps=stamps, audit=audit, message=message, precheck=precheck)
 
 
-# ======================================================================================= the list
 @login_required
 def laborsession_list(request):
     """Search + three filters + a work-date window + the derived gap filter.
