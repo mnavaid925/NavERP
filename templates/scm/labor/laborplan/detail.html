@@ -93,7 +93,7 @@ badge-danger do not exist and render unstyled (L33).
       <div class="stat-value">{% if totals.shift_gap is None %}—{% else %}{{ totals.shift_gap|floatformat:2 }}{% endif %}</div>
       <div class="stat-label">
         {% if totals.shift_gap is None %}Nothing to compare yet
-        {% elif totals.shift_gap < 0 %}Short by {{ totals.shift_gap|floatformat:2 }} — signed, so a cushion and a shortfall never look alike
+        {% elif totals.shift_gap < 0 %}Short by {{ totals.shift_gap|floatformat:2|cut:"-" }} — the stat above stays signed, so a cushion and a shortfall never look alike
         {% elif totals.shift_gap > 0 %}A cushion of {{ totals.shift_gap|floatformat:2 }} — reported, not refused
         {% else %}Planned exactly matches required{% endif %}
       </div>
