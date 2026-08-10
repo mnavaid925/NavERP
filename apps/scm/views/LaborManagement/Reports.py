@@ -164,6 +164,12 @@ from apps.scm.views.SupplyChainAnalytics.Reports import _csv_response
 # apply_search is the shared OR-of-icontains builder crud_list uses; the board hand-rolls its
 # queryset (three models, three different open-status sets) but must not hand-roll the search.
 from apps.core.crud import apply_search
+# The audit rows for a bulk assign are built and inserted in ONE bulk_create rather than
+# one write_audit_log call per row. Same columns, same content — `write_audit_log` is
+# still the right helper everywhere a single object changes, and every other verb in 4.14
+# uses it. This one path writes up to MAX_BULK_ASSIGN rows at once inside a held lock.
+from django.contrib.contenttypes.models import ContentType
+from apps.core.models import AuditLog
 # q2 lives in the MODELS toolkit — views/_common.py deliberately does not re-export it (the 4.11
 # alert views and the 4.12 carbon report import it the same way).
 from apps.scm.models._base import q2
@@ -1257,6 +1263,9 @@ def _bulk_assign(request, *, assign):
 
     target_id = target.pk if target is not None else None
     changed, unchanged = 0, 0
+    # Resolved ONCE. ContentType.objects.get_for_model is cached per process, but reading it
+    # out of the row loop keeps the loop free of anything that could touch the database.
+    content_type = ContentType.objects.get_for_model(spec["model"])
     with transaction.atomic():
         # step 4 — the tenant filter and the open-status filter ARE the authorization check here.
         # `select_for_update` so two supervisors assigning the same task serialise instead of one
@@ -1265,19 +1274,59 @@ def _bulk_assign(request, *, assign):
                     .filter(pk__in=ids, tenant=request.tenant, status__in=spec["statuses"])
                     .select_for_update())
         skipped = len(ids) - len(rows)
+
+        # DELIBERATELY no select_related on the locking query above. On MySQL/MariaDB a
+        # `SELECT ... FOR UPDATE` with joins locks the JOINED rows too, so pulling `item` and
+        # `to_location` in there would lock 4.3's Item and Location masters for the duration of a
+        # bulk assign — a board button freezing the item master is a far worse bug than the one
+        # being fixed. The display objects come from a second, lock-free query instead.
+        #
+        # They are needed because `write_audit_log` stores `str(obj)`, and two of the three task
+        # models walk FKs to build it: `PutawayTask.__str__` dereferences `to_location` AND `item`,
+        # `CycleCountTask.__str__` dereferences `location`. Unprefetched that is 1-2 extra queries
+        # PER ROW, on top of the per-row UPDATE and the per-row audit INSERT — measured at 3.1 / 5.1
+        # / 4.1 queries per row for pick / put-away / count, i.e. roughly 620 / 1020 / 820 queries at
+        # the documented MAX_BULK_ASSIGN of 200, every one of them inside this transaction while it
+        # holds FOR UPDATE on 200 rows of another sub-module's table.
+        display = {}
+        if rows:
+            display = {o.pk: o for o in
+                       spec["model"].objects
+                       .filter(pk__in=[r.pk for r in rows])
+                       .select_related(*spec["select_related"])}
+
+        pending, audit_rows = [], []
+        stamped_at = timezone.now()
         for row in rows:                    # step 5
             if row.assigned_to_id == target_id:
                 unchanged += 1
                 continue
             before = row.assigned_to_id
             row.assigned_to = target
-            row.save(update_fields=["assigned_to", "updated_at"])
-            write_audit_log(request.user, row, "update", {
-                "action": "assign" if assign else "unassign",
-                "kind": spec["kind"],
-                "assigned_to": [before, target_id],
-            })
+            # bulk_update does not fire auto_now, so updated_at is stamped explicitly. Leaving it to
+            # the field would silently freeze the timestamp on every bulk-assigned task.
+            row.updated_at = stamped_at
+            pending.append(row)
+            audit_rows.append(AuditLog(
+                tenant=request.tenant,
+                user=request.user if request.user.is_authenticated else None,
+                content_type=content_type,
+                object_id=row.pk,
+                target=str(display.get(row.pk, row))[:255],
+                action="update",
+                changes={"action": "assign" if assign else "unassign",
+                         "kind": spec["kind"],
+                         "assigned_to": [before, target_id]},
+            ))
             changed += 1
+
+        # Three queries instead of three per row. The audit rows are built from the SAME data the
+        # per-row calls produced — same target string, same action, same before/after pair — so the
+        # trail is unchanged in content, only in how it is written.
+        if pending:
+            spec["model"].objects.bulk_update(pending, ["assigned_to", "updated_at"],
+                                              batch_size=200)
+            AuditLog.objects.bulk_create(audit_rows, batch_size=200)
 
     if changed:
         who = f"to {target}" if assign else "from their previous owner"
