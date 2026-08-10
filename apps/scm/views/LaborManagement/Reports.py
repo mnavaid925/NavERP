@@ -1021,12 +1021,35 @@ def _board_queryset(spec, tenant, data):
     # never multiply one, which is what keeps the reverse-join Counts annotated below honest under
     # a search — a fanned-out row would double every line count on the board.
     qs = apply_search(qs, (data.get("q") or "").strip(), spec["search_fields"])
+
+    # THE SLICE IS TAKEN IN TWO STEPS, and the reason is the whole point of this function.
+    #
+    # The obvious one-step version — annotate, then `[:MAX_BOARD_ROWS + 1]` — reads as if the LIMIT
+    # bounds the work. It does not. Annotating adds a GROUP BY, and the generated SQL is
+    # `... GROUP BY picktask.id, location.id, user.id ORDER BY created_at LIMIT 201`: with a
+    # GROUP BY ahead of it, the engine must materialise EVERY group before it can sort and take 201.
+    # So on the two annotated kinds the database grouped the entire open backlog on every board
+    # load — 40,000 open picks joined to their lines is ~200,000 rows aggregated to display 200.
+    # Three queries either way, so no N+1 and nothing a query COUNT would ever reveal; it is a
+    # cost-per-query problem that grows silently with the backlog. That is precisely the L40 §1
+    # shape: a bound that first computes the thing it is bounding is not a bound.
+    #
+    # Step 1 takes the pks with NO annotation, so there is no GROUP BY and the LIMIT is pushed down
+    # against the (tenant, status) index. Step 2 re-selects exactly those rows and annotates only
+    # them. One extra, very cheap query buys a slice that genuinely bounds the aggregate.
+    # `values_list` is applied after every filter above, which it must be — the filters decide WHICH
+    # rows are in the window, and moving them after the slice would cap the wrong set.
+    pks = list(qs.order_by("created_at", "id")
+                 .values_list("pk", flat=True)[:MAX_BOARD_ROWS + 1])
+    if not pks:
+        return model.objects.none()
+    # +1 above so the caller can tell "exactly at the cap" from "there is more behind it" without a
+    # second COUNT over the same queue.
+    bounded = (model.objects.filter(pk__in=pks)
+               .select_related(*spec["select_related"]))
     if spec["annotate"] is not None:
-        qs = spec["annotate"](qs)
-    # +1 so the caller can tell "exactly at the cap" from "there is more behind it" without a
-    # second COUNT over the same queue. Slicing LAST, so the LIMIT lands in the database and the
-    # annotations are computed for the rows that survive it — not for the whole backlog (L40 §1).
-    return qs.order_by("created_at", "id")[:MAX_BOARD_ROWS + 1]
+        bounded = spec["annotate"](bounded)
+    return bounded.order_by("created_at", "id")
 
 
 def _open_session_map(tenant):
