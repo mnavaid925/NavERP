@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — shared create/edit form for one LaborPlan.
+
+Renders apps/scm/views/LaborManagement/LaborPlans.py::_laborplan_form, which is hand-rolled rather
+than routed through crud_create / crud_edit so that a newly saved plan lands on its own DETAIL page
+— one click from the Generate button that is the entire next step. Everything this page may read,
+and nothing else:
+
+  form     LaborPlanForm (bound on POST)
+  is_edit  False on create, True on edit
+  obj      the LaborPlan on the EDIT path and None on create, so every reference to it below sits
+           inside an `is_edit` branch and is never rendered bare
+
+Fields are rendered BY NAME so the staffing question can be grouped the way a planner thinks about
+it, which couples this page to LaborPlanForm.Meta.fields: that whitelist is twelve names and all
+twelve are below. A field added to the model and to the whitelist but not to a group here would
+never reach the POST — and on edit it would be silently blanked on every save.
+
+WHAT THE FORM DELIBERATELY DOES NOT OFFER, and why the absence is the mechanism (not a check):
+tenant and number are stamped on save, and `status` / `generated_at` / `approved_by` / `approved_at`
+are all editable=False and moved only by the generate / approve / archive verbs. A crafted
+status=approved in a POST body cannot land — not because a view rejects it, but because there is no
+path from form data to the column at all.
+
+The period contract, the horizon cap and the volume-source pairing live in LaborPlan.clean(), not
+here and not in the form, so the seeder and any future revise action inherit one implementation.
+Those refusals arrive as FIELD errors on period_start / period_end / demand_forecast / location —
+every one of which is rendered below with its own errors, plus form.non_field_errors at the top of
+the first card.
+
+No delete button here. Deleting is POST-only and tenant-admin-gated and lives on the plan's own
+page, where the line count that makes the consequence readable actually exists; a form nested inside
+this form would be invalid HTML anyway.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Labour Plan{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit Labour Plan{% else %}New Labour Plan{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:laborplan_list' %}">Labour Plans</a><span class="sep">›</span>
+      <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span>
+    </div>
+    <p class="text-muted">Everything on this form is the staffing <span class="fw-600">question</span> — which site, which dates, which grain, where the volume comes from and how it becomes people. Nothing here executes: no grid is built until Generate is pressed on the plan's own page, and no stock movement or accounting document is written by this sub-module at all. The LPL- number is assigned on save, so there is no number field.</p>
+  </div></div>
+
+  {% if is_edit %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{{ obj.number }} · {{ obj.name }}</h2>
+        <div class="badge-group">
+          <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+          <span class="badge badge-slate">{{ obj.get_bucket_display }}</span>
+        </div>
+      </div>
+      <div class="card-body text-muted">
+        A plan is editable only while it is <span class="fw-600">draft</span> or <span class="fw-600">planned</span>. Changing the horizon, the volume source or the productivity assumption <em>after</em> a regenerate is fine; changing them once a plan is approved would restate the question after the answer had been agreed, while leaving a grid on the page that was derived from the old values and now reconciles to nothing. That is why the view refuses it and offers Archive instead. Editing any of these fields does <span class="fw-600">not</span> rebuild the grid — press Generate afterwards, and note that each line's planned headcount and notes are not carried across a regenerate.
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the plan is</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">Leave the <span class="fw-600">site</span> blank to plan the whole network. A plan scoped to a warehouse or a zone reads volume from that location <em>and everything beneath it</em>, because the ledger is written at bin level while a plan is written at site level — filtering on the site exactly would produce a grid of zeroes for a perfectly ordinary plan and read as "this site has no work". The <span class="fw-600">grain</span> is the staffing decision being made: daily is what a shift manager actually decides, weekly is the seasonal look-ahead. There is deliberately no hourly grain — an hourly grid over a quarter is a row count nobody reviews.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.location %}
+          {% include "partials/form_field.html" with field=form.period_start %}
+          {% include "partials/form_field.html" with field=form.period_end %}
+          {% include "partials/form_field.html" with field=form.bucket %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">The period is capped at <span class="fw-600">366 buckets</span> — a year of days, or seven years of weeks — because the grid is one database row per bucket per in-scope standard, and an unbounded span is an unbounded bulk insert any planner could fire by pressing Generate. The span is measured by arithmetic on the two dates rather than by building the range, so a period that is too long is refused without ever allocating the list the bound exists to prevent. A weekly plan keeps <em>your</em> start weekday rather than snapping to Monday: moving it would mis-align every bucket against the volume history read for it.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Where the volume comes from</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The volume source names a ledger this system already keeps, and the history is <span class="fw-600">derived when Generate is pressed and never stored</span> — so a regenerate always reflects what actually happened rather than a stale copy of it. Each activity is driven by the flow that produces its work: receiving and put-away read what came <em>in</em>, picking, packing, loading, replenishment and value-added service read what went <em>out</em>, and cycle counting reads both added together, because counting workload tracks how much the site moves rather than which direction it moved in.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.volume_source %}
+          {% include "partials/form_field.html" with field=form.method %}
+          {% include "partials/form_field.html" with field=form.history_days %}
+          {% include "partials/form_field.html" with field=form.demand_forecast %}
+        </div>
+
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Volume source</th><th>What it reads</th><th>Whether the method and history window apply</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="fw-600">Stock movement history</td>
+                <td>Receipts and issues on the inventory ledger, in the site's tree. Manufacturing draws, MRO spares, transfers and adjustments are excluded — a transfer is a pair across two locations and would double-count one physical touch, and a quantity changing on paper is not a quantity anybody carried.</td>
+                <td><span class="badge badge-green">Both apply</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Pick task history</td>
+                <td>Lines actually picked, stamped when the pick happened — an open or cancelled task contributes nothing. This one series answers for every flow, which is the honest reading of the choice: it says <em>drive this whole site off order-picking volume</em>.</td>
+                <td><span class="badge badge-green">Both apply</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Goods receipt history</td>
+                <td>Received lines on receipts in the <em>received</em> state — a draft receipt is a document somebody is still filling in and a cancelled one is a delivery that never landed.</td>
+                <td><span class="badge badge-green">Both apply</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Demand forecast</td>
+                <td>The linked forecast's own periods, spread evenly across the days each covers. A 3,000-unit month becomes 100 a day, which a daily plan reads as 100 and a weekly one as 700.</td>
+                <td><span class="badge badge-amber">Neither</span> a forecast is already the forward projection those two exist to produce, so the statistical machinery stays in demand planning rather than being re-implemented here</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Manual entry</td>
+                <td>Nothing. Every line's required headcount is zero by construction and the roster is typed line by line — the honest answer for a brand-new site with no history at all.</td>
+                <td><span class="badge badge-muted">Neither</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="form-help" style="margin-top:.75rem;">The forecast and the volume source are paired <span class="fw-600">both ways</span> and a mismatch is refused as a field error: a forecast-driven plan with no forecast attached would generate an empty grid and look like a site with no work, while a forecast hung off a stock-moves plan is a pointer nothing consults — which is worse than none, because the header would name a forecast the numbers on the page were never derived from. <span class="fw-600">Same period last year</span> looks back 364 days rather than 365, so the comparison bucket lands on the same weekday: a Monday is not a Saturday's workload.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How volume becomes people</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">These two are the divisors behind every required headcount the generator will write:
+          <span class="mono">required minutes = standard minutes × 100 ÷ productivity</span>, then
+          <span class="mono">headcount = required minutes ÷ (hours per shift × 60)</span>.
+          At 90% productivity a bucket costing 1,000 standard minutes needs 1,111 real ones, which is the honest number to roster against — planning to the standard and hoping is how a site is understaffed every day and nobody can point at the assumption that did it. Neither may be zero, and that is not an arbitrary floor: a zero here is a division by zero inside the generator for every line in the grid, so the minimum is enforced on the field rather than discovered at the press of a button.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.hours_per_shift %}
+          {% include "partials/form_field.html" with field=form.productivity_pct %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">Free text for the reader of the plan — the peak being covered, the assumption being tested, the shift pattern that made the hours-per-shift figure what it is. Notes are searchable from the plan list alongside the number and the name.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create plan{% endif %}</button>
+      {% if is_edit %}
+        <a href="{% url 'scm:laborplan_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'scm:laborplan_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
+{% endblock %}
