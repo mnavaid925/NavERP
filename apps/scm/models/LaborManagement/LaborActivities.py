@@ -57,6 +57,7 @@ from apps.scm.models.LaborManagement._choices import (
     INDIRECT_ACTIVITIES,
     INDIRECT_REASON_CHOICES,
     MAX_ACTIVITY_MINUTES,
+    MAX_SNAPSHOT_MINUTES,
 )
 
 #: Local scalars for the two conversions this file does. Named rather than inlined so the percentage
@@ -396,7 +397,16 @@ class LaborActivity(TenantNumbered):
         rate = self.standard_rate_snapshot or ZERO
         allowance = self.standard_allowance_snapshot or ZERO
         quantity = self.quantity or ZERO
-        return q4((fixed + quantity * rate) * (Decimal("1") + allowance / _ONE_HUNDRED))
+        earned = q4((fixed + quantity * rate) * (Decimal("1") + allowance / _ONE_HUNDRED))
+        # q4() bounds this to DecimalField(14, 4) — TEN integer digits — but the column it is about
+        # to be written into is DecimalField(12, 4), which holds EIGHT. So q4() alone is not the
+        # bound it looks like: a quantity the form happily accepts (validated only up to MAX_Q4)
+        # produces a figure two orders of magnitude too wide for the column, and the failure is a
+        # DataError raised by the driver inside save() — an uncaught 500 on this sub-module's
+        # primary write path, not a validation message a user could act on.
+        # Clamping rather than raising matches q4()'s own posture: a single absurd row degrades to
+        # an absurd-but-storable number instead of taking down the save.
+        return min(earned, MAX_SNAPSHOT_MINUTES)
 
     @property
     def has_standard(self):
@@ -405,7 +415,20 @@ class LaborActivity(TenantNumbered):
         Asks the SNAPSHOTS, not ``standard_id``. The FK is ``SET_NULL``, so deleting a standard
         clears the pointer — and if that decided the question, every measurement the standard ever
         produced would evaporate the moment somebody tidied the library.
+
+        **An INDIRECT row is never measured, whatever it is carrying.** The create path already
+        refuses to stamp one (``_stamp_standard`` gates on ``is_direct``), but that is a gate on how
+        snapshots get WRITTEN, and there are other ways a row can end up holding them: editing a
+        direct activity's type to ``break`` keeps the determinants that were stamped when it was a
+        pick, and so would an admin edit or a future importer. Without this clause such a row reads
+        as measured and prints a ``performance_pct()`` on its own detail page — a worker credited
+        with achievement for being on a break.
+        Enforcing it HERE rather than in the edit view makes it true by construction for every
+        writer, which is the difference between an invariant and a habit. The session-level ratio
+        was already safe: ``LaborSession._measured()`` skips indirect rows outright.
         """
+        if self.activity_type in INDIRECT_ACTIVITIES:
+            return False
         return (self.standard_fixed_snapshot is not None
                 or self.standard_rate_snapshot is not None)
 
@@ -426,7 +449,14 @@ class LaborActivity(TenantNumbered):
         ``None`` when there is no standard. Every caller must cope with that rather than substitute
         zero — an activity nobody has time-studied is unmeasured, not failed, and it must drop out of
         both sides of the ratio instead of dragging one of them down.
+
+        Routed through :attr:`has_standard` rather than returning the column directly, so the
+        indirect-work rule that property enforces reaches this figure too: a break row holding
+        determinants from a previous activity type answers ``None`` here, not the minutes those
+        determinants would produce.
         """
+        if not self.has_standard:
+            return None
         return self.standard_minutes_snapshot
 
     def performance_pct(self):
