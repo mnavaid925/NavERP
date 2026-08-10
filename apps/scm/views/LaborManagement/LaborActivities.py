@@ -270,6 +270,32 @@ def _aware_bound(raw, *, end_of_day):
     return value
 
 
+#: How many sessions the activity list's session filter offers. Newest first, because the shift
+#: somebody is filtering by is almost always a recent one.
+_SESSION_FILTER_LIMIT = 200
+
+
+def _session_filter_options(tenant, selected_pk):
+    """The bounded session list for the filter dropdown, with the selected one guaranteed present.
+
+    Two queries at worst, one in the normal case. The second only fires when the pk in ``?session=``
+    is older than the window — which is exactly the deep-link case that must not silently reset to
+    "All sessions", and is why this cannot just be a slice.
+    """
+    if tenant is None:
+        return []
+    qs = (LaborSession.objects.filter(tenant=tenant)
+          .select_related("worker")
+          .order_by("-work_date", "-clock_in", "-id"))
+    sessions = list(qs[:_SESSION_FILTER_LIMIT])
+    if selected_pk is not None and all(s.pk != selected_pk for s in sessions):
+        extra = (LaborSession.objects.filter(pk=selected_pk, tenant=tenant)
+                 .select_related("worker").first())
+        if extra is not None:
+            sessions.insert(0, extra)
+    return sessions
+
+
 def _started_window(qs, data):
     """Apply ``?date_from=&date_to=`` to ``started_at`` through the SHARED ``_date_window`` helper.
 
@@ -350,8 +376,16 @@ def laboractivity_list(request):
             # sessions" (the 4.8 finding on ProductionTimeLog's work-order filter).
             # `LaborSession.__str__` walks `worker.name`, so the select_related is what stops one
             # query per <option>.
-            "sessions": (LaborSession.objects.filter(tenant=request.tenant)
-                         .select_related("worker")),
+            # ...but BOUNDED, because "every session ever" is not a dropdown. LaborSession is one row
+            # per worker per shift, so a 60-person warehouse writes ~15,000 a year and every one
+            # would become an <option> on the filter bar of a page that renders 15 rows — megabytes
+            # of HTML and DOM to filter a paginated list.
+            # The two properties above are both preserved: the newest _SESSION_FILTER_LIMIT are
+            # offered, and if the CURRENTLY SELECTED session is older than that it is fetched and
+            # prepended, so a deep link from a signed-off shift still binds instead of silently
+            # resetting to "All sessions". Worst case two queries, bounded payload.
+            "sessions": _session_filter_options(request.tenant,
+                                                as_db_int(request.GET.get("session"))),
             # The same set the session form offers, so the filter cannot list a person no shift could
             # ever have been filed against.
             "workers": _employee_parties(request.tenant),
