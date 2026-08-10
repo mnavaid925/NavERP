@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — the labour plan register (SAP EWM's planned workload document).
+
+Renders apps/scm/views/LaborManagement/LaborPlans.py::laborplan_list, which returns crud_list(...).
+Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py)
+  status_choices               [(value, label), …] — PLAN_STATUS_CHOICES, 4 pairs
+  bucket_choices               [(value, label), …] — PLAN_BUCKET_CHOICES, 2 pairs
+  volume_source_choices        [(value, label), …] — VOLUME_SOURCE_CHOICES, 5 pairs
+  method_choices               [(value, label), …] — PLAN_METHOD_CHOICES, 4 pairs
+  locations                    Location queryset, tenant-scoped (__str__ is "code · name")
+  stats                        {draft, planned, approved, archived} — real ints, over the WHOLE
+                               workspace rather than the filtered page
+
+EVERY ROW additionally carries four annotations the view computes in ONE grouped aggregate
+(_with_grid_totals): row.line_count, row.required_shifts, row.planned_shifts and row.shift_gap.
+Those are what the grid columns read. Reading obj.totals() here instead would be an aggregate PER
+ROW — 15 extra queries a screen.
+
+THE UNIT IS PERSON-SHIFTS, NOT HEADCOUNT, and the column headings say so. Headcount does not add up
+across buckets — two people on Monday and two on Tuesday is two people, not four — so the plan-wide
+sums are labelled shifts. The one place a headcount sum means anything is the per-bucket rollup on
+the plan's own page, because that is one day's roster.
+
+All three annotations are Coalesce'd in the view and so are a real 0 (never None) on a plan nobody
+has generated yet, which is exactly the plan that most needs "0" printed against it. They are still
+rendered through an explicit `is None` branch: |default:"—" would swallow a true zero, and
+|default_if_none after |floatformat never fires because floatformat turns None into "".
+
+obj.demand_forecast.number and NOT {{ obj.demand_forecast }} — the list select_related's are
+(location, demand_forecast, approved_by) with no demand_forecast__item, and DemandForecast.__str__
+dereferences self.item.sku. Printing the object would be one query per forecast-driven row. `number`
+is a local column on the already-joined row and costs nothing.
+
+Filter params: q / status / bucket / volume_source / method are STRING columns and compare against
+request.GET.<param> directly; location is a PK and compares with |stringformat:"d" — |slugify would
+be wrong. date_from / date_to window period_start (a plain DateField, inclusive at both ends); junk
+input skips the filter rather than 500-ing.
+
+Badge classes come from the model — obj.status_css (PLAN_STATUS_CSS). theme.css ships COLOUR-named
+badges only: badge-success / badge-warning / badge-danger do not exist and render as an unstyled
+pill with no error anywhere (L33).
+
+Edit is gated on obj.is_editable, which reads `status` alone and costs no query — laborplan_edit
+redirects an approved or archived plan straight back with a message, so the link would be a one-click
+failure. Delete is gated on the SAME condition plus the house admin gate, because laborplan_delete is
+@tenant_admin_required: offering a member a button they will 403 on is the 4.11 finding.
+{% endcomment %}
+{% block title %}Labour Plans{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Labour Plans</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Labour Plans</span></div>
+      <p class="text-muted">A plan is an <span class="fw-600">artefact, not a screen</span>: one row per staffing question — this site, these dates, this grain — generated once from the live ledgers and then reviewed by a human. That matters because the volumes it was built from keep moving. A plan computed live would silently re-answer last week's staffing question with this week's data, and nobody could ever say what the roster was actually decided on. The set of activities a plan covers is a consequence of the <a href="{% url 'scm:laborstandard_list' %}">standards library</a> rather than a list somebody maintains: an activity with no active standard has no minutes to plan with and is not planned.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> Standards</a>
+      <a href="{% url 'scm:labor_board' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Labour Board</a>
+      <a href="{% url 'scm:laborplan_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Labour Plan</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, not over the filtered page: "3 plans awaiting approval" is a
+    fact somebody has to act on, and a number that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one site. The filtered count is the badge in the card header
+    below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-pen-line"></i></div>
+      <div class="stat-value">{{ stats.draft }}</div>
+      <div class="stat-label">Draft · the question is written, the grid has never been built</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="table-2"></i></div>
+      <div class="stat-value">{{ stats.planned }}</div>
+      <div class="stat-label">Planned · generated and waiting for somebody to sign it off</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="badge-check"></i></div>
+      <div class="stat-value">{{ stats.approved }}</div>
+      <div class="stat-label">Approved · the roster a site is actually staffing to</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="archive"></i></div>
+      <div class="stat-value">{{ stats.archived }}</div>
+      <div class="stat-label">Archived · retired without destroying the roster somebody staffed to</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Plans</h2>
+      <div class="badge-group">
+        {% if stats.planned %}<span class="badge badge-info">{{ stats.planned }} awaiting approval</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search LPL- number, plan name or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="bucket" aria-label="Bucket" class="form-select">
+            <option value="">Any grain</option>
+            {% for val, label in bucket_choices %}
+              <option value="{{ val }}" {% if request.GET.bucket == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="volume_source" aria-label="Volume source" class="form-select">
+            <option value="">Any volume source</option>
+            {% for val, label in volume_source_choices %}
+              <option value="{{ val }}" {% if request.GET.volume_source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="method" aria-label="Method" class="form-select">
+            <option value="">Any method</option>
+            {% for val, label in method_choices %}
+              <option value="{{ val }}" {% if request.GET.method == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            PK dropdown — |stringformat:"d" and never |slugify. The view routes this filter through
+            crud_list's is_int leg, so a hand-edited ?location=abc skips the filter instead of
+            500-ing. The list is deliberately not narrowed to active locations: a plan written for a
+            site later deactivated is still a row somebody filters for, and hiding the option would
+            make it unfindable.
+          {% endcomment %}
+          <select name="location" aria-label="Site" class="form-select">
+            <option value="">Whole network</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ request.GET.date_from }}" aria-label="Starting from" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ request.GET.date_to }}" aria-label="Starting to" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:laborplan_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The two dates window the plan's <span class="fw-600">start date</span> and are inclusive at both ends. Unparseable input skips the filter rather than refusing the page, so a hand-edited address bar can never 500 this list. The site filter matches the plan's own scope exactly — a plan scoped to a zone does not appear under its parent warehouse here, even though the generator reads volume from the whole tree beneath it.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Site</th>
+            <th>Period</th>
+            <th>How it is priced</th>
+            <th>Grid</th>
+            <th>Required vs planned <span class="text-muted">(person-shifts)</span></th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:laborplan_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+                <div class="form-help"><span class="badge badge-slate">{{ obj.get_bucket_display }}</span></div>
+              </td>
+              <td>
+                {% if obj.location %}
+                  {{ obj.location.code }}
+                  <div class="text-muted">{{ obj.location.name }}</div>
+                {% else %}
+                  <span class="badge badge-info">Whole network</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {{ obj.period_start|date:"M d, Y" }}
+                <div class="form-help">to {{ obj.period_end|date:"M d, Y" }}</div>
+                <div class="form-help">{{ obj.period_count }} bucket{{ obj.period_count|pluralize }}</div>
+              </td>
+              <td>
+                {{ obj.get_volume_source_display }}
+                {% comment %}
+                  A forecast-driven plan does not consult its method at all — a forecast is ALREADY
+                  the forward projection the three arithmetic methods exist to produce — so printing
+                  the method beside it would name an input the numbers were never derived from. Only
+                  the forecast's `number` is printed: DemandForecast.__str__ dereferences item.sku
+                  and this list does not join the item, so the object itself would be a query a row.
+                {% endcomment %}
+                {% if obj.volume_source == "demand_forecast" %}
+                  <div class="form-help mono">{% if obj.demand_forecast %}{{ obj.demand_forecast.number }}{% else %}<span class="badge badge-red">No forecast attached</span>{% endif %}</div>
+                {% else %}
+                  <div class="form-help">{{ obj.get_method_display }}{% if obj.method != "manual" and obj.volume_source != "manual" %} · {{ obj.history_days }}d history{% endif %}</div>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if obj.line_count is None %}—{% else %}{{ obj.line_count }}{% endif %}
+                <div class="form-help">
+                  {% if obj.line_count %}
+                    line{{ obj.line_count|pluralize }} generated
+                  {% else %}
+                    <span class="text-muted">Never generated</span>
+                  {% endif %}
+                </div>
+              </td>
+              {% comment %}
+                Both sums are the view's annotations, computed for the whole page in ONE grouped
+                aggregate; obj.totals() would be an aggregate per row. Coalesce is what keeps an
+                un-generated plan printing 0.00 rather than blanking, and the explicit `is None`
+                branch is what keeps a true 0.00 printing as 0.00 rather than as an em dash.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if obj.required_shifts is None %}—{% else %}{{ obj.required_shifts|floatformat:2 }}{% endif %}
+                <span class="text-muted">req</span> ·
+                {% if obj.planned_shifts is None %}—{% else %}{{ obj.planned_shifts|floatformat:2 }}{% endif %}
+                <span class="text-muted">plan</span>
+                <div class="form-help">
+                  {% if obj.shift_gap is None %}
+                    <span class="badge badge-muted">—</span>
+                  {% elif obj.shift_gap < 0 %}
+                    <span class="badge badge-red">{{ obj.shift_gap|floatformat:2 }} short</span>
+                  {% elif obj.shift_gap > 0 %}
+                    <span class="badge badge-amber">+{{ obj.shift_gap|floatformat:2 }} cushion</span>
+                  {% else %}
+                    <span class="badge badge-green">Balanced</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                {% if obj.generated_at %}<div class="form-help">Generated {{ obj.generated_at|date:"M d, Y H:i" }}</div>{% endif %}
+                {% if obj.approved_at %}<div class="form-help">Signed off {{ obj.approved_at|date:"M d, Y" }}{% if obj.approved_by %} by {{ obj.approved_by.get_full_name|default:obj.approved_by.username }}{% endif %}</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:laborplan_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    is_editable is EDITABLE_STATUSES (draft, planned) and reads `status` alone, so
+                    this costs no query. An approved plan is the roster a site is staffing to and an
+                    archived one is history — laborplan_edit redirects both straight back with a
+                    message, so the link would be a one-click failure.
+                  {% endcomment %}
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:laborplan_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    Same two gates laborplan_delete enforces — @tenant_admin_required and the same
+                    is_editable refusal — so a member is never offered a button they will 403 on and
+                    nobody is offered a press the view will refuse. Only the system-generated LPL-
+                    number goes into the confirm string; the plan NAME is user-typed and an
+                    apostrophe in it escapes to &#x27;, which the HTML parser hands to JavaScript as
+                    a bare quote and the dialog breaks.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if obj.is_editable %}
+                      <form method="post" action="{% url 'scm:laborplan_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every generated plan line goes with it and cannot be reconstructed without regenerating. Archive it instead — an archived plan keeps its whole grid and stays readable.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="users"></i>
+                  <h3>No labour plans</h3>
+                  <p>Nobody has written a staffing question yet. Create one here — a site, a period and a grain — and it starts as a <span class="fw-600">draft</span> with no grid at all. Pressing Generate on its own page is what derives the volume from the live ledgers, prices it against the standards library and builds one line per bucket × activity; that press is the only route into <span class="fw-600">planned</span>. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">period start, newest first</span>. Required and planned are summed across every bucket and every activity, so they are denominated in <span class="fw-600">person-shifts</span> and not in people: headcount does not add up across days, and calling the total a headcount would be a confidently wrong number on the most-read column of the page. The one place a headcount sum is meaningful is the per-bucket rollup on a plan's own page, because that is one day's roster. Nothing on this page posts a stock movement or drafts an accounting document — a plan reads the ledgers and writes only its own lines.
+    </div>
+  </div>
+{% endblock %}
