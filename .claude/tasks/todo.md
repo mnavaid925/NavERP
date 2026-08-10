@@ -21965,6 +21965,9 @@ Carried over from `research-scm-4.15.md` so nothing is lost, plus what this plan
 
 (filled in at the end of the pass)
 
+<!-- ===== END OF THE 4.15 COLD CHAIN PLAN. The 4.16 Customer Portal plan is appended below the
+     stale duplicated 4.13 review-notes block that closes this file. Do not edit above this line. ===== -->
+
 ---
 
 ## Review notes
@@ -22013,4 +22016,975 @@ a system-filed meter reading onto somebody else's job.
 A parallel session began building **4.14 Labor Management** in the same working tree during close-out
 (it created `apps/scm/forms/LaborManagement/` and lifted the shared form helpers into
 `forms/_common.py`). Those changes were left uncommitted and unclaimed by this run.
+
+---
+# Sub-module 4.16 — Customer Portal (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.16.md  (2026-08-11)
+
+## 0. Read this first — SHARED WORKING TREE, concurrent 4.15 build
+
+**Another Claude session is building 4.15 Cold Chain in this exact checkout, on this exact branch, right
+now.** Its plan is the section above this one (it ends at the `END OF THE 4.15 COLD CHAIN PLAN` marker).
+Nothing below may clobber it.
+
+- [ ] **Never `Write` a shared file — always a targeted `Edit`.** A full-file write silently destroys the
+      other session's work and **git will not warn you**, because we are on the same branch in the same
+      tree. The shared files, every one of which gets an anchored `Edit` and never a rewrite:
+      `apps/scm/models/__init__.py`, `apps/scm/forms/__init__.py`, `apps/scm/views/__init__.py`,
+      `apps/scm/urls/__init__.py`, `apps/scm/admin.py`,
+      `apps/scm/management/commands/seed_scm.py` (the new `_seed_portal_tenant` **plus** its call site in
+      `handle()` **plus** its branch in `_flush()` — three separate anchored edits in one file),
+      `apps/core/navigation.py` (`LIVE_LINKS` — 4.15's key lands immediately adjacent to 4.16's),
+      `templates/scm/overview.html`, `README.md`, `.claude/skills/scm/SKILL.md`,
+      and `.claude/tasks/todo.md` itself.
+- [ ] **Re-read the anchor region of every shared file immediately before editing it.** It may have moved
+      since it was last read. Anchor on text that is unique and unlikely to be the other session's edit
+      site.
+- [ ] **Migrations: 4.15 has claimed `0026_…`. 4.16 is `0027_…`.**
+      **Do NOT run `makemigrations scm` until 4.15's `0026_*.py` exists on disk.** Running early makes
+      Django auto-depend on `0025_alter_laboractivity_standard` (verified current leaf) and produces a
+      **second leaf** when 4.15 lands — a split graph that `migrate` refuses.
+      **If a collision happens anyway: regenerate the LATER migration (4.16's — delete `0027_*.py`, then
+      re-run `makemigrations scm`). NEVER `makemigrations --merge`,** and never renumber or edit 4.15's.
+- [ ] **Never run `seed_scm --flush`.** Shared MySQL `nav_erp`; a flush wipes the rows the 4.15 session is
+      verifying against. `python manage.py seed_scm` (no flag) only — it is idempotent by contract.
+- [ ] **Do not run the 4.15 session's review agents, do not edit `apps/scm/**/ColdChainManagement/`, do not
+      touch `templates/scm/coldchain/`, and do not "fix" a half-written 4.15 file you happen to open.**
+- [ ] One file per commit, PowerShell-safe (`;` not `&&`). **Never `git push`.**
+
+---
+
+## 1. What this pass is — an EXTEND run
+
+- [ ] `apps/scm` already ships **4.1–4.14**. This adds 4.16 alongside them.
+- [ ] **No `config/settings.py` change and no `config/urls.py` change.** `apps.scm` is already in
+      `INSTALLED_APPS` and already `include()`d at `scm/` (`config/urls.py:16`). Touching either on an
+      extend run is the error this line exists to prevent.
+- [ ] **Backend sub-package name: `CustomerPortal/`** in all four layers — PascalCase of the NavERP.md
+      title, following `AssetManagement/` → `LaborManagement/`.
+- [ ] **Template sub-module folder: `templates/scm/portal/`** — the short-slug convention all fourteen
+      shipped scm template folders use (`assets/`, `labor/`, `orders/`, `returns/`, …).
+      **The backend-package / template-folder asymmetry is the house rule, not a defect** — write a
+      one-line note into the sub-module's model package docstring and into SKILL.md so no review agent
+      "fixes" `templates/scm/portal/` into `templates/scm/customerportal/`.
+- [ ] Reference implementations to copy patterns from, verbatim where possible:
+      `apps/scm/models/LaborManagement/`, `apps/scm/views/LaborManagement/`,
+      `apps/scm/urls/LaborManagement/LaborStandards.py` (its **COLLISION CHECK docstring** — write one
+      like it for every new url prefix, checked against the WHOLE concatenated urlconf),
+      `templates/scm/labor/laborstandard/{list,detail,form}.html`.
+- [ ] Views use `apps/core/crud.py` (`crud_list` / `crud_create` / `crud_edit` / `crud_detail` /
+      `crud_delete` / `paginate` / `as_db_int`) via `apps/scm/views/_common.py`'s star import.
+      **Context-var contract is pinned:** list → `object_list` + `page_obj` + `q`; detail/edit → `obj`;
+      form → `form` + `is_edit`.
+- [ ] Auto-numbers come from `TenantNumbered` in `apps/scm/models/_base.py` (`NUMBER_PREFIX` + the
+      retry-on-collision `save()`); `secrets` is already re-exported there (`_base.py:17`) for
+      `public_token`.
+- [ ] **`theme.css` badges are COLOUR-named only** — `badge-green / badge-red / badge-amber / badge-info /
+      badge-muted / badge-slate`. `badge-success` / `badge-danger` / `badge-warning` **do not exist** and
+      render completely unstyled (**L33**, shipped 4× already). Stat-icon colours are
+      `blue / green / orange / purple / slate` — there is no red and no amber.
+- [ ] **L32 — all five `LIVE_LINKS["4.16"]` bullets point at STAFF-reachable pages**, never at a
+      login-gated customer portal page. The gated customer pages are secondary extras reached from the
+      staff pages. Already applied at 4.1 "Vendor Portal" and 4.10 "Return Portal".
+
+### Spine re-verified on disk at plan time (L28 — the grep is the truth, never the ERD)
+
+| Entity | Verified at | 4.16 use |
+|---|---|---|
+| `core.Party` / `PartyRole` / `Address` / `ContactMethod` / `Document` / `Tenant` | `apps/core/models/{Party,PartyRole,Address,ContactMethod,Document,Tenant}.py:5` | customer master, ship-to book, contacts, attachments |
+| `core.AuditLog` | `apps/core/models/AuditLog.py:5` — `ACTION_CHOICES` = create/update/delete **only** | staff writes; **cannot** express a customer READ → `PortalActivity` |
+| `accounting.Invoice` / `Payment` / `PaymentTerm` / `Currency` / `CustomerProfile` | `AccountsReceivable/Invoices.py:6`, `AccountsPayable/Payments.py:6`, `AccountsPayable/PaymentTerms.py:6`, `GeneralLedger/Currencies.py:6`, `AccountsReceivable/CustomerProfiles.py:5` | AR read-only (**L29 — SCM computes no AR of its own**) |
+| `scm.SalesOrder` / `SalesOrderLine` / `SalesOrderAllocation` | `OrderManagement/SalesOrders.py:20,185`, `SalesOrderAllocations.py:15` | 4.5 owns the order; 4.16 READS it |
+| `scm.Shipment` / `TrackingEvent` / `Load` / `LoadStop` | `TransportationManagement/Shipments.py:18,148` (`current_status_text` `:70`, `last_known_location` `:71`, `pod_received` `:73`, `pod_received_at` `:74`, `is_delayed()` `:94`), `Loads.py:18,107` | tracking + POD, read-only |
+| `scm.Item` / `ItemCategory` / `UOM` / `Location` / `ReorderRule` | `InventoryManagement/Items.py:17,34,56`, `Locations.py:10`, `ReorderRules.py:26` | catalog + live stock (**`Item.on_hand()` is derived over `StockMove` — L37, never a stored column**) |
+| `scm.ReturnAuthorization` / `ReturnLine` | `ReturnsManagement/ReturnAuthorizations.py:48,360` | 4.10 already built the customer return request |
+| `scm.TradeDocument` | `ContractCompliance/TradeDocuments.py:70` | BoL / commercial invoice / packing list |
+| `scm.QualityInspection` / `InspectionResult` | `QualityManagement/QualityInspections.py:62,330` | CoA (4.9 deferred the customer-facing CoA to 4.16) |
+| `crm.CustomerPortalAccess` | `CustomerService/CustomerPortalAccess.py:5` — `customer_party` FK `:11`, **`portal_user` = `OneToOneField(User)` `:12`**, `is_active` `:15` | **THE customer login binding. 4.16 builds no second one.** |
+| `crm.Case` / `CaseComment` | `CustomerService/Cases.py:5,120` — `account` FK `core.Party` `:36`, `origin="portal"` `:29`, `sla_policy`/`first_response_due`/`resolution_due` `:47-50`, `satisfaction_rating` `:53`, `public_token` `:58` | the helpdesk engine 4.16 WRAPS |
+| `crm.SlaPolicy` / `KnowledgeArticle` / `ContractDocument` | `CustomerService/SlaPolicies.py:10`, `CustomerService/KnowledgeBase.py:5`, `DocumentContract/Contracts.py:5` | SLA targets, KB deflection, the CUSTOMER-side contract |
+
+**Verified NOT to exist — no hopeful FK is planned against any of them:**
+- **No cold-chain model.** 4.15 is being built in parallel and is not on disk. **4.16 FKs nothing
+  cold-chain, imports nothing from `ColdChainManagement`, and adds no temperature column.**
+- **No customer price list / price book on the SCM side** → `price_basis` ships as `hidden | last_ordered`
+  only; a real price engine is **9.3**.
+- **No image field on `scm.Item`** → the catalog is text-only this pass.
+- **No `public_token` on `Shipment`** → an anonymous branded tracking link is deferred to a 4.6 additive
+  column.
+- **No stored payment instrument anywhere** → "payment methods" is satisfied as read-only terms + balance.
+
+---
+
+## 2. Models — 4 tenant-scoped models in `apps/scm/models/CustomerPortal/`
+
+Every model gets `tenant` (from `TenantOwned` / `TenantNumbered`). **All four are new tables. Nothing in
+4.3 / 4.5 / 4.6 / 4.10 / `accounting` / `crm` is re-declared, extended, re-numbered or given a new column
+— migration `0027` must be `CreateModel` × 4 + `AddIndex` + `AlterUniqueTogether` and NOTHING ELSE.**
+
+### 2.1 `PortalAccount` [`PAC-`, `TenantNumbered`] — `models/CustomerPortal/PortalAccounts.py`
+*The account-level portal configuration and entitlement record. One row per customer `core.Party`.*
+**It is not a login.** Users bind through the existing `crm.CustomerPortalAccess` (a `OneToOneField` on
+`User`); a portal page resolves `user → CustomerPortalAccess → customer_party → PortalAccount` and
+**refuses when no `PortalAccount` row exists** — explicit per-customer opt-in, and it is what makes the
+staff enablement console meaningful. A second SCM-side login binding could disagree with CRM's about
+*which party this user is*, which is an authorisation bug by construction.
+
+- [ ] `customer` — FK `"core.Party"`, `on_delete=PROTECT`, `related_name="scm_portal_accounts"`
+      (driver: *company account with several named users* — Shopify company profiles, Oro corporate
+      accounts, Zendesk organizations)
+- [ ] `is_active` — Boolean default `True`; `activated_on` — DateField null/blank **`editable=False`**,
+      stamped once in `save()` the first time `is_active` is True (driver: *portal enablement / adoption
+      console* — Sana admin-created accounts, Salesforce)
+- [ ] **Entitlements** (driver: *per-buyer permissions* — Sana roles/access rights, Shopify permission
+      levels, Oro buyer roles, Salesforce permission sets), all `BooleanField`:
+      `can_track_shipments` (True), `can_view_invoices` (True), `can_view_documents` (True),
+      `can_raise_inquiries` (True), `can_request_returns` (True — routes to 4.10's **existing**
+      `scm:portal_return_create`), `show_credit_and_balance` (**False** — financial data is opt-in)
+- [ ] **Stock presentation** (driver: *Sana Stock Presentation* — exact amount / text / colour band /
+      hidden, with different rules per customer type; Unleashed):
+      `stock_display` ∈ `hidden | availability_text | band | exact_quantity`, default `availability_text`;
+      `low_stock_threshold` — Decimal(14, 4) default `0`, `MinValueValidator(ZERO)`;
+      `show_by_location` — Boolean default `False`
+- [ ] **Catalog scope** (driver: *customer-specific catalogs* — Shopify, Oro organization-aware catalogs,
+      Unleashed per-customer catalogues): `catalog_scope` ∈
+      `all_active | previously_ordered | categories`, default `all_active`;
+      `catalog_categories` — **M2M `"scm.ItemCategory"`**, `blank=True`, `related_name="portal_accounts"`
+- [ ] **Pricing** (driver: the documented GAP — no customer price master exists):
+      `price_basis` ∈ `hidden | last_ordered`, default `hidden`. `last_ordered` = the customer's own most
+      recent `SalesOrderLine.unit_price` for that item, **derived at render time, never stored.**
+- [ ] `default_ship_to` — FK `"core.Address"`, `on_delete=SET_NULL`, null/blank, `related_name="+"`
+      (driver: *multiple ship-to locations* — Epicor P21, Shopify locations, Sana).
+      **`core.Address` has `kind` / `line1` / `city` / `country` and NO postal-code field** (already
+      documented at 4.10) — no form, label or template may imply one exists.
+- [ ] **Notification preference DATA hooks** (driver: Narvar channel choice, NetSuite email preferences):
+      `notify_on_shipment` / `notify_on_delivery` / `notify_on_exception` Boolean;
+      `preferred_channel` ∈ `email | sms | none`, default `email`.
+      **4.16 DISPATCHES NOTHING** — these are stored preferences only, the same posture as
+      `SalesOrder.confirmation_sent_at` / `shipped_notification_at` / `delivered_notification_at`
+      (`SalesOrders.py:81-83`), which have existed unfired since 4.5. Say so on the form and in the
+      docstring; **do not invent a mailer.**
+- [ ] `welcome_message` — TextField blank (driver: *per-account welcome / announcement* — Oro dealer
+      zones, Sana); `support_email` — EmailField blank; `notes` — TextField blank
+- [ ] `Meta`: `ordering = ["-created_at"]`; `unique_together = (("tenant", "number"),
+      ("tenant", "customer"))`; indexes `(tenant, is_active)` → `scm_pac_tnt_active_idx`,
+      `(tenant, customer)` → `scm_pac_tnt_cust_idx`
+- [ ] `clean()`: `default_ship_to` (when set) must belong to **this tenant AND this `customer`** — a
+      cross-party ship-to is an authorisation leak, not a typo; `low_stock_threshold` is only meaningful
+      when `stock_display in ("band", "availability_text")` (error, not silent ignore).
+      **The `catalog_scope == "categories"` → at-least-one-category rule lives in the FORM's `clean()`,
+      not the model's** — an M2M has no rows until after `save()`, so a model-level check is
+      unenforceable on create. Write that reason into the code.
+- [ ] `__str__`: `f"{self.number} · {self.customer}"`
+- [ ] **Derived, never stored:** `linked_user_count` (active `crm.CustomerPortalAccess` rows for this
+      party — a **local** CRM import inside the method, following `ReturnsManagement/Reports.py:349-361`:
+      SCM does not import CRM at module scope), `has_never_logged_in` (no `PortalActivity` with
+      `action="login"`).
+- [ ] **Form excludes:** `tenant`, `number`, `activated_on`, `created_at`, `updated_at`. Everything else
+      is staff-editable — this row IS the configuration.
+- [ ] **Deliberately NOT a field: `visibility_scope` (`company` vs `own`).** `SalesOrder` records no
+      portal originator, so `own` could not be honoured and would be a switch that lies. Company-wide is
+      the only faithful v1 (Zendesk's organization-requests default). Reason goes in the docstring; the
+      item is carried in §10.
+
+### 2.2 `PortalOrderInquiry` [`PIQ-`, `TenantNumbered`] — `models/CustomerPortal/PortalOrderInquiries.py`
+*A support ticket that is **about a specific order / line / shipment / invoice**.* WISMO is ~25–40 % of
+inbound support volume, which is why bullet 1 and bullet 4 are one design problem, not two.
+
+**It WRAPS `crm.Case` rather than forking the helpdesk.** The `case` FK carries the thread
+(`CaseComment.is_public`), the SLA clocks, CSAT, ownership and the public status token — all already
+built and tested. SCM adds only the supply-chain context and the outcome.
+**Rejected alternatives, recorded in the docstring:** (a) adding `sales_order`/`shipment` columns to
+`crm.Case` — a cross-app schema edit inside an SCM pass, and it puts SCM vocabulary in CRM's model;
+(b) a second ticket table — L29's one-ledger logic applied to the helpdesk.
+*(Precedent that SCM may FK CRM: `SalesOrder.source_quote → crm.Quote`, `SalesOrders.py:60`.)*
+
+- [ ] `case` — FK `"crm.Case"`, `on_delete=CASCADE`, `related_name="scm_portal_inquiries"`,
+      **`editable=False`** and **not null**. Created server-side; `editable=False` keeps it out of every
+      ModelForm automatically rather than relying on each form's field list.
+- [ ] `portal_account` — FK `"scm.PortalAccount"`, `on_delete=PROTECT`, null/blank,
+      `related_name="inquiries"`. PROTECT because an inquiry is evidence and the account must not vanish
+      under it in one click; blank when a staff member files one for a customer with no portal account.
+      **Consequence to handle, not discover:** `portalaccount_delete` must catch `ProtectedError` and
+      `messages.error(...)` rather than 500 (the 4.13 precedent), and the UI steers to `is_active=False`.
+- [ ] **Context FKs** (driver: *raise a ticket in the context of an order* — NetSuite cases beside
+      purchases, Salesforce Cases-with-Orders, project44's order↔shipment↔SKU stitching):
+      `sales_order` FK `"scm.SalesOrder"` **PROTECT** null/blank `related_name="portal_inquiries"`;
+      `sales_order_line` FK `"scm.SalesOrderLine"` **SET_NULL** null/blank `related_name="+"`;
+      `shipment` FK `"scm.Shipment"` **SET_NULL** null/blank `related_name="portal_inquiries"`;
+      `invoice` FK `"accounting.Invoice"` **SET_NULL** null/blank `related_name="+"`
+- [ ] `inquiry_type` ∈ `wismo | delivery_exception | short_shipment | damaged | wrong_item | quality |
+      invoice_dispute | return_request | reorder_request | product_question | other`, default `wismo`
+      (driver: the WISMO literature + Narvar Care + the classic distribution claim set; `reorder_request`
+      is the **honest v1 of "reorder"** — writing a `SalesOrder` from the portal is parked to 9.4/9.17)
+- [ ] `requested_resolution` ∈ `information | redeliver | replace | credit | return | callback`,
+      default `information`
+- [ ] `quantity_affected` — Decimal(14, 4) null/blank, `MinValueValidator(ZERO)` (driver:
+      *short-shipment / damage claims* — Narvar Shield, the classic distribution claim set)
+- [ ] `outcome` ∈ `open | information_provided | credit_drafted | rma_raised | replacement_arranged |
+      rejected | duplicate`, default `open`, **`editable=False`** — workflow-controlled
+- [ ] `resolved_at` — DateTimeField null/blank **`editable=False`** (system-set, **L22**)
+- [ ] `return_authorization` — FK `"scm.ReturnAuthorization"`, `on_delete=SET_NULL`, null/blank,
+      `related_name="portal_inquiries"`, **`editable=False`** — set only by the conversion verb
+      (driver: *convert an inquiry into a return / claim* — NetSuite, Narvar Shield, Salesforce).
+      **Do NOT build a second RMA** — this points at 4.10's existing document, and the customer request
+      routes to 4.10's existing `portal_return_create`.
+- [ ] `source` ∈ `portal | staff`, default `staff`, **`editable=False`** — forced server-side by
+      whichever view filed it
+- [ ] `raised_by` — FK `settings.AUTH_USER_MODEL`, `on_delete=SET_NULL`, null/blank, `related_name="+"`,
+      **`editable=False`**
+- [ ] `Meta`: `ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+      `(tenant, outcome)` → `scm_piq_tnt_outcome_idx`, `(tenant, inquiry_type)` → `scm_piq_tnt_type_idx`,
+      `(tenant, sales_order)` → `scm_piq_tnt_so_idx`, `(tenant, case)` → `scm_piq_tnt_case_idx`
+- [ ] `clean()`: the order-bound types (`wismo`, `delivery_exception`, `short_shipment`, `damaged`,
+      `wrong_item`, `reorder_request`) **require** `sales_order`; `invoice_dispute` requires `invoice`;
+      `sales_order_line.order_id` must equal `sales_order_id` when both are set (the mismatched-child
+      guard); `shipment.sales_order_id` must equal `sales_order_id` when both are set;
+      `quantity_affected` is only allowed with a line and must be `<=` that line's quantity; every FK's
+      tenant must equal `self.tenant`.
+- [ ] **`@classmethod open_for(cls, *, tenant, portal_account, subject, description, user, source,
+      **context)`** — the SINGLE writer of the `crm.Case`, in one `transaction.atomic()`. Forces
+      `origin="portal"`, `account=<the portal party>` and the case `type` from the inquiry type, and lets
+      `Case.save()` resolve the tenant's default `SlaPolicy` (it already does). This is the shape of
+      `crm.views…CustomerPortal.portal_case_create:92-98`, forced server-side. **Local CRM import inside
+      the method.** Putting it on the model rather than in a view helper means the staff create, the
+      portal create and the seeder all get the identical rule with no second copy to drift.
+- [ ] **Workflow methods — the ONLY writers of `outcome` / `resolved_at` / `return_authorization`:**
+      `resolve(user, outcome, note="")` (refuses if already resolved; optionally appends a **public**
+      `CaseComment`), `reopen(user)`, `link_return(rma, user)` (sets `return_authorization` +
+      `outcome="rma_raised"`; refuses a cross-tenant or cross-customer RMA).
+- [ ] `__str__`: `f"{self.number} · {self.get_inquiry_type_display()}"`
+- [ ] **Derived, never stored:** `is_open` (`outcome == "open"`), `age_days`, `sla_state`
+      (breached / due-soon / ok, computed from `case.first_response_due` / `case.resolution_due` — 4.16
+      recomputes no SLA of its own), and `customer_status` — **the customer-facing status vocabulary,
+      deliberately distinct from the agent one** (driver: Zendesk documents that portal statuses ≠ agent
+      statuses; Narvar). It is a presentation mapping over `case.status`, **not a column.**
+- [ ] **Form excludes:** `tenant`, `number`, `case`, `outcome`, `resolved_at`, `return_authorization`,
+      `source`, `raised_by`, `created_at`, `updated_at`.
+- [ ] **Deliberately NOT fields: `details` and `staff_notes`.** The customer's words live on
+      `Case.description`; internal triage notes are `CaseComment(is_public=False)`. A second copy is a
+      second thing to keep in sync and a second place to leak an internal note.
+
+### 2.3 `PortalDocumentShare` [`PDS-`, `TenantNumbered`] — `models/CustomerPortal/PortalDocumentShares.py`
+*What this account may retrieve, and the proof it did.* The one genuinely new thing bullet 3 needs.
+
+- [ ] `portal_account` — FK `"scm.PortalAccount"`, `on_delete=CASCADE`, `related_name="document_shares"`
+      — the audience
+- [ ] `doc_type` ∈ `invoice | pod | packing_list | trade_document | contract | coa | statement | other`
+- [ ] **Exactly one typed pointer** (all `SET_NULL`, null/blank, `related_name="+"`), validated in
+      `clean()`:
+      `document` FK `"core.Document"` ·
+      `invoice` FK `"accounting.Invoice"` ·
+      `shipment` FK `"scm.Shipment"` (its POD — `pod_received` / `pod_received_at`) ·
+      `trade_document` FK `"scm.TradeDocument"` (4.12 — BoL / commercial invoice / packing list) ·
+      `contract` FK `"crm.ContractDocument"` (**the CUSTOMER-side contract; never `scm.SupplierContract`,
+      which is supplier-side commercial data**) ·
+      **`quality_inspection` FK `"scm.QualityInspection"`** — the CoA. *(This sixth pointer is an
+      addition to the research's five: `doc_type="coa"` had no target otherwise, and 4.9 explicitly
+      deferred the customer-facing CoA to 4.16. It surfaces the existing `scm:coa_report`.)*
+- [ ] `title` — CharField(255): **the customer-facing label. Never leak an internal filename**, and never
+      render the storage path into any page.
+- [ ] `shared_by` — FK `settings.AUTH_USER_MODEL` SET_NULL null/blank `related_name="+"`,
+      **`editable=False`**
+- [ ] **`public_token`** — CharField(64), `unique=True`, `editable=False`, `null=True`, `blank=True`,
+      minted once in `save()` with **`secrets.token_urlsafe(32)`** (already re-exported from
+      `models/_base.py:17`; the `ReturnAuthorization.public_token` / `crm.Case.public_token` precedent).
+      `null=True` **not** `blank=""` so rows stay distinct under the unique index — NULLs are distinct in
+      MySQL/MariaDB (`crm/…/Cases.py:56-58` states the same reason).
+- [ ] **`expires_at`** — DateTimeField null/blank, **staff-editable**; **`revoked_at`** — DateTimeField
+      null/blank **`editable=False`**, written only by the `revoke` verb.
+      **This is the explicit fix for 4.10's documented residual risk** (*"the token never expires, cannot
+      be rotated and cannot be revoked… a forwarded link is permanent read access"*,
+      `ReturnsManagement/Reports.py:41-42`).
+      **Both are enforced IN THE LOOKUP, not after it** — `.filter(public_token=token,
+      revoked_at__isnull=True)` plus an explicit `expires_at` check that raises `Http404` — so an expired
+      or revoked share is indistinguishable from a wrong token.
+- [ ] `download_count` — PositiveIntegerField default `0` **`editable=False`**; `first_viewed_at` /
+      `last_downloaded_at` — DateTimeField null/blank **`editable=False`** (driver: *download audit* —
+      dealer / partner download zones, the Salesforce sharing model)
+- [ ] `Meta`: `ordering = ["-created_at"]`; `unique_together = ("tenant", "number")`; indexes
+      `(tenant, portal_account)` → `scm_pds_tnt_acct_idx`, `(tenant, doc_type)` → `scm_pds_tnt_type_idx`,
+      `(tenant, revoked_at)` → `scm_pds_tnt_revoked_idx`. **No `UniqueConstraint`** — `unique_together`
+      is this app's shipped idiom.
+- [ ] `clean()`, in this order: **exactly one** pointer set (0 → error naming the six; ≥2 → error naming
+      which two); the pointer must **match `doc_type`** (`invoice`→`invoice`, `pod`→`shipment`,
+      `coa`→`quality_inspection`, `contract`→`contract`, `trade_document`/`packing_list`→`trade_document`,
+      `statement`/`other`→`document`); `expires_at` must be in the future on create; **the target must
+      belong to this tenant AND to `portal_account.customer`** — `Invoice.party`,
+      `Shipment.sales_order.customer`, `ContractDocument.account`, `Document.tenant` + its related object.
+      **That last rule is the authorisation rule of the whole sub-module: a share is only ever of the
+      customer's OWN document.** It is checked here **and re-checked in the download view** — validation
+      that only runs on a form is not an access control.
+- [ ] `__str__`: `f"{self.number} · {self.title}"`
+- [ ] **Derived, never stored:** `is_expired`, `is_revoked`, `is_live` (neither), `target` /
+      `target_label`, `file_field` (resolves the underlying `FileField` for the streaming view, or `None`
+      for a rendered-HTML target such as an invoice or a CoA).
+- [ ] **Methods, both TOCTOU-safe conditional UPDATEs, never read-then-save** (the `case_public` /
+      `returnauthorization_public` shape): `revoke(user)` →
+      `objects.filter(pk=…, revoked_at__isnull=True).update(revoked_at=now)`;
+      `record_download()` → `.update(download_count=F("download_count") + 1, last_downloaded_at=now)`
+      plus a separate `first_viewed_at__isnull=True` stamp.
+- [ ] **Form excludes:** `tenant`, `number`, `public_token`, `revoked_at`, `download_count`,
+      `first_viewed_at`, `last_downloaded_at`, `shared_by`, `created_at`, `updated_at`.
+      **`public_token` is a credential — the L20 secret-field class: never in a form, never in
+      `AuditLog.changes` (confirm `token` is already in `_SENSITIVE_AUDIT_FIELDS`,
+      `apps/core/crud.py:179` — it is), never in a log line, never in a `messages.success()` string.**
+- [ ] **# WARNING (carried forward verbatim from the research — security):** a token only protects a file
+      if the file is **served through the view**. `config/urls.py:19-20` serves `MEDIA_URL` **directly
+      when `DEBUG`**, so in dev the underlying `/media/documents/...` path bypasses the token entirely.
+      Therefore: **the download view MUST stream via `django.http.FileResponse(obj.file_field.open("rb"),
+      as_attachment=True, filename=<sanitised title>)` — never `redirect(obj.file.url)`, never render
+      `.url` into a template, never expose `MEDIA_URL` for a shared document.** The build must not treat
+      the token as protection for the media directory, and SKILL.md must say so.
+
+### 2.4 `PortalActivity` (**no number prefix**, `TenantOwned`, append-only) — `models/CustomerPortal/PortalActivities.py`
+*The evidence trail that makes "we told you on the 3rd" defensible, and the input to any deflection
+metric.* The `StockMove` / `TrackingEvent` / `MeterReading` posture.
+
+**Why not `core.AuditLog`:** its `ACTION_CHOICES` are `create/update/delete` only
+(`apps/core/models/AuditLog.py:8`) — it records *changes to records by staff*, not *reads by a customer*.
+Bending it would corrupt an existing audit surface. Staff CRUD on all four 4.16 models still goes through
+`write_audit_log` as normal.
+
+- [ ] `portal_account` — FK `"scm.PortalAccount"` CASCADE `related_name="activities"`
+- [ ] `user` — FK `settings.AUTH_USER_MODEL` SET_NULL **null/blank** `related_name="+"` (a token visitor
+      has none — that is why it is nullable)
+- [ ] `action` ∈ `login | view_order | track_shipment | view_catalog | download_document | raise_inquiry |
+      request_return | update_profile`
+- [ ] `object_label` — CharField(160) blank — the short human string (`"SO-00012"`, `"PDS-00004"`)
+- [ ] `sales_order` / `shipment` / `document_share` — FKs `"scm.SalesOrder"` / `"scm.Shipment"` /
+      `"scm.PortalDocumentShare"`, all SET_NULL null/blank `related_name="+"`
+- [ ] `ip_address` — GenericIPAddressField null/blank. **Security note to write into the code: take it
+      from `request.META["REMOTE_ADDR"]` ONLY. `X-Forwarded-For` is caller-controlled and there is no
+      trusted-proxy list in this repo — trusting it writes an attacker-chosen string into an evidence
+      table.**
+- [ ] **Every field is `editable=False`** — the whole row is system-written. **There is NO form module for
+      this model.**
+- [ ] `Meta`: `ordering = ["-created_at"]`; indexes `(tenant, portal_account, created_at)` →
+      `scm_pact_tnt_acct_at_idx`, `(tenant, action)` → `scm_pact_tnt_action_idx`. **No
+      `unique_together`** — it is a log; two identical reads a second apart are two facts.
+- [ ] **No `at` column here and no `shared_at` on 2.3** — `TenantOwned.created_at` already is that
+      timestamp. Two columns meaning "when" is two things to keep in sync. Say so in the docstring.
+- [ ] **`@classmethod record(cls, account, action, *, request=None, user=None, **targets)`** — the single
+      writer, called only from the gated customer views and the token download. **Never from a staff
+      view** (staff activity is `core.AuditLog`'s job). Fails soft: a logging error must never 500 the
+      page the customer was reading.
+- [ ] `__str__`: `f"{self.get_action_display()} · {self.object_label or self.portal_account}"`
+- [ ] **LIST + DETAIL ONLY — no create, no edit, no delete view, no form, no Actions column.** This is a
+      deliberate, precedented exception to the CRUD-Completeness rule, and the same posture 4.15 is taking
+      for `TemperatureReading`: `StockMoveAdmin` (`admin.py:198-212`) and `MeterReadingAdmin` (`:964-984`)
+      already do exactly this. **Write the reason into the list template's `{% comment %}` and into
+      SKILL.md so a review agent does not "complete" the CRUD.**
+- [ ] **If scope must be cut, this is the model to cut first** — the other three each carry a bullet.
+
+---
+
+## 3. Backend — `apps/scm/{models,forms,views,urls}/CustomerPortal/`
+
+Absolute imports only (`from apps.scm.models import X`) — a relative `from .models import X` resolves one
+package too deep. Entity modules pull the toolkit via `from apps.scm.models._base import *` /
+`apps.scm.forms._common` / `apps.scm.views._common`.
+
+### 3.1 models
+- [ ] `apps/scm/models/CustomerPortal/__init__.py` (empty — still its own commit)
+- [ ] `apps/scm/models/CustomerPortal/_choices.py` — every `*_CHOICES` and its `*_CSS` badge map
+      (colour-named classes only, L33): `STOCK_DISPLAY_CHOICES`, `CATALOG_SCOPE_CHOICES`,
+      `PRICE_BASIS_CHOICES`, `PREFERRED_CHANNEL_CHOICES`, `INQUIRY_TYPE_CHOICES` + `INQUIRY_TYPE_CSS`,
+      `REQUESTED_RESOLUTION_CHOICES`, `INQUIRY_OUTCOME_CHOICES` + `INQUIRY_OUTCOME_CSS`,
+      `INQUIRY_SOURCE_CHOICES`, `SHARE_DOC_TYPE_CHOICES` + `SHARE_DOC_TYPE_CSS`,
+      `PORTAL_ACTION_CHOICES` + `PORTAL_ACTION_CSS`, and `CUSTOMER_STATUS_MAP` (the Zendesk-style
+      customer-facing status vocabulary over `crm.Case.STATUS_CHOICES` — a presentation map, **not** a
+      model vocabulary and **not** a column)
+- [ ] `apps/scm/models/CustomerPortal/PortalAccounts.py` — `PortalAccount`
+- [ ] `apps/scm/models/CustomerPortal/PortalOrderInquiries.py` — `PortalOrderInquiry`
+- [ ] `apps/scm/models/CustomerPortal/PortalDocumentShares.py` — `PortalDocumentShare`
+- [ ] `apps/scm/models/CustomerPortal/PortalActivities.py` — `PortalActivity`
+
+### 3.2 forms (`TenantModelForm` from `apps/core/forms/_common.py`, via `apps/scm/forms/_common.py`)
+- [ ] `apps/scm/forms/CustomerPortal/__init__.py` (empty)
+- [ ] `apps/scm/forms/CustomerPortal/PortalAccounts.py` — `PortalAccountForm`. **Explicit `fields`
+      whitelist, never `exclude`.** `customer` queryset from `_customer_parties(tenant)`
+      (`forms/_common.py:59`); `default_ship_to` queryset scoped to the selected **customer** *and*
+      tenant; `catalog_categories` queryset tenant-scoped. `clean()` carries the
+      `catalog_scope == "categories"` → at-least-one-category rule (2.1). Use `_reject_foreign`
+      (`forms/_common.py:136`) so a crafted cross-tenant pk in a POST is rejected, not saved.
+- [ ] `apps/scm/forms/CustomerPortal/PortalOrderInquiries.py` — **two** forms:
+      `PortalOrderInquiryForm` (staff triage: context FKs + type + resolution + quantity, plus the
+      `subject` / `description` that feed `open_for()`), and `PortalInquiryCustomerForm` (the portal-side
+      form — narrower: no `portal_account` field at all, `sales_order` queryset **scoped to the resolved
+      customer's own orders**, no outcome, no staff fields). Both scope every FK queryset to the tenant;
+      the customer form additionally scopes to the customer.
+- [ ] `apps/scm/forms/CustomerPortal/PortalDocumentShares.py` — `PortalDocumentShareForm`. Every one of
+      the six pointer querysets is scoped to **tenant AND `portal_account.customer`** in `__init__`, so
+      the dropdowns can only offer that customer's own documents — the form must not depend on `clean()`
+      alone to stop a crafted pk.
+- [ ] **No `forms/CustomerPortal/PortalActivities.py`** — the model is append-only and has no form. Note
+      the absence in the package docstring so it reads as a decision, not an omission.
+
+### 3.3 views — function-based, `@login_required`, tenant-scoped, full CRUD + search/filters/pagination
+- [ ] `apps/scm/views/CustomerPortal/__init__.py` (empty)
+- [ ] `apps/scm/views/CustomerPortal/PortalAccounts.py` — `portalaccount_list` (filters: `q`, `is_active`,
+      `stock_display`, `catalog_scope`, `price_basis`, `customer` pk) / `_create` / `_detail` / `_edit` /
+      `_delete`. Delete is `@tenant_admin_required` + `@require_POST` and **catches `ProtectedError`**
+      (2.2). Detail shows the linked `crm.CustomerPortalAccess` users, recent `PortalActivity`, live
+      shares and open inquiries.
+- [ ] `apps/scm/views/CustomerPortal/PortalOrderInquiries.py` — full CRUD (`_list` filters: `q`,
+      `inquiry_type`, `outcome`, `requested_resolution`, `source`, `sales_order` pk, `portal_account` pk,
+      plus a derived `sla` bucket) + the verbs `portalorderinquiry_resolve` / `_reopen` / `_raise_return`,
+      all `@require_POST`.
+- [ ] `apps/scm/views/CustomerPortal/PortalDocumentShares.py` — full CRUD (`_list` filters: `q`,
+      `doc_type`, `portal_account` pk, and a derived `state` ∈ live / expired / revoked) +
+      `portaldocumentshare_revoke` (`@require_POST` + `@tenant_admin_required`).
+- [ ] `apps/scm/views/CustomerPortal/PortalActivities.py` — `portalactivity_list` (filters: `q`, `action`,
+      `portal_account` pk, date window) + `portalactivity_detail`. **Nothing else.**
+- [ ] `apps/scm/views/CustomerPortal/Reports.py` — the two computed STAFF pages that carry bullets 1 and
+      5, with no table of their own (the `coa_report` / `mrp_report` / `labor_board` precedent):
+  - **`portal_order_tracking`** — portal customers' open orders with shipment status, ETA, exception and
+    POD state **in one row**. Neither 4.5's order list nor 4.6's shipment list shows this join; that is
+    the whole reason it exists. Reads `SalesOrder` + `Shipment` + `TrackingEvent` + `Load`/`LoadStop`.
+    Line-level allocated / backordered comes from `SalesOrderLine.quantity_allocated()` /
+    `quantity_backordered()` (`SalesOrders.py:231-242`) — **derived, never stored.**
+  - **`portal_catalog_preview`** — "as seen by customer X" (Sana's sales-agent view).
+    **# SECURITY: render-as, NEVER authenticate-as.** No session swapping, no impersonation token, no
+    `login()` call. It renders the customer's projection server-side from their `PortalAccount` config
+    and nothing more.
+- [ ] `apps/scm/views/CustomerPortal/Portal.py` — the gated CUSTOMER surface. **All `@login_required`
+      except the token download.** Every one resolves the customer through a shared
+      `_portal_account(request)` helper: `user → crm.CustomerPortalAccess (active) → customer_party →
+      PortalAccount (active)`, **refusing at each step with a message + redirect**, never a silent
+      unscoped queryset — a portal account with no linked party would otherwise match every unscoped row
+      (the CRM view's own WARNING). Reuse `_customer_portal_access` verbatim from
+      `apps/scm/views/ReturnsManagement/Reports.py:349-361`; **put the shared resolver in
+      `apps/scm/views/_helpers.py`** (4.10 and 4.16 both need it) and leave 4.10 working unchanged.
+      Views: `portal_home` (the NetSuite MyAccount landing shape — purchases · billing · documents ·
+      support · catalog, each tile gated by the matching entitlement), `portal_order_list`,
+      `portal_order_detail` (the timeline: lines + allocation/backorder + shipments + `TrackingEvent`s +
+      POD), `portal_documents`, **`portal_document_download`** (token; see below), `portal_inquiry_create`,
+      `portal_catalog`, `portal_profile` (addresses from `core.Address`, contacts from
+      `core.ContactMethod`, terms / credit **read-only** from `accounting.CustomerProfile` +
+      `Invoice.balance_due()`, gated on `show_credit_and_balance`).
+  - **`portal_document_download(request, token)` — the security-critical view. Requirements, each its own
+    checkable line:**
+    - [ ] **No decorator** — the unguessable `public_token` is the bearer credential (the
+          `returnauthorization_public` / `case_public` mechanism; there is no `LoginRequiredMiddleware`
+          in this project, so a bare view is genuinely public).
+    - [ ] **Tenant is taken OFF THE OBJECT** (`obj.tenant`), never `request.tenant` — `TenantMiddleware`
+          sets `request.tenant = None` for an anonymous visitor.
+    - [ ] **`obj.tenant.is_active` is re-checked** (the `careers_list` / `_public_rma:471` precedent) — a
+          churned or suspended workspace must stop serving customer data.
+    - [ ] **The state guard lives in the LOOKUP**: `revoked_at__isnull=True` inside `filter()`, then an
+          explicit `expires_at` check raising `Http404`. An expired / revoked share must be
+          indistinguishable from a wrong token.
+    - [ ] **`portal_account.is_active` is re-checked** — deactivating an account must kill its live links.
+    - [ ] **Streams with `FileResponse`, never a redirect to `MEDIA_URL`** (the `# WARNING` in 2.3).
+    - [ ] Calls `obj.record_download()` (conditional UPDATE) and `PortalActivity.record(...)` with
+          `action="download_document"`, `user=None` for an anonymous visitor.
+    - [ ] **# WARNING: unauthenticated GET — add per-IP rate limiting** (django-ratelimit) or a WAF
+          throttle before this is internet-facing, exactly as 4.10's public POST is flagged
+          (`Reports.py:489`). Token enumeration is the attack; 32 urlsafe bytes is the mitigation and is
+          **not** a substitute for a throttle.
+- [ ] **Every list view passes ALL filter context the template needs** — the `*_choices` constants and the
+      **querysets** behind every pk dropdown (`portal_accounts`, `customers`, `sales_orders`,
+      `item_categories`). A template never gets data the view did not explicitly pass.
+- [ ] **Audit:** the `crud_*` helpers call `write_audit_log` automatically. **The hand-rolled save paths —
+      `open_for()`, `resolve()`, `reopen()`, `link_return()`, `revoke()` — must call
+      `write_audit_log(request.user, obj, "update", changes={...})` themselves** (`apps/core/utils.py`).
+      A verb that changes state without an audit row is the gap this line exists to close.
+- [ ] **Perf (flagged by the research):** the catalog pages aggregate stock **once per page** with a
+      single grouped `annotate(Sum(...))` over `StockMove`, **never `Item.on_hand()` per row**. Same for
+      `last_ordered` price (one grouped query over `SalesOrderLine`) and for the `PortalAccount` list's
+      linked-user / open-inquiry counts (`Exists`/`OuterRef` or one grouped query — not a per-row
+      `count()`; the 4.13 `asset_list` finding).
+- [ ] **L11 on every filter:** junk GET values (`?portal_account=abc`, `?portal_account=²`,
+      `?portal_account=99999999999999999999`) skip the filter via `as_db_int`, never 500.
+
+### 3.4 urls
+- [ ] `apps/scm/urls/CustomerPortal/__init__.py` (empty)
+- [ ] `apps/scm/urls/CustomerPortal/PortalAccounts.py` — prefix `portal-accounts/`
+- [ ] `apps/scm/urls/CustomerPortal/PortalOrderInquiries.py` — prefix `portal-inquiries/`
+- [ ] `apps/scm/urls/CustomerPortal/PortalDocumentShares.py` — prefix `portal-document-shares/`
+- [ ] `apps/scm/urls/CustomerPortal/PortalActivities.py` — prefix `portal-activity/`
+- [ ] `apps/scm/urls/CustomerPortal/Reports.py` — prefixes `portal-order-tracking/`,
+      `portal-catalog-preview/`
+- [ ] `apps/scm/urls/CustomerPortal/Portal.py` — the gated area under `portal/` (`portal/`,
+      `portal/orders/`, `portal/orders/<int:pk>/`, `portal/documents/`, `portal/catalog/`,
+      `portal/profile/`, `portal/inquiries/add/`) **plus the token route
+      `portal-documents/<str:token>/` → `portal_document_download`**
+- [ ] **COLLISION CHECK docstring in every one of those six modules** (the
+      `LaborManagement/LaborStandards.py:1-31` shape), re-verified against the **WHOLE concatenated
+      urlconf**, not just the 4.16 block. Verified at plan time:
+      **the only `portal` paths anywhere in `scm` are 4.10's `return-portal/` and
+      `return-portal/request/` — a different first segment.** Django matches **whole path components**
+      and never splits one at a hyphen, so `portal`, `portal-accounts`, `portal-inquiries`,
+      `portal-document-shares`, `portal-activity`, `portal-order-tracking`, `portal-catalog-preview` and
+      `portal-documents` are **eight unrelated first segments**; none shadows another and none may ever
+      be "tidied" into another's shape. `crm`'s `portal/` and `portal-access/` routes live in a
+      **different app mounted at `/crm/`** and cannot collide.
+      **VIEW-NAME collision check (the `scm:` namespace is flat):** 4.10 already owns the names
+      `return_portal` and **`portal_return_create`** — 4.16 must not reuse either. Check every new name
+      against `apps/scm/views/__init__.py` before writing it.
+- [ ] **`portal-documents/<str:token>/` is only the SECOND greedy `<str:…>` converter in the whole app**
+      (4.10's `return-tracking/<str:token>/` was the first). It sits on its own first segment, so it
+      cannot swallow anything — state that explicitly in the docstring, because the next greedy converter
+      added without this check is the one that breaks a neighbour.
+- [ ] **Literal routes before `<int:pk>` in every module — first-match-wins is behaviour, not style.**
+      `portal-accounts/add/` above `portal-accounts/<int:pk>/`, or the create page 404s as
+      "portal account 'add' not found". Same for the other three CRUD modules. In `Portal.py`,
+      `portal/inquiries/add/` is literal and there is deliberately **no** `portal/inquiries/<int:pk>/`
+      (see §4).
+
+### 3.5 Re-export blocks — **forgetting one is an ImportError/AttributeError at RUNTIME, not at import time**
+All four are **targeted `Edit`s appending a new block at the end of the existing list** — never a rewrite,
+and never a reordering of an existing block (§0).
+- [ ] `apps/scm/models/__init__.py` — append a `# --- 4.16 Customer Portal ---` block **after** the 4.14
+      block (currently ends `:354`) **and after whatever 4.15 has landed**. Import `_choices` **by name,
+      never `import *`** — the file's own comment at `:292-298` explains why (a star-imported second
+      `_choices` re-declaring a shared token silently shadows the first, and which one wins depends on
+      import order). Then `PortalAccounts` → `PortalOrderInquiries` → `PortalDocumentShares` →
+      `PortalActivities` (the account first, for the reader: the other three FK it).
+- [ ] `apps/scm/forms/__init__.py` — the four form classes (there is no `PortalActivityForm`).
+- [ ] `apps/scm/views/__init__.py` — **every** view name: the four CRUD sets, the three inquiry verbs, the
+      share revoke verb, the two staff reports, and all eight gated portal views. They are referenced as
+      `views.<name>` from the urlconf, so a missing name is an `AttributeError` at startup.
+- [ ] `apps/scm/urls/__init__.py` — six `from .CustomerPortal.<X> import urlpatterns as _cp_<x>` lines and
+      six `*_cp_<x>,` entries at the **END** of `urlpatterns`, plus the collision-check comment.
+      **Use the `_cp_` prefix.** Verified free at plan time — the shipped aliases are `_procurement_`,
+      `_srm_`, `_inv_`, `_wms_`, `_oms_`, `_tms_`, `_dp_`, `_mf_`, `_qm_`, `_rma_`, `_sca_`, `_cc_`
+      (ContractCompliance), `_am_`, `_lm_`. **`_cp_` is NOT `_cc_`** — rebinding `_cc_reports` would
+      silently drop 4.12's report routes. **4.15 is expected to take `_ccm_`; do not touch those lines.**
+- [ ] `apps/scm/admin.py` — targeted `Edit` appending registrations: `PortalAccount` (full CRUD),
+      `PortalOrderInquiry` and `PortalDocumentShare` with **every `editable=False` column in
+      `readonly_fields`** (so the admin cannot forge an outcome, a token, a download count or a revoke
+      stamp), and **`PortalActivity` fully read-only** — `has_add_permission` / `has_change_permission` /
+      `has_delete_permission` all return `False` (the `StockMoveAdmin:198-212` / `MeterReadingAdmin`
+      posture). **`public_token` must not appear in `list_display`, `search_fields` or any changelist.**
+- [ ] `python manage.py makemigrations scm` → expect **`0027_…`**, **only after 4.15's `0026_*.py` exists
+      on disk** (§0). **Read the generated file before applying:** it must be `CreateModel` × 4 +
+      `AddIndex` × 9 + `AlterUniqueTogether` × 3 (`portalaccount` — two tuples, `portalorderinquiry`,
+      `portaldocumentshare`) **and NOTHING ELSE** — **zero `AddField`, zero `RemoveField`, zero
+      `DeleteModel`, zero `RunPython`, and zero `AlterField` on any 4.1–4.15 / `crm` / `accounting`
+      column.** If `crm.Case`, `scm.SalesOrder`, `scm.Shipment` or `accounting.Invoice` appears as
+      anything other than a dependency, stop and re-read the models.
+
+---
+
+## 4. Scope boundary — what this pass does NOT build
+
+Stated up front so it reads as a decision, not an omission, and so no review agent adds it back.
+- [ ] **No second customer-login model.** `crm.CustomerPortalAccess.portal_user` is the binding.
+- [ ] **No second thread page.** The customer's inquiry conversation reuses CRM's existing
+      **`crm:portal_case_detail`** (`apps/crm/urls/CustomerService/CustomerPortal.py:11`) over
+      `crm.CaseComment(is_public=True)`. 4.16 **links** to it; there is deliberately no
+      `portal/inquiries/<int:pk>/` route in SCM.
+- [ ] **No second RMA.** The conversion FKs 4.10's `ReturnAuthorization`, and the customer request routes
+      to 4.10's existing `scm:portal_return_create`.
+- [ ] **No SLA engine, no KB, no CSAT survey.** `crm.SlaPolicy` / `Case.first_response_due` /
+      `resolution_due` / `satisfaction_rating` / `crm.KnowledgeArticle` + the already-public `kb_public`
+      are reused as-is — a link, not a build.
+- [ ] **No AR of any kind.** Balances, terms and credit limits are read from `accounting.CustomerProfile`
+      and `Invoice.balance_due()` (**L29**). 4.16 posts no `JournalEntry`, drafts no `Invoice`, creates no
+      `Payment`.
+- [ ] **No `StockMove`.** The catalog reads the ledger; it never writes it.
+- [ ] **No cart, no checkout, no order placement, no price engine.** NetSuite SuiteCommerce MyAccount
+      ships a login-only portal with **no cart, no checkout and no new-order entry** — that is the
+      precedent and the licence to park this to **9.1 / 9.3 / 9.4 / 9.17**.
+- [ ] **No outbound email / SMS.** The notification fields are stored preferences only.
+
+---
+
+## 5. Wire-up
+
+- [ ] `apps/core/navigation.py` — **one new `LIVE_LINKS["4.16"]` entry**, added by **targeted `Edit`**
+      after the `"4.14"` block (closes `:1028`; the dict closes `:1029`). **4.15's key will be
+      immediately adjacent — re-read the region right before editing and do not disturb it.** The five
+      keys are the **exact `**Feature**` bullet text from `NavERP.md:839-843`**, verbatim:
+
+      "4.16": {
+          "Order Tracking":     "scm:portal_order_tracking",      # bullet (COMPUTED join of 4.5 + 4.6 - no table)
+          "Account Management": "scm:portalaccount_list",         # bullet (the enablement + entitlement console)
+          "Document Retrieval": "scm:portaldocumentshare_list",   # bullet (what was shared, and the proof it was fetched)
+          "Support Ticketing":  "scm:portalorderinquiry_list",    # bullet (the triage queue over crm.Case)
+          "Catalog Browsing":   "scm:portal_catalog_preview",     # bullet (staff "as seen by customer X" - render-as)
+      },
+
+      Plus the block comment recording the decisions, in the house style:
+  - **All five bullets point at STAFF pages (L32).** The gated customer pages (`scm:portal_home` and
+    friends) are secondary extras reached from these, exactly as 4.1's "Vendor Portal"
+    (`navigation.py:774-777`) and 4.10's "Return Portal" resolved the same question.
+  - **"Order Tracking" and "Catalog Browsing" are COMPUTED pages, not tables** — the `labor_board` /
+    `sparepart_list` precedent. 4.16 declares no order table and no catalog table; 4.5 owns the order,
+    4.6 owns tracking, 4.3 owns the item.
+  - **NO sidebar key for `PortalActivity`** — NavERP.md gives 4.16 five bullets and the sidebar mirrors it
+    exactly. The activity log is a panel on the account (and has its own list page reached from there).
+    That is the established `WorkCenter` / `ReorderRule` / `ReturnReason` / `InspectionPlan` /
+    `KpiTarget` / `MeterReading` rule: a child or master reached from the page that uses it takes no
+    bullet of its own.
+  - **"Account Management" points at `portalaccount_list`, not at a customer profile page** — the bullet
+    is about *managing accounts*, and L32 bars a staff bullet from targeting a login-gated page.
+- [ ] **No `config/settings.py` change and no `config/urls.py` change.**
+- [ ] `templates/scm/overview.html` — targeted `Edit` adding the 4.16 sub-module card next to the existing
+      ones. **Re-read first: 4.15 is adding its own card to this same file.**
+
+---
+
+## 6. Templates — `templates/scm/portal/`
+
+Two levels (sub-module folder → entity folder) with **bare page filenames**; never a flat
+`<entity>_<page>.html`. Standalone pages sit at the sub-module root (Template Folder Structure rule 6).
+All `{% extends "base.html" %}` and `{% include %}` the shared partials at the templates root.
+
+**Entity pages**
+- [ ] `templates/scm/portal/portalaccount/list.html` — the enablement console: who has the portal switched
+      on, how many users are bound, who has **never logged in**, open inquiries, live shares. Every count
+      comes from the view's aggregate, never a per-row query in the template.
+- [ ] `templates/scm/portal/portalaccount/detail.html` — the 360°: entitlement chips, the
+      stock-presentation / catalog-scope / pricing summary, `default_ship_to` (**no postal code — the
+      field does not exist**), the bound `crm.CustomerPortalAccess` users linking to
+      `crm:customerportalaccess_detail`, recent `PortalActivity`, live shares, open inquiries, and a
+      **"Preview catalog as this customer"** button → `scm:portal_catalog_preview`. A standing note
+      states that the notification toggles are **stored preferences and that 4.16 sends nothing.**
+- [ ] `templates/scm/portal/portalaccount/form.html` — the entitlement / stock / catalog / pricing /
+      notification groups with help text, including the *"pricing shows the customer's own last-ordered
+      price or nothing — there is no price list in this repo yet"* explanation stated **above** the field.
+- [ ] `templates/scm/portal/portalorderinquiry/list.html` — the triage queue: type, order, SLA state,
+      outcome, age, source. **The customer-facing status is rendered next to the internal one** wherever
+      both appear, so nobody conflates them.
+- [ ] `templates/scm/portal/portalorderinquiry/detail.html` — the context block (order → line → shipment →
+      invoice, each linking out to the sub-module that OWNS it, with a one-line note saying so), then the
+      triage block: `resolve` / `reopen` / `raise return` as POST+confirm forms rendering **only the legal
+      next moves**, plus a link to the `crm` case thread. States that the SLA clocks and CSAT are
+      **CRM's, read here and computed nowhere.**
+- [ ] `templates/scm/portal/portalorderinquiry/form.html` — serves both create and edit; on create it says
+      the `crm.Case` will be **opened server-side** with `origin="portal"`/`"staff"` and the tenant's
+      default SLA policy, and that those are not typeable.
+- [ ] `templates/scm/portal/portaldocumentshare/list.html` — the share register with the **live /
+      expiring-soon / expired / revoked** state chip, download count, and a **Revoke** POST button.
+      **`public_token` is never rendered on this page — not in a column, not in a tooltip.** A "copy link"
+      affordance is fine on the *detail* page only, and it copies the URL, which is the token's only
+      legitimate exposure.
+- [ ] `templates/scm/portal/portaldocumentshare/detail.html` — the audience, the typed target (one line
+      identifying which of the six it is), the expiry / revocation card with the **Revoke** action, and
+      the download audit (`download_count`, `first_viewed_at`, `last_downloaded_at`). Carries a visible
+      note: *this link is a bearer credential — anyone holding it can fetch this document until it
+      expires or is revoked.*
+- [ ] `templates/scm/portal/portaldocumentshare/form.html` — the six pointer fields with the
+      **exactly-one rule stated ABOVE them**, not only in the error message, and the doc-type → pointer
+      matrix rendered as help text.
+- [ ] `templates/scm/portal/portalactivity/list.html` — **no Add button, no Edit, no Delete, no Actions
+      column**, with a one-line banner: *this log is append-only; it records customer reads, which
+      `core.AuditLog` deliberately cannot express.* Filter bar: action, account, date window.
+- [ ] `templates/scm/portal/portalactivity/detail.html` — the row plus its targets. Actions sidebar has
+      **Back to List only.**
+
+**Standalone STAFF pages (sub-module root)**
+- [ ] `templates/scm/portal/order_tracking.html` — one row per open order of a portal customer: order,
+      promised date, shipment status + ETA + **delayed** flag, exception, POD state. Exceptions render a
+      **customer-readable reason**, never a raw code.
+- [ ] `templates/scm/portal/catalog_preview.html` — "as seen by customer X", with a customer picker and a
+      prominent banner: **this is a render-as preview; no session is swapped and nobody is impersonated.**
+
+**Standalone gated CUSTOMER pages (sub-module root, `customer_` prefix so the split is obvious at a glance)**
+- [ ] `templates/scm/portal/customer_home.html` — the MyAccount landing (purchases · billing · documents ·
+      support · catalog), each tile shown only when the matching entitlement is on.
+- [ ] `templates/scm/portal/customer_orders.html` and `customer_order.html` — the timeline: lines with
+      allocated / backordered, shipments, `TrackingEvent`s, POD, and a **"Raise an inquiry about this
+      order"** button that **pre-fills the context** rather than making the customer retype it.
+- [ ] `templates/scm/portal/customer_documents.html` — only **live** shares, linking to
+      `scm:portal_document_download`.
+- [ ] `templates/scm/portal/customer_catalog.html` — items in scope, availability rendered **per
+      `stock_display`** (hidden / text / band / exact), ATP, "expected back in stock" labelled a
+      **replenishment estimate, not a promise** (`ReorderRule.lead_time_days`), and last-ordered price or
+      nothing.
+- [ ] `templates/scm/portal/customer_profile.html` — addresses, contacts, and (gated) terms / credit /
+      balance read-only from accounting.
+- [ ] `templates/scm/portal/customer_inquiry_form.html` — with a **KB deflection block** linking
+      `crm:kb_public` articles above the form (Zendesk / Salesforce deflection), and a link to
+      `scm:portal_return_create` when `can_request_returns`.
+- [ ] **Every customer-facing page renders escaped and never with `|safe`** — `welcome_message`, `title`,
+      `object_label` and every `CaseComment` body are user-typed.
+
+**Cross-cutting template rules (each its own checkable line)**
+- [ ] **Every list template:** filter bar reflecting `request.GET` — string params
+      `{% if request.GET.x == v %}selected{% endif %}`, pk params
+      `{% if request.GET.x == o.pk|stringformat:"d" %}` (**never `|slugify`**) — an **Actions column**
+      (View eye / Edit pencil / Delete bin as a `<form method="post">` with
+      `onclick="return confirm(...)"` + `{% csrf_token %}`), pagination guarded with
+      `{% if page_obj.has_previous %}` / `{% if page_obj.has_next %}` (**L9**), and an empty-state row.
+      **The Actions column is omitted entirely on `portalactivity/list.html`.**
+- [ ] **Confirm text must contain no apostrophe and no `{{ }}`-interpolated user data** — HTML decodes
+      `&#39;` inside an attribute before the JS engine sees it, which silently disables the guard and was
+      stored XSS in 4.13 (**L42**). Use the system-generated `PAC-` / `PIQ-` / `PDS-` number only.
+- [ ] **Every detail template:** Actions sidebar with Edit, Delete (POST+confirm+csrf) and Back to List,
+      each conditional wherever the view is conditional — offering a button the view will refuse is the
+      4.11 finding.
+- [ ] **Badges: only `badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate`**,
+      driven by the `_choices.py` `*_CSS` maps, always with an `{% else %}` fallback to
+      `{{ obj.get_<field>_display }}`. **`badge-success` / `badge-danger` / `badge-warning` do not exist
+      (L33).** Stat icons: `blue / green / orange / purple / slate` only.
+- [ ] **Every derived figure renders `None` as "—"**, never `0`, never blank: on-hand with no ledger rows,
+      balance with no invoices, ETA with no shipment, SLA state with no policy, last-ordered price with no
+      prior line.
+
+---
+
+## 7. Seeder — `apps/scm/management/commands/seed_scm.py` (three targeted `Edit`s, never a rewrite)
+
+- [ ] **New `_seed_portal_tenant(tenant)`** — appended as a new method.
+- [ ] **Call site in `handle()`** — added by targeted `Edit` **after whatever is currently last** (today
+      `self._seed_labor_tenant(tenant)` at `:145`; 4.15 is inserting `_seed_coldchain_tenant` there too).
+      **Re-read the region immediately before editing and place 4.16's call after 4.15's if it has
+      landed. Do not reorder or renumber anything already present.** Comment in the established style:
+      *4.16 LAST — it is a PROJECTION. It reads 4.5's sales orders, 4.6's shipments, 4.3's items and
+      categories, 4.10's RMAs, 4.12's trade documents, 4.9's inspections and `accounting`'s invoices, and
+      it binds to `crm.CustomerPortalAccess`. It writes **no `StockMove` and no `JournalEntry`**; its only
+      cross-app write is the `crm.Case` rows its inquiries wrap.*
+- [ ] **Prerequisite guard:** if the tenant has no customer `Party`, no `SalesOrder` or no `Item`,
+      **warn and RETURN rather than half-seed** (the 4.10–4.14 posture).
+- [ ] **Idempotent:** `if PortalAccount.objects.filter(tenant=tenant).exists(): print + return`.
+      Auto-numbered rows use the documented "check existence before creating" pattern; `get_or_create` for
+      the `crm.CustomerPortalAccess` binding. **Never a bare `.create()` on a model with
+      `unique_together`.**
+- [ ] **Reuses existing seeded rows only — it invents no master data:** an existing customer `Party` via
+      the seeder's own helper, and existing `SalesOrder` / `Shipment` / `Invoice` / `ItemCategory` /
+      `TradeDocument` / `QualityInspection` rows found with `.first()`, **skipping the optional link when
+      none exists** rather than creating one.
+- [ ] **Rows created:**
+  - **Two `PortalAccount` rows** on two different customers so the list has variety: one fully enabled
+    with `stock_display="exact_quantity"`, `catalog_scope="categories"` (1–2 existing `ItemCategory` rows
+    attached), `price_basis="last_ordered"`, `show_credit_and_balance=True`; one **restricted** with
+    `stock_display="availability_text"`, `catalog_scope="previously_ordered"`, `price_basis="hidden"`,
+    `can_view_invoices=False`, `show_credit_and_balance=False` — so every entitlement branch and every
+    presentation mode is exercised, and the preview page shows two genuinely different catalogs.
+  - **One `crm.CustomerPortalAccess`** bound to a real tenant user for the enabled account, via
+    `get_or_create` — so the gated pages are reachable in the demo. **`portal_user` is a
+    `OneToOneField`: pick a user with no binding yet, or reuse the existing row.**
+  - **Three `PortalOrderInquiry` rows, every one created through `PortalOrderInquiry.open_for()`** — never
+    hand-built — so the seeder exercises the real path on every run and the demo cannot drift from the
+    implementation: (1) a `wismo` against a shipped order, left `open`; (2) a `short_shipment` with
+    `quantity_affected` on a real line, walked through `resolve(..., "credit_drafted")`; (3) a
+    `return_request` walked through `link_return(<an existing 4.10 RMA>)` when one exists, else left open
+    with a comment saying why.
+  - **Three `PortalDocumentShare` rows** covering three different pointers: an `invoice` share (live,
+    `expires_at` ~30 days out), a `pod` share on a delivered shipment (live, **no expiry** — so the
+    never-expires branch renders), and a **revoked** one via `revoke()` so the revoked chip and the
+    dead-link 404 are both demonstrable. **The seeder never prints a `public_token`.**
+  - **~8–12 `PortalActivity` rows** written via `PortalActivity.record()`, spread across `login` /
+    `view_order` / `track_shipment` / `download_document` / `raise_inquiry`, back-dated over the last
+    ~10 days — plus **one account with zero activity** so the "never logged in" branch renders.
+- [ ] Update the `help` string and the final `SUCCESS` string (`seed_scm.py:61-65`, `:147-151`) to mention
+      4.16 — **targeted `Edit`; 4.15 is editing those same two strings.**
+- [ ] **`_flush()`** — add a 4.16 block by targeted `Edit`, placed **immediately above 4.15's block if it
+      is already there** (newest-first is the convention at `:967`). **Do not touch, reorder or reformat
+      4.15's block.** Order inside 4.16 is forced by real PROTECT edges, not by taste:
+      **`PortalOrderInquiry.portal_account` and `.sales_order` are PROTECT**, so inquiries go FIRST — and
+      **before the 4.5 sales-order block further down**, or that flush raises `ProtectedError`.
+      `PortalDocumentShare` and `PortalActivity` CASCADE from the account and would go anyway; name them
+      before it regardless so the teardown reads top-down. `PortalAccount.customer` is PROTECT onto
+      `core.Party`, which is why the whole 4.16 tree precedes any party cleanup.
+      **For the `crm.Case` rows this seeder created: delete the CASES first and let the CASCADE take the
+      inquiries with them** —
+      `Case.objects.filter(scm_portal_inquiries__isnull=False).distinct().delete()`. Deleting the
+      inquiries first destroys the reverse link and strands every case as an orphan, one per `--flush`
+      cycle. This is exactly the shape of the existing orphaned-bills teardown at `_flush():963`, and the
+      comment should say so.
+      **State in the comment that there is NO `StockMove` and NO `JournalEntry` to unwind**, so the next
+      reader does not go looking for the filter that removes them.
+- [ ] **Never run `seed_scm --flush` during this pass (§0)** — the `_flush()` branch is written and
+      reviewed, not executed, while 4.15 is live in the same database.
+
+---
+
+## 8. Verify
+
+- [ ] `python manage.py makemigrations scm` — **only after `0026_*.py` exists**; read `0027_…` **before**
+      applying and confirm the exact operation list in §3.5.
+- [ ] `python manage.py migrate` against `nav_erp`.
+- [ ] `python manage.py seed_scm` **twice** (**no `--flush`**) — the second run is a no-op: no duplicate
+      `PortalAccount`, no second `CustomerPortalAccess`, no second `crm.Case`, no duplicate inquiries or
+      shares, no second batch of activity rows. Diff the row counts of all four tables plus `crm.Case`
+      across the two runs and assert equality.
+- [ ] `python manage.py check` — clean (no `fields.E304/E305` reverse-accessor clash from the new
+      `related_name`s — note `related_name="+"` on every FK no template reverses; no `models.E006`; no
+      index-name collision with 4.15's `scm_ccm_*` / `scm_exc_*` names).
+- [ ] **`temp/` smoke sweep, logged in as `admin_acme` / `password`:**
+  - every new `scm:*` url returns **200** (GET) or **302** (verb POSTs): `portalaccount_*`,
+    `portalorderinquiry_*` incl. `_resolve` / `_reopen` / `_raise_return`, `portaldocumentshare_*` incl.
+    `_revoke`, `portalactivity_list` / `_detail`, `portal_order_tracking`, `portal_catalog_preview`,
+    `portal_home`, `portal_order_list` / `_detail`, `portal_documents`, `portal_catalog`,
+    `portal_profile`, `portal_inquiry_create`, `portal_document_download`
+  - content assertions: page titles present; a seeded `PAC-` / `PIQ-` / `PDS-` number visible on its list
+    page; **no `{#` or `{% comment` leaks**; **no `badge-success` / `badge-warning` / `badge-danger`
+    anywhere in the new templates**; no `stat-icon amber` / `stat-icon red`
+  - **cross-tenant IDOR → 404** on every detail / edit / delete / verb route for all four models
+  - **GET to every POST-only verb → 405**
+  - a plain (non-admin) member → **403** on `portalaccount_delete`, `portaldocumentshare_delete` and
+    `_revoke`; **200** on the read pages
+  - junk filter values (`?portal_account=abc`, `?portal_account=²`,
+    `?portal_account=99999999999999999999`, `?is_active=maybe`, `?date_from=lastweek`) leave the filter
+    **OFF** and return **200, never 500** (L11)
+  - both report pages and every gated page render **200 on an empty tenant** without a 500, and report
+    "no data" rather than a confident zero
+- [ ] **Token security — the headline gate for this sub-module, each an explicit assertion:**
+  - a **valid** token streams the file with a `Content-Disposition: attachment` header and
+    **`isinstance(response, FileResponse)`** — **assert the response is NOT a 302 to anything under
+    `MEDIA_URL`** (the `config/urls.py:19-20` `DEBUG` warning, made a test)
+  - a **revoked** share → **404**; an **expired** share → **404**; a share whose
+    `portal_account.is_active` is False → **404**; a share whose `tenant.is_active` is False → **404**.
+    All four must be **indistinguishable from a wrong token** (same status, same body)
+  - `grep -rn "public_token" templates/scm/portal/` → the token appears in **no** list column, **no**
+    tooltip and **no** `messages` string; `grep -rn "\.url" templates/scm/portal/` → no `MEDIA_URL` /
+    `.file.url` for a shared document
+  - `download_count` increments by exactly **1** per fetch and two concurrent fetches do not lose one
+    (the conditional-UPDATE / `F()` shape); `revoke()` called twice updates **0 rows** the second time
+  - a token belonging to tenant A returns **404** while logged in as tenant B's admin — the tenant comes
+    off the object, so this must pass **and** the row must not leak
+- [ ] **Authorisation — the share-scoping rule:** creating a `PortalDocumentShare` whose `invoice.party`
+      is a **different** customer than `portal_account.customer` is **rejected by `clean()`**, and a
+      crafted POST carrying that pk is rejected by the **form** (not merely absent from the dropdown).
+      Same for `shipment`, `contract` and `quality_inspection`.
+- [ ] **Portal resolution refuses rather than leaks:** a logged-in user with **no**
+      `CustomerPortalAccess` → message + redirect; with an access row whose `customer_party` is **None**
+      → message + redirect (**never a silently unscoped queryset**); with a party that has **no
+      `PortalAccount`** → message + redirect; with an **inactive** `PortalAccount` → message + redirect.
+      Then: a portal user of customer A **cannot** see customer B's order, document, inquiry or catalog —
+      assert 404, and assert it on the *object* route, not just the list.
+- [ ] **Provenance (the 4.13 `MeterReading` fix, re-proved here):** a POST to `portalorderinquiry_create`
+      carrying `outcome=rejected&source=portal&raised_by=<pk>&resolved_at=…&case=<other pk>&
+      return_authorization=<pk>` must set **none** of them — they are `editable=False` and not in
+      `cleaned_data`. Same for a POST to `portaldocumentshare_create` carrying
+      `public_token=…&download_count=999&revoked_at=…&shared_by=<pk>`.
+- [ ] **Derived-never-stored:** assert there is **no** stored on-hand, no stored ATP, no stored price, no
+      stored SLA state and no stored customer status anywhere in `0027_*.py` —
+      `grep -rn "on_hand\|available_to_promise\|unit_price\|sla_\|customer_status" apps/scm/migrations/0027_*.py`
+      → **nothing**.
+- [ ] **Architectural assertions:** `seed_scm`'s 4.16 block and every 4.16 verb leave
+      `StockMove.objects.count()` and `JournalEntry.objects.count()` **unchanged**; 4.16 writes no
+      `accounting.Invoice` and no `accounting.Payment`;
+      `grep -rn "ColdChain\|coldchain\|Temperature" apps/scm/{models,forms,views,urls}/CustomerPortal/ templates/scm/portal/`
+      → **nothing** (no accidental coupling to the parallel 4.15 build).
+- [ ] **Regression:** `scm:return_portal` and `scm:portal_return_create` (4.10) still resolve and are
+      **unchanged** — proving the new `portal*` prefixes and the `_helpers.py` extraction did not shadow
+      or rebind them. `_cc_reports` (4.12) still resolves — proving the `_cp_` alias choice did not
+      rebind it. `crm:portal_case_detail` and `crm:kb_public` still resolve.
+- [ ] Sidebar shows **4.16 Customer Portal** as Live with all **five** bullets linked (parsed from
+      `NavERP.md:838-843` through `parse_catalog()` — **the bullet text must match `LIVE_LINKS` exactly**
+      or the link silently does not render).
+
+---
+
+## 9. Close-out
+
+- [ ] `code-reviewer` → apply → commit (one file per commit)
+- [ ] `explorer` → apply → commit
+- [ ] `frontend-reviewer` → apply → commit
+- [ ] `performance-reviewer` → apply → commit
+- [ ] `qa-smoke-tester` → apply → commit
+- [ ] `security-reviewer` → apply → commit
+- [ ] `test-writer` → apply → commit. Minimum coverage: **model** tests (auto-number for `PAC-` / `PIQ-` /
+      `PDS-`; the one-account-per-customer `unique_together`; the `default_ship_to` cross-party refusal;
+      `PortalOrderInquiry.clean()`'s five rules both ways; `open_for()` forcing `origin`, `account` and
+      the SLA policy; every workflow method's diff **and its no-op safety**; `resolve()` refusing an
+      already-resolved row; `PortalDocumentShare.clean()`'s exactly-one, doc-type-matching and
+      same-customer rules; `public_token` minted once, unique, and **never regenerated on a later
+      `save()`**; the `revoke()` / `record_download()` conditional-update semantics; `PortalActivity`
+      being append-only); **form** tests (whitelist coverage, tenant stamping, every FK queryset scoped to
+      tenant **and** customer, a crafted cross-tenant pk rejected, the `catalog_scope="categories"` rule,
+      every `editable=False` field absent from `cleaned_data`); **view** tests (every list with and
+      without each filter incl. junk values, the full CRUD round trip for all four, the three inquiry
+      verbs, the share revoke, 405 on GET to every verb, both staff reports on an empty tenant);
+      **security** tests (the whole token matrix above — valid / revoked / expired / inactive account /
+      inactive tenant / wrong tenant, plus the `FileResponse`-not-redirect assertion; cross-tenant 404 on
+      every detail / edit / verb; 403 for a plain member on every tenant-admin route; the four
+      portal-resolution refusals; customer A cannot reach customer B's anything); and **one architectural
+      test** asserting 4.16 creates no `StockMove`, no `JournalEntry`, no `accounting.Invoice`, and
+      declares no second login / RMA / ticket / SLA table.
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — it **exists**, so this is an **update by targeted `Edit`
+      (4.15 is updating the same file)**. Add 4.16's four models, the `scm:*` url names (all four CRUD
+      sets, the three inquiry verbs, the share revoke, the two staff reports, the eight gated portal views
+      and the token download), the `templates/scm/portal/` tree, `_seed_portal_tenant`, the
+      `LIVE_LINKS["4.16"]` block, and four gotcha sections the next session must not have to rediscover:
+      (a) **"the backend package is `CustomerPortal/` but the template folder is `portal/`"** — the house
+      rule, not a defect; (b) **"the token protects the VIEW, not the file"** — `config/urls.py:19-20`
+      serves `MEDIA_URL` under `DEBUG`, so downloads stream via `FileResponse`; (c) **"there is exactly
+      one customer login binding and it lives in CRM"** — `crm.CustomerPortalAccess.portal_user` is a
+      `OneToOneField`, while `PortalAccount` keys on the **Party** and is not a login; (d) **"two of five
+      bullets are computed pages"**, and **`PortalActivity` is list+detail by design.**
+- [ ] `README.md` — targeted `Edit` adding 4.16 to the SCM feature list and adjusting the
+      "remaining 4.15–4.19" sentence (`README.md:90`). **Re-read first: 4.15 is editing that same
+      sentence — if it has already narrowed it to 4.16–4.19, narrow it to 4.17–4.19 rather than reverting
+      its edit.**
+- [ ] **One file per commit, PowerShell-safe (`;` not `&&`). Never `git push`.**
+
+---
+
+## 10. Later passes / deferred
+
+Carried over from `research-scm-4.16.md` so nothing is lost, plus what this plan itself cut.
+
+**Cut or decided by this plan (a decision, not an omission):**
+- **`visibility_scope` (`company` vs `own`)** — `SalesOrder` records no portal originator, so `own` would
+  be a switch that lies. Company-wide is the only faithful v1 (Zendesk's organization-requests default).
+- **`details` / `staff_notes` on `PortalOrderInquiry`** — the customer's words are `Case.description`;
+  internal notes are `CaseComment(is_public=False)`. No second copy.
+- **A `shared_at` / `at` column** — `TenantOwned.created_at` already is that timestamp.
+- **A second inquiry-thread page in SCM** — reuses `crm:portal_case_detail`.
+- **A sixth pointer ADDED beyond the research** (`quality_inspection`) — because `doc_type="coa"` had no
+  target and 4.9 explicitly deferred the customer-facing CoA here. Recorded so it reads as deliberate.
+
+**Deferred from the research (later passes / integrations):**
+- **Proactive customer notifications** (Narvar Notify's 50+ events; email / SMS / WhatsApp) — 4.16 stores
+  the preference and renders the existing `SalesOrder.*_notification_at` stamps; real dispatch needs
+  **4.19** or a mail service.
+- **Anonymous branded tracking link** — needs an additive `public_token` on **4.6's** `Shipment` (the
+  4.4-extends-4.3 / 4.13-extends-`Item` precedent). v1 tracking is login-gated. Revisit with the L32 /
+  4.10 token-security checklist — and note that 4.16's `expires_at` / `revoked_at` pair is the pattern
+  that retrofit should copy.
+- **Per-user roles, spending limits, multi-step order approvals** (Oro, Shopify) — needs a per-user grant
+  row and an approval document; entitlements are **party-level** this pass.
+- **Stored payment methods / pay-now** (NetSuite, Shopify, Sana) — gateway + PCI scope; not inventable
+  in-repo. The bullet's "payment methods" is satisfied as read-only terms + balance.
+- **Favourites / saved lists / customer part numbers / quick-order pad / CSV order upload** (Unleashed,
+  Epicor, Sana) — **the strongest candidate for a follow-up 4.16 pass**; one small table.
+- **Reorder that actually writes a `SalesOrder`** — parked to 9.4 / 9.17; the honest v1 is
+  `inquiry_type="reorder_request"`.
+- **Bulk / ZIP document packages** and emailed large-download links — needs async packaging.
+- **AI self-service agent / chat deflection** (Salesforce Agentforce, Narvar automated claims) —
+  **Module 10**.
+- **Catalog imagery** — `scm.Item` has no image field; attach `core.Document` later or stay text-only.
+- **Per-user "own records only" scoping** — see the cut above.
+- **Portal-side multi-language / branding themes** (Sana, Narvar branded pages) — presentation-layer work,
+  no data-model impact.
+- **Per-IP rate limiting on the public token route** — flagged in code as a `# WARNING`; needs
+  django-ratelimit or a WAF. The same open item 4.10 already carries.
+
+**Parked for a named sibling sub-module (not this one):**
+- Cart, checkout, order placement, promotions, price / discount engine, product search & discovery,
+  storefront CMS, wishlists, reviews → **9.1 / 9.3 / 9.4 / 9.7 / 9.9 / 9.13 / 9.17**.
+- Customer-specific **price lists / contract pricing / volume breaks** → **9.3** (+ **8.5** for quote
+  pricing). 4.16 shows "your last ordered price" or nothing.
+- Online invoice **payment** + stored payment instruments → **accounting 2.4 / 2.6** and a gateway; the AR
+  document itself stays `accounting.Invoice` (**L29**).
+- Order **amendment / cancellation with impact analysis**, revenue recognition → **8.6** (the 4.5
+  docstring already reserves this).
+- Quote request / RFQ from the portal → **8.5** / `crm.Quote`; supplier-side RFQ is **4.1**.
+- Supplier / vendor self-service portal → **4.1 / 4.2** (both already parked it; the L32 note lives at
+  `navigation.py:774-777`).
+- **3PL client** portal — client billing by volume / weight, SLA dashboards, client-ERP sync → **4.17**.
+- Return **request** flow, RMA lifecycle, refunds, disposition → **4.10** (already built; 4.16 links to
+  `portal_return_create` and adds nothing).
+- Helpdesk engine — SLA policies, KB authoring, agent queues, CSAT surveys, the public case token page →
+  **CRM 1.4** (reused wholesale).
+- Customer contract authoring / e-signature → **CRM 1.9** (`ContractDocument` / `SignerRecord`); supplier
+  contracts → **4.2 / 4.12**.
+- Carrier API / GPS / EDI ingestion of tracking events, webhooks to customer systems → **4.6** (the event
+  log) and **4.19 Integration & API Gateway**.
+- Document folders, versioning, retention, watermarking, OCR → **Module 13 (DMS)**; `core.Document` stays
+  the attachment.
+- Cold-chain temperature evidence on a delivery → **4.15** (being built in parallel; **no FK from 4.16**).
+
+---
+
+## 11. Review notes
+
+(filled in at the end of the pass)
+
 
