@@ -358,7 +358,9 @@ so this template invents none.
             <thead>
               <tr>
                 {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                  <th><input type="checkbox" data-select-all title="Select every {{ k.kind_label|lower }} row shown"></th>
+                  <th><input type="checkbox" data-select-all
+                             aria-label="Select every {{ k.kind_label|lower }} row shown"
+                             title="Select every {{ k.kind_label|lower }} row shown"></th>
                 {% endif %}
                 <th>Task</th>
                 <th>Status</th>
@@ -420,7 +422,11 @@ so this template invents none.
               {% endfor %}
               {% if not k.task_count %}
                 <tr>
-                  <td colspan="9">
+                  {% comment %}
+                    Mirrors the header's own admin gate above — the checkbox <th> only renders for a
+                    tenant admin, so a fixed 9 spans a phantom column for everybody else.
+                  {% endcomment %}
+                  <td colspan="{% if request.user.is_superuser or request.user.is_tenant_admin %}9{% else %}8{% endif %}">
                     <div class="empty-state">
                       <i data-lucide="clipboard-check"></i>
                       <h3>No {{ k.kind_label|lower }} work matching</h3>
@@ -452,7 +458,12 @@ so this template invents none.
                 <div class="form-help">Active logins in this workspace only. Unassign needs no target.</div>
               </div>
               <div class="form-group">
-                <label class="form-label">Act on the selection</label>
+                {% comment %}
+                  A div, not a <label>: this names the pair of submit buttons below it, and a <label>
+                  with no `for=` and no wrapped control is an orphan node that screen readers
+                  announce as a label for nothing.
+                {% endcomment %}
+                <div class="form-label">Act on the selection</div>
                 <div class="form-actions">
                   <button type="submit" class="btn btn-primary"><i data-lucide="user-check"></i> Assign selected</button>
                   <button type="submit" class="btn btn-outline"
