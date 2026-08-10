@@ -3422,9 +3422,14 @@ class Command(BaseCommand):
         ONE cross-sub-module write is stamping ``assigned_to`` on a couple of existing 4.4 tasks, so
         the labor board has a grouped-by-assignee bucket as well as an unassigned one. That is 4.4's
         own column, written one row at a time and guarded so a second run is a no-op; nothing else
-        here touches another sub-module's data. **It is normally a no-op on the first run too**, and
-        that is worth knowing before somebody goes looking for the bug: the board lists OPEN tasks
-        only, and 4.4's seeder leaves all three of its tasks closed. See step 6.
+        here touches another sub-module's data.
+
+        The board lists OPEN tasks only, so this write depends on 4.4 having left some. It does:
+        ``_seed_warehouse_tenant`` walks its original putaway/pick/count to terminal states to show
+        the lifecycle, and then adds ONE open unassigned task of each kind precisely so the "what
+        needs doing" surfaces are not empty. This step claims two of those three, which leaves
+        exactly one in the board's unassigned bucket — both halves populated from one set of rows.
+        See step 6.
 
         **Nothing hand-sets a workflow status.** ``status`` is ``editable=False`` on the standard,
         the session and the plan (L22), so each is walked down the same ladder its verbs take —
@@ -3605,8 +3610,20 @@ class Command(BaseCommand):
         # opens on the 1st-to-today window: an approved shift three days back would fall outside it
         # for the first two days of every month and the export would demo as empty.
         month_start = today.replace(day=1)
-        approved_day = max(today - datetime.timedelta(days=3), month_start)
-        closed_day = max(today - datetime.timedelta(days=2), month_start)
+        # ...but never so far forward that the shift has not happened yet. On the 1st of a month
+        # `month_start` IS today, so the `max()` alone collapsed both shifts onto today — and a seed
+        # run before 16:00 then wrote an approved shift whose clock_out (15:30), closed_at and
+        # approved_at were all in the FUTURE. That is a state no verb can produce: the approve verb
+        # stamps `timezone.now()`, so a fixture holding a later stamp asserts a row the product
+        # cannot make, which is exactly what the "walk the ladders the verbs walk" rule exists to
+        # avoid.
+        # 16:00 is the conservative floor for both windows (the later one ends 15:30). When the month
+        # is too young to hold a finished shift, the day falls into the previous month and the
+        # payroll export's default 1st-to-today window shows nothing for a day — the right trade:
+        # honest data that a default filter misses beats visible data that could not have happened.
+        latest_finished = today if now.hour >= 16 else today - datetime.timedelta(days=1)
+        approved_day = min(max(today - datetime.timedelta(days=3), month_start), latest_finished)
+        closed_day = min(max(today - datetime.timedelta(days=2), month_start), latest_finished)
 
         def _session(worker, work_date, clock_in, clock_out, **fields):
             """Existence-checked on (tenant, worker, work_date) — the auto-numbered rule again.
@@ -3855,10 +3872,12 @@ class Command(BaseCommand):
         # `assigned_to__isnull=True` so a second run matches nothing and cannot re-assign a task a
         # supervisor has since moved: the guard IS the idempotency, not a flag written beside it.
         #
-        # Note for whoever reads the board and finds it empty: 4.4's seeder leaves its three tasks in
-        # `completed` / `packed` / `reconciled` and already assigns each to the tenant admin, so
-        # there is normally nothing open for this to act on. Populating the board needs an OPEN 4.4
-        # task, which is 4.4's row to create and not 4.14's to invent.
+        # Where the open tasks come from: 4.4's ORIGINAL three are walked to `completed` / `packed` /
+        # `reconciled` and already assigned, so they are invisible here by design. `_seed_warehouse_tenant`
+        # additionally creates one OPEN unassigned task of each kind — 4.4's rows to create, not
+        # 4.14's to invent — and this step claims the pick and the count. The putaway is left alone
+        # ON PURPOSE, so the board renders a populated unassigned bucket beside the assigned one; a
+        # dataset where every task has an owner can only ever exercise half the page.
         assigned = []
         if admin is not None:
             open_pick = (PickTask.objects
