@@ -81,7 +81,8 @@ from django.db.models.functions import Abs, Coalesce, TruncDay
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
-from apps.scm.views._helpers import _date_window, _location_qs, _need_tenant
+from apps.scm.views._helpers import (_date_window, _location_qs, _need_tenant,
+                                     _status_transition)
 
 from apps.scm.forms import LaborPlanForm, LaborPlanLineForm
 from apps.scm.models import (
@@ -552,54 +553,19 @@ def _with_grid_totals(qs):
     ).order_by("-period_start", "-id")
 
 
-def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None, audit=None,
-                message=None, precheck=None):
-    """Guard, stamp, audit, redirect — the shape both plain status verbs in this file share.
+def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None,
+                audit=None, message=None, precheck=None):
+    """Delegates to the shared :func:`_status_transition` — see it for the locking contract.
 
-    ``action`` and ``verb`` are two different things and both are needed. ``action`` is the SLUG the
-    audit row is keyed on (``approve`` / ``archive``), so the trail stays filterable; ``verb`` is the
-    past participle the two human sentences read with.
-
-    The row is taken ``FOR UPDATE`` and its status re-read INSIDE ``transaction.atomic()``: two
-    concurrent POSTs (a double-click, a retry, a replay) would otherwise both see ``planned`` and
-    each stamp ``approved_at``, and the second stamp is the one that survives. The object is resolved
-    BEFORE the status guard so a cross-tenant pk answers 404 rather than a 302 that leaks "there is a
-    row there, you just cannot move it" (the 4.12 finding).
-
-    ``precheck`` is evaluated INSIDE the lock and never by the caller before it. A guard that reads a
-    CHILD table (here: does this plan have any lines?) is a plain snapshot read — run before the lock
-    it answers about the state the request started in, and the write then waits for the lock and
-    lands the moment the competing transaction commits. That is the 4.13 finding, priced in advance.
-
-    ``save(update_fields=…)`` is narrow on purpose: a full ``save()`` would write back every
-    in-memory column, including any a concurrent edit had just changed.
+    ``precheck`` matters most on this model: the approve verb refuses a plan with an empty grid, and
+    that guard reads the CHILD table, so it has to run inside the lock rather than before it.
     """
-    with transaction.atomic():
-        obj = get_object_or_404(LaborPlan.objects.select_for_update(), pk=pk, tenant=request.tenant)
-        if obj.status not in from_statuses:
-            messages.error(request, f"{obj.number} cannot be {verb} — it is "
-                                    f"{obj.get_status_display().lower()}.")
-            return _detail(pk)
-        if precheck is not None:
-            refusal = precheck(obj)
-            if refusal:
-                messages.error(request, refusal)
-                return _detail(pk)
-
-        fields = ["status", "updated_at"]
-        obj.status = to_status
-        for field, value in (stamps or {}).items():
-            setattr(obj, field, value)
-            fields.append(field)
-        obj.save(update_fields=list(dict.fromkeys(fields)))
-
-    write_audit_log(request.user, obj, "update",
-                    {"action": action, "status": to_status, **(audit or {})})
-    messages.success(request, message or f"{obj.number} {verb}.")
-    return _detail(pk)
+    return _status_transition(
+        request, LaborPlan, pk, _detail,
+        from_statuses=from_statuses, to_status=to_status, action=action, verb=verb,
+        stamps=stamps, audit=audit, message=message, precheck=precheck)
 
 
-# ======================================================================================= the list
 @login_required
 def laborplan_list(request):
     """Search + five filters + a period window over the workspace's labour plans.
