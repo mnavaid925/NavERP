@@ -109,6 +109,15 @@ class LaborActivity(TenantNumbered):
     # must take its minutes with it or the aggregates would keep counting orphaned work.
     session = models.ForeignKey("scm.LaborSession", on_delete=models.CASCADE,
                                 related_name="activities")
+    # `activity_type` here, but plain `activity` on LaborStandard and LaborPlanLine — one vocabulary,
+    # two column names, and it is deliberate rather than drift. On THIS model the noun is already
+    # taken: the row IS an activity, so `LaborActivity.activity` reads as though it points at another
+    # one, and `activity.activity` is unreadable at every call site. On the other two the column is a
+    # plain attribute of a different noun (a standard FOR picking, a plan line FOR picking) and
+    # `standard.activity_type` would be the odd one out there.
+    # The cost is real and worth knowing: the filter params differ too — the standards list takes
+    # `?activity=` and this one takes `?activity_type=` — and `LaborActivity.objects.filter(activity=)`
+    # is a FieldError. Both read from the same ACTIVITY_CHOICES, so the VALUES are always identical.
     activity_type = models.CharField(max_length=18, choices=ACTIVITY_CHOICES, default="pick")
     # Required for indirect work, forbidden for direct — see clean(). ``activity_type`` sizes the
     # loss; the reason is what a supervisor can actually act on.
@@ -154,7 +163,13 @@ class LaborActivity(TenantNumbered):
     # typed (L22). A standard a user can type is not a measurement, it is a claim.
     standard = models.ForeignKey(
         "scm.LaborStandard", on_delete=models.SET_NULL, null=True, blank=True, editable=False,
-        related_name="activities",
+        # `measured_activities`, NOT `activities`. LaborStandard already has an `activity` CharField,
+        # and a reverse manager one character away from a choice field on the SAME model is a trap
+        # that fails silently rather than loudly: `{{ standard.activities }}` in a template renders a
+        # manager repr instead of raising, and `standard.activity` vs `standard.activities` read as a
+        # typo either way round. LaborSession keeps the plain `activities` — it has no `activity`
+        # field, so there is nothing there to confuse it with.
+        related_name="measured_activities",
         help_text="Which standard was in force when this was filed — traceability only; the "
                   "measurement itself lives in the snapshots below")
     standard_fixed_snapshot = models.DecimalField(
