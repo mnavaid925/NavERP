@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — every booked interval in the workspace.
+
+Renders apps/scm/views/LaborManagement/LaborActivities.py::laboractivity_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py:106) — 15 rows a page
+  activity_choices             [(value, label), …] = ACTIVITY_CHOICES (the 8 direct + 9 indirect)
+  direction_choices            [(value, label), …] = the view's own DIRECTION_CHOICES. `direction`
+                               is DERIVED from DIRECT_ACTIVITIES / INDIRECT_ACTIVITIES and is NOT a
+                               column, so the two options can only come from here
+  reason_choices               [(value, label), …] = INDIRECT_REASON_CHOICES
+  sessions                     this tenant's LaborSession queryset (EVERY status, select_related
+                               worker) — the shift dropdown
+  workers                      _employee_parties(request.tenant) — the same set the SESSION form
+                               offers, so this filter cannot list a person no shift exists for
+
+There is NO `stats` dict, NO `date_from` / `date_to` context variable and NO totals in the context.
+The two date inputs therefore echo request.GET directly, and this page renders no stat tiles: a tile
+bound to a key the view does not pass renders blank with no error anywhere, which is this codebase's
+most repeated frontend bug. The only count below is page_obj.paginator.count, which crud_list passes.
+
+Filter params: q / activity_type / direction / indirect_reason (strings — compared with
+request.GET.<param> directly) and session / worker (PKs — compared with |stringformat:"d", NEVER
+|slugify, which is banned on pk params).
+
+THERE IS NO "Add activity" BUTTON ON THIS PAGE, AND THAT IS THE DESIGN. There is no standalone
+labor-activities/add/ route: an activity is minutes inside one shift's clock window, so it is filed
+from the shift's own page (labor-sessions/<pk>/activities/add/) where the parent comes from the URL
+rather than from a POST field. A button here would be a NoReverseMatch.
+
+Every row value below is a plain column, a select_related FK or a pure-arithmetic property on the row
+— the view joins session, worker, location, standard and all three 4.4 task pointers (plus the second
+hop each task's __str__ walks), so a full page costs one query rather than sixty.
+
+`earned_minutes` and `performance_pct` are None — never 0 — on an activity no standard covered. They
+render as an em dash. A 0 there would print an unmeasured job as a failing one, against a named
+person, which is exactly what the model refuses to do.
+
+Badge colours come from the model's ACTIVITY_CSS via obj.activity_css and from
+SESSION_STATUS_CSS via obj.session.status_css. Lost time — system down, waiting for equipment,
+waiting for work — is badge-red on purpose: an idle floor is the one thing on this page worth seeing
+from across a room. badge-success / badge-warning / badge-danger DO NOT EXIST in theme.css (L33).
+{% endcomment %}
+{% block title %}Labor Activities{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Labor Activities</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Labor Activities</span></div>
+      <p class="text-muted">One row per stretch of a shift: what the worker was doing, for how long, how many units came out of it and how many of those were wrong. A shift says a person was on site between two clock times; <span class="fw-600">these rows say what those minutes went on</span> — and every productivity figure in the module is an aggregate over this table.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Shifts</a>
+      <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> Standards</a>
+      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Scorecard</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Minutes are booked on the shift, not here</h2>
+      <span class="badge badge-info">Read across every shift</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">This register is a workspace-wide read across every shift — it is where a supervisor filters, compares and finds a booking, and it is deliberately <span class="fw-600">not</span> a second place to file one. An activity is minutes inside one shift's clock window, so it is booked from that shift's own page: open the shift and press <span class="fw-600">Book activity</span>. The parent then comes from the address of the page rather than from a field anybody could type, which is what stops minutes being grafted onto somebody else's shift.</p>
+      <p class="text-muted" style="margin-top:.75rem;">A booking can only be added, corrected or removed while its shift is still <span class="fw-600">open</span>. Closing a shift freezes its activities, and approving one is the payroll export's lock — which is why the Edit and Delete actions below disappear on a signed-off shift rather than failing when pressed.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Activities</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search LAB- number or reference…">
+        </div>
+        <div class="form-group">
+          <select name="activity_type" aria-label="Activity type" class="form-select">
+            <option value="">All activities</option>
+            {% for val, label in activity_choices %}
+              <option value="{{ val }}" {% if request.GET.activity_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `direction` is not a column — the view derives it from the two frozensets that define
+            productive work everywhere else in the module, so these options can only come from
+            `direction_choices`. An unrecognised value skips the filter rather than narrowing to
+            nothing, so a hand-edited ?direction=sideways shows every row instead of an empty table.
+          {% endcomment %}
+          <select name="direction" aria-label="Direction" class="form-select">
+            <option value="">Direct and indirect</option>
+            {% for val, label in direction_choices %}
+              <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="indirect_reason" aria-label="Indirect reason" class="form-select">
+            <option value="">All reasons</option>
+            {% for val, label in reason_choices %}
+              <option value="{{ val }}" {% if request.GET.indirect_reason == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `session` is a pk, so every option compares with |stringformat:"d". |slugify is banned on
+            pk params — it has silently deselected the chosen option elsewhere in this codebase.
+          {% endcomment %}
+          <select name="session" aria-label="Shift" class="form-select">
+            <option value="">All shifts</option>
+            {% for s in sessions %}
+              <option value="{{ s.pk }}" {% if request.GET.session == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.number }} · {{ s.worker.name }} · {{ s.work_date|date:"M d, Y" }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="worker" aria-label="Worker" class="form-select">
+            <option value="">All workers</option>
+            {% for w in workers %}
+              <option value="{{ w.pk }}" {% if request.GET.worker == w.pk|stringformat:"d" %}selected{% endif %}>{{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ request.GET.date_from }}" aria-label="Started on or after" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ request.GET.date_to }}" aria-label="Started on or before" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:laboractivity_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The date window filters on <span class="fw-600">when the activity started</span>, and both bounds cover the whole day — a booking that began at 22:40 on the closing date is inside the window, not dropped at midnight. That is deliberately the start time rather than the shift's work date: an overnight shift keeps the day it began on, so a 02:00 pick belongs to the small hours it was worked in. The search box covers the LAB- number and the free-text reference only — whose shift and which shift are the dropdowns beside it, so one field never means two things at once.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Activity</th>
+            <th>Shift</th>
+            <th>Work</th>
+            <th>Interval</th>
+            <th class="text-right">Units</th>
+            <th class="text-right">Earned</th>
+            <th class="text-right">Performance</th>
+            <th>Booked against</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in object_list %}
+            <tr>
+              <td class="nowrap">
+                <a href="{% url 'scm:laboractivity_detail' r.pk %}" class="fw-600 mono">{{ r.number }}</a>
+                <div class="form-help">{{ r.started_at|date:"M d, Y" }}</div>
+              </td>
+              <td class="nowrap">
+                <a href="{% url 'scm:laborsession_detail' r.session.pk %}" class="fw-600 mono">{{ r.session.number }}</a>
+                <div class="form-help">{{ r.session.worker.name }}</div>
+                <span class="badge {{ r.session.status_css }}">{{ r.session.get_status_display }}</span>
+              </td>
+              <td>
+                {% comment %}
+                  activity_css is built from the choice lists themselves, so it is total by
+                  construction and no value can fall through to unstyled text. Lost time
+                  (system down / waiting for equipment / waiting for work) comes back badge-red on
+                  purpose; the rest of the indirect list is badge-amber and every direct activity is
+                  badge-green.
+                {% endcomment %}
+                <span class="badge {{ r.activity_css }}">{{ r.get_activity_type_display }}</span>
+                <div class="form-help">
+                  {% if r.is_direct %}
+                    Direct — productive
+                  {% elif r.is_indirect %}
+                    Indirect{% if r.indirect_reason %} — {{ r.get_indirect_reason_display }}{% endif %}
+                  {% else %}
+                    {{ r.get_activity_type_display }}
+                  {% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {{ r.started_at|date:"H:i" }} →
+                {% if r.ended_at %}
+                  {{ r.ended_at|date:"H:i" }}
+                {% else %}
+                  <span class="badge badge-info">Running</span>
+                {% endif %}
+                {% comment %}
+                  duration_minutes is derived in save() from the two ends and is a real 0 — not an
+                  unknown — while the activity is still running, so it is labelled rather than dashed.
+                {% endcomment %}
+                <div class="form-help mono">
+                  {% if r.ended_at %}{{ r.duration_minutes }} min · {{ r.duration_hours|floatformat:2 }} h{% else %}not booked until it ends{% endif %}
+                </div>
+              </td>
+              <td class="nowrap text-right mono">
+                {{ r.quantity|floatformat:4 }}
+                {% if r.error_quantity %}<div class="form-help">{{ r.error_quantity|floatformat:4 }} in error</div>{% endif %}
+              </td>
+              {% comment %}
+                `is None`, never |default and never a bare truthiness test. An activity no standard
+                covered has earned_minutes None and performance_pct None — unmeasured, not failed —
+                and |default:"—" would ALSO swallow a genuine 0.0000, which is a measurement.
+              {% endcomment %}
+              <td class="nowrap text-right mono">
+                {% if r.earned_minutes is None %}
+                  <span class="text-muted">—</span>
+                {% else %}
+                  {{ r.earned_minutes|floatformat:2 }}
+                {% endif %}
+              </td>
+              <td class="nowrap text-right mono">
+                {% if r.performance_pct is None %}
+                  <span class="text-muted">—</span>
+                {% else %}
+                  <span class="fw-600">{{ r.performance_pct|floatformat:2 }}%</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  At most ONE task pointer can be set (LaborActivity.clean() enforces it), so these
+                  three branches are mutually exclusive rather than a precedence rule. All three are
+                  select_related on the list query, including the second hop each __str__ walks, so
+                  this column costs no queries.
+                {% endcomment %}
+                {% if r.pick_task %}
+                  <a href="{% url 'scm:picktask_detail' r.pick_task.pk %}" class="mono">{{ r.pick_task.number }}</a>
+                  <div class="form-help">Pick task</div>
+                {% elif r.putaway_task %}
+                  <a href="{% url 'scm:putawaytask_detail' r.putaway_task.pk %}" class="mono">{{ r.putaway_task.number }}</a>
+                  <div class="form-help">Put-away task</div>
+                {% elif r.cycle_count_task %}
+                  <a href="{% url 'scm:cyclecounttask_detail' r.cycle_count_task.pk %}" class="mono">{{ r.cycle_count_task.number }}</a>
+                  <div class="form-help">Cycle count</div>
+                {% elif r.reference %}
+                  <span class="mono">{{ r.reference }}</span>
+                  <div class="form-help">Free-text reference</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:laboractivity_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    is_editable on the PARENT reads session.status alone, so it costs no query
+                    (session is select_related). laboractivity_edit re-checks exactly this and
+                    redirects a frozen shift straight back with a message, so the pencil on a closed
+                    or approved shift would be a one-click failure.
+                  {% endcomment %}
+                  {% if r.session.is_editable %}
+                    <a href="{% url 'scm:laboractivity_edit' r.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    Same gate as laboractivity_delete's @tenant_admin_required, so a member is never
+                    offered a button they will 403 on (the 4.11 finding). Only the system-generated
+                    LAB- number goes into the confirm string — never the reference or the worker's
+                    name, both of which are user-typed: an apostrophe escapes to &#x27;, which the
+                    HTML parser hands to JavaScript as a bare quote and the dialog breaks.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if r.session.is_editable %}
+                      <form method="post" action="{% url 'scm:laboractivity_delete' r.pk %}" onsubmit="return confirm('Remove {{ r.number }} from this shift? The minutes go with it and every figure derived from them — booked time, utilisation, gap time, performance — is recalculated. There is no undo; the honest correction for a mis-booked stretch of work is to remove it and file it again while the shift is open.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="timer"></i>
+                  <h3>No labor activities</h3>
+                  <p>No minutes have been booked against any shift yet. Open a shift and press <span class="fw-600">Book activity</span> — each booking says what the worker was doing and for how long, and together they turn "someone was on site for eight hours" into a productivity figure with working anybody can check. If you were expecting rows here, try clearing the filters or widening the date window.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">start time, newest first</span>. <span class="fw-600">Earned</span> is what the labor standard in force at the time says this quantity should have taken, and <span class="fw-600">performance</span> is that figure over the minutes actually booked — 100% is working exactly to standard and above it is faster. Both are blank, never zero, on work no standard covers: not every job in a warehouse has been time-studied, and printing 0% against a named person would render an unmeasured job as a failing one. Both are computed from a snapshot taken when the row was filed, so re-timing a standard next month cannot restate last month's figures. Nothing on this page writes a stock movement or a journal entry — booking minutes against a 4.4 pick, put-away or count task sets a pointer out to it and adds nothing to it.
+    </div>
+  </div>
+{% endblock %}
