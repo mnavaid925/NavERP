@@ -733,3 +733,56 @@ escapes `'` to `&#x27;`, which the table above shows is decoded right back.
 positives above). Fixing the class is cheap; finding it requires knowing the decode order.
 
 See [[commit-workflow]].
+
+---
+
+## L43 — Two sessions in ONE tree: claim the migration number BEFORE generating, and never full-rewrite a shared file
+
+**Context:** SCM 4.16 Customer Portal. The user runs several Claude sessions against the *same*
+checkout at once and said so explicitly: *"I am running multiple sessions, if you find any migration
+issue then solve it yourself and communicate with another session."* At that moment
+`mcp__ccd_session_mgmt__list_sessions` showed **"Module 4.15 multi-agent workflow" with
+`isRunning: true`, same `cwd`**, and its uncommitted 4.15 plan in `todo.md` had already written
+*"Migration will be `0026_…`"* — the exact number my own `makemigrations scm` was about to take.
+
+This is not the L41 §2/§3 shared-tree problem (a stale `git log`, a subagent's debris). It is
+worse, because both failure modes are **silent at the moment they happen** and only surface later:
+
+### 1. Two `makemigrations <app>` runs both produce `00NN_*` and split the graph
+
+Django numbers from the current leaf on disk. Two sessions that generate at the same time both see
+`0025` and both emit `0026_*`, and the app then has **two leaf nodes**. `migrate` refuses with
+*"Conflicting migrations detected; multiple leaf nodes in the migration graph."*
+
+**Rules:**
+1. **Check for a concurrent session before you generate anything** — `list_sessions`, filter on the
+   same `cwd`, look at `isRunning`. If one exists, `send_message` and agree who takes which number.
+2. **Concede the lower number and generate LAST.** Do not run `makemigrations` until the other
+   session's file exists on disk; Django then auto-depends on it and the graph stays linear. Order
+   the *build* so migration generation is the last backend step, not the first.
+3. **Resolve a real collision by regenerating the LATER migration**, not with `makemigrations
+   --merge`. A merge migration makes the double-leaf permanent in the graph and in every future
+   `showmigrations`; deleting your own `0026_*.py` and re-running once theirs has landed leaves a
+   clean chain. Never renumber or delete a migration another session created.
+
+### 2. `Write` on a shared file destroys the other session's work with no conflict marker
+
+Git protects nothing here — same branch, same working tree, no worktrees. Last write wins, silently.
+Every `/next-module` run touches the same ~10 files:
+`apps/<slug>/{models,forms,views,urls}/__init__.py`, `admin.py`,
+`management/commands/seed_<slug>.py`, `apps/core/navigation.py` (`LIVE_LINKS` — adjacent keys!),
+`templates/<slug>/overview.html`, `README.md`, `.claude/tasks/todo.md`, `.claude/tasks/lessons.md`,
+`.claude/skills/<slug>/SKILL.md`.
+
+**Rules:**
+1. **Targeted `Edit` with a unique anchor, never `Write`,** on any of those files — and **re-read
+   immediately before editing**, because the anchor may have moved since you last looked.
+2. Tell every **subagent** the same thing, explicitly. An agent handed "update the re-export block"
+   will happily rewrite the file.
+3. **Never `seed_<slug> --flush`** on a shared DB — it deletes the rows the other session is
+   verifying against. Plain idempotent re-seeding is safe from both sides.
+4. Expect to commit the other session's uncommitted edits to a shared doc file when you
+   `git add` it. Say so in the hand-off message rather than reverting their hunk.
+
+See [[commit-workflow]], [[concurrent-sessions-same-tree]], and L41 (the earlier, narrower
+shared-tree lesson).
