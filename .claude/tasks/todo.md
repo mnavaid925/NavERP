@@ -20472,6 +20472,1500 @@ Carried over from `research-scm-4.14.md` so nothing is lost, plus what this plan
   (L29 — accounting owns the ledger). 4.14 exports and stops.
 
 ---
+# Sub-module 4.15 — Cold Chain Management (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.15.md  (2026-08-11)
+
+> **Placement note.** This section is the NEWEST plan in this file even though a `## Review notes` block
+> follows it. That trailing block is 4.13's review notes, which a previous run appended **six times** into
+> this file (verified: `grep -c "unclaimed by this run"` → 6). It is a duplication artifact, not live
+> content. 4.15's own review notes go at the END of THIS section.
+
+**EXTEND run, not a scaffold run.** `apps/scm` exists and ships 4.1–4.14. **No `config/settings.py` and no
+`config/urls.py` change.**
+
+- New backend sub-package: **`ColdChainManagement/`** in all four layers (`models` / `forms` / `views` /
+  `urls`) — PascalCase of the NavERP.md title, the `AssetManagement/` → `LaborManagement/` precedent.
+- New template sub-module slug: **`coldchain/`** — the short-slug convention every one of the fourteen
+  shipped `scm` template folders follows (`procurement/ srm/ inventory/ warehouse/ orders/ transportation/
+  demandplanning/ manufacturing/ quality/ returns/ analytics/ compliance/ assets/ labor/`, verified on
+  disk). **The asymmetry is deliberate and is the house rule:** BACKEND package `ColdChainManagement/` ↔
+  TEMPLATE folder `coldchain/`, exactly as `models/AssetManagement/` ↔ `templates/scm/assets/` and
+  `models/LaborManagement/` ↔ `templates/scm/labor/`. **Do not let a review agent "fix" either one into
+  matching the other.**
+- Migration will be **`0026_…`** (latest on disk is `0025_alter_laboractivity_standard.py`).
+- New flat app-root module: **`apps/scm/coldchain.py`** — the excursion detector + the MKT/profile service.
+  The `apps/scm/analytics.py` precedent (Backend Package Structure rule 8: single-purpose modules stay flat
+  at the app root).
+
+**Shape of the sub-module.** **3 new models + 2 additive fields on 4.3's masters + 3 computed report pages +
+1 flat service module.** Three of the five NavERP.md bullets are **pages over derived data, not tables**,
+and one of those (Maintenance of Reefers) declares **ZERO new entities** — it is a board computed over
+4.13's existing `Asset` / `MaintenancePlan(trigger_type="meter"|"condition")` / `MaintenanceWorkOrder` /
+`MeterReading`. 4.15 posts **no `StockMove`**, **no `JournalEntry`** (L29), flips **no `LotSerial.status`**
+(4.9 owns quarantine) and adds **no reciprocal value** to any 4.9/4.13 choices list.
+
+---
+
+## 0. The five decisions — read before writing code, do not re-litigate
+
+**A. `TemperatureReading` is an INTERVAL SUMMARY, not a raw sample.** Every row covers one logging interval
+and carries `temperature` (the representative value) plus optional `min_temperature` / `max_temperature` /
+`sample_count`. That is the shape a logger's own PDF summary and a gateway batch already emit, and it is
+what makes the duration/TOR/MKT arithmetic correct — **each row carries its own weight**. At the 30-minute
+default that is ~17.5k rows / monitor / year instead of 105k at 5-minute sampling. Four bounds keep the
+table finite: `MAX_BATCH_READINGS` per import; a list page that is always monitor-scoped **and**
+date-scoped; `MAX_READING_WINDOW_DAYS` on every chart/profile; and `unique_together (monitor, reading_at)`
+so a re-uploaded logger file cannot double the series. **Retention is a named non-goal, not an oversight** —
+GDP wants years of records, so a default purge would be wrong; the seam is a future
+`purge_temperature_readings` management command with a per-tenant window. Say so in the docstring.
+
+**B. `interval_minutes` is SNAPSHOTTED onto each reading row.** Editing the monitor's interval next month
+must not retroactively re-weight last month's MKT. Same rule as `LaborActivity.standard_minutes_snapshot`
+and `CycleCountTaskLine.expected_quantity`.
+
+**C. The two additive fields on 4.3's masters are taken CONSCIOUSLY, and they spend the 4th model slot.**
+`scm.Item.storage_condition` (precedent: `Item.is_spare_part`, `Items.py:94-102` — 4.13 added exactly one
+column rather than forking a parts master) and `scm.Location.storage_condition` (precedent: the four 4.4
+bin attributes on `Location`, `Locations.py:34-36` — *"a bin IS a location of `location_type='bin'`, and
+splitting them would fork the StockMove FK and the on-hand aggregate"*). Together they turn Cold Storage
+Inventory from a table into a **query**. A `StorageCondition` master with per-item numeric limits is what to
+add when a bullet needs one; none does this pass.
+
+**D. Humidity is IN; humidity EXCURSIONS are not.** One nullable `humidity_pct` on the reading and
+`humidity_min` / `humidity_max` on the monitor (four of the eleven surveyed products treat humidity as
+co-equal with temperature). **Excursion detection stays temperature-only this pass** — a humidity excursion
+is a second episode type and no bullet asks for one.
+
+**E. What this sub-module claims about compliance — and what it must NOT claim.** It records
+`assessed_by` / `assessed_on` and reuses `core.AuditLog` through `write_audit_log()`
+(`apps/core/utils.py:6`). **No docstring, template or page may claim 21 CFR Part 11 / EU Annex 11 / GAMP 5
+conformance.** There is no e-signature (no re-authentication at signing, no stated meaning-of-signature, no
+tamper-evident record), no validated-system evidence and no database-level immutability guarantee.
+Over-claiming here is worse than the gap.
+
+---
+
+## 1. The three as-built traps this sub-module walks straight into
+
+**Trap 1 — `q4()` and `MinValueValidator(ZERO)` are BOTH wrong for temperature. Two separate bugs.**
+
+- **The validator.** Every other decimal column in `apps/scm` carries `MinValueValidator(ZERO)`. A
+  temperature is **signed**, and −18 °C is the normal operating point of half this sub-module. Every
+  temperature column instead carries `validators=[MinValueValidator(MIN_TEMPERATURE_C),
+  MaxValueValidator(MAX_TEMPERATURE_C)]` (`Decimal("-200")` / `Decimal("200")`).
+  **A review agent that "restores consistency" by adding `MinValueValidator(ZERO)` to a temperature column
+  breaks the module** — say so in words in the model docstring, right beside the field.
+- **The helper.** `_base.py:48` — `q4()` is `min(max(Decimal(value or ZERO), -MAX_Q4), MAX_Q4)`. The *sign*
+  survives the clamp, so at a glance it looks safe. It is not: **`value or ZERO` turns `None` into
+  `Decimal("0")`, and 0 °C is a perfectly plausible temperature.** A logger row with a blank temperature
+  cell would import as "the fridge was at freezing" — a wrong measurement that reads exactly like a real
+  one, which is the worst possible failure mode for an audit record.
+  **The rule for this whole sub-module: NO temperature, humidity or MKT value passes through `q2()` or
+  `q4()`.** A missing reading stays `None`. Quantize with `.quantize(Decimal("0.01"))` applied to a value
+  already proven non-`None`, never with the clamping helpers. The importer **skips and counts** a row whose
+  temperature cell is blank or unparseable; it never substitutes a number.
+  This is `MeterReading.reading`'s "bounded by a validator and never clamped" ruling
+  (`MeterReadings.py:39-43`) taken one step further: 4.13 rejected the clamp, 4.15 also rejects the
+  coercion.
+- **Corollary, worth a line in the docstring:** `MeterReading.reading` itself carries
+  `MinValueValidator(ZERO)` (`MeterReadings.py:81-83`), so **`MeterReading` structurally cannot record a
+  sub-zero temperature at all.** That is a second, independent reason the two ledgers are separate tables,
+  on top of `MeterReading.asset` being a non-nullable CASCADE FK that cannot name a cold room or a shipment.
+
+**Trap 2 — MariaDB has no partial indexes, so "one open excursion per monitor" is a DETECTOR guard.**
+`SupplyChainAlerts.py:17-37` states the finding verbatim: `UniqueConstraint(fields=[…], condition=Q(…))` is
+**silently omitted by Django on MariaDB**, while the SQLite test settings **do** support it — so the
+constraint would be created under test, pass every test, and be absent in production. *"A guard that exists
+only under test is more dangerous than no guard."* And a constraint can only **refuse** a write; it cannot
+**merge** one, which is the actual rule here (*re-fire the existing open episode, do not raise a second*).
+So the rule lives in `coldchain.detect_excursions()`, inside `transaction.atomic()`, behind a
+`select_for_update()` on the monitor's still-running episode taken **before** the readings are walked.
+`TemperatureExcursion.clean()` carries a belt-and-braces copy for the form path, and its docstring states
+**explicitly that `clean()` is NOT the concurrency guard** (a form is not inside the detector's lock).
+- [ ] Gate: `grep -rn "UniqueConstraint" apps/scm/models/ColdChainManagement/` → **must return nothing.**
+
+**Trap 3 — `MaintenancePlan.condition_threshold` is non-negative, so a reefer condition plan cannot be
+phrased as "discharge air below −15 °C".** Verified at plan time: `MaintenancePlans.py:174-177` declares
+`condition_threshold = DecimalField(max_digits=14, decimal_places=4, null=True, blank=True,
+validators=[MinValueValidator(ZERO), MaxValueValidator(MAX_Q4)])`, with `condition_operator` ∈ `gte`/`lte`.
+The research's suggested "condition plan on discharge-air temperature" is therefore **not expressible as
+written**. Two binding consequences:
+- The seeded reefer condition plan uses a **positive "too warm" threshold** — e.g. *Condenser Discharge
+  Temp*, `gte`, `5` — never a negative one.
+- **4.15 does NOT widen 4.13's validator.** Relaxing `condition_threshold` to allow negatives is a real
+  4.13 change with its own blast radius (`_condition_axis_due()` `MaintenancePlans.py:378-388`, the PM
+  board, the PM forecast) and belongs to a 4.13 pass. Recorded under **Later passes**.
+
+---
+
+## 2. Pre-flight (do these BEFORE writing a single file)
+
+- [ ] `grep -n '\.badge-\|detail-item\|detail-grid\|stat-icon' static/css/theme.css` — **mandatory pre-write
+      step, not a pre-ship check** (L33, now at seven recurrences). Badges are **`badge-green / badge-red /
+      badge-amber / badge-info / badge-muted / badge-slate` ONLY**; `badge-success` / `badge-warning` /
+      `badge-danger` **DO NOT EXIST** and render completely unstyled. Layout is
+      `<dl class="detail-grid"><div class="detail-item"><dt>Label</dt><dd>Value</dd></div></dl>` —
+      `.detail-label` / `.detail-value` do not exist. `stat-icon` has `blue/green/orange/purple/slate` only.
+- [ ] Re-run the spine grep before FK-ing anything (L28). **All verified present at plan time — re-check
+      rather than trusting this list:**
+  - `grep -rn "^class Sensor\|^class Device\|^class TemperatureReading\|^class Excursion\|^class ColdRoom\|^class Reefer\|^class StorageCondition\|^class ColdChain" apps/`
+    → **nothing.** All three 4.15 tables are genuinely new; 4.15 is their first and only owner.
+  - `scm.Location` `InventoryManagement/Locations.py:10` — `code`, `name`, `location_type`
+    (`warehouse|zone|bin|staging|transit`), self-FK `parent` `:30`, `is_active`, the 4.4 bin attrs
+    `capacity`/`pick_sequence`/`abc_class`/`is_pickable` `:37-44`, `path()` `:55`, `on_hand_value()` `:65`.
+    **There is no `Warehouse`, `Bin` or `ColdRoom` class — a cold room IS a `Location`.** **No temperature
+    or storage-condition field exists on it** — 4.15 adds the first.
+  - `scm.Item` `InventoryManagement/Items.py:56` — `sku`, `name`, `category`→`ItemCategory`, `uom`→`UOM`,
+    `item_type`, `tracking` (`none|lot|serial`), `costing_method`, `standard_cost`, `average_cost`
+    *(editable=False)*, `reorder_point`, `is_active`, **`is_spare_part` `:100`** (the additive-field
+    precedent), `on_hand(location=None)` `:116`. **No storage-condition and no shelf-life field.**
+  - `scm.LotSerial` `LotSerials.py:5` — `item` (CASCADE), `kind`, `number`, **`expiry_date` `:19`**,
+    `status` ∈ `available|quarantine|expired|consumed` `:9-14`, `on_hand()` `:28`,
+    `unique_together ("tenant","item","number")`. **FEFO and shelf-life already have a home — do not build
+    a second one.**
+  - `scm.StockMove` `InventoryManagement/StockMoves.py:13` — append-only, **signed** `quantity` `:43`,
+    `move_type` ∈ `receipt|issue|transfer|adjustment|consumption|production|maintenance` `:16-36`,
+    `moved_at` `:50`, `reference`, four indexes `:55-60`. On-hand at a cold location is DERIVED here.
+  - `scm.Asset` `AssetManagement/Assets.py:50` [`AST-`] — `code`, `name`, `asset_type` `:129`
+    (`machine|vehicle|forklift|conveyor|rack|tool|facility|it_equipment|other`, `max_length=14`), `status`
+    `:130`, `criticality`, `location` `:163`, `work_center` `:171`,
+    `custodian`/`supplier`/`service_vendor`→`core.Party`, `warranty_expires_on` `:189`, `fixed_asset`
+    `:194`, `meter_name`/`meter_unit` `:199-201` *(definition only)*, `latest_reading()` `:604`,
+    `next_pm_due()` `:591`, `open_jobs()` `:310`, `is_down_now()` `:318`,
+    `mtbf_hours()`/`mttr_hours()`/`availability_pct()`, `warranty_chip()` `:641`.
+    **The reefer unit IS an `Asset` — 4.15 declares no `Reefer` table.** Reverse accessors already taken on
+    it: `children`, `work_orders`, `meter_readings`, `maintenance_plans`, `spare_parts`.
+  - `scm.MeterReading` `AssetManagement/MeterReadings.py:60` — `asset` **non-nullable CASCADE** `:69`,
+    `recorded_by`→`core.Party` (`related_name="scm_meter_readings"` — **taken**) `:72`, `meter_name` (free
+    text, explicitly "Bearing Temp") `:76`, `unit`, **`reading` with `MinValueValidator(ZERO)`** `:81-83`,
+    `read_at`, `source` ∈ `manual|work_order|sensor`, the no-future-`read_at` `clean()` `:145`, and the
+    two-index + "redundant `tenant=`" lesson `:101-116`.
+  - `scm.Shipment` `TransportationManagement/Shipments.py:18` [`SHP-`] — `direction`, `carrier`, `load`,
+    `sales_order`/`purchase_order`, `mode`, derived `status` *(editable=False)* `:54`,
+    `actual_pickup_at`/`actual_delivery_at` `:58-59`, `current_status_text`, `last_known_location`, `eta`,
+    `EDITABLE_STATUSES`/`CLOSED_STATUSES` `:35-36`. `TrackingEvent` `:148` — append-only, with
+    `latitude`/`longitude` `:177-178`. Reverse accessors taken: `events`, `scm_alerts`.
+  - `scm.MaintenancePlan` `AssetManagement/MaintenancePlans.py:70` [`PM-`] — `TRIGGER_CHOICES` `:77` incl.
+    **`condition`**, `condition_operator` `:171` (`gte`/`lte`), **`condition_threshold` `:174` with
+    `MinValueValidator(ZERO)` — see Trap 3**, `schedule_basis`, `interval_days`, `meter_interval`,
+    `next_due_on`, `next_due_reading`, `due_status()` `:390`, `advance()` `:440`, `due_status_css` `:499`,
+    `MaintenancePlanTask` `:516`.
+  - `scm.MaintenanceWorkOrder` `AssetManagement/MaintenanceWorkOrders.py:81` [`MWO-`] — `work_type` `:147`
+    (incl. `corrective`/`inspection`/`predictive`/`calibration`), `priority`, **`SOURCE_CHOICES` `:90`**
+    (read it and pick an EXISTING value for the raise-from-excursion verb — **do not add one**),
+    `STATUS_CHOICES` `:101` 8-state, `OPEN_STATUSES`/`CLOSED_STATUSES` `:116-118`, `asset` **PROTECT**
+    `:156`, `plan` SET_NULL, `downtime_start/end/minutes`, problem/cause/remedy codes `:207-211`,
+    **`non_conformance` FK out to 4.9 `:177`** — the one-way-link precedent (`:175-179`).
+  - `scm.NonConformance` `QualityManagement/NonConformances.py:28` [`NCR-`] — `source` `:84`,
+    `DEFECT_CATEGORY_CHOICES` `:43` (incl. `contamination`, `process_deviation`), `severity`,
+    `DISPOSITION_CHOICES` `:63`, `item`/`lot_serial`/`location`/`shipment` FKs `:91-104`,
+    **`quarantine_applied` (editable=False) `:126`**, `cost_of_quality` `:140`. **4.9 owns disposition,
+    quarantine and cost of quality. 4.15 links and reads; it writes none of them.**
+  - `scm.SupplyChainAlert` `SupplyChainAnalytics/SupplyChainAlerts.py:59` [`ALR-`] — **the pattern to
+    copy**: the `SUBJECT_FIELDS` tuple `:70`, `subject_label` `:232`, the MariaDB partial-index finding
+    `:17-37`, the detector-vs-triage contract `:1-8`, `_actor()` `:246`, and the five workflow methods
+    `:265-352`, each returning a `{field: [before, after]}` diff (an empty dict = nothing changed).
+  - `core.Party` `apps/core/models/Party.py:5` · `core.Document` `Document.py:5` — the GenericFK attachment
+    (`tenant`, `content_type`, `object_id`, `related`, `file`, `name`, `classification`, `version`,
+    `uploaded_at`) · `write_audit_log(user, obj, action, changes, tenant)` **`apps/core/utils.py:6`**.
+- [ ] **Auto-number prefix collision check — both FREE.** `NUMBER_PREFIX` values already in `scm`:
+      `PR RFQ QT PO GRN SC SCR SRA CAT ADJ TRF PUT PIK CC YRD SO CAR LD SHP FRT SEA DF DS FA WO BOM WC PRD
+      QC QA NCR CAPA RMA WTY KPI ALR LIC CR TD ESG AST PM MWO LST LSN LAB LPL`. **`CCM` and `EXC` do not
+      appear.** Near-misses that are NOT collisions and must not be "tidied": `CCM` ≠ `CC`
+      (CycleCountTask) ≠ `CAT` ≠ `CAPA` ≠ `CR`; `EXC` ≠ `ESG`. **`TemperatureReading` takes NO prefix at
+      all** — the `StockMove` / `MeterReading` rule (`MeterReadings.py:63-67`): a data point in a series is
+      identified by its subject and its timestamp, and minting a per-tenant sequence for one would be a
+      counter nobody ever quotes.
+- [ ] **Index-name collision check — all three prefixes FREE.** Every `scm_*_idx` name under
+      `apps/scm/models/` was enumerated; **no `scm_ccm_`, `scm_tmp_` or `scm_exc_` exists.** Keep every new
+      name **globally unique AND ≤ 30 chars**, pattern `scm_<abbr>_tnt_<x>_idx`. Watch the near-misses:
+      `scm_cc_` (CycleCountTask), `scm_cat_` (SupplierCatalog), `scm_esg_`, `scm_ast_` are all taken.
+- [ ] **`related_name` collision check** — grep each before writing; a duplicate reverse accessor is a
+      `SystemCheckError` at startup, not a runtime surprise. Known taken on `core.Party`:
+      `scm_meter_readings`, `scm_supply_alerts`, `scm_custodian_assets`, `scm_supplied_assets`,
+      `scm_serviced_assets`, `scm_scorecards`, `demand_signals`, `sales_orders`, `accounting_invoices`.
+      Use the `scm_*`-prefixed names listed per model below.
+- [ ] Confirm `apps/scm/models/ColdChainManagement/` does not exist (verified absent) and that
+      `apps/core/navigation.py` has **`"4.14"` as its LAST `LIVE_LINKS` key** (verified: block at
+      `navigation.py:1022-1028`, dict closes at `:1029`).
+- [ ] Read as the shape reference: `apps/scm/models/SupplyChainAnalytics/SupplyChainAlerts.py` (the typed
+      subject tuple + the detector/triage split + the MariaDB finding), `apps/scm/analytics.py` (where a
+      detector lives and how it is invoked), `apps/scm/models/AssetManagement/MeterReadings.py` (the
+      append-only posture and the index lesson), `apps/scm/views/_helpers.py:393` (`_status_transition`),
+      `apps/scm/forms/_common.py:136` (`_reject_foreign`), `apps/scm/views/_common.py`.
+      Note that **every `<SubModule>/__init__.py` in this app is EMPTY** — the re-export blocks live in the
+      four package `__init__.py` files at the layer root. Create the four `ColdChainManagement/__init__.py`
+      files empty (each still gets its own commit).
+
+---
+
+## 3. Models (3 new, in `apps/scm/models/ColdChainManagement/`)
+
+Shared conventions for every file: `from apps.scm.models._base import *` (gives `TenantOwned` /
+`TenantNumbered` / `q2` / `q4` / `ZERO` / `MAX_Q2` / `MAX_Q4` / `settings` / `models` / `ValidationError` /
+`MinValueValidator` / `MaxValueValidator` / `timezone` / `Decimal` / `Sum` / `Q` / `F` / `transaction`).
+**Every FK by string.** Every model carries a `tenant` FK via the base — **there are no tenant-less child
+tables in 4.15.** `*_CSS` dicts live in `_choices.py` (the `AssetManagement/_choices.py` precedent) so a
+badge colour is decided in exactly one place, and only the six real classes may appear (L33).
+**`q2()`/`q4()` are used for NOTHING in this sub-module** — see Trap 1.
+
+### File 0a — `apps/scm/models/_choices.py` (NEW, at the models package ROOT)
+
+- [ ] **This is a new file at the package root, deliberately, and the reasoning must be in its docstring.**
+      `STORAGE_CONDITION_CHOICES` is read from **three sub-modules**: 4.3's `Item`, 4.3's `Location` and
+      4.15's `ColdChainMonitor`. The per-sub-module `_choices.py` files are documented as *"the vocabularies
+      shared across more than one entity **in the sub-module**"* (`AssetManagement/_choices.py:1-5`); a
+      vocabulary shared across **sub-modules** does not belong inside either one. Putting it in
+      `ColdChainManagement/_choices.py` would make an older sub-module (4.3, imported first by
+      `models/__init__.py`) reach into a newer sub-module's private module — a dependency edge pointing
+      backwards, and one every future reader of `Items.py` would have to learn 4.15 to understand.
+      It is **NOT** merged into `_base.py`: `_base` is star-imported by every entity module in the app, and
+      dumping this vocabulary into forty namespaces is exactly the shadowing hazard the 4.14 re-export
+      comment (`models/__init__.py:292-298`) warns about. It is imported **by name**, never with `*`.
+- [ ] Pure data — **no queries, no model imports, not even `_base`** — with an explicit `__all__`.
+- [ ] `STORAGE_CONDITION_CHOICES` = `ambient | cool | chilled | frozen | deep_frozen | cryogenic |
+      controlled_rt` with human labels naming the band (e.g. `("chilled", "Chilled / Refrigerated (2 to
+      8 C)")`). Longest value `controlled_rt` = 12 → **`max_length=14`** on all three columns (headroom; the
+      4.10 lesson that a longer value later is a column widen on a table with rows in it).
+      *(drivers: Made4net / AEB / Datex / Logimax user-defined temperature zones — chiller, deep freeze,
+      blast, ambient; SmartSense walk-in/chiller/display-case classes; ELPRO product-level assessment.)*
+- [ ] `STORAGE_CONDITION_RANGES = {code: (Decimal min, Decimal max)}` — **used ONLY to pre-fill the
+      monitor's explicit limit columns in the create form and the seeder.** The columns stay the single
+      source of truth; nothing reads this dict at query time and **`save()` never rewrites a limit from
+      it** (a model that recomputes its own limits has two writers). Say that in the comment.
+- [ ] `FROZEN_CONDITIONS = frozenset({"frozen", "deep_frozen", "cryogenic"})` — the set for which **MKT
+      honestly answers `None`**. USP <1079.2> states MKT does not apply to frozen product or to
+      freeze–thaw. Declared here rather than in `ColdChainManagement/_choices.py` because it is a property
+      of the shared vocabulary.
+- [ ] `COLD_CONDITIONS = frozenset({"chilled", "frozen", "deep_frozen", "cryogenic"})` — what "cold
+      storage" means for the Cold Storage Inventory report's location/item filters.
+
+### File 0b — `apps/scm/models/ColdChainManagement/_choices.py` (4.15-only vocabularies)
+
+- [ ] Create it FIRST and import it by name from all three entity modules — the `SupplyChainAnalytics/`
+      `ContractCompliance/` `AssetManagement/` `LaborManagement/` precedent. It imports no sibling model,
+      so the edge runs one way and no cycle is possible. Explicit `__all__`.
+- [ ] `DEVICE_TYPE_CHOICES` = `single_use_logger | multi_use_logger | realtime_tracker | fixed_sensor |
+      gateway_probe | manual` → `max_length=20` (longest is `single_use_logger` = 17).
+      *(drivers: ELPRO runs single-use, Bluetooth and real-time devices into ONE database; Controlant's
+      reusable circular loggers; Tive trackers reassigned shipment to shipment; SmartSense fixed sensors.)*
+- [ ] `MONITOR_STATUS_CHOICES` = `active | inactive | in_calibration | retired | lost` → `max_length=16`
+      (longest `in_calibration` = 14) + `MONITOR_STATUS_CSS` = `{"active": "badge-green", "inactive":
+      "badge-muted", "in_calibration": "badge-info", "retired": "badge-muted", "lost": "badge-red"}`.
+- [ ] `READING_SOURCE_CHOICES` = `manual | logger_import | sensor_api | gateway` → `max_length=16`.
+      **`sensor_api` is written by NOTHING this pass** — it is the ingestion seam declared now so a live
+      feed lands as a new *row source* rather than a schema change. The `METER_SOURCE_CHOICES["sensor"]`
+      precedent verbatim (`AssetManagement/_choices.py:151-158`) — say so in the comment.
+- [ ] `EXCURSION_STATUS_CHOICES` = `open | investigating | assessed | closed | dismissed` → `max_length=16`
+      + `EXCURSION_STATUS_CSS` = `{"open": "badge-red", "investigating": "badge-amber", "assessed":
+      "badge-info", "closed": "badge-green", "dismissed": "badge-muted"}` (open is RED because open means
+      unattended — the `SupplyChainAlert.STATUS_CSS` reasoning).
+- [ ] `OPEN_EXCURSION_STATUSES = ("open", "investigating", "assessed")` and
+      `EDITABLE_EXCURSION_STATUSES = ("open", "investigating")` — owned here so the detector, the model and
+      every page that filters on them cannot drift apart (`SupplyChainAlert.OPEN_STATUSES` precedent).
+- [ ] `EXCURSION_SEVERITY_CHOICES` = `critical | major | minor` → `max_length=10` + `EXCURSION_SEVERITY_CSS`
+      = `{"critical": "badge-red", "major": "badge-amber", "minor": "badge-info"}`.
+- [ ] `BREACH_DIRECTION_CHOICES` = `high | low | both` → `max_length=6` + `BREACH_DIRECTION_CSS`
+      (`high` → `badge-red`, `low` → `badge-info`, `both` → `badge-amber`).
+- [ ] `ASSESSMENT_CHOICES` = `pending | product_ok | product_affected` → `max_length=20` +
+      `ASSESSMENT_CSS` (`pending` → `badge-muted`, `product_ok` → `badge-green`, `product_affected` →
+      `badge-red`). *(drivers: ELPRO "assess shipments at product level to reduce unnecessary
+      quarantines"; Sensitech "faster, more precise release decisions"; Tive "the quality team maintains
+      decision authority for disposition".)* **The DISPOSITION itself is 4.9's `DISPOSITION_CHOICES` and is
+      NOT redeclared here** — 4.15 records the verdict and links out to the NCR that acts on it.
+- [ ] `EXCURSION_CAUSE_CHOICES` = `equipment_failure | power_loss | door_left_open | packaging_failure |
+      transit_delay | loading_delay | wrong_setpoint | sensor_fault | unknown | other` → `max_length=20`
+      (longest = 17). Closed on purpose: a closed vocabulary is what makes "which cause costs us the most
+      spoilage?" a `GROUP BY` (the Maximo failure-code reasoning, `AssetManagement/_choices.py:98-104`).
+      `unknown` and `other` are both present so nobody is forced into a wrong code.
+      *(drivers: SmartSense audit-ready corrective action; ORBCOMM alarm → rapid repair; Tive CAPA
+      documentation.)*
+- [ ] Physical + policy bounds:
+      `MIN_TEMPERATURE_C = Decimal("-200")`, `MAX_TEMPERATURE_C = Decimal("200")`,
+      `MIN_HUMIDITY_PCT = Decimal("0")`, `MAX_HUMIDITY_PCT = Decimal("100")`,
+      `MAX_WARNING_MARGIN_C = Decimal("50")`,
+      `MIN_LOGGING_INTERVAL_MINUTES = 1`, `MAX_LOGGING_INTERVAL_MINUTES = 1440`,
+      `MAX_EXCURSION_GRACE_MINUTES = 10080` (7 days),
+      `MAX_EXCURSION_MINUTES = 60 * 24 * 365` (the `MaintenanceWorkOrder.MAX_DOWNTIME_MINUTES` idiom),
+      `MAX_SAMPLE_COUNT = 10000`, `MAX_BATCH_READINGS = 5000`, `MAX_READING_WINDOW_DAYS = 90`,
+      `MAX_EPISODE_READINGS = 20000`, `STALE_INTERVAL_MULTIPLIER = 3`, `CALIBRATION_NOTICE_DAYS = 30`.
+      **Every one of these is a validator or an explicit refusal, never a silent clamp.** The day/minute
+      counts are capped because `PositiveIntegerField` accepts 4294967295 on MariaDB and each is fed to
+      `timedelta(minutes=…)` — an uncaught `OverflowError` (a 500), not a validation error (the 4.10 DoS
+      finding).
+- [ ] MKT constants: `MKT_ACTIVATION_ENERGY_KJ = Decimal("83.144")` (kJ/mol, the USP <1079.2> default),
+      `GAS_CONSTANT_KJ = Decimal("0.0083144")` (kJ/mol·K), `MKT_EA_OVER_R = Decimal("10000")` and
+      `KELVIN_OFFSET = Decimal("273.15")`. Comment that `83.144 / 0.0083144 == 10000` exactly — that is why
+      the USP picked those figures, and the code uses `MKT_EA_OVER_R` directly rather than dividing two
+      Decimals every call.
+
+### Model 1 — `ColdChainMonitor` [`CCM-`] · `models/ColdChainManagement/ColdChainMonitors.py`
+
+*Bullet 1, Temperature Monitoring — the keystone. A **monitoring point**: this device, watching this thing,
+from this date, against these limits.* Drivers: device-to-subject deployment (Controlant, ELPRO, Tive,
+Sensitech, ORBCOMM); explicit limits + grace duration (ELPRO's duration-outside-limits alarm criterion,
+Tive, Controlant); the warning band before the alarm band (Sensitech verbatim, ELPRO's 8 alarm levels);
+setpoint vs actual (ORBCOMM, Carrier Lynx Fleet, Thermo King); multi-probe/multi-zone units (Carrier and
+Thermo King support up to five probes); calibration certificates with traceability and expiry (ELPRO's
+ILAC/NIST/ISO 17025 3-point certs, Tive's NIST cert per tracker, Controlant validated loggers);
+device-health / missing-logger detection (Controlant device-health assessments, ELPRO missing-logger
+alerts, Berlinger device delivery rates).
+
+- [ ] `class ColdChainMonitor(TenantNumbered)` — `NUMBER_PREFIX = "CCM"`
+  - **identity:** `name = CharField(max_length=255)`;
+    `device_serial = CharField(max_length=64, blank=True, db_index=False)` — **deliberately NOT unique per
+    tenant**: a reusable logger has many deployments, one per shipment, and each is its own monitor row
+    with its own limits and its own reading history. The rule that IS enforced is *no second **active**
+    monitor may share a `device_serial`* — in `clean()`, for the `Asset._validate_tag_code` reason
+    (`Assets.py:251-258`): MariaDB stores a blank CharField as `""` not NULL, so a `(tenant,
+    device_serial)` `unique_together` would permit exactly ONE untagged monitor per workspace and reject
+    the second with an IntegrityError 500;
+    `device_type = CharField(max_length=20, choices=DEVICE_TYPE_CHOICES, default="fixed_sensor")`
+  - **subject — exactly one of three, all `PROTECT`, all `null=True, blank=True`:**
+    `location` → `"scm.Location"` `related_name="cold_chain_monitors"`;
+    `asset` → `"scm.Asset"` `related_name="cold_chain_monitors"`;
+    `shipment` → `"scm.Shipment"` `related_name="cold_chain_monitors"`;
+    and the class attribute `SUBJECT_FIELDS = ("location", "asset", "shipment")` so `clean()` walks the
+    tuple and a template renders "what this watches" without a three-branch if-chain — the
+    `SupplyChainAlert.SUBJECT_FIELDS` idiom (`SupplyChainAlerts.py:68-70`).
+    **Typed FKs, never a `GenericForeignKey`** — `SupplyChainAlerts.py:109-114` already settled this for
+    SCM: *"a bare int carries neither a tenant nor a type, so it can point at a deleted or cross-tenant
+    row (L40 §3)."*
+    **`PROTECT`, unlike `SupplyChainAlert`'s `SET_NULL` subjects, and the difference is the point:** an
+    alert is history and must survive its subject being retired; a monitor is a **live configuration**, and
+    a monitor with no subject is uninterpretable and violates its own exactly-one rule. You retire the
+    monitor; you do not delete the cold room out from under it. Every delete view that can hit this must
+    catch `ProtectedError` and message it rather than 500.
+  - **limits (all nullable — a one-sided limit is legitimate):**
+    `storage_condition = CharField(max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True)`;
+    `min_temperature` / `max_temperature = DecimalField(max_digits=6, decimal_places=2, null=True,
+    blank=True, validators=[MinValueValidator(MIN_TEMPERATURE_C), MaxValueValidator(MAX_TEMPERATURE_C)])`
+    — **signed; NEVER `MinValueValidator(ZERO)` (Trap 1)**;
+    `warning_margin_c = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+    validators=[MinValueValidator(Decimal("0.01")), MaxValueValidator(MAX_WARNING_MARGIN_C)])` — **this one
+    IS non-negative on purpose, because a margin is a magnitude, not a temperature.** Put a one-line
+    comment saying so, or the next reader "fixes" the temperature columns to match it;
+    `humidity_min` / `humidity_max = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
+    validators=[MinValueValidator(MIN_HUMIDITY_PCT), MaxValueValidator(MAX_HUMIDITY_PCT)])`;
+    `setpoint_temperature = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, <signed
+    bounds>)` — what the unit was **told**, not a command channel *(ORBCOMM / Carrier / Thermo King
+    two-way control is deferred; this column is the record, and the docstring says so)*
+  - **rules:** `excursion_grace_minutes = PositiveIntegerField(default=30,
+    validators=[MaxValueValidator(MAX_EXCURSION_GRACE_MINUTES)])` — *the single most important field in the
+    sub-module: without it every door-open is an incident and the queue is ignored (ELPRO, Tive,
+    Controlant all delay on duration)*; `logging_interval_minutes = PositiveSmallIntegerField(default=30,
+    validators=[MinValueValidator(MIN_LOGGING_INTERVAL_MINUTES),
+    MaxValueValidator(MAX_LOGGING_INTERVAL_MINUTES)])`
+  - **calibration (the one genuinely persistent audit artefact):** `calibrated_on = DateField(null=True,
+    blank=True)`; `calibration_due_on = DateField(null=True, blank=True)`;
+    `calibration_reference = CharField(max_length=64, blank=True)`. The certificate PDF attaches as a
+    **`core.Document`** (GenericFK — `content_type`/`object_id`, verified) from the detail page; **no new
+    attachment table.**
+  - **lifecycle:** `status = CharField(max_length=16, choices=MONITOR_STATUS_CHOICES, default="active")` —
+    **USER-EDITABLE, and it is the only writer.** The detector never flips it (the `Asset.status` ruling,
+    `Assets.py:12-19`: one writer per column, no drift). `deployed_on = DateField(null=True, blank=True)`;
+    `retired_on = DateField(null=True, blank=True)`; `notes = TextField(blank=True)`
+  - `TENANT_SCOPED_FKS = ("location", "asset", "shipment")`
+- [ ] **`Meta`:** `ordering = ["name", "id"]`; `unique_together = ("tenant", "number")`; indexes
+      `("tenant","status")` → `scm_ccm_tnt_status_idx`, `("tenant","device_serial")` →
+      `scm_ccm_tnt_serial_idx` (the active-serial `clean()` lookup), `("tenant","location")` →
+      `scm_ccm_tnt_loc_idx`, `("tenant","asset")` → `scm_ccm_tnt_asset_idx`, `("tenant","shipment")` →
+      `scm_ccm_tnt_shp_idx`, `("tenant","calibration_due_on")` → `scm_ccm_tnt_caldue_idx` (the calibration
+      chip and the compliance report's overdue list both order on it).
+- [ ] **`clean()` — nine invariants, in this order:**
+  1. cross-tenant guard over `TENANT_SCOPED_FKS` (the table-driven `Asset.clean()` shape, with the defaulted
+     `getattr` so a pointer whose row went away degrades to `None` instead of 500-ing inside validation);
+  2. **exactly one subject FK set** — zero → *"A monitor has to watch something — choose a location, an
+     asset or a shipment."*; more than one → *"A monitor watches exactly one thing."*;
+  3. **the subject is FROZEN once readings exist** — on an existing pk, if
+     `TemperatureReading.objects.filter(tenant_id=self.tenant_id, monitor_id=self.pk).exists()` and any of
+     the three FK ids differs from the stored row, refuse. *An audit report must not be rewritable by
+     re-pointing a monitor.* Read the stored row ONCE with `.only("location_id","asset_id","shipment_id")`;
+  4. `max_temperature > min_temperature` when both are given (strict — equal limits are an impossible band);
+  5. **at least one of `min_temperature` / `max_temperature` when `status == "active"`** — the 4.11 "an
+     alert with no threshold" finding: an active monitor with no limit can never be in or out of range, so
+     every chip on every page reads "unknown" forever;
+  6. `humidity_max > humidity_min` when both are given;
+  7. `warning_margin_c` must be **strictly smaller than half the band width** when both limits are set —
+     a warning band wider than the band itself would fire warnings inside the safe zone;
+  8. `retired_on >= deployed_on`, and `calibration_due_on >= calibrated_on`, when each pair is set;
+  9. **no second `active` monitor with the same non-blank `device_serial`** in this tenant (excluding
+     `self.pk`), with the message naming the other monitor — `clean()`, **not** a partial unique index
+     (Trap 2 + the MariaDB-blank reason above).
+- [ ] **Derived — nothing below is stored:**
+  - `latest_reading()` → `self.readings.filter(tenant_id=self.tenant_id).order_by("-reading_at","-id")
+    .first()`. **The `tenant_id=` is REDUNDANT and load-bearing** — `scm_tmp_tnt_mon_idx` is
+    `(tenant, monitor, reading_at)` and `tenant_id` is the LEADING column, so without a predicate on it
+    MariaDB falls back to the plain FK index and filesorts the whole monitor's history to find one row.
+    That is the measured `Asset.latest_reading()` finding (`Assets.py:616-625`, `MeterReadings.py:101-116`)
+    — **a reader adding a third caller to this table owes the same line.**
+  - `is_in_range(reading=None)` → `True` / `False` / **`None`** when there is no reading or no limits.
+    Never `False` for "unknown" — an unknown that renders red is a page that cries wolf.
+  - `is_in_warning_band(reading=None)` → tri-state, using `warning_margin_c` inside the limits.
+  - `is_reporting(now=None)` → `False` when the latest reading is older than
+    `STALE_INTERVAL_MULTIPLIER × logging_interval_minutes`; **`None`** when there has never been a reading.
+    *(drivers: Controlant device-health assessments, ELPRO missing-logger alerts, Berlinger delivery
+    rates.)* **No stored `offline` flag** — the fact changes by the clock ticking, and a stored flag needs
+    something to run every night to stay true (the 4.12 licence-expiry / `Asset.warranty_chip()` ruling).
+  - `range_chip()` / `reporting_chip()` / `calibration_chip()` → `(label, css)` pairs; templates read `.0`
+    and `.1`. `"Not recorded"` is its own **muted** state and never green — not knowing whether a sensor is
+    in calibration is not the same as knowing that it is.
+  - `days_to_calibration_due(today=None)` / `is_calibration_due(today=None)` — the
+    `Asset.days_to_warranty_expiry` / `WARRANTY_NOTICE_DAYS` idiom with `CALIBRATION_NOTICE_DAYS`.
+  - `open_episode()` → the still-running excursion: `self.excursions.filter(tenant_id=self.tenant_id,
+    ended_at__isnull=True).order_by("-started_at").first()` — **the detector's de-dupe target.**
+  - `open_excursion_count()` → triage-open count (`status__in=OPEN_EXCURSION_STATUSES`).
+    **These are two different questions and they are named apart on purpose**: an episode can be over
+    (`ended_at` set) while its triage is still open, and a page that conflated them would tell somebody an
+    incident is still happening when it stopped yesterday.
+  - `subject` property + `subject_label` (walks `SUBJECT_FIELDS`, the `SupplyChainAlert.subject_label`
+    shape) + `subject_kind` → `"location" | "asset" | "shipment" | ""`.
+  - `effective_limits()` → `(min, max)` — the pair the detector snapshots onto an excursion at fire time.
+  - `is_frozen_condition` → `storage_condition in FROZEN_CONDITIONS` (drives MKT's honest `None`).
+  - `setpoint_gap()` → latest temperature − `setpoint_temperature`, or **`None`** when either is missing.
+  - `status_css` → `MONITOR_STATUS_CSS.get(self.status, "badge-muted")`.
+- [ ] **`save()`** — inherits `TenantNumbered.save()` unchanged (the retry-on-collision numbering loop).
+      **No override.** In particular it does NOT pre-fill limits from `STORAGE_CONDITION_RANGES` — that is
+      a FORM initial-value concern, because a model that rewrites its own limits on save is a second writer
+      of the columns the detector snapshots.
+- [ ] **Form excludes:** `tenant`, `number`. Everything else IS on the form, **including `status`** — it is
+      user-owned lifecycle, not workflow-controlled state, and the docstring says so explicitly so a
+      reviewer does not "fix" it to `editable=False` by analogy with `TemperatureExcursion.status`.
+- [ ] **Wrongly duplicates if built otherwise** (record in the docstring): a separate `Sensor`/`Device`
+      master alongside the deployment (right in a device-fleet product, pure overhead here); a `ColdRoom`
+      table (a cold room **is** a `scm.Location`); a `Reefer` table (a reefer **is** a `scm.Asset`).
+
+### Model 2 — `TemperatureReading` (NO prefix, `TenantOwned`) · `models/ColdChainManagement/TemperatureReadings.py`
+
+*Bullet 1 + bullet 4 — the append-only **product-environment** ledger: what the goods actually experienced.*
+Drivers: a continuous series per monitor (all eleven products); interval statistics (Berlinger's graph +
+statistics, ELPRO); humidity alongside temperature (Emerson GO monitors temp/location/light/humidity, Tive,
+ORBCOMM); bulk import of a logger file or gateway batch (ELPRO one DB across single-use/Bluetooth/real-time,
+Sensitech TempTale Manager download, Emerson Oversight export); a tamper-evident record (Tive, Controlant,
+ALCOA+/GDP). **Shape it on `MeterReading` + `StockMove`.**
+
+- [ ] `class TemperatureReading(TenantOwned)` — **`TenantOwned`, not `TenantNumbered`, and no
+      `NUMBER_PREFIX`.** State the `MeterReadings.py:63-67` reasoning verbatim in the class docstring.
+  - `monitor` → `"scm.ColdChainMonitor"`, **CASCADE**, `related_name="readings"` — **the ledger's only FK.**
+    The three-way subject polymorphism is resolved ONCE on the low-volume master; pushing it down here
+    would widen the highest-volume table in the sub-module and force every aggregate to `COALESCE` across
+    three columns. CASCADE because a reading is meaningless without the deployment that defines its limits.
+  - `reading_at = DateTimeField()` — no `default=timezone.now`: an interval summary always states its own
+    window, and a defaulted "now" would silently file a logger row under the import time.
+  - `temperature = DecimalField(max_digits=6, decimal_places=2,
+    validators=[MinValueValidator(MIN_TEMPERATURE_C), MaxValueValidator(MAX_TEMPERATURE_C)])` —
+    **signed, NOT NULL, bounded and NEVER clamped.** Both halves of Trap 1 apply to this one field: no
+    `MinValueValidator(ZERO)`, and no `q4()`.
+  - `humidity_pct = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[0,100])`
+  - **interval statistics:** `min_temperature` / `max_temperature = DecimalField(max_digits=6,
+    decimal_places=2, null=True, blank=True, <signed bounds>)` — the window's extremes, both optional
+    because a single-sample interval has none; `sample_count = PositiveSmallIntegerField(default=1,
+    validators=[MinValueValidator(1), MaxValueValidator(MAX_SAMPLE_COUNT)])`
+  - **`interval_minutes = PositiveSmallIntegerField(default=30, editable=False,
+    validators=[MinValueValidator(MIN_LOGGING_INTERVAL_MINUTES),
+    MaxValueValidator(MAX_LOGGING_INTERVAL_MINUTES)])`** — **snapshotted from the monitor by the create /
+    import verb, never a form field.** Decision B. The row carries its own weight so MKT and
+    time-out-of-range cannot be retroactively re-weighted by editing the monitor.
+  - **provenance, both stamped by the verb and neither typeable:**
+    `source = CharField(max_length=16, choices=READING_SOURCE_CHOICES, default="manual", editable=False)`;
+    `recorded_by` → `"core.Party"`, `SET_NULL`, `null=True, blank=True, editable=False`,
+    `related_name="scm_temperature_readings"` (**distinct from `scm_meter_readings`, which is taken**).
+    SET_NULL because *"the observation outlives the observer"* (`MeterReadings.py:70-74`). This is the
+    4.13 `MeterReading` provenance fix applied from the start — a member must not be able to forge a
+    system-filed reading by POSTing `source=sensor_api&recorded_by=<pk>`.
+  - `notes = CharField(max_length=255, blank=True)`
+- [ ] **`Meta`:** `ordering = ["-reading_at", "-id"]` (newest first — every reader wants the current value,
+      and the tie-break on `-id` matters because a bulk import can land several rows on one timestamp and
+      `latest_reading()` must be deterministic);
+      **`unique_together = ("monitor", "reading_at")`** — the idempotent-import guard. Deliberately TWO
+      columns, not `("tenant","monitor","reading_at")`: the monitor already implies the tenant, and adding
+      it would let one monitor hold two rows at one timestamp if it were ever re-pointed;
+      indexes `("tenant","monitor","reading_at")` → `scm_tmp_tnt_mon_idx` and `("tenant","reading_at")` →
+      `scm_tmp_tnt_read_idx` (the whole-workspace list and the date-range export cannot use the first —
+      `monitor` is not a prefix of their filter).
+      **Repeat the `MeterReading` index lesson in the docstring**: `tenant_id` is the LEADING column, so a
+      caller reaching this table through the related manager alone (`monitor.readings…`) states no tenant,
+      cannot open the index, and falls back to a filesort. **Every reader owes a "redundant" `tenant=`.**
+- [ ] **`clean()`:**
+  1. cross-tenant guard on `monitor` and `recorded_by` (skipped when `tenant_id is None`, defaulted
+     `getattr`);
+  2. **no future `reading_at`** — `MeterReadings.py:145-148` verbatim: a future reading sorts to the top of
+     an append-only log and becomes "the current value" for a fridge that has not reached it yet, silently
+     driving every chip and every excursion decision off a number nobody observed. Back-dating an
+     observation is supported; post-dating one is a claim about a measurement that has not happened;
+  3. `min_temperature <= temperature` and `temperature <= max_temperature` **checked independently** so a
+     one-sided statistic is legal; and `max_temperature >= min_temperature` when both are supplied;
+  4. `reading_at` must not predate `monitor.deployed_on` when that is set — a reading from before the
+     deployment belongs to a different deployment of the same reusable logger.
+- [ ] **Documented CRUD exception — state it as a decision, not an omission** (the `StockMove` /
+      `MeterReading` docstring posture, `StockMoves.py:1-9`, `MeterReadings.py:28-37`):
+      **list + create + detail + import. NO edit view, NO delete view, no admin write.** A wrong reading is
+      corrected by **posting a later, correct one**; the mistaken row stays visible, which is the point of
+      an append-only log rather than a defect in it. It is also the only posture that survives an ALCOA+
+      review, where a silently editable measurement IS the finding. `admin.py` registers it read-only
+      (`has_add_permission` / `has_change_permission` / `has_delete_permission` all `False` — the
+      `StockMoveAdmin` `admin.py:198-212` / `MeterReadingAdmin` `:964-984` shape).
+- [ ] **Nothing derived is stored on the reading** — no `is_excursion` boolean, no `mkt`, no `in_range`.
+      Both are a second copy of a fact the monitor's limits already determine, and both go stale the moment
+      a limit is edited.
+- [ ] **Wrongly duplicates if built otherwise:** a second ledger for asset temperatures. `MeterReading`
+      keeps the **asset-condition** series that feeds `MaintenancePlan(trigger_type="condition")` (run
+      hours, discharge-air temp); this table keeps the **product-environment** series. Two tables, two
+      subjects, two questions — and `MeterReading` structurally cannot hold either a sub-zero value or a
+      non-asset subject (Trap 1 corollary).
+
+### Model 3 — `TemperatureExcursion` [`EXC-`] · `models/ColdChainManagement/TemperatureExcursions.py`
+
+*Bullet 2, Excursion Management — a derived EPISODE plus the human judgement about it.* Drivers: excursion
+records with duration + extreme + reading count (Berlinger's graph/statistics/excursions, ELPRO, Sensitech,
+Tive); grace/duration criteria (ELPRO's total-duration-outside-limits alarm); limits snapshotted at fire
+time (every GxP audit trail — the record must read the same next year); MKT over the window (ELPRO's
+MKT-triggered alarms, USP <1079.2>); the triage lifecycle acknowledge → investigate → assess → close
+(Sensitech's Handling & Excursion Management, SmartSense's prescriptive corrective-action workflow,
+Controlant); the product-level release decision (ELPRO, Sensitech, Tive); alarm → repair (ORBCOMM, Carrier).
+**Shape the detector-vs-triage split on `SupplyChainAlert` (`SupplyChainAlerts.py:1-8`).**
+
+- [ ] `class TemperatureExcursion(TenantNumbered)` — `NUMBER_PREFIX = "EXC"`
+  - `monitor` → `"scm.ColdChainMonitor"`, **PROTECT**, `related_name="excursions"` — the record must
+    survive; you retire a monitor, you do not delete the evidence that it fired.
+  - **DETECTOR-WRITTEN — every one of these is `editable=False` and no form ever touches them:**
+    `started_at = DateTimeField(editable=False)`;
+    `ended_at = DateTimeField(null=True, blank=True, editable=False)` — **null means the episode is still
+    running**;
+    `duration_minutes = PositiveIntegerField(default=0, editable=False,
+    validators=[MaxValueValidator(MAX_EXCURSION_MINUTES)])`;
+    `breach_direction = CharField(max_length=6, choices=BREACH_DIRECTION_CHOICES, default="high",
+    editable=False)`;
+    `extreme_temperature = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
+    editable=False, <signed bounds>)`;
+    **`limit_min` / `limit_max = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True,
+    editable=False, <signed bounds>)` — the SNAPSHOT of what was in force when it fired**, written at open
+    time and **never re-written on extend** (the `LaborActivity.standard_minutes_snapshot` /
+    `CycleCountTaskLine.expected_quantity` / `MaintenanceWorkOrderTask` snapshot rule);
+    `reading_count = PositiveIntegerField(default=0, editable=False)`;
+    `mkt = DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, editable=False, <signed
+    bounds>)` — **nullable and honestly `None`** for a frozen/deep-frozen/cryogenic monitor (USP says MKT
+    does not apply) and for a window with no readings. **Never 0** — the 4.13 rule: an MKT of 0 °C reads as
+    a perfectly-cold shipment, the exact opposite of "we don't know";
+    `last_detected_at = DateTimeField(default=timezone.now, editable=False)` — the re-fire stamp (the
+    `SupplyChainAlert.last_seen_at` idiom): a breach that keeps breaching shows "still breaching" by moving
+    this, **without a duplicate row**.
+  - **HUMAN TRIAGE — the only writable block:**
+    `status = CharField(max_length=16, choices=EXCURSION_STATUS_CHOICES, default="open", editable=False)` —
+    **workflow-controlled: `editable=False` and moved only by the four verbs** (L22 + the
+    `SupplyChainAlert.status` posture). Note the deliberate contrast with `ColdChainMonitor.status`, which
+    IS on its form;
+    `severity = CharField(max_length=10, choices=EXCURSION_SEVERITY_CHOICES, default="major")` — seeded by
+    the detector at open time, **human-writable afterwards, and the detector must NOT overwrite it on a
+    later pass** (a triager's downgrade has to survive the next detection run);
+    `acknowledged_by` → `settings.AUTH_USER_MODEL`, SET_NULL, `editable=False`,
+    `related_name="scm_excursions_acknowledged"`; `acknowledged_at = DateTimeField(null=True, blank=True,
+    editable=False)`;
+    `assessment = CharField(max_length=20, choices=ASSESSMENT_CHOICES, default="pending")`;
+    `assessed_by` → `"core.Party"`, SET_NULL, `null=True, blank=True, editable=False`,
+    `related_name="scm_excursion_assessments"`; `assessed_on = DateTimeField(null=True, blank=True,
+    editable=False)`;
+    `cause = CharField(max_length=20, choices=EXCURSION_CAUSE_CHOICES, blank=True)`;
+    `corrective_action = TextField(blank=True)`; `notes = TextField(blank=True)`
+  - **LINKS OUT — all `SET_NULL`, one-way, and NO reciprocal vocabulary edit anywhere** (the
+    `MaintenanceWorkOrder.non_conformance` precedent, `MaintenanceWorkOrders.py:175-179`):
+    `non_conformance` → `"scm.NonConformance"`, `related_name="cold_chain_excursions"` — **4.9 owns
+    disposition, the quarantine verb that flips `LotSerial.status`, and `cost_of_quality`. 4.15 must not
+    re-declare a disposition vocabulary and must not flip a lot status itself**;
+    `maintenance_work_order` → `"scm.MaintenanceWorkOrder"`, `related_name="cold_chain_excursions"` —
+    **4.13 owns the repair**; `lot_serial` → `"scm.LotSerial"`, `related_name="cold_chain_excursions"` —
+    the affected batch: **read its status, never write it.**
+  - `TENANT_SCOPED_FKS = ("monitor", "non_conformance", "maintenance_work_order", "lot_serial")`
+  - Class attributes: `OPEN_STATUSES = OPEN_EXCURSION_STATUSES`,
+    `EDITABLE_STATUSES = EDITABLE_EXCURSION_STATUSES`, `CLOSED_STATUSES = ("closed", "dismissed")`,
+    plus the three `*_CSS` lookups pulled from `_choices`.
+- [ ] **`Meta`:** `ordering = ["-started_at", "-id"]`; `unique_together = ("tenant", "number")`; indexes
+      `("tenant","status")` → `scm_exc_tnt_status_idx`, `("tenant","monitor","started_at")` →
+      `scm_exc_tnt_mon_idx`, `("tenant","started_at")` → `scm_exc_tnt_start_idx`, `("tenant","severity")` →
+      `scm_exc_tnt_sev_idx`, `("tenant","ended_at")` → `scm_exc_tnt_ended_idx` (**the detector's hot path:
+      one lookup for the still-running episode per monitor per pass**).
+      **NO `UniqueConstraint(condition=…)` — see Trap 2**, and put the reason in the `Meta`-adjacent
+      docstring, not just in this plan.
+- [ ] **`clean()`:** cross-tenant guard over `TENANT_SCOPED_FKS`; `ended_at >= started_at` when both set;
+      `started_at` not in the future; `limit_min <= limit_max` when both set;
+      **`assessment="product_affected"` requires either a non-blank `corrective_action` or a linked
+      `non_conformance`** (a verdict that something is spoiled with no recorded action and no NCR is not an
+      audit record); and a **belt-and-braces** refusal of a second `ended_at IS NULL` row for the same
+      monitor — with a docstring line stating **that this is NOT the concurrency guard**; the detector's
+      `select_for_update()` is (Trap 2).
+- [ ] **Derived — nothing below is stored:**
+  - `is_open` (triage) vs `is_episode_running` (`ended_at is None`) — **two different questions, named
+    apart**, exactly as on the monitor; `is_editable` (`status in EDITABLE_STATUSES`).
+  - **`is_reportable`** → `live_duration_minutes() >= monitor.excursion_grace_minutes`. **Tier 2, derived,
+    never stored** — the grace period is a monitor setting and editing it must move this answer.
+  - `live_duration_minutes(now=None)` → the stored `duration_minutes` for a closed episode; `now −
+    started_at` for a running one, clamped to `MAX_EXCURSION_MINUTES`. The `Asset._reliability_agg` open-
+    window rule: a window still running contributes to the figure but not to the stored column, and the
+    clock is read **once** per call so two figures on one page cannot disagree.
+  - `excess_c()` → how far past the snapshotted limit the extreme went, or **`None`**.
+  - `readings()` → the episode's rows: `TemperatureReading.objects.filter(tenant_id=…, monitor_id=…,
+    reading_at__gte=started_at, reading_at__lte=(ended_at or timezone.now()))` — with the "redundant"
+    `tenant_id` so the index is reachable.
+  - `status_css` / `severity_css` / `assessment_css` / `breach_direction_css`.
+- [ ] **Workflow methods — the ONLY writers of the triage columns.** Each returns the
+      `{field: [before, after]}` diff for `write_audit_log`, or `{}` when nothing changed; **every one is
+      no-op safe** (re-acknowledging must not blank the first acknowledger). A `ValidationError` is raised
+      only for a caller-supplied VALUE that is out of range, never for a wrong STATE — the
+      `SupplyChainAlert.snooze` split (`SupplyChainAlerts.py:293-305`). Copy `_actor(user)`
+      (`SupplyChainAlerts.py:246-250`) so a management command's `AnonymousUser` goes unattributed instead
+      of raising on assignment.
+  - `acknowledge(user)` → `investigating`, stamps `acknowledged_by` / `acknowledged_at`.
+  - `assess(party, assessment, cause="", corrective_action="")` → `assessed`, stamps `assessed_by` /
+    `assessed_on`. Validates `assessment` against the vocabulary.
+  - `close(user, note="")` → `closed`. **Refuses while the episode is still running** (`ended_at is None`)
+    with a message — closing an incident that is still happening is the one refusal worth being loud about.
+  - `dismiss(user)` → `dismissed` (a blip under grace, judged not worth acting on).
+- [ ] **Wrongly duplicates if built otherwise** (record in the docstring): a second disposition vocabulary
+      (4.9's `DISPOSITION_CHOICES`); a second CAPA table (4.9's `CapaAction`); a second alert queue (4.11's
+      `SupplyChainAlert` — this one is domain-specific and carries an **episode**, which an alert does
+      not); a second quarantine mechanism (4.9 flips `LotSerial.status` and posts nothing); or any
+      `accounting.JournalEntry` (L29).
+
+### The two additive fields on 4.3's masters — Decision C, NOT a fourth model
+
+Both are single, all-default, blank-permitted `CharField`s sharing `STORAGE_CONDITION_CHOICES` from the new
+`apps/scm/models/_choices.py`, so **no existing row changes meaning and nothing needs backfilling.**
+
+- [ ] `apps/scm/models/InventoryManagement/Items.py` — add
+      `storage_condition = models.CharField(max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True,
+      help_text="Temperature class this item must be kept at; blank = not temperature-controlled")`
+      immediately after `is_spare_part`, with a comment in the same voice as `Items.py:94-102`.
+      *(drivers: the whole cold-storage WMS bracket — Made4net, AEB, Datex, Logimax — plus ELPRO's
+      product-level assessment.)*
+- [ ] `apps/scm/models/InventoryManagement/Locations.py` — add
+      `storage_condition = models.CharField(max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True,
+      help_text="Temperature class of this zone or bin; blank = ambient / unclassified")`
+      in the 4.4 bin-attribute block, with a comment naming the same precedent (`Locations.py:34-36`).
+      *(drivers: user-defined temperature zones — chiller / deep freeze / blast / ambient and sub-zones —
+      in Made4net, AEB, Datex, Logimax; SmartSense's per-asset monitoring.)*
+- [ ] **The import line in both files is `from apps.scm.models._choices import STORAGE_CONDITION_CHOICES`
+      — by name, never `import *`.** It is safe because `_choices.py` imports nothing at all (not even
+      `_base`), so the partially-initialised `apps.scm.models` package in `sys.modules` is never asked for
+      a name it has not bound yet. **If this ever does turn circular, the fix is to move the constant, not
+      to duplicate the list.**
+- [ ] **Both need a WRITER in the tenant UI** — add `storage_condition` to `Meta.fields` on
+      `apps/scm/forms/InventoryManagement/Items.py` and `.../Locations.py`, and render it on both form
+      templates. **This is the exact 4.13 finding the code-reviewer raised** (`Item.is_spare_part` shipped
+      with no writer, so the storeroom page could only ever be populated by the seeder). Do not repeat it.
+- [ ] Add `storage_condition` as a **filter** on `item_list` and `location_list`, and as a column on both
+      list pages. A field nobody can search is a field nobody uses.
+
+---
+
+## 4. The detector + MKT service — `apps/scm/coldchain.py` (FLAT at the app root)
+
+**Where and why.** Backend Package Structure rule 8: *"`admin.py`, `apps.py`, `analytics.py`, `services.py`
+and other single-purpose modules stay flat at the app root."* 4.11's `SupplyChainAlert` detector lives in
+`apps/scm/analytics.py` for exactly this reason, and the model's own docstring records the **import
+direction** rule that comes with it: *"the metric vocabulary comes from `_choices` (pure data), NEVER from
+`apps.scm.analytics` — that module imports the model layer, so the edge has to run one way or the package
+will not import"* (`SupplyChainAlerts.py:9-11`). **The same rule binds here:** `coldchain.py` imports
+`apps.scm.models`; **no model module may ever import `apps.scm.coldchain`.**
+
+- [ ] `apps/scm/coldchain.py` — module docstring stating: the import direction above; that this module is
+      the ONLY writer of every `editable=False` column on `TemperatureExcursion`; that it posts no
+      `StockMove`, no `JournalEntry`, and never touches `LotSerial.status`; and that the "one open episode
+      per monitor" rule is enforced HERE, by a row lock, because MariaDB has no partial indexes (Trap 2).
+
+### 4a. Pure functions (no DB, unit-testable on their own)
+
+- [ ] `out_of_range(temperature, limit_min, limit_max) -> str` → `""` | `"high"` | `"low"`.
+      A `None` limit means **no limit on that side** — a one-sided band is legitimate and must not be
+      treated as "always in range on both sides". **`temperature is None` returns `""` and the caller
+      SKIPS the row** — a missing measurement is neither in range nor a breach, and this is the second half
+      of Trap 1: the function must never see a `q4()`-coerced `0`.
+- [ ] `mean_kinetic_temperature(rows, *, frozen=False) -> Decimal | None` — USP <1079.2>:
+      `MKT = (ΔH/R) / −ln( Σ wᵢ·exp(−(ΔH/R)/Tᵢ) / Σ wᵢ )` in **Kelvin**, then `− KELVIN_OFFSET`.
+      - `wᵢ` is the row's **snapshotted `interval_minutes`** — that is the entire reason the column exists
+        (Decision B). A row with a `None` weight falls back to 1 rather than being dropped.
+      - Uses `MKT_EA_OVER_R` directly (= 10000 K exactly, by the USP's choice of constants).
+      - **Returns `None`, never `0`, for:** an empty row set; `frozen=True` (a frozen / deep-frozen /
+        cryogenic monitor — USP states MKT does not apply, and it must never be used to offset a prior
+        excursion); a row set whose weights sum to zero; and a log-domain failure. The 4.13 rule verbatim:
+        *"an honest figure can answer `None`, never 0"*.
+      - Computes in **`float` via `math.exp` / `math.log`** and returns a `Decimal` quantized to 2dp.
+        Comment that this is deliberate — `Decimal.exp()` over tens of thousands of rows costs ~100× for
+        precision no thermometer has — so nobody "fixes" it later.
+      - **Property worth asserting in the tests:** MKT is always **≥** the arithmetic mean for a varying
+        series, and **equal** to it for a constant one. That is a real correctness check, not a smoke test.
+- [ ] `severity_for(excess_c, duration_minutes, grace_minutes) -> str` — the detector's **initial** severity
+      only (`critical` / `major` / `minor`). Pure, so the rule is testable and is stated in one place.
+
+### 4b. `profile(monitor, *, date_from, date_to) -> dict` — the derived temperature profile
+
+*Bullet 4's headline artefact: Berlinger's PDF sector report, ELPRO, Sensitech, Tive all ship this.*
+
+- [ ] Returns `{"count", "first_at", "last_at", "min", "max", "mean", "in_range_minutes",
+      "out_minutes", "pct_in_range", "mkt", "window_capped"}`.
+- [ ] **Every figure is `None` on an empty window — never `0`.** `pct_in_range` of 0 % means "it was never
+      in range"; a blank means "we have no readings", and conflating them is how a page lies.
+- [ ] **`pct_in_range` and `out_minutes` are MINUTE-WEIGHTED, not row-weighted** — each row contributes its
+      own `interval_minutes`. A row-count percentage would silently mis-state any monitor whose interval
+      changed mid-window, which is the exact drift the snapshot exists to prevent.
+- [ ] **The window is capped at `MAX_READING_WINDOW_DAYS`** and the return says so (`window_capped`) so the
+      page can state that it truncated rather than pretending the range was honoured.
+- [ ] **ONE aggregate** for count/min/max/mean (`Min`/`Max`/`Avg` in a single `.aggregate()`), then **one
+      bounded iterator** over `.values("temperature","interval_minutes")` for the in/out minutes and the
+      MKT. Never a per-row model instantiation, never N queries. Carries the "redundant" `tenant=`.
+
+### 4c. `detect_excursions(tenant, *, monitor=None, user=None) -> dict` — the episode detector
+
+Returns `{"opened", "extended", "closed", "skipped", "more_remain"}`.
+
+- [ ] **Scope:** monitors with `tenant=tenant`, `status="active"`, and at least one limit set
+      (`Q(min_temperature__isnull=False) | Q(max_temperature__isnull=False)`) — a monitor with no threshold
+      is skipped and counted, not crashed on. `monitor=` narrows to one, which is what the per-monitor
+      button uses.
+- [ ] **One `transaction.atomic()` per monitor**, not one for the whole sweep: a poisoned monitor must not
+      roll back the twenty that already succeeded, and a single long transaction over every monitor in a
+      tenant holds locks for the length of the sweep.
+- [ ] **Inside the transaction, FIRST — before any reading is read —**
+      `episode = TemperatureExcursion.objects.select_for_update().filter(tenant=tenant, monitor=monitor,
+      ended_at__isnull=True).order_by("-started_at").first()`.
+      **This ordering is the whole guard.** Taking the lock after the walk would leave the classic TOCTOU
+      window the 4.13 security review found twice: two concurrent passes both read "no open episode", both
+      walk, and both INSERT. Note in the comment that `select_for_update()` on a queryset that matches
+      nothing locks nothing — so the second half of the guard is the re-read of
+      `monitor.open_episode()` **after** the lock is taken, plus the `unique_together` on the reading table
+      making a duplicated walk idempotent in its inputs. If a stronger guarantee is ever needed the answer
+      is a lock on the **monitor row** (`ColdChainMonitor.objects.select_for_update().get(pk=…)`), which is
+      always present — **do that**, and say so: lock the monitor, then read its episode.
+      → **DECISION: lock the MONITOR row.** It always exists, so the lock is never a no-op, and it also
+      serialises the reading-import path against the detector.
+- [ ] **Watermark:** walk only readings newer than
+      `max(open_episode.last_detected_at, last closed episode's ended_at, monitor.deployed_on, None)` —
+      so a re-run is cheap and cannot re-open an episode that was already closed.
+- [ ] **Bounded walk:** `.order_by("reading_at").values("id","reading_at","temperature","interval_minutes")
+      .iterator()` with a hard `[:MAX_EPISODE_READINGS]` slice; when the slice is full, return
+      `more_remain=True` and let the caller press again. **An unbounded walk over the fastest-growing table
+      in the sub-module is the 4.7 `MAX_HORIZON_PERIODS` lesson applied to reads instead of writes.**
+- [ ] **The episode rule** (tier 1 + tier 2 of the market's five):
+      open at the first out-of-range reading; extend while consecutive readings stay out of range; close at
+      the first in-range reading, with `ended_at` = that reading's `reading_at`.
+      `extreme_temperature` = the max (for `high`) / min (for `low`) over the episode's readings;
+      `breach_direction` = `high` / `low` / **`both`** once an episode has seen breaches on both sides;
+      `duration_minutes` = `(ended_at or now) − started_at`, clamped to `MAX_EXCURSION_MINUTES`;
+      `reading_count` = rows in the episode; `mkt` = `mean_kinetic_temperature(episode rows,
+      frozen=monitor.is_frozen_condition)`.
+- [ ] **De-dupe:** when an episode is already open, **UPDATE it** —
+      `save(update_fields=["ended_at","duration_minutes","extreme_temperature","breach_direction",
+      "reading_count","mkt","last_detected_at","updated_at"])` — never `create()` a second row.
+      `save(update_fields=…)` is narrow **on purpose**: a full `save()` would write back every in-memory
+      column including any a concurrent triage edit had just changed (the `_status_transition` reasoning,
+      `views/_helpers.py:425-428`).
+- [ ] **`limit_min` / `limit_max` are written at OPEN time and never touched again.** An extend that
+      re-snapshotted them would make the record read differently next year — which is the one thing a GxP
+      record must not do.
+- [ ] **`severity` is written at OPEN time only.** A later pass must not overwrite a triager's downgrade.
+      Say so beside the code, because "recompute everything on every pass" is the natural instinct.
+- [ ] **`status` is NEVER written by the detector** — only the four workflow methods move it. A re-fire on
+      an acknowledged excursion moves `last_detected_at` and leaves the triage state alone (the
+      `SupplyChainAlert` re-fire contract, which is also why `resolve` is reachable from every open status).
+- [ ] **`write_audit_log(user, excursion, "create" | "update", {...})` per row touched.** The detector is a
+      hand-rolled save path, so it owes the audit call itself — the `crud_*` helpers are not involved here.
+      Include the monitor number and the measured deltas in the payload.
+- [ ] **It writes NOTHING outside its own table.** No `StockMove`, no `JournalEntry`, no
+      `LotSerial.status`, no `Asset.status`, no `MaintenanceWorkOrder`. Assert that in a test.
+
+### 4d. `raise_work_order(excursion, user)` — the one cross-sub-module verb
+
+*Bullet 5's "alarm code → work order → repair" (ORBCOMM, Carrier, Thermo King) and bullet 2's "equipment fix
+raised from the excursion" (SmartSense).*
+
+- [ ] Creates a `scm.MaintenanceWorkOrder(tenant=…, asset=excursion.monitor.asset,
+      work_type="corrective", priority=<mapped from severity>, source=<an EXISTING SOURCE_CHOICES value —
+      read `MaintenanceWorkOrders.py:90-99` and pick one; do NOT add a new one>, title=…, description=…)`
+      and points `excursion.maintenance_work_order` at it.
+- [ ] **Returns `None` when the monitor's subject is not an `Asset`** — a cold room and a shipment are not
+      maintainable things — and the view messages that rather than 500-ing.
+- [ ] Inside `transaction.atomic()` with the excursion taken `select_for_update()`, and **re-reads
+      `maintenance_work_order_id` under the lock** so a double-click cannot raise two jobs (the 4.13
+      TOCTOU fix).
+- [ ] **One-way link out, no reciprocal edit** — 4.13's `SOURCE_CHOICES` and `Asset.ASSET_TYPE_CHOICES` are
+      both left exactly as they are. **In particular, do NOT add a `reefer` asset type:** a reefer is
+      *derived* as "an `Asset` that has an active `ColdChainMonitor` pointed at it", which needs no change
+      to 4.13 at all and cannot go stale the way a hand-set type would.
+
+### 4e. How it runs
+
+- [ ] `@require_POST @tenant_admin_required def coldchain_detect(request)` (and a per-monitor variant) —
+      a **button**, exactly as 4.11 runs `detect_alerts` from a button rather than a cron. There is no
+      scheduler in this project and inventing half of one here would be a second thing to operate.
+- [ ] **The seeder calls the same function**, so the demo excursions are produced by the real code path and
+      the path is exercised on every `seed_scm` run.
+- [ ] **`_status_transition` is REUSED, not re-implemented.** `apps/scm/views/_helpers.py:393` already does
+      guard → `select_for_update()` → status re-read inside the lock → stamp → `write_audit_log` →
+      message → redirect, and it is described there as *"the concurrency guard"* whose whole point is that
+      there is ONE copy. Use it for `temperatureexcursion_acknowledge` / `_close` / `_dismiss` (passing
+      `from_statuses`, `to_status`, `action`, `verb`, `stamps`, and — for `close` — a `precheck` that
+      refuses a still-running episode, **evaluated inside the lock**, which is exactly what `precheck` is
+      for). Only `_assess` is hand-rolled, because it consumes a form payload; it opens its own
+      `transaction.atomic()` + `select_for_update()` and calls `write_audit_log` itself.
+
+---
+
+## 5. Backend (`apps/scm/{models,forms,views,urls}/ColdChainManagement/`)
+
+One `ColdChainManagement/` folder per layer, one `<Entity>.py` per entity, the four layers lining up
+one-to-one. **Absolute imports only** (`from apps.scm.models import ColdChainMonitor`); a relative
+`from .models import X` resolves one package too deep. Entity modules pull the toolkit via
+`from apps.scm.models._base import *` / `from apps.scm.forms._common import *` /
+`from apps.scm.views._common import *`.
+
+### Models
+
+- [ ] `apps/scm/models/_choices.py` **(NEW, package root)** — the shared storage vocabulary (§3 File 0a)
+- [ ] `apps/scm/models/ColdChainManagement/__init__.py` (empty — the `AssetManagement` precedent)
+- [ ] `apps/scm/models/ColdChainManagement/_choices.py`
+- [ ] `apps/scm/models/ColdChainManagement/ColdChainMonitors.py` — `ColdChainMonitor`
+- [ ] `apps/scm/models/ColdChainManagement/TemperatureReadings.py` — `TemperatureReading`
+- [ ] `apps/scm/models/ColdChainManagement/TemperatureExcursions.py` — `TemperatureExcursion`
+- [ ] `apps/scm/models/InventoryManagement/Items.py` — **modified**: one `storage_condition` column
+- [ ] `apps/scm/models/InventoryManagement/Locations.py` — **modified**: one `storage_condition` column
+- [ ] **No other shipped model file changes.** In particular: no column on `Asset`, no value added to
+      `Asset.ASSET_TYPE_CHOICES`, no change to `MaintenancePlan` (including its `condition_threshold`
+      validator — Trap 3), no change to `MaintenanceWorkOrder.SOURCE_CHOICES`, no change to
+      `NonConformance.source`, no change to `StockMove.MOVE_TYPES`. **Verify that against the migration.**
+
+### Forms
+
+- [ ] `apps/scm/forms/ColdChainManagement/__init__.py` (empty)
+- [ ] `apps/scm/forms/ColdChainManagement/ColdChainMonitors.py` — `ColdChainMonitorForm`
+- [ ] `apps/scm/forms/ColdChainManagement/TemperatureReadings.py` — `TemperatureReadingForm` +
+      `TemperatureReadingImportForm`
+- [ ] `apps/scm/forms/ColdChainManagement/TemperatureExcursions.py` — `TemperatureExcursionForm` (triage) +
+      `TemperatureExcursionAssessForm` + `TemperatureExcursionWindowForm` (the manual back-dated create)
+- [ ] `apps/scm/forms/InventoryManagement/Items.py` + `.../Locations.py` — **modified**: add
+      `storage_condition` to `Meta.fields` (the missing-writer fix, §3)
+- [ ] **Every form subclasses `TenantModelForm`** (`apps/core/forms/_common.py`), takes `tenant=`, and
+      **narrows every FK queryset to that tenant**: `location` via `_location_qs`, and `asset` /
+      `shipment` / `lot_serial` / `non_conformance` / `maintenance_work_order` via tenant-scoped querysets
+      with the instance's own current pk kept selectable on edit (the `ProductionTimeLogForm:37-42` idiom).
+      Then **`clean()` re-checks the tenant of every chosen FK via `_reject_foreign`**
+      (`forms/_common.py:136`) — a narrowed dropdown is a UI convenience, **not an authorization
+      boundary** (L39 §2).
+- [ ] `Meta.fields` is an explicit **whitelist** on every form — never `exclude`, never `"__all__"`.
+      **Excluded by design, per model:**
+  - `ColdChainMonitorForm` — `tenant`, `number`. *(Everything else IS on the form, `status` included.)*
+  - `TemperatureReadingForm` — `tenant`, **`monitor` (taken from the URL, never from POST)**,
+    **`interval_minutes`**, **`source`**, **`recorded_by`**. Fields ARE: `reading_at`, `temperature`,
+    `humidity_pct`, `min_temperature`, `max_temperature`, `sample_count`, `notes`.
+  - `TemperatureExcursionForm` (triage/edit) — `tenant`, `number`, `monitor`, and **every detector-written
+    column** (`started_at`, `ended_at`, `duration_minutes`, `breach_direction`, `extreme_temperature`,
+    `limit_min`, `limit_max`, `reading_count`, `mkt`, `last_detected_at`), plus `status`,
+    `acknowledged_by`, `acknowledged_at`, `assessed_by`, `assessed_on`. Fields ARE: `severity`,
+    `assessment`, `cause`, `corrective_action`, `notes`, `non_conformance`, `maintenance_work_order`,
+    `lot_serial`. *(They are already `editable=False` on the model, so a crafted POST naming them cannot
+    reach `cleaned_data` — the whitelist is the second lock, not the only one.)*
+  - `TemperatureExcursionWindowForm` — a plain `forms.Form` for the **manual back-dated create**:
+    `monitor`, `started_at`, `ended_at` + the triage fields. **No measured number is ever typed** — the
+    view computes `duration_minutes` / `extreme_temperature` / `breach_direction` / `reading_count` /
+    `mkt` / `limit_min` / `limit_max` from the readings in that window via `apps/scm/coldchain.py`. This is
+    how CRUD Completeness ("every model with a list page gets a create view") and the `editable=False`
+    contract are BOTH honoured — write that in the docstring so nobody "simplifies" it into typed numbers.
+  - `TemperatureReadingImportForm` — a plain `forms.Form`: `file` (CSV), `source` limited to
+    `{logger_import, gateway}`, `interval_minutes_override` (optional). Validates extension and size
+    against the `ALLOWED_DOC_EXTENSIONS` / `MAX_UPLOAD_BYTES` pattern in `apps/core/forms/_common.py`, and
+    **refuses a file with more than `MAX_BATCH_READINGS` data rows before parsing any of them.**
+- [ ] **The `STORAGE_CONDITION_RANGES` pre-fill lives HERE** — `ColdChainMonitorForm.__init__` sets the
+      *initial* `min_temperature` / `max_temperature` from the chosen `storage_condition` on an **unbound,
+      unsaved** form only. It never overwrites a value the user typed and never touches a saved row.
+
+### Views
+
+- [ ] `apps/scm/views/ColdChainManagement/__init__.py` (empty)
+- [ ] `apps/scm/views/ColdChainManagement/ColdChainMonitors.py` — `coldchainmonitor_list` (search + filters
+      + pagination), `_create`, `_detail`, `_edit`, `_delete`, plus `coldchainmonitor_profile`,
+      `coldchainmonitor_detect` (per-monitor) and `coldchain_detect` (whole-tenant sweep)
+- [ ] `apps/scm/views/ColdChainManagement/TemperatureReadings.py` — `temperaturereading_list`
+      (whole-workspace, **date-windowed and paginated**), `coldchainmonitor_add_reading` (**create under
+      the parent route — `monitor` from the URL, never POST**), `temperaturereading_detail`,
+      `coldchainmonitor_import_readings`. **NO `_edit` view and NO `_delete` view** — the documented CRUD
+      exception (§3 Model 2). Do not let a review agent "complete the CRUD" here.
+- [ ] `apps/scm/views/ColdChainManagement/TemperatureExcursions.py` — `temperatureexcursion_list`,
+      `_create` (the back-dated window form), `_detail`, `_edit` (triage fields only), `_delete`, plus the
+      verbs `_acknowledge`, `_assess`, `_close`, `_dismiss`, `_raise_work_order`
+- [ ] `apps/scm/views/ColdChainManagement/Reports.py` — `cold_storage_report`,
+      `cold_chain_compliance_report` (+ `?format=csv`), `reefer_board`
+- [ ] **Every view:** function-based, `@login_required`, `Model.objects.filter(tenant=request.tenant)` with
+      no exceptions, `get_object_or_404(..., tenant=request.tenant)` on every pk lookup (a reading via its
+      own tenant **and** `monitor__tenant`). Audit via `write_audit_log` (`apps/core/utils.py`) — the
+      `crud_*` helpers in `apps/core/crud.py` call it automatically, but **every hand-rolled save path and
+      every verb must call it itself**, the detector and the CSV import included.
+- [ ] **`@tenant_admin_required` on the privileged writes:** all three delete views;
+      `coldchainmonitor_import_readings` (it bulk-writes an audit record);
+      `coldchain_detect` / `coldchainmonitor_detect` (they mint records a regulator reads);
+      `temperatureexcursion_assess` (the product release/reject decision), `_close` and `_dismiss` (both
+      terminal); and `temperatureexcursion_raise_work_order` (**it writes another sub-module's table** —
+      the `labor_board_assign` precedent). `_acknowledge` stays `@login_required`: seeing something is not
+      a privileged act, and gating it would slow the one response you want to be fast.
+- [ ] **Every verb is `@require_POST`** so a GET is a 405, not a silent state change. Each validates its
+      transition and answers with a message + redirect rather than a 500 on an illegal move; a
+      cross-tenant pk must be **404 before any 302** (the 4.12 finding: a 302 leaks "there is a row there,
+      you just cannot move it").
+- [ ] **List filters — mandatory on every list page. Pass every choice list and queryset from the view, and
+      compare pk params with `|stringformat:"d"`, never `|slugify`:**
+  - `coldchainmonitor_list` — `q` (name / number / device_serial), `status`, `device_type`,
+    `storage_condition`, `subject` (`location`/`asset`/`shipment`, derived from which FK is set),
+    `location` (int), `asset` (int), `shipment` (int), `range` (`in`/`out`/`unknown`, **derived** from the
+    latest reading vs the limits), `reporting` (`live`/`stale`/`never`, derived),
+    `calibration` (`due`/`overdue`/`ok`/`not_recorded`, derived)
+  - `temperaturereading_list` — `monitor` (int), `source`, `date_from`/`date_to` on `reading_at` (the
+    shared `_date_window` helper, `views/_helpers.py:88`), `band` (`in`/`out`, derived against the
+    monitor's limits). **The page is ALWAYS bounded** — with no `monitor` and no dates it defaults to the
+    last 7 days and says so on the page.
+  - `temperatureexcursion_list` — `q` (number / monitor name), `status`, `severity`, `assessment`, `cause`,
+    `breach_direction`, `monitor` (int), `reportable` (`yes`/`no`, **derived** against
+    `excursion_grace_minutes`), `running` (`open_episode`/`ended`, derived), `date_from`/`date_to` on
+    `started_at`
+  - `cold_storage_report` — `storage_condition`, `location` (int), `expiring_within` (clamped int days),
+    `view` (`on_hand`/`mismatch`/`expiring`/`quarantined`/`unmonitored`)
+  - `cold_chain_compliance_report` — `date_from`/`date_to` (via `_report_window`,
+    `views/_helpers.py:484`), `monitor` (int), `status`, `assessment`
+  - `reefer_board` — `q`, `criticality`, `pm_due` (`overdue`/`due_soon`), `range` (`in`/`out`/`unknown`)
+  - Every int-valued param goes through `as_db_int` / the `crud_list` `(param, lookup, is_int)` spec so
+    `?monitor=abc`, `?monitor=²` and `?monitor=999999999999999999999` **skip the filter rather than 500**
+    (L11). Every `?days=` / `?expiring_within=` is **clamped**, not trusted.
+- [ ] **Query hygiene** — `select_related("monitor", "monitor__location", "monitor__asset",
+      "monitor__shipment", "non_conformance", "maintenance_work_order", "lot_serial", "lot_serial__item")`
+      on every list/detail. **`coldchainmonitor_list` must not run one `latest_reading()` per row** — that
+      is the `asset_list` correlated-EXISTS finding from 4.13 (5,000 probes to render 15 rows). Resolve the
+      latest reading for the whole page in **one** query (`Subquery`/`OuterRef` over the paginated slice,
+      or one `filter(monitor__in=page_ids)` pass ordered by `-reading_at` collapsed in Python) and hand it
+      into `is_in_range()` / `range_chip()`. Same rule for `open_episode()` — one
+      `filter(monitor__in=…, ended_at__isnull=True)` pass, not per row.
+- [ ] **Every derived figure renders `None` as "—"**, never `0`, never `0.00`, never blank: MKT for a
+      frozen monitor, `pct_in_range` on an empty window, `is_in_range()` with no reading, `setpoint_gap()`
+      with no setpoint, `days_to_calibration_due()` with no date.
+
+### URLs
+
+- [ ] `apps/scm/urls/ColdChainManagement/__init__.py` (empty)
+- [ ] `apps/scm/urls/ColdChainManagement/ColdChainMonitors.py` — prefix `cold-chain-monitors/`
+- [ ] `apps/scm/urls/ColdChainManagement/TemperatureReadings.py` — prefix `temperature-readings/`
+- [ ] `apps/scm/urls/ColdChainManagement/TemperatureExcursions.py` — prefix `temperature-excursions/`
+- [ ] `apps/scm/urls/ColdChainManagement/Reports.py` — prefixes `cold-storage-report/`,
+      `cold-chain-compliance/`, `reefer-board/`
+- [ ] **COLLISION CHECK, to be written into `urls/__init__.py` as a comment and re-verified against the
+      WHOLE concatenated urlconf (not just the 4.15 block):** six new first segments — **nothing anywhere
+      in `scm` starts with `cold`, `temperature` or `reefer`** (verified at plan time). Django matches
+      **whole path components** and never splits one at a hyphen, so `cold-chain-monitors`,
+      `cold-storage-report`, `cold-chain-compliance`, `temperature-readings`, `temperature-excursions` and
+      `reefer-board` are six unrelated components; none can shadow another, and none may ever be "tidied"
+      to look like another. Near neighbours that are NOT collisions: 4.12's compliance routes, 4.3's
+      `categories/` and `locations/`, 4.6's `carriers/`.
+      **4.15 introduces NO greedy `<str:…>` converter** — 4.10's `return-tracking/<str:token>/` remains the
+      app's only one. Within every module, literal routes (`add/`, `detect/`, `import/`) precede every
+      `<int:pk>/` route, or the create page is swallowed and 404s as "monitor 'add' not found".
+- [ ] Nested routes, and where each verb hangs:
+      `cold-chain-monitors/<int:pk>/readings/add/` → `coldchainmonitor_add_reading`;
+      `cold-chain-monitors/<int:pk>/readings/import/` → `coldchainmonitor_import_readings`;
+      `cold-chain-monitors/<int:pk>/profile/` → `coldchainmonitor_profile`;
+      `cold-chain-monitors/<int:pk>/detect/` → `coldchainmonitor_detect`;
+      `cold-chain-monitors/detect/` → `coldchain_detect` (**literal, so it goes BEFORE the `<int:pk>` block
+      in the same module**);
+      `temperature-readings/<int:pk>/` → detail **only** (no `/edit/`, no `/delete/`).
+      A reading is reached by its **own** pk, not nested under the monitor — the child pk already
+      identifies it, and nesting invites a caller to pair a real child with somebody else's parent id (the
+      `compliance-checks/` rationale).
+- [ ] **4.15 adds NO route under `assets/`, `maintenance-plans/` or `maintenance-work-orders/`** — the
+      reefer board lives entirely on `reefer-board/`, so 4.13's urlconf is untouched.
+
+### Re-export blocks — **forgetting one is an ImportError/AttributeError at runtime, not at import time**
+
+- [ ] `apps/scm/models/__init__.py` — append a `# --- 4.15 Cold Chain Management ---` block after the 4.14
+      block (which ends at `:354`). Order and style following the 4.13/4.14 comment blocks:
+      **`from ._choices import (STORAGE_CONDITION_CHOICES, STORAGE_CONDITION_RANGES, FROZEN_CONDITIONS,
+      COLD_CONDITIONS)` must come FIRST in the file — above the 4.3 `InventoryManagement` block** — because
+      `Items.py` and `Locations.py` now read it. Then, inside the 4.15 block,
+      `from .ColdChainManagement._choices import (…names spelled out…)` — **by name, never `import *`**,
+      for the reason `models/__init__.py:292-298` gives (a star-imported second `_choices` re-declaring a
+      shared token silently shadows the first, and which one wins depends on import order). Then
+      `ColdChainMonitors` (`ColdChainMonitor`), `TemperatureReadings` (`TemperatureReading`),
+      `TemperatureExcursions` (`TemperatureExcursion`) — the monitor first, for the reader rather than for
+      Django, because both other tables FK it.
+- [ ] `apps/scm/forms/__init__.py` — the six form classes
+- [ ] `apps/scm/views/__init__.py` — **every** view name, including all five excursion verbs, both detect
+      verbs, the import, the profile and the three report views (they are referenced as `views.<name>`
+      from the urlconf; a missing name is an `AttributeError` at startup)
+- [ ] `apps/scm/urls/__init__.py` — the four
+      `from .ColdChainManagement.<X> import urlpatterns as _ccm_<x>` lines (**use the `_ccm_` prefix, NOT
+      `_cc_` — `_cc_tradelicenses` / `_cc_compliancerequirements` / `_cc_tradedocuments` /
+      `_cc_sustainability` / `_cc_reports` are 4.12's, and `_cc_reports` in particular would be a SILENT
+      rebind that drops 4.12's report routes**), the four `*_ccm_<x>,` entries at the END of
+      `urlpatterns`, and the collision-check comment block above them.
+- [ ] `apps/scm/admin.py` — register `ColdChainMonitor` (full CRUD), `TemperatureReading` (**read-only:
+      `has_add_permission` / `has_change_permission` / `has_delete_permission` all return `False`** — the
+      `StockMoveAdmin` `:198-212` / `MeterReadingAdmin` `:964-984` posture), and `TemperatureExcursion`
+      with **every `editable=False` column in `readonly_fields`** so the admin cannot forge a measurement
+      or a snapshot either.
+- [ ] `python manage.py makemigrations scm` → expect **`0026_…`**. **Read the generated file before
+      applying**: it must be `CreateModel` × 3 + `AddField` × 2 (`item.storage_condition`,
+      `location.storage_condition`) + `AddIndex` × 13 + `AlterUniqueTogether` × 3 (monitor, excursion,
+      reading) and **NOTHING ELSE** — **zero `RemoveField`, zero `DeleteModel`, zero `RunPython`, and zero
+      `AlterField` on any 4.13 column** (in particular `maintenanceplan.condition_threshold` and
+      `asset.asset_type` must not appear).
+
+---
+
+## 6. Wire-up
+
+- [ ] `apps/core/navigation.py` — **one new `LIVE_LINKS["4.15"]` entry**, appended after the `"4.14"` block
+      (which closes at `:1028`; the dict closes at `:1029`). The five keys are the **exact `**Feature**`
+      bullet text from `NavERP.md:832-836`**, verbatim:
+
+      "4.15": {
+          "Temperature Monitoring": "scm:coldchainmonitor_list",         # bullet (the monitoring points + live chip)
+          "Excursion Management":   "scm:temperatureexcursion_list",     # bullet (the episode queue + triage)
+          "Cold Storage Inventory": "scm:cold_storage_report",           # bullet (COMPUTED over 4.3 - no table)
+          "Compliance Reporting":   "scm:cold_chain_compliance_report",  # bullet (COMPUTED - log + MKT + calibration)
+          "Maintenance of Reefers": "scm:reefer_board",                  # bullet (COMPUTED over 4.13 - no table)
+      },
+
+      Plus the block comment recording the decisions, in the house style — **three of these five bullets are
+      pages, not tables, and that is the headline fact about this sub-module:**
+  - **"Cold Storage Inventory" is a COMPUTED page over 4.3.** On-hand by cold location comes from
+    `StockMove` (`Item.on_hand(location)`); the condition mismatch comes from the two new
+    `storage_condition` columns; expiry comes from `LotSerial.expiry_date`; quarantine comes from
+    `LotSerial.status`, which **4.9's NCR verb writes and 4.15 only reads**. 4.15 declares no zone table
+    and no shelf-life table. Precedents: 4.13's `"Spare Parts Inventory": "scm:sparepart_list"` computing
+    over 4.3, and 4.4's `"Bin/Location Management"` pointing at 4.3's `scm:location_list`.
+  - **"Compliance Reporting" is a COMPUTED page plus three stored columns.** The excursion log is a
+    filtered list over rows that exist for their *triage* state; the temperature profile (min/max/mean,
+    % time in range, TOR, MKT) is fully derived over `TemperatureReading`; the audit trail is
+    `core.AuditLog` via `write_audit_log()` — **no second audit table**. The only genuinely persistent
+    artefact is the monitor's `calibrated_on` / `calibration_due_on` / `calibration_reference`, because an
+    uncalibrated sensor invalidates every record it produced. **The page must not claim Part 11 / Annex 11
+    conformance** (Decision E).
+  - **"Maintenance of Reefers" is a COMPUTED board over 4.13, and 4.15 declares ZERO maintenance
+    entities.** `MaintenancePlan` already carries exactly the four triggers reefer PM needs — `calendar`
+    (annual service), `meter` (every 500 run hours: Carrier's *"service scheduled based on actual
+    performance instead of calendar alerts"*), `combined`, and **`condition`** with
+    `condition_operator`/`condition_threshold`, whose own docstring (`MaintenancePlans.py:10-13`) says the
+    condition trigger *"is the seam 11.7 / IoT condition monitoring lands on"* — **that seam was built for
+    this sub-module.** `MaintenanceWorkOrder` already carries `preventive`/`inspection`/`predictive`/
+    `calibration` work types, downtime, the Maximo problem/cause/remedy hierarchy (`overheating`, `leak`,
+    `electrical_fault`, `contamination`, `environmental` all already present), parts, labour and a link out
+    to `NonConformance`. **What identifies a reefer is `an Asset that has an active ColdChainMonitor`** —
+    which requires no change to 4.13 at all and cannot go stale the way a hand-set `asset_type` would.
+    Same precedent as 4.14's `"Task Assignment": "scm:labor_board"` computing over 4.4 (*"migration 0024
+    has no `AddField` at all, which is the evidence"*, `navigation.py:1005-1010`).
+  - **NO sidebar key for `TemperatureReading`** — it is the monitor's ledger panel, exactly as
+    `MeterReading` is the asset's and `LaborActivity` is the session's. The reading list, the CSV import
+    and the temperature profile are all reached **from the monitor's detail page**. That is the established
+    `WorkCenter` / `ReorderRule` / `ReturnReason` / `InspectionPlan` / `KpiTarget` rule: a child or master
+    reached from the page that uses it takes no bullet of its own.
+  - Every bullet points at a **staff-facing** management page (L32).
+- [ ] **No `config/settings.py` change and no `config/urls.py` change** — `apps.scm` is already installed
+      and already included. Touching either on an extend run is the error this line exists to prevent.
+
+---
+
+## 7. Templates (`templates/scm/coldchain/`)
+
+Two levels — sub-module folder then entity folder — with **bare page filenames**. Never a flat
+`<entity>_<page>.html`. All extend `base.html` and `{% include %}` the shared partials at the templates
+root. The three report pages are **standalone pages at the sub-module root** (Template Folder Structure
+rule 6); `profile.html` and `import.html` are **secondary entity-action pages inside the entity folder**
+(rule 5).
+
+- [ ] `templates/scm/coldchain/coldchainmonitor/list.html` — the register, with the **live chips** that are
+      the whole point of bullet 1: in-range / out-of-range / unknown, reporting / stale / never reported,
+      calibration ok / due / overdue / not recorded, and the open-excursion count. Every chip is derived and
+      every one renders "—" or a muted "Unknown" rather than a confident green when there is no data.
+- [ ] `templates/scm/coldchain/coldchainmonitor/detail.html` — the 360° page: what it watches (one line
+      from `subject_label`, linking to the location / asset / shipment); the limit band with the warning
+      band drawn inside it and the setpoint marked; **setpoint vs actual** with the gap; the calibration
+      card with the certificate `core.Document` upload/list; the latest-reading card; the recent-readings
+      panel (capped, with "see all" → the reading list filtered to this monitor); the open/recent
+      excursions panel; the **Detect now** POST button; **Add reading** and **Import readings** buttons;
+      a link to `profile.html`; and the Actions sidebar (Edit / Delete POST+confirm+csrf / Back to List).
+      Also a short provenance note stating that `source`, `recorded_by` and `interval_minutes` on a reading
+      are stamped by whichever verb filed it and are **not typeable**.
+- [ ] `templates/scm/coldchain/coldchainmonitor/form.html` — with the `storage_condition` pre-fill
+      explained in the help text ("choosing a class suggests the limits; the limits are what actually
+      apply"), and the exactly-one-subject rule stated **above** the three FK fields rather than only in
+      the error message.
+- [ ] `templates/scm/coldchain/coldchainmonitor/profile.html` — **the temperature profile**, bullet 4's
+      headline artefact (Berlinger's PDF sector report, ELPRO, Sensitech, Tive): the reading series as a
+      simple chart, min / max / mean, **% time in range (minute-weighted)**, cumulative time out of range,
+      **MKT with an explicit "not applicable to frozen product (USP <1079.2>)" note when it is `None`**,
+      the excursion episodes marked on the window, and the date-range form. States
+      `MAX_READING_WINDOW_DAYS` in the UI when it truncates. Reachable from the monitor **and** (for a
+      shipment-monitor) from the shipment.
+- [ ] `templates/scm/coldchain/coldchainmonitor/import.html` — the CSV import: the expected column list,
+      the `MAX_BATCH_READINGS` cap stated **before** the button, and the result panel reporting
+      **imported / skipped-as-duplicate / skipped-as-unparseable** separately. A blank temperature cell is
+      reported as skipped, **never imported as 0** (Trap 1) — say so on the page.
+- [ ] `templates/scm/coldchain/temperaturereading/list.html` — **no Edit and no Delete action**, with a
+      one-line banner stating that the ledger is append-only and a wrong reading is corrected by posting a
+      later one. The filter bar makes the active window visible (it always has one).
+- [ ] `templates/scm/coldchain/temperaturereading/detail.html` — the row plus its interval statistics, the
+      snapshotted `interval_minutes` **with a sentence saying that is why editing the monitor's interval
+      cannot change this row's weight**, and the provenance block. Actions sidebar has **Back to List only**.
+- [ ] `templates/scm/coldchain/temperaturereading/form.html` — the CREATE form only (there is no edit page).
+- [ ] `templates/scm/coldchain/temperatureexcursion/list.html` — the triage queue, ordered newest first,
+      with `status` / `severity` / `assessment` / `breach_direction` chips, the **reportable vs
+      under-grace** distinction visible (an under-grace blip must look different from a real incident), and
+      a "still running" marker for `ended_at is None`.
+- [ ] `templates/scm/coldchain/temperatureexcursion/detail.html` — **the measured block and the human block
+      visually separated**, with the measured half labelled as detector-written and read-only: started /
+      ended / duration (live for a running episode) / extreme / **the snapshotted `limit_min`–`limit_max`
+      with a sentence saying they are the limits that were in force when it fired, which is why editing the
+      monitor now cannot change this record** / reading count / MKT (or "—" plus the frozen-product note) /
+      last detected. Then the triage half: the status ladder (Acknowledge → Assess → Close, plus Dismiss)
+      as POST+confirm forms rendering **only the legal next moves**, the assessment form, cause and
+      corrective action, and the three outward links (NCR / work order / lot) each with a one-line note
+      saying which sub-module owns the thing at the other end. Plus the **Raise work order** button, shown
+      only when the monitor's subject is an `Asset`. Actions sidebar as usual.
+- [ ] `templates/scm/coldchain/temperatureexcursion/form.html` — serves both the triage edit and the
+      back-dated create; on create it explains that the numbers will be **computed from the readings in the
+      window**, not typed.
+- [ ] `templates/scm/coldchain/cold_storage_report.html` — **standalone at the sub-module root.** Five
+      sections, each a real question: cold on-hand by location; **condition mismatches** ("which chilled
+      item is sitting in an ambient bin?" — the single most useful derived view in this bullet); lots
+      **expiring within N days** and **expired but still on hand** (FEFO visibility over
+      `LotSerial.expiry_date`); **quarantined** lots (read from `LotSerial.status`, with a note that 4.9's
+      NCR verb is what writes it); and **unmonitored cold storage** — a location classified chilled/frozen
+      with no active monitor, which is a genuine GDP audit finding. A standing note says this page
+      **reads 4.3 and 4.9 and writes nothing.**
+- [ ] `templates/scm/coldchain/cold_chain_compliance_report.html` — **standalone at the sub-module root.**
+      The excursion log for a date range with a **CSV download** (the `labor_payroll_export` precedent),
+      monitor calibration status (due / overdue / not recorded), per-monitor % time in range and MKT, and a
+      link into the audit trail. Carries the **explicit non-claim** from Decision E in visible page text —
+      *this report is a record of what was measured and decided; it is not a validated Part 11 system and
+      contains no electronic signature* — because an over-claiming compliance page is worse than a missing
+      one.
+- [ ] `templates/scm/coldchain/reefer_board.html` — **standalone at the sub-module root.** One row per
+      reefer asset (= an `Asset` with an active `ColdChainMonitor`), showing latest cargo temperature +
+      in/out chip, open excursions, `MaintenancePlan.due_status()` with its own colour, open work orders,
+      the run-hours meter via `Asset.latest_reading()`, and the warranty chip. A note states that **4.15
+      declares no maintenance table** and that every column here is 4.13's, with links into
+      `scm:asset_detail` / `scm:maintenanceplan_detail` / `scm:maintenanceworkorder_detail`.
+- [ ] **Every list template:** filter bar reflecting `request.GET` (string params
+      `{% if request.GET.x == v %}`, pk params `{% if request.GET.x == o.pk|stringformat:"d" %}`), an
+      **Actions column** with View (eye) / Edit (pencil) / Delete (bin, POST form +
+      `onclick="return confirm(...)"` + `{% csrf_token %}`) — Edit/Delete wrapped in
+      `{% if obj.is_editable %}` where status-dependent, and **omitted entirely on the readings list** —
+      pagination guarded with `{% if page_obj.has_previous %}` / `{% if page_obj.has_next %}` (**L9**), and
+      an empty-state row.
+      **Confirm text must contain no apostrophe and no `{{ }}`-interpolated user data** — HTML decodes
+      `&#39;` inside an attribute before the JS engine sees it, which silently disables the guard and was
+      stored XSS in 4.13 (**L42**).
+- [ ] **Every detail template:** an Actions sidebar with Edit, Delete (POST+confirm+csrf) and Back to List.
+- [ ] Badges use **only** `badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate`,
+      driven by the `_choices.py` `*_CSS` dicts, always with an `{% else %}` fallback to
+      `{{ obj.get_<field>_display }}`.
+- [ ] **Two shipped templates get one new field each:** `templates/scm/inventory/item/form.html` and
+      `templates/scm/inventory/location/form.html` render `storage_condition`; their `list.html` files gain
+      the column + the filter. (Each file is still its own commit.)
+
+---
+
+## 8. Seeder — `apps/scm/management/commands/seed_scm.py`
+
+- [ ] New `_seed_coldchain_tenant(tenant)`, called from `handle()` **after `_seed_labor_tenant(tenant)`**
+      (`seed_scm.py:145`), with a comment in the established style explaining the dependency: it classifies
+      4.3's existing `Location` and `Item` rows, points monitors at 4.3/4.13/4.6 rows, and raises its
+      excursions **through the real detector**, so 4.3, 4.6 and 4.13 must all have run first. **Like 4.14
+      it writes NO `StockMove` and NO `JournalEntry`**; unlike 4.14 its cross-sub-module writes are two
+      `storage_condition` back-fills and two reefer `MaintenancePlan` rows.
+- [ ] **Prerequisite guard:** if the tenant has no `Location`, no `Item`, no `Asset` or no `Shipment`,
+      **warn and RETURN rather than half-seed** (the 4.10–4.14 posture).
+- [ ] **Idempotent:** `if ColdChainMonitor.objects.filter(tenant=tenant).exists(): print + return`.
+      Auto-numbered rows use the "check existence before creating" pattern. The `storage_condition`
+      back-fills are guarded (`.exclude(storage_condition="")` / only set when currently blank) so a second
+      run is a no-op. The readings' `unique_together (monitor, reading_at)` makes the bulk insert
+      idempotent in its own right.
+- [ ] **Reuses existing seeded rows only — it invents no master data:**
+  - **`Location`** — classify three existing rows: one `chilled`, one `frozen`, and **leave a third blank**
+    so the mismatch report has both sides and the "unmonitored cold storage" section has a candidate.
+  - **`Item`** — set `storage_condition="chilled"` on one **lot-tracked** item (so the FEFO/expiry section
+    has real `LotSerial` rows behind it) and `"frozen"` on another; leave the rest blank.
+  - **`Asset`** — the reefer is an EXISTING asset (a vehicle or machine). **Nothing on it is edited** — no
+    `asset_type` change, no status change. It becomes a reefer purely by having an active monitor.
+  - **`Shipment`** — one existing shipment for the in-transit monitor.
+  - **`core.Party`** — `self._employee(tenant, name=…)` (`seed_scm.py:2090`) for `recorded_by` /
+    `assessed_by`. **It creates no Party.**
+  - **`NonConformance`** — link the assessed excursion to an existing 4.9 NCR via `.first()`, and **skip
+    the link if none exists** rather than creating one.
+- [ ] **Rows created — five monitors:**
+  1. `CCM-` **chilled cold room** → `location`, `fixed_sensor`, limits `2.00` / `8.00`,
+     `warning_margin_c=1.00`, `excursion_grace_minutes=30`, `logging_interval_minutes=30`, calibration due
+     in 45 days (chip renders green/amber).
+  2. **frozen store** → `location`, `fixed_sensor`, limits `-25.00` / `-15.00` — **the row that proves
+     negative limits round-trip (Trap 1)** — with `calibration_due_on` in the PAST so the overdue chip
+     renders red.
+  3. **reefer unit** → `asset`, `realtime_tracker`, `setpoint_temperature=-18.00`, limits `-22.00` /
+     `-15.00`, `device_serial` set.
+  4. **in-transit shipment** → `shipment`, `single_use_logger`, limits `2.00` / `8.00`, same
+     `device_serial` as (3) **but `status="retired"`** — so the reusable-logger rule is demonstrated
+     (a retired monitor may share a serial with an active one) and the status filter has something to hide.
+  5. a **second active** monitor on the chilled room with **no `calibrated_on` at all**, so the "Not
+     recorded" muted chip is exercised rather than only the green/red ones.
+- [ ] **Readings:** ~120–180 rows across the monitors at `interval_minutes=30` over the last 3–5 days,
+      written with **one `bulk_create` inside `transaction.atomic()`**, `source="logger_import"`,
+      `recorded_by=<employee Party>`. Deliberately shaped so the pages have real data:
+  - the chilled room's series contains a **4-reading, ~2-hour breach above 8 °C** → a **reportable**
+    excursion;
+  - it also contains a **single-reading 30-minute blip** → an episode that is **under the grace period and
+    therefore NOT reportable**, so the distinction renders;
+  - the frozen store's series sits at −18 °C throughout with genuine **negative** values, and includes
+    **one legitimate 0.00 °C reading** on the chilled room (so the Trap-1 test can assert a real zero is
+    storable while a blank is skipped);
+  - one monitor gets **no readings at all** so `is_reporting()` → `None` and every "never reported" branch
+    is exercised.
+- [ ] **Then call `coldchain.detect_excursions(tenant)`** — the excursion rows are produced by the **REAL
+      detector**, never hand-built. That is the point: `seed_scm` exercises the code path on every run, and
+      the demo cannot drift from the implementation.
+- [ ] **Then walk the triage state through the real workflow methods**, not by setting columns: one
+      excursion `acknowledge()` → `assess(party, "product_affected", cause="door_left_open",
+      corrective_action=…)` and linked to an existing NCR + the affected `LotSerial`; a second left
+      **`open`** so the queue is not empty; the under-grace blip left open and un-triaged so its
+      "not reportable" chip is visible in the queue.
+- [ ] **Two reefer `MaintenancePlan` rows on the reefer asset** — the proof that bullet 5 is served by
+      4.13: one `trigger_type="meter"` on run hours (`meter_interval=500`, `meter_name` matching the
+      asset's), and one **`trigger_type="condition"`, `condition_operator="gte"`,
+      `condition_threshold=Decimal("5")`** on a *Condenser Discharge Temp* meter. **Positive threshold —
+      see Trap 3;** put a comment in the seeder saying why it is not the −15 °C the domain would suggest.
+      Guarded so a second run does not duplicate them.
+- [ ] Update the final `SUCCESS` string (`seed_scm.py:147-151`) to mention 4.15.
+- [ ] **`_flush()`** — add a 4.15 block **FIRST** (newest sub-module, the existing convention at
+      `seed_scm.py:967`). **Order is forced by a real PROTECT edge:** `TemperatureExcursion.monitor` is
+      PROTECT, so **excursions must be deleted before monitors** or the flush raises `ProtectedError`.
+      `TemperatureReading.monitor` is CASCADE and would go anyway; name it second regardless so the
+      teardown reads top-down. Then clear `storage_condition` back to `""` on the `Item` and `Location`
+      rows it set, and delete the two reefer `MaintenancePlan` rows it created (before 4.13's own block
+      clears the rest). **There is NO `StockMove` and NO `JournalEntry` to unwind — say so in the comment**
+      so the next reader does not go looking for the filter that removes them.
+
+---
+
+## 9. Verify
+
+- [ ] `python manage.py makemigrations scm` — read `0026_…` **before** applying; confirm the exact
+      operation list in §5 (3 × `CreateModel`, 2 × `AddField`, 13 × `AddIndex`, 3 × `AlterUniqueTogether`,
+      nothing else).
+- [ ] `python manage.py migrate` against `nav_erp`.
+- [ ] `python manage.py seed_scm` **twice** — the second run is a no-op: no duplicate `ColdChainMonitor`,
+      no second set of readings (the `unique_together` holds), no second excursion from the detector, no
+      re-classification of the `Item`/`Location` rows, no duplicate `MaintenancePlan`.
+- [ ] `python manage.py check` — clean (in particular: no `fields.E304/E305` reverse-accessor clash from
+      the new `related_name`s, no `models.E006` field clash, no index-name collision).
+- [ ] **The two traps, as explicit gates AND as tests:**
+  1. `grep -rn "MinValueValidator(ZERO)" apps/scm/models/ColdChainManagement/` → **only** on
+     `warning_margin_c`-style magnitude fields, and **never** on a temperature column. A monitor with
+     `min_temperature=Decimal("-25")` and a reading of `Decimal("-18.50")` both save and round-trip.
+  2. `grep -rn "q2(\|q4(" apps/scm/models/ColdChainManagement/ apps/scm/coldchain.py` → **nothing.**
+  3. A `TemperatureReading` POST with an **empty** temperature is refused (field required). An import file
+     with a blank temperature cell is **skipped and counted**, never stored as `0.00`. Assert BOTH: the
+     seeded genuine `0.00 °C` reading exists, **and** the blank row did not become a second one.
+  4. `grep -rn "UniqueConstraint" apps/scm/models/ColdChainManagement/` → **nothing** (Trap 2).
+  5. `detect_excursions` run **twice in a row** produces no second open row for the same monitor — it
+     extends. Prove the lock is real: the second call must be waiting on the monitor row, not inserting.
+  6. `grep -rn "condition_threshold" apps/scm/migrations/0026_*.py` → **nothing** (Trap 3); and
+     `MaintenancePlan._meta.get_field("condition_threshold").validators` is unchanged.
+- [ ] **`temp/` smoke sweep, logged in as `admin_acme` / `password`:**
+  - every new `scm:*` url returns **200** (GET pages) or **302** (verb POSTs) — `coldchainmonitor_*` incl.
+    `_profile`/`_detect`/`_add_reading`/`_import_readings`, `coldchain_detect`, `temperaturereading_list`
+    and `_detail`, `temperatureexcursion_*` incl. `_acknowledge`/`_assess`/`_close`/`_dismiss`/
+    `_raise_work_order`, `cold_storage_report`, `cold_chain_compliance_report` (both HTML and
+    `?format=csv`), `reefer_board`
+  - content assertions: page titles present; a seeded `CCM-` and `EXC-` number visible on its list page;
+    **no `{#` or `{% comment` leaks**; no `badge-success`/`badge-warning`/`badge-danger` anywhere in the
+    new templates; no `.detail-label` / `.detail-value`; no `stat-icon amber` / `stat-icon red`
+  - **cross-tenant IDOR → 404** on every detail / edit / delete / verb route, readings included (scoped via
+    `monitor__tenant` as well as their own `tenant`)
+  - **GET to every POST-only verb → 405**
+  - a plain (non-admin) member → **403** on all three deletes, on both detect verbs, on the import, and on
+    `temperatureexcursion_assess` / `_close` / `_dismiss` / `_raise_work_order`; **200** on `_acknowledge`
+  - junk filter values (`?monitor=abc`, `?monitor=²`, `?monitor=99999999999999999999`,
+    `?date_from=lastweek`, `?expiring_within=-1`) leave the filter OFF and return **200, never 500** (L11)
+  - all three report pages render **200 on an empty tenant** without a 500, and report "no data" rather
+    than a confident zero
+- [ ] **Provenance (the 4.13 `MeterReading` fix, re-proved here):** a POST to
+      `coldchainmonitor_add_reading` carrying `source=sensor_api&recorded_by=<pk>&interval_minutes=1&
+      monitor=<other pk>` must set **none** of them — they are not in `cleaned_data`; the saved row comes
+      out with `source` from the verb, `recorded_by` from `_acting_party(request)`, `interval_minutes`
+      snapshotted from the monitor, and `monitor` from the **URL**. Same for a POST to
+      `temperatureexcursion_edit` carrying `started_at=…&duration_minutes=1&mkt=0&limit_min=99&
+      status=closed&acknowledged_by=<pk>`.
+- [ ] **Snapshot immutability — two separate headline tests:**
+  - **Limits:** fire an excursion, then edit the monitor's `min_temperature`/`max_temperature` and re-run
+    the detector. The existing row's `limit_min` / `limit_max` are **unchanged**, and the detail page still
+    renders the band that was in force when it fired.
+  - **Interval:** change `monitor.logging_interval_minutes`, then re-run `profile()` over last month. The
+    MKT and `pct_in_range` are **unchanged**, because every row carries its own weight (Decision B).
+- [ ] **Subject freeze:** a monitor **with** readings refuses a subject change with a field error; a
+      monitor with **none** accepts one.
+- [ ] **The reusable-logger rule:** a second **`active`** monitor with the same `device_serial` is refused
+      and the message names the other monitor; a second **`retired`** one with the same serial is
+      **accepted**; and a second monitor with a **blank** serial is accepted (the MariaDB `""`-not-NULL
+      reason this is a `clean()` guard and not a `unique_together`).
+- [ ] **Exactly-one-subject:** zero subjects refused; two subjects refused; one accepted. And a `PROTECT`
+      check — deleting a `Location` / `Asset` / `Shipment` that a monitor points at raises `ProtectedError`
+      and the delete view **messages it rather than 500-ing**.
+- [ ] **MKT correctness (not just smoke):** `None` for a `frozen` / `deep_frozen` / `cryogenic` monitor;
+      `None` for an empty window; **≥ the arithmetic mean** for a varying series and **equal** to it for a
+      constant one; and correctly weighted when two rows carry different `interval_minutes`.
+- [ ] **Grace period:** the 30-minute blip produces an episode that is **not `is_reportable`**; the 2-hour
+      breach **is**. Editing `excursion_grace_minutes` flips the first without touching any stored column.
+- [ ] **Bounds (L40):** an import of `MAX_BATCH_READINGS + 1` rows is **refused before parsing**, naming
+      both numbers, and `TemperatureReading.objects.count()` is unchanged; a `profile()` request spanning
+      `1900-01-01 → 9999-12-31` is **capped** and says so; a monitor with
+      `excursion_grace_minutes=4294967295` is refused by the validator, not by an `OverflowError` inside
+      `timedelta`; a detector run over a monitor with more than `MAX_EPISODE_READINGS` new readings returns
+      `more_remain=True` instead of walking them all.
+- [ ] **Derived-figure guards:** every figure returns `None` (rendering "—") where the honest answer is
+      "we don't know" — `is_in_range()` with no reading, `pct_in_range` on an empty window, `mkt` for a
+      frozen monitor, `setpoint_gap()` with no setpoint, `is_reporting()` with no reading ever,
+      `days_to_calibration_due()` with no date, `excess_c()` with no extreme.
+- [ ] **Regression checks specific to the decisions:**
+  - `scm:asset_list` / `scm:maintenanceplan_list` / `scm:maintenanceworkorder_list` / `scm:meterreading_*`
+    all still resolve and are untouched; `Asset.ASSET_TYPE_CHOICES`, `MaintenanceWorkOrder.SOURCE_CHOICES`
+    and `NonConformance.source` are **unchanged** (assert against the migration and with a choices test)
+  - `scm:item_list` / `scm:location_list` still resolve; both gained **exactly one** column, both have a
+    working filter for it, and **both forms can write it** (the 4.13 missing-writer regression)
+  - `StockMove.objects.count()` and `JournalEntry.objects.count()` are **unchanged** by `seed_scm`'s 4.15
+    block and by every 4.15 verb; `LotSerial.objects.filter(status="quarantine").count()` is unchanged by
+    every 4.15 verb (4.9 owns that flip)
+  - `_cc_reports` (4.12) still resolves — proving the `_ccm_` alias choice did not rebind it
+- [ ] Sidebar shows **4.15 Cold Chain Management** as Live with all **five** bullets linked (parse
+      `NavERP.md:831-836` through `parse_catalog()` — the bullet text must match `LIVE_LINKS` exactly or
+      the link silently does not render).
+
+---
+
+## 10. Close-out
+
+- [ ] `code-reviewer` → apply → commit (one file per commit)
+- [ ] `explorer` → apply → commit
+- [ ] `frontend-reviewer` → apply → commit
+- [ ] `performance-reviewer` → apply → commit
+- [ ] `qa-smoke-tester` → apply → commit
+- [ ] `security-reviewer` → apply → commit
+- [ ] `test-writer` → apply → commit. Minimum coverage: **model** tests (auto-number for `CCM-`/`EXC-`; the
+      exactly-one-subject rule both ways; the subject freeze; the active-`device_serial` rule incl. the
+      retired and blank exceptions; the at-least-one-limit rule for an active monitor; the no-future
+      `reading_at` refusal; the min ≤ temp ≤ max rule; **negative temperatures round-tripping**; every
+      workflow method's diff **and its no-op safety**; `close()` refusing a running episode; every derived
+      figure returning `None` on an unknowable input; all the bounds); **service** tests
+      (`out_of_range` with one-sided limits and with `None`; `mean_kinetic_temperature`'s `None` cases,
+      its ≥-mean property and its weighting; `detect_excursions` opening / extending / closing / de-duping
+      / respecting the watermark / honouring `MAX_EPISODE_READINGS` / **not** overwriting severity or
+      status or the limit snapshot on a later pass; `raise_work_order` returning `None` for a non-asset
+      subject and refusing a second job); **form** tests (whitelist coverage, tenant stamping, FK querysets
+      scoped, a crafted cross-tenant FK rejected by `clean()`, a crafted `source=`/`interval_minutes=`/
+      `status=`/`limit_min=` absent from `cleaned_data`, the import's row cap and its blank-cell skip);
+      **view** tests (every list with and without each filter incl. junk values, the full CRUD round trip,
+      the whole excursion verb ladder, the CSV export's columns, 405 on GET to every verb, the reading
+      list's default window); **security** tests (cross-tenant 404 on every detail/edit/verb, 403 for a
+      plain member on every tenant-admin route); and **one architectural test asserting 4.15 creates no
+      `StockMove`, no `JournalEntry`, and never writes `LotSerial.status`, `Asset.*` or
+      `MaintenanceWorkOrder.SOURCE_CHOICES`.**
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — it **exists**, so this is an update. Add 4.15's three
+      models + the two additive fields, the `scm:*` url names (all five excursion verbs, both detect verbs,
+      the import, the profile, the three report pages), the `templates/scm/coldchain/` tree, the
+      `_seed_coldchain_tenant` rows, the `LIVE_LINKS["4.15"]` block, and — importantly — a **"temperature
+      is signed" gotcha section** (no `MinValueValidator(ZERO)`, no `q2()`/`q4()`, a missing reading stays
+      `None`), a **"two ledgers" section** (`MeterReading` = asset-condition, feeds
+      `MaintenancePlan(trigger_type="condition")`; `TemperatureReading` = product-environment; neither can
+      do the other's job), and the **"three of five bullets are pages"** note, so the next session cannot
+      re-conflate any of them.
+- [ ] `README.md` — add 4.15 to the SCM feature list and move 4.15 out of the "remaining 4.15–4.19"
+      sentence.
+- [ ] **One file per commit, PowerShell-safe (`;` not `&&`). Never `git push`.**
+
+---
+
+## 11. Later passes / deferred
+
+Carried over from `research-scm-4.15.md` so nothing is lost, plus what this plan itself cut.
+
+**Cut or discovered by this plan (a decision, not an omission):**
+- **Widening `MaintenancePlan.condition_threshold` to accept negative values** — Trap 3. A real 4.13
+  limitation found while planning 4.15: a reefer condition plan cannot be phrased as "discharge air below
+  −15 °C" today. The fix touches `_condition_axis_due()`, the PM board and the PM forecast, so it is a
+  **4.13 follow-up**, not a 4.15 change.
+- **A `reefer` value on `Asset.ASSET_TYPE_CHOICES`** — possible (`max_length=14` has room, and the change
+  would be additive and all-default) but **optional garnish, not the definition**. A reefer is derived as
+  "an `Asset` with an active `ColdChainMonitor`", which cannot go stale.
+- **A `StorageCondition` master with per-item numeric limits** — Decision C. The shared class vocabulary
+  plus the monitor's explicit limit columns covers every page this pass needs.
+- **A calibration HISTORY table** — the monitor stores the *current* calibration, which is what "is this
+  sensor in date?" needs, plus the certificate as a `core.Document`. An append-only calibration log is a
+  later pass and `MeterReading`'s shape is the template if it is ever wanted.
+- **A stored "clear for release" flag on a shipment** — Controlant's automatic-release headline is rendered
+  as a **derived green chip** (a shipment-monitor with zero reportable excursions). A stored flag would be
+  a second writer of a fact the ledger already determines.
+- **Humidity excursion episodes** — Decision D.
+
+**Deferred from the research (later passes / integrations):**
+- **Live sensor / gateway ingestion (MQTT, vendor APIs, device provisioning, webhooks)** — the whole market
+  is built on it; `READING_SOURCE_CHOICES["sensor_api"]` is declared now so a feed lands as a new *row
+  source* rather than a schema change (the `METER_SOURCE_CHOICES["sensor"]` precedent).
+- **Outbound notification (email / SMS / push) the moment an excursion fires** — every product surveyed has
+  it; the excursion row is the payload, but NavERP has no outbound channel yet.
+- **Two-way reefer control** (setpoint, operating mode, remote pre-trip inspection, alarm clear, manual
+  defrost) — ORBCOMM, Carrier Lynx Fleet and Thermo King all ship it; it needs a command channel to a
+  device. `setpoint_temperature` is the record of what the unit was *told*, not a way to tell it.
+- **21 CFR Part 11 electronic signature on the release decision** — needs re-authentication at signing, a
+  stated meaning-of-signature and a tamper-evident record. A **Module 0** capability, and Decision E says
+  the docstrings must not pretend otherwise in the meantime.
+- **Stability budget** (cumulative allowed out-of-range time across a product's whole life — ELPRO's
+  continuous remaining-budget calculation) — needs a per-product budget master.
+- **Predictive shelf-life / freshness scoring from accumulated thermal exposure** (Roambee, the Zest Labs
+  school) — needs a degradation model; MKT is the honest halfway house shipped this pass, and
+  `LotSerial.expiry_date` is the static answer.
+- **Lane and carrier cold-chain risk analytics** ("which lanes break" — Tive Reveal, Sensitech clustering)
+  — an aggregate over excursions grouped by `shipment.carrier` / lane; the data model already supports it.
+- **Light / shock / tilt / door-open sensing** (Emerson, Tive, ORBCOMM, SmartSense) — would widen the
+  highest-volume table in the sub-module for facts no bullet asks for. The sub-module is *temperature*.
+- **Temperature mapping / storage qualification studies** (ELPRO, GxP practice) — a study artefact with
+  sensor-placement diagrams, not a monitoring feature.
+- **Scheduled report delivery / automated distribution** — needs a scheduler and outbound email.
+- **Reading retention / rollup** (`purge_temperature_readings` with a per-tenant window) — Decision A. GDP
+  wants years of records, so a default purge would be wrong; named as a seam, not shipped.
+- **A mobile surface for floor staff to acknowledge an alarm** (SmartSense, Emerson Oversight mobile, Tive)
+  — the excursion pages are the same data.
+- **24/7 human monitoring desk** (Tive, Controlant) — a service, not software. Out of scope.
+- **Controlled-atmosphere / cold-treatment control** (ORBCOMM CT 3500) — well beyond the bullet.
+
+**Parked for a named sibling sub-module (not this one):**
+- **Disposition of affected product, quarantine, scrap, cost of quality, CAPA** → **4.9**
+  (`NonConformance` + its `DISPOSITION_CHOICES` and quarantine ruling, `CapaAction`, `QualityInspection`).
+  4.15 links out and reads; it re-declares none of it.
+- **All reefer maintenance schedules, PM generation, work orders, downtime, failure codes, parts and
+  labour cost** → **4.13** (`Asset`, `MaintenancePlan` incl. its `condition` trigger,
+  `MaintenanceWorkOrder`, `MeterReading`). 4.15 declares zero maintenance entities.
+- **GPS pings, route deviation, geofence, ETA risk, carrier exception milestones** → **4.6** (`Shipment`,
+  `TrackingEvent` with lat/long, `Load`, `Carrier`).
+- **FEFO pick allocation, blast-freeze / tempering work steps, zone-constrained putaway and slotting** →
+  **4.4** (`PickTask`, `PutawayTask`, `Location.pick_sequence` / `abc_class`). 4.15 ships the FEFO
+  *visibility* report; the picking *strategy* is 4.4's.
+- **Catch-weight (variable-weight) items, per-item numeric temperature limits, item physical dimensions**
+  → **4.3** (`Item`, `UOM`, `StockMove`).
+- **Cold-chain KPI tiles, thresholds and the alert queue on the analytics dashboards** → **4.11**, which
+  owns `KpiTarget` / `KpiSnapshot` / `SupplyChainAlert` and a deliberately **closed** `METRIC_CHOICES`
+  registry currently containing no cold-chain metrics. Adding one is 4.11's decision, not 4.15's.
+- **HACCP / food-safety checklists, regulatory obligation registers, licence and certificate tracking** →
+  **4.12** (`ComplianceRequirement`, `ComplianceCheck`, `TradeLicense`) and **4.9** (`QualityAudit`,
+  `InspectionPlan`). A third checklist engine is exactly the duplication L29 forbids.
+- **Supplier cold-chain scorecards and risk** → **4.2** (`SupplierScorecard`, `SupplierRiskAssessment`).
+- **Any financial effect of spoilage** → **`apps.accounting`** (L29). 4.15 posts no `JournalEntry`, drafts
+  no `Bill`, and records cost only through 4.9's existing `cost_of_quality`.
+
+---
+
+## 12. Review notes
+
+(filled in at the end of the pass)
+
+---
 
 ## Review notes
 
