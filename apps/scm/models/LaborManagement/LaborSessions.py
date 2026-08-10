@@ -289,6 +289,19 @@ class LaborSession(TenantNumbered):
             # quantity, so a standard attached to one could only ever pollute the ratio.
             if row.activity_type not in DIRECT_ACTIVITIES:
                 continue
+            # A STILL-RUNNING row is skipped, and this is the load-bearing line. clean() requires a
+            # direct row to carry quantity > 0 but deliberately allows ended_at=None, so a booked
+            # interval that has not finished yet is ordinary use, not a corrupt row. Its
+            # earned_minutes is already known (the snapshots times the quantity so far) while its
+            # duration_minutes is still 0 — so counting it would add to the NUMERATOR and nothing to
+            # the DENOMINATOR. A completed 60-minute pick of 100 units plus a running pick of 40
+            # renders the shift at ~130% of standard instead of ~88%: the figure climbs the moment
+            # work starts and drops when it finishes, which is precisely backwards.
+            # The rule, stated once: a shift's measured figures describe COMPLETED work; work in
+            # flight is counted when it lands. `_unit_totals()` skips the same rows for the same
+            # reason, and Reports.py's GROUP BY twin carries the same `duration_minutes__gt=0`.
+            if (row.duration_minutes or 0) <= 0:
+                continue
             value = row.earned_minutes
             if value is None:
                 continue
@@ -333,11 +346,21 @@ class LaborSession(TenantNumbered):
         return q2(Decimal(self.booked_minutes(activities)) / Decimal(attended) * Decimal("100"))
 
     def _unit_totals(self, activities=None):
-        """``(units, errors)`` over direct activities — the two recorded quantities on the shift."""
+        """``(units, errors)`` over COMPLETED direct activities — the shift's recorded quantities.
+
+        Still-running rows are skipped for the same reason :meth:`_measured` skips them: their
+        units are known while their minutes are still 0, so including them would inflate
+        :meth:`units_per_hour`, whose denominator is direct MINUTES. One rule across every measured
+        figure on the shift — completed work is counted, work in flight is counted when it lands —
+        which also keeps :meth:`accuracy_pct` describing the same set of rows as the rate figures
+        rather than a quietly larger one.
+        """
         units = ZERO
         errors = ZERO
         for row in self._activity_rows(activities):
             if row.activity_type not in DIRECT_ACTIVITIES:
+                continue
+            if (row.duration_minutes or 0) <= 0:
                 continue
             units += row.quantity or ZERO
             errors += row.error_quantity or ZERO
