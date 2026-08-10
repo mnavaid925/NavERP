@@ -1,0 +1,682 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — the Task Assignment board.
+
+Renders apps/scm/views/LaborManagement/Reports.py::labor_board. Everything this page may read,
+and nothing else (the view pins the same list in its module docstring):
+
+  rows row_count truncated truncated_note      the merged board, oldest first, DB-sliced per kind
+  stale_count oldest_age_hours stale_after_hours
+  by_assignee by_zone                          GROUP dicts (keys below)
+  by_kind                                      [{kind, kind_label, task_count}] — every kind, always
+  unassigned_rows unassigned_count             the bucket this page exists to empty
+  kind assignee zone unassigned q              the RAW echoed GET values
+  kind_choices assignees assignable_users zones
+  board_qs max_bulk_assign board_note
+  generated_at no_tenant no_tenant_note
+
+BOARD ROW dict — these key names come from _row() / _pick_rows() / _putaway_rows() / _count_rows(),
+NOT from the 4.4 model fields, and a wrong one renders as a silent blank (L41):
+
+  kind kind_label pk number url status status_label assignee_id assignee zone_id zone
+  created_at age_hours age_days is_stale detail progress line_count flag flag_css
+
+GROUP dict (by_assignee and by_zone share it, built by _group()):
+
+  assignee_id / zone_id · assignee / zone (already "Unassigned" / "No zone" when empty)
+  task_count · oldest_age_hours · rows · open_session (by_assignee only: {id, number, worker,
+  location, since} or None)
+
+NOT PAGINATED — there is no page_obj in the context, so this page includes no pagination partial.
+The board is DB-sliced at MAX_BOARD_ROWS per kind instead and says so when it bit (truncated).
+
+age_hours / oldest_age_hours are Decimal|None and every test below is `is not None` or
+|default_if_none — never |default, which would swallow a genuine 0.00 (a task created seconds ago),
+and never a substituted 0, which would read as "no wait" rather than "not measured". age_days is
+int|None; a real 0 days deliberately prints no sub-line rather than "0 day(s)".
+
+There is no pencil and no bin on a row. This board does not own these tasks — 4.4 does — and the
+view passes exactly one URL per row (its 4.4 detail page). Editing or deleting a pick, put-away or
+cycle count happens on 4.4's own pages, one hop through the eye. The only write this page offers is
+the assignee column, through the two bulk verbs.
+
+Both verbs are @tenant_admin_required + @require_POST, so every control that reaches them is wrapped
+in the superuser-or-tenant-admin gate; a member sees the same board read-only rather than a button
+they would 403 on. One POST assigns within ONE kind (three kinds = three tables), which is why there
+is one form per kind and the select-all is per kind.
+
+Badge classes: badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY.
+badge-success / badge-warning / badge-danger do not exist in theme.css and render unstyled (L33).
+flag_css is handed down by the view (badge-red for a short pick, badge-amber for a count variance)
+so this template invents none.
+{% endcomment %}
+{% block title %}Labour Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Labour Board — Task Assignment</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:laborsession_list' %}">Labour</a><span class="sep">›</span>
+        <span>Task Assignment</span>
+      </div>
+      <p class="text-muted">
+        Every open <span class="fw-600">pick</span>, <span class="fw-600">put-away</span> and
+        <span class="fw-600">cycle count</span> in the workspace, oldest first, grouped by who owns it, where
+        it happens and what kind of work it is. Nothing here is stored: the queue is read live from 4.4's own
+        task tables each time this page loads.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Labour Sessions</a>
+      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Scorecard</a>
+      <a href="{% url 'scm:labor_payroll_export' %}" class="btn btn-outline"><i data-lucide="file-down"></i> Payroll Export</a>
+      <a href="{% url 'scm:laborplan_list' %}" class="btn btn-primary"><i data-lucide="calendar-range"></i> Labour Plans</a>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    The design decision in visible copy rather than a code comment. A reader who assumes 4.14 keeps
+    its own task table will go looking for one, will not find it, and will eventually build a second
+    queue that drifts from the warehouse's.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this board writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ board_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">Reads 4.4's pick, put-away and cycle-count queues live</span>
+        <span class="badge badge-slate">Writes exactly one column — 4.4's <span class="mono">assigned to</span></span>
+        <span class="badge badge-muted">4.14 declares no task table and no assignee column</span>
+        <span class="badge badge-muted">No stock movement, no journal entry</span>
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As at {{ generated_at|date:"M d, Y H:i" }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ row_count }}</div>
+      <div class="stat-label">Open task{{ row_count|pluralize }} on this board</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="user-x"></i></div>
+      <div class="stat-value">{{ unassigned_count }}</div>
+      <div class="stat-label">Waiting for an owner</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ stale_count }}</div>
+      <div class="stat-label">Older than {{ stale_after_hours }} hours</div>
+    </div>
+    {% comment %}
+      oldest_age_hours is None on an empty board — an em dash, never 0.00. "The oldest thing here has
+      been waiting 0 hours" is a claim about a queue that does not exist.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ oldest_age_hours|default_if_none:"—" }}</div>
+      <div class="stat-label">Longest wait (hours)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filter the board</h2>
+      {% comment %}
+        by_kind always carries all three kinds, and its counts are taken from the FILTERED rows — so
+        a zero here means "nothing matching", which is not the same claim as "that queue is empty".
+        The chips say "matching" for exactly that reason, and every zero-state below is worded the
+        same way. Hiding the other two cards under a ?kind= filter was the alternative and it is
+        worse: an unrecognised kind is deliberately treated as "show everything", so a template that
+        hid every card whose kind did not equal the echoed value would blank the whole board on a
+        hand-typed ?kind=picks.
+      {% endcomment %}
+      <div class="badge-group">
+        {% for k in by_kind %}
+          <span class="badge {% if k.task_count %}badge-info{% else %}badge-muted{% endif %}">
+            {{ k.task_count }} {{ k.kind_label|lower }} matching
+          </span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="lb-q">Search</label>
+          <input type="text" id="lb-q" name="q" value="{{ q }}" class="form-input"
+                 placeholder="Task number, wave, ship-to, SKU or bin code…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lb-kind">Kind</label>
+          <select name="kind" id="lb-kind" class="form-select">
+            <option value="">All three kinds</option>
+            {% for value, label in kind_choices %}
+              <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lb-assignee">Assignee</label>
+          {% comment %}
+            pk dropdown — |stringformat:"d", NEVER |slugify. This list is deliberately WIDER than the
+            assign control below: "what is still sitting with somebody who has left" is exactly the
+            question a supervisor asks, while handing that person NEW work is not.
+          {% endcomment %}
+          <select name="assignee" id="lb-assignee" class="form-select">
+            <option value="">Anyone</option>
+            {% for u in assignees %}
+              <option value="{{ u.pk }}" {% if assignee == u.pk|stringformat:"d" %}selected{% endif %}>
+                {{ u }}{% if not u.is_active %} (inactive){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lb-zone">Zone / bin</label>
+          <select name="zone" id="lb-zone" class="form-select">
+            <option value="">Anywhere</option>
+            {% for z in zones %}
+              <option value="{{ z.pk }}" {% if zone == z.pk|stringformat:"d" %}selected{% endif %}>
+                {{ z.code }} — {{ z.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lb-unassigned">Ownership</label>
+          <div class="form-check">
+            {% comment %}
+              The view accepts 1 / true / yes / on, case-insensitively, and treats anything else as
+              filter OFF. The box is ticked for exactly that set, so a hand-typed ?unassigned=0 does
+              not leave a ticked box above rows that were never narrowed.
+            {% endcomment %}
+            <input type="checkbox" id="lb-unassigned" name="unassigned" value="1"
+                   {% if unassigned|lower == "1" or unassigned|lower == "true" or unassigned|lower == "yes" or unassigned|lower == "on" %}checked{% endif %}>
+            <label for="lb-unassigned">Unassigned only</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:labor_board' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        An unrecognised kind shows <span class="fw-600">everything</span> rather than nothing — a stale or
+        hand-typed value must never render an empty board that reads as "there is no work". The same posture
+        applies to the two pk filters: a value that is not a real id simply drops the filter.
+      </div>
+      {% if truncated %}
+        <div class="badge-group">
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> {{ truncated_note }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %} ===================== the bucket this page exists to empty ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Unassigned</h2>
+      <div class="badge-group">
+        {% if unassigned_count %}
+          <span class="badge badge-amber">{{ unassigned_count }} task{{ unassigned_count|pluralize }} with no owner</span>
+        {% else %}
+          <span class="badge badge-green">Everything open has an owner</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body form-help">
+      Work nobody has picked up. It is listed here on its own because it is the one bucket a shift start is
+      meant to clear — assign it from the per-kind consoles below, which is where the checkboxes live.
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Kind</th>
+            <th>Task</th>
+            <th>Status</th>
+            <th>Zone</th>
+            <th>What / where</th>
+            <th>Progress</th>
+            <th>Waiting</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in unassigned_rows %}
+            <tr>
+              <td><span class="badge badge-slate">{{ row.kind_label }}</span></td>
+              <td>
+                <a href="{{ row.url }}" class="fw-600 mono">{{ row.number|default:"—" }}</a>
+                <div class="form-help">Created {{ row.created_at|date:"M d, Y H:i" }}</div>
+              </td>
+              <td>
+                <span class="badge badge-info">{{ row.status_label }}</span>
+                {% if row.flag %}<div><span class="badge {{ row.flag_css }}">{{ row.flag }}</span></div>{% endif %}
+              </td>
+              <td class="mono">{% if row.zone %}{{ row.zone }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ row.detail|default:"—" }}</td>
+              <td>{{ row.progress|default:"—" }}</td>
+              <td class="nowrap mono">
+                {% if row.age_hours is not None %}{{ row.age_hours }} h{% else %}—{% endif %}
+                {% if row.age_days %}<div class="form-help">{{ row.age_days }} day{{ row.age_days|pluralize }}</div>{% endif %}
+                {% if row.is_stale %}<div><span class="badge badge-red">Stale</span></div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{{ row.url }}" class="btn-icon" title="Open in Warehouse Management"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="user-check"></i>
+                  <h3>Nothing is waiting for an owner</h3>
+                  <p>Every open pick, put-away and cycle count that matches the filters above already has somebody's name on it. On a workspace with no warehouse work yet this is simply an empty floor, not a problem — an empty board is a normal Tuesday.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    ===================================================================================================
+    One console per kind. A POST assigns within ONE kind because the three kinds are three different
+    TABLES — so there are three forms, three hidden task_kind values and three select-alls. Both verbs
+    hang off the same checkbox set: the form posts to assign, and the unassign button overrides the
+    target with formaction, so an operator cannot tick one list and act on another.
+    ===================================================================================================
+  {% endcomment %}
+  {% for k in by_kind %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{{ k.kind_label }} queue</h2>
+        <div class="badge-group">
+          {% if k.task_count %}
+            <span class="badge badge-info">{{ k.task_count }} matching</span>
+          {% else %}
+            {% comment %}
+              "Nothing matching", never "queue is clear" — the count is taken from the FILTERED rows,
+              so under a ?kind= or ?zone= filter a zero here says the filter excluded this queue, not
+              that the warehouse has no put-aways.
+            {% endcomment %}
+            <span class="badge badge-muted">Nothing matching</span>
+          {% endif %}
+          {% if request.user.is_superuser or request.user.is_tenant_admin %}
+            <span class="badge badge-slate">Up to {{ max_bulk_assign }} per press</span>
+          {% else %}
+            <span class="badge badge-muted">Read-only — assignment is a workspace-admin action</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% comment %}
+        THE FORM ELEMENT IS OPENED HERE AND CLOSED IN THE MATCHING BLOCK BELOW THE TABLE — both
+        guarded by the same superuser-or-tenant-admin test, so they open and close together. Edit
+        one condition and you must edit the other. A member gets the identical table with no
+        <form>, no CSRF token and no controls at all, rather than an inert POST form wrapping a
+        read-only list.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'scm:labor_board_assign' %}">
+          {% csrf_token %}
+          {% comment %}
+            task_kind / assign_to are deliberately NOT named kind / assignee: the five filter params
+            ride in the same form so the verb's redirect lands back on the board the operator was
+            looking at, and a collision would make the redirect fight the payload.
+          {% endcomment %}
+          <input type="hidden" name="task_kind" value="{{ k.kind }}">
+          <input type="hidden" name="kind" value="{{ kind }}">
+          <input type="hidden" name="assignee" value="{{ assignee }}">
+          <input type="hidden" name="zone" value="{{ zone }}">
+          <input type="hidden" name="unassigned" value="{{ unassigned }}">
+          <input type="hidden" name="q" value="{{ q }}">
+      {% endif %}
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                  <th><input type="checkbox" data-select-all title="Select every {{ k.kind_label|lower }} row shown"></th>
+                {% endif %}
+                <th>Task</th>
+                <th>Status</th>
+                <th>Assignee</th>
+                <th>Zone</th>
+                <th>What / where</th>
+                <th>Progress</th>
+                <th>Age</th>
+                <th class="table-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                {% if row.kind == k.kind %}
+                  <tr>
+                    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                      <td><input type="checkbox" name="ids" value="{{ row.pk }}"></td>
+                    {% endif %}
+                    <td>
+                      <a href="{{ row.url }}" class="fw-600 mono">{{ row.number|default:"—" }}</a>
+                      <div class="form-help">Created {{ row.created_at|date:"M d, Y H:i" }}</div>
+                    </td>
+                    <td>
+                      <span class="badge badge-info">{{ row.status_label }}</span>
+                      {% if row.flag %}<div><span class="badge {{ row.flag_css }}">{{ row.flag }}</span></div>{% endif %}
+                    </td>
+                    <td>
+                      {% if row.assignee %}
+                        {{ row.assignee }}
+                      {% else %}
+                        <span class="badge badge-amber">Unassigned</span>
+                      {% endif %}
+                    </td>
+                    <td class="mono">{% if row.zone %}{{ row.zone }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    <td>{{ row.detail|default:"—" }}</td>
+                    <td>
+                      {{ row.progress|default:"—" }}
+                      {% comment %}
+                        line_count is None for a put-away (one item, one move, no child table) and an
+                        int for the other two. A genuine 0 is worth saying out loud — an empty sheet
+                        is work nobody can do — so the test is against 0 explicitly, never truthiness.
+                      {% endcomment %}
+                      {% if row.line_count == 0 %}
+                        <div class="form-help">No lines on this sheet yet</div>
+                      {% endif %}
+                    </td>
+                    <td class="nowrap mono">
+                      {% if row.age_hours is not None %}{{ row.age_hours }} h{% else %}—{% endif %}
+                      {% if row.age_days %}<div class="form-help">{{ row.age_days }} day{{ row.age_days|pluralize }}</div>{% endif %}
+                      {% if row.is_stale %}<div><span class="badge badge-red">Stale</span></div>{% endif %}
+                    </td>
+                    <td>
+                      <div class="table-actions">
+                        <a href="{{ row.url }}" class="btn-icon" title="Open in Warehouse Management"><i data-lucide="eye"></i></a>
+                      </div>
+                    </td>
+                  </tr>
+                {% endif %}
+              {% endfor %}
+              {% if not k.task_count %}
+                <tr>
+                  <td colspan="9">
+                    <div class="empty-state">
+                      <i data-lucide="clipboard-check"></i>
+                      <h3>No {{ k.kind_label|lower }} work matching</h3>
+                      <p>Nothing in this queue matches the filters above — which on a narrowed board means the filter excluded it, not that the queue is empty. Reset the filters to see the whole floor. On a workspace that has not started picking yet an empty queue is simply the correct answer, not an error.</p>
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" for="lb-assign-{{ k.kind }}">Assign the ticked {{ k.kind_label|lower }} tasks to</label>
+                {% comment %}
+                  ACTIVE logins only. You cannot hand new work to an account that has been switched
+                  off, and the verb refuses one — so offering it would be offering a one-click
+                  failure. The filter dropdown above is deliberately wider.
+                {% endcomment %}
+                <select name="assign_to" id="lb-assign-{{ k.kind }}" class="form-select">
+                  <option value="">Choose a member of this workspace…</option>
+                  {% for u in assignable_users %}
+                    <option value="{{ u.pk }}">{{ u }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-help">Active logins in this workspace only. Unassign needs no target.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Act on the selection</label>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary"><i data-lucide="user-check"></i> Assign selected</button>
+                  <button type="submit" class="btn btn-outline"
+                          formaction="{% url 'scm:labor_board_unassign' %}"
+                          onclick="return confirm('Return the ticked {{ k.kind_label|lower }} tasks to the unassigned queue?');">
+                    <i data-lucide="user-minus"></i> Unassign selected
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="form-help">
+              <span class="fw-600">At most {{ max_bulk_assign }} tasks per press.</span> The board itself fetches at
+              most {{ max_bulk_assign }} {{ k.kind_label|lower }} rows, so ticking the header box can never build a
+              selection larger than the limit — the cap is measured on the request before a single query runs, and a
+              bigger hand-built one is refused outright rather than half-applied. To work through more than that,
+              narrow with the filters above and assign in batches.
+            </div>
+            <div class="form-help">
+              A task that has been picked, completed, cancelled or removed since this page loaded is
+              <span class="fw-600">skipped and counted</span>, never forced — the message after the redirect says how
+              many, so a partial success is a fact you can go and check rather than something the board quietly hides.
+              Re-pressing the same button changes nothing and files no audit entry.
+            </div>
+          </div>
+        {% comment %} …and the </form> opened above the table. Same condition, deliberately. {% endcomment %}
+        </form>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  {% comment %} ============================== grouped by assignee ============================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By assignee</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ by_assignee|length }} bucket{{ by_assignee|length|pluralize }}</span>
+        <span class="badge badge-muted">Busiest queue first</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Owner</th>
+            <th>Open tasks</th>
+            <th>Longest wait (hours)</th>
+            <th>On shift right now</th>
+            <th>What they are holding</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in by_assignee %}
+            <tr>
+              <td>
+                {% if g.assignee_id %}
+                  <span class="fw-600">{{ g.assignee }}</span>
+                {% else %}
+                  <span class="badge badge-amber">{{ g.assignee }}</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ g.task_count }}</td>
+              {% comment %}
+                None when not one row in the bucket carried a created_at the age could be taken from.
+                An em dash, not 0.00 — see the module docstring's rule on every |None figure.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {{ g.oldest_age_hours|default_if_none:"—" }}
+              </td>
+              <td>
+                {% if g.open_session %}
+                  <a href="{% url 'scm:laborsession_detail' g.open_session.id %}" class="mono">{{ g.open_session.number|default:"—" }}</a>
+                  <div class="form-help">
+                    {{ g.open_session.worker|default:"—" }}
+                    {% if g.open_session.location %} · {{ g.open_session.location }}{% endif %}
+                  </div>
+                  <div class="form-help">Since {{ g.open_session.since|date:"M d, Y H:i" }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% for row in g.rows %}
+                  <div class="form-help">
+                    <a href="{{ row.url }}" class="mono">{{ row.number|default:"—" }}</a>
+                    <span class="text-muted">{{ row.kind_label }}</span>
+                    {% if row.zone %}<span class="mono">· {{ row.zone }}</span>{% endif %}
+                    {% if row.is_stale %}<span class="badge badge-red">Stale</span>{% endif %}
+                  </div>
+                {% endfor %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="users"></i>
+                  <h3>Nobody is holding anything</h3>
+                  <p>There is no open pick, put-away or cycle count matching the filters above, so there is nothing to group. Clear the filters, or come back once the warehouse has work in flight.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body form-help">
+      <span class="fw-600">On shift right now</span> is a courtesy, not a fact anything depends on: the labour
+      session's own login is set only by self-service clock-in, so a shift a supervisor filed for somebody else
+      falls back to matching the login's linked party. It renders perfectly well with neither, and no figure,
+      filter or verb on this page reads it.
+    </div>
+  </div>
+
+  {% comment %} ================================ grouped by zone ================================ {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">By zone</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ by_zone|length }} bucket{{ by_zone|length|pluralize }}</span>
+        <span class="badge badge-muted">Grouped on the location id, never on the printed code</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Zone / bin</th>
+            <th>Open tasks</th>
+            <th>Longest wait (hours)</th>
+            <th>What is queued there</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in by_zone %}
+            <tr>
+              <td>
+                {% if g.zone_id %}
+                  <span class="fw-600 mono">{{ g.zone }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ g.zone }}</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ g.task_count }}</td>
+              <td class="nowrap mono">{{ g.oldest_age_hours|default_if_none:"—" }}</td>
+              <td>
+                {% for row in g.rows %}
+                  <div class="form-help">
+                    <a href="{{ row.url }}" class="mono">{{ row.number|default:"—" }}</a>
+                    <span class="text-muted">{{ row.kind_label }} · {{ row.progress|default:"—" }}</span>
+                    {% if row.assignee %}
+                      <span class="text-muted">· {{ row.assignee }}</span>
+                    {% else %}
+                      <span class="badge badge-amber">Unassigned</span>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4">
+                <div class="empty-state">
+                  <i data-lucide="map-pin-off"></i>
+                  <h3>No work queued anywhere</h3>
+                  <p>Nothing open matches the filters above, so no zone has a queue. A put-away is grouped by its <span class="fw-600">destination</span> bin and a cycle count by the location being counted — that is where the work physically happens.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How this board is worked out</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        Three queries, one per task table, each fetching at most {{ max_bulk_assign }} of the
+        <span class="fw-600">oldest</span> open rows with its progress figures already annotated onto them. "Open"
+        is each model's own definition — a pick that is still editable or still pickable, a put-away in its open
+        statuses, a cycle count that is scheduled or in progress — so a status added to any of them appears here
+        automatically rather than quietly dropping out of the queue. Age is the only ordering the merged board
+        uses, because the row that has been waiting longest is the one somebody has to act on.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Stale</span> is a display band and nothing else: past {{ stale_after_hours }} hours a
+        row is chipped, and no refusal, expiry or escalation hangs off it. It is a fixed threshold rather than
+        "older than average" on purpose — a threshold derived from the set it is grading moves with the data and
+        stops being a threshold.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">There is no edit and no delete on a row here.</span> These tasks belong to 4.4
+        Warehouse Management, which owns their lifecycle, their lines and their stock consequences; this page
+        holds a single column of theirs and a read-only view of the rest. The eye opens the real record, one hop
+        away, and every other change is made there.
+      </p>
+      <p class="text-muted">
+        Assignment re-fetches every ticked id inside the workspace and inside the kind's own open statuses before
+        writing, so a foreign id and a task that has moved on since the page loaded are skipped rather than
+        forced, and each genuine change writes one narrow update and one audit entry. Assigning the same person
+        twice writes nothing and audits nothing — the second press is a no-op, not a duplicate trail.
+      </p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    // Progressive enhancement only. With scripting off every checkbox is still tickable by hand, the
+    // forms still post, and the server-side cap is still the cap — this just saves 200 clicks.
+    var toggles = Array.prototype.slice.call(document.querySelectorAll("[data-select-all]"));
+    toggles.forEach(function (toggle) {
+      toggle.addEventListener("change", function () {
+        var form = toggle.closest("form");
+        if (!form) { return; }
+        // Scoped to THIS form, which is scoped to one kind — a POST assigns within one kind because
+        // the three kinds are three different tables, so a cross-kind select-all would build a
+        // selection the verb is right to refuse.
+        var boxes = form.querySelectorAll('input[type="checkbox"][name="ids"]');
+        Array.prototype.forEach.call(boxes, function (box) { box.checked = toggle.checked; });
+      });
+    });
+  })();
+</script>
+{% endblock %}
