@@ -388,3 +388,65 @@ def _post_adjustment(adjustment, user, moved_at=None):
                          unit_cost=line.unit_cost if line.unit_cost else (item.average_cost or ZERO),
                          lot_serial=line.lot_serial, reference=adjustment.number,
                          reason=adjustment.get_reason_display(), moved_at=moved_at)
+
+
+def _status_transition(request, model, pk, detail, *, from_statuses, to_status, action, verb,
+                       stamps=None, audit=None, message=None, precheck=None):
+    """Guard, stamp, audit, redirect — the shape every plain status verb in this app shares.
+
+    Promoted here because it was written three times, byte-identical apart from the model name:
+    4.13's ``MaintenanceWorkOrders`` and both of 4.14's ``LaborSessions`` / ``LaborPlans``. That is
+    the case Backend Package Structure rule 5 names, and it matters more than usual for this
+    particular function because **it is the concurrency guard**: with three copies, the next lock or
+    audit fix has to be found and landed three times, and the one that gets missed fails silently
+    under load rather than at import.
+
+    ``model`` is the model class; ``detail`` is the caller's own ``_detail(pk)`` redirect, passed in
+    because each sub-module redirects to its own page.
+
+    ``action`` and ``verb`` are two different things and both are needed. ``action`` is the SLUG the
+    audit row is keyed on (``close`` / ``approve`` / …), so the trail stays filterable — a sentence
+    like ``"put on hold"`` as an ``action`` value would be the only entry in the application nobody
+    could query for. ``verb`` is the past participle the two human messages read with ("… cannot be
+    closed", "LSN-00001 closed.").
+
+    The row is taken ``FOR UPDATE`` and its status re-read INSIDE ``transaction.atomic()``: two
+    concurrent POSTs (a double-click at a timeclock, a retry, a replay) would otherwise both see the
+    same status and each stamp the same column, and the second stamp is the one that survives. The
+    object is resolved BEFORE the status guard so a cross-tenant pk answers 404 rather than a 302
+    that leaks "there is a row there, you just cannot move it" (the 4.12 finding).
+
+    ``precheck`` is evaluated INSIDE the lock, never by the caller before it. A guard that reads
+    anything other than this row's own columns — a sibling session's status, a child line count — is
+    a plain snapshot read when it runs outside the lock: it answers about the state the request
+    started in, and the write then waits for the lock and lands the moment the competing transaction
+    commits (the 4.13 cancel/delete TOCTOU fix).
+
+    ``save(update_fields=…)`` is narrow on purpose — a full ``save()`` would write back every
+    in-memory column, including any a concurrent edit had just changed. ``updated_at`` is
+    ``auto_now``, so it only fires when it is IN the list. A ``None`` in ``stamps`` is a deliberate
+    CLEAR (reopen empties three columns), not an "unset" to be skipped.
+    """
+    with transaction.atomic():
+        obj = get_object_or_404(model.objects.select_for_update(), pk=pk, tenant=request.tenant)
+        if obj.status not in from_statuses:
+            messages.error(request, f"{obj.number} cannot be {verb} — it is "
+                                    f"{obj.get_status_display().lower()}.")
+            return detail(pk)
+        if precheck is not None:
+            refusal = precheck(obj)
+            if refusal:
+                messages.error(request, refusal)
+                return detail(pk)
+
+        fields = ["status", "updated_at"]
+        obj.status = to_status
+        for field, value in (stamps or {}).items():
+            setattr(obj, field, value)
+            fields.append(field)
+        obj.save(update_fields=list(dict.fromkeys(fields)))
+
+    write_audit_log(request.user, obj, "update",
+                    {"action": action, "status": to_status, **(audit or {})})
+    messages.success(request, message or f"{obj.number} {verb}.")
+    return detail(pk)
