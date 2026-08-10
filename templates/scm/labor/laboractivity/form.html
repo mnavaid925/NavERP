@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — book or correct one stretch of a shift. Shared create/edit page.
+
+Renders apps/scm/views/LaborManagement/LaborActivities.py::_activity_form, reached from
+laborsession_add_activity (create) and laboractivity_edit (edit). Everything this page may read, and
+nothing else:
+
+  form      LaborActivityForm (bound on POST) — exactly eleven fields:
+            activity_type, indirect_reason, started_at, ended_at, quantity, error_quantity,
+            pick_task, putaway_task, cycle_count_task, reference, notes
+  is_edit   True on the edit route, False on the create route
+  session   the PARENT shift. The form has NO `session` field, so the heading, the breadcrumb, the
+            clock window shown below and the create action URL can only come from here
+  obj       the LaborActivity being corrected — None on create
+
+THE TWO ROUTES ARE SHAPED DIFFERENTLY AND THE FORM MUST FOLLOW.
+
+  create — POST to  {% templatetag openblock %} url 'scm:laborsession_add_activity' session.pk {% templatetag closeblock %}   (nested under the SHIFT: there is no
+           standalone labor-activities/add/ route, because the parent has to come from the URL rather
+           than from a field anybody could post). Cancel returns to the shift.
+  edit   — POST to  {% templatetag openblock %} url 'scm:laboractivity_edit' obj.pk {% templatetag closeblock %}   (on the activity's OWN pk: a child pk already
+           identifies its parent, and nesting would invite a caller to pair a real activity with
+           somebody else's session id). Cancel returns to the activity.
+
+`obj` is None on create, so every reference to it below sits inside `{% templatetag openblock %} if is_edit {% templatetag closeblock %}`. Building the edit
+action or the edit cancel URL outside that guard would be a NoReverseMatch on every create.
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to LaborActivityForm's
+whitelist — Meta.fields is the eleven names above and nothing else. A field added to the model and to
+the form but not added to a group here would never reach the POST.
+
+Deliberately absent and must not be added: `session` (the parent route owns it — that absence IS the
+security control), `standard` and all four *_snapshot columns (the MEASUREMENT: resolved once by
+select_standard() in the create path and recomputed only from data already on the row — a standard a
+user can type is not a measurement, it is a claim), `duration_minutes` (derived in save() from the
+interval, so a field for it would be a field for a subtraction), `tenant` and `number`.
+
+Every rule stated in the operator notes below is enforced by LaborActivity.clean() and by the form's
+tenant-scoped, open-task-scoped querysets — never by this template — so the words somebody reads and
+the validation that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}Book Activity on {{ session.number }}{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}Book an Activity{% endif %}</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:laboractivity_list' %}">Labor Activities</a><span class="sep">›</span>
+      <a href="{% url 'scm:laborsession_detail' session.pk %}">{{ session.number }}</a><span class="sep">›</span>
+      {% if is_edit %}
+        <a href="{% url 'scm:laboractivity_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>
+      {% else %}
+        <span>New activity</span>
+      {% endif %}
+    </div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Correct one booked stretch of {{ session.worker.name }}'s shift. Fixing the quantity re-derives the earned minutes from the standard already snapshotted on this row — the standard itself is <span class="fw-600">not</span> looked up again, so a correction made today cannot re-measure work done months ago against a standard that has since been re-timed.
+      {% else %}
+        One stretch of {{ session.worker.name }}'s shift on {{ session.work_date|date:"M d, Y" }}: what was being done, between which two times, and what came out of it. The shift comes from the address of this page and is never a field — which is what stops minutes being grafted onto somebody else's shift.
+      {% endif %}
+    </p>
+  </div></div>
+
+  {% comment %}
+    The shift card is not decoration: two of the three rules most likely to refuse this save are
+    facts about the parent — the interval has to fall inside the clock window, and the shift has to
+    still be open — and neither is visible anywhere on the form itself.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Booking onto {{ session.number }}</h2>
+      <div class="badge-group">
+        <span class="badge {{ session.status_css }}">{{ session.get_status_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Shift</dt><dd><a href="{% url 'scm:laborsession_detail' session.pk %}" class="fw-600 mono">{{ session.number }}</a></dd></div>
+        <div class="detail-item"><dt>Worker</dt><dd>{{ session.worker.name }}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd><span class="mono">{{ session.location.code }}</span> <span class="text-muted">{{ session.location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Work date</dt><dd class="nowrap">{{ session.work_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Clock in</dt><dd class="nowrap">{{ session.clock_in|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Clock out</dt><dd class="nowrap">{% if session.clock_out %}{{ session.clock_out|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Still on the floor</span>{% endif %}</dd></div>
+      </dl>
+      <div class="form-help">The interval below must fall <span class="fw-600">inside that clock window</span>. Minutes booked outside it are minutes nobody was on site for: they push booked time past attended time until utilisation silently exceeds 100% with no explanation on the page. While the shift is still running there is no clock-out to bound against, so the ceiling is now — an activity that ends in the future is time nobody has worked yet.</div>
+    </div>
+  </div>
+
+  {% comment %}
+    THE ACTION DIFFERS BETWEEN THE TWO ROUTES — see the block comment at the top of this file. Create
+    posts to the SHIFT-nested route (the parent comes from the URL); edit posts to the activity's own
+    pk. `obj` is None on create, so the edit branch may only be reached inside `if is_edit`.
+  {% endcomment %}
+  <form method="post" novalidate action="{% if is_edit %}{% url 'scm:laboractivity_edit' obj.pk %}{% else %}{% url 'scm:laborsession_add_activity' session.pk %}{% endif %}">
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What was being done</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The split between <span class="fw-600">productive work</span> and everything else is the line the whole module is built on — a performance figure is earned minutes over <em>direct</em> minutes, so an activity on the wrong side of it moves every number on the scorecard. The two halves are paired in both directions and the save is refused either way round: productive work records the units it completed and carries no reason; non-productive time carries a reason and completes no units. A reason with no required companion is a bucket nobody can total afterwards, which is the entire point of filing it.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.activity_type %}
+          {% include "partials/form_field.html" with field=form.indirect_reason %}
+        </div>
+        <div class="form-help">Waiting for equipment, system down and waiting for work are the <span class="fw-600">lost time</span> the industry names separately — sanctioned, in the sense that nobody chose to spend it. The activity sizes the loss; the reason beside it is what a supervisor can actually act on.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The interval</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.started_at %}
+          {% include "partials/form_field.html" with field=form.ended_at %}
+        </div>
+        <div class="form-help">
+          Leave <span class="fw-600">ended at</span> blank while the work is still in progress — a running activity books no minutes until it is given an end, which is the honest state rather than a zero. The booked duration is <span class="fw-600">derived</span> from these two times and never typed, so the interval and its length can never disagree. A single booking is capped at 24 hours; a longer stretch is several activities, one per stretch of work.
+          {% if not is_edit %}
+            <br>The start time is pre-filled from the end of the last completed activity on this shift, or from clock-in when nothing has been booked yet. It is only a starting point — change it freely.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What came out of it</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.quantity %}
+          {% include "partials/form_field.html" with field=form.error_quantity %}
+        </div>
+        <div class="form-help">Units are counted in the standard's own basis — units, lines, cases or pallets — which is what makes minutes per unit mean anything: 0.4 minutes is fast per pallet and absurd per case. Errors are the one recorded accuracy input; the accuracy percentage is derived from the pair and never stored, so correcting a mis-typed quantity corrects the percentage with it. Errors cannot exceed the units completed, or a worker who made three mistakes in two picks would read as −50% accurate.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Booked against</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">At most <span class="fw-600">one</span> task may be named, and the one that is named has to match the work — a pick task cannot carry cleaning minutes, or every board that reports "time booked against this task" reports a number that was never spent on it. Time spent on two tasks is two activities. The link is a pointer <span class="fw-600">out</span> to the warehouse task and adds nothing to it: 4.14 writes no column into 4.4's tables, posts no stock movement and drafts no accounting document.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.pick_task %}
+          {% include "partials/form_field.html" with field=form.putaway_task %}
+          {% include "partials/form_field.html" with field=form.cycle_count_task %}
+          {% include "partials/form_field.html" with field=form.reference %}
+        </div>
+        <div class="form-help">The three dropdowns offer this workspace's <span class="fw-600">still-open</span> tasks, plus whichever task this activity already names even if it has since closed — a task legitimately finishes while its booking is still being corrected, and dropping it out of the list would silently null the pointer on the next save, keeping the minutes and losing the record of what they were spent on. They are deliberately <em>not</em> narrowed by the activity type above: that match is enforced when you save, where it also holds against a crafted request, and narrowing here would render three permanently empty selects on an unbound form. <span class="fw-600">Reference</span> is the honest fallback for work with no task record at all — it exists so nobody reaches for whichever pointer was nearest just to have filled something in.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{% if is_edit %}What this correction will and will not change{% else %}How these minutes will be measured{% endif %}</h2>
+        <span class="badge badge-info">Snapshot, not a live lookup</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        {% if is_edit %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            The standard is <span class="fw-600">not</span> resolved again. The earned minutes are recomputed from the three determinants already snapshotted on this row and the quantity you type here, so fixing a mistyped figure fixes the measurement with it — while editing the standard in the library changes nothing on this row at all. Re-resolving would mean a correction made today silently re-measured work done months ago against a standard that has since been re-timed, which is the exact failure the snapshot exists to prevent.
+          </p>
+          <p class="text-muted" style="margin-top:.75rem;">
+            The one honest edge: changing the <span class="fw-600">activity type</span> leaves the standard filed for the original type in place. Nothing pretends otherwise — you will be told so after saving. If the work really was a different job, delete this booking and file it again so it is measured against the right standard.
+          </p>
+        {% else %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            When this activity saves, the labor standard governing <span class="fw-600">this kind of work, at {{ session.location.code }}, on the day it was actually done</span> is resolved once and its three determinants — fixed minutes, minutes per unit and the allowance — are copied onto the row. Every performance figure this booking ever shows is computed from those copies. Editing or deleting the standard afterwards cannot move them, which is what lets a three-month-old figure be reproduced exactly as it was shown at the time.
+          </p>
+          <p class="text-muted" style="margin-top:.75rem;">
+            If no active standard covers it, that is <span class="fw-600">not an error</span>: the booking is recorded as unmeasured, earned minutes and performance stay blank rather than reading as zero, and the row drops out of both sides of the shift ratio. Not every job in a warehouse has been time-studied, and printing 0% against {{ session.worker.name }} would render an unmeasured job as a failing one. Indirect time is unmeasured by design — break time is not earned time — so no standard is resolved for it at all.
+          </p>
+        {% endif %}
+        <div class="form-help">Neither the standard nor any of the snapshot figures is a field on this form, and none of them should ever become one: a standard a user can type is not a measurement, it is a claim — on a record that feeds a payroll export.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Book activity{% endif %}</button>
+      {% comment %}
+        Cancel mirrors the action: an edit goes back to the activity it was correcting, a create goes
+        back to the shift — which is also where a successful create lands, because the next thing a
+        supervisor does is book the NEXT stretch of the same shift.
+      {% endcomment %}
+      <a href="{% if is_edit %}{% url 'scm:laboractivity_detail' obj.pk %}{% else %}{% url 'scm:laborsession_detail' session.pk %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
