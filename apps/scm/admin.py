@@ -1069,3 +1069,74 @@ class LaborPlanAdmin(admin.ModelAdmin):
     inlines = [LaborPlanLineInline]
     readonly_fields = ("number", "status", "generated_at", "approved_by", "approved_at",
                        "created_at", "updated_at")
+
+
+# --- 4.15 Cold Chain Management ----------------------------------------------------------------
+from apps.scm.models import (  # noqa: E402
+    ColdChainMonitor, TemperatureExcursion, TemperatureReading,
+)
+
+
+@admin.register(ColdChainMonitor)
+class ColdChainMonitorAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "name", "device_type", "device_serial", "location", "asset",
+                    "shipment", "storage_condition", "min_temperature", "max_temperature",
+                    "excursion_grace_minutes", "logging_interval_minutes", "calibration_due_on",
+                    "status")
+    list_filter = ("tenant", "status", "device_type", "storage_condition")
+    search_fields = ("number", "name", "device_serial", "calibration_reference", "notes",
+                     "location__code", "location__name", "asset__code", "asset__name",
+                     "shipment__number")
+    date_hierarchy = "calibration_due_on"
+    # `status` is deliberately NOT read-only here — unlike TemperatureExcursion.status it is
+    # user-owned lifecycle and the user is its only writer (the Asset.status ruling). Every derived
+    # answer on this model (in range, in the warning band, still reporting, calibration due, the open
+    # episode) is a METHOD and is deliberately not a column anywhere, so there is nothing else to
+    # protect from an admin edit beyond the generated number.
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(TemperatureReading)
+class TemperatureReadingAdmin(admin.ModelAdmin):
+    # APPEND-ONLY ledger — read-only in the admin, no add/change/delete. Exactly the StockMoveAdmin
+    # (:198-212) and MeterReadingAdmin (:964-984) posture, and for the same reason one sub-module on:
+    # a wrong reading is corrected by posting a later, correct one, never by editing the row a
+    # compliance report has already been built from. It is also the only posture that survives an
+    # ALCOA+ review, where a silently editable measurement IS the finding. The front end ships no
+    # edit and no delete route for the same reason.
+    list_display = ("monitor", "tenant", "reading_at", "temperature", "min_temperature",
+                    "max_temperature", "humidity_pct", "sample_count", "interval_minutes", "source",
+                    "recorded_by")
+    list_filter = ("tenant", "source")
+    search_fields = ("notes", "monitor__number", "monitor__name", "monitor__device_serial")
+    date_hierarchy = "reading_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(TemperatureExcursion)
+class TemperatureExcursionAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "monitor", "started_at", "ended_at", "duration_minutes",
+                    "breach_direction", "extreme_temperature", "limit_min", "limit_max", "mkt",
+                    "severity", "status", "assessment", "cause")
+    list_filter = ("tenant", "status", "severity", "assessment", "breach_direction", "cause")
+    search_fields = ("number", "corrective_action", "notes", "monitor__number", "monitor__name")
+    date_hierarchy = "started_at"
+    # EVERY detector-written column is read-only, plus the workflow-controlled `status` and the two
+    # attribution stamps. These are MEASUREMENTS and SNAPSHOTS: `limit_min`/`limit_max` record the
+    # band that was in force when the episode fired, and an admin who can retype them can rewrite
+    # last year's audit finding into a pass. `status` is read-only because the four triage verbs are
+    # what stamp who acknowledged and who assessed; an editable dropdown could close an excursion
+    # with nobody's name on it. `severity`, `assessment`, `cause`, `corrective_action` and `notes`
+    # stay editable — that is the human half of the record.
+    readonly_fields = ("number", "started_at", "ended_at", "duration_minutes", "breach_direction",
+                       "extreme_temperature", "limit_min", "limit_max", "reading_count", "mkt",
+                       "last_detected_at", "status", "acknowledged_by", "acknowledged_at",
+                       "assessed_by", "assessed_on", "created_at", "updated_at")
