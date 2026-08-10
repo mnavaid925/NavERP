@@ -382,7 +382,7 @@ string, so nothing appended to the URL rides along into the download link.
                       <a href="{% url 'scm:laborsession_list' %}?status=closed">labour session list</a>.
                     {% else %}
                       No shift has been recorded in this window at all. Widen the dates above, clear the location
-                      and worker filters, or <a href="{% url 'scm:laborsession_clock_in' %}">clock somebody in</a>.
+                      and worker filters, or <a href="{% url 'scm:laborsession_list' %}">clock somebody in</a>.
                     {% endif %}
                   </p>
                 </div>
