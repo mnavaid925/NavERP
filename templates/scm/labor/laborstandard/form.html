@@ -12,7 +12,7 @@ and ::laborstandard_edit (via crud_edit). Everything this page may read, and not
 
 Fields are rendered BY NAME so the four determinants can be separated from the scope and the
 effectivity, which couples this page to LaborStandardForm's field set. Meta.fields is a WHITELIST of
-13 names and all 13 are below: name / activity / basis / source / minutes_per_unit / setup_minutes /
+14 names and all 14 are below: name / activity / basis / source / minutes_per_unit / setup_minutes /
 travel_minutes / allowance_pct / labour_rate / effective_from / effective_to / location /
 item_category / notes. A field added to the model and to that whitelist but not to a group here
 would never reach the POST — and on edit it would be silently blanked on every save.
