@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — the labor standards library (LST-).
+
+Renders apps/scm/views/LaborManagement/LaborStandards.py::laborstandard_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py) — page_obj.window drives the
+                               shared pagination partial
+  activity_choices             ACTIVITY_CHOICES        (the 17 direct + indirect activities)
+  basis_choices                STANDARD_BASIS_CHOICES  (per unit / line / task / case / pallet)
+  source_choices               STANDARD_SOURCE_CHOICES (engineered / observed / benchmark / learned)
+  status_choices               LaborStandard.STATUS_CHOICES (draft / active / archived)
+  effective_choices            EFFECTIVE_CHOICES — the three DERIVED effectivity buckets, NOT a
+                               model vocabulary and NOT a column
+  locations                    Location queryset for the pk dropdown
+  item_categories              ItemCategory queryset for the pk dropdown
+  effective                    the RESOLVED bucket ("" when the param was absent or junk). The
+                               select below binds its `selected` to THIS, never to
+                               request.GET.effective, so ?effective=soon shows "Any window" rather
+                               than a phantom pick that narrowed nothing
+  stats                        dict: active / draft / archived / lapsed. `lapsed` counts rows still
+                               marked active whose window has already CLOSED — live-looking
+                               standards select_standard() can never pick again
+  today                        the date every figure above was computed against
+
+Filter params: q / activity / basis / source / status / location / item_category / effective. The
+four string params compare against request.GET.<param> directly; `location` and `item_category` are
+PKs and compare with |stringformat:"d" — never |slugify.
+
+The status badge class comes from the model's own lookup (obj.status_css -> STATUS_CSS). There is
+NO activity_css on LaborStandard (that property lives on LaborActivity), so the activity column
+takes the neutral badge-slate rather than inventing a colour mapping this page cannot see.
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33).
+
+The per-row effectivity chip is computed HERE from `today`, because the view attaches
+`effective_chip` to the detail page's sibling rows only. It is the same rule as
+_effective_state()/_apply_effective_filter() written in the third dialect, and deliberately in the
+same order so a row the filter puts in a bucket renders that bucket's chip: future is
+effective_from > today, expired is effective_to < today (a blank end date never expires), and
+everything else is in force. Labels and colours are EFFECTIVE_CHOICES / EFFECTIVE_CSS verbatim.
+
+Nothing in a row is a query: the view's select_related covers location + item_category and
+.defer("notes") drops the only column not rendered here.
+
+Edit is gated on obj.is_editable (draft, active — an archived standard is frozen). Delete is gated
+on the status set the ROUTE enforces (draft, archived — a live standard is what the resolver is
+answering with right now), which is deliberately NOT the same set: offering a button the view will
+refuse is the 4.11 finding, and is_editable would put Delete on exactly the rows that refuse it and
+hide it from exactly the rows that accept it. Delete is also @tenant_admin_required and
+@require_POST, so it sits behind the house gate as a real <form method="post"> with a csrf token.
+
+Only the system-generated LST- number goes into the confirm string: the name is user-typed and an
+apostrophe in it would be escaped to &#x27;, which the HTML parser hands to JavaScript as a bare
+quote and the dialog breaks.
+{% endcomment %}
+{% block title %}Labor Standards{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Labor Standards</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Labor Standards</span></div>
+      <p class="text-muted">A standard is how long one unit of one activity is <span class="fw-600">expected</span> to take, in one scope, over one date range — and it is the keystone of the whole sub-module: without one, a labor module is a timeclock. Every performance figure downstream is <em>earned minutes over actual minutes</em>, and earned minutes come from exactly one formula: <span class="mono">(setup + travel + qty × per-unit) × (1 + allowance%)</span>. Nothing on this page measures anything on its own — only an <span class="fw-600">active</span> standard whose window covers today is ever selected.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="trophy"></i> Scorecard</a>
+      <a href="{% url 'scm:labor_board' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Labor Board</a>
+      <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Sessions</a>
+      <a href="{% url 'scm:laborstandard_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Standard</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The four tiles are counted over the WHOLE workspace, not the filtered page — "3 lapsed" is a
+    fact somebody has to act on, and a number that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one activity. stat-icon ships blue / green / orange /
+    purple / slate only; there is no red, so lapsed takes orange.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Active — the only status the resolver considers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alarm-clock-off"></i></div>
+      <div class="stat-value">{{ stats.lapsed }}</div>
+      <div class="stat-label">Active but their window closed before {{ today|date:"M d, Y" }} — they look live and can never be picked again</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-pen-line"></i></div>
+      <div class="stat-value">{{ stats.draft }}</div>
+      <div class="stat-label">Draft — written, measuring nothing until activated</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="archive"></i></div>
+      <div class="stat-value">{{ stats.archived }}</div>
+      <div class="stat-label">Archived — out of the resolver, still the rule last quarter was measured under</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Standards</h2>
+      <div class="badge-group">
+        {% if stats.lapsed %}<span class="badge badge-amber">{{ stats.lapsed }} lapsed</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search LST- number or standard name…">
+        </div>
+        <div class="form-group">
+          <select name="activity" aria-label="Activity" class="form-select">
+            <option value="">All activities</option>
+            {% for val, label in activity_choices %}
+              <option value="{{ val }}" {% if request.GET.activity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="basis" aria-label="Basis" class="form-select">
+            <option value="">Any basis</option>
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if request.GET.basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Any provenance</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A pk filter, so the comparison is |stringformat:"d" — |slugify would agree only by
+            accident and would silently drop the selection on any pk it renders differently.
+          {% endcomment %}
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">Every location</option>
+            {% for l in locations %}
+              <option value="{{ l.pk }}" {% if request.GET.location == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.code }} · {{ l.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="item_category" aria-label="Item category" class="form-select">
+            <option value="">Every item category</option>
+            {% for c in item_categories %}
+              <option value="{{ c.pk }}" {% if request.GET.item_category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `effective` is the value the VIEW resolved, not the raw query string — ?effective=junk
+            narrows nothing and must show "Any window" here rather than a phantom selection.
+          {% endcomment %}
+          <select name="effective" aria-label="Effectivity" class="form-select">
+            <option value="">Any window</option>
+            {% for val, label in effective_choices %}
+              <option value="{{ val }}" {% if effective == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        The <span class="fw-600">window</span> filter is a date question, not a column: there is no stored “is effective” flag and there must not be one, because the answer changes when the calendar rolls over and a stored flag would need something running every night to stay true. It is evaluated against <span class="fw-600">{{ today|date:"M d, Y" }}</span>. It says nothing about <span class="fw-600">status</span> — the two are separate facts, and an archived standard still has an honest answer to “was this in force then?”. A row that is <em>active</em> and <em>window closed</em> at the same time is the one worth hunting: it looks live everywhere and the resolver can never pick it again.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Standard</th>
+            <th>Activity / basis</th>
+            <th>Determinants</th>
+            <th>Rate</th>
+            <th>Scope</th>
+            <th>Effective</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:laborstandard_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+                <div class="form-help">
+                  <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+                  <span class="badge badge-muted">{{ obj.get_source_display }}</span>
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  badge-slate is a fixed taxonomy colour, not a severity: LaborStandard exposes no
+                  activity_css (that property is on LaborActivity), so this page must not invent a
+                  per-activity mapping it cannot keep in step with ACTIVITY_CSS.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_activity_display }}</span>
+                <div class="form-help">{{ obj.get_basis_display }}</div>
+              </td>
+              <td class="mono nowrap">
+                {% comment %}
+                  All four are non-nullable columns defaulting to 0, so a real 0.0000 prints as
+                  0.0000 rather than an em dash — here a zero is a fact (no setup time), not a
+                  missing measurement. The None-able figures on this model are all DERIVED and live
+                  on the detail page.
+                {% endcomment %}
+                {{ obj.minutes_per_unit|floatformat:"-4" }} <span class="text-muted">/ unit</span>
+                <div class="form-help">setup {{ obj.setup_minutes|floatformat:"-4" }} · travel {{ obj.travel_minutes|floatformat:"-4" }}</div>
+                <div class="form-help">allowance {{ obj.allowance_pct|floatformat:"-2" }}%</div>
+              </td>
+              <td class="mono nowrap">
+                {% if obj.labour_rate %}
+                  {{ obj.labour_rate|floatformat:"-4" }} <span class="text-muted">/ h</span>
+                {% else %}
+                  <span class="badge badge-muted">Not priced</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  Both pointers are nullable, so each is guarded by an if-branch rather than
+                  reached through a |default filter on the related object (L10). Both blank is the
+                  network-wide default and is a first-class answer, not a gap.
+                {% endcomment %}
+                {% if obj.location %}
+                  <span class="mono">{{ obj.location.code }}</span> <span class="text-muted">{{ obj.location.name }}</span>
+                {% else %}
+                  <span class="text-muted">Every location</span>
+                {% endif %}
+                <div class="form-help">{% if obj.item_category %}{{ obj.item_category.name }}{% else %}Every item category{% endif %}</div>
+              </td>
+              <td class="nowrap">
+                {{ obj.effective_from|date:"M d, Y" }}
+                <div class="form-help">{% if obj.effective_to %}to {{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}</div>
+                <div class="form-help">
+                  {% comment %}
+                    The three-bucket rule, in the same order as _effective_state(): future first
+                    (its start is after today), then expired (its end is before today — a blank end
+                    date fails the comparison and correctly never expires), else in force. Labels
+                    and classes are EFFECTIVE_CHOICES / EFFECTIVE_CSS verbatim, so the chip and the
+                    filter above can never describe different facts.
+                  {% endcomment %}
+                  {% if obj.effective_from > today %}
+                    <span class="badge badge-info">Starts later</span>
+                  {% elif obj.effective_to and obj.effective_to < today %}
+                    <span class="badge badge-slate">Window closed</span>
+                  {% else %}
+                    <span class="badge badge-green">In force today</span>
+                  {% endif %}
+                  {% if obj.status == "active" and obj.effective_to and obj.effective_to < today %}
+                    <span class="badge badge-amber">Lapsed</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:laborstandard_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:laborstandard_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    Delete is @tenant_admin_required and @require_POST, so it is a real form behind
+                    the house gate. Its status set is DELETABLE_STATUSES (draft, archived) and NOT
+                    is_editable (draft, active): an active standard is what the resolver is
+                    answering with right now and the route refuses to remove it, while an archived
+                    one is frozen for editing but perfectly deletable.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if obj.status == "draft" or obj.status == "archived" %}
+                      <form method="post" action="{% url 'scm:laborstandard_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Booked activity lines and plan lines that point at it keep every recorded figure, because each carries its own snapshot of the determinants — but the trail from a measurement back to this rule is erased and nothing rebuilds it.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="ruler"></i>
+                  <h3>No labor standards</h3>
+                  <p>Nothing in this workspace says how long any activity should take, so every minute booked on the floor is recorded as <span class="fw-600">unmeasured</span> — no earned minutes and no performance figure anywhere, which is the honest answer rather than a zero. Write a standard, activate it, and from that moment work in its scope is measured against it. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Nothing on this screen writes, and nothing here re-derives a minute: <span class="fw-600">earned minutes exist in one method</span>, and every page in 4.14 routes through it rather than keeping a second copy of the formula. A standard only starts measuring when somebody presses <span class="fw-600">Activate</span> on its own page, because activating redefines what every future booking earns and archiving silently removes a scope's measuring stick — both belong on a button with the consequence printed beside it, not on a dropdown somebody scrolls past while fixing a typo. Editing a live standard is allowed and cannot rewrite history: each booked activity snapshots the determinants it was measured under, so a re-time changes what <em>future</em> work earns and nothing else.
+    </div>
+  </div>
+{% endblock %}
