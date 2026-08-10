@@ -640,6 +640,20 @@ def laboractivity_delete(request, pk):
     label = f"{obj.number} ({obj.duration_minutes} minute(s) of " \
             f"{obj.get_activity_type_display().lower()})"
     with transaction.atomic():
+        # RE-CHECK under a row lock, not just at the top. The check above is the cheap early exit
+        # that gives the user a message; this one is the guard. Between the two, a concurrent
+        # `laborsession_approve` can land — and approval is the export lock, so the window is
+        # exactly "minutes silently removed from a shift that has already been approved and may
+        # already have been exported to payroll", which is the thing this view's docstring says the
+        # guard exists to prevent. Every other destructive verb in 4.14 (`_transition`,
+        # `laborsession_delete`, `laborplan_delete`) re-reads its parent inside `select_for_update`
+        # for this reason; this one was the outlier.
+        locked = (LaborSession.objects
+                  .select_for_update()
+                  .filter(pk=session.pk, tenant=request.tenant)
+                  .first())
+        if locked is None or _frozen(request, locked):
+            return _detail(pk)
         write_audit_log(request.user, obj, "delete", {
             "action": "delete_activity",
             "session": session.number,
