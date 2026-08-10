@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — shared create/edit form for LaborStandard.
+
+Rendered by apps/scm/views/LaborManagement/LaborStandards.py::laborstandard_create (via crud_create)
+and ::laborstandard_edit (via crud_edit). Everything this page may read, and nothing else:
+
+  form     — LaborStandardForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the LaborStandard on the EDIT path only (crud_edit adds it; crud_create does not), so
+             every use of it below is guarded by is_edit and never rendered bare
+
+Fields are rendered BY NAME so the four determinants can be separated from the scope and the
+effectivity, which couples this page to LaborStandardForm's field set. Meta.fields is a WHITELIST of
+13 names and all 13 are below: name / activity / basis / source / minutes_per_unit / setup_minutes /
+travel_minutes / allowance_pct / labour_rate / effective_from / effective_to / location /
+item_category / notes. A field added to the model and to that whitelist but not to a group here
+would never reach the POST — and on edit it would be silently blanked on every save.
+
+Four columns are deliberately absent and none of them is an oversight:
+  status      — editable=False and moved ONLY by the activate / archive verbs on the detail page.
+                A crafted status=active in a POST body cannot land, and not because a view checks
+                for it: there is no path from form data to the column at all.
+  tenant      — stamped by crud_create, and again in the form's __init__ so the model's overlap
+                refusal can actually run on the create path.
+  number      — auto-assigned on save (LST-).
+  created_at / updated_at — automatic.
+Nothing time-, cost- or reliability-shaped is missing either: minutes_for(), cost_for() and
+is_effective_on() are all DERIVED and have no column for a form to disagree with.
+
+Every refusal this form can produce arrives as a FIELD error, so each field renders its own errors
+through partials/form_field.html and form.non_field_errors is rendered at the top of the first card:
+  effective_to        — a standard cannot stop applying before it starts
+  effective_from      — a date before 1900, or THE OVERLAP REFUSAL naming the clashing standard and
+                        its date span
+  minutes_per_unit    — a zero standard, or a per-unit figure on a per-task basis, or a missing
+                        per-unit figure on every other basis
+  setup_minutes       — a per-task standard with no fixed time in it
+  location / item_category — the cross-tenant pointer guard (checked at BOTH the form and the model
+                        boundary, because a narrowed <select> has never held against a crafted POST)
+
+The date widgets are NOT declared here: TenantModelForm.__init__ replaces the widget of every
+forms.DateField outright with a native date input and sets the matching input_formats, and it runs
+AFTER ModelForm has built the fields — anything declared for a date field here would be silently
+overwritten and would read like the mechanism while being dead code.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Labor Standard{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Labor Standard</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:laborstandard_list' %}">Labor Standards</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Editing a standard changes what <span class="fw-600">future</span> work earns and nothing else: every activity already booked snapshotted these determinants at the moment it was filed, so there is no history here for a save to rewrite. That is also why a genuine re-time is better written as a <span class="fw-600">new</span> standard starting today than as an edit to this one — a superseded row parked under its successor is what keeps last month reproducible.
+      {% else %}
+        A standard says how long one unit of one activity is expected to take, in one scope, over one date range. It is saved as a <span class="fw-600">draft</span> and measures nothing at all until somebody activates it on its own page — the LST- number is assigned on save, so there is no number field here.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What this standard measures</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The <span class="fw-600">basis</span> is what makes a minutes figure mean anything — 0.4 minutes is fast per pallet and absurd per case — and it is also a rule the save enforces in both directions: <span class="fw-600">Per task (fixed)</span> says the fixed time <em>is</em> the standard, so it needs setup minutes and refuses a per-unit figure, and every other basis needs a per-unit figure or it charges the same minutes for one unit as for a thousand. The <span class="fw-600">provenance</span> is a claim you are making about where the number came from, and a supervisor arguing with it is entitled to see whether it was time-studied here or lifted from a library. An <span class="fw-600">indirect</span> activity may carry a standard, but no performance figure is computed against it — break time is not earned time.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.activity %}
+          {% include "partials/form_field.html" with field=form.basis %}
+          {% include "partials/form_field.html" with field=form.source %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The determinants</h2>
+        <span class="badge badge-info">Three times and an allowance, not one rate</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Earned minutes are <span class="mono fw-600">(setup + travel + qty × minutes_per_unit) × (1 + allowance% / 100)</span>, and that formula exists in exactly one place in this system — everything below only feeds it. Splitting the fixed time out of the variable time is the whole point: a per-task standard that is really twelve minutes of setup, charged per unit, prices a one-line pick identically to a forty-line one.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.minutes_per_unit %}
+          {% include "partials/form_field.html" with field=form.setup_minutes %}
+          {% include "partials/form_field.html" with field=form.travel_minutes %}
+          {% include "partials/form_field.html" with field=form.allowance_pct %}
+        </div>
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Determinant</th><th>What it is</th><th>What a wrong figure does</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="fw-600">Minutes per unit</td>
+                <td>The work itself, per unit of the chosen basis</td>
+                <td>Multiplied by the quantity, so it does not stay local — it lands in earned minutes, in the cost per unit, and in the required-headcount arithmetic of every plan built on this activity</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Setup</td>
+                <td>Fixed time paid once per task, whatever the quantity</td>
+                <td>Charged in full on a one-unit task and amortised away on a large one — which is exactly the economics a per-task standard exists to show</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Travel</td>
+                <td>Fixed time getting to the work and back, once per task</td>
+                <td>Distance-derived travel would need bin coordinates the location master does not carry, so this is the typed stand-in rather than a derivation waiting to happen</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Allowance</td>
+                <td>Personal needs, fatigue and unavoidable delay, added on top of the measured time</td>
+                <td>Capped at 100% — an allowance may at most <em>double</em> the standard; past that the thing being allowed for has stopped being the standard</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">A standard of zero minutes is refused at the door</span>, and not out of tidiness: earned minutes would come out zero for any quantity, so every worker measured against it would read as 0% forever and the scorecard would be explaining those zeroes instead of the work. Put some time in at least one of the three.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Costing</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Leave this at <span class="fw-600">zero</span> to skip costing entirely — an unpriced activity is an honest state, and every cost figure on the standard's own page then renders blank rather than inventing a confident 0.00 that would read as “this work is free”. This is a <span class="fw-600">charge-out</span> rate carried by the standard and never a person's wage: HR owns compensation, this module neither reads it nor copies it, and the hand-off to payroll from here is a report rather than a link.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.labour_rate %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">When it applies</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Leave the end date blank for an <span class="fw-600">open-ended</span> standard. Two live standards covering the same activity and the same scope on the same day have <span class="fw-600">no defined winner</span>, so the save refuses the overlap and names the standard that clashes along with its date span — close that one off or archive it. Archived rows are ignored by that check on both sides, which is why an archived standard is frozen for editing and has to be brought back through <span class="fw-600">Activate</span> instead: that path re-runs the check as a live row.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.effective_from %}
+          {% include "partials/form_field.html" with field=form.effective_to %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          A reversed pair is refused too. It would otherwise produce a standard that is effective on <em>no day at all</em> — configured, listed, and silently never selected, which is the worst of the three failures because nothing anywhere reports it.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Scope</h2>
+        <span class="badge badge-muted">Both blank = network-wide</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The resolver walks four rungs, narrowest first: <span class="fw-600">location + item category</span>, then <span class="fw-600">item category</span> alone, then <span class="fw-600">location</span> alone, then the <span class="fw-600">network-wide</span> default — and stops at the first that answers. Each rung matches standards scoped to <em>exactly</em> that shape, so a standard measured at one warehouse can never be selected for work done at another; the alternative would quietly apply another site's times. Leaving both blank is a first-class answer rather than a gap: it is the row that applies wherever nothing narrower does.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.location %}
+          {% include "partials/form_field.html" with field=form.item_category %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          Neither dropdown is narrowed to live rows. A standard is legitimately measured for a zone that has since been deactivated or a category that has been discontinued, and this sub-module reads history as much as it writes plans — the subject being dormant today is very often exactly why somebody is looking at the row.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Free text for the things the determinants cannot carry — the method used, who observed it and on what shift, the equipment or layout it assumes, the conditions under which it should be re-timed. A standard nobody can trace the provenance of is a standard nobody accepts, and this box is where the trace lives.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:laborstandard_detail' obj.pk %}{% else %}{% url 'scm:laborstandard_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving does not change the standard's status. {% if obj.status == "draft" %}It stays a <span class="fw-600">draft</span> and measures nothing until it is activated on its own page.{% elif obj.status == "active" %}It stays <span class="fw-600">active</span>, so the changed determinants take effect for the next booking in its scope and for none of the ones already recorded.{% else %}It stays where it is.{% endif %} Activate and Archive are buttons on the detail page with their consequence printed beside them, deliberately not a dropdown on this form: one redefines what every future booking earns and the other silently removes a scope's measuring stick, and neither belongs on a select somebody scrolls past while fixing a typo in the name.
+      {% else %}
+        The standard is saved as a <span class="fw-600">draft</span>. A draft is invisible to the resolver, so nothing is measured against it and nothing on the floor changes until somebody presses <span class="fw-600">Activate</span> on its page — which is where the consequence of publishing it is spelled out.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
