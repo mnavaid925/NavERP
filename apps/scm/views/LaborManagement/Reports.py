@@ -494,13 +494,27 @@ def _worker_aggregate(tenant, *, statuses, date_from, date_to, location_id=None,
                     # retroactively unmeasure the work it once measured.
                     measured_direct=Sum("duration_minutes",
                                         filter=Q(activity_type__in=_DIRECT,
+                                                 duration_minutes__gt=0,
                                                  standard_minutes_snapshot__isnull=False)),
                     # NULL when nothing on the shift carried a standard — never 0. An unmeasured
                     # week has not earned zero minutes, it has not been measured, and the ratio
                     # below drops out entirely rather than printing 0%.
-                    earned=Sum("standard_minutes_snapshot", filter=Q(activity_type__in=_DIRECT)),
-                    units=Sum("quantity", filter=Q(activity_type__in=_DIRECT)),
-                    errors=Sum("error_quantity", filter=Q(activity_type__in=_DIRECT)))):
+                    #
+                    # `duration_minutes__gt=0` on EVERY filter below, and it is not defensive
+                    # padding — it is what makes these the exact SQL twin of
+                    # `LaborSession._measured()` / `_unit_totals()`. A still-running activity
+                    # (ended_at=None, so duration 0) already carries its earned minutes and its
+                    # units, so without this predicate `earned` and `units` would count it while
+                    # `measured_direct` contributed nothing for it: performance and units-per-hour
+                    # would climb the moment work started and fall when it finished. The model and
+                    # this GROUP BY must describe the same set of rows, or the scorecard and the
+                    # session page disagree about the same worker on the same day.
+                    earned=Sum("standard_minutes_snapshot",
+                               filter=Q(activity_type__in=_DIRECT, duration_minutes__gt=0)),
+                    units=Sum("quantity",
+                              filter=Q(activity_type__in=_DIRECT, duration_minutes__gt=0)),
+                    errors=Sum("error_quantity",
+                               filter=Q(activity_type__in=_DIRECT, duration_minutes__gt=0)))):
         entry = out.get(row["session__worker_id"])
         if entry is None:
             # Unreachable while the two querysets share a window (an activity's session is always in
