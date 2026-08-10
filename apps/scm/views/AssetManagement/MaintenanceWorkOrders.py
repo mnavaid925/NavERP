@@ -110,7 +110,8 @@ from django.utils.dateparse import parse_date, parse_datetime
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._common import _changed
 from apps.scm.views._helpers import (_acting_party, _date_window, _insufficient_stock,
-                                     _need_tenant, _post_stock_move, _shared_items)
+                                     _need_tenant, _post_stock_move, _shared_items,
+                                     _status_transition)
 # Views legitimately depend on forms for the shared party querysets — the `_supplier_parties`
 # precedent in views/_helpers.py. The `assigned_to` filter dropdown must offer the same set the
 # form's `assigned_to` field offers, or the filter lists people the field cannot select.
@@ -293,64 +294,19 @@ def _issued_parts_refusal(obj):
     return ""
 
 
-def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None, audit=None,
-                message=None, precheck=None):
-    """Guard, stamp, audit, redirect — the shape every plain status verb in this file shares.
+def _transition(request, pk, *, from_statuses, to_status, action, verb, stamps=None,
+                audit=None, message=None, precheck=None):
+    """Delegates to the shared :func:`_status_transition` — see it for the locking contract.
 
-    ``action`` and ``verb`` are two different things and both are needed. ``action`` is the SLUG the
-    audit row is keyed on (``approve`` / ``hold`` / …), matching 4.12's trail so the log stays
-    filterable — ``"put on hold"`` as an ``action`` value is a sentence, not a key, and it would be
-    the only entry in the whole application nobody could query for. ``verb`` is the past participle
-    the two human messages read with ("… cannot be started", "MWO-00001 started.").
-
-    The row is taken ``FOR UPDATE`` and its status re-read INSIDE ``transaction.atomic()``: two
-    concurrent POSTs (a double-click, a retry, a replay) would otherwise both see ``in_progress`` and
-    each stamp ``completed_at``, and the second stamp is the one that survives. The object is
-    resolved BEFORE the status guard so a cross-tenant pk answers 404 rather than a 302 that leaks
-    "there is a row there, you just cannot move it" (the 4.12 finding).
-
-    ``save(update_fields=…)`` is narrow on purpose — a full ``save()`` here would write back every
-    in-memory column, including any a concurrent edit had just changed. ``updated_at`` is
-    ``auto_now``, so it only fires when it is IN the list.
+    This is where the shape was written first; 4.14 copied it twice before it was promoted into
+    ``views/_helpers.py``. The ten-verb ladder below is unchanged.
     """
-    with transaction.atomic():
-        obj = get_object_or_404(MaintenanceWorkOrder.objects.select_for_update(),
-                                pk=pk, tenant=request.tenant)
-        if obj.status not in from_statuses:
-            messages.error(request, f"{obj.number} cannot be {verb} — it is "
-                                    f"{obj.get_status_display().lower()}.")
-            return _detail(pk)
-        # Cross-ROW guards belong here, inside the lock — not in the caller before it.
-        #
-        # `select_for_update()` above protects this row's own columns, but a guard that reads a
-        # CHILD table (a part line's `is_issued`) is a plain snapshot read: run before the lock, it
-        # answers about the state the transaction started in, and the write then simply waits for
-        # the lock and lands the moment the competing transaction commits. That is not a narrow
-        # window either — `_issue_parts` holds this row locked for its whole per-line loop, so an
-        # attacker firing issue-parts and cancel back to back wins it reliably. The end state was a
-        # `cancelled` job carrying posted `maintenance` StockMoves: `Asset._jobs()` excludes
-        # cancelled jobs, so the consumption vanished from maintenance_cost_to_date(), from the
-        # repair-vs-replace ratio and from MTTR/MTBF, while the stock was genuinely gone.
-        if precheck is not None:
-            refusal = precheck(obj)
-            if refusal:
-                messages.error(request, refusal)
-                return _detail(pk)
-
-        fields = ["status", "updated_at"]
-        obj.status = to_status
-        for field, value in (stamps or {}).items():
-            setattr(obj, field, value)
-            fields.append(field)
-        obj.save(update_fields=list(dict.fromkeys(fields)))
-
-    write_audit_log(request.user, obj, "update",
-                    {"action": action, "status": to_status, **(audit or {})})
-    messages.success(request, message or f"{obj.number} {verb}.")
-    return _detail(pk)
+    return _status_transition(
+        request, MaintenanceWorkOrder, pk, _detail,
+        from_statuses=from_statuses, to_status=to_status, action=action, verb=verb,
+        stamps=stamps, audit=audit, message=message, precheck=precheck)
 
 
-# ======================================================================================= the list
 @login_required
 def maintenanceworkorder_list(request):
     """Search + seven filters + a reported-on window over the workspace's maintenance jobs.
