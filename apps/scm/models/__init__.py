@@ -6,6 +6,18 @@ will ImportError/AttributeError at runtime, not at import time.
 """
 from ._base import *  # noqa: F401,F403
 
+# CROSS-SUB-MODULE vocabulary, FIRST and BY NAME — 4.3's Items.py and Locations.py both import it
+# directly, so it has to be importable before them. It lives at the package ROOT rather than inside
+# 4.15's folder because it is read from THREE sub-modules (4.3's Item, 4.3's Location, 4.15's
+# ColdChainMonitor), and burying it in ColdChainManagement/ would make an older sub-module reach into
+# a newer one's private module. Spelled out rather than star-imported for the reason at :292 below.
+from ._choices import (  # noqa: F401
+    COLD_CONDITIONS,
+    FROZEN_CONDITIONS,
+    STORAGE_CONDITION_CHOICES,
+    STORAGE_CONDITION_RANGES,
+)
+
 # 4.1 Procurement Management
 from .ProcurementManagement.PurchaseRequisitions import (  # noqa: F401
     PurchaseRequisition,
@@ -351,4 +363,67 @@ from .LaborManagement.LaborActivities import (  # noqa: F401
 from .LaborManagement.LaborPlans import (  # noqa: F401
     LaborPlan,
     LaborPlanLine,
+)
+
+# --- 4.15 Cold Chain Management ----------------------------------------------------------------
+# _choices FIRST and BY NAME, not `import *`, for the reason spelled out at :292 above: 4.12's and
+# 4.13's `_choices` are star-imported earlier in this file, and a second star-imported `_choices`
+# re-declaring a shared token would silently shadow one of them with the winner decided by import
+# order. Spelling every name out makes such a collision a visible edit rather than a runtime
+# coin-flip. (`STORAGE_CONDITION_CHOICES` is NOT in this block — it is cross-sub-module and is
+# imported from the package-root `_choices` at the very top of this file, because 4.3's Item and
+# Location read it too.)
+#
+# ColdChainMonitor before the other two, for the reader rather than for Django: every FK below is
+# declared by string so the ORM does not care, but both other tables point at the monitor —
+# TemperatureReading CASCADEs off it (a reading is meaningless without the deployment that defines
+# its limits) and TemperatureExcursion PROTECTs it (an episode is evidence and must outlive the
+# device being retired).
+#
+# 4.15 declares NO reefer, cold-room, sensor or maintenance table: a reefer IS a `scm.Asset`, a cold
+# room IS a `scm.Location`, and "Maintenance of Reefers" is a board computed over 4.13.
+from .ColdChainManagement._choices import (  # noqa: F401
+    ASSESSMENT_CHOICES,
+    ASSESSMENT_CSS,
+    BREACH_DIRECTION_CHOICES,
+    BREACH_DIRECTION_CSS,
+    CALIBRATION_NOTICE_DAYS,
+    DEVICE_TYPE_CHOICES,
+    EDITABLE_EXCURSION_STATUSES,
+    EXCURSION_CAUSE_CHOICES,
+    EXCURSION_SEVERITY_CHOICES,
+    EXCURSION_SEVERITY_CSS,
+    EXCURSION_STATUS_CHOICES,
+    EXCURSION_STATUS_CSS,
+    GAS_CONSTANT_KJ,
+    KELVIN_OFFSET,
+    MAX_BATCH_READINGS,
+    MAX_EPISODE_READINGS,
+    MAX_EXCURSION_GRACE_MINUTES,
+    MAX_EXCURSION_MINUTES,
+    MAX_HUMIDITY_PCT,
+    MAX_LOGGING_INTERVAL_MINUTES,
+    MAX_READING_WINDOW_DAYS,
+    MAX_SAMPLE_COUNT,
+    MAX_TEMPERATURE_C,
+    MAX_WARNING_MARGIN_C,
+    MIN_HUMIDITY_PCT,
+    MIN_LOGGING_INTERVAL_MINUTES,
+    MIN_TEMPERATURE_C,
+    MKT_ACTIVATION_ENERGY_KJ,
+    MKT_EA_OVER_R,
+    MONITOR_STATUS_CHOICES,
+    MONITOR_STATUS_CSS,
+    OPEN_EXCURSION_STATUSES,
+    READING_SOURCE_CHOICES,
+    STALE_INTERVAL_MULTIPLIER,
+)
+from .ColdChainManagement.ColdChainMonitors import (  # noqa: F401
+    ColdChainMonitor,
+)
+from .ColdChainManagement.TemperatureReadings import (  # noqa: F401
+    TemperatureReading,
+)
+from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
+    TemperatureExcursion,
 )
