@@ -12,6 +12,13 @@ cached weighted-average maintained by `apply_receipt()` for fast valuation displ
 truth for quantity.
 """
 from apps.scm.models._base import *  # noqa: F401,F403
+# BY NAME, never `import *`. `_choices.py` at the models package ROOT imports nothing at all (not
+# even `_base`), so the partially-initialised `apps.scm.models` package sitting in `sys.modules`
+# while this file is being imported is never asked for a name it has not bound yet. The vocabulary
+# lives at the root rather than inside 4.15's folder precisely so this line does not make an older
+# sub-module reach into a newer one — see `apps/scm/models/_choices.py`. If this ever does turn
+# circular, the fix is to MOVE the constant, never to duplicate the list.
+from apps.scm.models._choices import STORAGE_CONDITION_CHOICES
 
 
 class ItemCategory(TenantOwned):
@@ -100,6 +107,19 @@ class Item(TenantOwned):
     is_spare_part = models.BooleanField(
         default=False,
         help_text="MRO part held for maintenance; shown on the spare-parts storeroom page")
+    # 4.15 Cold Chain Management. One column on the EXISTING item master, exactly as `is_spare_part`
+    # above and the 4.4 bin attributes on Location: a temperature class is an attribute of a product,
+    # not a reason for a parallel "cold item" master that would fork the UoM, the costing method, the
+    # reorder point and the derived on-hand. Together with the same column on Location it turns Cold
+    # Storage Inventory from a table into a QUERY. Additive, all-default and blank-permitted — no
+    # existing row changes meaning and nothing needs backfilling.
+    #
+    # A `StorageCondition` master carrying per-item numeric limits is what to add the day a bullet
+    # needs one; none does. The numbers that decide in-range live on `ColdChainMonitor`, which is the
+    # thing that actually measures.
+    storage_condition = models.CharField(
+        max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True,
+        help_text="Temperature class this item must be kept at; blank = not temperature-controlled")
 
     class Meta:
         ordering = ["sku"]
