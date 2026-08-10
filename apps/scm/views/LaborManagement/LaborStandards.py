@@ -700,7 +700,7 @@ def laborstandard_detail(request, pk):
     # standard, which is already this workspace's) and are the house idiom for a reason: they hold
     # the module-wide scoping rule mechanically, and `LaborPlanLine` carries NO tenant column of its
     # own, so `plan__tenant` is the only shape that can express the question at all.
-    activity_count = obj.activities.filter(tenant=request.tenant).count()
+    activity_count = obj.measured_activities.filter(tenant=request.tenant).count()
     plan_line_count = obj.plan_lines.filter(plan__tenant=request.tenant).count()
 
     return render(request, "scm/labor/laborstandard/detail.html", {
@@ -773,7 +773,7 @@ def laborstandard_delete(request, pk):
             return _detail(pk)
 
         # Counted inside the lock and before the delete, while the rows still exist to be counted.
-        activities = obj.activities.filter(tenant=request.tenant).count()
+        activities = obj.measured_activities.filter(tenant=request.tenant).count()
         plan_lines = obj.plan_lines.filter(plan__tenant=request.tenant).count()
         number, name = obj.number, obj.name
         # Inside the transaction so it rolls back with a failed delete rather than recording a
