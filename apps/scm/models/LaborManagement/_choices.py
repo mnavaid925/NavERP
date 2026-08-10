@@ -52,7 +52,7 @@ __all__ = [
     "VOLUME_SOURCE_CHOICES", "PLAN_METHOD_CHOICES",
     "MAX_SESSION_MINUTES", "MAX_ACTIVITY_MINUTES",
     "MAX_HORIZON_PERIODS", "MAX_PLAN_LINES", "MIN_PLAN_YEAR", "MAX_BULK_ASSIGN",
-    "MAX_STANDARD_RATE", "MAX_ALLOWANCE_PCT", "MAX_PRODUCTIVITY_PCT", "MAX_HOURS_PER_SHIFT",
+    "MAX_STANDARD_RATE", "MAX_SNAPSHOT_MINUTES", "MAX_ALLOWANCE_PCT", "MAX_PRODUCTIVITY_PCT", "MAX_HOURS_PER_SHIFT",
     "MIN_RANKED_MINUTES", "COACHING_THRESHOLD_PCT",
 ]
 
@@ -343,6 +343,23 @@ MAX_BULK_ASSIGN = 200
 #: token ``MAX_STANDARD_RATE`` rather than reusing 4.13's ``MAX_LABOUR_RATE`` keeps that distinction
 #: visible *and* keeps the two re-exports from shadowing each other in ``apps.scm.models``.
 MAX_STANDARD_RATE = Decimal("100000")
+
+#: Ceiling on a stored earned-minutes snapshot, and it is the COLUMN's ceiling, not a policy one.
+#: ``LaborActivity.standard_minutes_snapshot`` and ``LaborPlanLine.standard_minutes_snapshot`` are
+#: both ``DecimalField(max_digits=12, decimal_places=4)``, which holds eight integer digits —
+#: 99999999.9999 and not one unit more.
+#:
+#: The trap this exists to close: ``q4()`` looks like it already bounds the value, and it does, but
+#: to the *other* column shape in this app — ``DecimalField(14, 4)``, i.e. TEN integer digits. So a
+#: figure that passes ``q4()`` can still be two orders of magnitude too wide for the column it is
+#: about to be written into, and the failure is a ``DataError`` raised by the driver inside
+#: ``save()`` — an uncaught 500 on the sub-module's primary write path, not a validation message.
+#: Reaching it takes only a large ``quantity``, which the form accepts up to ``MAX_Q4``.
+#:
+#: It lives here rather than beside either writer because there are TWO writers of this column
+#: shape — the activity's ``_earned_from_snapshots()`` and the plan generator — and a bound that is
+#: re-derived at each site is a bound that eventually disagrees with itself.
+MAX_SNAPSHOT_MINUTES = Decimal("99999999.9999")
 
 #: Personal, fatigue and delay allowance, as a percentage added on top of the measured time — SAP
 #: EWM's "normal time including travel, personal needs, fatigue and unavoidable delay". Capped at
