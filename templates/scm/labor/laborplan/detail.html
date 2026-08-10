@@ -1,0 +1,488 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — one labour plan: the assumptions, the bucket × activity grid, the ladder.
+
+Renders apps/scm/views/LaborManagement/LaborPlans.py::laborplan_detail. Everything this page may
+read, and nothing else:
+
+  obj                     the LaborPlan (select_related: location, demand_forecast,
+                          demand_forecast__item, approved_by — anything else on it is a query, so
+                          this page reads only those FKs and the model's own columns/properties)
+  lines                   the CURRENT PAGE of the grid (LaborPlanLine rows, select_related standard)
+  page_obj                the Paginator page for `lines` — partials/pagination.html reads it
+  totals                  {lines, required_minutes, required_shifts, planned_shifts, shift_gap,
+                          coverage_pct} — LaborPlan.totals(), computed over the WHOLE plan.
+                          coverage_pct is None (never 0) when nothing is required.
+  bucket_rows             [{period_start, required, planned, gap, is_short, is_over}] — one dict per
+                          bucket across the WHOLE plan. THESE SIX KEYS ARE THE CONTRACT: the view
+                          builds the dicts itself, so a key guessed from a model field name would
+                          resolve to the empty string and render as a deliberate-looking blank.
+  periods                 int — the plan's span in buckets
+  scoped_activity_count   int — distinct direct activities with an active in-scope standard
+  projected_lines         int — periods × scoped_activity_count, what a Generate WOULD build
+  max_horizon_periods     int — LaborPlan.MAX_HORIZON_PERIODS (the span bound)
+  max_plan_lines          int — LaborPlan.MAX_PLAN_LINES (the grid bound)
+  history_start           date or None — both None when the plan has no start date
+  history_end             date or None
+  can_edit / can_delete / can_generate / can_approve / can_archive   bools
+  generate_blocked_reason "" when Generate is available, else the exact sentence the verb refuses
+                          with — say WHY rather than hiding the button (the 4.13 rule)
+
+THE DECOMPOSITION IS THE FEATURE (4.7's rule, inherited). Every grid row shows the whole chain —
+forecast volume → minutes at standard (and WHICH standard produced them) → required minutes →
+required headcount — beside the planner's own planned_headcount, because a headcount figure nobody
+can take apart is a number people argue with instead of act on. The snapshot is frozen at generate
+time on purpose: re-timing a standard next month must not silently rewrite what last month's roster
+was decided on.
+
+EVERY DERIVED FIGURE THAT CAN BE None RENDERS AN EM DASH, never 0. coverage_pct — on the plan and on
+each line — is None when nothing is required, because a bucket with no forecast work is an
+UNANSWERED question and a confident 0% would put a red chip on the emptiest day of the plan. The
+figures are rendered through explicit `is None` branches rather than |default:"—", which would
+swallow a true 0.00, and rather than |default_if_none after |floatformat, which never fires because
+floatformat turns None into the empty string.
+
+Generate, Approve and Delete are @tenant_admin_required AND @require_POST, so each is a real
+<form method="post"> with a csrf token behind the house gate
+{% templatetag openblock %} if request.user.is_superuser or request.user.is_tenant_admin {% templatetag closeblock %}.
+Archive is deliberately only @login_required — archiving is the SAFE move, and gating it would push
+a planner towards asking an administrator to delete instead, which is the outcome the status
+vocabulary exists to avoid.
+
+Badge classes come from the models — obj.status_css (PLAN_STATUS_CSS) and line.activity_css
+(ACTIVITY_CSS). theme.css ships COLOUR-named badges only; badge-success / badge-warning /
+badge-danger do not exist and render unstyled (L33).
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-slate">{{ obj.get_bucket_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:laborplan_list' %}">Labour Plans</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">The staffing question and the machine's answer to it, side by side. Every line below shows the <span class="fw-600">whole chain</span> from expected volume to bodies, because a headcount nobody can take apart is a number people argue with rather than act on. The planner's column is the only one a human writes: the generator says what the volume implies, and the difference between the two is what this page exists to show.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}
+        <a href="{% url 'scm:laborplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      <a href="{% url 'scm:laborplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The four plan-wide figures, computed in ONE aggregate over the whole plan and NOT over the page —
+    a header figure that changed as you paged would be worse than no header figure at all. The first
+    three are person-shifts, and the tile labels say so: headcount does not add up across buckets.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
+      <div class="stat-value">{% if totals.required_shifts is None %}—{% else %}{{ totals.required_shifts|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">Required person-shifts · what the derived volume costs at standard</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="users"></i></div>
+      <div class="stat-value">{% if totals.planned_shifts is None %}—{% else %}{{ totals.planned_shifts|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">Planned person-shifts · what the planner intends to roster</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="git-compare-arrows"></i></div>
+      <div class="stat-value">{% if totals.shift_gap is None %}—{% else %}{{ totals.shift_gap|floatformat:2 }}{% endif %}</div>
+      <div class="stat-label">
+        {% if totals.shift_gap is None %}Nothing to compare yet
+        {% elif totals.shift_gap < 0 %}Short by {{ totals.shift_gap|floatformat:2 }} — signed, so a cushion and a shortfall never look alike
+        {% elif totals.shift_gap > 0 %}A cushion of {{ totals.shift_gap|floatformat:2 }} — reported, not refused
+        {% else %}Planned exactly matches required{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="percent"></i></div>
+      {% comment %}
+        coverage_pct is None — never 0 — when nothing is required. A plan whose grid has not been
+        generated is UNANSWERED, and a confident 0% would read as catastrophically understaffed on
+        the emptiest page in the module (the 4.11 lesson).
+      {% endcomment %}
+      <div class="stat-value">{% if totals.coverage_pct is None %}—{% else %}{{ totals.coverage_pct|floatformat:2 }}%{% endif %}</div>
+      <div class="stat-label">
+        {% if totals.coverage_pct is None %}
+          Nothing is required, so coverage has no denominator — this is “not measured”, not 0%
+        {% else %}
+          Coverage · planned as a percentage of required
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The assumptions this grid was built on</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_volume_source_display }}</span>
+        {% if obj.volume_source != "demand_forecast" %}<span class="badge badge-info">{{ obj.get_method_display }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        These ARE the inputs to required_headcount, so they are shown on the same page as the answer.
+        A reader who cannot see the productivity assumption cannot tell why the number is what it is,
+        and will assume the arithmetic is wrong rather than that the assumption is aggressive.
+      {% endcomment %}
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Plan</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item">
+          <dt>Site being staffed</dt>
+          <dd>{% if obj.location %}{{ obj.location.code }} <span class="text-muted">{{ obj.location.name }}</span>{% else %}<span class="badge badge-info">Whole network</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Period</dt><dd class="mono">{{ obj.period_start|date:"M d, Y" }} → {{ obj.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Grain</dt><dd>{{ obj.get_bucket_display }} · {{ periods }} bucket{{ periods|pluralize }}</dd></div>
+        <div class="detail-item"><dt>Volume source</dt><dd>{{ obj.get_volume_source_display }}</dd></div>
+        <div class="detail-item"><dt>Method</dt><dd>{% if obj.volume_source == "demand_forecast" %}<span class="text-muted">Not consulted — a forecast is already the projection</span>{% else %}{{ obj.get_method_display }}{% endif %}</dd></div>
+        <div class="detail-item">
+          <dt>History window</dt>
+          {% comment %}
+            history_start / history_end are BOTH None when the plan has no start date — print an em
+            dash, never today's date. The window is also not consulted at all on a forecast-driven or
+            manual plan, and saying so is better than printing a range nothing read.
+          {% endcomment %}
+          <dd class="mono">
+            {% if obj.volume_source == "demand_forecast" or obj.volume_source == "manual" or obj.method == "manual" %}
+              <span class="text-muted">Not read on this source</span>
+            {% elif history_start is None or history_end is None %}
+              <span class="text-muted">—</span>
+            {% else %}
+              {{ history_start|date:"M d, Y" }} → {{ history_end|date:"M d, Y" }}
+              <div class="form-help">{{ obj.history_days }} day{{ obj.history_days|pluralize }}, ending the day before the plan opens</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Demand forecast</dt>
+          <dd>{% if obj.demand_forecast %}<a href="{% url 'scm:demandforecast_detail' obj.demand_forecast.pk %}">{{ obj.demand_forecast }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Hours per shift</dt><dd class="mono">{{ obj.hours_per_shift|floatformat:2 }} h</dd></div>
+        <div class="detail-item"><dt>Productivity</dt><dd class="mono">{{ obj.productivity_pct|floatformat:2 }}%</dd></div>
+        <div class="detail-item"><dt>Generated</dt><dd>{{ obj.generated_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item">
+          <dt>Approved</dt>
+          <dd>
+            {% if obj.approved_at %}
+              {{ obj.approved_at|date:"M d, Y H:i" }}
+              {% if obj.approved_by %}<div class="form-help">by {{ obj.approved_by.get_full_name|default:obj.approved_by.username }}</div>{% endif %}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Hours per shift</span> and <span class="fw-600">productivity</span> are not decoration — they are the two divisors every required headcount on this page went through:
+        <span class="mono">required minutes = standard minutes × 100 ÷ productivity</span>, then
+        <span class="mono">headcount = required minutes ÷ (hours per shift × 60)</span>.
+        At {{ obj.productivity_pct|floatformat:2 }}% a bucket costing 1,000 standard minutes needs {{ obj.productivity_pct|floatformat:2 }}% of a site's day rather than 100% of it, which is the honest number to roster against — planning to the standard and hoping is how a site is understaffed every day and nobody can point at the assumption that did it. Headcount is left <span class="fw-600">fractional on purpose</span>: 2.3 and 3.0 are different staffing conversations, and rounding at the line would hide six activities each needing 0.4 of a person sharing four bodies between them.
+      </p>
+      <p class="text-muted" style="margin-top:.5rem;">
+        The history above is <span class="fw-600">derived at generate time and never stored</span>, so a regenerate always reflects what actually happened rather than a stale copy of it. Manufacturing draws, MRO spares, transfers and adjustments are deliberately excluded from the movement history: a transfer is posted as a pair across two locations and would double-count one physical touch, and a quantity changing on paper is not a quantity anybody carried.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Generate the grid</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ periods }} / {{ max_horizon_periods }} buckets</span>
+        <span class="badge badge-slate">{{ projected_lines }} / {{ max_plan_lines }} lines</span>
+      </div>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        THE BOUNDS ARE STATED BEFORE THE BUTTON IS PRESSED, not quoted back in a refusal afterwards.
+        Both numbers come from the same constants the verb's own guards read, and projected_lines is
+        computed from the same COUNT(*) the ceiling check uses — so the figure the page states and
+        the figure a refusal would quote are one statement of the rule, never two.
+      {% endcomment %}
+      <div class="table-wrap" style="margin-bottom:1rem;">
+        <table class="table">
+          <thead><tr><th>What a press would build</th><th>The sum</th><th>The bound</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Buckets</td>
+              <td class="mono">{{ obj.period_start|date:"Y-m-d" }} → {{ obj.period_end|date:"Y-m-d" }} at {{ obj.get_bucket_display|lower }} grain = {{ periods }}</td>
+              <td>
+                {% if periods > max_horizon_periods %}
+                  <span class="badge badge-red">Over</span> the maximum is {{ max_horizon_periods }}
+                {% elif periods <= 0 %}
+                  <span class="badge badge-muted">No period</span> set a start and an end date
+                {% else %}
+                  <span class="badge badge-green">{{ periods }} of {{ max_horizon_periods }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">Direct activities in scope</td>
+              <td class="mono">{{ scoped_activity_count }} activity(ies) with an active standard covering this site on {{ obj.period_start|date:"Y-m-d" }}</td>
+              <td>
+                {% if scoped_activity_count == 0 %}
+                  <span class="badge badge-red">Nothing to price with</span>
+                {% else %}
+                  <span class="badge badge-green">{{ scoped_activity_count }} priced</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">Grid rows</td>
+              <td class="mono">{{ periods }} × {{ scoped_activity_count }} = {{ projected_lines }}</td>
+              <td>
+                {% if projected_lines > max_plan_lines %}
+                  <span class="badge badge-red">Over</span> the maximum is {{ max_plan_lines }}
+                {% else %}
+                  <span class="badge badge-green">{{ projected_lines }} of {{ max_plan_lines }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if can_generate %}
+          <form method="post" action="{% url 'scm:laborplan_generate' obj.pk %}" onsubmit="return confirm('Generate the grid for {{ obj.number }}? Any existing plan lines are replaced, and the planned headcount and notes typed on them are NOT carried forward.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="table-2"></i> Generate {{ projected_lines }} plan line{{ projected_lines|pluralize }}</button>
+            <div class="form-help" style="margin-top:.5rem;">
+              One press, inside one transaction: the previous generation is deleted and the new grid written together, so a regenerate is idempotent rather than a collision. <span class="fw-600">Planned headcount and notes do not survive a regenerate</span>, and that is deliberate rather than an omission — a roster typed against last week's required figures is not an answer to this week's question, and carrying it forward silently would leave a planner staring at a coverage percentage nobody computed. An activity whose standard cannot be resolved is <span class="fw-600">skipped and named in a warning</span>, never written as a zero line: nobody-has-measured-this and this-work-needs-nobody are different statements, and printing the second when the first is true puts a green chip on the activity that is actually unpriced.
+            </div>
+          </form>
+        {% else %}
+          <p class="text-muted"><span class="badge badge-muted">Generate unavailable</span> {{ generate_blocked_reason }}</p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">Generating writes the whole grid in bulk and approving it states which roster a site will be staffed to, so both are workspace-administrator actions. Ask an administrator — everything else on this page is readable, and each line's planned headcount stays editable while the plan is a draft or planned.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    THE PER-BUCKET ROLLUP, and it is the only place on this page where a headcount SUM means
+    anything: within ONE bucket the sum across activities *is* a headcount, because it is how many
+    bodies the site needs that day. Across buckets it is not, which is why every plan-wide figure
+    above is denominated in person-shifts instead. bucket_rows is a list of DICTS built by the view,
+    and its six keys — period_start / required / planned / gap / is_short / is_over — are the whole
+    contract: a key guessed from the model's field names would resolve to the empty string and
+    render as a blank that looks deliberate.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The roster, bucket by bucket</h2>
+      <span class="badge badge-slate">{{ bucket_rows|length }} bucket{{ bucket_rows|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Bucket</th><th>Required headcount</th><th>Planned headcount</th><th>Gap</th><th>Reads</th></tr></thead>
+        <tbody>
+          {% for row in bucket_rows %}
+            <tr>
+              <td class="nowrap mono">{{ row.period_start|date:"M d, Y" }}</td>
+              <td class="mono">{% if row.required is None %}—{% else %}{{ row.required|floatformat:2 }}{% endif %}</td>
+              <td class="mono">{% if row.planned is None %}—{% else %}{{ row.planned|floatformat:2 }}{% endif %}</td>
+              <td class="mono">{% if row.gap is None %}—{% else %}{{ row.gap|floatformat:2 }}{% endif %}</td>
+              <td>
+                {% if row.is_short %}
+                  <span class="badge badge-red">Short</span> fewer bodies planned than the volume needs
+                {% elif row.is_over %}
+                  <span class="badge badge-amber">Cushion</span> more planned than required — reported, not refused
+                {% else %}
+                  <span class="badge badge-green">Balanced</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="calendar-range"></i>
+                  <h3>No buckets yet</h3>
+                  <p>The grid has never been generated, so there is no roster to roll up. Everything above says what a press would build and what would stop it.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      A <span class="fw-600">cushion is reported and never refused</span>: a deliberate margin before a peak is a legitimate plan, and the number is here so it is a decision somebody made rather than one nobody saw. The gap is signed for the same reason — an absolute figure would make an overstaffed Tuesday and an understaffed Wednesday look like the same problem.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The grid · bucket × activity</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ totals.lines }} line{{ totals.lines|pluralize }}</span>
+        <span class="badge badge-info">{% if totals.required_minutes is None %}—{% else %}{{ totals.required_minutes|floatformat:2 }}{% endif %} required minutes</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Bucket</th>
+            <th>Activity</th>
+            <th>Forecast volume</th>
+            <th>Priced from</th>
+            <th>Minutes at standard</th>
+            <th>Required minutes</th>
+            <th>Required headcount</th>
+            <th>Planned headcount</th>
+            <th>Variance / coverage</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="nowrap mono">{{ line.period_start|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge {{ line.activity_css }}">{{ line.get_activity_display }}</span>
+                {% if line.notes %}<div class="form-help">{{ line.notes }}</div>{% endif %}
+              </td>
+              {% comment %}
+                THE DECOMPOSITION, left to right, exactly as the generator computed it:
+                forecast_volume → standard_minutes_snapshot → required_minutes → required_headcount.
+                The snapshot is frozen at generate time and the `standard` FK beside it says which
+                row produced it — the FK answers "which standard", the snapshot answers "what it
+                said at the time", and only the second half survives somebody re-timing the standard
+                next month. `standard` is SET_NULL, so it is guarded rather than dereferenced.
+              {% endcomment %}
+              <td class="mono">{% if line.forecast_volume is None %}—{% else %}{{ line.forecast_volume|floatformat:"-4" }}{% endif %}</td>
+              <td>
+                {% if line.standard %}
+                  <a href="{% url 'scm:laborstandard_detail' line.standard.pk %}" class="mono">{{ line.standard.number }}</a>
+                  <div class="text-muted">{{ line.standard.name }}</div>
+                  <div class="form-help">{{ line.standard.get_basis_display }} · {{ line.standard.minutes_per_unit|floatformat:"-4" }} min/unit{% if line.standard.allowance_pct %} · +{{ line.standard.allowance_pct|floatformat:2 }}% allowance{% endif %}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help">The standard this line was priced from has since been removed; the snapshot beside it is what it said at the time.</div>
+                {% endif %}
+              </td>
+              <td class="mono">{% if line.standard_minutes_snapshot is None %}—{% else %}{{ line.standard_minutes_snapshot|floatformat:"-4" }}{% endif %}</td>
+              <td class="mono">{% if line.required_minutes is None %}—{% else %}{{ line.required_minutes|floatformat:2 }}{% endif %}</td>
+              <td class="mono fw-600">{% if line.required_headcount is None %}—{% else %}{{ line.required_headcount|floatformat:2 }}{% endif %}</td>
+              <td class="mono fw-600">{% if line.planned_headcount is None %}—{% else %}{{ line.planned_headcount|floatformat:2 }}{% endif %}</td>
+              <td class="nowrap">
+                {% comment %}
+                  coverage_pct() is None — never 0 — when nothing is required on this bucket, so it
+                  is tested with `is None` rather than for truthiness. Both it and headcount_variance
+                  read columns already on the row, so neither costs a query.
+                {% endcomment %}
+                <span class="mono">{% if line.headcount_variance is None %}—{% else %}{{ line.headcount_variance|floatformat:2 }}{% endif %}</span>
+                <div class="form-help">
+                  {% if line.coverage_pct is None %}
+                    <span class="badge badge-muted">Not measured</span>
+                  {% elif line.is_short %}
+                    <span class="badge badge-red">{{ line.coverage_pct|floatformat:2 }}% covered</span>
+                  {% elif line.is_over %}
+                    <span class="badge badge-amber">{{ line.coverage_pct|floatformat:2 }}% covered</span>
+                  {% else %}
+                    <span class="badge badge-green">{{ line.coverage_pct|floatformat:2 }}% covered</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    Exactly the condition laborplanline_edit enforces on the PARENT: an approved
+                    plan's planned headcount is the roster that was signed off, and the view
+                    redirects straight back with a message — so the link would be a one-click
+                    failure. The verb is @login_required and not admin-gated: typing a roster is
+                    ordinary planner work.
+                  {% endcomment %}
+                  {% if can_edit %}
+                    <a href="{% url 'scm:laborplanline_edit' line.pk %}" class="btn-icon" title="Set planned headcount"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="table-2"></i>
+                  <h3>This plan has no grid</h3>
+                  <p>A draft plan is the staffing <span class="fw-600">question</span> and nothing more — the generator is what builds the answer, and pressing Generate above is the only route into <span class="fw-600">planned</span>. There is deliberately no activity picker anywhere on this page: the generator emits one line per bucket per direct activity that has an active standard covering this site, so widening what a plan covers is a matter of adding a standard rather than maintaining a second list.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    <div class="card-body text-muted">
+      The grid is <span class="fw-600">paginated by the database</span>, not sliced after the fact — a plan may legitimately hold {{ max_plan_lines }} rows and fetching them all to draw fifty would be the payload rather than the page. The four figures above the planner's column are all <span class="fw-600">generated and read-only</span>; only planned headcount and its note may be typed. That asymmetry is the model: letting a planner edit the required figure would let them close the gap by editing the question instead of by rostering somebody.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% comment %}
+        The ladder, and only the LEGAL next move is offered. can_approve already carries the verb's
+        own precheck (planned, and the grid is not empty), so a button is never shown for a press
+        that would be refused inside the lock. Approve and Delete are @tenant_admin_required and
+        POST-only; Archive is deliberately only @login_required, because archiving is the safe move
+        and gating it would push a planner towards asking for a delete instead.
+
+        Only the system-generated LPL- number goes into a confirm string — the plan name is
+        user-typed and an apostrophe escapes to &#x27;, which the HTML parser hands to JavaScript as
+        a bare quote and the dialog breaks.
+      {% endcomment %}
+      <div class="form-actions">
+        {% if can_edit %}
+          <a href="{% url 'scm:laborplan_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_approve %}
+            <form method="post" action="{% url 'scm:laborplan_approve' obj.pk %}" onsubmit="return confirm('Approve {{ obj.number }}? This states that the grid below is the roster the site will be staffed to. The plan stops being editable, including every line planned headcount.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="badge-check"></i> Approve</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if can_archive %}
+          <form method="post" action="{% url 'scm:laborplan_archive' obj.pk %}" onsubmit="return confirm('Archive {{ obj.number }}? Every line, every snapshot and the approval stamp survive — the plan simply stops being one of the live ones.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="archive"></i> Archive</button>
+          </form>
+        {% endif %}
+
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:laborplan_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its {{ totals.lines }} generated plan line(s) are cascaded away with it. Archive it instead — an archived plan keeps its whole grid and stays readable.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        <a href="{% url 'scm:laborplan_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        The ladder is <span class="fw-600">draft → planned → approved → archived</span>, and Generate is the only route into <em>planned</em>: the grid <span class="fw-600">is</span> the plan, so “the generator has run” and “this plan has lines” are the same fact and do not need two flags. Approving a plan with no lines is refused outright — it would approve nothing, and would put the green badge on the one plan in the workspace that has never been costed. <span class="fw-600">Archive is the safe retirement</span> and delete is not: an approved plan is the roster a site staffed to and an archived one is the record of a decision somebody made, so neither may be destroyed, while an archived plan stays readable forever. Nothing on this page posts a stock movement or drafts an accounting document — the payroll hand-off is a CSV export and lives nowhere near a foreign key.
+      </p>
+
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Notes.</span> {{ obj.notes }}</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
