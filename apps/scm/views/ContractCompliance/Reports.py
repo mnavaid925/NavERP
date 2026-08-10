@@ -53,6 +53,10 @@ from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.models._base import q2
 from apps.scm.models import Carrier, Shipment, SustainabilityAssessment
 from apps.scm.models.TransportationManagement.Carriers import MODE_CHOICES
+from apps.scm.views._helpers import _report_day, _report_window  # noqa: F401
+# One parser and one reversed-window rule for every dated report page in the app. This
+# module used to carry its own pair; so did 4.12's and 4.14's, and two of the three were
+# both named `_window` with incompatible signatures.
 
 # The factor table, its provenance string and the limitations paragraph all live in
 # models/ContractCompliance/_choices.py — ONE table with two readers (this report and the page's
@@ -68,50 +72,6 @@ from apps.scm import analytics  # noqa: E402
 
 _GRAMS_PER_TONNE = Decimal("1000000")  # gCO2e -> tCO2e
 _KG_PER_TONNE = Decimal("1000")
-
-
-def _parse_date(raw):
-    """A ``YYYY-MM-DD`` GET value as a date, or ``None`` if it is anything else.
-
-    Returns None rather than raising: the window comes out of the query string, so a hand-typed or
-    truncated value must drop the filter, never 500 (L11's rule applied to a date instead of an int).
-    """
-    raw = (raw or "").strip()
-    if not raw:
-        return None
-    try:
-        value = datetime.date.fromisoformat(raw)
-    except (ValueError, TypeError):
-        return None
-    # A date within a year of date.min makes the `date_to - timedelta(days=365)` default below raise
-    # OverflowError — an uncaught 500 on a value anybody can type into the address bar. Outside the
-    # range the window arithmetic survives, this is simply "not a date" for this page, so it falls
-    # back to the default window and lights the window_invalid banner the template already renders.
-    if not (analytics.MIN_PERIOD_DATE <= value <= analytics.MAX_PERIOD_DATE):
-        return None
-    return value
-
-
-def _window(request):
-    """Resolve the reporting window, defaulting to the last 12 months.
-
-    Also reports whether a value was typed and rejected, so the page can say "showing the default
-    window" instead of silently ignoring what somebody asked for.
-    """
-    raw_from = (request.GET.get("date_from") or "").strip()
-    raw_to = (request.GET.get("date_to") or "").strip()
-    date_from, date_to = _parse_date(raw_from), _parse_date(raw_to)
-    invalid = bool(raw_from and date_from is None) or bool(raw_to and date_to is None)
-    today = timezone.localdate()
-    if date_to is None:
-        date_to = today
-    if date_from is None:
-        date_from = date_to - datetime.timedelta(days=365)
-    if date_from > date_to:
-        # A reversed window is a typo, not an empty result — swap rather than render nothing.
-        date_from, date_to = date_to, date_from
-        invalid = True
-    return date_from, date_to, raw_from, raw_to, invalid
 
 
 def _shipment_date(shipment):
@@ -160,7 +120,13 @@ def _collect(request):
     ``EMISSION_FACTORS`` by hand. One query, one loop, and the factor table stays the only place a
     factor is written down.
     """
-    date_from, date_to, raw_from, raw_to, invalid = _window(request)
+    # See the note in AssetManagement/Reports.py: the defaults belong to the page, the
+    # parsing and the reversed-window swap belong to the shared helper.
+    _today = timezone.localdate()
+    _w = _report_window(request.GET, _today - datetime.timedelta(days=365), _today)
+    date_from, date_to = _w["date_from"], _w["date_to"]
+    raw_from, raw_to, invalid = (_w["date_from_raw"], _w["date_to_raw"],
+                                 _w["window_invalid"])
     mode = (request.GET.get("mode") or "").strip()
     carrier_raw = (request.GET.get("carrier") or "").strip()
 
