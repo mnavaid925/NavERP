@@ -323,6 +323,7 @@ from .LaborManagement._choices import (  # noqa: F401
     MAX_PLAN_LINES,
     MAX_PRODUCTIVITY_PCT,
     MAX_SESSION_MINUTES,
+    MAX_SNAPSHOT_MINUTES,
     MAX_STANDARD_RATE,
     MIN_PLAN_YEAR,
     MIN_RANKED_MINUTES,
