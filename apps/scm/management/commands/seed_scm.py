@@ -60,8 +60,9 @@ REQUISITION_LINES = [
 class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management "
-            "demo data — idempotent (skips a tenant that already has the rows each pass creates).")
+            "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
+            "4.14 labor management demo data — idempotent (skips a tenant that already has the rows "
+            "each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -133,12 +134,21 @@ class Command(BaseCommand):
             # move type. Every one of those rows must already exist, and like 4.9-4.12 it posts no
             # JournalEntry — the only ledger effect in the whole sub-module is that one stock issue.
             self._seed_asset_tenant(tenant)
+            # 4.14 AFTER 4.13, and its dependencies are as real as 4.13's even though it writes far
+            # less: it books minutes against 4.4's EXISTING pick/putaway/count tasks, it derives its
+            # 14-day plan from 4.3's StockMove ledger through the generate verb's own helpers, and it
+            # names its workers from the spine's `employee` parties — so 4.3, 4.4 and seed_core must
+            # all have run first. Unlike 4.13 it writes NO StockMove and NO JournalEntry: labour is
+            # MEASURED, not posted, and nothing it records moves a quantity or a balance. Its only
+            # cross-sub-module write is stamping `assigned_to` on a couple of existing 4.4 tasks so
+            # the labor board has both an assignee bucket and an unassigned one.
+            self._seed_labor_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
-            "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management "
-            "seed complete."))
+            "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
+            "4.14 labor management seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -325,7 +335,13 @@ class Command(BaseCommand):
 
     def _seed_warehouse_tenant(self, tenant):
         """4.4 WMS demo: a completed putaway, a picked+packed task, a cycle count that reconciles
-        into a real StockAdjustment, and a truck at a dock. Idempotent via a PutawayTask guard.
+        into a real StockAdjustment, a truck at a dock, and ONE OPEN task of each kind left
+        unassigned. Idempotent via a PutawayTask guard.
+
+        The open trio is not filler. Three finished tasks demonstrate the lifecycle but leave every
+        "what needs doing" surface in the app empty — 4.4's own list pages and 4.14's assignment
+        board, which exists to group open work by who is doing it. They post no stock, because an
+        open task has not reached the posting helpers yet.
 
         Runs AFTER _seed_inventory_tenant because every row here references its items/locations.
         Posts through the real service helpers so the seed exercises the same path the app uses.
@@ -423,6 +439,42 @@ class Command(BaseCommand):
             count.reconciled_at = timezone.now()
             count.save(update_fields=["adjustment", "status", "reconciled_at", "updated_at"])
 
+        # --- OPEN work, deliberately unassigned and deliberately never posted -----------------
+        # The three tasks above are each walked to a terminal state, because 4.4's demo is about the
+        # full lifecycle: putaway -> completed, pick -> picked -> packed, count -> reconciled into a
+        # real StockAdjustment. That tells 4.4's story well and leaves a warehouse with no work in
+        # it, which is not a warehouse. Every "open work" surface in the app therefore rendered
+        # empty — 4.4's own three list pages under their default filters, and 4.14's assignment
+        # board, whose whole subject is open tasks grouped by who is doing them.
+        #
+        # So each kind also gets ONE open row. They are left `assigned_to=None` on purpose: the
+        # board's two halves are "grouped by assignee" and "unassigned", and a dataset where every
+        # task already has an owner can only ever exercise one of them. 4.14's seeder then claims
+        # two of these three (its back-fill is guarded on open AND unassigned), which leaves exactly
+        # one in the unassigned bucket — both halves populated, from one set of rows.
+        #
+        # NOTHING here posts stock. `_post_putaway` / `_post_pick` / `_post_adjustment` are what
+        # move the ledger, and an open task has not reached any of them yet — which is precisely
+        # what "open" means. The pick line carries `quantity_picked=0` for the same reason, so
+        # `is_short()` reads as "nothing picked yet" rather than a shortfall.
+        open_put = PutawayTask(tenant=tenant, item=mon, from_location=main, to_location=bin_a,
+                               quantity=Decimal("3"), strategy="directed", status="pending",
+                               notes="Awaiting putaway — seeded open work for the labor board.")
+        open_put.save()
+
+        open_pick = PickTask(tenant=tenant, strategy="zone", status="released", zone=bin_a,
+                             wave_ref="WAVE-002", ship_to="Acme retail store",
+                             notes="Awaiting picking — seeded open work for the labor board.")
+        open_pick.save()
+        PickTaskLine.objects.create(pick_task=open_pick, item=mon, from_location=bin_a,
+                                    quantity_requested=Decimal("4"),
+                                    quantity_picked=Decimal("0"))
+
+        open_count = CycleCountTask(tenant=tenant, location=bin_a, scheduled_date=today,
+                                    count_method="abc", status="scheduled",
+                                    notes="Awaiting count — seeded open work for the labor board.")
+        open_count.save()
+
         # --- a truck currently at a dock door -------------------------------------------------
         yard = YardVisit(tenant=tenant, carrier_name="Northbound Haulage", vehicle_ref="TRK-4471",
                          trailer_ref="TRL-88", driver_name="J. Rivera", direction="inbound",
@@ -436,7 +488,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"{tenant.name}: seeded warehouse ({put.number} putaway, {pick.number} pick, "
-            f"{count.number} count -> {adj.number}, {yard.number} yard visit).")
+            f"{count.number} count -> {adj.number}, {yard.number} yard visit, plus 3 OPEN "
+            f"unassigned tasks — {open_put.number}, {open_pick.number}, {open_count.number}).")
 
     def _seed_oms_tenant(self, tenant):
         """4.5 OMS demo: three orders sitting at three different lifecycle points, so the order
@@ -911,7 +964,41 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.13 Asset Management FIRST (newest sub-module). The order inside it is forced by ONE
+        # 4.14 Labor Management FIRST (newest sub-module). The order inside it is forced by two
+        # things. LaborActivity.session is CASCADE and LaborPlanLine.plan is CASCADE, so the two
+        # child tables would go with their parents anyway — the activities are named first regardless
+        # so the teardown reads top-down like every block below it. The edge that genuinely matters is
+        # LaborSession.worker/location being PROTECT onto core.Party and 4.3's Location: a session is
+        # minutes belonging to somebody, so losing the person must never be one click away — which
+        # puts the whole 4.14 tree before the 4.3 masters cleared at the bottom of this method.
+        # LaborStandard goes LAST of the four because both LaborActivity.standard and
+        # LaborPlanLine.standard point at it (SET_NULL, so neither could block, but the order keeps
+        # the intent readable).
+        #
+        # **There is NO StockMove to unwind here, and that is a fact about the sub-module rather than
+        # an oversight.** 4.14 measures labour; it does not post any. Unlike 4.13's `maintenance`
+        # issue, 4.9's scrap adjustment and 4.8's consumption/production moves, this pass writes not
+        # one row to the stock ledger and not one JournalEntry — so do not go looking for the filter
+        # that removes them.
+        #
+        # The ONE cross-sub-module write it does make is `assigned_to` on 4.4's OPEN pick and
+        # cycle-count tasks, and it is cleared here — the same filter the seeder assigns on, minus
+        # its `isnull` guard, so teardown and guard describe the same set of rows (the 4.13
+        # maintenance-move reasoning). The 4.4 block ~180 lines below deletes those tasks outright,
+        # so this UPDATE is a top-down readability unwind rather than a load-bearing one; it is
+        # written down for exactly the reason 4.13 names its own already-covered move filter.
+        from apps.scm.models import (CycleCountTask as _CycleCountTask, LaborActivity, LaborPlan,
+                                     LaborSession, LaborStandard, PickTask as _PickTask)
+        from apps.scm.views.LaborManagement.Reports import _PICK_OPEN as _BOARD_PICK_OPEN
+        LaborActivity.objects.all().delete()
+        LaborSession.objects.all().delete()
+        LaborPlan.objects.all().delete()              # plan lines cascade
+        LaborStandard.objects.all().delete()
+        _PickTask.objects.filter(status__in=_BOARD_PICK_OPEN).update(assigned_to=None)
+        _CycleCountTask.objects.filter(
+            status__in=_CycleCountTask.EDITABLE_STATUSES).update(assigned_to=None)
+
+        # 4.13 Asset Management NEXT. The order inside it is forced by ONE
         # PROTECT edge: MaintenanceWorkOrder.asset is PROTECT onto Asset — a completed job is history
         # and must never be one click from deletion — so every job goes before the assets they were
         # raised against. MaintenancePlan.asset is CASCADE and MaintenanceWorkOrder.plan is SET_NULL,
@@ -1143,7 +1230,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
             f"demand planning + manufacturing + quality + returns + analytics + compliance + asset "
-            f"management rows (+{bill_count + freight_bill_count} linked accounting bill(s), "
+            f"management + labor management rows "
+            f"(+{bill_count + freight_bill_count} linked accounting bill(s), "
             f"+{return_credit_count} linked credit note(s))."))
 
     def _seed_manufacturing_tenant(self, tenant):
@@ -3314,3 +3402,495 @@ class Command(BaseCommand):
             f"{breakdown.number} {breakdown.get_status_display().lower()} and down now, "
             f"{request_job.number} {request_job.get_status_display().lower()}), "
             f"{issued_lines} part line(s) worth {issued_value} issued through the ledger.")
+
+    def _seed_labor_tenant(self, tenant):
+        """4.14 demo rows: an engineered standards library (five active scopes plus one draft), three
+        shifts sitting at three different points of the session ladder, ten booked intervals across
+        them, and a costed 14-day labour plan with both variance chips populated.
+
+        Idempotent via a ``LaborStandard`` guard. Runs LAST, and its dependencies are load-bearing
+        rather than cosmetic: it books minutes against 4.4's EXISTING pick/putaway/count tasks, it
+        plans from 4.3's ``StockMove`` ledger, and it names its workers from the spine's ``employee``
+        parties. It REFUSES rather than half-seeds when any of those is missing (the 4.10-4.13
+        posture) — a labour module with no site, no task and nobody to book against would demo five
+        pages that all read "no data".
+
+        **It writes NO ``StockMove`` and NO ``JournalEntry``, and that is a statement about what
+        labour IS rather than an omission.** 4.14 measures how long work took and what it earned
+        against a standard; not one figure it records moves a quantity or a balance, so unlike 4.13
+        — which draws spare parts out of the storeroom — this pass leaves the ledger untouched. Its
+        ONE cross-sub-module write is stamping ``assigned_to`` on a couple of existing 4.4 tasks, so
+        the labor board has a grouped-by-assignee bucket as well as an unassigned one. That is 4.4's
+        own column, written one row at a time and guarded so a second run is a no-op; nothing else
+        here touches another sub-module's data. **It is normally a no-op on the first run too**, and
+        that is worth knowing before somebody goes looking for the bug: the board lists OPEN tasks
+        only, and 4.4's seeder leaves all three of its tasks closed. See step 6.
+
+        **Nothing hand-sets a workflow status.** ``status`` is ``editable=False`` on the standard,
+        the session and the plan (L22), so each is walked down the same ladder its verbs take —
+        a standard is created ``draft`` and then re-validated AS AN ACTIVE ROW before being
+        published (``_activation_refusal``'s contract); a session is filed ``open``, has its minutes
+        booked into it while ``LaborActivity.clean()`` still allows writes, and is only then closed
+        and approved with each verb's own stamps; the plan is generated to ``planned``. A seeded
+        status no button can produce lets a test assert a screen no user can reach.
+
+        The measurement path is likewise the app's own: ``_stamp_standard`` resolves the governing
+        standard through ``select_standard()`` and copies its three determinants onto each row, and
+        the plan grid is priced by the generate verb's own derivation helpers over the live ledger —
+        so pressing **Generate** on the seeded plan reproduces exactly these lines instead of a
+        second, slightly different set.
+
+        **Deliberately mixed state**, because a uniform week exercises nothing: one session is
+        approved and booked to the minute (the payroll export needs a row), one is closed with a
+        real 45-minute GAP so ``unaccounted_minutes`` is a number rather than a flat zero, and one
+        is still running with ``clock_out`` null so every "None while open" guard is hit on a real
+        page. Two activities carry an ``error_quantity`` so accuracy is not a flat 100%, one is
+        booked against work whose only standard is still a DRAFT so ``earned_minutes`` is honestly
+        ``None`` rather than a failing 0%, and one plan line is short while another is over.
+        """
+        from apps.scm.models import (CycleCountTask, ItemCategory, LaborActivity, LaborPlan,
+                                     LaborPlanLine, LaborSession, LaborStandard, Location, PickTask,
+                                     PutawayTask, select_standard)
+        from apps.scm.models._base import ZERO, q4
+        # The app's own measurement and generation paths, imported rather than re-implemented for the
+        # reason 4.13 imports `_post_stock_move`: a seeder that rolls its own copy of the arithmetic
+        # is demo data the product itself would compute differently.
+        from apps.scm.views.LaborManagement.LaborActivities import _stamp_standard
+        from apps.scm.views.LaborManagement.LaborPlans import (
+            MAX_SNAPSHOT_MINUTES, _bucket_volume, _daily_series, _direct_standards_qs, _flow_for,
+            _history_buckets)
+        # The board's OWN definition of an open pick, so the back-fill below cannot drift from the
+        # page it exists to populate.
+        from apps.scm.views.LaborManagement.Reports import _PICK_OPEN
+
+        if LaborStandard.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: labor management data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10-4.13 posture) --------
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        has_task = (PickTask.objects.filter(tenant=tenant).exists()
+                    or PutawayTask.objects.filter(tenant=tenant).exists()
+                    or CycleCountTask.objects.filter(tenant=tenant).exists())
+        # LOOKED UP, never created — `_employee` deliberately does not get_or_create, because an
+        # associate invented by a seeder is a person nobody hired. Deduped by pk because `_employee`
+        # falls back to "the first employee" when a name is missing, and two calls answering the same
+        # party would file two shifts against one person and trip the session-overlap refusal.
+        workers = []
+        for name in ("Olivia Martin", "Liam Johnson", "Emma Williams"):
+            party = self._employee(tenant, name)
+            if party is not None and all(party.pk != w.pk for w in workers):
+                workers.append(party)
+        if main is None or not has_task or len(workers) < 3:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: missing 4.3 locations, 4.4 tasks or three distinct `employee` "
+                "parties — skipping 4.14 labor management (its shifts are worked at a 4.3 location, "
+                "its activities book minutes against 4.4's tasks, and the three demo shifts need "
+                "three different people or the session-overlap rule refuses them)."))
+            return
+
+        now = timezone.now()
+        today = timezone.localdate()
+        admin = self._admin(tenant)
+        # The category-scoped standard's scope. Optional: without it that one standard is simply not
+        # written, which costs the demo one resolver rung and breaks nothing — whereas defaulting it
+        # to "no category" would make it a SECOND network-wide standard for the same activity, and
+        # LaborStandard.clean()'s overlap refusal would reject it outright.
+        category = ItemCategory.objects.filter(tenant=tenant).order_by("id").first()
+
+        def _at(day, hour, minute=0):
+            """An aware datetime at a FIXED local time on ``day`` — 4.13's ``_at``, same reasoning.
+
+            Anchored on the DATE rather than counted back from ``now``, because ``LaborSession``
+            pins ``work_date`` to the LOCAL DATE of ``clock_in`` and every activity has to fall
+            inside the clock window: a shift built as ``now - timedelta(...)`` would cross midnight
+            on an early-morning run and the whole set would fail validation (L16).
+            """
+            return timezone.make_aware(datetime.datetime.combine(day, datetime.time(hour, minute)))
+
+        # ---- 1. the standards library ------------------------------------------------------------
+        # Existence-checked on (tenant, activity, name) rather than bare-created, because `number` is
+        # auto-minted (the 4.12 `_license` / 4.13 `_asset` pattern).
+        #
+        # Every row is created `draft` — the field's own default and the only status a create path
+        # can produce — and then published through the SAME check the activate verb runs: status set
+        # to `active` on the in-memory instance and `clean()` re-run against it, which is exactly
+        # `_activation_refusal`. That is what proves the overlap guard rather than side-stepping it.
+        def _standard(name, activity, activate=True, **fields):
+            existing = LaborStandard.objects.filter(
+                tenant=tenant, activity=activity, name=name).first()
+            if existing is not None:
+                return existing
+            obj = LaborStandard(tenant=tenant, name=name, activity=activity,
+                                effective_from=today - datetime.timedelta(days=60), **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            if activate:
+                obj.status = "active"
+                obj.clean()                      # the activation re-check, in the verb's own shape
+                obj.save(update_fields=["status", "updated_at"])
+            return obj
+
+        standards = [
+            # Network-wide: no location, no category. These are the rung `select_standard()` falls
+            # back to when nothing narrower matches, and three of them is what makes that fallback
+            # visible rather than theoretical.
+            _standard("Receiving — cases off the trailer", "receive",
+                      basis="per_case", source="observed",
+                      minutes_per_unit=Decimal("0.7500"), setup_minutes=Decimal("4.0000"),
+                      travel_minutes=Decimal("2.5000"), allowance_pct=Decimal("12.00"),
+                      labour_rate=Decimal("28.5000"),
+                      notes="Time-studied over four inbound trailers. Setup covers the seal check "
+                            "and the paperwork; travel is dock to staging."),
+            _standard("Order picking — per line, ambient", "pick",
+                      basis="per_line", source="engineered",
+                      minutes_per_unit=Decimal("0.4200"), setup_minutes=Decimal("2.0000"),
+                      travel_minutes=Decimal("3.0000"), allowance_pct=Decimal("14.00"),
+                      labour_rate=Decimal("30.0000"),
+                      notes="The site's busiest standard. Travel is the average walk to the pick "
+                            "face and back — distance-derived travel needs bin coordinates 4.3 "
+                            "does not carry."),
+            _standard("Cycle counting — per line counted", "cycle_count",
+                      basis="per_line", source="benchmark",
+                      minutes_per_unit=Decimal("0.3500"), setup_minutes=Decimal("5.0000"),
+                      travel_minutes=Decimal("4.0000"), allowance_pct=Decimal("12.00"),
+                      labour_rate=Decimal("26.0000"),
+                      notes="Lifted from the benchmark library rather than time-studied here, "
+                            "which is why `source` is on the page: a supervisor arguing with a "
+                            "standard is entitled to know where the number came from."),
+            # Scoped to ONE SITE. This is the rung that lets a warehouse run a slower standard than
+            # the network without forking the library.
+            _standard("Put-away — pallets to reserve, main site", "putaway",
+                      basis="per_pallet", source="observed", location=main,
+                      minutes_per_unit=Decimal("2.2000"), setup_minutes=Decimal("1.5000"),
+                      travel_minutes=Decimal("3.5000"), allowance_pct=Decimal("15.00"),
+                      labour_rate=Decimal("28.5000"),
+                      notes=f"Measured at {main.code} specifically — the racking there is deeper "
+                            "than the network average, so the network standard would understate "
+                            "every put-away booked at this site."),
+        ]
+        if category is not None:
+            # Scoped to an ITEM CATEGORY. Deliberately never selected for a labour PLAN (a plan has
+            # no category, so the resolver's category rungs are unreachable from one) — it is here
+            # so the "no standard resolved for packing" warning on the generate verb is a real
+            # message about a real row rather than an unreachable branch.
+            standards.append(_standard(
+                f"Packing — {category.name}", "pack",
+                basis="per_unit", source="engineered", item_category=category,
+                minutes_per_unit=Decimal("0.8500"), setup_minutes=Decimal("1.2000"),
+                travel_minutes=Decimal("0.8000"), allowance_pct=Decimal("10.00"),
+                labour_rate=Decimal("27.0000"),
+                notes=f"Scoped to {category.name}: these pack slower than bulk goods."))
+
+        # THE DRAFT, and it is doing two jobs at once. It gives the activate verb something to act on,
+        # and — because `select_standard()` considers `active` rows and nothing else — the LOADING
+        # activity booked further down resolves to NOTHING and comes out honestly unmeasured
+        # (`earned_minutes` None, no performance figure) instead of a flattering or damning zero. A
+        # draft for an activity that ALREADY has an active standard could not do either job. It could
+        # not even be SAVED in the same scope: clean()'s overlap refusal excludes only `archived`
+        # rows, so a second network-wide `pick` standard over the same dates is rejected outright —
+        # and in a different scope it would merely lose to the live row, with the skip invisible.
+        draft_standard = _standard(
+            "Loading — pallets onto the trailer (draft, awaiting sign-off)", "load",
+            activate=False, basis="per_pallet", source="observed",
+            minutes_per_unit=Decimal("3.5000"), setup_minutes=Decimal("6.0000"),
+            travel_minutes=Decimal("4.0000"), allowance_pct=Decimal("15.00"),
+            labour_rate=Decimal("29.0000"),
+            notes="Still a DRAFT on purpose. Until somebody presses Activate, loading work is "
+                  "booked unmeasured — which is the honest answer for a job nobody has agreed a "
+                  "time for, and the reason earned minutes are None rather than zero.")
+
+        # ---- 2. the shifts -----------------------------------------------------------------------
+        # Both dated shifts are pinned INSIDE the current calendar month, because the payroll export
+        # opens on the 1st-to-today window: an approved shift three days back would fall outside it
+        # for the first two days of every month and the export would demo as empty.
+        month_start = today.replace(day=1)
+        approved_day = max(today - datetime.timedelta(days=3), month_start)
+        closed_day = max(today - datetime.timedelta(days=2), month_start)
+
+        def _session(worker, work_date, clock_in, clock_out, **fields):
+            """Existence-checked on (tenant, worker, work_date) — the auto-numbered rule again.
+
+            `source` and `recorded_by` are `editable=False` and are stamped HERE rather than typed,
+            exactly as the create form's own path stamps them: this is a supervisor filing a shift on
+            somebody's behalf, so `source="supervisor"` and `login` stays null (nobody punched
+            anything). A provenance a user could choose would not be a provenance at all.
+            """
+            existing = LaborSession.objects.filter(
+                tenant=tenant, worker=worker, work_date=work_date).first()
+            if existing is not None:
+                return existing
+            obj = LaborSession(tenant=tenant, worker=worker, location=main, work_date=work_date,
+                               clock_in=clock_in, clock_out=clock_out, **fields)
+            obj.source = "supervisor"
+            obj.recorded_by = admin
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            return obj
+
+        # (a) approved and booked to the minute — 510 attended, 510 booked, zero gap.
+        approved_session = _session(
+            workers[0], approved_day, _at(approved_day, 7), _at(approved_day, 15, 30),
+            shift_label="Early",
+            notes="Seeded 4.14 shift, signed off. Every attended minute is accounted for, so the "
+                  "gap reads zero and utilisation reads 100% — the baseline the two shifts below "
+                  "are read against.")
+        # (b) closed with a REAL 45-minute hole — 450 attended, 405 booked.
+        closed_session = _session(
+            workers[1], closed_day, _at(closed_day, 6), _at(closed_day, 13, 30),
+            shift_label="Early",
+            notes="Seeded 4.14 shift with a deliberate 45 minutes of gap time. Easy Metrics sells "
+                  "this figure as a product; here it is the difference between paid minutes and "
+                  "booked ones, and it is the most actionable number on the page.")
+        # (c) still running — clock_out null, so attended minutes, gap, over-booked time and
+        #     utilisation are all None rather than zero, and every "None while open" guard in the
+        #     module is exercised against a row somebody can actually open. Derived from `now` rather
+        #     than from a fixed hour so it is genuinely in the past whenever the seeder runs, and
+        #     `work_date` is read off the clock so clean()'s pin can never disagree with it.
+        open_in = (now - datetime.timedelta(hours=3)).replace(second=0, microsecond=0)
+        open_session = _session(
+            workers[2], timezone.localdate(open_in), open_in, None,
+            shift_label="Day",
+            notes="Seeded 4.14 shift, still on the floor. Attended minutes are unknown until it "
+                  "clocks out, and every figure derived from them answers 'not yet' rather than "
+                  "zero — a running shift has not gone missing.")
+
+        # ---- 3. the booked intervals -------------------------------------------------------------
+        # The 4.4 rows these are booked against. Pointers OUT to tables 4.14 adds nothing to; the
+        # type/FK pairing is enforced by LaborActivity.clean(), so a pick may only carry a pick task
+        # and a count only a count task.
+        pick_task = PickTask.objects.filter(tenant=tenant).order_by("id").first()
+        count_task = CycleCountTask.objects.filter(tenant=tenant).order_by("id").first()
+
+        def _activity(session, activity_type, start, end, **fields):
+            """Existence-checked on (tenant, session, started_at), created while the session is OPEN.
+
+            Order matters and is the app's own: build the row, resolve the governing standard ONCE
+            through `_stamp_standard` (which copies the three determinants onto it), validate, then
+            save — `LaborActivity.save()` derives `duration_minutes` and replays the earned figure
+            from the snapshots. `select_standard()` answering None is a legitimate outcome and is
+            never turned into a zero.
+            """
+            existing = LaborActivity.objects.filter(
+                tenant=tenant, session=session, started_at=start).first()
+            if existing is not None:
+                return existing
+            obj = LaborActivity(tenant=tenant, session=session, activity_type=activity_type,
+                                started_at=start, ended_at=end, **fields)
+            _stamp_standard(obj, session, tenant)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            return obj
+
+        activities = [
+            # --- the approved shift: receive / break / pick / meeting / put-away = 510 minutes -----
+            _activity(approved_session, "receive", _at(approved_day, 7), _at(approved_day, 9, 30),
+                      quantity=Decimal("180"), reference="GRN inbound, bay 2",
+                      notes="Two trailers stripped to staging."),
+            _activity(approved_session, "break", _at(approved_day, 9, 30), _at(approved_day, 10),
+                      indirect_reason="scheduled_break",
+                      notes="Indirect: paid minutes, no units, no earned time."),
+            # The PickTask link, and one of the two rows carrying errors — three mis-picks out of
+            # 310 lines, so accuracy is 99.03% rather than a flat 100%.
+            _activity(approved_session, "pick", _at(approved_day, 10), _at(approved_day, 12, 30),
+                      quantity=Decimal("310"), error_quantity=Decimal("3"), pick_task=pick_task,
+                      notes="Booked against a real 4.4 pick task. Three mis-picks caught at the "
+                            "check station."),
+            _activity(approved_session, "meeting", _at(approved_day, 12, 30), _at(approved_day, 13),
+                      indirect_reason="sanctioned_meeting",
+                      notes="Indirect: the weekly safety briefing. Sanctioned, and still not "
+                            "productive time — which is exactly what the split is for."),
+            # No task pointer at all: `reference` is the free-text path for work with no task record,
+            # and it is deliberately exercised alongside the two linked rows.
+            _activity(approved_session, "putaway", _at(approved_day, 13), _at(approved_day, 15, 30),
+                      quantity=Decimal("58"), reference="Reserve racking, aisle C",
+                      notes="Measured against the site-scoped put-away standard, not the network "
+                            "one — the resolver's location rung, working."),
+
+            # --- the closed shift: pick / equipment wait / count / load = 405 of 450 minutes -------
+            # Deliberately a SLOW shift: 200 lines in 135 minutes against a 0.42-minute standard
+            # works out below the 80% coaching threshold, so that chip fires on a real row instead of
+            # being a band nothing ever lands in.
+            _activity(closed_session, "pick", _at(closed_day, 6), _at(closed_day, 8, 15),
+                      quantity=Decimal("200"), error_quantity=Decimal("2"),
+                      notes="The second row carrying errors, so the accuracy column has a spread "
+                            "rather than one outlier."),
+            _activity(closed_session, "equipment_wait", _at(closed_day, 8, 15),
+                      _at(closed_day, 8, 50), indirect_reason="equipment_failure",
+                      notes="Indirect LOST time: the reach truck was down. `activity_type` sizes "
+                            "the loss, `indirect_reason` is what a supervisor can act on."),
+            _activity(closed_session, "cycle_count", _at(closed_day, 8, 50),
+                      _at(closed_day, 11, 5), quantity=Decimal("250"), cycle_count_task=count_task,
+                      notes="Booked against a real 4.4 cycle-count task."),
+            # UNMEASURED on purpose: the only `load` standard is still a draft, so select_standard()
+            # returns None, every snapshot stays null, and this row drops out of BOTH sides of the
+            # performance ratio instead of scoring zero against the person who worked it.
+            _activity(closed_session, "load", _at(closed_day, 11, 5), _at(closed_day, 12, 45),
+                      quantity=Decimal("18"), reference="Trailer TRK-4471",
+                      notes="Loading has no ACTIVE standard yet, so this is booked unmeasured — "
+                            "earned minutes None, no performance figure, and no pretence of one."),
+
+            # --- the open shift: one interval booked so far ---------------------------------------
+            _activity(open_session, "pick", open_in, open_in + datetime.timedelta(minutes=95),
+                      quantity=Decimal("210"),
+                      notes="Booked mid-shift. The session's gap and utilisation stay None until it "
+                            "clocks out; this row's own performance figure does not."),
+        ]
+
+        # ---- 4. walk the session ladder — the verbs' path, never a typed status ------------------
+        def _walk(session, status, **stamps):
+            """One verb's effect: write the stamps that verb owns, move ``status``, one round trip.
+
+            ``LaborSession.status`` is ``editable=False`` and the verbs are its only writer (L22).
+            The activities above were filed while every session was still ``open``, which is the only
+            state ``LaborActivity.clean()`` accepts a booking in — closing first and booking after
+            would have been refused, exactly as it would be through the UI.
+            """
+            for field, value in stamps.items():
+                setattr(session, field, value)
+            session.status = status
+            session.save(update_fields=["status", *stamps, "updated_at"])
+
+        if approved_session.status == "open":
+            _walk(approved_session, "closed", closed_at=_at(approved_day, 15, 35))
+            # closed -> approved is the payroll export's lock, and the only status it reads.
+            _walk(approved_session, "approved",
+                  approved_at=_at(approved_day, 16), approved_by=admin)
+        if closed_session.status == "open":
+            _walk(closed_session, "closed", closed_at=_at(closed_day, 13, 40))
+
+        # ---- 5. the labour plan ------------------------------------------------------------------
+        plan = LaborPlan.objects.filter(tenant=tenant, location=main,
+                                        name="Main warehouse — next 14 days").first()
+        if plan is None:
+            plan = LaborPlan(
+                tenant=tenant, name="Main warehouse — next 14 days", location=main,
+                period_start=today + datetime.timedelta(days=1),
+                period_end=today + datetime.timedelta(days=14),
+                bucket="day", volume_source="stock_moves", method="moving_average",
+                history_days=28, hours_per_shift=Decimal("8.00"),
+                productivity_pct=Decimal("92.00"),
+                notes="Seeded 4.14 plan. Volume is derived from 4.3's StockMove ledger at generate "
+                      "time and never stored — a regenerate re-reads what actually happened rather "
+                      "than trusting a stale copy of it.")
+            plan.full_clean(exclude=["number"])
+            plan.save()
+
+        plan_lines, variance_chips, unpriced = 0, 0, []
+        if not plan.lines.exists():
+            # The generate verb's own derivation, called rather than re-implemented: the same history
+            # window, the same daily series off the ledger, the same per-bucket method and the same
+            # clamp. Pressing Generate on this plan therefore reproduces exactly these lines instead
+            # of a second, slightly different grid.
+            buckets = [(start, plan.bucket_end(start)) for start in plan.period_starts()]
+            window_start, window_end = plan.history_window()
+            history = _history_buckets(plan)
+            series = _daily_series(plan, tenant, window_start, window_end)
+            # `.order_by()` before `.distinct()`: LaborStandard.Meta.ordering would otherwise drag
+            # `effective_from` and `id` into the SELECT and the DISTINCT would be taken per STANDARD.
+            scoped = sorted(_direct_standards_qs(plan, tenant)
+                            .order_by().values_list("activity", flat=True).distinct())
+            priced = {}
+            for activity in scoped:
+                standard = select_standard(tenant, activity, location=plan.location,
+                                           on_date=plan.period_start)
+                if standard is None:
+                    # The category-scoped packing standard lands here: a plan has no item category,
+                    # so the resolver's category rungs cannot be walked from one.
+                    unpriced.append(activity)
+                    continue
+                priced[activity] = standard
+
+            rows = []
+            for bucket_start, bucket_end in buckets:
+                for activity, standard in priced.items():
+                    volume = q4(_bucket_volume(plan, series, _flow_for(activity),
+                                               bucket_start, bucket_end, history))
+                    snapshot = min(standard.minutes_for(volume), MAX_SNAPSHOT_MINUTES)
+                    required_minutes = plan.required_minutes_for(snapshot)
+                    required_headcount = plan.headcount_for(required_minutes)
+                    rows.append(LaborPlanLine(
+                        plan=plan, period_start=bucket_start, activity=activity,
+                        forecast_volume=volume, standard=standard,
+                        standard_minutes_snapshot=snapshot, required_minutes=required_minutes,
+                        required_headcount=required_headcount,
+                        # The planner's answer, and the ONLY column on the line a human may write.
+                        # Rostered exactly to requirement by default so the two deliberate exceptions
+                        # below are the only chips on the grid — a plan where every line is off tells
+                        # a supervisor nothing about where to look.
+                        planned_headcount=required_headcount))
+            if rows:
+                # Deliberately SHORT and deliberately OVER, so both variance chips render. Every line
+                # carries a non-zero required headcount whatever the ledger holds, because
+                # `minutes_for()` includes the fixed setup and travel determinants at any volume —
+                # so rostering nobody is genuinely a shortfall rather than an arithmetic accident.
+                short_line = rows[0]
+                short_line.planned_headcount = ZERO
+                short_line.notes = "Deliberately UNDER-staffed: nobody rostered against real work."
+                variance_chips += 1
+                if len(rows) > len(priced):
+                    # The SAME activity one bucket later, so the two chips sit in the same column and
+                    # the signed variance is legible as a pair rather than as two unrelated rows.
+                    over_line = rows[len(priced)]
+                    over_line.planned_headcount = over_line.required_headcount + Decimal("1.00")
+                    over_line.notes = ("Deliberately OVER-staffed: a cushion somebody chose, which "
+                                       "is why the variance is signed rather than absolute.")
+                    variance_chips += 1
+            # bulk_create without a per-row full_clean, exactly as `laborplan_generate` does: the
+            # grid is machine-built from validated inputs and the DB holds the one invariant that
+            # matters, unique_together (plan, period_start, activity).
+            LaborPlanLine.objects.bulk_create(rows, batch_size=500)
+            plan_lines = len(rows)
+
+            if plan.status == "draft":
+                # The generate verb's own stamp pair — draft -> planned, `generated_at` written at
+                # the same moment. `status` is editable=False here too (L22).
+                plan.generated_at = timezone.now()
+                plan.status = "planned"
+                plan.save(update_fields=["generated_at", "status", "updated_at"])
+
+        # ---- 6. THE ONE CROSS-SUB-MODULE WRITE: assign two of 4.4's OPEN tasks -------------------
+        # Restricted to OPEN tasks because that is what the labor board lists — assigning a completed
+        # put-away to somebody moves nothing on the page and edits history for no reason. Guarded on
+        # `assigned_to__isnull=True` so a second run matches nothing and cannot re-assign a task a
+        # supervisor has since moved: the guard IS the idempotency, not a flag written beside it.
+        #
+        # Note for whoever reads the board and finds it empty: 4.4's seeder leaves its three tasks in
+        # `completed` / `packed` / `reconciled` and already assigns each to the tenant admin, so
+        # there is normally nothing open for this to act on. Populating the board needs an OPEN 4.4
+        # task, which is 4.4's row to create and not 4.14's to invent.
+        assigned = []
+        if admin is not None:
+            open_pick = (PickTask.objects
+                         .filter(tenant=tenant, status__in=_PICK_OPEN, assigned_to__isnull=True)
+                         .order_by("created_at", "id").first())
+            open_count = (CycleCountTask.objects
+                          .filter(tenant=tenant, status__in=CycleCountTask.EDITABLE_STATUSES,
+                                  assigned_to__isnull=True)
+                          .order_by("created_at", "id").first())
+            for task in (open_pick, open_count):
+                if task is None:
+                    continue
+                task.assigned_to = admin
+                task.save(update_fields=["assigned_to", "updated_at"])
+                assigned.append(task.number)
+
+        gap = closed_session.unaccounted_minutes()
+        performance = approved_session.performance_pct()
+        self.stdout.write(
+            f"{tenant.name}: 4.14 labor management — {len(standards)} active standard(s) "
+            f"(one at {main.code}, "
+            f"{'one by item category, ' if category is not None else ''}"
+            f"the rest network-wide) plus {draft_standard.number} still draft, "
+            f"3 sessions ({approved_session.number} approved at "
+            f"{performance if performance is not None else 'no'}% of standard, "
+            f"{closed_session.number} closed with {gap} min unaccounted, "
+            f"{open_session.number} still open), {len(activities)} booked activities "
+            f"(3 indirect, 2 carrying errors, 1 direct row deliberately unmeasured), {plan.number} "
+            f"{plan.get_status_display().lower()} over {plan.period_count()} days with "
+            f"{plan_lines or plan.lines.count()} line(s) and {variance_chips} deliberate "
+            f"variance chip(s)"
+            + (f" ({len(unpriced)} activity(ies) unpriced)" if unpriced else "")
+            + (f", {len(assigned)} 4.4 task(s) assigned to the board" if assigned
+               else ", no open 4.4 task to assign")
+            + ". No StockMove and no JournalEntry — labour is measured, not posted.")
