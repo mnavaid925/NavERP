@@ -197,7 +197,12 @@ GRID_PAGE_SIZE = 50
 #: reasoning, same shape, as ``LaborPlans.MAX_REQUIRED_MINUTES`` / ``MAX_PLAN_HEADCOUNT`` on the
 #: model; those two are applied by ``required_minutes_for()`` / ``headcount_for()`` and this is the
 #: one column no model method owns.
-MAX_SNAPSHOT_MINUTES = Decimal("99999999.9999")
+#:
+#: Imported from ``_choices`` rather than declared here, because this file is not the only writer of
+#: that column: ``LaborActivity._earned_from_snapshots()`` writes the same shape on the activity
+#: side and hit the same DataError. Two hand-maintained copies of one column's ceiling is two
+#: numbers that eventually disagree, so the bound lives with the vocabulary both sides already read.
+from apps.scm.models import MAX_SNAPSHOT_MINUTES  # noqa: E402,F401
 
 #: One output shape for the grid rollup on the list, so Django never has to guess how to combine two
 #: SUMs of ``DecimalField(8, 2)`` columns with the subtraction between them.
@@ -466,11 +471,21 @@ def _direct_standards_qs(plan, tenant):
     network. The category rungs of the resolver's ladder are unreachable here on purpose — a plan
     has no item category, so a category-scoped standard is never selected for one, and including
     those rows in the scope would count activities the grid will not contain.
+
+    ``item_category__isnull=True`` is what makes that last sentence TRUE rather than merely intended.
+    Without it the paragraph above described the filter and the filter did something else: the
+    generator calls ``select_standard(..., item_category=None)``, whose ladder can only reach
+    network- or location-scoped rows, while this queryset happily counted a category-scoped one as
+    long as its ``location`` matched. On the seeded tenant that gap was visible — the detail page
+    promised a 70-line grid and Generate built 56, because the ``pack`` standard is scoped to an item
+    category and can never resolve for a plan. The page's whole contract is "this is what pressing
+    Generate WOULD build", so an over-count is not a safe cap; it is the page being wrong.
     """
     if tenant is None or plan.period_start is None:
         return LaborStandard.objects.none()
     qs = (LaborStandard.objects
           .filter(tenant=tenant, status="active", activity__in=DIRECT_ACTIVITIES,
+                  item_category__isnull=True,
                   effective_from__lte=plan.period_start)
           .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=plan.period_start)))
     if plan.location_id:
