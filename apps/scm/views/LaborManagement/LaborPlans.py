@@ -190,6 +190,14 @@ MAX_HISTORY_BUCKETS = 730
 #: rendered (L40 §1 — a guard that first builds the whole thing is the payload, not a guard).
 GRID_PAGE_SIZE = 50
 
+#: Methods whose derived volume depends only on the FLOW (inbound/outbound), never on which
+#: bucket is being priced: `naive` reads the newest history bucket and `moving_average` the
+#: mean across all of them, and neither expression contains bucket_start or bucket_end.
+#: `same_period_last_year` is deliberately absent — it IS per-bucket, and caching it would
+#: flatten a seasonal plan into a single repeated number, which is a wrong plan rather than
+#: a slow one.
+_FLOW_CONSTANT_METHODS = frozenset({"naive", "moving_average"})
+
 #: ``standard_minutes_snapshot`` is ``DecimalField(12, 4)`` — eight integer digits — while
 #: :func:`q4` clamps to the app's (14, 4) shape at TEN. So ``q4`` alone is NOT a safe clamp for this
 #: column: ``LaborStandard.minutes_for()`` returns a q4 figure, a large forecast volume against a
@@ -981,13 +989,32 @@ def laborplan_generate(request, pk):
             return _detail(pk)
 
         rows = []
+        # flow -> volume, for the methods whose answer does not vary by bucket. Empty for
+        # `same_period_last_year`, which genuinely differs per bucket and must never be cached.
+        constant_volume = {}
         for bucket_start, bucket_end in buckets:
             for activity, standard in standards.items():
                 if obj.volume_source == "demand_forecast":
                     volume = forecast_map.get(bucket_start) or ZERO
                 elif series:
-                    volume = _bucket_volume(obj, series, _flow_for(activity),
-                                            bucket_start, bucket_end, history)
+                    flow = _flow_for(activity)
+                    # `naive` and `moving_average` produce a figure that depends only on the FLOW —
+                    # the newest history bucket, or the mean across all of them. Neither reads
+                    # bucket_start or bucket_end at all, so recomputing per grid cell walked the
+                    # whole history window again for an answer already known. At the caps this
+                    # module explicitly permits (MAX_PLAN_LINES = 2000 cells x up to 730 history
+                    # buckets) that is ~1.5M Decimal additions of pure Python, executed INSIDE
+                    # transaction.atomic() while it holds select_for_update on the plan row — zero
+                    # queries, so nothing a query counter would ever show, and seconds of lock hold
+                    # on a POST any planner can fire.
+                    # `same_period_last_year` IS genuinely per-bucket and is deliberately not cached.
+                    if flow in constant_volume:
+                        volume = constant_volume[flow]
+                    else:
+                        volume = _bucket_volume(obj, series, flow,
+                                                bucket_start, bucket_end, history)
+                        if obj.method in _FLOW_CONSTANT_METHODS:
+                            constant_volume[flow] = volume
                 else:
                     # `manual` on either axis: no derived volume at all, and the planner types
                     # `planned_headcount` on each line. Zero here is the TRUTH about what was
@@ -1021,8 +1048,9 @@ def laborplan_generate(request, pk):
         # than an omission: a roster typed against last week's required figures is not an answer to
         # this week's question, and silently carrying it forward would leave a planner staring at a
         # coverage percentage nobody computed.
-        removed = obj.lines.count()
-        obj.lines.all().delete()
+        # delete() already returns how many rows it removed, so the COUNT(*) that used to sit
+        # here was a second query for a number the next line hands back for free.
+        removed = obj.lines.all().delete()[0]
         LaborPlanLine.objects.bulk_create(rows, batch_size=500)
 
         obj.generated_at = timezone.now()
