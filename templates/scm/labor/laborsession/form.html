@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.14 Labor Management — shared create/edit form for LaborSession. One worked shift, typed by a
+human: a supervisor keying in a shift before or after it happened.
+
+Context contract — apps/scm/views/LaborManagement/LaborSessions.py::_laborsession_form, which renders
+this page directly rather than through crud_create / crud_edit so it can stamp the provenance itself.
+Everything this page may read, and nothing else:
+
+  form      LaborSessionForm (bound on POST) — a WHITELIST of exactly seven fields:
+            worker, location, work_date, shift_label, clock_in, clock_out, notes
+  is_edit   False on create, True on edit
+  obj       the LaborSession on the EDIT path, None on create — so every use of it below is guarded
+            by is_edit and never rendered bare
+
+Fields are rendered BY NAME so they can be grouped, which couples this page to LaborSessionForm's
+whitelist: Meta.fields is those seven names and nothing else, and all seven are below. A field added
+to the model and to that whitelist but not to a group here would never reach the POST — on edit it
+would be silently blanked on every save.
+
+THERE IS NO STATUS FIELD ON THIS PAGE, and that absence is the mechanism rather than an oversight.
+`status` is editable=False on the model and deliberately absent from the form's whitelist, so a
+crafted status=approved in a POST body has nowhere to land — not because a view screens for it, but
+because there is no path from form data to the column at all. That matters more here than on most
+documents: `approved` IS the payroll export's lock, and the export reads approved sessions and
+nothing else. The six verbs on the shift's own page are the only writers.
+
+DELIBERATELY ABSENT for the same reason, and must not be added: `source`, `recorded_by`, `login`,
+`closed_at`, `approved_at` and `approved_by`. All six are the session's PROVENANCE and are stamped by
+whichever code path actually files or moves the record. A source a member could choose is not a
+provenance at all — it would let a hand-keyed shift claim to have come from a badge reader that never
+saw the worker, on a record whose minutes end in a payroll export. `number` is auto-assigned on save
+and `tenant` is stamped by the view.
+
+clock_in / clock_out ARE on the form and are the one deliberate exception: they are not system
+stamps, they are the human-entered SUBJECT of the record. Both are rendered through the form's OWN
+widget ({{ form.clock_in }} via partials/form_field.html) and never as a hand-written <input>. That
+widget is a DateTimeInput carrying type="datetime-local" AND format="%Y-%m-%dT%H:%M" together, and
+both halves are load-bearing: the type without the format renders an EMPTY box for a stored value,
+because a datetime-local control cannot parse Django's default "%Y-%m-%d %H:%M:%S" rendering — so the
+edit form for a filed shift would come up blank and saving it would re-post empty clock times. A
+hand-written input here would throw that round-trip away.
+
+Every rule the operator notes below describe is enforced by LaborSession.clean() — the clock
+ordering, the two-day length cap, the work-date pin, the year floor, the one-open-session-per-worker
+rule, the overlap guard and the employee-role check — and never by this template, so the words
+somebody reads and the validation that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Labor Session{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Labor Session{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:laborsession_list' %}">Labor Sessions</a><span class="sep">›</span>{% if is_edit %}<a href="{% url 'scm:laborsession_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>{% else %}<span>New</span>{% endif %}</div>
+    <p class="text-muted">A shift keyed in by hand, before or after it happened — the ordinary case for a floor associate with no ERP login at all. A shift filed here is recorded as a <span class="fw-600">supervisor entry</span>, because that is what it is; a worker punching themselves in uses the clock-in card on the session list, and that path records itself as a self-service punch. There is deliberately <span class="fw-600">no status field on this form</span>: the ladder is owned by the buttons on the shift's own page, so nothing typed here can move it.</p>
+  </div></div>
+
+  {% if is_edit %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Editing {{ obj.number }}</h2>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Filed as</dt><dd><span class="badge badge-slate">{{ obj.get_source_display }}</span></dd></div>
+          <div class="detail-item"><dt>Booked activities</dt><dd class="mono">{{ obj.activities.count }}</dd></div>
+        </dl>
+        <div class="form-help">A shift is editable only while it is <span class="fw-600">open</span>. Correcting the clock times here also corrects every figure derived from them — attended minutes, gap time, over-booking and utilisation are all recomputed on read, so there is no stored total to fall out of step. The activities already booked underneath are <em>not</em> moved by an edit: if you shorten the shift so that a booking now falls outside its clock window, the save is refused rather than silently orphaning the minutes. The provenance stamps are never re-applied on edit — correcting a typo on a shift the worker punched in themselves does not turn it into a supervisor entry.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Whose shift, and where</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">The LSN- number is assigned on save. The <span class="fw-600">worker</span> list offers parties holding the <span class="fw-600">employee</span> role and nobody else — a party record is the right vocabulary here precisely because warehouse associates routinely have no ERP login, and an unnarrowed list would offer customers and hauliers under a label reading "worker". A party whose employee role was removed after a shift was filed stays selectable on this form, so an unrelated edit does not fail on a field nobody touched; the refusal you get instead names the party and says to add the role back. The <span class="fw-600">location</span> list is deliberately not narrowed to active sites: a shift worked at a site since wound down is still a shift somebody was paid for.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.worker %}
+          {% include "partials/form_field.html" with field=form.location %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">When it was worked</h2>
+        <span class="badge badge-info">Date and time, not just a date</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">The <span class="fw-600">work date</span> must be the calendar day the shift <em>started</em> on — an overnight shift keeps its start date, which is the grain HR attendance uses and the grain a supervisor rosters by. It is pinned to the local date of the clock-in and the save is refused if the two disagree, because a session dated last March holding this week's clock times would poison every period aggregate, every scorecard window and the payroll export, none of which re-read the clock.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.work_date %}
+          {% include "partials/form_field.html" with field=form.shift_label %}
+          {% include "partials/form_field.html" with field=form.clock_in %}
+          {% include "partials/form_field.html" with field=form.clock_out %}
+        </div>
+        <div class="form-help">
+          Both clock boxes are date <span class="fw-600">and time</span> controls, and both round-trip to the minute — a punch silently truncated to midnight would collapse every attended figure to zero or to a whole number of days. Leave <span class="fw-600">clock out</span> blank for a shift that is still running: attended minutes are then genuinely unknown, and every figure derived from them answers "not yet" rather than zero. That is a deliberate design decision and not a gap in the data — a running shift reported as 0% utilised with infinite gap time would fill the exception queue with people who are simply still working. It can also be stamped later with the <span class="fw-600">Clock out</span> button on the shift's page, which records the moment the button was pressed; set it here instead when the punch was missed and is being reconstructed, because that is a different act with a different truth value.
+        </div>
+        <div class="form-help">
+          Four rules are enforced on save and each protects a number that ends in a payroll export: the clock-out must be <span class="fw-600">after</span> the clock-in; a single session may not run longer than <span class="fw-600">two days</span> (long enough for an overnight shift closed out late the next morning, short enough that a mistyped year is a rejection rather than an overflow); a worker may have only <span class="fw-600">one open shift</span>, or the clock-out button would have to guess which one it is closing; and two shifts for one worker may not <span class="fw-600">overlap</span>, because double-counted minutes are double-counted payroll hours and nothing downstream can detect them — the export would simply report a longer day. A shift ending at 14:00 and one starting at 14:00 do not overlap: that is a handover, not a clash.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes and provenance</h2>
+        <span class="badge badge-slate">Provenance is stamped, never typed</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">Notes belong to the <em>shift</em> and stay with it. A reason for withdrawing a shift is not a note — it is asked for by the Cancel button and lands in the audit trail, so it cannot overwrite what the shift itself says.</div>
+        <p class="text-muted" style="margin-top:.9rem;">
+          <span class="fw-600">How this record arrived is not on this form, and must not be.</span> The source, the login that filed it, the login that punched it and the close and approval stamps are all written by whichever code path actually files or moves the shift. A shift saved here is stamped <span class="fw-600">supervisor entry</span> with no punching login, because nobody punched — and that blank is the truth rather than missing data. Letting any of them be typed would let a hand-keyed shift claim to have come from a badge reader that never saw the worker, on a record whose minutes are read by the payroll export. Neither stamp is re-applied on an edit: correcting a typo on a shift the worker punched in themselves did not turn it into a supervisor entry.
+        </p>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Nothing derived is typeable either. Attended, booked, direct, indirect, gap, over-booked, earned minutes, performance, utilisation, units per hour and accuracy are all recomputed on read and have no column at all — so there is nothing here for a form to disagree with, and no way for a stored total to drift from the rows it was built from.
+        </p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}File the shift{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'scm:laborsession_detail' obj.pk %}{% else %}{% url 'scm:laborsession_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
