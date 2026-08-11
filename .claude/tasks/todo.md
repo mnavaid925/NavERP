@@ -23097,6 +23097,51 @@ So the recipe applies to itself:
 - An `ImportError`, a `NameError` or an empty fixture in a test is **not a flaky test to route
   around**; it is the check reporting that it never reached the state it claims to verify.
 
+#### The harness is code too — and it propagates by copy, where no review can see it
+
+A seventh instance, and structurally the worst, because **no mechanism in this project could ever
+have caught it.** 4.14's empty-state link sweep (`temp/verify_links.py`) had two defects:
+
+1. a **fixed** throwaway-tenant slug, so a re-run while a leaked tenant exists raises
+   `IntegrityError` *before* the sweep — meaning that run's cleanup never executes either, and
+   **each failure guarantees the next one**; and
+2. teardown not in a `finally`, so any mid-sweep exception strands the tenant.
+
+It leaked a tenant that subsequent `seed_scm` runs then kept feeding: **623 rows across ~60 tables**
+in the database all three concurrent sessions read from, silently inflating every count. Cleanup
+needed a four-pass dependency-ordered delete (`Party`, `Item`, `Location`, `Asset`, `Carrier`,
+`Shipment` and `ColdChainMonitor` all `PROTECT` the tenant row) — deliberately **not**
+`seed_scm --flush`, which would have destroyed two other sessions' demo data.
+
+**The lesson forbidding this already existed (L41 §3) and did not fire.** That is the finding:
+
+> **The second copy was not a second decision.** L41 §3 could only fire for someone *writing* such a
+> harness from scratch. The second author was not — they were adapting one that visibly worked, via
+> a two-minute edit that changed a `PAGES` list and nothing else. **That is precisely the moment
+> nobody re-derives the invariants.** So copy-propagation does not *halve* the failure rate by
+> adding a second careful engineer; it **doubles** it.
+
+And the structural consequence, which is the honest next step for whoever picks it up:
+
+> **These harnesses live in a gitignored `temp/`, so every rule about them is enforced only by
+> memory.** There is no commit, no diff and no review anywhere in this project that would show a
+> third session inheriting the defect. `test_suite_hygiene.py` is a rule with teeth *because* it is
+> a committed `ast` check. The equivalent here — asserting that any `Tenant.objects.create()`
+> outside `conftest.py` takes a non-literal slug — **can never police `temp/`.** Anything we want to
+> actually hold has to move into the committed suite.
+
+**Requirements for any throwaway-tenant harness, until that lands:**
+
+- [ ] `uuid4`-suffixed slug **and** username **and** email — never a literal
+- [ ] sweep in `try`, teardown in `finally`
+- [ ] a debris check matching on the **prefix**, so it warns about tenants leaked by *earlier* runs,
+      not only its own
+- [ ] **run it twice back to back** — that is the proof the collision path is gone
+- [ ] any ad-hoc teardown touching 4.13 assets must clear 4.15 first (`ColdChainMonitor.asset` is
+      `PROTECT`) — the `--flush` ordering constraint binds cleanup scripts too
+- [ ] prefer a **read-only** probe wherever one answers the question: three sessions share this
+      database, so a probe that writes is itself the hazard it is looking for
+
 #### Do not over-trust the suite
 
 **The test suite runs SQLite (`config.settings_test`); production is MariaDB.** Anything whose
