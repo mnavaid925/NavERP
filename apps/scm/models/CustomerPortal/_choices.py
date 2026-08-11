@@ -50,6 +50,7 @@ already shipped four times). Verified against ``theme.css`` before this file was
 
 __all__ = [
     "STOCK_DISPLAY_CHOICES", "THRESHOLD_STOCK_DISPLAYS",
+    "STOCK_BAND_LABELS", "STOCK_BAND_CSS", "stock_band",
     "CATALOG_SCOPE_CHOICES",
     "PRICE_BASIS_CHOICES",
     "PREFERRED_CHANNEL_CHOICES",
@@ -93,6 +94,65 @@ STOCK_DISPLAY_CHOICES = [
 #: Owned here so the model's ``clean()``, the form's help text and the catalog renderer that compares
 #: against the threshold cannot drift apart.
 THRESHOLD_STOCK_DISPLAYS = ("availability_text", "band")
+
+#: The three buckets a derived on-hand figure collapses into, and the ONE place their words and
+#: colours are decided.
+#:
+#: **This is not a model vocabulary and never becomes a column.** No row anywhere stores a band: the
+#: band is recomputed from the on-hand aggregate every time a catalog page renders, because on-hand
+#: is itself derived over the append-only ``StockMove`` ledger (L37). A stored band would be a cached
+#: copy of a derived figure — stale the moment a move posts, and stale in the direction that tells a
+#: customer something is in stock when it is not.
+#:
+#: ``availability_text`` and ``band`` are the SAME three buckets rendered two ways, which is exactly
+#: why :data:`THRESHOLD_STOCK_DISPLAYS` contains both: the text display prints
+#: :data:`STOCK_BAND_LABELS`, the band display shows :data:`STOCK_BAND_CSS` as a colour chip. Two
+#: vocabularies here would let the words and the colour disagree about the same quantity on the same
+#: page — the customer reads "In stock" beside an amber dot and trusts neither.
+#:
+#: **The colour is never the only carrier of the meaning.** A colour-only chip is invisible to a
+#: screen reader and to the ~8% of men with a red/green deficiency, so a template rendering the band
+#: must still expose the label as ``title``/``aria-label`` even when it prints no visible text. The
+#: pairing lives here so that rule has one home rather than being remembered per template.
+STOCK_BAND_LABELS = {
+    "out": "Out of stock",
+    "low": "Low stock",
+    "in": "In stock",
+}
+
+#: Colour-named theme.css classes only — ``badge-success``/``badge-warning``/``badge-danger`` do not
+#: exist in this project and render completely unstyled (L33).
+STOCK_BAND_CSS = {
+    "out": "badge-red",
+    "low": "badge-amber",
+    "in": "badge-green",
+}
+
+
+def stock_band(on_hand, threshold=None):
+    """Bucket a derived on-hand quantity into ``"out"`` / ``"low"`` / ``"in"``, or ``None``.
+
+    ``None`` in means ``None`` out, and it is a genuinely different answer from ``"out"``: *no
+    ledger rows exist for this item at this scope* is not the same statement as *we have none left*.
+    The first renders as an em-dash, the second as "Out of stock" — and a caller that collapses them
+    tells a customer an item is unavailable when the truth is that nobody has ever counted it.
+
+    ``threshold`` of ``None`` or zero means the account set none, so nothing is ever "low": a
+    positive quantity is simply in stock. That is the right default, because
+    ``PortalAccount.low_stock_threshold`` defaults to zero and a zero threshold treated as "low"
+    would paint every item amber on every freshly created account.
+
+    Pure and import-free on purpose — this module deliberately imports nothing at all (not even
+    ``Decimal``), so the dependency edge inside 4.16 runs one way and no cycle is possible. The
+    comparisons work unchanged on ``Decimal``, ``int`` and ``float``.
+    """
+    if on_hand is None:
+        return None
+    if on_hand <= 0:
+        return "out"
+    if threshold is not None and threshold > 0 and on_hand <= threshold:
+        return "low"
+    return "in"
 
 #: Which items this customer's catalog contains. Customer-specific catalogs are table stakes in the
 #: surveyed products (Shopify B2B, Oro organization-aware catalogs, Unleashed per-customer
