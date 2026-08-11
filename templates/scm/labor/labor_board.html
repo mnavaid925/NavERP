@@ -69,7 +69,9 @@ so this template invents none.
     </div>
     <div class="page-actions">
       <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Labour Sessions</a>
-      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Scorecard</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Scorecard</a>
+      {% endif %}
       <a href="{% url 'scm:labor_payroll_export' %}" class="btn btn-outline"><i data-lucide="file-down"></i> Payroll Export</a>
       <a href="{% url 'scm:laborplan_list' %}" class="btn btn-primary"><i data-lucide="calendar-range"></i> Labour Plans</a>
     </div>
