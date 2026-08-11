@@ -41,10 +41,14 @@ open episode rather than raise a second row.
 
 So :func:`detect_excursions` opens ``transaction.atomic()`` per monitor and takes
 ``select_for_update()`` **on the MONITOR row, BEFORE any reading is read**. The monitor row always
-exists, so the lock is never the no-op that ``select_for_update()`` on an empty queryset would be,
-and it also serialises the reading-import path against the detector. Taking the lock after the walk
-would leave the classic TOCTOU window: two concurrent passes both read "no open episode", both walk,
-and both INSERT.
+exists, so the lock is never the no-op that ``select_for_update()`` on an empty queryset would be.
+Taking the lock after the walk would leave the classic TOCTOU window: two concurrent passes both read
+"no open episode", both walk, and both INSERT.
+
+**It serialises detector against detector, and nothing else.** The reading importer never touches the
+monitor row, so an import committing mid-sweep is not held off by this lock — it does not need to be:
+a reading that lands after the walk is simply picked up by the next pass, because the watermark is a
+statement about the series rather than about the clock.
 
 --------------------------------------------------------------------------------------------------
 NO TEMPERATURE IN THIS MODULE PASSES THROUGH ``q2()`` OR ``q4()``
@@ -731,10 +735,11 @@ def _window_rows(monitor, start, end):
 # 4c. The episode detector — the ONLY writer of the measured block
 # -------------------------------------------------------------------------------------------------
 
-def detect_excursions(tenant, *, monitor=None, user=None):
+def detect_excursions(tenant, *, monitor=None, user=None, after=None):
     """Open, extend and close ``TemperatureExcursion`` episodes from the reading ledger.
 
-    Returns ``{"opened", "extended", "closed", "skipped", "more_remain"}``:
+    Returns ``{"opened", "extended", "closed", "skipped", "more_remain", "more_monitors",
+    "last_monitor_id"}``:
 
     * ``opened`` — episodes CREATED by this pass.
     * ``extended`` — already-open episodes UPDATED by this pass (new readings folded in, or the
@@ -748,9 +753,19 @@ def detect_excursions(tenant, *, monitor=None, user=None):
       finding).
     * ``more_remain`` — a cap bit (too many monitors, or too many unwalked readings on one of them)
       and the caller should press again.
+    * ``more_monitors`` — the MONITOR cap specifically, which is the half a second press cannot
+      resolve on its own. The reading cap is self-healing (each pass advances the watermark, so the
+      same monitor is walked further next time); the monitor cap is not, because the sweep is
+      ordered by id and a cursor-less re-run walks the SAME first
+      :data:`MAX_MONITORS_PER_SWEEP` monitors forever. Told apart so a caller can say which of the
+      two happened and do the right thing about it.
+    * ``last_monitor_id`` — the id of the last monitor this pass EXAMINED (including one skipped for
+      having no limits), or ``None`` for a pass that examined none. Feed it back as ``after=`` and
+      the next pass continues from the following monitor.
 
     **Scope:** ``status="active"`` monitors in ``tenant``, optionally narrowed to one by ``monitor=``
-    (a model instance or a pk), which is what the per-monitor button uses.
+    (a model instance or a pk), which is what the per-monitor button uses, and optionally started
+    past ``after=`` (a monitor id — ``id__gt``), which is the sweep CURSOR.
 
     **ONE ``transaction.atomic()`` PER MONITOR, not one for the whole sweep.** A poisoned monitor
     must not roll back the twenty that already succeeded, and a single transaction spanning every
@@ -768,7 +783,8 @@ def detect_excursions(tenant, *, monitor=None, user=None):
     **It writes NOTHING outside its own table** — no ``StockMove``, no ``JournalEntry``, no
     ``LotSerial.status``, no ``Asset.status``, no ``MaintenanceWorkOrder``. Worth asserting in a test.
     """
-    summary = {"opened": 0, "extended": 0, "closed": 0, "skipped": 0, "more_remain": False}
+    summary = {"opened": 0, "extended": 0, "closed": 0, "skipped": 0, "more_remain": False,
+               "more_monitors": False, "last_monitor_id": None}
     if tenant is None:
         return summary
 
@@ -780,6 +796,15 @@ def detect_excursions(tenant, *, monitor=None, user=None):
         except (TypeError, ValueError):
             # A junk pk narrows to nothing rather than raising out of `.filter()` (L11).
             return summary
+    if after is not None:
+        # THE CURSOR, and the reason the sweep is `order_by("id")` rather than merely ordered: the
+        # cap has to be resumable or monitor 501 is only ever reachable through its own per-monitor
+        # button. A junk cursor sweeps from the start rather than raising out of `.filter()` (L11) —
+        # walking the first page twice is a wasted press, walking nothing is a silent no-op.
+        try:
+            candidates = candidates.filter(id__gt=int(after))
+        except (TypeError, ValueError):
+            pass
 
     # Only the three columns the skip test needs. The row is re-read in full under its own lock
     # below, so this cheap pass cannot make a stale decision that matters.
@@ -787,7 +812,15 @@ def detect_excursions(tenant, *, monitor=None, user=None):
                 .values("id", "min_temperature", "max_temperature")[:MAX_MONITORS_PER_SWEEP + 1])
     if len(rows) > MAX_MONITORS_PER_SWEEP:
         summary["more_remain"] = True
+        # The half a plain re-run cannot fix — see the docstring. The caller carries
+        # `last_monitor_id` back in as `after=`.
+        summary["more_monitors"] = True
         rows = rows[:MAX_MONITORS_PER_SWEEP]
+    if rows:
+        # Set from the SWEEP list rather than inside the loop, so a monitor skipped for having no
+        # limits still advances the cursor past itself: a cursor that stalls on an unconfigurable
+        # monitor is the same bug in a smaller box.
+        summary["last_monitor_id"] = rows[-1]["id"]
 
     # The audit rows are written AFTER their transaction commits, the `_status_transition` shape
     # (`views/_helpers.py:451`): an audit row for a write that then rolled back is worse than no
@@ -810,8 +843,8 @@ def _detect_one(tenant, monitor_id, user, summary, audit):
         # ---- THE LOCK, FIRST, ON THE MONITOR ROW -------------------------------------------------
         # Before any reading is read, and on a row that ALWAYS EXISTS — `select_for_update()` on a
         # queryset that matches nothing locks nothing, which is why the episode row is the wrong
-        # thing to lock (the whole point is the case where there is no episode yet). Locking the
-        # monitor also serialises the reading-import path against the detector.
+        # thing to lock (the whole point is the case where there is no episode yet). It serialises
+        # detector against detector only: the import path never touches this row.
         monitor = (ColdChainMonitor.objects.select_for_update()
                    .filter(pk=monitor_id, tenant=tenant).first())
         if monitor is None:
@@ -922,10 +955,20 @@ def _open_episode(tenant, monitor, segment, now, summary, audit):
     and a queue of excursions with blank numbers is a queue nobody can quote in an email.
     """
     limit_min, limit_max = monitor.effective_limits()
-    rows = segment["rows"]
-    stats = episode_stats(rows, limit_min, limit_max, frozen=monitor.is_frozen_condition)
     started_at = segment["started_at"]
     ended_at = segment["ended_at"]
+    breaching = segment["rows"]
+
+    # THE SAME WINDOW `_extend_episode` RECOMPUTES OVER, so the two writers of these columns agree.
+    # `walk_episodes` hands back only the BREACHING rows, but an episode's window is closed BY the
+    # first reading back inside the band — that row falls in [started_at, ended_at] and is one of the
+    # rows `TemperatureExcursion.readings()` lists on the page. Counting it here is what stops an
+    # episode opened and closed inside one pass (which a back-dated logger import does constantly)
+    # from reporting one fewer row than the identical episode a later pass closed, with a badge that
+    # disagrees with its own reading table. A STILL-RUNNING segment keeps its breaching rows: it has
+    # no end to bound a query with, and there is no in-range row to have missed.
+    rows = _window_rows(monitor, started_at, ended_at) if ended_at is not None else breaching
+    stats = episode_stats(rows, limit_min, limit_max, frozen=monitor.is_frozen_condition)
     duration = episode_duration_minutes(started_at, ended_at, now=now)
 
     excursion = TemperatureExcursion(
@@ -942,7 +985,10 @@ def _open_episode(tenant, monitor, segment, now, summary, audit):
         limit_max=limit_max,
         reading_count=stats["reading_count"],
         mkt=stats["mkt"],
-        last_detected_at=_last_moment(rows) or started_at,
+        # From the BREACHING rows, never the window: this is the watermark the next pass walks after,
+        # and `_extend_episode` sets it the same way. The closing in-range row is already covered by
+        # `ended_at`, which is what `_watermark` reads for a closed episode.
+        last_detected_at=_last_moment(breaching) or started_at,
         severity=severity_for(stats["excess_c"], duration, monitor.excursion_grace_minutes),
     )
     excursion.save()
