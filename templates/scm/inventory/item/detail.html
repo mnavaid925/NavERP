@@ -37,6 +37,10 @@
       <div class="detail-item"><dt>Average Cost</dt><dd>{{ obj.average_cost|floatformat:4 }}</dd></div>
       <div class="detail-item"><dt>Reorder Point</dt><dd>{{ obj.reorder_point|floatformat:2 }}</dd></div>
       <div class="detail-item"><dt>Spare Part (MRO)</dt><dd>{% if obj.is_spare_part %}<span class="badge badge-info">Yes</span> <a href="{% url 'scm:sparepart_list' %}">Storeroom</a>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
+      {# 4.15 temperature class — same shape as the MRO row above: the badge states the class and the #}
+      {# link goes to the page this one column feeds. Blank is a real answer here (not missing data), #}
+      {# so it reads as "Not temperature-controlled" rather than an em-dash. #}
+      <div class="detail-item"><dt>Temperature Class</dt><dd>{% if obj.storage_condition %}<span class="badge badge-info">{{ obj.get_storage_condition_display }}</span> <a href="{% url 'scm:cold_storage_report' %}">Cold storage</a>{% else %}<span class="badge badge-muted">Not temperature-controlled</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Description</dt><dd>{{ obj.description|default:"—"|linebreaksbr }}</dd></div>
     </dl>
