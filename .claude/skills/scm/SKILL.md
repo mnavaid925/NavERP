@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). and 4.12 Contract & Compliance Management (a standing-obligation register whose CLM obligations point back at 4.2's contracts rather than duplicating them, import/export licences that decrement as documents are issued under them, trade paperwork hung off 4.6's shipments with HS codes snapshotted at issue, supplier ESG scorecards, and a GLEC/ISO-14083 freight-emissions estimate that reports its coverage gaps instead of a confident zero). and 4.13 Asset Management (scm.Asset as the operational asset spine with a cycle-guarded hierarchy and derived MTBF/MTTR/availability that answer None rather than a flattering zero, four-trigger preventive-maintenance plans whose schedule has exactly one writer, the MWO- maintenance work order - a SEPARATE document from 4.8's WO- production work order - carrying downtime, Maximo failure codes and the sub-module's one ledger write under a new maintenance StockMove type, an append-only MeterReading log with no edit and no delete route, and three computed report pages: a PM forecast board, an MRO storeroom over 4.3's Item/StockMove/ReorderRule with no SparePart table, and a repair-vs-replace page that READS accounting.FixedAsset). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). and 4.12 Contract & Compliance Management (a standing-obligation register whose CLM obligations point back at 4.2's contracts rather than duplicating them, import/export licences that decrement as documents are issued under them, trade paperwork hung off 4.6's shipments with HS codes snapshotted at issue, supplier ESG scorecards, and a GLEC/ISO-14083 freight-emissions estimate that reports its coverage gaps instead of a confident zero). and 4.13 Asset Management (scm.Asset as the operational asset spine with a cycle-guarded hierarchy and derived MTBF/MTTR/availability that answer None rather than a flattering zero, four-trigger preventive-maintenance plans whose schedule has exactly one writer, the MWO- maintenance work order - a SEPARATE document from 4.8's WO- production work order - carrying downtime, Maximo failure codes and the sub-module's one ledger write under a new maintenance StockMove type, an append-only MeterReading log with no edit and no delete route, and three computed report pages: a PM forecast board, an MRO storeroom over 4.3's Item/StockMove/ReorderRule with no SparePart table, and a repair-vs-replace page that READS accounting.FixedAsset). and 4.14 Labor Management (engineered multi-determinant labour standards with a most-specific-wins resolver that answers None rather than a zero standard, warehouse shift sessions on core.Party whose twelve productivity figures are all derived and all answer None on a zero denominator, booked direct/indirect activity intervals that SNAPSHOT the standard at file time so re-timing it cannot rewrite last month, volume-driven labour plans on 4.7's generate-then-review shape, and three computed pages - a task-assignment board writing only 4.4's EXISTING assigned_to column, an admin-only productivity scorecard, and a read-only payroll CSV hand-off that narrows to your own rows unless you are an admin; declares no attendance table because HRM owns attendance, no task table because 4.4 owns tasks, and writes no StockMove, no JournalEntry and nothing at all into hrm.*). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,8 +9,8 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management + 4.13 Asset Management.**
-4.14–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management + 4.13 Asset Management + 4.14 Labor Management.**
+4.15–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -1172,6 +1172,167 @@ assets → the `maintenance` moves, forced by the single PROTECT edge `Maintenan
     reported as excluded, never folded in as zero and never rendered as infinity. Both reports render 200 on an
     empty tenant with an honest zero-coverage line; neither may 500 on a first run.
 
+## 4.14 Labor Management  (`apps/scm/*/LaborManagement/`, templates `templates/scm/labor/`)
+
+The **people** side of the warehouse, and the sub-module most defined by what it deliberately does **not** own.
+Two whole features here are computed pages over somebody else's tables, and a third is a read-only hand-off.
+
+**THE THREE THINGS 4.14 DOES NOT DECLARE — read this before adding anything.**
+
+1. **No attendance table. HRM owns daily attendance.** `hrm.AttendanceRecord` is unique per
+   `(tenant, employee, date)` with `check_in`/`check_out` TimeFields, derived `hours_worked`, geofence and a
+   biometric `source`, alongside `Shift`, `ShiftAssignment`, `AttendanceRegularization`, `Timesheet` and
+   `OvertimeRequest`. A `LaborSession` is the layer *beneath* that: a shift **at a warehouse** whose minutes are
+   split into booked activity intervals, which is what an LMS measures and what a one-row-per-day attendance
+   record structurally cannot hold. `LaborSession.work_date` is deliberately the **same grain** as
+   `AttendanceRecord.date` so the two reconcile **in a report, without a FK**.
+2. **No task table, and no second assignee column.** 4.4's `PickTask` / `PutawayTask` / `CycleCountTask` already
+   carry `assigned_to`, a status and lifecycle stamps. `scm:labor_board` is a **computed console** that reads
+   those three queues live and writes **only** their existing `assigned_to`. Migration `0024` contains **no
+   `AddField` at all** — that is the evidence, not the claim. (Same precedent as 4.13's Spare Parts computing over
+   4.3 and 4.4's bin bullet pointing at `scm:location_list`.)
+3. **No payroll posting.** `scm:labor_payroll_export` writes **nothing**, anywhere. `accounting.PayrollRun` is a
+   whole-company period **accrual** with no employee lines and no hours columns, so "drafting" one from warehouse
+   labour would be *wrong*, not merely redundant. Contrast 4.6's freight audit, which *does* draft an
+   `accounting.Bill` — because a Bill has lines and a payee.
+
+**`apps/scm` contains ZERO `hrm.*` references** (no `from apps.hrm`, no `"hrm.X"` FK string) and 4.14 did not add
+the first. There is an architectural test asserting it. 4.14 also writes **no `StockMove` and no `JournalEntry`**.
+
+### Models  (`apps/scm/models/LaborManagement/`)
+
+`_choices.py` first — it imports no sibling model, so the edge runs one way. It owns `ACTIVITY_CHOICES` and the
+`DIRECT_ACTIVITIES` / `INDIRECT_ACTIVITIES` **frozensets** (the single source of truth for "is this row
+productive" — every aggregate branches on these, never a hand-typed tuple), `INDIRECT_REASON_CHOICES`, the
+`*_CSS` dicts, and every bound. Re-exported **by name**, not `import *`: 4.13's `AssetManagement/_choices` is
+star-imported and exports `MAX_LABOUR_RATE`, so 4.14's rate ceiling is the distinct token `MAX_STANDARD_RATE`.
+
+- **`LaborStandard` [`LST-`]** — the engineered standard, and the keystone: without it 4.14 is a timeclock.
+  Multi-determinant (`setup_minutes` + `travel_minutes` + `minutes_per_unit` + PF&D `allowance_pct`), scoped by
+  `location` and/or `item_category` (both nullable = network-wide), dated with `effective_from`/`effective_to`,
+  and `source` ∈ engineered/observed/benchmark/learned. `minutes_for(qty)` =
+  `(setup + travel + qty × rate) × (1 + allowance/100)` — **the whole earned-minutes definition, in one place**.
+  `status` is `editable=False` (activate/archive verbs); `EDITABLE_STATUSES = ("draft", "active")` because an
+  active standard stays editable **precisely because every activity snapshots it**.
+  Module-level **`select_standard(tenant, activity, location, item_category, on_date)`** — most-specific-wins
+  (location+category → category → location → network), ties by latest `effective_from`, active rows only, and
+  **returns `None` when nothing matches**. Every caller must handle that: an unmeasured job must not read as a
+  failing one.
+- **`LaborSession` [`LSN-`]** — the warehouse shift. `worker` → **`core.Party`** on `PROTECT` (the worker is the
+  *subject* of the row — contrast `MeterReading.recorded_by`, `SET_NULL` because the observation outlives the
+  observer). **Never `hrm.EmployeeProfile`.** Status ladder `open → closed → approved` (+ `cancelled`);
+  `approved` **is** the export lock. Provenance (`source`, `recorded_by`, `login`, the three stamps) is all
+  `editable=False` and stamped by whichever verb files the record. **No `exported_at` column** — a decision: a GET
+  must not write. Twelve derived figures, none stored, each accepting a pre-fetched `activities=None` list so one
+  render is one scan.
+- **`LaborActivity` [`LAB-`]** — the booked interval, shaped on 4.8's `ProductionTimeLog`. `duration_minutes`
+  derived in `save()` **with the `update_fields` ride-along**. Nullable pointers to the three 4.4 tasks (at most
+  one, and it must match the activity type). **The four `*_snapshot` columns are the correctness feature**:
+  resolution happens **once**, in the create view, and `save()` never re-resolves.
+- **`LaborPlan` [`LPL-`] + `LaborPlanLine`** — 4.7's generate-then-review shape. `LaborPlanLine` is
+  **tenant-less** — scope it via `plan__tenant`, always. `planned_headcount` is the **only** editable column on a
+  line.
+
+### URLs  (`apps/scm/urls/LaborManagement/`, `app_name="scm"`)
+
+`labor-standards/` · `labor-sessions/` · `labor-activities/` · `labor-plans/` · `labor-plan-lines/` ·
+`labor-board/` · `labor-payroll-export/` · `labor-scorecard/` — **eight distinct whole path components**; nothing
+else in scm starts with `labor`. Names: `laborstandard_{list,create,detail,edit,delete,activate,archive}` ·
+`laborsession_{list,create,detail,edit,delete,clock_in,clock_out,close,approve,reopen,cancel}` ·
+`laboractivity_{list,detail,edit,delete}` + `laborsession_add_activity` ·
+`laborplan_{list,create,detail,edit,delete,generate,approve,archive}` · `laborplanline_edit` ·
+`labor_board` / `labor_board_assign` / `labor_board_unassign` · `labor_payroll_export` · `labor_scorecard`.
+
+`laborsession_add_activity` **nests** under its session (the parent supplies the child's session, which must
+never come from POST); `laborplanline_edit` hangs off its **own** pk (a child pk already identifies it, and
+nesting invites pairing a real child with someone else's parent).
+
+### Gating — 4.14 renders NAMED PEOPLE, so this is not the usual list
+
+House policy, checked against `apps/hrm`: a **workspace-wide roll-up over named people** is
+`@tenant_admin_required` (hrm's cost, leave-liability, executive, benchmarking reports); a **per-record** people
+page is `@login_required` (hrm's attendance record list). Therefore:
+
+- `laborsession_list` / `laboractivity_list` and the detail pages — `@login_required`. Correct: per-record.
+- **`labor_scorecard` — `@tenant_admin_required`.** It *ranks* colleagues with a coaching band; there is no
+  version scoped to one person that is still a ranking. Its four header chips are wrapped in the house gate.
+- **`labor_payroll_export` — `@login_required`, but the ROWS narrow.** It is a sidebar bullet and `resolve_nav`
+  has no per-link permission concept, so gating it would hand every member a bullet that 403s (L32). An admin
+  sees the workspace; everybody else sees **only themselves**, the page says so, and a member with **no linked
+  Party** gets a sentinel worker id — **not `None`**, which `_worker_aggregate` reads as "no filter" and would
+  hand them the whole floor. The worker **dropdown** is scoped too: narrowing the table while listing every
+  colleague in a `<select>` leaks the roster the narrowing exists to protect.
+- Tenant-admin verbs: the five deletes, `laborsession_approve`/`_reopen`/`_cancel`,
+  `laborstandard_activate`/`_archive`, `laborplan_generate`/`_approve`, and **both board verbs** (they write
+  another sub-module's table).
+
+### Templates  (`templates/scm/labor/`)
+
+`laborstandard/` `laborsession/` `laboractivity/` `laborplan/` `laborplanline/` (entity folders, bare
+`list/detail/form.html`) + three standalone report pages at the sub-module root: `labor_board.html`,
+`labor_payroll_export.html`, `labor_scorecard.html`. **Note the deliberate asymmetry**: the backend package is
+`LaborManagement/` (PascalCase NavERP title) while the template folder is `labor/` (short slug) — exactly what
+4.13 does as `models/AssetManagement/` ↔ `templates/scm/assets/`. Do not "fix" either into matching the other.
+
+### Seeder
+
+`_seed_labor_tenant(tenant)` runs after `_seed_asset_tenant`. Six standards (five active — one at a location, one
+by item category, three network-wide — plus one **draft**, so `select_standard()` demonstrably skips drafts),
+three sessions on three different workers (one **approved** and fully booked, one **closed** with a real
+**45-minute gap**, one **open** with `clock_out=None` so every "None while open" guard is exercised), ten
+activities (three indirect with reasons, two carrying `error_quantity`, one linked to a real `PickTask`, one to a
+real `CycleCountTask`, one deliberately unmeasured), and one 14-day plan generated to `planned` with 56 lines,
+one short and one over. It creates **no Party** and writes **no StockMove**.
+
+**It also required a change to 4.4's seeder**: `_seed_warehouse_tenant` walked all three of its tasks to terminal
+states *and* assigned them, so every "what needs doing" surface — 4.4's own lists and 4.14's board — rendered
+empty. It now also creates **one OPEN unassigned task of each kind**; 4.14 claims two of them and leaves the
+put-away unassigned, so both halves of the board populate from one set of rows.
+
+### Non-negotiables for 4.14
+
+1. **Every productivity figure answers `None`, never `0`, on a zero denominator.** An unmeasured job printed as
+   0% is a claim about a named person that the data does not support. Templates use `|default_if_none:"—"` for
+   numerics (`|default:` would swallow a genuine `0.00`).
+2. **A still-running activity contributes to NEITHER side of a ratio.** `clean()` permits `ended_at=None` with a
+   quantity, so its earned minutes are known while its duration is still 0 — counting it added to the numerator
+   and nothing to the denominator, and performance *climbed when work started and fell when it finished*. The
+   model (`_measured`, `_unit_totals`) and the scorecard's `GROUP BY` (`duration_minutes__gt=0` on all four
+   filters) must always agree; there is a test asserting they return the same number for the same data.
+3. **Snapshots are never rewritten.** Editing a `LaborStandard` cannot change a figure already filed. An
+   **indirect** activity is never measured *whatever it carries* — `has_standard` gates on
+   `INDIRECT_ACTIVITIES` at the model, so a direct row edited to `break` stops printing a performance %.
+4. **Bounds are constants and none is computed from the thing it bounds** (L40): `MAX_SESSION_MINUTES`,
+   `MAX_ACTIVITY_MINUTES` (explicitly *not* "the session's remaining minutes"), `MAX_ACTIVITIES_PER_SESSION`
+   (nothing in the model bounds this — overlaps are legal), `MAX_HORIZON_PERIODS` (integer arithmetic on the two
+   dates, **never** `len(range)`), `MAX_PLAN_LINES` (one `COUNT(*)` *before* any allocation), `MAX_BULK_ASSIGN`
+   (measured on `request.POST.getlist` before any query), `MAX_SNAPSHOT_MINUTES` (**`q4()` is not this bound** —
+   it clamps to (14,4) while the column is (12,4)).
+5. **The bulk-assign path is bulk on purpose.** `write_audit_log` stores `str(obj)`, and `PutawayTask.__str__`
+   walks two FKs while `CycleCountTask.__str__` walks one — per-row it measured 3–5 queries **per row** inside a
+   held `FOR UPDATE`. It now does one lock-free `select_related` fetch for the display strings, one
+   `bulk_update` and one `bulk_create`. **Do not add `select_related` to the locking query** — on MariaDB
+   `FOR UPDATE` with joins locks the joined `Item`/`Location` rows too. And `bulk_update` does **not** fire
+   `auto_now`, so `updated_at` is stamped explicitly.
+6. **`?gap=` taught the filter rule (L44).** Annotating a `Sum` adds a `GROUP BY`; comparing a **non-aggregate**
+   against it pushes the column into `HAVING`, which MariaDB rejects (MySQL 8 would not). `_ATTENDED_SPAN` is
+   wrapped in `Max` for that reason. Test **every valid value** of a closed vocabulary, not just junk — a
+   negative-input sweep proves the guard and says nothing about the feature.
+
+### Common tasks (4.14)
+
+- **Add a field to a standard** → model, `Meta.fields` whitelist (never `exclude`), the form's field groups AND
+  the count in `laborstandard/form.html`'s note, then `makemigrations scm`.
+- **Add a derived figure to a shift** → a method on `LaborSession` taking `activities=None`, passed the
+  pre-fetched list by `laborsession_detail`; add the SQL twin to `_worker_aggregate` **and** a test that the two
+  agree.
+- **Add an activity type** → `_DIRECT_ACTIVITY_CHOICES` or `_INDIRECT_ACTIVITY_CHOICES` in `_choices.py` only;
+  `ACTIVITY_CHOICES`, both frozensets and `ACTIVITY_CSS` are all derived from those two lists, so the partition
+  stays total by construction.
+- **Add a volume source to the plan** → `VOLUME_SOURCE_CHOICES`, a branch in `_daily_series`, and decide whether
+  it is flow-constant (`_FLOW_CONSTANT_METHODS`) before caching it — `same_period_last_year` is per-bucket and
+  caching it would flatten a seasonal plan.
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -1243,4 +1404,18 @@ sidebar mirrors that file exactly; the reading log is reached from the asset's m
 `scm:meterreading_list`, and the three children are panels on their parent's detail page (the
 `WorkCenter`/`ReorderRule`/`ReturnReason`/`InspectionPlan` precedent). The PM forecast board
 (`scm:pm_forecast`) is likewise a chip in the Preventive Maintenance list header, not a sixth key.
+**`LIVE_LINKS["4.14"]`** → Labor Planning `scm:laborplan_list`, Time & Attendance
+**`scm:laborsession_list`** (the warehouse SHIFT, *not* an attendance table — HRM owns
+`hrm.AttendanceRecord` and `apps/scm` holds zero `hrm.*` references), Task Assignment
+**`scm:labor_board`** (a COMPUTED console over 4.4's EXISTING `assigned_to` — 4.14 declares no task
+table and adds no assignee column; migration `0024` has no `AddField` at all), Performance Tracking
+**`scm:laborstandard_list`** (the standards library, because units-per-hour with nothing to compare
+against is trivia — the scorecard hangs off a header chip, the `pm_forecast` precedent), Payroll
+Integration **`scm:labor_payroll_export`** (a read-only CSV hand-off that writes nothing;
+`accounting.PayrollRun` is a whole-company accrual with no employee lines, so drafting one would be
+*wrong* rather than redundant). **No sidebar key for `LaborActivity` or `LaborPlanLine`** — five
+NavERP.md bullets, five keys. Note `scm:labor_scorecard` is `@tenant_admin_required` while the
+payroll export is NOT: the export is a sidebar destination and `resolve_nav` has no per-link
+permission concept, so it stays reachable and narrows its rows to the acting worker instead (L32).
+
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
