@@ -422,3 +422,47 @@ from .LaborManagement.Reports import (  # noqa: F401
     labor_board, labor_board_assign, labor_board_unassign,
     labor_payroll_export, labor_scorecard,
 )
+
+# --- 4.15 Cold Chain Management ---------------------------------------------------------------
+# `ColdChainMonitors` FIRST, because it is this sub-package's root entity module and the other three
+# import from it (`_monitor_qs`, `_latest_reading_pk`, `MAX_PANEL_ROWS` and the shared prose
+# constants). That keeps the dependency edge running one way — the 4.13 `AssetManagement/Assets.py`
+# precedent exactly.
+#
+# The verbs are listed one per concept rather than folded into the CRUD line: `TemperatureExcursion`
+# has `status = editable=False`, so the ladder is the ONLY thing that can move it, and a verb that
+# quietly stopped being exported would take its button's route down with it — as an AttributeError at
+# startup, since the URLconf resolves these as `views.<name>`.
+#
+# **`temperaturereading_edit` and `temperaturereading_delete` are absent BY DESIGN, not by
+# oversight.** The reading ledger is append-only (the `scm.StockMove` / `scm.MeterReading` posture):
+# a wrong reading is corrected by filing a later, correct one. There is no such view, no such form,
+# no such template and no such route anywhere in the sub-module. Do not "complete the CRUD" here.
+from .ColdChainManagement.ColdChainMonitors import (  # noqa: F401
+    coldchainmonitor_list, coldchainmonitor_create, coldchainmonitor_detail,
+    coldchainmonitor_edit, coldchainmonitor_delete,
+    coldchainmonitor_profile, coldchainmonitor_detect, coldchain_detect,
+)
+# `coldchainmonitor_add_reading` and `coldchainmonitor_import_readings` live in the READING module,
+# not the monitor one, even though they are named for their parent: both create a
+# TemperatureReading and the monitor only supplies the route. Keeping them beside the thing they
+# create is what stops a future reader looking in ColdChainMonitors.py and concluding the child has
+# no create path (the 4.14 `laborsession_add_activity` precedent).
+from .ColdChainManagement.TemperatureReadings import (  # noqa: F401
+    temperaturereading_list, temperaturereading_detail,
+    coldchainmonitor_add_reading, coldchainmonitor_import_readings,
+)
+from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
+    temperatureexcursion_list, temperatureexcursion_create, temperatureexcursion_detail,
+    temperatureexcursion_edit, temperatureexcursion_delete,
+    temperatureexcursion_acknowledge, temperatureexcursion_assess,
+    temperatureexcursion_close, temperatureexcursion_dismiss,
+    temperatureexcursion_raise_work_order,
+)
+# THREE COMPUTED PAGES over tables that already exist — 4.15 declares no model for any of them.
+# The cold-storage page reads 4.3's StockMove/Item/Location/LotSerial and 4.9's lot status; the
+# compliance report reads 4.15's own excursions plus the derived profile; the reefer board reads
+# 4.13's MaintenancePlan / MaintenanceWorkOrder / MeterReading. All three write NOTHING.
+from .ColdChainManagement.Reports import (  # noqa: F401
+    cold_storage_report, cold_chain_compliance_report, reefer_board,
+)
