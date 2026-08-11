@@ -10759,3 +10759,1147 @@ class TestAssetManagementNothingIsStored:
             related = {f.related_model.__name__ for f in model._meta.get_fields()
                        if getattr(f, "related_model", None) is not None}
             assert "JournalEntry" not in related, model.__name__
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.14 date/time basis for the model tests. timezone.localdate() / timezone.now(), NEVER
+# datetime.date.today() and never a literal (L16): LaborSession.clean() pins ``work_date`` to the
+# LOCAL date of ``clock_in`` and LaborActivity.clean() refuses an interval outside its shift's clock
+# window, so a literal date rots and a date.today() basis disagrees with the model after local
+# midnight.
+# ------------------------------------------------------------------------------------------------
+def _labor_model_day(days=0):
+    """Today (or days from it) on the basis every 4.14 date reader uses."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+def _labor_model_moment(hours_ago=0, minutes_ago=0):
+    """An aware datetime that far in the past, truncated to the minute."""
+    from django.utils import timezone
+    return (timezone.now() - datetime.timedelta(hours=hours_ago, minutes=minutes_ago)
+            ).replace(second=0, microsecond=0)
+
+
+def _labor_model_workday(moment):
+    """The LOCAL date a shift starting at ``moment`` belongs to — ``LaborSession.clean()`` rule (c).
+
+    Derived rather than typed so a fixture built either side of local midnight still satisfies the
+    pin, which is the whole reason the rule is worth testing at all.
+    """
+    from django.utils import timezone
+    return timezone.localdate(moment)
+
+
+def _book(session, minutes_after, minutes, **overrides):
+    """Book one activity ``minutes_after`` minutes into ``session``, for ``minutes``.
+
+    ``minutes=None`` leaves ``ended_at`` null — a STILL-RUNNING interval, which is ordinary use and
+    not a corrupt row: ``LaborActivity.clean()`` requires a direct row to carry a quantity but
+    deliberately permits an open end.
+    """
+    from apps.scm.models import LaborActivity
+    started = session.clock_in + datetime.timedelta(minutes=minutes_after)
+    data = {
+        "tenant": session.tenant, "session": session, "activity_type": "pick",
+        "started_at": started,
+        "ended_at": None if minutes is None else started + datetime.timedelta(minutes=minutes),
+        "quantity": Decimal("100"),
+    }
+    data.update(overrides)
+    return LaborActivity.objects.create(**data)
+
+
+def _measured(session, minutes_after, minutes, quantity="100", **overrides):
+    """``_book`` with the three input snapshots ``_stamp_standard`` would have written."""
+    return _book(session, minutes_after, minutes, quantity=Decimal(quantity),
+                 standard_fixed_snapshot=Decimal("3.0000"),
+                 standard_rate_snapshot=Decimal("0.5000"),
+                 standard_allowance_snapshot=Decimal("10.00"), **overrides)
+
+
+# =================================================================================================
+# SCM 4.14 Labor Management — models.
+#
+# One standards library with a resolver, one shift, one booked interval, one planned workload grid.
+# The classes marked REGRESSION LOCK each pin a defect this pass found and fixed; every one of them
+# fails against the pre-fix behaviour, which is the whole point of writing them.
+# =================================================================================================
+
+# ================================================================ 4.14 · numbering and __str__
+class TestLaborAutoNumbering:
+    def test_every_4_14_prefix_is_the_one_its_model_declares(self, labor_standard_a,
+                                                             labor_session_a, labor_activity_a,
+                                                             labor_plan_a):
+        assert labor_standard_a.number == "LST-00001"
+        assert labor_session_a.number == "LSN-00001"
+        assert labor_activity_a.number == "LAB-00001"
+        assert labor_plan_a.number == "LPL-00001"
+
+    def test_each_sequence_restarts_per_tenant(self, labor_standard_a, labor_standard_b):
+        assert labor_standard_a.number == labor_standard_b.number == "LST-00001"
+        assert labor_standard_a.tenant_id != labor_standard_b.tenant_id
+
+    def test_the_standard_number_is_unique_within_a_tenant(self, tenant_a, labor_standard_a):
+        from apps.scm.models import LaborStandard
+        with pytest.raises(IntegrityError):
+            LaborStandard.objects.create(
+                tenant=tenant_a, name="Dup", activity="pick", number=labor_standard_a.number,
+                minutes_per_unit=Decimal("1"), effective_from=_labor_model_day())
+
+    def test_the_plan_line_is_unique_per_bucket_per_activity(self, labor_plan_line_a):
+        from apps.scm.models import LaborPlanLine
+        with pytest.raises(IntegrityError):
+            LaborPlanLine.objects.create(plan=labor_plan_line_a.plan,
+                                         period_start=labor_plan_line_a.period_start,
+                                         activity=labor_plan_line_a.activity)
+
+    def test_every_str_names_the_row_it_describes(self, labor_standard_a, labor_session_a,
+                                                  labor_activity_a, labor_plan_a,
+                                                  labor_plan_line_a):
+        assert str(labor_standard_a).startswith("LST-00001")
+        assert "Case picking" in str(labor_standard_a)
+        assert str(labor_session_a).startswith("LSN-00001")
+        assert labor_session_a.worker.name in str(labor_session_a)
+        assert str(labor_activity_a).startswith("LAB-00001")
+        assert "60m" in str(labor_activity_a)
+        assert str(labor_plan_a) == f"LPL-00001 · {labor_plan_a.name}"
+        assert "Picking" in str(labor_plan_line_a)
+
+
+# ================================================================ 4.14 · the standard's arithmetic
+class TestLaborStandardArithmetic:
+    def test_minutes_for_is_setup_plus_travel_plus_variable_times_the_allowance(self,
+                                                                                labor_standard_a):
+        # (2 + 1 + 100 x 0.5) x 1.10
+        assert labor_standard_a.minutes_for(Decimal("100")) == Decimal("58.3000")
+
+    def test_a_zero_quantity_still_charges_the_fixed_time(self, labor_standard_a):
+        assert labor_standard_a.minutes_for(Decimal("0")) == Decimal("3.3000")
+
+    def test_cost_for_is_minutes_at_the_charge_out_rate(self, labor_standard_a):
+        # 58.3 minutes = 0.9716..h at 24.0000 per hour
+        assert labor_standard_a.cost_for(Decimal("100")) == Decimal("23.3200")
+
+    def test_an_unpriced_standard_costs_zero_rather_than_inventing_a_rate(self, tenant_a):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard.objects.create(
+            tenant=tenant_a, name="Unpriced", activity="pack", minutes_per_unit=Decimal("1"),
+            effective_from=_labor_model_day(-1))
+        assert standard.cost_for(Decimal("10")) == Decimal("0.0000")
+
+    def test_minutes_for_clamps_rather_than_raising_on_a_hostile_quantity(self, labor_standard_a):
+        from apps.scm.models import MAX_Q4
+        value = labor_standard_a.minutes_for(MAX_Q4)
+        assert value.is_finite() and value <= MAX_Q4
+
+    @pytest.mark.parametrize("days,expected", [(-1, True), (0, True), (1, False)])
+    def test_is_effective_on_reads_the_window_and_says_nothing_about_status(self, tenant_a, days,
+                                                                           expected):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard.objects.create(
+            tenant=tenant_a, name="Windowed", activity="pack", minutes_per_unit=Decimal("1"),
+            status="archived", effective_from=_labor_model_day(-5),
+            effective_to=_labor_model_day(0))
+        assert standard.is_effective_on(_labor_model_day(days)) is expected
+
+    def test_is_editable_and_status_css_read_the_model_tables(self, labor_standard_a,
+                                                              draft_standard_a):
+        assert labor_standard_a.is_editable is True
+        assert draft_standard_a.is_editable is True
+        labor_standard_a.status = "archived"
+        assert labor_standard_a.is_editable is False
+        assert labor_standard_a.status_css == "badge-slate"
+        assert draft_standard_a.status_css == "badge-muted"
+
+
+# ================================================================ 4.14 · the standard's refusals
+class TestLaborStandardValidation:
+    def test_a_reversed_window_is_refused(self, tenant_a):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Backwards", activity="pack",
+                                 minutes_per_unit=Decimal("1"),
+                                 effective_from=_labor_model_day(5),
+                                 effective_to=_labor_model_day(1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "effective_to" in exc.value.error_dict
+
+    def test_a_zero_standard_is_refused_at_the_door(self, tenant_a):
+        """Earned minutes would be zero for any quantity, so every worker measured against it reads
+        as 0% forever."""
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Nothing", activity="pack",
+                                 effective_from=_labor_model_day(-1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "minutes_per_unit" in exc.value.error_dict
+
+    def test_a_per_task_standard_refuses_a_per_unit_figure(self, tenant_a):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Fixed", activity="pack", basis="per_task",
+                                 setup_minutes=Decimal("12"), minutes_per_unit=Decimal("1"),
+                                 effective_from=_labor_model_day(-1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "minutes_per_unit" in exc.value.error_dict
+
+    def test_a_per_task_standard_needs_its_setup_minutes(self, tenant_a):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Fixed", activity="pack", basis="per_task",
+                                 travel_minutes=Decimal("4"),
+                                 effective_from=_labor_model_day(-1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "setup_minutes" in exc.value.error_dict
+
+    def test_every_other_basis_needs_a_per_unit_time(self, tenant_a):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Flat", activity="pack", basis="per_case",
+                                 setup_minutes=Decimal("9"),
+                                 effective_from=_labor_model_day(-1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "minutes_per_unit" in exc.value.error_dict
+
+    def test_an_effective_date_before_the_floor_year_is_refused(self, tenant_a):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Ancient", activity="pack",
+                                 minutes_per_unit=Decimal("1"),
+                                 effective_from=datetime.date(1000, 1, 1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "effective_from" in exc.value.error_dict
+
+    def test_two_live_standards_for_one_scope_on_one_day_are_refused(self, tenant_a,
+                                                                     labor_standard_a):
+        from apps.scm.models import LaborStandard
+        clash = LaborStandard(tenant=tenant_a, name="Second picking", activity="pick",
+                              minutes_per_unit=Decimal("0.4"),
+                              effective_from=_labor_model_day(-1))
+        with pytest.raises(ValidationError) as exc:
+            clash.clean()
+        assert "effective_from" in exc.value.error_dict
+        assert labor_standard_a.number in str(exc.value)
+
+    def test_an_archived_row_creates_no_overlap(self, tenant_a, labor_standard_a):
+        """The guard skips archived rows on BOTH sides — which is exactly why the activate verb has
+        to re-run it."""
+        from apps.scm.models import LaborStandard
+        labor_standard_a.status = "archived"
+        labor_standard_a.save(update_fields=["status"])
+        successor = LaborStandard(tenant=tenant_a, name="Retimed picking", activity="pick",
+                                  minutes_per_unit=Decimal("0.4"),
+                                  effective_from=_labor_model_day(-1))
+        successor.clean()   # no raise
+
+    def test_a_closed_off_predecessor_creates_no_overlap(self, tenant_a, labor_standard_a):
+        from apps.scm.models import LaborStandard
+        labor_standard_a.effective_to = _labor_model_day(-2)
+        labor_standard_a.save(update_fields=["effective_to"])
+        successor = LaborStandard(tenant=tenant_a, name="Retimed picking", activity="pick",
+                                  minutes_per_unit=Decimal("0.4"),
+                                  effective_from=_labor_model_day(-1))
+        successor.clean()   # no raise
+
+    def test_a_scope_pointer_from_another_workspace_is_refused(self, tenant_a, location_b):
+        from apps.scm.models import LaborStandard
+        standard = LaborStandard(tenant=tenant_a, name="Foreign scope", activity="pack",
+                                 minutes_per_unit=Decimal("1"), location=location_b,
+                                 effective_from=_labor_model_day(-1))
+        with pytest.raises(ValidationError) as exc:
+            standard.clean()
+        assert "location" in exc.value.error_dict
+
+
+# ============================================ 4.14 · REGRESSION LOCK — select_standard's precedence
+class TestSelectStandardPrecedence:
+    """Most specific wins: location+category -> category -> location -> network-wide.
+
+    Every rung matches standards scoped to EXACTLY that shape, so a standard measured at warehouse B
+    can never be selected for work done at warehouse A. ``None`` when nothing matches — never a zero
+    standard, because zero earned minutes says the worker achieved nothing while ``None`` says
+    nobody has measured this work.
+    """
+
+    @staticmethod
+    def _standard(tenant, name, location=None, category=None, days_ago=10, status="active"):
+        from apps.scm.models import LaborStandard
+        return LaborStandard.objects.create(
+            tenant=tenant, name=name, activity="pick", minutes_per_unit=Decimal("1"),
+            location=location, item_category=category, status=status,
+            effective_from=_labor_model_day(-days_ago))
+
+    def test_location_and_category_beats_every_other_rung(self, tenant_a, location_a, category_a,
+                                                          labor_standard_a):
+        from apps.scm.models import select_standard
+        self._standard(tenant_a, "category only", category=category_a)
+        self._standard(tenant_a, "location only", location=location_a)
+        both = self._standard(tenant_a, "both", location=location_a, category=category_a)
+        assert select_standard(tenant_a, "pick", location=location_a,
+                               item_category=category_a) == both
+
+    def test_category_beats_location_and_network(self, tenant_a, location_a, category_a,
+                                                 labor_standard_a):
+        from apps.scm.models import select_standard
+        category = self._standard(tenant_a, "category only", category=category_a)
+        self._standard(tenant_a, "location only", location=location_a)
+        assert select_standard(tenant_a, "pick", location=location_a,
+                               item_category=category_a) == category
+
+    def test_location_beats_the_network_default(self, tenant_a, location_a, labor_standard_a):
+        from apps.scm.models import select_standard
+        site = self._standard(tenant_a, "location only", location=location_a)
+        assert select_standard(tenant_a, "pick", location=location_a) == site
+
+    def test_the_network_default_is_the_last_rung(self, tenant_a, location_a, labor_standard_a):
+        from apps.scm.models import select_standard
+        assert select_standard(tenant_a, "pick", location=location_a) == labor_standard_a
+
+    def test_another_sites_standard_is_never_selected(self, tenant_a, location_a, location_a2):
+        """The category rung requires ``location`` to be blank ON THE STANDARD — matching on
+        category alone would quietly apply warehouse 2's times to warehouse 1's work."""
+        from apps.scm.models import select_standard
+        self._standard(tenant_a, "other site", location=location_a2)
+        assert select_standard(tenant_a, "pick", location=location_a) is None
+
+    def test_a_tie_is_broken_by_the_LATEST_effective_from(self, tenant_a):
+        from apps.scm.models import select_standard
+        self._standard(tenant_a, "older", days_ago=30)
+        newer = self._standard(tenant_a, "newer", days_ago=2)
+        assert select_standard(tenant_a, "pick") == newer
+
+    def test_a_draft_is_never_selected(self, tenant_a):
+        from apps.scm.models import select_standard
+        self._standard(tenant_a, "draft", status="draft")
+        assert select_standard(tenant_a, "pick") is None
+
+    def test_an_archived_row_is_never_selected(self, tenant_a):
+        from apps.scm.models import select_standard
+        self._standard(tenant_a, "archived", status="archived")
+        assert select_standard(tenant_a, "pick") is None
+
+    def test_a_standard_outside_its_window_is_never_selected(self, tenant_a):
+        from apps.scm.models import LaborStandard, select_standard
+        LaborStandard.objects.create(
+            tenant=tenant_a, name="lapsed", activity="pick", minutes_per_unit=Decimal("1"),
+            status="active", effective_from=_labor_model_day(-30),
+            effective_to=_labor_model_day(-2))
+        assert select_standard(tenant_a, "pick") is None
+        assert select_standard(tenant_a, "pick", on_date=_labor_model_day(-5)) is not None
+
+    def test_nothing_matching_answers_None_and_never_a_zero_standard(self, tenant_a,
+                                                                     labor_standard_a):
+        from apps.scm.models import select_standard
+        assert select_standard(tenant_a, "cycle_count") is None
+        assert select_standard(None, "pick") is None
+        assert select_standard(tenant_a, "") is None
+
+    def test_it_accepts_a_pk_as_readily_as_an_instance(self, tenant_a, location_a):
+        """A resolver that silently returned the network default because it was handed an int is the
+        worst kind of wrong."""
+        from apps.scm.models import select_standard
+        site = self._standard(tenant_a, "location only", location=location_a)
+        assert select_standard(tenant_a, "pick", location=location_a.pk) == site
+        assert select_standard(tenant_a, "pick", location=location_a) == site
+
+    def test_it_never_crosses_a_workspace(self, tenant_a, labor_standard_b):
+        from apps.scm.models import select_standard
+        assert select_standard(tenant_a, "pick") is None
+
+
+# ================================================================ 4.14 · the shift's derived figures
+class TestLaborSessionDerivedFigures:
+    def test_attended_minutes_is_None_while_the_shift_is_still_running(self, labor_session_a):
+        assert labor_session_a.clock_out is None
+        assert labor_session_a.attended_minutes is None
+
+    def test_attended_minutes_is_the_clock_span_once_it_is_closed(self, labor_session_a):
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=3)
+        assert labor_session_a.attended_minutes == 180
+
+    def test_the_minutes_waterfall_splits_direct_from_indirect(self, labor_session_a,
+                                                               labor_activity_a):
+        _book(labor_session_a, 70, 20, activity_type="break", quantity=Decimal("0"),
+              indirect_reason="scheduled_break")
+        assert labor_session_a.booked_minutes() == 80
+        assert labor_session_a.direct_minutes() == 60
+        assert labor_session_a.indirect_minutes() == 20
+
+    def test_gap_and_over_booking_are_two_named_figures_not_one_signed_one(self, labor_session_a,
+                                                                          labor_activity_a):
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=2)
+        labor_session_a.save(update_fields=["clock_out"])
+        assert labor_session_a.unaccounted_minutes() == 60
+        assert labor_session_a.over_booked_minutes() == 0
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(minutes=30)
+        assert labor_session_a.unaccounted_minutes() == 0
+        assert labor_session_a.over_booked_minutes() == 30
+
+    def test_both_gap_figures_are_None_while_the_shift_runs(self, labor_session_a,
+                                                            labor_activity_a):
+        assert labor_session_a.unaccounted_minutes() is None
+        assert labor_session_a.over_booked_minutes() is None
+
+    def test_performance_is_earned_over_MEASURED_direct_minutes(self, labor_session_a,
+                                                                labor_activity_a):
+        assert labor_session_a.earned_minutes() == Decimal("58.3000")
+        assert labor_session_a.performance_pct() == Decimal("97.17")
+
+    def test_an_UNMEASURED_activity_leaves_both_sides_of_the_ratio_alone(self, labor_session_a,
+                                                                         labor_activity_a):
+        """Leaving unmeasured minutes in the denominator scores un-time-studied work as zero."""
+        _book(labor_session_a, 70, 60)          # no snapshots at all
+        assert labor_session_a.performance_pct() == Decimal("97.17")
+
+    def test_a_shift_nobody_measured_answers_None_rather_than_zero(self, labor_session_a):
+        _book(labor_session_a, 0, 30)
+        assert labor_session_a.earned_minutes() is None
+        assert labor_session_a.performance_pct() is None
+
+    def test_utilisation_is_booked_over_attended_and_None_while_open(self, labor_session_a,
+                                                                     labor_activity_a):
+        assert labor_session_a.utilisation_pct() is None
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=2)
+        assert labor_session_a.utilisation_pct() == Decimal("50.00")
+
+    def test_units_per_hour_divides_by_DIRECT_minutes(self, labor_session_a, labor_activity_a):
+        assert labor_session_a.units_per_hour() == Decimal("100.00")
+
+    def test_accuracy_is_derived_from_the_one_recorded_error_count(self, labor_session_a,
+                                                                   labor_activity_a):
+        assert labor_session_a.accuracy_pct() == Decimal("98.00")
+
+    def test_a_shift_of_pure_indirect_time_has_no_rate_and_no_accuracy(self, labor_session_a):
+        _book(labor_session_a, 0, 30, activity_type="training", quantity=Decimal("0"),
+              indirect_reason="training")
+        assert labor_session_a.units_per_hour() is None
+        assert labor_session_a.accuracy_pct() is None
+
+    def test_status_css_comes_from_the_one_dict_that_decides_it(self, labor_session_a):
+        assert labor_session_a.status_css == "badge-info"
+        labor_session_a.status = "approved"
+        assert labor_session_a.status_css == "badge-green"
+
+
+# ============================== 4.14 · REGRESSION LOCK — a running activity moves NEITHER side
+class TestRunningActivityIsCountedWhenItLands:
+    """``ended_at=None`` with ``quantity > 0`` is LEGAL — ``clean()`` requires a direct row to carry
+    a quantity but deliberately permits an open end.
+
+    Its ``earned_minutes`` is already known (the snapshots times the quantity so far) while its
+    ``duration_minutes`` is still 0, so counting it adds to the NUMERATOR and nothing to the
+    DENOMINATOR: performance climbs the moment work STARTS and drops when it FINISHES, which is
+    precisely backwards. The rule, stated once: a shift's measured figures describe COMPLETED work.
+    """
+
+    def test_performance_is_unchanged_by_a_still_running_measured_activity(self, labor_session_a,
+                                                                           labor_activity_a):
+        before = labor_session_a.performance_pct()
+        assert before == Decimal("97.17")
+        running = _measured(labor_session_a, 70, None, quantity="40")
+        assert running.ended_at is None and running.duration_minutes == 0
+        assert running.earned_minutes is not None       # it IS measured, it just has not landed
+        assert labor_session_a.performance_pct() == before
+
+    def test_earned_minutes_is_unchanged_by_a_still_running_measured_activity(self,
+                                                                              labor_session_a,
+                                                                              labor_activity_a):
+        before = labor_session_a.earned_minutes()
+        _measured(labor_session_a, 70, None, quantity="40")
+        assert labor_session_a.earned_minutes() == before
+
+    def test_units_per_hour_is_unchanged_by_a_still_running_activity(self, labor_session_a,
+                                                                     labor_activity_a):
+        before = labor_session_a.units_per_hour()
+        assert before == Decimal("100.00")
+        _book(labor_session_a, 70, None, quantity=Decimal("500"))
+        assert labor_session_a.units_per_hour() == before
+
+    def test_accuracy_describes_the_same_row_set_as_the_rate_figures(self, labor_session_a,
+                                                                     labor_activity_a):
+        before = labor_session_a.accuracy_pct()
+        _book(labor_session_a, 70, None, quantity=Decimal("500"),
+              error_quantity=Decimal("500"))
+        assert labor_session_a.accuracy_pct() == before
+
+    def test_the_GROUP_BY_twin_in_Reports_agrees_with_the_model(self, tenant_a, labor_session_a,
+                                                               labor_activity_a):
+        """``_worker_aggregate`` is ``LaborSession``'s SQL twin, and the two disagreed: the model
+        skipped the running row and the aggregate summed its earned minutes anyway, so the same
+        worker on the same day read one figure on the shift page and another on the scorecard."""
+        from apps.scm.views.LaborManagement.Reports import _pct, _worker_aggregate
+        _measured(labor_session_a, 70, None, quantity="40")
+        totals = _worker_aggregate(
+            tenant_a, statuses=("open", "closed", "approved"),
+            date_from=labor_session_a.work_date, date_to=labor_session_a.work_date)
+        entry = totals[labor_session_a.worker_id]
+        assert _pct(entry["earned_minutes"], entry["measured_direct_minutes"]) == \
+            labor_session_a.performance_pct()
+
+    def test_the_twin_agrees_about_units_too(self, tenant_a, labor_session_a, labor_activity_a):
+        from apps.scm.views.LaborManagement.Reports import _worker_aggregate
+        _book(labor_session_a, 70, None, quantity=Decimal("500"))
+        totals = _worker_aggregate(
+            tenant_a, statuses=("open", "closed", "approved"),
+            date_from=labor_session_a.work_date, date_to=labor_session_a.work_date)
+        assert totals[labor_session_a.worker_id]["units"] == Decimal("100")
+
+
+# ================================================================ 4.14 · the shift's refusals
+class TestLaborSessionValidation:
+    def test_a_shift_that_ends_before_it_starts_is_refused(self, tenant_a, employee_party_a,
+                                                           location_a):
+        from apps.scm.models import LaborSession
+        started = _labor_model_moment(hours_ago=2)
+        session = LaborSession(tenant=tenant_a, worker=employee_party_a, location=location_a,
+                               work_date=_labor_model_workday(started), clock_in=started,
+                               clock_out=started - datetime.timedelta(hours=1))
+        with pytest.raises(ValidationError) as exc:
+            session.clean()
+        assert "clock_out" in exc.value.error_dict
+
+    def test_a_shift_longer_than_the_cap_is_refused(self, tenant_a, employee_party_a, location_a):
+        from apps.scm.models import LaborSession, MAX_SESSION_MINUTES
+        started = _labor_model_moment(hours_ago=100)
+        session = LaborSession(
+            tenant=tenant_a, worker=employee_party_a, location=location_a,
+            work_date=_labor_model_workday(started), clock_in=started,
+            clock_out=started + datetime.timedelta(minutes=MAX_SESSION_MINUTES + 60))
+        with pytest.raises(ValidationError) as exc:
+            session.clean()
+        assert "clock_out" in exc.value.error_dict
+
+    def test_the_work_date_is_pinned_to_the_local_day_the_shift_started(self, tenant_a,
+                                                                        employee_party_a,
+                                                                        location_a):
+        from apps.scm.models import LaborSession
+        started = _labor_model_moment(hours_ago=1)
+        session = LaborSession(tenant=tenant_a, worker=employee_party_a, location=location_a,
+                               work_date=_labor_model_workday(started) - datetime.timedelta(days=3),
+                               clock_in=started)
+        with pytest.raises(ValidationError) as exc:
+            session.clean()
+        assert "work_date" in exc.value.error_dict
+
+    def test_a_second_open_session_for_one_worker_is_refused(self, tenant_a, labor_session_a,
+                                                             location_a):
+        from apps.scm.models import LaborSession
+        started = _labor_model_moment(hours_ago=10)
+        second = LaborSession(tenant=tenant_a, worker=labor_session_a.worker, location=location_a,
+                              work_date=_labor_model_workday(started), clock_in=started)
+        with pytest.raises(ValidationError) as exc:
+            second.clean()
+        assert set(exc.value.error_dict) & {"worker", "clock_in"}
+
+    def test_two_sessions_may_not_occupy_the_same_instant_for_one_worker(self, tenant_a,
+                                                                          labor_session_a,
+                                                                          location_a):
+        """Double-counted minutes are double-counted payroll hours, and the export cannot detect
+        it — it sums per worker per period and simply reports a longer day."""
+        from apps.scm.models import LaborSession
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=2)
+        labor_session_a.status = "closed"
+        labor_session_a.save(update_fields=["clock_out", "status"])
+        overlapping = LaborSession(
+            tenant=tenant_a, worker=labor_session_a.worker, location=location_a,
+            work_date=labor_session_a.work_date,
+            clock_in=labor_session_a.clock_in + datetime.timedelta(hours=1),
+            clock_out=labor_session_a.clock_in + datetime.timedelta(hours=3))
+        with pytest.raises(ValidationError) as exc:
+            overlapping.clean()
+        assert "clock_in" in exc.value.error_dict
+
+    def test_a_handover_at_the_same_instant_is_NOT_an_overlap(self, tenant_a, labor_session_a,
+                                                              location_a):
+        from apps.scm.models import LaborSession
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=2)
+        labor_session_a.status = "closed"
+        labor_session_a.save(update_fields=["clock_out", "status"])
+        handover = LaborSession(
+            tenant=tenant_a, worker=labor_session_a.worker, location=location_a,
+            work_date=_labor_model_workday(labor_session_a.clock_out),
+            clock_in=labor_session_a.clock_out,
+            clock_out=labor_session_a.clock_out + datetime.timedelta(hours=1))
+        handover.clean()   # no raise
+
+    def test_a_cancelled_shift_occupies_no_time(self, tenant_a, labor_session_a, location_a):
+        from apps.scm.models import LaborSession
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=2)
+        labor_session_a.status = "cancelled"
+        labor_session_a.save(update_fields=["clock_out", "status"])
+        replacement = LaborSession(
+            tenant=tenant_a, worker=labor_session_a.worker, location=location_a,
+            work_date=labor_session_a.work_date, clock_in=labor_session_a.clock_in,
+            clock_out=labor_session_a.clock_out)
+        replacement.clean()   # no raise
+
+    def test_a_worker_without_the_employee_role_is_refused(self, tenant_a, location_a):
+        from apps.core.models import Party
+        from apps.scm.models import LaborSession
+        customer = Party.objects.create(tenant=tenant_a, name="Not an employee", kind="person")
+        started = _labor_model_moment(hours_ago=1)
+        session = LaborSession(tenant=tenant_a, worker=customer, location=location_a,
+                               work_date=_labor_model_workday(started), clock_in=started)
+        with pytest.raises(ValidationError) as exc:
+            session.clean()
+        assert "worker" in exc.value.error_dict
+
+    def test_a_worker_from_another_workspace_is_refused(self, tenant_a, location_a,
+                                                        employee_party_b):
+        from apps.scm.models import LaborSession
+        started = _labor_model_moment(hours_ago=1)
+        session = LaborSession(tenant=tenant_a, worker=employee_party_b, location=location_a,
+                               work_date=_labor_model_workday(started), clock_in=started)
+        with pytest.raises(ValidationError) as exc:
+            session.clean()
+        assert "worker" in exc.value.error_dict
+
+
+# ================================================================ 4.14 · the booked interval
+class TestLaborActivityModel:
+    def test_duration_minutes_is_derived_in_save_and_never_typed(self, labor_session_a):
+        activity = _book(labor_session_a, 0, 45)
+        assert activity.duration_minutes == 45
+        activity.ended_at = activity.started_at + datetime.timedelta(minutes=90)
+        activity.save(update_fields=["ended_at"])
+        activity.refresh_from_db()
+        assert activity.duration_minutes == 90, "a derived field must ride along with its inputs"
+
+    def test_a_running_interval_derives_zero_minutes(self, labor_session_a):
+        assert _book(labor_session_a, 0, None).duration_minutes == 0
+
+    def test_is_direct_and_is_indirect_partition_the_vocabulary(self):
+        from apps.scm.models import ACTIVITY_CHOICES, DIRECT_ACTIVITIES, INDIRECT_ACTIVITIES
+        values = {value for value, _label in ACTIVITY_CHOICES}
+        assert DIRECT_ACTIVITIES | INDIRECT_ACTIVITIES == values
+        assert not (DIRECT_ACTIVITIES & INDIRECT_ACTIVITIES)
+
+    def test_activity_css_only_ever_names_a_class_theme_css_carries(self):
+        from apps.scm.models import ACTIVITY_CHOICES, ACTIVITY_CSS
+        assert set(ACTIVITY_CSS) == {value for value, _label in ACTIVITY_CHOICES}
+        assert set(ACTIVITY_CSS.values()) <= {"badge-green", "badge-red", "badge-amber",
+                                              "badge-info", "badge-muted", "badge-slate"}
+
+    def test_the_row_level_ratios_are_None_on_a_zero_denominator(self, labor_session_a):
+        running = _book(labor_session_a, 0, None)
+        assert running.performance_pct() is None
+        assert running.units_per_hour() is None
+        indirect = _book(labor_session_a, 70, 10, activity_type="break",
+                         quantity=Decimal("0"), indirect_reason="scheduled_break")
+        assert indirect.accuracy_pct() is None
+
+    def test_earned_minutes_is_recomputed_from_the_snapshots_and_the_CURRENT_quantity(
+            self, labor_activity_a):
+        assert labor_activity_a.earned_minutes == Decimal("58.3000")
+        labor_activity_a.quantity = Decimal("200")
+        labor_activity_a.save(update_fields=["quantity"])
+        labor_activity_a.refresh_from_db()
+        assert labor_activity_a.earned_minutes == Decimal("113.3000")
+
+    def test_has_standard_asks_the_SNAPSHOTS_and_never_the_pointer(self, labor_activity_a,
+                                                                   labor_standard_a):
+        """The FK is SET_NULL, so tidying the library must not evaporate every measurement it ever
+        produced."""
+        labor_standard_a.delete()
+        labor_activity_a.refresh_from_db()
+        assert labor_activity_a.standard_id is None
+        assert labor_activity_a.has_standard is True
+        assert labor_activity_a.earned_minutes == Decimal("58.3000")
+
+
+# ================================ 4.14 · REGRESSION LOCK — an INDIRECT row is never measured
+class TestIndirectWorkIsNeverMeasured:
+    """The create path gates ``_stamp_standard`` on ``is_direct``, but that is a gate on how
+    snapshots get WRITTEN. Editing a direct activity's type to ``break`` keeps the determinants
+    stamped when it was a pick — and without the rule on ``has_standard`` such a row reads as
+    measured and prints a ``performance_pct()`` on its own detail page: a worker credited with
+    achievement for being on a break.
+    """
+
+    @staticmethod
+    def _turn_into(activity, activity_type, reason):
+        activity.activity_type = activity_type
+        activity.indirect_reason = reason
+        activity.quantity = Decimal("0")
+        activity.error_quantity = Decimal("0")
+        activity.save()
+        activity.refresh_from_db()
+        return activity
+
+    def test_a_pick_edited_into_a_break_stops_being_measured(self, labor_activity_a):
+        activity = self._turn_into(labor_activity_a, "break", "scheduled_break")
+        assert activity.has_standard is False
+        assert activity.earned_minutes is None
+        assert activity.performance_pct() is None
+
+    def test_the_derived_snapshot_is_cleared_by_the_same_rule(self, labor_activity_a):
+        activity = self._turn_into(labor_activity_a, "meeting", "sanctioned_meeting")
+        assert activity.standard_minutes_snapshot is None
+
+    def test_the_determinants_are_still_there_which_is_why_the_rule_is_needed(self,
+                                                                              labor_activity_a):
+        activity = self._turn_into(labor_activity_a, "break", "scheduled_break")
+        assert activity.standard_rate_snapshot == Decimal("0.5000")
+        assert activity.has_standard is False
+
+    def test_the_shift_ratio_was_already_safe_and_stays_safe(self, labor_session_a,
+                                                             labor_activity_a):
+        self._turn_into(labor_activity_a, "break", "scheduled_break")
+        assert labor_session_a.performance_pct() is None
+        assert labor_session_a.direct_minutes() == 0
+        assert labor_session_a.indirect_minutes() == 60
+
+
+# =========================== 4.14 · REGRESSION LOCK — MAX_SNAPSHOT_MINUTES is the COLUMN's ceiling
+class TestSnapshotClamping:
+    """``q4()`` clamps to the app's ``DecimalField(14, 4)`` shape — TEN integer digits — while
+    ``standard_minutes_snapshot`` is ``DecimalField(12, 4)``, which holds EIGHT. A figure that passes
+    ``q4()`` can therefore still be two orders of magnitude too wide for the column it is about to be
+    written into, and the failure is a ``DataError`` raised by the driver inside ``save()`` — an
+    uncaught 500 on this sub-module's primary write path. Reaching it takes only a large quantity,
+    which the form accepts up to ``MAX_Q4``.
+    """
+
+    def test_an_enormous_quantity_saves_rather_than_raising(self, labor_session_a):
+        from apps.scm.models import MAX_Q4
+        activity = _measured(labor_session_a, 0, 60, quantity=str(MAX_Q4))
+        activity.refresh_from_db()
+        assert activity.standard_minutes_snapshot is not None
+
+    def test_the_stored_figure_fits_the_column_it_is_written_into(self, labor_session_a):
+        from apps.scm.models import LaborActivity, MAX_Q4, MAX_SNAPSHOT_MINUTES
+        activity = _measured(labor_session_a, 0, 60, quantity=str(MAX_Q4))
+        field = LaborActivity._meta.get_field("standard_minutes_snapshot")
+        ceiling = Decimal(10) ** (field.max_digits - field.decimal_places)
+        assert activity.standard_minutes_snapshot < ceiling
+        assert activity.standard_minutes_snapshot == MAX_SNAPSHOT_MINUTES
+
+    def test_the_constant_is_exactly_the_column_shape_both_writers_share(self):
+        from apps.scm.models import LaborActivity, LaborPlanLine, MAX_SNAPSHOT_MINUTES
+        for model in (LaborActivity, LaborPlanLine):
+            field = model._meta.get_field("standard_minutes_snapshot")
+            assert (field.max_digits, field.decimal_places) == (12, 4), model.__name__
+        assert MAX_SNAPSHOT_MINUTES == Decimal("99999999.9999")
+
+    def test_an_ordinary_quantity_is_not_clamped(self, labor_session_a):
+        activity = _measured(labor_session_a, 0, 60, quantity="100")
+        assert activity.standard_minutes_snapshot == Decimal("58.3000")
+
+
+# ============================= 4.14 · REGRESSION LOCK — the snapshot survives a re-timed standard
+class TestSnapshotImmutability:
+    """Editing a standard next month must not silently rewrite last month's measured performance.
+    A supervisor who tightens a picking standard in March would otherwise retroactively turn
+    February's passing shifts into failing ones, and nobody could reproduce the figure they were
+    shown at the time.
+    """
+
+    def test_re_timing_the_standard_moves_neither_the_row_nor_the_shift(self, labor_session_a,
+                                                                        labor_activity_a,
+                                                                        labor_standard_a):
+        earned_before = labor_activity_a.earned_minutes
+        performance_before = labor_session_a.performance_pct()
+        labor_standard_a.minutes_per_unit = Decimal("0.2500")
+        labor_standard_a.allowance_pct = Decimal("50.00")
+        labor_standard_a.save(update_fields=["minutes_per_unit", "allowance_pct"])
+        labor_activity_a.refresh_from_db()
+        assert labor_activity_a.earned_minutes == earned_before == Decimal("58.3000")
+        assert labor_session_a.performance_pct() == performance_before
+
+    def test_saving_the_activity_afterwards_still_replays_the_SNAPSHOTS(self, labor_activity_a,
+                                                                        labor_standard_a):
+        """``save()`` never re-resolves — it recomputes from the three snapshots and the current
+        quantity, so an edit made after a re-time cannot re-measure the work."""
+        labor_standard_a.minutes_per_unit = Decimal("5.0000")
+        labor_standard_a.save(update_fields=["minutes_per_unit"])
+        labor_activity_a.notes = "corrected a typo in the note"
+        labor_activity_a.save()
+        labor_activity_a.refresh_from_db()
+        assert labor_activity_a.standard_minutes_snapshot == Decimal("58.3000")
+
+
+# ================================================================ 4.14 · the booking contract
+class TestLaborActivityValidation:
+    def test_an_interval_that_ends_before_it_starts_is_refused(self, labor_session_a):
+        from apps.scm.models import LaborActivity
+        activity = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                 started_at=labor_session_a.clock_in,
+                                 ended_at=labor_session_a.clock_in - datetime.timedelta(minutes=5),
+                                 quantity=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            activity.clean()
+        assert "ended_at" in exc.value.error_dict
+
+    def test_an_interval_longer_than_the_cap_is_refused(self, labor_session_a):
+        from apps.scm.models import LaborActivity, MAX_ACTIVITY_MINUTES
+        activity = LaborActivity(
+            tenant=labor_session_a.tenant, session=labor_session_a,
+            started_at=labor_session_a.clock_in,
+            ended_at=labor_session_a.clock_in
+            + datetime.timedelta(minutes=MAX_ACTIVITY_MINUTES + 10),
+            quantity=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            activity.clean()
+        assert "ended_at" in exc.value.error_dict
+
+    def test_direct_work_must_record_units_and_may_carry_no_reason(self, labor_session_a):
+        from apps.scm.models import LaborActivity
+        no_units = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                 activity_type="pick", started_at=labor_session_a.clock_in,
+                                 quantity=Decimal("0"))
+        with pytest.raises(ValidationError) as exc:
+            no_units.clean()
+        assert "quantity" in exc.value.error_dict
+        with_reason = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                    activity_type="pick", started_at=labor_session_a.clock_in,
+                                    quantity=Decimal("5"), indirect_reason="other")
+        with pytest.raises(ValidationError) as exc:
+            with_reason.clean()
+        assert "indirect_reason" in exc.value.error_dict
+
+    def test_indirect_work_needs_a_reason_and_may_carry_no_units(self, labor_session_a):
+        from apps.scm.models import LaborActivity
+        no_reason = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                  activity_type="break", started_at=labor_session_a.clock_in)
+        with pytest.raises(ValidationError) as exc:
+            no_reason.clean()
+        assert "indirect_reason" in exc.value.error_dict
+        with_units = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                   activity_type="break", indirect_reason="scheduled_break",
+                                   started_at=labor_session_a.clock_in, quantity=Decimal("5"))
+        with pytest.raises(ValidationError) as exc:
+            with_units.clean()
+        assert "quantity" in exc.value.error_dict
+
+    def test_errors_may_not_exceed_the_units_completed(self, labor_session_a):
+        from apps.scm.models import LaborActivity
+        activity = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                 activity_type="pick", started_at=labor_session_a.clock_in,
+                                 quantity=Decimal("2"), error_quantity=Decimal("3"))
+        with pytest.raises(ValidationError) as exc:
+            activity.clean()
+        assert "error_quantity" in exc.value.error_dict
+
+    def test_at_most_one_task_pointer_may_be_set(self, labor_session_a, picktask_a,
+                                                 putawaytask_a):
+        from apps.scm.models import LaborActivity
+        activity = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                 activity_type="pick", started_at=labor_session_a.clock_in,
+                                 quantity=Decimal("1"), pick_task=picktask_a,
+                                 putaway_task=putawaytask_a)
+        with pytest.raises(ValidationError) as exc:
+            activity.clean()
+        assert "putaway_task" in exc.value.error_dict
+
+    def test_the_task_pointer_must_match_the_work(self, labor_session_a, picktask_a):
+        from apps.scm.models import LaborActivity
+        activity = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                 activity_type="cycle_count", started_at=labor_session_a.clock_in,
+                                 quantity=Decimal("1"), pick_task=picktask_a)
+        with pytest.raises(ValidationError) as exc:
+            activity.clean()
+        assert "pick_task" in exc.value.error_dict
+
+    @pytest.mark.parametrize("status", ["closed", "approved", "cancelled"])
+    def test_nothing_may_be_booked_into_a_shift_that_is_not_open(self, labor_session_a, status):
+        from apps.scm.models import LaborActivity
+        labor_session_a.status = status
+        labor_session_a.save(update_fields=["status"])
+        activity = LaborActivity(tenant=labor_session_a.tenant, session=labor_session_a,
+                                 activity_type="pick", started_at=labor_session_a.clock_in,
+                                 quantity=Decimal("1"))
+        with pytest.raises(ValidationError):
+            activity.clean()
+
+    def test_the_interval_has_to_fall_inside_the_shift(self, labor_session_a):
+        from apps.scm.models import LaborActivity
+        early = LaborActivity(
+            tenant=labor_session_a.tenant, session=labor_session_a, activity_type="pick",
+            started_at=labor_session_a.clock_in - datetime.timedelta(minutes=1),
+            quantity=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            early.clean()
+        assert "started_at" in exc.value.error_dict
+
+    def test_an_interval_ending_after_the_clock_out_is_refused(self, labor_session_a):
+        from apps.scm.models import LaborActivity
+        labor_session_a.clock_out = labor_session_a.clock_in + datetime.timedelta(hours=1)
+        labor_session_a.save(update_fields=["clock_out"])
+        late = LaborActivity(
+            tenant=labor_session_a.tenant, session=labor_session_a, activity_type="pick",
+            started_at=labor_session_a.clock_in,
+            ended_at=labor_session_a.clock_out + datetime.timedelta(minutes=1),
+            quantity=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            late.clean()
+        assert "ended_at" in exc.value.error_dict
+
+    def test_an_activity_ending_in_the_future_on_a_running_shift_is_refused(self, labor_session_a):
+        from django.utils import timezone
+        from apps.scm.models import LaborActivity
+        future = LaborActivity(
+            tenant=labor_session_a.tenant, session=labor_session_a, activity_type="pick",
+            started_at=labor_session_a.clock_in,
+            ended_at=timezone.now() + datetime.timedelta(hours=1), quantity=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            future.clean()
+        assert "ended_at" in exc.value.error_dict
+
+    def test_a_session_from_another_workspace_is_refused(self, tenant_a, labor_session_b):
+        from apps.scm.models import LaborActivity
+        activity = LaborActivity(tenant=tenant_a, session=labor_session_b, activity_type="pick",
+                                 started_at=labor_session_b.clock_in, quantity=Decimal("1"))
+        with pytest.raises(ValidationError) as exc:
+            activity.clean()
+        assert "session" in exc.value.error_dict
+
+
+# ================================================================ 4.14 · the planned workload
+class TestLaborPlanModel:
+    def test_period_count_is_integer_arithmetic_and_never_builds_the_range(self, labor_plan_a):
+        assert labor_plan_a.period_count() == 3
+        labor_plan_a.bucket = "week"
+        assert labor_plan_a.period_count() == 1
+        labor_plan_a.period_end = labor_plan_a.period_start - datetime.timedelta(days=1)
+        assert labor_plan_a.period_count() == 0
+
+    def test_period_starts_walks_the_buckets_under_a_cap(self, labor_plan_a):
+        starts = labor_plan_a.period_starts()
+        assert starts == [labor_plan_a.period_start + datetime.timedelta(days=n)
+                          for n in range(3)]
+        assert labor_plan_a.period_starts(limit=2) == starts[:2]
+
+    def test_a_weekly_bucket_keeps_the_period_start_weekday(self, labor_plan_a):
+        labor_plan_a.bucket = "week"
+        labor_plan_a.period_end = labor_plan_a.period_start + datetime.timedelta(days=20)
+        assert labor_plan_a.period_starts()[1] == (labor_plan_a.period_start
+                                                   + datetime.timedelta(days=7))
+
+    def test_the_trailing_bucket_is_clipped_to_the_period_end(self, labor_plan_a):
+        labor_plan_a.bucket = "week"
+        assert labor_plan_a.bucket_end(labor_plan_a.period_start) == labor_plan_a.period_end
+
+    def test_the_history_window_never_overlaps_the_period_being_planned(self, labor_plan_a):
+        start, end = labor_plan_a.history_window()
+        assert end == labor_plan_a.period_start - datetime.timedelta(days=1)
+        assert start == labor_plan_a.period_start - datetime.timedelta(days=28)
+
+    def test_required_minutes_applies_the_productivity_divisor(self, labor_plan_a):
+        labor_plan_a.productivity_pct = Decimal("90")
+        assert labor_plan_a.required_minutes_for(Decimal("1000")) == Decimal("1111.11")
+
+    def test_a_non_positive_productivity_falls_back_rather_than_500ing(self, labor_plan_a):
+        labor_plan_a.productivity_pct = Decimal("0")
+        assert labor_plan_a.required_minutes_for(Decimal("100")) == Decimal("100.00")
+
+    def test_headcount_is_fractional_on_purpose(self, labor_plan_a):
+        assert labor_plan_a.headcount_for(Decimal("240")) == Decimal("0.50")
+
+    def test_a_non_positive_shift_length_falls_back_rather_than_500ing(self, labor_plan_a):
+        labor_plan_a.hours_per_shift = Decimal("0")
+        assert labor_plan_a.headcount_for(Decimal("480")) == Decimal("1.00")
+
+    def test_totals_is_denominated_in_person_shifts_and_is_one_aggregate(self, labor_plan_a,
+                                                                         labor_plan_line_a):
+        totals = labor_plan_a.totals()
+        assert totals["lines"] == 1
+        assert totals["required_shifts"] == Decimal("0.12")
+        assert totals["planned_shifts"] == Decimal("1.00")
+        assert totals["shift_gap"] == Decimal("0.88")
+
+    def test_coverage_is_None_rather_than_zero_on_an_ungenerated_plan(self, labor_plan_a):
+        assert labor_plan_a.totals()["coverage_pct"] is None
+        assert labor_plan_a.totals()["lines"] == 0
+
+    def test_the_line_variance_is_signed_and_its_coverage_is_None_when_nothing_is_required(
+            self, labor_plan_line_a):
+        assert labor_plan_line_a.headcount_variance == Decimal("0.88")
+        assert labor_plan_line_a.is_over is True
+        assert labor_plan_line_a.is_short is False
+        assert labor_plan_line_a.coverage_pct() == Decimal("833.33")
+        labor_plan_line_a.required_headcount = Decimal("0")
+        assert labor_plan_line_a.coverage_pct() is None
+
+    def test_the_line_badge_comes_from_the_one_dict_that_decides_it(self, labor_plan_line_a):
+        assert labor_plan_line_a.activity_css == "badge-green"
+
+    def test_status_css_is_decided_in_choices_and_nowhere_else(self, labor_plan_a):
+        from apps.scm.models import PLAN_STATUS_CSS
+        assert labor_plan_a.status_css == PLAN_STATUS_CSS["draft"]
+        assert set(PLAN_STATUS_CSS.values()) <= {"badge-green", "badge-red", "badge-amber",
+                                                 "badge-info", "badge-muted", "badge-slate"}
+
+
+class TestLaborPlanValidation:
+    def test_a_plan_cannot_end_before_it_starts(self, labor_plan_a):
+        labor_plan_a.period_end = labor_plan_a.period_start - datetime.timedelta(days=1)
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_a.clean()
+        assert "period_end" in exc.value.error_dict
+
+    def test_an_over_long_horizon_is_refused_with_the_span_in_the_message(self, labor_plan_a):
+        from apps.scm.models import LaborPlan
+        labor_plan_a.period_end = (labor_plan_a.period_start
+                                   + datetime.timedelta(days=LaborPlan.MAX_HORIZON_PERIODS + 5))
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_a.clean()
+        assert "period_end" in exc.value.error_dict
+        assert str(LaborPlan.MAX_HORIZON_PERIODS) in str(exc.value)
+
+    def test_a_forecast_driven_plan_needs_its_forecast(self, labor_plan_a):
+        labor_plan_a.volume_source = "demand_forecast"
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_a.clean()
+        assert "demand_forecast" in exc.value.error_dict
+
+    def test_a_forecast_on_a_ledger_driven_plan_is_refused_too(self, labor_plan_a,
+                                                               demand_forecast_a):
+        labor_plan_a.demand_forecast = demand_forecast_a
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_a.clean()
+        assert "demand_forecast" in exc.value.error_dict
+
+    def test_a_plan_before_the_floor_year_is_refused(self, labor_plan_a):
+        labor_plan_a.period_start = datetime.date(1000, 1, 1)
+        labor_plan_a.period_end = datetime.date(1000, 1, 2)
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_a.clean()
+        assert "period_start" in exc.value.error_dict
+
+    def test_a_location_from_another_workspace_is_refused(self, labor_plan_a, location_b):
+        labor_plan_a.location = location_b
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_a.clean()
+        assert "location" in exc.value.error_dict
+
+    def test_the_tenant_less_line_anchors_its_guard_on_the_PARENT(self, labor_plan_line_a,
+                                                                  labor_standard_b):
+        labor_plan_line_a.standard = labor_standard_b
+        with pytest.raises(ValidationError) as exc:
+            labor_plan_line_a.clean()
+        assert "standard" in exc.value.error_dict
+
+    def test_the_line_carries_no_tenant_column_at_all(self):
+        from apps.scm.models import LaborPlanLine
+        assert "tenant" not in {f.name for f in LaborPlanLine._meta.get_fields()}
+
+
+# ================================================ 4.14 · every productivity figure is DERIVED
+class TestLaborFiguresAreDerivedNotStored:
+    @pytest.mark.parametrize("name", ["attended_minutes", "booked_minutes", "direct_minutes",
+                                      "indirect_minutes", "unaccounted_minutes",
+                                      "over_booked_minutes", "earned_minutes", "performance_pct",
+                                      "utilisation_pct", "units_per_hour", "accuracy_pct"])
+    def test_the_shift_stores_none_of_them(self, name):
+        from apps.scm.models import LaborSession
+        assert name not in {f.name for f in LaborSession._meta.get_fields()}
+
+    @pytest.mark.parametrize("name", ["earned_minutes", "performance_pct", "units_per_hour",
+                                      "accuracy_pct", "duration_hours", "has_standard"])
+    def test_the_activity_stores_none_of_them(self, name):
+        from apps.scm.models import LaborActivity
+        assert name not in {f.name for f in LaborActivity._meta.get_fields()}
+
+    def test_the_stored_activity_figures_are_all_verb_or_save_owned(self):
+        """``duration_minutes`` and the four ``*_snapshot`` columns ARE stored, and every one of
+        them is ``editable=False`` — derived in ``save()`` or stamped by the create path."""
+        from apps.scm.models import LaborActivity
+        for name in ("duration_minutes", "standard_fixed_snapshot", "standard_rate_snapshot",
+                     "standard_allowance_snapshot", "standard_minutes_snapshot", "standard"):
+            assert LaborActivity._meta.get_field(name).editable is False, name
+
+    @pytest.mark.parametrize("name", ["status", "source", "recorded_by", "login", "closed_at",
+                                      "approved_at", "approved_by"])
+    def test_every_shift_provenance_column_is_verb_owned(self, name):
+        from apps.scm.models import LaborSession
+        assert LaborSession._meta.get_field(name).editable is False, name
+
+    @pytest.mark.parametrize("name", ["status", "generated_at", "approved_by", "approved_at"])
+    def test_every_plan_lifecycle_stamp_is_verb_owned(self, name):
+        from apps.scm.models import LaborPlan
+        assert LaborPlan._meta.get_field(name).editable is False, name
+
+    @pytest.mark.parametrize("name", ["forecast_volume", "standard", "standard_minutes_snapshot",
+                                      "required_minutes", "required_headcount"])
+    def test_every_generated_line_column_is_verb_owned(self, name):
+        from apps.scm.models import LaborPlanLine
+        assert LaborPlanLine._meta.get_field(name).editable is False, name
+
+    def test_the_standards_status_is_verb_owned_too(self):
+        from apps.scm.models import LaborStandard
+        assert LaborStandard._meta.get_field("status").editable is False
+
+
+# ================================ 4.14 · ARCHITECTURE — no hrm pointer, no ledger effect at all
+class TestLaborManagementTouchesNoOtherSystemOfRecord:
+    """``apps/scm`` holds ZERO ``hrm.*`` references and 4.14 must not be the one that introduces the
+    first. The payroll hand-off is a REPORT and a CSV, never a foreign key and never a write into
+    ``hrm``; and unlike 4.13 — whose issue-parts verb posts one ``StockMove`` — 4.14 has no ledger
+    effect anywhere at all.
+
+    "Reference" is checked as the two things that would actually BE one: an import of ``apps.hrm``,
+    and an ``"hrm.X"`` string handed to a relationship-field constructor. The prose labels in
+    ``Reports.SYSTEMS_OF_RECORD`` name the systems of record on the page for a human reader and are
+    deliberately NOT a reference — nothing resolves them, and the last test below proves it from
+    Django's own model registry rather than from the source text.
+    """
+
+    _RELATION_FIELDS = ("ForeignKey", "OneToOneField", "ManyToManyField")
+
+    @staticmethod
+    def _scm_modules():
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parents[2] / "scm"
+        return sorted(p for p in root.rglob("*.py") if "migrations" not in p.parts)
+
+    def test_apps_scm_imports_nothing_from_apps_hrm(self):
+        import ast
+        offenders = []
+        for path in self._scm_modules():
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("apps.hrm"):
+                    offenders.append(f"{path.name}:{node.lineno}")
+                if isinstance(node, ast.Import):
+                    offenders += [f"{path.name}:{node.lineno}" for alias in node.names
+                                  if alias.name.startswith("apps.hrm")]
+        assert not offenders, f"apps/scm must hold zero hrm imports: {offenders}"
+
+    def test_no_relationship_field_in_apps_scm_targets_the_hr_app(self):
+        import ast
+        offenders = []
+        for path in self._scm_modules():
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = getattr(node.func, "attr", getattr(node.func, "id", ""))
+                if name not in self._RELATION_FIELDS:
+                    continue
+                targets = list(node.args) + [kw.value for kw in node.keywords if kw.arg == "to"]
+                for target in targets:
+                    if isinstance(target, ast.Constant) and isinstance(target.value, str) \
+                            and target.value.lower().startswith("hrm."):
+                        offenders.append(f"{path.name}:{node.lineno} -> {target.value!r}")
+        assert not offenders, f"apps/scm must declare no hrm.* relation: {offenders}"
+
+    def test_no_model_in_the_scm_app_resolves_to_the_hr_app(self):
+        """From Django's own registry, so it cannot be fooled by how a target was spelt."""
+        from django.apps import apps as django_apps
+        offenders = []
+        for model in django_apps.get_app_config("scm").get_models():
+            for field in model._meta.get_fields():
+                related = getattr(field, "related_model", None)
+                if related is not None and related._meta.app_label == "hrm":
+                    offenders.append(f"{model.__name__}.{field.name}")
+        assert not offenders, offenders
+
+    def test_no_4_14_model_points_at_a_stock_move_or_a_journal_entry(self):
+        from apps.scm.models import (LaborActivity, LaborPlan, LaborPlanLine, LaborSession,
+                                     LaborStandard)
+        for model in (LaborStandard, LaborSession, LaborActivity, LaborPlan, LaborPlanLine):
+            related = {f.related_model.__name__ for f in model._meta.get_fields()
+                       if getattr(f, "related_model", None) is not None}
+            assert "StockMove" not in related, model.__name__
+            assert "JournalEntry" not in related, model.__name__
