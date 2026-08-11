@@ -12,6 +12,10 @@ applied one domain over:
   in this app touches any of them. A measurement a user can retype is not a measurement.
 * **the human half is the only writable block:** severity, the product assessment, the cause code,
   the corrective action, and the links out to the NCR / work order / lot that somebody else acts on.
+  Of those, **``assessment`` is written by :meth:`TemperatureExcursion.assess` and nothing else** —
+  it is deliberately absent from ``TemperatureExcursionForm``'s whitelist, because that form is
+  reachable by any member while the verb is tenant-admin gated and stamps ``assessed_by`` /
+  ``assessed_on``. A verdict with no signature on it is not a verdict.
 
 **``limit_min`` / ``limit_max`` are a SNAPSHOT taken when the episode opened, and they are never
 re-written when it extends.** The record must read the same next year: if the limits are widened
@@ -183,6 +187,11 @@ class TemperatureExcursion(TenantNumbered):
     # The PRODUCT-LEVEL RELEASE DECISION — ELPRO's "assess at product level to reduce unnecessary
     # quarantines", Sensitech's "faster, more precise release decisions". The disposition that
     # FOLLOWS from it is 4.9's and is reached through `non_conformance`, never re-declared here.
+    #
+    # Written by `assess()` ALONE. It stays `editable=True` because that verb is an ordinary save,
+    # but it is off `TemperatureExcursionForm.Meta.fields` on purpose: the edit form is
+    # @login_required and the verb is @tenant_admin_required, so a field for it there is a member
+    # marking product released for sale with `assessed_by` / `assessed_on` left blank.
     assessment = models.CharField(max_length=20, choices=ASSESSMENT_CHOICES, default="pending")
     # core.Party rather than a login: the person who signs off product quality is frequently a QA
     # lead with no ERP account, and Party is how SCM has named a person since 4.8. SET_NULL — the
