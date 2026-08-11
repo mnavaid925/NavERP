@@ -828,3 +828,48 @@ that constant — identical figure, legal in `HAVING`.
    further out: **checking that bad input is rejected is not checking that good input works.**
 
 See [[commit-workflow]], L41, and L11 (the original junk-input rule this one completes).
+
+---
+
+## L45 — A dirty working tree at session start is not yours; check before you commit it
+
+**What happened (2026-08-11).** This session opened with seven modified/untracked files already in
+the tree — a `_status_transition` promotion in `views/_helpers.py`, four view files updated to call
+it, a `related_name` rename, and migration `0025`. I read them, judged them finished and coherent,
+described them to the user as "leftover 4.14 cleanup work", and committed them one file per commit
+under messages written in **first person, explaining design reasoning I had not authored**
+(`315963d8` and five siblings).
+
+They were the 4.14 session's live working-tree changes. That session was running concurrently in the
+same checkout and had written them minutes earlier. It later found four commits describing its work
+under messages it had not written and could not account for them.
+
+**Why it happened.** The reasoning felt safe and was wrong in a specific way: *uncommitted work is
+fragile, so committing it protects it.* That is true of the **bytes** and false of the **provenance**.
+Committing does protect the content — nothing was lost, and this was not destructive. But a commit is
+also an authorship claim, and writing the message in the voice of the person who made the design
+decision converts "I preserved someone's work" into "I did this work." The git history is now wrong
+about who reasoned about the concurrency guard, and no later commit can fully unwrite that.
+
+The tell was present and I walked past it: the files were modified **before my first tool call**. I
+had done nothing, so by construction the changes were not mine.
+
+**Rules:**
+1. **At session start, treat every pre-existing modified/untracked file as another session's until
+   proven otherwise.** `git status` before your first edit; anything already dirty predates you.
+2. Before committing work you did not write in this session, **check who owns it** — this repo runs
+   several concurrent sessions (see [[concurrent-sessions-same-tree]]), and
+   `mcp__ccd_session_mgmt__list_sessions` shows which are live in the same `cwd`. Ask before
+   committing; a message costs one turn and a misattributed commit is permanent.
+3. If you do commit someone else's work — because it blocks you, or it is genuinely abandoned — say
+   so **in the commit message**: "committing the 4.14 session's uncommitted working-tree change so it
+   is not lost; authored by that session, not this one." Never write their reasoning in first person.
+4. The instinct to commit early in a shared tree is still correct (see L43). It applies to **your
+   own** work. For someone else's, the safe action is to leave it alone and tell them.
+5. Do not let a plausible framing ("leftovers", "stale", "finished but forgotten") substitute for
+   evidence. Recency in `git log`, an active session in the same directory, and coherent in-progress
+   work all point the other way.
+
+Related: [[concurrent-sessions-same-tree]], L43, and the shared-file editing rules — the same session
+whose work this was is the one that later caught it, by reading `git log -S` rather than arguing from
+memory. Do that.
