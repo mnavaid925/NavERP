@@ -1026,6 +1026,41 @@ LIVE_LINKS = {
         "Performance Tracking": "scm:laborstandard_list",     # bullet (the library + scorecard chip)
         "Payroll Integration":  "scm:labor_payroll_export",   # bullet (CSV hand-off - zero writes)
     },
+    # --- 4.15 Cold Chain Management ---
+    # Five bullets, five pages, and THREE of the five are COMPUTED pages rather than tables — which is
+    # the headline fact about this sub-module and the reason the mapping below needs explaining.
+    #
+    # **"Temperature Monitoring" points at the MONITOR register, not at the reading ledger.** A
+    # monitoring point is "one device, watching one thing, from one date, against these limits", and
+    # that row is what a user configures, retires and calibrates. `TemperatureReading` is the
+    # append-only interval log underneath it (~17.5k rows per monitor per year) and has no edit and no
+    # delete by design; it is reached from the monitor it belongs to and from
+    # `scm:temperaturereading_list`, exactly as 4.13's `MeterReading` log is. A ledger takes no bullet
+    # of its own — the WorkCenter / ReorderRule / ReturnReason / InspectionPlan / KpiTarget rule.
+    #
+    # **"Cold Storage Inventory" is 4.3 FILTERED, and declares no table.** On-hand is the live SUM of
+    # the append-only `StockMove` ledger, the condition mismatch is the two `storage_condition`
+    # columns disagreeing, expiry is `LotSerial.expiry_date` and quarantine is `LotSerial.status` —
+    # which **4.9's non-conformance verb writes and 4.15 only READS**. Same precedent as 4.13's
+    # "Spare Parts Inventory" computing over 4.3 rather than forking a second parts master.
+    #
+    # **"Compliance Reporting" is a computed page plus three stored columns** (the monitor's
+    # calibration triple). The excursion log is 4.15's own rows filtered by window, the temperature
+    # profile is derived over `TemperatureReading` through `apps/scm/coldchain.py`, and the audit
+    # trail is `core.AuditLog` — there is no second audit table. The page states its own NON-CLAIM:
+    # it is not a validated 21 CFR Part 11 / EU Annex 11 system.
+    #
+    # **"Maintenance of Reefers" is a BOARD over 4.13, and 4.15 declares ZERO maintenance entities.**
+    # A reefer is DERIVED as *an `Asset` with an active `ColdChainMonitor`* — no `reefer` asset type
+    # and deliberately never one, because a hand-set type goes stale the day a unit is repurposed
+    # while "has a live probe pointed at it" cannot. Every maintenance column on it is 4.13's own.
+    "4.15": {
+        "Temperature Monitoring":  "scm:coldchainmonitor_list",           # bullet (the monitor register)
+        "Excursion Management":    "scm:temperatureexcursion_list",       # bullet (the triage queue)
+        "Cold Storage Inventory":  "scm:cold_storage_report",             # bullet (COMPUTED over 4.3)
+        "Compliance Reporting":    "scm:cold_chain_compliance_report",    # bullet (COMPUTED + CSV)
+        "Maintenance of Reefers":  "scm:reefer_board",                    # bullet (COMPUTED over 4.13)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
