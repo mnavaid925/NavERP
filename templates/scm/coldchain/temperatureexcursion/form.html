@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — create/edit for TemperatureExcursion.
+
+THIS TEMPLATE SERVES TWO GENUINELY DIFFERENT FORMS AND MUST BRANCH HARD ON `is_edit`. They share no
+field at all except severity, cause, corrective_action and notes, and rendering either one's fields
+on the other's page would post names that form does not carry — on the edit path that silently
+blanks a column on every save.
+
+  CREATE — apps/scm/views/…/TemperatureExcursions.py::temperatureexcursion_create
+    form            TemperatureExcursionWindowForm: monitor, started_at, ended_at, severity, cause,
+                    corrective_action, notes
+    is_edit         False
+    computed_note   str — why no measured number is typed here
+    monitors        ColdChainMonitor queryset (used for the "none deployed yet" case; the monitor
+                    <select> itself is the form's own field and is rendered from the form)
+
+  EDIT — ::temperatureexcursion_edit, through crud_edit
+    form            TemperatureExcursionForm: severity, assessment, cause, corrective_action, notes,
+                    non_conformance, maintenance_work_order, lot_serial
+    obj             the TemperatureExcursion
+    is_edit         True
+    snapshot_note   str — the limits on the record are the ones in force when it fired
+    triage_note     str — where the detector's half stops and the human half starts
+
+NOT ONE MEASURED NUMBER IS ON EITHER FORM, and none may be added. started_at / ended_at /
+duration_minutes / breach_direction / extreme_temperature / limit_min / limit_max / reading_count /
+mkt / last_detected_at are all editable=False on the model and computed by apps/scm/coldchain.py from
+the reading ledger. The create page takes the two things a human genuinely knows — WHICH MONITOR and
+BETWEEN WHEN AND WHEN — and the view asks coldchain.window_stats() for every figure from the readings
+that actually fall inside that window. That is how "every model with a list page gets a create view"
+and "a measurement a user can retype is not a measurement" both survive. Do not simplify it into
+typed numbers.
+
+`status` IS ABSENT FROM BOTH, in deliberate contrast to ColdChainMonitor.status, which IS on its
+form. Excursion status is workflow state moved only by the four verbs on the detail page, each of
+which validates the transition it is making; a monitor's status is user-owned lifecycle with exactly
+one writer. Do not "fix" either one to match the other.
+
+`assessment` is on the EDIT form but NOT on the create form, and that asymmetry is the point:
+recording a product verdict stamps the assessor and the moment, and stamping a signature as a side
+effect of creating a row is exactly what the Assess verb exists to prevent. Note also that setting it
+on the edit form does not move the status — reaching "assessed" that way would record a verdict with
+nobody's name on it.
+
+started_at / ended_at are rendered through the form's OWN widgets (via partials/form_field.html) and
+never as hand-written inputs: each is a DateTimeInput carrying type="datetime-local" AND
+format="%Y-%m-%dT%H:%M" together, and the type without the format renders an EMPTY box for a stored
+value because a datetime-local control cannot parse Django's default rendering.
+
+Every rule described below is enforced by TemperatureExcursionWindowForm.clean() and
+TemperatureExcursion.clean() — the window ordering, the future-start refusal, the year cap, the
+affected-product-needs-an-action rule and the open-episode clash check — and never by this template.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}File an Excursion{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}File an excursion{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:temperatureexcursion_list' %}">Temperature Excursions</a><span class="sep">›</span>{% if is_edit %}<a href="{% url 'scm:temperatureexcursion_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>{% else %}<span>New</span>{% endif %}</div>
+    {% if is_edit %}
+      <p class="text-muted">This form reaches the <span class="fw-600">human half</span> of the record and nothing else. Everything the detector measured is read-only on the model, so there is no field here that could restate it — and that is the mechanism rather than a policy, because a crafted post naming a measured column has nowhere to land.</p>
+    {% else %}
+      <p class="text-muted">For an episode the detector cannot see: a logger whose file was lost, an event witnessed on a mechanical chart, an incident carried over from another system. You give the monitor and the window; every measured figure is computed from the readings that actually fall inside it. The EXC- number is assigned on save.</p>
+    {% endif %}
+  </div></div>
+
+  {% if is_edit %}
+    {% comment %}
+      The measured block, restated read-only above the form so nobody has to open a second tab to
+      see what they are triaging — and so it is obvious which figures the form below cannot touch.
+      Every None-able one is guarded: extreme_temperature and mkt on this record, and both
+      snapshotted limits, which are legitimately one-sided.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What the detector measured</h2>
+        <div class="badge-group">
+          <span class="badge badge-slate">Read-only</span>
+          <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+          <span class="badge {{ obj.breach_direction_css }}">{{ obj.get_breach_direction_display }}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Monitor</dt><dd><a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="mono">{{ obj.monitor.number }}</a></dd></div>
+          <div class="detail-item"><dt>Started</dt><dd class="mono">{{ obj.started_at|date:"M d, Y H:i" }}</dd></div>
+          <div class="detail-item"><dt>Ended</dt><dd class="mono">{% if obj.ended_at %}{{ obj.ended_at|date:"M d, Y H:i" }}{% else %}<span class="badge badge-red">Still running</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Duration</dt><dd class="mono">{{ obj.duration_minutes }} min</dd></div>
+          <div class="detail-item">
+            <dt>Worst reached</dt>
+            <dd class="mono">{% if obj.extreme_temperature is not None %}{{ obj.extreme_temperature|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Band in force then</dt>
+            <dd class="mono">
+              {% if obj.limit_min is not None %}{{ obj.limit_min|floatformat:2 }}{% else %}<span class="text-muted">no lower</span>{% endif %}
+              <span class="text-muted">to</span>
+              {% if obj.limit_max is not None %}{{ obj.limit_max|floatformat:2 }}{% else %}<span class="text-muted">no upper</span>{% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Mean kinetic temperature</dt>
+            <dd class="mono">
+              {% if obj.mkt is not None %}
+                {{ obj.mkt|floatformat:2 }} °C
+              {% elif obj.monitor.is_frozen_condition %}
+                <span class="text-muted">n/a — frozen range</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+        <div class="form-help">{{ snapshot_note }}</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if not is_edit %}
+      {% comment %}
+        ---------------------------------------------------------------- CREATE: monitor + window
+      {% endcomment %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Which monitor, and between when and when</h2>
+          <span class="badge badge-info">Nothing measured is typed</span>
+        </div>
+        <div class="card-body">
+          {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <p class="form-help" style="margin:0 0 .9rem;">{{ computed_note }}</p>
+          {% if not monitors %}
+            <div class="empty-state">
+              <i data-lucide="thermometer-snowflake"></i>
+              <h3>No monitoring points exist yet</h3>
+              <p>An excursion is always an episode <span class="fw-600">on a monitor</span> — its limits are what the window is judged against and what gets snapshotted onto the record — so there is nothing to file this against. Deploy the monitoring point first, then come back and file the episode against it.</p>
+              <a href="{% url 'scm:coldchainmonitor_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Deploy a monitor</a>
+            </div>
+          {% endif %}
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.monitor %}
+            {% include "partials/form_field.html" with field=form.started_at %}
+            {% include "partials/form_field.html" with field=form.ended_at %}
+          </div>
+          <div class="form-help">
+            The monitor list is deliberately <span class="fw-600">not</span> narrowed to active deployments: a retired monitor can legitimately receive a back-dated episode from the period it <em>was</em> active, and offering only live ones would make exactly the historical record this page exists for impossible to file.
+          </div>
+          <div class="form-help">
+            Leave <span class="fw-600">ended at</span> blank if the breach is still happening — the detector writes the end time on the first reading back inside the band, and until then the duration is a live figure. A start in the <span class="fw-600">future</span> is refused: it would put an incident on the board for weather nobody has had yet. A window longer than a year is refused too, and not merely because it is implausible — that figure is fed to date arithmetic on the report pages where an out-of-range value is a crash rather than a message. An end before the start derives a negative duration and inverts every figure built on it.
+          </div>
+          <div class="form-help">
+            One monitor may have only <span class="fw-600">one running episode</span> at a time. If one is already open there, this save is refused and names it: a breach that keeps breaching is <em>extended</em> rather than duplicated, which is what keeps the queue one row per incident instead of one row per logging interval.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The human judgement</h2>
+        <span class="badge badge-slate">The only writable block on this record</span>
+      </div>
+      <div class="card-body">
+        {% if is_edit %}
+          {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <p class="form-help" style="margin:0 0 .9rem;">{{ triage_note }}</p>
+        {% endif %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.severity %}
+          {% if is_edit %}
+            {% include "partials/form_field.html" with field=form.assessment %}
+          {% endif %}
+          {% include "partials/form_field.html" with field=form.cause %}
+          {% include "partials/form_field.html" with field=form.corrective_action %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">
+          <span class="fw-600">Severity</span> is the one graded field the detector seeds and a person then owns. It is never re-written by a later detection pass, deliberately — a triager's downgrade has to survive the next sweep, or the queue silently re-escalates everything anybody has already judged.
+          {% if not is_edit %}
+            The value here starts from the same rule the detector uses; override it if you know better, and the suggestion is kept in the audit trail beside your choice, so the override is a visible fact rather than an invisible one.
+          {% endif %}
+        </div>
+        <div class="form-help">
+          <span class="fw-600">Cause</span> is a closed vocabulary and that is what makes "which cause costs us the most spoilage?" a single grouped query rather than a pile of free text nobody can total. Both <em>Unknown</em> and <em>Other</em> are on the list so nobody is ever forced into a wrong code — one coder pushed into the nearest-looking value makes every other value untrustworthy.
+        </div>
+        {% if is_edit %}
+          <div class="form-help">
+            <span class="fw-600">The product assessment on this form does not move the status.</span> Reaching <em>assessed</em> is the job of the Assess button on the record's own page, because that path stamps who decided and when — and a verdict with no signature on it is not a verdict. Marking product <span class="fw-600">affected</span> still requires either a corrective action written here or a linked non-conformance: an affected-product verdict with neither is a note rather than an audit record.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if is_edit %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The records somebody else acts on</h2>
+          <span class="badge badge-info">One-way links out</span>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.non_conformance %}
+            {% include "partials/form_field.html" with field=form.maintenance_work_order %}
+            {% include "partials/form_field.html" with field=form.lot_serial %}
+          </div>
+          <div class="form-help">
+            All three are pointers and nothing more. <span class="fw-600">4.9 owns disposition</span> — the quarantine, the disposition decision and the cost of quality live on the non-conformance, and this module reads a lot's status without ever writing it, because two places deciding whether a batch is quarantined is one place too many. <span class="fw-600">4.13 owns the repair</span>, and the work order can also be raised in one press from the record's own page, which fills this field in for you.
+          </div>
+          <div class="form-help">
+            None of the three is narrowed by status on purpose: a closed non-conformance is still the right one to cite for last month's excursion, a completed work order is still the repair this incident led to — that is the whole point of recording it — and a consumed or quarantined lot is exactly the batch an affected-product verdict is about. Narrowing any of them would drop the stored choice out of its list on a later edit and silently blank the link when somebody saved an unrelated note.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save the triage{% else %}File the excursion{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'scm:temperatureexcursion_detail' obj.pk %}{% else %}{% url 'scm:temperatureexcursion_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  {% if not is_edit %}
+    <div class="card">
+      <div class="card-body text-muted">
+        If the window you name holds <span class="fw-600">no readings at all</span>, the extreme temperature, the mean kinetic temperature and the reading count come back <span class="fw-600">blank rather than zero</span> and the page says so after saving. That is the honest outcome: an MKT of 0.00 °C would read as a perfectly-cold store, which is the precise opposite of "we have no data". Import the logger file for the period first if you have it, and the figures fill in from the ledger.
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
