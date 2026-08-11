@@ -163,7 +163,16 @@ OPEN_EXCURSION_STATUSES = ("open", "investigating", "assessed")
 
 #: Statuses in which the human triage block may still be edited. Once an episode is closed or
 #: dismissed the assessment is the record, and an editable record is not one.
-EDITABLE_EXCURSION_STATUSES = ("open", "investigating")
+#:
+#: ``assessed`` is IN the list, matching that sentence and the ladder: the terminal pair is
+#: ``closed`` / ``dismissed``, and an assessed episode is the one that most needs editing afterwards
+#: — a ``product_affected`` verdict tells the user to link the non-conformance 4.9 acts on, and the
+#: only place to link it is this form. Excluding it stranded that instruction: the message said "link
+#: it on the edit form" while the edit view refused the form and the detail page repeated the
+#: instruction with its own Edit button already hidden. Re-opening the release decision is not the
+#: cost of allowing it — ``assessment`` is not on the form at all; only the gated ``assess`` verb
+#: writes that column.
+EDITABLE_EXCURSION_STATUSES = ("open", "investigating", "assessed")
 
 #: How bad it was. Seeded by the detector at open time from ``severity_for()`` and **human-writable
 #: afterwards** — a triager's downgrade has to survive the next detection pass, so the detector
