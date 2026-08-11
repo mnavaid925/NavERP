@@ -23,6 +23,26 @@ secret-field class) — minted in ``save()``, absent from every ModelForm becaus
 ``editable=False``, and never rendered, logged or put in a message. The same applies to
 ``revoked_at``, ``download_count``, ``first_viewed_at``, ``last_downloaded_at`` and ``shared_by``:
 all system-written, all ``editable=False``, none listed below.
+
+**# WARNING — ``expires_at`` and ``revoked_at`` are two halves of ONE control and must be gated
+the same way.** Both answer the same question: *how much longer may this bearer token fetch this
+customer's document?* ``revoked_at`` is ``editable=False`` and written only by the ``revoke`` verb,
+which is ``@require_POST`` + ``@tenant_admin_required``. ``expires_at`` is on this form. So if
+``portaldocumentshare_edit`` is left at plain ``@login_required``, **any tenant member can blank
+``expires_at`` — blank means never expires — on a share only an admin is allowed to revoke.** That
+is not a smaller version of revoking; an unrevokable-in-practice permanent link is strictly worse
+than an un-revoked one, and it is exactly the permanent read access ``expires_at`` was added to
+abolish (4.10's documented residual risk).
+
+Therefore **``portaldocumentshare_edit`` MUST carry ``@tenant_admin_required``**, or ``expires_at``
+must come off this form and move behind its own gated verb. Pick one; do not ship neither.
+
+This is a general shape, not a one-off: *any field a form exposes whose authoritative writer is a
+staff-gated verb is a privilege-escalation bypass by construction.* The sibling instance found by
+the same grep lives at ``apps/scm/forms/ReturnsManagement/ReturnDispositions.py`` — ``disposition``
+is on the form while ``returndisposition_decide`` is ``@tenant_admin_required`` and
+``returndisposition_edit`` is not. When adding a field here, ask who else can write it and whether
+they are held to the same bar.
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
 from apps.scm.forms._common import _reject_foreign
