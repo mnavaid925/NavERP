@@ -23203,3 +23203,128 @@ byte-identical after the caching fix.
   if it is ever wanted.
 * `select_standard`'s four-rung ladder stays four queries — one `Case/When` query would cost more in
   readability than three index seeks on a cold path are worth.
+
+---
+
+# Review — 4.15 Cold Chain Management (2026-08-11)
+
+Built in one run: 3 models (`ColdChainMonitor` `CCM-`, `TemperatureReading`, `TemperatureExcursion`
+`EXC-`), the `apps/scm/coldchain.py` service, 2 additive `storage_condition` fields on 4.3, and 3
+computed pages. Migration `0026`. Five reviewers, all findings applied. **~76 commits, one per file.**
+
+## What the review chain actually caught
+
+Ranked by what it would have cost to ship. The first three are the argument for the chain existing.
+
+1. **Privilege escalation on the product-release decision.** `assessment` sat on
+   `TemperatureExcursionForm.Meta.fields` while `temperatureexcursion_edit` is `@login_required` and
+   the `assess` verb is `@tenant_admin_required`. Any workspace member could POST
+   `assessment=product_ok` and have the detail page, triage queue, compliance report and audit CSV
+   all print **"Product unaffected — release"** for an episode no admin ever saw, with
+   *"Assessed by: Not assessed"* beside it. Both the model and form docstrings already *claimed*
+   `assess()` was the only writer — **the whitelist is what makes such a claim true, and it was not
+   on it.** The security reviewer then grepped for the *shape* rather than stopping at the instance
+   and found the same pairing in **4.10 `ReturnDispositions.disposition`** (spun out as its own
+   task, owned by the 4.16 session) and, when passed on, in **4.16's own
+   `PortalDocumentShare.expires_at`** — caught there *before* its views were written. One finding,
+   three sub-modules. **That grep was the highest-yield action of the whole run.**
+2. **A 500 reachable from one CSV cell.** `Decimal("nan")` and `"sNaN"` *parse cleanly* and only
+   raise `InvalidOperation` at the first ordering comparison, so a single `nan` reached the bounds
+   check and took down the entire import. `Infinity` was always safe — it compares and skips as
+   out-of-bounds. Fixed with `if not value.is_finite(): return None`, dropping the row into the
+   existing skip counters. The same pass wrapped `csv.Error`.
+3. **A whole NavERP bullet was inert.** `storage_condition` was never added to `ItemForm` /
+   `LocationForm`, so four of the five Cold Storage Inventory sections were permanently empty — and
+   the report's own empty state told users to *"set the class on your items and your locations"*,
+   linking to pages **where the field did not exist**. Settable only via `seed_scm` and the Django
+   admin. This is the exact failure `ItemForm`'s own comment already records for `is_spare_part`,
+   two lines above the whitelist it was missing from.
+4. **The CSV importer bypassed `clean()` rule 4** (`bulk_create` skips `full_clean`), so re-uploading
+   a reusable logger's history filed a previous consignment's readings against this deployment, where
+   they counted toward its % time-in-range and MKT. Typing the same row by hand was refused.
+5. **`EDITABLE_EXCURSION_STATUSES` contradicted its own docstring**, stranding the NCR link: `assess()`
+   told the user to link a non-conformance on the edit form, and the edit form then refused to open.
+6. **Two unbounded fetches** in files whose own docstrings claimed everything was capped, and **five
+   templates running untenanted `COUNT(*)`s** over the highest-volume table — a ~90k-row scan after
+   five years to render a decorative number on a form.
+7. **The detector sweep had no cursor**, so pressing Detect re-walked the same first 500 monitors
+   forever and 501+ were unreachable from the workspace button — while the message said it would
+   continue from where it stopped (true of the *reading* cap, false of the *monitor* cap).
+
+## Verification — and what each green result is actually worth
+
+**See the `METHOD — "the check passes because it never reached the failing state"` section in this
+file** (written by the 4.16 session with input from this one and the 4.14 session). 4.15 does not
+restate it. The cold-chain-specific consequences:
+
+| guard | SQLite suite | this MariaDB | actually enforced by |
+|---|---|---|---|
+| `HAVING` / `GROUP BY` | blind | **real** | the engine |
+| `select_for_update` (the detector's whole "one open episode" guard) | blind — no row locking | **real** | the engine |
+| decimal width / column bounds | blind | **blind** — no `STRICT_TRANS_TABLES` | **only a Python clamp** |
+
+- **A green pytest run says nothing about the detector's locking.** What covered those paths was the
+  route sweep and seeder running through `manage.py` against real `nav_erp` — **luck of the harness,
+  not design.**
+- **4.15 survives row three structurally, not carefully.** Every decimal column is ~50× wider than
+  its validator bound (`Dec(6,2)`, column max 9999, bound ±200). That gap is the only protection,
+  **because the detector bypasses the validators entirely** — every measured column is
+  `editable=False` and written directly, so `full_clean()` never runs there. **On those columns the
+  validators are documentation, not enforcement.** A future column whose bound sits near its width
+  would truncate silently on both engines with nothing to catch it.
+- **Empty-tenant sweep** (new this run, from the 4.14 session's finding): every list + derived page
+  asserted to render its empty branch, with **all 39 hrefs inside it resolved against the URLconf and
+  confirmed GET-able**. POST-only view names harvested by `ast` — a decorator-attribute probe reports
+  a confident, wrong **zero**, because `require_http_methods` keeps its methods in a closure.
+- **Link sweep across both tenants**: 134 in-app links followed on seeded, 75 on empty, both clean.
+  Denominators stated, because a pass over zero anchors is this repo's most common false green.
+- One 4.15 **test** failed with `ImportError: cannot import name 'ASSET_TYPE_CHOICES'`. Assertion
+  correct, product correct, import wrong — it read as *"the assertion is false"* and meant *"the
+  assertion never ran."* One `try/except ImportError` + skip away from going green forever while
+  testing nothing. **The checks are subject to the same failure as the code they guard.**
+
+## Deliberate — do not "fix"
+
+* `TemperatureReading` has **no edit route and no delete route** — the absence *is* the append-only
+  rule, not an oversight. Read-only admin for the same reason.
+* Every measured column on `TemperatureExcursion` is `editable=False`; `limit_min` / `limit_max` are
+  **snapshotted** so editing a monitor cannot rewrite what past episodes were breaches *of*.
+* "One open episode per monitor" is a `select_for_update()` on the **monitor** row — MariaDB cannot
+  express `UniqueConstraint(condition=…)`, and locking the monitor (always present) rather than the
+  episode matters because an episode lock is a no-op on exactly the path that would create a second.
+* **MKT returns `None`, never 0**, on frozen ranges (USP <1079.2>). Many 4.15 values are legitimately
+  `None` and must render as an em-dash — blank-vs-zero is this sub-module's entire contract.
+* No temperature passes through `q2()` / `q4()` and none carries `MinValueValidator(ZERO)`; −18 °C is
+  the normal operating point of half the sub-module.
+* `profile.html` draws a **band strip, not a line chart** — no charting library ships here and no
+  filter can offset a signed temperature into a pixel height.
+* 4.15 declares **zero** maintenance entities; a reefer is derived as *an Asset with an active
+  monitor*, so `Asset.ASSET_TYPE_CHOICES` gains nothing that could go stale.
+* The compliance report states an explicit **non-claim**: an audit trail, not a validated 21 CFR
+  Part 11 / EU Annex 11 system.
+
+## Known-open / deferred
+
+* **4.10 `ReturnDispositions.disposition`** — same privilege-escalation shape, unfixed; task owned by
+  the 4.16 session, which also carries the general audit (pair every `@tenant_admin_required` verb
+  against sibling edit paths that can write the same column).
+* **`MaintenancePlan.condition_threshold` carries `MinValueValidator(ZERO)`**, so a sub-zero reefer
+  condition trigger is **not expressible today**. The seeded plan uses a positive "too warm"
+  threshold. Widening it is a 4.13 change and was deliberately not made from here.
+* **`seed_scm --flush` was never run for real** — it would have wiped two concurrent sessions' rows.
+  Teardown ordering was proved by probe instead (deleting assets before clearing 4.15 correctly
+  raises `ProtectedError`). The 4.15 `_flush()` block must stay ahead of 4.13's asset teardown.
+* Live sensor/MQTT ingestion, outbound notification, two-way reefer control, Part 11 e-signature,
+  stability budget, predictive shelf-life, calibration-history table, humidity excursions — all
+  deferred; `sensor_api` is the declared seam.
+* View / form / service test files were still being written when this section was recorded;
+  `test_coldchain_models.py` (915 lines, 10 classes) is green.
+
+## Process note
+
+Three sessions built 4.14 / 4.15 / 4.16 concurrently in this one working tree. Two failure classes
+found tonight exist **only** because of that, and neither is a code defect: the `--flush` cascade
+collector walking FKs declared in code whose tables a sibling had not yet migrated, and this session
+committing another session's uncommitted working-tree work under first-person messages (**L45**).
+Migration numbering held (`0025 → 0026 → 0027`, a single linear leaf) because the sessions agreed one
+rule: **nobody pre-reserves a number they have not generated.**
