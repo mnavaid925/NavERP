@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — import a whole logger / gateway file onto ONE monitor.
+
+Renders apps/scm/views/ColdChainManagement/TemperatureReadings.py::coldchainmonitor_import_readings.
+Everything this page may read, and nothing else:
+
+  form              TemperatureReadingImportForm — exactly THREE fields: file, source,
+                    interval_minutes_override. Rendered BY NAME, which couples this page to that
+                    whitelist
+  monitor           the ColdChainMonitor from the ROUTE — never from the POST body
+  max_rows          int — the hard ceiling on ONE upload, measured on raw bytes before parsing
+  interval_minutes  int — the monitor's own logging interval, snapshotted when no override is given
+  zero_note         str — printed ABOVE the button, verbatim. The single most important sentence on
+                    this screen
+  result            a dict or NONE. None before an import has run, and the panel is not drawn at all
+                    in that case — an empty tally rendered as a row of zeros would read as "we
+                    imported nothing", which is a different statement from "you have not imported
+                    yet". Keys: imported, duplicates, parsed, source, interval_minutes and a
+                    `skipped` sub-dict (total, no_temperature, bad_timestamp, future, out_of_bounds,
+                    duplicate_in_file, dropped_humidity, dropped_interval_stats)
+  provenance_note / append_only_note   strs, printed verbatim
+
+The view is @tenant_admin_required — one press writes up to max_rows rows into the record a regulator
+reads — so there is no permission branch in here: a member never reaches this template at all.
+
+THE MONITOR IS NOT A FIELD, and must never become one. The import route is
+cold-chain-monitors/<int:pk>/readings/import/, so the parent comes from the URL; a parent pk in a
+POST body is how a caller grafts five thousand readings onto somebody else's cold room, and this
+child's rows ARE that workspace's compliance figures.
+
+theme.css ships COLOUR-named badges only — badge-success / badge-warning / badge-danger do not exist
+and render unstyled (L33).
+{% endcomment %}
+{% block title %}Import readings · {{ monitor.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Import readings onto {{ monitor.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain Monitors</a><span class="sep">›</span><a href="{% url 'scm:coldchainmonitor_detail' monitor.pk %}">{{ monitor.number }}</a><span class="sep">›</span><span>Import readings</span></div>
+    <p class="text-muted">A logger download or a gateway batch, filed in one press. Up to {{ max_rows }} data rows per upload — the limit is measured on the raw file before a single value is parsed, because an unbounded upload is an unbounded write. Re-uploading a file you have already imported is a <span class="fw-600">safe no-op</span>: there is one interval summary per moment per monitor, so the rows already on file are counted as duplicates rather than doubling the series.</p>
+  </div></div>
+
+  {% comment %}
+    THE RESULT PANEL, and it is drawn ONLY when an import has actually run. `result` is None on the
+    first GET, and a tally of zeros rendered then would claim an import that imported nothing.
+  {% endcomment %}
+  {% if result %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What that upload did</h2>
+        {% if result.skipped.total %}
+          <span class="badge badge-amber">{{ result.skipped.total }} row{{ result.skipped.total|pluralize }} skipped</span>
+        {% else %}
+          <span class="badge badge-green">Nothing skipped</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Imported</dt><dd class="fw-600 mono">{{ result.imported }}</dd></div>
+          <div class="detail-item"><dt>Already in the ledger</dt><dd class="mono">{{ result.duplicates }}</dd></div>
+          <div class="detail-item"><dt>Readable rows in the file</dt><dd class="mono">{{ result.parsed }}</dd></div>
+          <div class="detail-item"><dt>Skipped</dt><dd class="mono">{{ result.skipped.total }}</dd></div>
+          <div class="detail-item"><dt>Stamped as</dt><dd>{{ result.source }}</dd></div>
+          <div class="detail-item"><dt>Weight stamped on every row</dt><dd class="mono">{{ result.interval_minutes }} min</dd></div>
+        </dl>
+
+        {% if result.skipped.total %}
+          <h3 class="card-title" style="margin:1rem 0 .5rem; font-size:.95rem;">Why rows were skipped</h3>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Reason</th><th class="text-right">Rows</th><th>What it means</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>No readable temperature</td>
+                  <td class="text-right mono">{{ result.skipped.no_temperature }}</td>
+                  <td class="text-muted">The cell was blank or could not be parsed. The row was dropped — <span class="fw-600">never filed as 0 °C</span>.</td>
+                </tr>
+                <tr>
+                  <td>Unreadable timestamp</td>
+                  <td class="text-right mono">{{ result.skipped.bad_timestamp }}</td>
+                  <td class="text-muted">An interval summary has to state its own window, and a row with no moment has no place in a series.</td>
+                </tr>
+                <tr>
+                  <td>Dated in the future</td>
+                  <td class="text-right mono">{{ result.skipped.future }}</td>
+                  <td class="text-muted">A future row sorts to the top of an append-only log and becomes "the current value" for a store that has not reached it yet.</td>
+                </tr>
+                <tr>
+                  <td>Outside the physical bounds</td>
+                  <td class="text-right mono">{{ result.skipped.out_of_bounds }}</td>
+                  <td class="text-muted">Refused rather than clamped. A quietly clamped temperature is a measurement nobody took wearing the costume of one somebody did.</td>
+                </tr>
+                <tr>
+                  <td>Duplicate timestamp inside the file</td>
+                  <td class="text-right mono">{{ result.skipped.duplicate_in_file }}</td>
+                  <td class="text-muted">Two rows claiming the same moment on one monitor. The first was kept.</td>
+                </tr>
+                <tr>
+                  <td>Humidity dropped, row kept</td>
+                  <td class="text-right mono">{{ result.skipped.dropped_humidity }}</td>
+                  <td class="text-muted">The humidity cell was out of 0–100 %, so it was cleared while the temperature — the reading that matters — was imported.</td>
+                </tr>
+                <tr>
+                  <td>Interval statistics dropped, row kept</td>
+                  <td class="text-right mono">{{ result.skipped.dropped_interval_stats }}</td>
+                  <td class="text-muted">The minimum or maximum did not bracket the reading, so those two columns were cleared rather than the whole row being lost.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="form-help">Every skip is <span class="fw-600">counted, not silenced</span>. A skip nobody can see is how an import quietly loses a third of a logger file and nobody notices until an audit. Fix the offending rows and upload the file again — the rows that landed the first time will come back as duplicates, not as a second copy.</div>
+        {% endif %}
+
+        <div class="form-actions" style="margin-top:1rem;">
+          <a href="{% url 'scm:temperaturereading_list' %}?monitor={{ monitor.pk }}" class="btn btn-outline"><i data-lucide="list"></i> See the ledger</a>
+          <a href="{% url 'scm:coldchainmonitor_profile' monitor.pk %}" class="btn btn-outline"><i data-lucide="activity"></i> Temperature profile</a>
+          <a href="{% url 'scm:coldchainmonitor_detail' monitor.pk %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> Back to the monitor</a>
+        </div>
+        <div class="form-help">Importing readings does <span class="fw-600">not</span> raise excursions by itself. Run <span class="fw-600">Detect excursions</span> from the monitor page once the file is in — the detector walks the ledger from its own watermark forward, so a back-dated download is picked up exactly once and an episode that was already closed cannot be re-opened.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filing against {{ monitor.name }}</h2>
+      <span class="badge {{ monitor.status_css }}">{{ monitor.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Monitor</dt><dd class="fw-600 mono">{{ monitor.number }}</dd></div>
+        <div class="detail-item"><dt>Watching</dt><dd>{{ monitor.subject_label }}</dd></div>
+        {% comment %}
+          A ONE-SIDED band is legitimate everywhere in 4.15, so each side is tested for None on its
+          own and a blank side prints "no lower"/"no upper" rather than 0.00 — 0 °C is a real limit
+          somebody may have set.
+        {% endcomment %}
+        <div class="detail-item">
+          <dt>Limits the rows will be judged against</dt>
+          <dd class="mono">
+            {% if monitor.min_temperature is not None %}{{ monitor.min_temperature|floatformat:2 }}{% else %}<span class="text-muted">no lower</span>{% endif %}
+            <span class="text-muted">to</span>
+            {% if monitor.max_temperature is not None %}{{ monitor.max_temperature|floatformat:2 }}{% else %}<span class="text-muted">no upper</span>{% endif %}
+            °C
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Weight that will be stamped</dt><dd class="mono">{{ interval_minutes }} min</dd></div>
+        <div class="detail-item"><dt>Deployed</dt><dd class="mono">{{ monitor.deployed_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
+        <div class="detail-item"><dt>Readings on file</dt><dd class="mono">{{ monitor.readings.count }}</dd></div>
+      </dl>
+      {% if monitor.deployed_on %}
+        <div class="form-help">This deployment started on <span class="fw-600">{{ monitor.deployed_on|date:"M d, Y" }}</span>. On a re-usable logger a row from before then belongs to an <em>earlier</em> deployment with its own limits and its own history, so filing it here would attribute another consignment's journey to this one.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The file</h2>
+        <span class="badge badge-slate">UTF-8 CSV, at most {{ max_rows }} data rows</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.file %}
+          {% include "partials/form_field.html" with field=form.source %}
+          {% include "partials/form_field.html" with field=form.interval_minutes_override %}
+        </div>
+        <div class="form-help">
+          The header row must name <span class="mono">reading_at</span> and <span class="mono">temperature</span>. <span class="mono">humidity_pct</span>, <span class="mono">min_temperature</span>, <span class="mono">max_temperature</span>, <span class="mono">sample_count</span> and <span class="mono">notes</span> are optional; anything else in the file is ignored. Column names are matched case-insensitively with punctuation stripped, and the order does not matter.
+        </div>
+        <div class="form-help">
+          Leave the <span class="fw-600">interval override</span> blank and every row is stamped with this monitor's own logging interval of {{ interval_minutes }} minutes. Set it only when the file itself was logged at a different cadence than the monitor is configured for — that weight is what a hot hour counts as in every duration and mean-kinetic-temperature figure derived from these rows, and it is snapshotted once at import so changing a setting next month cannot restate this month's arithmetic.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What this will and will not do</h2>
+        <span class="badge badge-red">A blank cell is never a zero</span>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          zero_note is printed VERBATIM and ABOVE the button — the contract says so, and it is the
+          one sentence somebody has to have read before pressing this.
+        {% endcomment %}
+        <p class="text-muted" style="margin:0 0 .75rem;">{{ zero_note }}</p>
+        <p class="text-muted" style="margin:0 0 .75rem;">{{ provenance_note }}</p>
+        <p class="text-muted" style="margin:0;">
+          Every row this import files is stamped with the source you chose above and attributed to your own party record. Neither is a column in the file: a provenance a spreadsheet can assert is not a provenance, and this record ends up in an audit pack.
+        </p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="upload"></i> Import the file</button>
+      <a href="{% url 'scm:coldchainmonitor_detail' monitor.pk %}" class="btn btn-outline">Cancel</a>
+      <a href="{% url 'scm:coldchainmonitor_add_reading' monitor.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> File one reading by hand</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-body text-muted">{{ append_only_note }}</div>
+  </div>
+{% endblock %}
