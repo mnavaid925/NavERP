@@ -906,3 +906,61 @@ night, across three sessions building 4.14 / 4.15 / 4.16 in one tree:
 able to show it failing. If you cannot name the input that turns it red, it is not yet evidence.
 Corollary: report the denominator (rows asserted, anchors followed, values tried) alongside the
 verdict — a pass over an empty set is the most common false green in this repo.
+
+---
+
+## L46 — Verification harnesses live in `temp/`, which is gitignored, so every rule about them is enforced only by memory
+
+**Context:** SCM 4.14. Two sessions, one shared working tree and one shared dev database. My
+empty-tenant link sweep (`temp/verify_links.py`) created its throwaway tenant with a **fixed slug**
+and deleted it *after* the sweep rather than in a `finally`. Both defects together are
+self-perpetuating: a leaked tenant makes the next run's `Tenant.objects.create()` raise
+`IntegrityError` **before** the sweep, so the cleanup at the bottom never runs, so the leak survives
+to break the run after that.
+
+It leaked once. The 4.15 session's `seed_scm` then **fed** that tenant on every pass, and by the time
+they noticed it held **623 rows across ~60 tables** in a database three sessions read from. Removing
+it needed a dependency-ordered delete scoped to one pk — `Party`, `PurchaseOrder`, `Item`,
+`Location`, `Carrier`, `Shipment`, `WorkCenter`, `TradeLicense`, `Asset` and `ColdChainMonitor` all
+`PROTECT` the tenant row — because `seed_scm --flush` clears **every** tenant and would have
+destroyed the demo data the other two sessions were verifying against.
+
+### 1. The rule already existed and did not fire
+
+L41 §3 says, in as many words, to give a DB-touching throwaway a slug with a run id in it *so a
+leaked row cannot collide with the next run*. I had read L41 earlier the same session. It still did
+not fire — because **nothing in the act of writing a throwaway-tenant harness asks whether the slug
+is unique.** A rule enforced only by remembering it is a rule with a green badge and no assertion
+behind it.
+
+### 2. It then propagated by COPY, which is worse than being repeated
+
+The 4.15 session built their sweep from mine with a `sed` that changed the `PAGES` list and nothing
+else, and inherited **both** defects verbatim. They did not re-derive the invariants, because they
+were adapting *a thing that visibly worked* — which is precisely the moment nobody re-derives
+anything. So the failure rate does not halve with a second careful engineer; it **doubles** with one.
+And because `temp/` is gitignored there is no commit, no diff and no review anywhere in the project
+that would ever show a third session inheriting it.
+
+### 3. Which is the actual lesson
+
+`test_suite_hygiene.py` works because it is a **check**, not a rule: it walks each test module with
+`ast` and fails on a duplicate module-level name. Nothing equivalent can exist for `temp/`, because
+`temp/` is not in the repository. So:
+
+**Rules:**
+1. Any throwaway `Tenant` (or User, or any row a seeder will later iterate) gets a **`uuid4`-suffixed
+   slug** and a **`try`/`finally`** teardown — and the debris check must match on the **PREFIX**, so
+   it catches a row leaked by an *earlier* run rather than only this one.
+2. **Run any cleanup-bearing script twice, back to back.** One run proves the happy path; the second
+   is the only thing that proves the teardown actually ran. Both sessions only found this after
+   doing exactly that.
+3. **Never `--flush` a shared dev database.** It is scoped to every tenant, and on a shared tree that
+   is somebody else's fixtures. Delete scoped to the one pk, looping until it converges, and then
+   **query the other tenants to confirm they are untouched**.
+4. **A harness worth relying on twice belongs in the committed suite, not in `temp/`.** Anything left
+   in `temp/` is unreviewable, uncopyable-safely, and governed only by whoever remembers the rule.
+   That is the durable fix, and it is still outstanding.
+
+See [[concurrent-sessions-same-tree]], L41 §3 (the rule this failed to apply), L44 (the checks-that-
+pass-for-the-wrong-reason family this belongs to) and L45.
