@@ -786,3 +786,45 @@ Every `/next-module` run touches the same ~10 files:
 
 See [[commit-workflow]], [[concurrent-sessions-same-tree]], and L41 (the earlier, narrower
 shared-tree lesson).
+
+---
+
+## L44 — A negative-input sweep that never runs the POSITIVE path proves the guard, not the feature
+
+**Context:** SCM 4.14 Labor Management. My smoke harness ran 134 checks and passed. Among them was a
+hostile-input sweep over every list page, firing `?worker=abc`, `?worker=²`,
+`?worker=99999999999999999999`, `?date_from=lastweek`, `?date_to=9999-99-99`, `?status=<script>`,
+`?page=abc` and more at each one, asserting every response was 200 and never a 500. It was.
+
+The `qa-smoke-tester` then found a hard 500 on `?gap=has_gap`.
+
+`has_gap` and `over_booked` are the **only two values that filter does anything with**. My sweep had
+passed that parameter a dozen malformed values, every one of which correctly hit the
+"unrecognised → narrow nothing" branch and returned 200. It never once passed a value the filter
+accepts. So the sweep proved, thoroughly, that the guard works — and said *nothing whatsoever* about
+the feature behind it. The page was the one the sidebar's "Time & Attendance" bullet points at.
+
+The bug itself is worth knowing separately: annotating a `Sum` puts a `GROUP BY` on the query, and
+comparing a **non-aggregate** expression against that aggregate with `F()` pushes the expression into
+the `HAVING` clause. MariaDB refuses a `HAVING` naming a column that is neither grouped nor
+aggregated — `OperationalError (1054): Unknown column 'scm_laborsession.clock_in' in 'having clause'`.
+MySQL 8 accepts it via functional-dependency detection, so this class of defect is **engine-specific**
+and will not reproduce on a different database. Fix: wrap the per-row expression in `Max(...)`. The
+GROUP BY is on the row's own pk, so the value is constant within the group and `Max` of a constant is
+that constant — identical figure, legal in `HAVING`.
+
+**Rules:**
+1. For every filter/param with a closed vocabulary, assert **each valid value** returns 200 AND
+   returns the right rows — not just that junk is ignored. The valid values are the feature; the junk
+   values are the guard. A suite that only tests one of them is half a suite.
+2. State the expected ROWS, not just the status. The gap filter is now asserted to return exactly the
+   seeded shift with a real 45-minute gap, `over_booked` to return none, and the still-open shift
+   (attended minutes unknown until it clocks out) to be excluded from both. A 200 on an empty table
+   would have passed a status-only check.
+3. Any `.annotate()` carrying an aggregate changes what the rest of the queryset may legally
+   reference. When a filter compares an annotated aggregate against a plain column, check the
+   generated SQL (`str(qs.query)`) for a `HAVING` clause before assuming it runs.
+4. This is the same shape as L41 §1 (checking a view's context is not checking its rows) one level
+   further out: **checking that bad input is rejected is not checking that good input works.**
+
+See [[commit-workflow]], L41, and L11 (the original junk-input rule this one completes).
