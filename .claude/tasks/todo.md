@@ -23011,6 +23011,7 @@ each case the code never entered the state that fails.
 | 3 | `PortalDocumentShare.OWNER_PATHS` — 3 of 18 lookups raise `FieldError` | The paths **are not wrong on the page**; nothing executes a form queryset until a page renders |
 | 4 | `expires_at` editable by any member on an admin-only-revocable share | Both the gate and the form are individually correct; only the **pair** is wrong |
 | 5 | `select_for_update()` in 4.15's excursion detector | Tests run **SQLite** under `config.settings_test`; production is MariaDB. The lock is never contended, so the test passes without exercising it |
+| 6 | A 4.15 test died on `ImportError: cannot import name 'ASSET_TYPE_CHOICES'` | **The check itself never ran.** The assertion was correct and the product was correct; the test imported the vocabulary from the wrong module |
 
 #### The two moves that actually find these
 
@@ -23074,14 +23075,52 @@ correct; the failure lived in the gap.
   were "uncontended" was read as "empty"; they carried committed 4.15 content, and a `Write` on
   that reading would have destroyed it.
 
+#### The checks are subject to the same failure as the code
+
+**A test that cannot fail for the right reason is worth less than no test, because it also carries a
+green badge.** #6 is the loop closing on this whole document: a 4.15 test asserting that 4.15 added
+no `reefer` value to 4.13's vocabulary died on `ImportError`. The assertion was right and the
+product was right — the test imported the vocabulary from the wrong module. It **read as "the
+assertion is false" and actually meant "the assertion never ran."**
+
+The near-miss is the instructive part. Had that test been written defensively — `try/except
+ImportError` with a skip, the reflex of anyone tidying a noisy suite — **it would have gone green
+while testing nothing, permanently.** Same species as #3: a reference that looks right on the page
+and only resolves at execution. Except this one was in the check.
+
+So the recipe applies to itself:
+
+- **Negative-test every guard**: make it fail on purpose once, and confirm it fails *for the reason
+  you think*. A guard nobody has watched fail is a guard nobody has tested (L40 §1).
+- **Never `skip` an import or setup error.** A skip on `ImportError` converts "this check is broken"
+  into "this check is fine" — the exact inversion this document is about.
+- An `ImportError`, a `NameError` or an empty fixture in a test is **not a flaky test to route
+  around**; it is the check reporting that it never reached the state it claims to verify.
+
 #### Do not over-trust the suite
 
 **The test suite runs SQLite (`config.settings_test`); production is MariaDB.** Anything whose
 behaviour is engine-specific is *not* covered by a passing test — `select_for_update()`, partial
-indexes, `NULL` distinctness under a unique index, strict-mode truncation. In 4.15 the paths that
-looked covered were actually exercised by the route sweep and seeder running through `manage.py`
-against real MariaDB — **luck of the harness, not design.** When `test-writer` runs for 4.16, do not
-claim engine-specific behaviour is covered because a test touching it went green.
+indexes, `NULL` distinctness under a unique index. In 4.15 the paths that looked covered were
+exercised by the route sweep and seeder running through `manage.py` against real MariaDB —
+**luck of the harness, not design.** When `test-writer` runs for 4.16, do not claim engine-specific
+behaviour is covered because a test touching it went green.
+
+**And the MariaDB fallback is narrower than it sounds.** This MariaDB runs *without*
+`STRICT_TRANS_TABLES` (`sql_mode: NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION`), so it
+**silently truncates an over-range decimal instead of raising**. `manage.py migrate` prints
+`(mysql.W002)` saying exactly this on every run, and it is easy to scope away as pre-existing
+noise — which is what happened here until the 4.14 session traced it. The consequence: for **column
+bounds**, SQLite and this MariaDB are *both* blind, and the only thing enforcing a range is a Python
+validator. So "it ran on real MariaDB" buys `HAVING`/`GROUP BY`/`select_for_update` — it buys
+**nothing for data integrity.**
+
+That matters most on the paths that skip validation. 4.15's measured columns are `editable=False`
+and written directly, so `full_clean()` never runs and **their validators are documentation, not
+enforcement** — it is safe only because every column is ~50× wider than its bound. A column whose
+width sat near its bound would truncate silently on both engines with nothing to catch it. **For
+4.16: any `editable=False` decimal written by a verb rather than a form has no validator protection
+at all** — check the column width against the bound, and do not rely on the validator.
 
 #### Checklist to apply per sub-module
 
@@ -23091,6 +23130,10 @@ claim engine-specific behaviour is covered because a test touching it went green
 - [ ] Every form field checked against the decorator on the verb that authoritatively writes it
 - [ ] Every finding grepped for its shape across `apps/` before being fixed as a line
 - [ ] Engine-specific behaviour marked as **not** covered by the SQLite suite
+- [ ] Every new guard negative-tested once — made to fail on purpose, and seen to fail for the right reason
+- [ ] No `skip`-on-`ImportError` anywhere; a setup error is a broken check, never a passing one
+- [ ] Every `editable=False` decimal written by a verb: column width checked against its bound
+      (no `full_clean()` on that path, and neither engine enforces the range)
 
 
 
