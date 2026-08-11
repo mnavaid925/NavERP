@@ -1,6 +1,6 @@
 ---
 name: scm
-description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). and 4.12 Contract & Compliance Management (a standing-obligation register whose CLM obligations point back at 4.2's contracts rather than duplicating them, import/export licences that decrement as documents are issued under them, trade paperwork hung off 4.6's shipments with HS codes snapshotted at issue, supplier ESG scorecards, and a GLEC/ISO-14083 freight-emissions estimate that reports its coverage gaps instead of a confident zero). and 4.13 Asset Management (scm.Asset as the operational asset spine with a cycle-guarded hierarchy and derived MTBF/MTTR/availability that answer None rather than a flattering zero, four-trigger preventive-maintenance plans whose schedule has exactly one writer, the MWO- maintenance work order - a SEPARATE document from 4.8's WO- production work order - carrying downtime, Maximo failure codes and the sub-module's one ledger write under a new maintenance StockMove type, an append-only MeterReading log with no edit and no delete route, and three computed report pages: a PM forecast board, an MRO storeroom over 4.3's Item/StockMove/ReorderRule with no SparePart table, and a repair-vs-replace page that READS accounting.FixedAsset). and 4.14 Labor Management (engineered multi-determinant labour standards with a most-specific-wins resolver that answers None rather than a zero standard, warehouse shift sessions on core.Party whose twelve productivity figures are all derived and all answer None on a zero denominator, booked direct/indirect activity intervals that SNAPSHOT the standard at file time so re-timing it cannot rewrite last month, volume-driven labour plans on 4.7's generate-then-review shape, and three computed pages - a task-assignment board writing only 4.4's EXISTING assigned_to column, an admin-only productivity scorecard, and a read-only payroll CSV hand-off that narrows to your own rows unless you are an admin; declares no attendance table because HRM owns attendance, no task table because 4.4 owns tasks, and writes no StockMove, no JournalEntry and nothing at all into hrm.*). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
+description: Work on the SCM module (Module 4 — Supply Chain Management). As-built = 4.1 Procurement Management (requisitions, RFQs + quote comparison, purchase orders, goods receipts + three-way match) 4.2 Supplier Relationship Management (onboarding, signal-derived scorecards, contracts, catalogs, risk), 4.3 Inventory Management (the append-only StockMove ledger with derived on-hand, items/locations/lots, transfers, adjustments, reorder automation, FIFO/LIFO/WAC valuation), 4.4 Warehouse Management (putaway, wave/batch/zone picking + packing, cycle counting, yard), 4.5 Order Management (sales orders, credit/fraud validation, soft allocation, backorders, quote-to-order), 4.6 Transportation Management (carrier master + rate cards + derived on-time scorecard, loads + route stops + cube utilization, shipments + append-only tracking events + POD, freight audit → draft accounting.Bill), and 4.7 Demand Planning & Forecasting (statistical forecasts over DERIVED sales history with a decomposition waterfall, seasonality/promotion index curves, demand-sensing signals with a working order-surge detector, consensus adjustments, and a compute-then-apply safety-stock calculator on 4.3's ReorderRule), 4.8 Manufacturing / Production (versioned multi-level bills of materials with a cycle-guarded explosion, work centres with derived capacity/OEE, the work-order lifecycle posting component consumption and finished-goods production through 4.3's append-only ledger under new consumption/production move types, ledger-derived WIP costing, an MRP netting report and an infinite-capacity schedule board), and 4.9 Quality Management System (reusable inspection plans, inspections at the receipt/in-process/shipment trigger points with snapshotted results and a usage decision held separate from pass/fail, non-conformance reports with MRB dispositions where only a scrap moves stock, CAPA with effectiveness verification, audits whose findings ARE non-conformances, and generated certificates of analysis that are refused rather than issued off-spec), and 4.10 Returns Management (RMAs with an eligibility verdict snapshotted at approval, a receiving bench where only the disposition decision touches stock - a restock posts a positive receipt at a grade-written-down cost while intake posts nothing - credit notes drafted into accounting and stopped there, warranty claims against suppliers with typed partial-approval cost lines, and a customer return portal across a staff console, a logged-in request page and a token-gated public status page and return slip). and 4.11 Supply Chain Analytics (a closed 36-metric registry in apps/scm/analytics.py behind five computed report pages - inventory turnover/dead stock/FIFO aging, the spend cube with negotiated-savings and supplier leaderboards, OTD/OTIF/freight-per-unit/utilization with a carrier scorecard, operational margin and cost-to-serve that says on the page it is NOT the statutory P&L, and a deterministic explainable disruption composite that never claims to be AI - plus KpiTarget for human intent, KpiSnapshot freezing history that cannot be re-derived, and a SupplyChainAlert inbox ranked by value at risk with a de-duplicating detector). and 4.12 Contract & Compliance Management (a standing-obligation register whose CLM obligations point back at 4.2's contracts rather than duplicating them, import/export licences that decrement as documents are issued under them, trade paperwork hung off 4.6's shipments with HS codes snapshotted at issue, supplier ESG scorecards, and a GLEC/ISO-14083 freight-emissions estimate that reports its coverage gaps instead of a confident zero). and 4.13 Asset Management (scm.Asset as the operational asset spine with a cycle-guarded hierarchy and derived MTBF/MTTR/availability that answer None rather than a flattering zero, four-trigger preventive-maintenance plans whose schedule has exactly one writer, the MWO- maintenance work order - a SEPARATE document from 4.8's WO- production work order - carrying downtime, Maximo failure codes and the sub-module's one ledger write under a new maintenance StockMove type, an append-only MeterReading log with no edit and no delete route, and three computed report pages: a PM forecast board, an MRO storeroom over 4.3's Item/StockMove/ReorderRule with no SparePart table, and a repair-vs-replace page that READS accounting.FixedAsset). and 4.14 Labor Management (engineered multi-determinant labour standards with a most-specific-wins resolver that answers None rather than a zero standard, warehouse shift sessions on core.Party whose twelve productivity figures are all derived and all answer None on a zero denominator, booked direct/indirect activity intervals that SNAPSHOT the standard at file time so re-timing it cannot rewrite last month, volume-driven labour plans on 4.7's generate-then-review shape, and three computed pages - a task-assignment board writing only 4.4's EXISTING assigned_to column, an admin-only productivity scorecard, and a read-only payroll CSV hand-off that narrows to your own rows unless you are an admin; declares no attendance table because HRM owns attendance, no task table because 4.4 owns tasks, and writes no StockMove, no JournalEntry and nothing at all into hrm.*). and 4.15 Cold Chain Management (three of its five NavERP bullets are COMPUTED pages rather than tables: a ColdChainMonitor watching exactly one of a Location, an Asset or a Shipment through three typed PROTECT FKs and never a GenericForeignKey, an append-only TemperatureReading interval log with no edit and no delete route, and a TemperatureExcursion whose every measured column is editable=False and written solely by coldchain.detect_excursions() under a lock on the MONITOR row - because MariaDB cannot express the partial unique constraint that rule would otherwise be - with the breached limits SNAPSHOTTED onto the episode, mean kinetic temperature returning None rather than 0 on frozen ranges per USP <1079.2>, no temperature ever passing through q4() or carrying MinValueValidator(ZERO) since -18 C is the normal operating point, Cold Storage Inventory computed over 4.3 and Maintenance of Reefers computed over 4.13 so 4.15 declares zero maintenance entities and a reefer is derived as an asset with an active monitor). Use when the user asks to add/change/debug anything under apps/scm or templates/scm, extend the seed_scm seeder, touch SCM sidebar wiring (LIVE_LINKS 4.x), build the next SCM sub-module, or invokes /scm.
 ---
 
 # SCM — Supply Chain Management (Module 4)
@@ -9,8 +9,8 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management + 4.13 Asset Management + 4.14 Labor Management.**
-4.15–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management + 4.13 Asset Management + 4.14 Labor Management + 4.15 Cold Chain Management.**
+4.16–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -1333,6 +1333,85 @@ put-away unassigned, so both halves of the board populate from one set of rows.
   it is flow-constant (`_FLOW_CONSTANT_METHODS`) before caching it — `same_period_last_year` is per-bucket and
   caching it would flatten a seasonal plan.
 
+## 4.15 Cold Chain Management  (`apps/scm/*/ColdChainManagement/` + `apps/scm/coldchain.py`, templates `templates/scm/coldchain/`)
+
+**Three of the five NavERP.md bullets are COMPUTED PAGES, not tables.** That is the headline fact. 4.15 adds
+three models and two additive fields, and reuses 4.3 / 4.13 for everything else.
+
+**Models** (`apps/scm/models/ColdChainManagement/`)
+- **`ColdChainMonitor`** (`CCM-`, `ColdChainMonitors.py`) — one device watching exactly ONE subject.
+  `SUBJECT_FIELDS = ("location","asset","shipment")`, three typed **PROTECT** FKs, never a `GenericForeignKey`
+  (a GenericFK carries neither a constraint nor a type, so it can point at a deleted or cross-tenant row).
+  `clean()` enforces exactly-one AND **freezes the subject once readings exist** — re-pointing would silently
+  re-attribute history the probe never measured. Carries limits (**a one-sided band is legal**), warning margin,
+  `excursion_grace_minutes`, `logging_interval_minutes`, setpoint, and the three calibration columns.
+  `status` is **user-editable here** — deliberately unlike the excursion's, which is verb-driven.
+- **`TemperatureReading`** (no prefix, `TemperatureReadings.py`) — **append-only** interval SUMMARY rows (not raw
+  samples), `interval_minutes` snapshotted per row, `unique_together (monitor, reading_at)` so a replayed import
+  is a DB error rather than a doubled history. `source`/`recorded_by` are `editable=False`. **No edit view, no
+  delete view, read-only admin** (the `StockMove`/`MeterReading` posture) — a wrong reading is corrected by
+  filing a later one.
+- **`TemperatureExcursion`** (`EXC-`, `TemperatureExcursions.py`) — split in half, and the split IS the design.
+  The **measured half is detector-written and every column is `editable=False`**: `started_at` / `ended_at` /
+  `duration_minutes` / `breach_direction` / `extreme_temperature` / `limit_min` / `limit_max` / `reading_count` /
+  `mkt` / `last_detected_at`, plus `status`. **`limit_min`/`limit_max` are SNAPSHOTTED** so editing a monitor
+  cannot rewrite what past episodes were breaches OF. Only severity / assessment / cause / corrective_action /
+  notes and the three links out (`non_conformance`, `maintenance_work_order`, `lot_serial`) are writable.
+- **Additive**: `storage_condition` on **`scm.Item`** and **`scm.Location`**, sourced from the package-ROOT
+  `apps/scm/models/_choices.py` (root because 4.3 reads it too — a cross-sub-module vocabulary must not live in
+  one sub-module's private folder). Both are on `ItemForm`/`LocationForm`; **without that they are unreachable
+  and the whole Cold Storage bullet is inert** (this shipped broken once — see below).
+
+**Service** (`apps/scm/coldchain.py`, flat at the app root like `analytics.py`)
+- `detect_excursions(tenant, *, monitor=None, user=None, after=None)` is the **ONLY writer of every measured
+  column**. It takes `select_for_update()` on the **MONITOR row** before reading anything — that lock **IS** the
+  "one open episode per monitor" guard, because **MariaDB cannot express `UniqueConstraint(condition=…)`**.
+  Locking the monitor (always present) rather than the episode matters: an episode lock is a no-op on exactly
+  the path that would create a second one. `after=` is the sweep cursor past `MAX_MONITORS_PER_SWEEP`.
+- `mean_kinetic_temperature(rows, *, frozen=False)` — USP <1079.2>, exact `Decimal`, interval-weighted (a hot
+  hour weighs an hour, not "one row"). **Returns `None`, never 0, for frozen ranges** — MKT models Arrhenius
+  degradation above freezing, so a number there is arithmetic without meaning.
+- Also `walk_episodes`, `episode_stats`, `profile(monitor, *, date_from, date_to)`, `window_stats`,
+  `time_in_range`, `severity_for`, `clamp_window`, `raise_work_order(excursion, user=None)` (hands off to 4.13).
+
+**URLs** — alias **`_ccm_`** (`_cc_` is 4.12's, `_cp_` is 4.16's). `coldchainmonitor_*` (incl. `_profile`,
+`_add_reading`, `_import_readings`, `_detect`), `temperaturereading_list/_detail` (**no edit/delete route
+exists** — that absence is the append-only rule), `temperatureexcursion_*` + POST-only verbs
+`acknowledge`/`assess`/`close`/`dismiss`/`raise_work_order`, and `cold_storage_report` /
+`cold_chain_compliance_report` / `reefer_board`.
+
+**Templates** (`templates/scm/coldchain/`) — entity folders `coldchainmonitor/` (incl. `profile.html`),
+`temperaturereading/` (incl. `import.html`), `temperatureexcursion/`; the three derived pages sit at the
+sub-module root. `profile.html` draws a **band strip, not a line chart**: the project ships no charting library
+and no filter can offset a SIGNED temperature into a pixel height — half of 4.15 runs at −18 °C, so a naive
+height-as-percent bar renders every frozen reading flat against the floor.
+
+**Seeder** — `_seed_coldchain_tenant` in `seed_scm.py`. 4 monitors across all three subject kinds, 204 readings,
+3 cold zones (one deliberately UNMONITORED so the gap report has a subject), a reefer asset + condition-trigger
+`MaintenancePlan`, 3 lots (one already expired and still on hand). **It calls `detect_excursions()` and lets the
+detector write every excursion** — a hand-written one would be a lie in the table an auditor reads. Its
+`_flush()` block **must stay ahead of 4.13's asset teardown** (`ColdChainMonitor.asset` is `PROTECT`).
+
+**Gotchas specific to 4.15 — all three shipped as real defects and were caught in review:**
+1. **Never `MinValueValidator(ZERO)` on a temperature** and **never pass one through `q2()`/`q4()`**.
+   `Decimal(value or ZERO)` turns a missing reading into a plausible **0 °C**, which in a freezer log either
+   reads as a catastrophic excursion or masks a real one. The importer **skips and counts** an unreadable cell.
+   Bounds are `MIN_TEMPERATURE_C = Decimal("-200")`.
+2. **`Decimal("nan")` parses cleanly** and only raises `InvalidOperation` at the first ordering comparison — one
+   `nan` CSV cell 500'd the whole import. `_parse_decimal` guards with `is_finite()`. `Infinity` was always safe.
+3. **A decision column on a ModelForm whose real writer is a gated verb is a privilege escalation.**
+   `assessment` was on `TemperatureExcursionForm` while `temperatureexcursion_edit` is `@login_required` and
+   `assess` is `@tenant_admin_required` — any member could mark product released with no signature. It is off
+   the whitelist; **do not put it back**. (`apps/scm/forms/ReturnsManagement/ReturnDispositions.py` has the same
+   shape with `disposition` and is not yet fixed.)
+4. Reefer maintenance declares **ZERO** entities — a reefer is DERIVED as *an `Asset` with an active monitor*, so
+   `Asset.ASSET_TYPE_CHOICES` gains no `reefer` value that would go stale the day a unit is repurposed.
+   `MaintenancePlan.condition_threshold` carries `MinValueValidator(ZERO)`, so a **sub-zero condition trigger is
+   not expressible today** — the seeded plan uses a positive "too warm" threshold.
+5. The compliance report states an explicit **NON-CLAIM**: it is an audit trail, not a validated 21 CFR Part 11 /
+   EU Annex 11 system. Do not add conformance language.
+6. `LotSerial.status` (quarantine) is **4.9's column to write**; 4.15 only reads it.
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -1381,6 +1460,15 @@ the `scm:reorder_alerts`/`scm:valuation_report` precedent that a bullet need not
 `scm:mrp_report`, Shop Floor Control **`scm:productiontimelog_list`** (the time-log list, NOT the work-centre
 master — the bullet is about *tracking* machine time, labour time and progress, which is what the log records;
 centres are reachable from it and from the schedule board).
+**`LIVE_LINKS["4.15"]`** → Temperature Monitoring `scm:coldchainmonitor_list` (the MONITOR register, **not**
+the reading ledger — an append-only log takes no bullet of its own, the `MeterReading` precedent),
+Excursion Management `scm:temperatureexcursion_list`, and **three COMPUTED pages**: Cold Storage Inventory
+`scm:cold_storage_report` (4.3 filtered — on-hand from the `StockMove` ledger, mismatch from the two
+`storage_condition` columns disagreeing, expiry/quarantine from `LotSerial`), Compliance Reporting
+`scm:cold_chain_compliance_report`, Maintenance of Reefers `scm:reefer_board` (a board over **4.13**;
+4.15 declares zero maintenance entities). `resolve_nav()` renders exactly five leaves under 4.15 — a sixth
+would mean a key drifted from its NavERP.md bullet, which is the cheapest check that the mapping is honest.
+
 **`LIVE_LINKS["4.11"]`** → all five bullets are COMPUTED pages, the `safety_stock_report` precedent taken to
 its conclusion: Inventory Dashboards `scm:inventory_analytics`, Procurement Analytics `scm:spend_analytics`,
 Logistics KPIs `scm:logistics_kpis`, Financial Reporting `scm:margin_analytics` (operational, NOT the ledger),
