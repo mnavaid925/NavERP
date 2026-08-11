@@ -362,3 +362,27 @@ from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
     TemperatureExcursionAssessForm,
     TemperatureExcursionWindowForm,
 )
+
+# --- 4.16 Customer Portal -----------------------------------------------------------------------
+# FOUR forms for THREE models, and no form at all for the fourth.
+#
+# `PortalActivity` has no form module and never will: every one of its fields is `editable=False`
+# because the whole row is system-written by `PortalActivity.record()` from the gated customer
+# views. A ModelForm over it would have no fields to render. The absence is a decision, not an
+# omission — it is why 4.16's views for that model are list + detail only.
+#
+# `PortalOrderInquiry` has TWO forms because the staff triage form and the customer-facing form
+# differ in what they may SET, not merely in what they render. `PortalInquiryCustomerForm` has no
+# `portal_account` field at all (the view stamps it from the signed-in user) and scopes every order
+# dropdown to that one customer. One form gated by an `is_staff` flag would put an authorisation
+# decision inside template-facing code, where the next edit quietly widens it.
+from .CustomerPortal.PortalAccounts import (  # noqa: F401
+    PortalAccountForm,
+)
+from .CustomerPortal.PortalOrderInquiries import (  # noqa: F401
+    PortalOrderInquiryForm,
+    PortalInquiryCustomerForm,
+)
+from .CustomerPortal.PortalDocumentShares import (  # noqa: F401
+    PortalDocumentShareForm,
+)
