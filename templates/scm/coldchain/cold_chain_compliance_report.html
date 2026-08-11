@@ -1,0 +1,704 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — Compliance Reporting. STANDALONE at the sub-module root
+(templates/scm/coldchain/), because it is not any one entity's list / detail / form page.
+
+Renders apps/scm/views/ColdChainManagement/Reports.py::cold_chain_compliance_report. Everything
+this page may read, and nothing else — the view pins the same list in its own docstring:
+
+  date_from date_to            RESOLVED date objects (the _report_window dict, SPLATTED)
+  date_from_raw date_to_raw    the echoed strings — quoted in the warning, never bound to an input
+  window_invalid period_label
+  window                       the SAME dict again, for a caller that prefers window.date_from
+  excursions excursions_truncated excursion_count      the episode log for the window
+  stats                        total reportable open critical product_affected dismissed (all int)
+  calibration_rows calibration_stats                   the certificate state of every monitor
+  profiles profiles_truncated profiled_cap             % time in range + MKT, capped at profiled_cap
+  monitors status_choices assessment_choices status assessment
+  max_window_days row_cap export_qs generated_at
+  calibration_note frozen_mkt_note no_claim_note reads_only_note
+
+ROW SHAPES.
+  excursions[i]      = {obj, duration_minutes (int, LIVE while running), excess_c (Dec|None),
+                        is_reportable (bool)}
+  calibration_rows[i]= {monitor, chip (a (label, css) 2-TUPLE — render .0 and .1), days (int|None)}
+  profiles[i]        = {monitor, profile} where profile is coldchain.profile():
+                        count first_at last_at min max mean in_range_minutes out_minutes
+                        pct_in_range mkt window_capped truncated date_from date_to limit_min
+                        limit_max frozen
+
+THE None CONTRACT, and it is the whole reason this page is worth reading:
+  * obj.extreme_temperature, obj.limit_min, obj.limit_max, obj.mkt, row.excess_c,
+    profile.min/max/mean/pct_in_range/mkt/in_range_minutes/out_minutes and row.days are ALL
+    None-able. Every one renders as an EM DASH, never as 0, never as 0.00 and never as a blank
+    green cell. An MKT of 0 °C reads as a perfectly cold shipment, which is the exact opposite of
+    "we cannot say"; 0 % time in range means "never once in range", which is a real and different
+    finding from "there were no readings".
+  * pct_in_range therefore uses `is not None` (a bare |default would swallow a genuine 0) while the
+    plain figures use |default_if_none (so a genuine 0.00 still prints as 0.00).
+  * MKT is None on EVERY frozen / deep-frozen / cryogenic monitor by design (USP <1079.2>) — those
+    cells say so in words and the reason is printed on the page as frozen_mkt_note.
+
+THE SNAPSHOT. obj.limit_min / obj.limit_max are the limits that were in force WHEN THE EPISODE
+FIRED, written once at open time and never rewritten. They are deliberately NOT the monitor's
+current band: that is what keeps this record readable next year after somebody legitimately re-bands
+a fridge. Never "helpfully" swap them for monitor.min_temperature / max_temperature.
+
+no_claim_note IS RENDERED AS VISIBLE PAGE TEXT and must stay that way. Nothing on this page may
+claim 21 CFR Part 11 / EU Annex 11 / GDP / HACCP conformance — it describes what the data IS, not
+what standard it satisfies. An over-claiming compliance page is worse than a missing one.
+
+READ-ONLY. There is no POST target on this page, no verb button and no form except the GET filter
+bar plus the CSV download link. Every action lives on the excursion's own detail page, one hop away.
+
+NOT PAGINATED — there is no page_obj in the context, so this page includes no pagination partial and
+needs no has_previous / has_next guard (L9). The log is DB-sliced at row_cap and the profile block at
+profiled_cap, and each says so when the cap bit.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY
+— badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+Every severity / status / assessment / direction colour comes from the MODEL's *_css property and
+every calibration colour from the view's chip tuple, so this template invents no judgement.
+{% endcomment %}
+{% block title %}Cold Chain Compliance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cold Chain Compliance Report</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain</a><span class="sep">›</span>
+        <span>Compliance</span>
+      </div>
+      <p class="text-muted">
+        What happened between <span class="fw-600">{{ period_label }}</span>, against the limits that were
+        actually in force at the time, on probes whose calibration state is stated beside them. Three blocks,
+        each answering a different question an auditor asks: the
+        <span class="fw-600">episode log</span>, the <span class="fw-600">certificate state</span> of every
+        monitor, and the <span class="fw-600">temperature profile</span> each one produced over the window.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer"></i> Monitors</a>
+      <a href="{% url 'scm:temperatureexcursion_list' %}" class="btn btn-outline"><i data-lucide="triangle-alert"></i> Excursion Queue</a>
+      <a href="{% url 'scm:cold_storage_report' %}" class="btn btn-outline"><i data-lucide="snowflake"></i> Cold Storage</a>
+      {% comment %}
+        export_qs is the WHITELISTED filter query string the view re-encoded — never the raw query
+        string, which would put anything an attacker appended into the browser history, the referrer
+        header and the server log. The empty branch matters: "?&format=csv" is legal but reads as a
+        bug, and on an unfiltered page export_qs is genuinely empty.
+      {% endcomment %}
+      <a href="{% url 'scm:cold_chain_compliance_report' %}{% if export_qs %}?{{ export_qs }}&amp;format=csv{% else %}?format=csv{% endif %}"
+         class="btn btn-primary"><i data-lucide="file-down"></i> Download CSV</a>
+    </div>
+  </div>
+
+  {% comment %}
+    ===================================================================================================
+    THE NON-CLAIM, ABOVE EVERY FIGURE ON THE PAGE. It is deliberately the first card: a reader who
+    takes this for a validated Part 11 system will rely on it for something it cannot carry, and by
+    the time they find out the reliance is already in a quality file somewhere.
+    ===================================================================================================
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this report is, and what it is not</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="clock"></i> Generated {{ generated_at|date:"M d, Y H:i" }}</span>
+        <span class="badge badge-info">{{ period_label }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ no_claim_note }}</p>
+      <p class="text-muted">{{ reads_only_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-muted">No electronic signature</span>
+        <span class="badge badge-muted">No re-authentication at the point of signing</span>
+        <span class="badge badge-muted">No database-level immutability guarantee</span>
+        <span class="badge badge-slate">Every change is written to the application audit log</span>
+      </div>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% comment %}
+          core:auditlog_list is @tenant_admin_required, so the link is gated on the same test — a
+          link everybody can see and only some people can open is a one-click 403 offered by the
+          page. The search runs against the audit row's target, which is the record's str() and so
+          begins with its EXC- number.
+        {% endcomment %}
+        <div class="form-help">
+          <a href="{% url 'core:auditlog_list' %}?q=EXC-"><i data-lucide="history"></i> Open the audit trail for temperature excursions</a>
+          — every acknowledgement, assessment, close and dismissal below is one row there, with the user,
+          the moment and the fields that changed.
+        </div>
+      {% else %}
+        <div class="form-help">
+          The audit trail behind these records is a workspace-admin page. Ask an administrator to open it if
+          you need the change history for a particular episode.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% comment %}
+          Bound to the RESOLVED dates, not to date_from_raw / date_to_raw: an unusable value has
+          already been replaced and a reversed window already swapped by the view, so echoing the
+          rejected string back into the box would make the controls disagree with the rows below.
+          The rejected text is quoted in the warning instead, so nothing is silently ignored.
+        {% endcomment %}
+        <div class="form-group">
+          <label class="form-label" for="cc-from">From</label>
+          <input type="date" id="cc-from" name="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cc-to">To</label>
+          <input type="date" id="cc-to" name="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cc-monitor">Monitor</label>
+          {% comment %}
+            pk dropdown — |stringformat:"d", NEVER |slugify. Bound to request.GET.monitor because the
+            view parses the pk straight into the query and passes no resolved value back.
+          {% endcomment %}
+          <select name="monitor" id="cc-monitor" class="form-select">
+            <option value="">Every monitor</option>
+            {% for m in monitors %}
+              <option value="{{ m.pk }}" {% if request.GET.monitor == m.pk|stringformat:"d" %}selected{% endif %}>
+                {{ m.number }} — {{ m.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cc-status">Triage status</label>
+          <select name="status" id="cc-status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cc-assessment">Product assessment</label>
+          <select name="assessment" id="cc-assessment" class="form-select">
+            <option value="">Any assessment</option>
+            {% for value, label in assessment_choices %}
+              <option value="{{ value }}" {% if assessment == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:cold_chain_compliance_report' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      {% if window_invalid %}
+        <div class="badge-group">
+          <span class="badge badge-amber">
+            <i data-lucide="alert-triangle"></i>
+            The window you asked for could not be used as typed{% if date_from_raw %} (from “{{ date_from_raw }}”){% endif %}{% if date_to_raw %} (to “{{ date_to_raw }}”){% endif %} —
+            a date that is not a real YYYY-MM-DD day is dropped, and a window the wrong way round is swapped.
+            Showing {{ period_label }}.
+          </span>
+        </div>
+      {% endif %}
+      <div class="form-help">
+        The window defaults to the <span class="fw-600">last 30 days</span> and filters episodes on when they
+        <span class="fw-600">started</span> — an episode that began inside the window and ran past its end is
+        in the report, because the record is about when the breach happened. Each temperature profile is
+        capped at <span class="fw-600">{{ max_window_days }} days</span> of readings and says so on the row
+        when the cap bit.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Excursion{{ stats.total|pluralize }} started in this window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="flag"></i></div>
+      <div class="stat-value">{{ stats.reportable }}</div>
+      <div class="stat-label">Reportable — outlived the grace period (of those listed)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ stats.critical }}</div>
+      <div class="stat-label">Rated critical</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="package-x"></i></div>
+      <div class="stat-value">{{ stats.product_affected }}</div>
+      <div class="stat-label">Assessed as product affected</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ stats.open }}</div>
+      <div class="stat-label">Still awaiting triage</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="circle-slash"></i></div>
+      <div class="stat-value">{{ stats.dismissed }}</div>
+      <div class="stat-label">Judged not worth acting on</div>
+    </div>
+  </div>
+
+  {% comment %} ========================= block 1 — the episode log ========================= {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Excursion log — {{ period_label }}</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ excursion_count }} in window</span>
+        <span class="badge badge-slate">Limits shown are the ones in force when each episode fired</span>
+        {% if excursions_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} — narrow the window or pick one monitor</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body form-help">
+      <span class="fw-600">Reportable</span> means the episode outlived its monitor's grace period. It is
+      derived against the grace period <em>as it stands now</em>, never stored — editing the setting has to
+      move the answer, and a stored flag would freeze last month's policy onto this month's episodes. The
+      count in the header therefore describes the rows listed below, not the whole workspace, and says so.
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Excursion</th>
+            <th>Monitor</th>
+            <th>Started</th>
+            <th>Ended</th>
+            <th>Duration</th>
+            <th>Direction</th>
+            <th>Extreme</th>
+            <th>Limits in force</th>
+            <th>Excess</th>
+            <th>Readings</th>
+            <th>MKT</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Assessment</th>
+            <th>Acted on</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in excursions %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:temperatureexcursion_detail' row.obj.pk %}" class="fw-600 mono">{{ row.obj.number }}</a>
+                {% if row.is_reportable %}
+                  <div><span class="badge badge-red">Reportable</span></div>
+                {% else %}
+                  <div><span class="badge badge-muted">Inside grace</span></div>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'scm:coldchainmonitor_detail' row.obj.monitor_id %}" class="mono">{{ row.obj.monitor.number }}</a>
+                <div class="text-muted">{{ row.obj.monitor.name }}</div>
+                <div class="form-help">{{ row.obj.monitor.subject_label }}</div>
+              </td>
+              <td class="nowrap">{{ row.obj.started_at|date:"M d, Y H:i" }}</td>
+              {% comment %}
+                ended_at is None while the monitor is STILL outside its limits. That is not a missing
+                value to em-dash quietly — it is the single most urgent fact a row can carry, so it
+                is said in words and in red.
+              {% endcomment %}
+              <td class="nowrap">
+                {% if row.obj.ended_at %}
+                  {{ row.obj.ended_at|date:"M d, Y H:i" }}
+                {% else %}
+                  <span class="badge badge-red">Still breaching</span>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {{ row.duration_minutes }} min
+                {% if not row.obj.ended_at %}<div class="form-help">Counting</div>{% endif %}
+              </td>
+              <td><span class="badge {{ row.obj.breach_direction_css }}">{{ row.obj.get_breach_direction_display }}</span></td>
+              {% comment %}
+                A temperature is NEVER printed as 0 when it is missing. |default_if_none, not
+                |default: 0.00 °C is an ordinary chilled-chain reading and must still print as 0.00.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.obj.extreme_temperature is not None %}{{ row.obj.extreme_temperature }} °C{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% comment %}
+                  THE SNAPSHOT, not the monitor's current band. A one-sided band is legitimate
+                  everywhere in this sub-module, so a missing side prints "no lower limit" / "no upper
+                  limit" rather than 0.
+                {% endcomment %}
+                {% if row.obj.limit_min is not None %}{{ row.obj.limit_min }}{% else %}<span class="text-muted">no lower limit</span>{% endif %}
+                <span class="text-muted">to</span>
+                {% if row.obj.limit_max is not None %}{{ row.obj.limit_max }}{% else %}<span class="text-muted">no upper limit</span>{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if row.excess_c is not None %}{{ row.excess_c }} °C{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono">{{ row.obj.reading_count }}</td>
+              <td class="nowrap mono">
+                {% comment %}
+                  mkt is None for a frozen / deep-frozen / cryogenic monitor (USP <1079.2>) and for a
+                  window that held no readings. The two are different facts, so the frozen case says
+                  which one it is instead of sharing the bare em dash.
+                {% endcomment %}
+                {% if row.obj.mkt is not None %}
+                  {{ row.obj.mkt }} °C
+                {% elif row.obj.monitor.is_frozen_condition %}
+                  <span class="badge badge-muted">n/a — frozen range</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td><span class="badge {{ row.obj.severity_css }}">{{ row.obj.get_severity_display }}</span></td>
+              <td><span class="badge {{ row.obj.status_css }}">{{ row.obj.get_status_display }}</span></td>
+              <td>
+                <span class="badge {{ row.obj.assessment_css }}">{{ row.obj.get_assessment_display }}</span>
+                {% if row.obj.cause %}
+                  <div class="form-help">{{ row.obj.get_cause_display }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.obj.non_conformance_id %}
+                  <div class="form-help">
+                    <a href="{% url 'scm:nonconformance_detail' row.obj.non_conformance_id %}" class="mono">{{ row.obj.non_conformance.number }}</a>
+                    <span class="text-muted">non-conformance</span>
+                  </div>
+                {% endif %}
+                {% if row.obj.maintenance_work_order_id %}
+                  <div class="form-help">
+                    <a href="{% url 'scm:maintenanceworkorder_detail' row.obj.maintenance_work_order_id %}" class="mono">{{ row.obj.maintenance_work_order.number }}</a>
+                    <span class="text-muted">work order</span>
+                  </div>
+                {% endif %}
+                {% if row.obj.lot_serial_id %}
+                  <div class="form-help">
+                    <a href="{% url 'scm:lotserial_detail' row.obj.lot_serial_id %}" class="mono">{{ row.obj.lot_serial.number }}</a>
+                    <span class="text-muted">lot</span>
+                  </div>
+                {% endif %}
+                {% if row.obj.assessed_by %}
+                  <div class="form-help">Assessed by {{ row.obj.assessed_by.name }}{% if row.obj.assessed_on %} on {{ row.obj.assessed_on|date:"M d, Y" }}{% endif %}</div>
+                {% endif %}
+                {% if not row.obj.non_conformance_id and not row.obj.maintenance_work_order_id and not row.obj.lot_serial_id and not row.obj.assessed_by %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:temperatureexcursion_detail' row.obj.pk %}" class="btn-icon" title="Open the excursion record"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:coldchainmonitor_profile' row.obj.monitor_id %}" class="btn-icon" title="Temperature profile for this monitor"><i data-lucide="activity"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="16">
+                <div class="empty-state">
+                  <i data-lucide="clipboard-check"></i>
+                  <h3>No excursion started in this window</h3>
+                  <p>
+                    Nothing here is zero — no episode began between
+                    {{ date_from|date:"M d, Y" }} and {{ date_to|date:"M d, Y" }} for these filters, so there
+                    is nothing to report. Widen the dates above, clear the monitor and status filters, or
+                    check the <a href="{% url 'scm:temperatureexcursion_list' %}">excursion queue</a> for
+                    episodes outside this window. On a workspace whose probes have never been outside their
+                    limits an empty log is the correct answer.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %} ======================= block 2 — monitor calibration ======================= {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Monitor calibration</h2>
+      <div class="badge-group">
+        {% if calibration_stats.overdue %}
+          <span class="badge badge-red">{{ calibration_stats.overdue }} overdue</span>
+        {% else %}
+          <span class="badge badge-green">Nothing overdue</span>
+        {% endif %}
+        {% if calibration_stats.due %}
+          <span class="badge badge-amber">{{ calibration_stats.due }} due soon</span>
+        {% endif %}
+        {% if calibration_stats.not_recorded %}
+          {% comment %}
+            "Not recorded" is its own bucket and is NEVER green. An uncalibrated sensor invalidates
+            every record it produced, and "we never wrote the certificate down" is a different
+            finding from "it is in date" — collapsing the two is how a gap becomes a tick.
+          {% endcomment %}
+          <span class="badge badge-muted">{{ calibration_stats.not_recorded }} with no certificate recorded</span>
+        {% endif %}
+        <span class="badge badge-slate">{{ calibration_stats.ok }} comfortably in date</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ calibration_note }}</p>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Monitor</th>
+            <th>Watches</th>
+            <th>Device</th>
+            <th>Lifecycle</th>
+            <th>Calibrated</th>
+            <th>Due</th>
+            <th>Days left</th>
+            <th>Certificate</th>
+            <th>State</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in calibration_rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:coldchainmonitor_detail' row.monitor.pk %}" class="fw-600 mono">{{ row.monitor.number }}</a>
+                <div class="text-muted">{{ row.monitor.name }}</div>
+              </td>
+              <td>
+                {{ row.monitor.subject_label }}
+                <div class="form-help">{{ row.monitor.subject_kind|default:"unassigned" }}</div>
+              </td>
+              <td>
+                {{ row.monitor.get_device_type_display }}
+                {% if row.monitor.device_serial %}
+                  <div class="form-help mono">{{ row.monitor.device_serial }}</div>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ row.monitor.status_css }}">{{ row.monitor.get_status_display }}</span></td>
+              <td class="nowrap">
+                {% if row.monitor.calibrated_on %}{{ row.monitor.calibrated_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% if row.monitor.calibration_due_on %}{{ row.monitor.calibration_due_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              {% comment %}
+                days is None when no due date is recorded — an em dash, never 0, which would read as
+                "the certificate lapses today". A genuine 0 IS due today and prints as 0.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.days is not None %}{{ row.days }}{% else %}—{% endif %}
+              </td>
+              <td class="mono">{{ row.monitor.calibration_reference|default:"—" }}</td>
+              {% comment %} chip is a plain 2-tuple from the view: .0 label, .1 theme.css class. {% endcomment %}
+              <td><span class="badge {{ row.chip.1 }}">{{ row.chip.0 }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:coldchainmonitor_detail' row.monitor.pk %}" class="btn-icon" title="Open the monitor record"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="thermometer"></i>
+                  <h3>No monitor to certify</h3>
+                  <p>
+                    This workspace has no cold-chain monitor{% if request.GET.monitor %} matching the monitor filter above{% endif %}.
+                    A compliance record starts with a deployment — add one on the
+                    <a href="{% url 'scm:coldchainmonitor_list' %}">monitor register</a>, record its
+                    certificate date and reference, and it appears here.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %} ======================= block 3 — temperature profiles ======================= {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Temperature profile — {{ period_label }}</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ profiles|length }} monitor{{ profiles|length|pluralize }} profiled</span>
+        {% if profiles_truncated %}
+          <span class="badge badge-amber">
+            <i data-lucide="alert-triangle"></i>
+            Profiling the first {{ profiled_cap }} monitors — pick one above for a specific point
+          </span>
+        {% endif %}
+        <span class="badge badge-slate">Window capped at {{ max_window_days }} days of readings</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ frozen_mkt_note }}</p>
+      <div class="form-help">
+        Each profile is two bounded queries plus a walk of the reading rows, so this is the one block on the
+        page that scales with how many monitors a workspace runs — it is capped rather than paginated, and it
+        says so above. Percentages and MKT are computed over the readings that exist; a monitor with no
+        reading in the window carries no percentage at all rather than 0 %.
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Monitor</th>
+            <th>Watches</th>
+            <th>Band judged against</th>
+            <th>Readings</th>
+            <th>First</th>
+            <th>Last</th>
+            <th>Min</th>
+            <th>Max</th>
+            <th>Mean</th>
+            <th>In range</th>
+            <th>Out of range</th>
+            <th>% time in range</th>
+            <th>MKT</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in profiles %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:coldchainmonitor_detail' row.monitor.pk %}" class="fw-600 mono">{{ row.monitor.number }}</a>
+                <div class="text-muted">{{ row.monitor.name }}</div>
+                {% if row.profile.window_capped %}
+                  <div><span class="badge badge-amber">Window capped at {{ max_window_days }} days</span></div>
+                {% endif %}
+                {% if row.profile.truncated %}
+                  <div><span class="badge badge-amber">Reading walk truncated</span></div>
+                {% endif %}
+              </td>
+              <td>{{ row.monitor.subject_label }}</td>
+              <td class="nowrap mono">
+                {% comment %}
+                  The limits the profile was JUDGED against — the monitor's current band, unlike the
+                  excursion log above, which carries each episode's own snapshot. Both are correct and
+                  they answer different questions; the copy below the tables says which is which.
+                {% endcomment %}
+                {% if row.profile.limit_min is not None %}{{ row.profile.limit_min }}{% else %}<span class="text-muted">no lower limit</span>{% endif %}
+                <span class="text-muted">to</span>
+                {% if row.profile.limit_max is not None %}{{ row.profile.limit_max }}{% else %}<span class="text-muted">no upper limit</span>{% endif %}
+              </td>
+              <td class="nowrap mono">{{ row.profile.count }}</td>
+              <td class="nowrap">
+                {% if row.profile.first_at %}{{ row.profile.first_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% if row.profile.last_at %}{{ row.profile.last_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              {% comment %}
+                min / max / mean are None on an empty window. |default_if_none, never |default —
+                0.00 °C is an ordinary reading and has to keep printing as 0.00.
+              {% endcomment %}
+              <td class="nowrap mono">{{ row.profile.min|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.profile.max|default_if_none:"—" }}</td>
+              <td class="nowrap mono">{{ row.profile.mean|default_if_none:"—" }}</td>
+              {% comment %}
+                in_range_minutes / out_minutes are None when there are no readings AND when the
+                monitor carries no limits at all — there is no "in range" to measure against a band
+                that does not exist, and 0 minutes would read as "it was never in range".
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.profile.in_range_minutes is not None %}{{ row.profile.in_range_minutes }} min{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if row.profile.out_minutes is not None %}{{ row.profile.out_minutes }} min{% else %}—{% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% comment %}
+                  `is not None`, never |default: 0 % means "never once inside the band", which is the
+                  worst possible finding, and a |default would render it as the same em dash as "no
+                  readings at all". The colour bands are this page's own reading of a number the view
+                  computed; they carry no threshold anything else depends on.
+                {% endcomment %}
+                {% if row.profile.pct_in_range is not None %}
+                  <span class="badge {% if row.profile.pct_in_range >= 99 %}badge-green{% elif row.profile.pct_in_range >= 95 %}badge-amber{% else %}badge-red{% endif %}">
+                    {{ row.profile.pct_in_range }}%
+                  </span>
+                {% elif row.profile.count %}
+                  <span class="badge badge-muted">No band configured</span>
+                {% else %}
+                  <span class="badge badge-muted">No readings</span>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">
+                {% if row.profile.mkt is not None %}
+                  {{ row.profile.mkt }} °C
+                {% elif row.profile.frozen %}
+                  <span class="badge badge-muted">n/a — frozen range</span>
+                {% elif row.profile.count %}
+                  <span class="badge badge-muted">n/a</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:coldchainmonitor_profile' row.monitor.pk %}?date_from={{ date_from|date:'Y-m-d' }}&amp;date_to={{ date_to|date:'Y-m-d' }}"
+                     class="btn-icon" title="Open the full profile for this window"><i data-lucide="activity"></i></a>
+                  <a href="{% url 'scm:temperaturereading_list' %}?monitor={{ row.monitor.pk }}&amp;date_from={{ date_from|date:'Y-m-d' }}&amp;date_to={{ date_to|date:'Y-m-d' }}"
+                     class="btn-icon" title="Every reading behind these figures"><i data-lucide="list"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="14">
+                <div class="empty-state">
+                  <i data-lucide="activity"></i>
+                  <h3>Nothing to profile</h3>
+                  <p>
+                    There is no monitor{% if request.GET.monitor %} matching the filter above{% endif %} to
+                    compute a profile for. Deploy one from the
+                    <a href="{% url 'scm:coldchainmonitor_list' %}">monitor register</a> and file or import
+                    readings against it; % time in range and mean kinetic temperature appear here as soon as
+                    there are readings inside the window.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How to read this report</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Limits in force</dt><dd>On the excursion log these are the limits <em>snapshotted when the episode opened</em>, so the record still reads correctly next year after somebody legitimately re-bands the equipment. On the profile table they are the monitor's band <em>today</em>, because that is what the window was judged against.</dd></div>
+        <div class="detail-item"><dt>Duration</dt><dd>The stored, minute-weighted figure once an episode has ended; the live elapsed time while it is still breaching. A row that says “still breaching” is counting now.</dd></div>
+        <div class="detail-item"><dt>Excess</dt><dd>How far past the snapshotted limit the worst reading went. Blank when no extreme was recorded, or when the breached side has no limit — an excess of zero would mean it touched the limit exactly.</dd></div>
+        <div class="detail-item"><dt>Reportable</dt><dd>The episode outlived its monitor's grace period. Derived against the setting as it stands now, never stored, so changing the grace period moves this answer.</dd></div>
+        <div class="detail-item"><dt>% time in range</dt><dd>Minutes inside the band over the minutes measured, weighted by each reading's own logging interval. Blank when there were no readings, or when the monitor carries no band to judge against; <span class="fw-600">0 % is a real answer</span> and means never once inside it.</dd></div>
+        <div class="detail-item"><dt>MKT</dt><dd>Mean kinetic temperature, USP &lt;1079.2&gt;, weighted by each reading's interval. Deliberately absent for frozen, deep-frozen and cryogenic points — see the note above the table.</dd></div>
+        <div class="detail-item"><dt>Calibration</dt><dd>In date · due inside the notice window · overdue · <span class="fw-600">not recorded</span>. The last of those is its own state and never green.</dd></div>
+        <div class="detail-item"><dt>Dismissed</dt><dd>Judged not worth acting on, kept apart from “closed” so the log can tell “we fixed it” from “we decided it was a non-event”.</dd></div>
+      </dl>
+      <p class="text-muted">
+        Every figure marked with an em dash is <span class="fw-600">unanswerable, not zero</span>. That
+        distinction is the point of the report: a green 0 that actually means “we had no data” stops somebody
+        going to look, while a blank sends them. The CSV download applies the same rule and writes
+        <span class="mono">n/a</span> in place of every missing value.
+      </p>
+      <p class="text-muted">
+        Nothing on this page writes anything. Acknowledging, assessing, closing and dismissing all happen on
+        an excursion's own detail page, one hop through the eye — and each of those actions writes one row to
+        the application audit log with the user, the moment and the fields that changed.
+      </p>
+    </div>
+  </div>
+{% endblock %}
