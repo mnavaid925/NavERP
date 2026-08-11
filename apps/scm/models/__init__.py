@@ -427,3 +427,58 @@ from .ColdChainManagement.TemperatureReadings import (  # noqa: F401
 from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
     TemperatureExcursion,
 )
+
+# --- 4.16 Customer Portal ---------------------------------------------------------------------
+# _choices FIRST and BY NAME, not `import *`. Three star-imported `_choices` modules already sit
+# above this block (4.12's, 4.13's, and 4.15's root-level one), so a fourth star import that
+# re-declared a shared token would silently shadow an earlier one, with the winner decided purely
+# by import order — a runtime coin-flip rather than a visible edit. 4.14's block spells every name
+# out for the same reason and its comment at :292-298 explains it at length. 4.16's vocabulary is
+# deliberately sub-module-PRIVATE (`CustomerPortal/_choices.py`) rather than living in the
+# package-root `_choices.py`: nothing outside 4.16 reads it, and the root file exists for the
+# opposite case — `STORAGE_CONDITION_CHOICES` is read by 4.3's Item and Location as well as by
+# 4.15, which is what earns a vocabulary its place at the root.
+#
+# PortalAccount FIRST, for the reader rather than for Django: every FK below is declared by string
+# so the ORM does not care, but the other three models all point AT the account. It is the root of
+# the sub-module and the row the staff enablement console exists to manage.
+#
+# **4.16 declares NO order table, NO shipment table, NO catalog table and NO second ticket table.**
+# It is a projection over what 4.3/4.5/4.6/4.10/4.12/`accounting` already own, plus exactly four
+# genuinely new rows: the entitlement record, the order-anchored inquiry that WRAPS `crm.Case`, the
+# expiring document share, and the append-only customer read log. Order Tracking and Catalog
+# Browsing are COMPUTED pages with no table at all — the `labor_board` / `sparepart_list` precedent.
+from .CustomerPortal._choices import (  # noqa: F401
+    CATALOG_SCOPE_CHOICES,
+    CUSTOMER_STATUS_MAP,
+    INQUIRY_OUTCOME_CHOICES,
+    INQUIRY_OUTCOME_CSS,
+    INQUIRY_SOURCE_CHOICES,
+    INQUIRY_TYPE_CHOICES,
+    INQUIRY_TYPE_CSS,
+    MAX_SHARE_EXPIRY_DAYS,
+    ORDER_BOUND_INQUIRY_TYPES,
+    PORTAL_ACTION_CHOICES,
+    PORTAL_ACTION_CSS,
+    PREFERRED_CHANNEL_CHOICES,
+    PRICE_BASIS_CHOICES,
+    REQUESTED_RESOLUTION_CHOICES,
+    SHARE_DOC_TYPE_CHOICES,
+    SHARE_DOC_TYPE_CSS,
+    SHARE_DOC_TYPE_FIELDS,
+    SHARE_POINTER_FIELDS,
+    STOCK_DISPLAY_CHOICES,
+    THRESHOLD_STOCK_DISPLAYS,
+)
+from .CustomerPortal.PortalAccounts import (  # noqa: F401
+    PortalAccount,
+)
+from .CustomerPortal.PortalOrderInquiries import (  # noqa: F401
+    PortalOrderInquiry,
+)
+from .CustomerPortal.PortalDocumentShares import (  # noqa: F401
+    PortalDocumentShare,
+)
+from .CustomerPortal.PortalActivities import (  # noqa: F401
+    PortalActivity,
+)
