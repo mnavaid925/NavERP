@@ -1,0 +1,581 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — one monitoring point: what it watches, what it is reading now, and
+what it has done lately.
+
+Renders apps/scm/views/ColdChainManagement/ColdChainMonitors.py::coldchainmonitor_detail. Everything
+this page may read, and nothing else:
+
+  obj                       the ColdChainMonitor, all three subjects joined. subject / subject_kind /
+                            subject_label / status_css / is_frozen_condition are safe to ask for —
+                            none of them queries
+  latest_reading            TemperatureReading or None (the probe has never reported)
+  range_chip / reporting_chip / calibration_chip
+                            plain (label, css) 2-tuples — render .0 and .1
+  in_warning_band           True / False / None — TRI-STATE (no reading, no margin, or no limits)
+  setpoint_gap              Decimal or None
+  days_to_calibration_due   int (negative once past) or None
+  limit_min / limit_max     Decimal or None — a ONE-SIDED band is legitimate
+  profile                   the coldchain.profile() dict over the last `profile_days` days
+  profile_days              int
+  profile_window            a (date_from, date_to) 2-tuple — render .0 and .1
+  readings                  a LIST, newest first, capped at `panel_cap`
+  readings_truncated        bool
+  reading_count             int — the monitor's WHOLE history, not the panel
+  panel_cap                 int
+  open_episode              TemperatureExcursion or None — set means OUT OF LIMITS RIGHT NOW
+  excursions                a LIST, newest first, capped
+  excursions_truncated      bool
+  excursion_count           int
+  open_excursion_count      int — outstanding TRIAGE, a different question from open_episode
+  can_delete                bool — the Delete button is gated on THIS, because it is exactly what
+                            coldchainmonitor_delete enforces
+  calibration_note / provenance_note / append_only_note   strs, printed verbatim
+
+`frozen_mkt_note` IS NOT IN THIS CONTEXT (the profile page and the excursion pages carry it). The
+frozen-MKT sentence below is therefore written out rather than pulled from a variable this view does
+not hand over.
+
+EVERY MEASURED FIGURE IN `profile` CAN BE None, AND None IS NEVER 0:
+
+  * min / max / mean / first_at / last_at  — None on an empty window
+  * in_range_minutes / out_minutes         — None on an empty window AND when the monitor has no
+                                             limits at all, because a reading with no band cannot be
+                                             inside or outside one
+  * pct_in_range                           — None means "no readings". A real 0 % means "never in
+                                             range", which is the opposite fact, so |default is
+                                             wrong on it and `is not None` guards it instead
+  * mkt                                    — None for a FROZEN / deep-frozen / cryogenic point (USP
+                                             <1079.2> says MKT does not apply there) and for a
+                                             window with no readable rows. Never 0.00, which would
+                                             read as a perfectly-cold store
+
+theme.css ships COLOUR-named badges only — badge-success / badge-warning / badge-danger do not exist
+and render unstyled (L33). Every badge class here is a model/view lookup (obj.status_css,
+range_chip.1, e.status_css, e.severity_css) or one of the six literals.
+
+Delete, Import and Detect are @tenant_admin_required, so all three are wrapped in the house gate —
+showing a member a button they will 403 on is the 4.11 finding. Detect is additionally @require_POST
+(a GET is a 405), so it is a real form and never a link.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ range_chip.1 }}">{{ range_chip.0 }}</span>
+        <span class="badge {{ reporting_chip.1 }}">{{ reporting_chip.0 }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain Monitors</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">This deployment watches <span class="fw-600">{{ obj.subject_label }}</span>. Nothing on this page is stored: the band state, the device health, the calibration chip, the open episode and every figure in the profile below are recomputed from the reading ledger and the clock each time it is opened — which is what makes a second, disagreeing copy of any of them structurally impossible.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_profile' obj.pk %}" class="btn btn-outline"><i data-lucide="activity"></i> Temperature profile</a>
+      <a href="{% url 'scm:coldchainmonitor_add_reading' obj.pk %}" class="btn btn-outline"><i data-lucide="thermometer"></i> File a reading</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'scm:coldchainmonitor_import_readings' obj.pk %}" class="btn btn-outline"><i data-lucide="upload"></i> Import logger file</a>
+        <form method="post" action="{% url 'scm:coldchainmonitor_detect' obj.pk %}" onsubmit="return confirm('Sweep this monitor for new, extended and closed excursions?');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="radar"></i> Detect</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if open_episode %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">This point is outside its limits right now</h2>
+        <span class="badge badge-red">Still breaching</span>
+      </div>
+      <div class="card-body">
+        <p style="margin:0;">
+          <a href="{% url 'scm:temperatureexcursion_detail' open_episode.pk %}" class="fw-600 mono">{{ open_episode.number }}</a>
+          opened <span class="fw-600">{{ open_episode.started_at|date:"M d, Y H:i" }}</span> and has no end time, which is what "still running" means here — the detector writes the end time on the first reading back inside the band. It is
+          <span class="badge {{ open_episode.severity_css }}">{{ open_episode.get_severity_display }}</span>
+          <span class="badge {{ open_episode.status_css }}">{{ open_episode.get_status_display }}</span>.
+        </p>
+        <div class="form-help">An episode is <em>extended</em> rather than duplicated: every later detection pass moves its last-detected stamp and its duration instead of raising a second row, so the queue holds one incident and not one row per interval. It cannot be closed until the monitor is back inside its limits — closing an incident that is still happening would file a record saying the product recovered while the freezer is still warming.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="thermometer"></i></div>
+      {% comment %}
+        The latest reading is None — not 0 — on a monitor that has never reported. 0 °C is a
+        perfectly plausible temperature, so a substituted zero here would read as a measurement
+        somebody took.
+      {% endcomment %}
+      <div class="stat-value">{% if latest_reading %}{{ latest_reading.temperature|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if latest_reading %}
+          °C at {{ latest_reading.reading_at|date:"M d, Y H:i" }} · {{ latest_reading.get_source_display|lower }}
+        {% else %}
+          No reading has ever been filed against this deployment
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="percent"></i></div>
+      {% comment %}
+        0 % means "never in range" and a BLANK means "we have no readings" — conflating them is how
+        a page lies about a fridge. floatformat renders None as the empty string, so the `is not
+        None` test has to happen before the filter ever sees the value.
+      {% endcomment %}
+      <div class="stat-value">{% if profile.pct_in_range is not None %}{{ profile.pct_in_range|floatformat:2 }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if profile.pct_in_range is not None %}
+          Time in range over the last {{ profile_days }} days
+        {% elif not profile.count %}
+          No readings in the last {{ profile_days }} days — not "0% in range"
+        {% else %}
+          This monitor has no temperature limits, so nothing can be in or out of a band
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ open_excursion_count }}</div>
+      <div class="stat-label">Excursion{{ open_excursion_count|pluralize }} awaiting triage · {{ excursion_count }} recorded here in total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="database"></i></div>
+      <div class="stat-value">{{ reading_count }}</div>
+      <div class="stat-label">Readings on file · one row per {{ obj.logging_interval_minutes }}-minute interval, appended forever</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ==================================================================== 1. what it watches, and how
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The deployment</h2>
+      <span class="badge badge-slate">{{ obj.get_device_type_display }}</span>
+    </div>
+    <div class="card-body">
+      <p style="margin:0 0 .9rem;">
+        {% if obj.subject_kind == "location" %}
+          <span class="badge badge-info">Cold room / zone</span>
+          This monitor watches <a href="{% url 'scm:location_detail' obj.location.pk %}" class="fw-600">{{ obj.location }}</a> — a <span class="fw-600">4.3 Location</span>, not a second cold-room master. The stock ledger already hangs off that row, which is what makes "what was in this room while it was warm" answerable at all.
+        {% elif obj.subject_kind == "asset" %}
+          <span class="badge badge-info">Reefer / chiller</span>
+          This monitor watches <a href="{% url 'scm:asset_detail' obj.asset.pk %}" class="fw-600">{{ obj.asset }}</a> — a <span class="fw-600">4.13 Asset</span>, so its maintenance plans, its work orders and its meter log are already that module's. A reefer is <em>derived</em> as "an asset with an active cold-chain monitor pointed at it" rather than being a hand-set type that could go stale.
+        {% elif obj.subject_kind == "shipment" %}
+          <span class="badge badge-info">In-transit consignment</span>
+          This monitor watches <a href="{% url 'scm:shipment_detail' obj.shipment.pk %}" class="fw-600">{{ obj.shipment }}</a> — a <span class="fw-600">4.6 Shipment</span>. A re-usable logger riding a consignment gets its own monitor row per journey, which is why the same device serial legitimately appears on many deployments.
+        {% else %}
+          <span class="badge badge-muted">Unassigned</span>
+          This row predates the exactly-one-subject rule and watches nothing the system can name. Edit it and point it at a location, an asset or a shipment.
+        {% endif %}
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Device type</dt><dd>{{ obj.get_device_type_display }}</dd></div>
+        <div class="detail-item"><dt>Device serial</dt><dd class="mono">{% if obj.device_serial %}{{ obj.device_serial }}{% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Temperature class</dt><dd>{{ obj.get_storage_condition_display|default:"Unclassified" }}</dd></div>
+        <div class="detail-item"><dt>Deployed</dt><dd class="mono">{{ obj.deployed_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
+        <div class="detail-item"><dt>Retired</dt><dd class="mono">{{ obj.retired_on|date:"M d, Y"|default:"Still deployed" }}</dd></div>
+        <div class="detail-item"><dt>Logging interval</dt><dd class="mono">{{ obj.logging_interval_minutes }} min</dd></div>
+        <div class="detail-item"><dt>Excursion grace</dt><dd class="mono">{{ obj.excursion_grace_minutes }} min</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Notes.</span> {{ obj.notes }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">The grace period is the single most important setting on this row.</span> A breach shorter than {{ obj.excursion_grace_minutes }} minutes is recorded but does not read as reportable — without that delay every door-open becomes an incident, the queue fills with noise inside a week, and then nobody reads it. What this monitor watches is <span class="fw-600">frozen</span> once readings exist: retire this deployment and start a new one rather than re-pointing it, because moving the pointer would restate every compliance figure already derived from it.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 2. the band, and where it sits in it
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The band, and where it is sitting in it</h2>
+      <span class="badge {{ range_chip.1 }}">{{ range_chip.0 }}</span>
+    </div>
+    <div class="card-body">
+      {% comment %}
+        A ONE-SIDED BAND IS LEGITIMATE and each side is tested on its own. "No lower limit" is not
+        "a lower limit of 0" — 0 °C is a real limit and printing one for the other would silently
+        invent a rule the detector is not applying.
+      {% endcomment %}
+      <p class="mono fw-600" style="margin:0 0 .35rem;">
+        {% if limit_min is not None %}{{ limit_min|floatformat:2 }} °C{% else %}no lower limit{% endif %}
+        &nbsp;→&nbsp;
+        {% if limit_max is not None %}{{ limit_max|floatformat:2 }} °C{% else %}no upper limit{% endif %}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        A reading exactly <em>on</em> a limit is <span class="fw-600">in range</span> — that is what "2 to 8 °C" means everywhere it is printed, and the detector compares strictly for the same reason.
+        {% if limit_min is None and limit_max is None %}
+          This monitor carries <span class="fw-600">no limit at all</span>, so nothing it reports can ever be in or out of range: every band chip on every page reads "not recorded" and the detector skips it silently. An active monitor is refused without one; this row is presently {{ obj.get_status_display|lower }}.
+        {% elif limit_min is None %}
+          Only an upper limit is set, so this point is judged on the warm side alone — the ordinary shape for a freezer that can never be too cold.
+        {% elif limit_max is None %}
+          Only a lower limit is set, so this point is judged on the cold side alone.
+        {% endif %}
+      </p>
+
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Latest reading</dt>
+          <dd class="mono">{% if latest_reading %}{{ latest_reading.temperature|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Taken at</dt>
+          <dd class="mono">{% if latest_reading %}{{ latest_reading.reading_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Setpoint</dt>
+          <dd class="mono">{% if obj.setpoint_temperature is not None %}{{ obj.setpoint_temperature|floatformat:2 }} °C{% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          {% comment %}
+            0.00 means "exactly on setpoint" — a measurement. None means there is no setpoint on
+            file, or no reading to compare it against. `is not None` keeps the two apart.
+          {% endcomment %}
+          <dt>Drift from setpoint</dt>
+          <dd class="mono">{% if setpoint_gap is not None %}{{ setpoint_gap|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Warning margin</dt>
+          <dd class="mono">{% if obj.warning_margin_c is not None %}{{ obj.warning_margin_c|floatformat:2 }} °C{% else %}<span class="text-muted">Not configured</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          {% comment %}
+            TRI-STATE, and the three answers are genuinely different: True = inside the limits but
+            close to one, False = comfortably inside (or already OUT, which is an excursion rather
+            than a warning), None = we cannot say because there is no reading, no margin or no band.
+          {% endcomment %}
+          <dt>Warning band</dt>
+          <dd>
+            {% if in_warning_band is None %}
+              <span class="badge badge-muted">Cannot say</span>
+            {% elif in_warning_band %}
+              <span class="badge badge-amber">Near a limit</span>
+            {% else %}
+              <span class="badge badge-green">Clear of both</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Humidity band</dt>
+          <dd class="mono">
+            {% if obj.humidity_min is not None or obj.humidity_max is not None %}
+              {% if obj.humidity_min is not None %}{{ obj.humidity_min|floatformat:2 }}{% else %}—{% endif %}
+              to
+              {% if obj.humidity_max is not None %}{{ obj.humidity_max|floatformat:2 }}{% else %}—{% endif %} %
+            {% else %}
+              <span class="text-muted">Not configured</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          {% comment %}
+            `latest_reading` is tested FIRST. On a monitor that has never reported, `latest_reading`
+            is None and a bare `latest_reading.humidity_pct` resolves to the empty string — which is
+            not None, so an `is not None` test alone would pass and print a bare "%" for a device
+            that has said nothing at all.
+          {% endcomment %}
+          <dt>Latest humidity</dt>
+          <dd class="mono">{% if latest_reading and latest_reading.humidity_pct is not None %}{{ latest_reading.humidity_pct|floatformat:2 }} %{% else %}<span class="text-muted">Not reported</span>{% endif %}</dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Humidity is <span class="fw-600">recorded but not detected on</span>: a humidity breach is a second episode type with its own duration and grace rules, and nothing in this pass raises one. The warning band is deliberately silent while a point is already out of range — that is an excursion, not a warning, and double-badging it would make the amber meaningless.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================ 3. the profile, over a fixed 7d
+    The window here is FIXED. The date-range control lives on the profile page, and giving this
+    360° page a second, differently-defaulted window is exactly how two pages come to print
+    different percentages about the same fridge.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Last {{ profile_days }} days</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ profile_window.0|date:"M d" }} → {{ profile_window.1|date:"M d, Y" }}</span>
+        <a href="{% url 'scm:coldchainmonitor_profile' obj.pk %}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Choose a window</a>
+      </div>
+    </div>
+    <div class="card-body">
+      {% if profile.count %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Readings in window</dt><dd class="mono">{{ profile.count }}</dd></div>
+          <div class="detail-item"><dt>First</dt><dd class="mono">{% if profile.first_at %}{{ profile.first_at|date:"M d, H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Last</dt><dd class="mono">{% if profile.last_at %}{{ profile.last_at|date:"M d, H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Coldest</dt><dd class="mono">{% if profile.min is not None %}{{ profile.min|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Warmest</dt><dd class="mono">{% if profile.max is not None %}{{ profile.max|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Mean</dt><dd class="mono">{% if profile.mean is not None %}{{ profile.mean|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item">
+            <dt>Time in range</dt>
+            <dd class="mono">{% if profile.in_range_minutes is not None %}{{ profile.in_range_minutes }} min{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Time out of range</dt>
+            <dd class="mono">{% if profile.out_minutes is not None %}{{ profile.out_minutes }} min{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>In range</dt>
+            <dd class="mono">{% if profile.pct_in_range is not None %}{{ profile.pct_in_range|floatformat:2 }} %{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            {% comment %}
+              MKT is None on every frozen / deep-frozen / cryogenic point — USP <1079.2> — and on a
+              window with no readable rows. NEVER 0.00: an MKT of 0 °C reads as a perfectly-cold
+              store, which is the precise opposite of "this does not apply".
+            {% endcomment %}
+            <dt>Mean kinetic temperature</dt>
+            <dd class="mono">
+              {% if profile.mkt is not None %}
+                {{ profile.mkt|floatformat:2 }} °C
+              {% elif profile.frozen %}
+                <span class="text-muted">n/a — frozen range</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+        {% if profile.frozen %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            <span class="badge badge-info">Frozen range</span>
+            Mean kinetic temperature is not reported for frozen, deep-frozen or cryogenic product. USP &lt;1079.2&gt; states it does not apply, because the Arrhenius weighting models a degradation rate frozen product is not undergoing — quoting a figure would let a warm spell be offset by the cold hours either side of it.
+          </p>
+        {% endif %}
+        {% if profile.in_range_minutes is None %}
+          <p class="text-muted" style="margin-top:.75rem;">
+            The two time figures are blank rather than zero because this monitor carries no temperature limit — readings without a band cannot be inside or outside one, and a confident <span class="mono">0 min</span> out of range would read as a clean record.
+          </p>
+        {% endif %}
+        {% if profile.window_capped %}
+          <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Window capped</span> The requested range was longer than the hard cap on any profile and was shortened. The figures above describe the window that was actually measured, not the one that was asked for.</p>
+        {% endif %}
+        {% if profile.truncated %}
+          <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-amber">Row walk capped</span> More readings fall in this window than one pass walks, so these figures cover the rows that were read. Narrow the window for an exact answer.</p>
+        {% endif %}
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="line-chart"></i>
+          <h3>No readings in the last {{ profile_days }} days</h3>
+          <p>Every figure here would be an invention rather than a measurement, so all of them are blank — including the percentage in range, which is <span class="fw-600">not</span> 0%. File a reading by hand, or import the logger file for the period, and the whole profile fills in from the ledger.</p>
+          <a href="{% url 'scm:coldchainmonitor_add_reading' obj.pk %}" class="btn btn-primary"><i data-lucide="thermometer"></i> File a reading</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ======================================================================== 4. calibration, the one
+    genuinely persistent audit artefact — an uncalibrated sensor invalidates every record it made.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Calibration</h2>
+      <span class="badge {{ calibration_chip.1 }}">{{ calibration_chip.0 }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Last calibrated</dt><dd class="mono">{{ obj.calibrated_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
+        <div class="detail-item"><dt>Certificate lapses</dt><dd class="mono">{{ obj.calibration_due_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
+        <div class="detail-item">
+          {% comment %}
+            0 is a real answer here — "due today" — and None means no certificate is on file at all.
+            |default would collapse the two, so `is not None` guards it.
+          {% endcomment %}
+          <dt>Days remaining</dt>
+          <dd class="mono">{% if days_to_calibration_due is not None %}{{ days_to_calibration_due }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Certificate reference</dt><dd class="mono">{% if obj.calibration_reference %}{{ obj.calibration_reference }}{% else %}<span class="text-muted">Not recorded</span>{% endif %}</dd></div>
+      </dl>
+      {% if days_to_calibration_due is None %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-muted">No certificate on file</span> Kept apart from "in date" deliberately: this is a data-completeness gap the compliance report lists on its own, not a due date that has not arrived. It is never green, because not knowing whether a probe is trustworthy is not the same as knowing that it is.</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">{{ calibration_note }}</p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 5. the reading panel
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recent readings</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ reading_count }} on file</span>
+        <a href="{% url 'scm:temperaturereading_list' %}?monitor={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the ledger</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Taken at</th><th>Temperature</th><th>Humidity</th><th>Interval min / max</th><th>Weight</th><th>Source</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for r in readings %}
+            <tr>
+              <td class="nowrap"><a href="{% url 'scm:temperaturereading_detail' r.pk %}" class="mono fw-600">{{ r.reading_at|date:"M d, Y H:i" }}</a></td>
+              <td class="mono nowrap">{{ r.temperature|floatformat:2 }} °C</td>
+              {% comment %}
+                Humidity is genuinely optional — most probes do not report it — so None prints an em
+                dash and never 0.00 %, which would be a claim about bone-dry air.
+              {% endcomment %}
+              <td class="mono nowrap">{% if r.humidity_pct is not None %}{{ r.humidity_pct|floatformat:2 }} %{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono nowrap">
+                {% if r.min_temperature is not None %}{{ r.min_temperature|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                /
+                {% if r.max_temperature is not None %}{{ r.max_temperature|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="mono nowrap">{{ r.interval_minutes }} min</td>
+              <td class="nowrap"><span class="badge badge-muted">{{ r.get_source_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:temperaturereading_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="thermometer"></i>
+                  <h3>Nothing has been filed against this monitor</h3>
+                  <p>A deployment with no readings is watching nothing yet, and every derived figure on this page answers "cannot say" rather than reporting a comfortable zero. File one interval summary by hand, or upload the logger file — a back-dated row is expected and supported, because that is exactly what a logger download is.</p>
+                  <a href="{% url 'scm:coldchainmonitor_add_reading' obj.pk %}" class="btn btn-primary"><i data-lucide="thermometer"></i> File a reading</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if readings_truncated %}
+        Showing the newest {{ panel_cap }} of <span class="fw-600">{{ reading_count }}</span> — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. Open the ledger for the rest.
+      {% else %}
+        {{ reading_count }} reading{{ reading_count|pluralize }} on file.
+      {% endif %}
+      <div style="margin-top:.5rem;">{{ append_only_note }}</div>
+      <div style="margin-top:.5rem;">{{ provenance_note }}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================= 6. the excursion panel
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Excursions on this point</h2>
+      <div class="badge-group">
+        {% if open_excursion_count %}<span class="badge badge-amber">{{ open_excursion_count }} awaiting triage</span>{% endif %}
+        <span class="badge badge-slate">{{ excursion_count }} recorded</span>
+        <a href="{% url 'scm:temperatureexcursion_list' %}?monitor={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the queue</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Excursion</th><th>Window</th><th>Direction</th><th>Worst</th><th>Severity</th><th>Status</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for e in excursions %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:temperatureexcursion_detail' e.pk %}" class="fw-600 mono">{{ e.number }}</a>
+                <div class="form-help text-muted">{{ e.reading_count }} reading{{ e.reading_count|pluralize }} in the window</div>
+              </td>
+              <td class="nowrap">
+                {{ e.started_at|date:"M d, H:i" }}
+                {% if e.ended_at %}
+                  <div class="form-help text-muted">to {{ e.ended_at|date:"M d, H:i" }} · {{ e.duration_minutes }} min</div>
+                {% else %}
+                  <div class="form-help"><span class="badge badge-red">Still breaching</span></div>
+                {% endif %}
+              </td>
+              <td class="nowrap"><span class="badge {{ e.breach_direction_css }}">{{ e.get_breach_direction_display }}</span></td>
+              {% comment %}
+                extreme_temperature is None when the window held no readable temperature — never 0,
+                which would read as a measurement at freezing.
+              {% endcomment %}
+              <td class="mono nowrap">{% if e.extreme_temperature is not None %}{{ e.extreme_temperature|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="nowrap"><span class="badge {{ e.severity_css }}">{{ e.get_severity_display }}</span></td>
+              <td class="nowrap"><span class="badge {{ e.status_css }}">{{ e.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:temperatureexcursion_detail' e.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="shield-check"></i>
+                  <h3>No excursions recorded here</h3>
+                  <p>Either this point has stayed inside its limits, or nothing has run the detector over its readings yet — the two look identical from here, and the detector is a button rather than a nightly job. Run it from the header above to sweep this monitor, or file a back-dated episode by hand if you are recording an incident the ledger never saw.</p>
+                  <a href="{% url 'scm:temperatureexcursion_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> File an excursion by hand</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if excursions_truncated %}
+        Showing the newest {{ panel_cap }} of <span class="fw-600">{{ excursion_count }}</span>. Open the queue filtered to this monitor for the rest.
+      {% else %}
+        {{ excursion_count }} excursion{{ excursion_count|pluralize }} recorded on this deployment.
+      {% endif %}
+      An excursion carries the limits that were <span class="fw-600">in force when it fired</span>, snapshotted onto the row. Editing this monitor's band today changes what happens next; it cannot change what a past record says about what already happened.
+    </div>
+  </div>
+
+  {% comment %}
+    =============================================================================== 7. the actions
+    can_delete is the SAME condition coldchainmonitor_delete enforces — no excursion may reference
+    the deployment — so the button and the route cannot disagree. Offering a one-click failure is
+    worse than not offering the button.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:coldchainmonitor_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <a href="{% url 'scm:coldchainmonitor_profile' obj.pk %}" class="btn btn-outline"><i data-lucide="activity"></i> Temperature profile</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:coldchainmonitor_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its entire reading history ({{ reading_count }} row(s)) is removed with it and cannot be reconstructed. Setting the status to Retired keeps everything.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if not can_delete %}
+          <span class="badge badge-slate">Delete refused</span>
+          {{ excursion_count }} excursion{{ excursion_count|pluralize }} reference{{ excursion_count|pluralize:"s," }} this monitor, and each one is the evidence record of an incident with its own snapshotted limits — so it has to outlive the device being retired. Set the status to <span class="fw-600">Retired</span> instead: a retired deployment stops being detected against and keeps its whole history. That is why the status vocabulary carries <em>retired</em> and <em>lost</em> at all.
+        {% else %}
+          Deleting this monitor also removes its <span class="fw-600">entire append-only reading history</span> — the readings cascade off the deployment that defines the limits they were judged against, and nothing reconstructs them. The cold room, reefer or shipment it watches is never touched. Retiring is the reversible move and is almost always the right one.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        A monitor stays editable at every status, deliberately: it describes a live configuration that legitimately gets renamed, re-banded and re-calibrated, and a retired deployment is often the row that most needs correcting. Nothing an edit can reach is a derived figure — none of them has a column — so there is nothing here for a form to restate. Widening the limits while an episode is running is legal and its effect is intended: the detector judges the extension against the <em>current</em> band while the excursion keeps the one it snapshotted, so the incident can actually end.
+      </p>
+    </div>
+  </div>
+{% endblock %}
