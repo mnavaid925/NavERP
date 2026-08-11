@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — the monitoring-point register.
+
+Renders apps/scm/views/ColdChainManagement/ColdChainMonitors.py::coldchainmonitor_list. Everything
+this page may read, and nothing else:
+
+  object_list                  the page slice of ColdChainMonitor. Present for the house contract;
+                               THE TABLE RENDERS `rows`, which carries the same monitors plus the
+                               five per-row facts the view resolved for the whole page at once
+  rows                         a list of dicts: monitor / latest_reading / range_chip /
+                               reporting_chip / calibration_chip / status_chip / setpoint_gap /
+                               days_to_calibration_due / open_episode / open_excursion_count
+  page_obj, q                  paginator page and the echoed search term
+  status_choices, device_type_choices, storage_condition_choices, subject_choices,
+  range_choices, reporting_choices, calibration_choices
+                               [(value, label), …] for the seven <select>s
+  range_bucket, reporting_bucket, calibration_bucket
+                               the RESOLVED bucket for each of the three DERIVED filters. The
+                               controls bind to THESE and never to request.GET, so a hand-edited
+                               ?range=whatever — which narrowed nothing — shows "All" rather than an
+                               option that did not happen
+  locations, assets, shipments querysets for the three pk dropdowns
+  total_count, active_count, out_of_range_count, calibration_overdue_count,
+  calibration_missing_count, open_excursion_count
+                               ints, counted over the WHOLE workspace and deliberately not over the
+                               filtered page
+  calibration_notice_days      int
+  calibration_note             str — printed verbatim; it is also what the compliance report prints,
+                               so the two pages cannot describe the same record two different ways
+
+WHY THE FIVE PER-ROW FACTS ARRIVE PRE-RESOLVED. latest_reading(), is_in_range(), is_reporting(),
+open_episode() and open_excursion_count() are all correct model methods and every one of them
+QUERIES — and a Django template re-evaluates a method call every single time it appears. Calling
+them from here would be five queries per row for one row of badges, which is the measured 4.13
+asset_list finding one sub-module over. The view resolves all five for the page in a fixed number of
+queries and hands them over as plain values; this page must never call the underlying method
+instead.
+
+EVERY CHIP IS A 2-TUPLE — render .0 (label) and .1 (css). Not one badge class is written by hand
+below: each comes from the model's own vocabulary, because theme.css ships COLOUR-named badges only
+and badge-success / badge-warning / badge-danger do not exist and render as unstyled text (L33).
+
+None IS NEVER 0 HERE. setpoint_gap is None when no setpoint was recorded or no reading exists — and
+a gap of 0.00 is the opposite statement ("exactly on setpoint"), so |default:"—" would be wrong.
+days_to_calibration_due is None when no certificate is on file, and a real 0 means "due today".
+latest_reading is None when the probe has never reported. All three are tested with `is None`.
+
+DELETE IS NOT ON A ROW, and that is deliberate rather than an oversight of the CRUD rule.
+coldchainmonitor_delete refuses while ANY excursion references the monitor (TemperatureExcursion.
+monitor is PROTECT — an episode is evidence and must outlive the device). This page cannot know
+that: open_excursion_count is a TRIAGE count, so a row showing 0 can still have five closed episodes
+behind it, and a Delete button gated on it would be a one-click failure on exactly those rows. The
+monitor's own page carries `can_delete`, which is the same condition the route enforces.
+{% endcomment %}
+{% block title %}Cold Chain Monitors{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cold Chain Monitors</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Cold Chain Monitors</span></div>
+      <p class="text-muted">One device, watching one thing, against these limits. A monitor is a <span class="fw-600">deployment</span> and not a piece of hardware: a re-usable logger legitimately appears on many monitors — one per shipment — each with its own limits and its own reading history. What it watches is exactly one of a cold room (Location), a reefer or chiller (Asset) or an in-transit consignment (Shipment), and that choice <span class="fw-600">freezes</span> the moment readings exist, because moving the pointer would silently restate every compliance figure already derived from it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:temperatureexcursion_list' %}" class="btn btn-outline"><i data-lucide="siren"></i> Excursions</a>
+      <a href="{% url 'scm:temperaturereading_list' %}" class="btn btn-outline"><i data-lucide="thermometer"></i> Reading Log</a>
+      {% comment %}
+        Detect is POST-only (@tenant_admin_required @require_POST) — a GET is a 405, so this must be
+        a real form and can never be a link. There is no scheduler in this project, so the sweep is a
+        button somebody presses; the seeder calls the same function, which is what keeps this path
+        exercised.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'scm:coldchain_detect' %}" onsubmit="return confirm('Sweep every active monitor for new, extended and closed excursions? This writes to the excursion queue.');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="radar"></i> Run detection</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'scm:coldchainmonitor_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Monitor</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, never over the filtered page: "3 out of range" is a fact
+    somebody has to act on right now, and a tile that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one cold room. The filtered figure is the badge in the card
+    header below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="radio"></i></div>
+      <div class="stat-value">{{ active_count }}</div>
+      <div class="stat-label">Active deployments · of {{ total_count }} monitor{{ total_count|pluralize }} on file</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="thermometer-sun"></i></div>
+      <div class="stat-value">{{ out_of_range_count }}</div>
+      <div class="stat-label">Outside their limits on the newest reading · this is a live count, not a stored flag</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ open_excursion_count }}</div>
+      <div class="stat-label">Excursions still awaiting triage across the workspace</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="badge-check"></i></div>
+      <div class="stat-value">{{ calibration_overdue_count }}</div>
+      <div class="stat-label">Calibration certificates lapsed · {{ calibration_missing_count }} monitor{{ calibration_missing_count|pluralize }} with none recorded at all</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Monitoring points</h2>
+      <div class="badge-group">
+        {% if out_of_range_count %}<span class="badge badge-red">{{ out_of_range_count }} out of range</span>{% endif %}
+        {% if calibration_overdue_count %}<span class="badge badge-amber">{{ calibration_overdue_count }} calibration overdue</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, CCM- number or device serial…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="device_type" aria-label="Device type" class="form-select">
+            <option value="">Any device</option>
+            {% for val, label in device_type_choices %}
+              <option value="{{ val }}" {% if request.GET.device_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="storage_condition" aria-label="Temperature class" class="form-select">
+            <option value="">Any temperature class</option>
+            {% for val, label in storage_condition_choices %}
+              <option value="{{ val }}" {% if request.GET.storage_condition == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="subject" aria-label="Watches" class="form-select">
+            <option value="">Watching anything</option>
+            {% for val, label in subject_choices %}
+              <option value="{{ val }}" {% if request.GET.subject == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The three pk dropdowns — |stringformat:"d" and NEVER |slugify. All three go through
+          as_db_int in the view, so ?asset=abc, ?asset=² and a 21-digit value SKIP the filter
+          instead of raising out of .filter() (L11).
+        {% endcomment %}
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">Any cold room / zone</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="asset" aria-label="Asset" class="form-select">
+            <option value="">Any reefer / chiller</option>
+            {% for a in assets %}
+              <option value="{{ a.pk }}" {% if request.GET.asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="shipment" aria-label="Shipment" class="form-select">
+            <option value="">Any consignment</option>
+            {% for s in shipments %}
+              <option value="{{ s.pk }}" {% if request.GET.shipment == s.pk|stringformat:"d" %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The three DERIVED filters bind to the RESOLVED bucket the view handed over, not to
+          request.GET. None of the three is a column and none ever will be: each answer changes by
+          the clock ticking, and a stored flag would need something to run every night to stay true.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="range" aria-label="In range" class="form-select">
+            <option value="">Any band state</option>
+            {% for val, label in range_choices %}
+              <option value="{{ val }}" {% if range_bucket == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="reporting" aria-label="Reporting" class="form-select">
+            <option value="">Any device health</option>
+            {% for val, label in reporting_choices %}
+              <option value="{{ val }}" {% if reporting_bucket == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="calibration" aria-label="Calibration" class="form-select">
+            <option value="">Any calibration state</option>
+            {% for val, label in calibration_choices %}
+              <option value="{{ val }}" {% if calibration_bucket == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The last three filters are <span class="fw-600">arithmetic rather than columns</span>. <em>Band state</em> compares the newest reading against the limits, and <span class="fw-600">unknown is not out of range</span> — a point with no reading, or with no limit on either side, cannot be judged, and a page that painted it red would cry wolf until the red meant nothing. <em>Device health</em> asks whether the probe is still sending, where <span class="fw-600">never reported</span> is its own answer because "not yet commissioned" and "stopped reporting" are different problems with different fixes. <em>Calibration</em> reads the certificate against today, with <span class="fw-600">{{ calibration_notice_days }} days</span> of notice; "no certificate recorded" is kept apart from "in date" because it is a data gap and not a due date that has not arrived yet.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Monitor</th>
+            <th>Watches</th>
+            <th>Limits</th>
+            <th>Latest reading</th>
+            <th>Band</th>
+            <th>Device</th>
+            <th>Calibration</th>
+            <th>Status</th>
+            <th>Excursions</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:coldchainmonitor_detail' row.monitor.pk %}" class="fw-600 mono">{{ row.monitor.number }}</a>
+                <div class="text-muted">{{ row.monitor.name }}</div>
+                <div class="form-help">
+                  <span class="badge badge-slate">{{ row.monitor.get_device_type_display }}</span>
+                  {% if row.monitor.device_serial %}<span class="mono">{{ row.monitor.device_serial }}</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  subject_kind is "location" / "asset" / "shipment" / "" — the model resolves it so
+                  no template needs an isinstance check or three model imports in a tag. The subject
+                  is joined by the view, so subject_label costs no query.
+                {% endcomment %}
+                {% if row.monitor.subject_kind == "location" %}
+                  <span class="badge badge-info"><i data-lucide="warehouse"></i> Cold room</span>
+                {% elif row.monitor.subject_kind == "asset" %}
+                  <span class="badge badge-info"><i data-lucide="truck"></i> Reefer / chiller</span>
+                {% elif row.monitor.subject_kind == "shipment" %}
+                  <span class="badge badge-info"><i data-lucide="package"></i> In transit</span>
+                {% else %}
+                  <span class="badge badge-muted">Unassigned</span>
+                {% endif %}
+                <div class="text-muted">{{ row.monitor.subject_label }}</div>
+              </td>
+              {% comment %}
+                A ONE-SIDED BAND IS LEGITIMATE — a freezer that only ever needs a ceiling is the
+                ordinary case — so each side is tested for None on its own and prints "none" rather
+                than 0.00. A 0 °C limit is a real limit and must not be confused with an absent one.
+              {% endcomment %}
+              <td class="nowrap mono">
+                {% if row.monitor.min_temperature is not None %}{{ row.monitor.min_temperature|floatformat:2 }}{% else %}<span class="text-muted">no lower</span>{% endif %}
+                <span class="text-muted">to</span>
+                {% if row.monitor.max_temperature is not None %}{{ row.monitor.max_temperature|floatformat:2 }}{% else %}<span class="text-muted">no upper</span>{% endif %}
+                <div class="form-help text-muted">°C · {{ row.monitor.get_storage_condition_display|default:"Unclassified" }}</div>
+              </td>
+              <td class="nowrap">
+                {% if row.latest_reading %}
+                  <span class="mono fw-600">{{ row.latest_reading.temperature|floatformat:2 }} °C</span>
+                  <div class="form-help text-muted">{{ row.latest_reading.reading_at|date:"M d, H:i" }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help text-muted">Never reported</div>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                <span class="badge {{ row.range_chip.1 }}">{{ row.range_chip.0 }}</span>
+                {% comment %}
+                  A setpoint gap of 0.00 means "exactly on setpoint" — a real measurement — while
+                  None means no setpoint was ever recorded, or there is no reading to compare. The
+                  two must not render alike, so `is not None` guards it and |default is never used.
+                {% endcomment %}
+                {% if row.setpoint_gap is not None %}
+                  <div class="form-help mono">{{ row.setpoint_gap|floatformat:2 }} °C off setpoint</div>
+                {% else %}
+                  <div class="form-help text-muted">No setpoint recorded</div>
+                {% endif %}
+              </td>
+              <td class="nowrap"><span class="badge {{ row.reporting_chip.1 }}">{{ row.reporting_chip.0 }}</span></td>
+              <td class="nowrap">
+                <span class="badge {{ row.calibration_chip.1 }}">{{ row.calibration_chip.0 }}</span>
+                {% if row.days_to_calibration_due is not None %}
+                  <div class="form-help text-muted">Due {{ row.monitor.calibration_due_on|date:"M d, Y" }}</div>
+                {% else %}
+                  <div class="form-help text-muted">No certificate on file</div>
+                {% endif %}
+              </td>
+              <td class="nowrap"><span class="badge {{ row.status_chip.1 }}">{{ row.status_chip.0 }}</span></td>
+              {% comment %}
+                TWO DIFFERENT QUESTIONS, deliberately not added together. open_episode is "is this
+                point outside its limits RIGHT NOW"; open_excursion_count is "how many episodes here
+                still need a human". An episode can be over while its investigation is wide open, and
+                one that is still breaching can already be assessed.
+              {% endcomment %}
+              <td class="nowrap">
+                {% if row.open_episode %}
+                  <a href="{% url 'scm:temperatureexcursion_detail' row.open_episode.pk %}" class="badge badge-red">Breaching now</a>
+                {% endif %}
+                {% if row.open_excursion_count %}
+                  <div class="form-help"><a href="{% url 'scm:temperatureexcursion_list' %}?monitor={{ row.monitor.pk }}">{{ row.open_excursion_count }} awaiting triage</a></div>
+                {% elif not row.open_episode %}
+                  <span class="badge badge-green">Clear</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:coldchainmonitor_detail' row.monitor.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:coldchainmonitor_profile' row.monitor.pk %}" class="btn-icon" title="Temperature profile"><i data-lucide="activity"></i></a>
+                  <a href="{% url 'scm:coldchainmonitor_add_reading' row.monitor.pk %}" class="btn-icon" title="File a reading"><i data-lucide="thermometer"></i></a>
+                  <a href="{% url 'scm:coldchainmonitor_edit' row.monitor.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="thermometer-snowflake"></i>
+                  <h3>No monitoring points yet</h3>
+                  <p>Nothing in this workspace is being watched for temperature. Deploy one with <span class="fw-600">New Monitor</span>: give it a name, point it at exactly one thing — a cold room, a reefer or a consignment — and give it at least one temperature limit, because without a limit nothing can ever be in or out of range and the detector will skip it silently. Readings are filed against a monitor afterwards, one at a time or as a logger file. If you were expecting rows here, try clearing the filters.</p>
+                  <a href="{% url 'scm:coldchainmonitor_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Deploy a monitor</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">name</span>. The band, device-health and calibration badges are all recomputed on read — there is no stored <span class="mono">offline</span> flag and no <span class="mono">calibration_status</span> column anywhere, because each of those answers changes by the clock ticking and a stored one would need something to run every night to stay true. <span class="fw-600">Delete is on the monitor's own page, not here</span>: it is refused while any excursion references the deployment (an episode is the evidence record of an incident and carries the limits that were in force when it fired), and this list cannot tell — the excursion figure in the column above counts outstanding <em>triage</em>, so a row reading "clear" may still have closed episodes behind it. Retiring a monitor is the move that keeps the record.
+      <div style="margin-top:.75rem;">{{ calibration_note }}</div>
+    </div>
+  </div>
+{% endblock %}
