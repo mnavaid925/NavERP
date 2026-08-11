@@ -1,0 +1,796 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — Cold Storage Inventory. STANDALONE at the sub-module root
+(templates/scm/coldchain/), because it is not any one entity's list / detail / form page.
+
+Renders apps/scm/views/ColdChainManagement/Reports.py::cold_storage_report. Everything this page
+may read, and nothing else — the view pins the same list in its own docstring:
+
+  view view_choices                    the resolved ?view= section + [(value, label)] x5
+  storage_condition storage_condition_choices
+  cold_conditions                      sorted RAW values of COLD_CONDITIONS (chilled/frozen/…)
+  locations items                      dropdown querysets
+  days days_raw days_invalid day_options min_days max_days     the expiry horizon, CLAMPED 1..365
+  today                                date
+  on_hand_rows      on_hand_truncated
+  mismatch_rows     mismatch_truncated
+  expiring_rows     expiring_truncated
+  quarantine_rows   quarantine_truncated
+  unmonitored_rows  unmonitored_truncated
+  stats                                cold_locations monitored_locations unmonitored_locations
+                                       cold_items mismatches expiring expired quarantined (all int)
+  row_cap                              the per-section SLICE, 100
+  reads_only_note lot_status_note      standing prose, printed verbatim
+
+ROW DICTS. on_hand_rows / mismatch_rows are dicts of RAW COLUMN VALUES, not model instances —
+item_id sku item_name location_id location_code location_name item_condition location_condition
+quantity value, plus kind + reason on a mismatch row. There is no `row.item` and no `row.location`,
+so `row.item.sku` would render as a silent blank (L41). expiring_rows / quarantine_rows carry
+`lot` (a real LotSerial with its item joined), `on_hand`, `days_to_expiry` and `is_expired`.
+
+TWO THINGS THE VIEW DOES **NOT** PASS, resolved by reading it:
+  * there is no resolved `location` value in the context — the ?location= pk is parsed straight into
+    the query — so the location <select> binds to request.GET.location and compares with
+    |stringformat:"d" (NEVER |slugify).
+  * `items` is in the context but the view parses NO ?item= parameter, so this page renders no item
+    dropdown. A control that posts a parameter nothing reads looks like a filter that silently did
+    nothing, which is worse than no control (the spare_parts ?spare=1 rule).
+
+item_condition / location_condition are RAW values ("deep_frozen"), and there is no label filter in
+this project — so each cell resolves its label by walking storage_condition_choices. A blank value
+is "not classified", which is its own finding and never "ambient".
+
+days_to_expiry is int|None and NEVER 0-by-accident: None means the lot carries no expiry date at
+all, while 0 means it expires today. Every test is `is not None`, never truthiness and never
+|default (which would swallow a genuine 0).
+
+THIS PAGE WRITES NOTHING — there is no POST target on it, no form except the GET filter bar, and no
+verb button anywhere. Quarantine in particular is 4.9's column: the lot status shown here is READ,
+and the only way to change it is a non-conformance on 4.9's own pages.
+
+?view= picks which section OPENS. All five are computed on every load, so the header chips can never
+disagree with the table below them; the four that are not open show their count and a link that
+opens them. Nothing is hidden numerically.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY
+— badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Cold Storage Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Cold Storage Inventory</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain</a><span class="sep">›</span>
+        <span>Cold Storage Inventory</span>
+      </div>
+      <p class="text-muted">
+        Five questions about refrigerated stock, all of them <span class="fw-600">derived</span> and none of
+        them stored. On-hand is summed live from the append-only stock ledger, the condition mismatch comes
+        from comparing what an item <em>requires</em> with what a bin <em>provides</em>, expiry comes from the
+        lot's own date and quarantine is read from the lot's status. There is no second stock figure on this
+        page to drift from the first.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer"></i> Monitors</a>
+      <a href="{% url 'scm:cold_chain_compliance_report' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Compliance</a>
+      <a href="{% url 'scm:reefer_board' %}" class="btn btn-outline"><i data-lucide="truck"></i> Reefer Board</a>
+      <a href="{% url 'scm:lotserial_list' %}" class="btn btn-primary"><i data-lucide="boxes"></i> Lots &amp; Serials</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The design decision in visible copy rather than a code comment. A reader who assumes this page
+    keeps its own stock figure will eventually try to reconcile it with the ledger by hand.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ reads_only_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">On-hand summed live from the stock ledger</span>
+        <span class="badge badge-slate">Expiry and quarantine read from the lot record</span>
+        <span class="badge badge-muted">No stock movement, no journal entry, no lot status written</span>
+        <span class="badge badge-slate"><i data-lucide="calendar"></i> As at {{ today|date:"M d, Y" }}</span>
+      </div>
+      <div class="form-help">
+        “Cold storage” here means
+        {% for value in cold_conditions %}<span class="badge badge-info">{% for v, label in storage_condition_choices %}{% if v == value %}{{ label }}{% endif %}{% endfor %}</span> {% endfor %}
+        — cool and controlled-room-temperature stores are deliberately <span class="fw-600">out</span>. A
+        controlled-room-temperature store is temperature-<em>controlled</em>, but it is not cold storage, and
+        folding it in would put every ordinary dry-goods bin on a page whose job is to show the refrigerated
+        ones.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="warehouse"></i></div>
+      <div class="stat-value">{{ stats.cold_locations }}</div>
+      <div class="stat-label">Cold storage location{{ stats.cold_locations|pluralize }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="thermometer"></i></div>
+      <div class="stat-value">{{ stats.monitored_locations }}</div>
+      <div class="stat-label">With an active monitor on them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="thermometer-snowflake"></i></div>
+      <div class="stat-value">{{ stats.unmonitored_locations }}</div>
+      <div class="stat-label">Cold, and watched by nothing</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ stats.cold_items }}</div>
+      <div class="stat-label">Items that declare a cold requirement</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.mismatches }}</div>
+      <div class="stat-label">Item / bin condition mismatches</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ stats.expiring }}</div>
+      <div class="stat-label">Expiring inside {{ days }} day{{ days|pluralize }} ({{ stats.expired }} already expired)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filter every section</h2>
+      <div class="badge-group">
+        {% if stats.quarantined %}
+          <span class="badge badge-amber">{{ stats.quarantined }} quarantined lot{{ stats.quarantined|pluralize }}</span>
+        {% else %}
+          <span class="badge badge-muted">Nothing in quarantine</span>
+        {% endif %}
+        {% if stats.expired %}
+          <span class="badge badge-red">{{ stats.expired }} expired and still on hand</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% comment %}
+          `view` rides in the filter bar as a hidden field so narrowing the data keeps the section
+          you were reading open. It is a <select> of its own further down.
+        {% endcomment %}
+        <input type="hidden" name="view" value="{{ view }}">
+        <div class="form-group">
+          <label class="form-label" for="cs-condition">Temperature class</label>
+          <select name="storage_condition" id="cs-condition" class="form-select">
+            <option value="">Every class</option>
+            {% for value, label in storage_condition_choices %}
+              <option value="{{ value }}" {% if storage_condition == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cs-location">Location</label>
+          {% comment %}
+            pk dropdown — |stringformat:"d", NEVER |slugify. Bound to request.GET.location because
+            the view parses the pk straight into the query and passes no resolved value back.
+          {% endcomment %}
+          <select name="location" id="cs-location" class="form-select">
+            <option value="">Everywhere</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>
+                {{ loc.code }} — {{ loc.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cs-days">Expiry horizon (days)</label>
+          {% comment %}
+            Bound to the RESOLVED `days`, never to days_raw: an out-of-range value has already been
+            clamped by the view, and echoing the rejected string back into the box would make the
+            control disagree with the rows below it. min/max mirror the view's own clamp.
+          {% endcomment %}
+          <input type="number" id="cs-days" name="expiring_within" value="{{ days }}"
+                 min="{{ min_days }}" max="{{ max_days }}" step="1" class="form-input">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:cold_storage_report' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      {% if days_invalid %}
+        <div class="badge-group">
+          <span class="badge badge-amber">
+            <i data-lucide="alert-triangle"></i>
+            “{{ days_raw }}” could not be used as an expiry horizon — showing {{ days }} day{{ days|pluralize }}
+            (allowed: {{ min_days }}–{{ max_days }}).
+          </span>
+        </div>
+      {% endif %}
+      <div class="form-help">
+        Quick horizons:
+        {% for opt in day_options %}
+          <a href="{% url 'scm:cold_storage_report' %}?view={{ view|urlencode }}&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ opt }}">{% if days == opt %}<span class="fw-600">{{ opt }}d</span>{% else %}{{ opt }}d{% endif %}</a>{% if not forloop.last %} · {% endif %}
+        {% endfor %}
+      </div>
+      <div class="form-help">
+        Every temperature class is offered above because the view accepts every one of them, but the four
+        stock sections only ever look at <span class="fw-600">cold</span> bins and cold-rated items — so
+        narrowing to ambient or controlled room temperature legitimately empties them. The horizon applies to
+        the expiry section only; it changes no other figure on the page.
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    ===================================================================================================
+    Section tabs. All five sections are computed on every load — these links only choose which table
+    is drawn, so the counts in the tabs and the rows in the open table always describe the same data.
+    Each link carries the other three filters so switching section never silently widens the query.
+    ===================================================================================================
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Sections</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% for value, label in view_choices %}
+          <a href="{% url 'scm:cold_storage_report' %}?view={{ value|urlencode }}&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ days }}"
+             class="btn btn-sm {% if view == value %}btn-primary{% else %}btn-outline{% endif %}">{{ label }}</a>
+        {% endfor %}
+      </div>
+      <div class="form-help">
+        The open section is the only table drawn, but every count on this page is computed from all five —
+        so a section you have not opened is never a section that has not been checked.
+      </div>
+    </div>
+  </div>
+
+  {% comment %} ===================== 1. cold on-hand by location ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Cold on-hand by location</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ on_hand_rows|length }} row{{ on_hand_rows|length|pluralize }}</span>
+        {% if on_hand_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} — narrow the filters to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if view == "on_hand" %}
+      <div class="card-body form-help">
+        What is physically in the refrigerated bins, summed from the stock ledger. A location whose moves
+        net to nothing is <span class="fw-600">dropped rather than printed as 0</span> — an empty bin is not
+        a stocking location, and a column of zeroes would bury the bins that hold something.
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Location</th>
+              <th>Item</th>
+              <th>Item requires</th>
+              <th>Bin provides</th>
+              <th>On hand</th>
+              <th>Value</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in on_hand_rows %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:location_detail' row.location_id %}" class="fw-600 mono">{{ row.location_code }}</a>
+                  <div class="text-muted">{{ row.location_name }}</div>
+                </td>
+                <td>
+                  <a href="{% url 'scm:item_detail' row.item_id %}" class="fw-600 mono">{{ row.sku }}</a>
+                  <div class="text-muted">{{ row.item_name }}</div>
+                </td>
+                <td>
+                  {% if row.item_condition %}
+                    <span class="badge badge-info">{% for v, label in storage_condition_choices %}{% if v == row.item_condition %}{{ label }}{% endif %}{% endfor %}</span>
+                  {% else %}
+                    {% comment %}
+                      Blank is NOT "ambient". Nobody has said what this product needs, which is a data
+                      gap somebody can close in one edit — a different finding from "it needs no
+                      cooling", and it must not be coloured as if the item were fine.
+                    {% endcomment %}
+                    <span class="badge badge-muted">Not classified</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.location_condition %}
+                    <span class="badge badge-slate">{% for v, label in storage_condition_choices %}{% if v == row.location_condition %}{{ label }}{% endif %}{% endfor %}</span>
+                  {% else %}
+                    <span class="badge badge-muted">Not classified</span>
+                  {% endif %}
+                </td>
+                <td class="nowrap mono">{{ row.quantity }}</td>
+                <td class="nowrap mono">{{ row.value }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:item_detail' row.item_id %}" class="btn-icon" title="Open the item record"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:location_detail' row.location_id %}" class="btn-icon" title="Open the location record"><i data-lucide="map-pin"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="7">
+                  <div class="empty-state">
+                    <i data-lucide="package-open"></i>
+                    <h3>Nothing on hand in a cold bin</h3>
+                    <p>
+                      No stock nets to a positive quantity in a location classified chilled, frozen, deep
+                      frozen or cryogenic under these filters. That is the correct answer on a workspace
+                      that has not classified its bins yet — set a temperature class on the
+                      <a href="{% url 'scm:location_list' %}">locations</a> that are refrigerated and this
+                      table starts answering.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body form-help">
+        {{ on_hand_rows|length }} row{{ on_hand_rows|length|pluralize }} computed.
+        <a href="{% url 'scm:cold_storage_report' %}?view=on_hand&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ days }}">Open this section</a>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %} ===================== 2. condition mismatches ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Condition mismatches</h2>
+      <div class="badge-group">
+        {% if stats.mismatches %}
+          <span class="badge badge-red">{{ stats.mismatches }} item{{ stats.mismatches|pluralize }} in the wrong place</span>
+        {% else %}
+          <span class="badge badge-green">Every cold-rated item is in a matching bin</span>
+        {% endif %}
+        {% if mismatch_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if view == "mismatch" %}
+      <div class="card-body form-help">
+        Only items that <span class="fw-600">declare a cold requirement</span> can appear here: an
+        unclassified item makes no claim about where it must live, so it cannot be in the wrong place. The
+        bin side is deliberately not restricted to cold storage — a chilled item sitting in an ambient or
+        unclassified bin is exactly the finding this section exists for. The test is
+        <span class="fw-600">exact inequality</span>, not a compatibility ladder: a freezer does not
+        “satisfy” a chilled item, it freeze-damages it.
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Requires</th>
+              <th>Sitting in</th>
+              <th>Finding</th>
+              <th>On hand</th>
+              <th>Value</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in mismatch_rows %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:item_detail' row.item_id %}" class="fw-600 mono">{{ row.sku }}</a>
+                  <div class="text-muted">{{ row.item_name }}</div>
+                </td>
+                <td>
+                  <span class="badge badge-info">{% for v, label in storage_condition_choices %}{% if v == row.item_condition %}{{ label }}{% endif %}{% endfor %}</span>
+                </td>
+                <td>
+                  <a href="{% url 'scm:location_detail' row.location_id %}" class="fw-600 mono">{{ row.location_code }}</a>
+                  <div class="text-muted">{{ row.location_name }}</div>
+                  {% if row.location_condition %}
+                    <span class="badge badge-slate">{% for v, label in storage_condition_choices %}{% if v == row.location_condition %}{{ label }}{% endif %}{% endfor %}</span>
+                  {% else %}
+                    <span class="badge badge-muted">No class recorded</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% comment %}
+                    `kind` arrives as a bare string with no colour attached, so the three cases are
+                    coloured here and nowhere else. too_warm is RED because warm is how cold-chain
+                    product is actually lost; too_cold is AMBER because freeze damage is real but is
+                    not the runaway case; unclassified is MUTED because it is a missing fact about the
+                    bin, not a measured breach — colouring a data gap red is how a page starts crying
+                    wolf.
+                  {% endcomment %}
+                  {% if row.kind == "too_warm" %}
+                    <span class="badge badge-red">Too warm for this item</span>
+                  {% elif row.kind == "too_cold" %}
+                    <span class="badge badge-amber">Colder than rated</span>
+                  {% else %}
+                    <span class="badge badge-muted">Bin not classified</span>
+                  {% endif %}
+                  <div class="form-help">{{ row.reason }}</div>
+                </td>
+                <td class="nowrap mono">{{ row.quantity }}</td>
+                <td class="nowrap mono">{{ row.value }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:item_detail' row.item_id %}" class="btn-icon" title="Open the item record"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:location_detail' row.location_id %}" class="btn-icon" title="Open the location record"><i data-lucide="map-pin"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="7">
+                  <div class="empty-state">
+                    <i data-lucide="check-circle"></i>
+                    <h3>No cold-rated stock is in the wrong place</h3>
+                    <p>
+                      Every item that declares a temperature class is sitting in a bin that matches it. On a
+                      workspace where neither side has been classified yet this is simply an unanswered
+                      question rather than a clean bill of health — set the class on your
+                      <a href="{% url 'scm:item_list' %}">items</a> and your
+                      <a href="{% url 'scm:location_list' %}">locations</a> and this section starts
+                      comparing them.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body form-help">
+        {{ stats.mismatches }} mismatch{{ stats.mismatches|pluralize:"es" }} computed.
+        <a href="{% url 'scm:cold_storage_report' %}?view=mismatch&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ days }}">Open this section</a>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %} ===================== 3. expiring and expired ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Expiring and expired</h2>
+      <div class="badge-group">
+        {% if stats.expired %}
+          <span class="badge badge-red">{{ stats.expired }} expired and still on hand</span>
+        {% else %}
+          <span class="badge badge-green">Nothing expired is still on hand</span>
+        {% endif %}
+        {% if stats.expiring %}
+          <span class="badge badge-amber">{{ stats.expiring }} due inside {{ days }} day{{ days|pluralize }}</span>
+        {% else %}
+          <span class="badge badge-muted">Nothing due inside {{ days }} day{{ days|pluralize }}</span>
+        {% endif %}
+        {% if expiring_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if view == "expiring" %}
+      <div class="card-body form-help">
+        FEFO visibility over the lot's own expiry date: batches of cold-rated product that expire inside the
+        horizon, and batches that expired already but are <span class="fw-600">still on hand</span>. Fully
+        consumed lots are left out — a lot with nothing left is history, not a first-expiry-first-out problem.
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Lot / serial</th>
+              <th>Item</th>
+              <th>Requires</th>
+              <th>Expires</th>
+              <th>Days</th>
+              <th>On hand</th>
+              <th>Lot status</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in expiring_rows %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:lotserial_detail' row.lot.pk %}" class="fw-600 mono">{{ row.lot.number }}</a>
+                  <div class="form-help">{{ row.lot.get_kind_display }}</div>
+                </td>
+                <td>
+                  <a href="{% url 'scm:item_detail' row.lot.item_id %}" class="mono">{{ row.lot.item.sku }}</a>
+                  <div class="text-muted">{{ row.lot.item.name }}</div>
+                </td>
+                <td>
+                  {% if row.lot.item.storage_condition %}
+                    <span class="badge badge-info">{% for v, label in storage_condition_choices %}{% if v == row.lot.item.storage_condition %}{{ label }}{% endif %}{% endfor %}</span>
+                  {% else %}
+                    <span class="badge badge-muted">Not classified</span>
+                  {% endif %}
+                </td>
+                <td class="nowrap">{{ row.lot.expiry_date|date:"M d, Y" }}</td>
+                {% comment %}
+                  days_to_expiry is None when the lot carries no expiry date and an int otherwise —
+                  0 means "expires today" and is a real answer, so the test is `is not None` and never
+                  |default. A negative value is rendered as a sentence rather than as "-14 days left".
+                {% endcomment %}
+                <td class="nowrap mono">
+                  {% if row.days_to_expiry is not None %}
+                    {% if row.is_expired %}
+                      <span class="badge badge-red">Expired</span>
+                      <div class="form-help">{{ row.days_to_expiry }} day{{ row.days_to_expiry|pluralize }} past</div>
+                    {% elif row.days_to_expiry == 0 %}
+                      <span class="badge badge-amber">Expires today</span>
+                    {% else %}
+                      {{ row.days_to_expiry }}
+                    {% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td class="nowrap mono">{{ row.on_hand }}</td>
+                <td>
+                  {% if row.lot.status == "available" %}
+                    <span class="badge badge-green">{{ row.lot.get_status_display }}</span>
+                  {% elif row.lot.status == "quarantine" %}
+                    <span class="badge badge-amber">{{ row.lot.get_status_display }}</span>
+                  {% elif row.lot.status == "expired" %}
+                    <span class="badge badge-red">{{ row.lot.get_status_display }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ row.lot.get_status_display }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:lotserial_detail' row.lot.pk %}" class="btn-icon" title="Open the lot record"><i data-lucide="eye"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="8">
+                  <div class="empty-state">
+                    <i data-lucide="calendar-check"></i>
+                    <h3>Nothing cold expires inside {{ days }} day{{ days|pluralize }}</h3>
+                    <p>
+                      No lot of a cold-rated item both carries an expiry date inside this horizon and still
+                      has stock against it. Widen the horizon above, or check the
+                      <a href="{% url 'scm:lotserial_list' %}">lot register</a> — a lot with no expiry date
+                      recorded cannot appear here at all, and that absence is a data gap rather than a clean
+                      result.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body form-help">
+        {{ expiring_rows|length }} lot{{ expiring_rows|length|pluralize }} inside the {{ days }}-day horizon.
+        <a href="{% url 'scm:cold_storage_report' %}?view=expiring&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ days }}">Open this section</a>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %} ===================== 4. quarantined lots ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Quarantined lots</h2>
+      <div class="badge-group">
+        {% if stats.quarantined %}
+          <span class="badge badge-amber">{{ stats.quarantined }} lot{{ stats.quarantined|pluralize }} on hold</span>
+        {% else %}
+          <span class="badge badge-green">Nothing cold is in quarantine</span>
+        {% endif %}
+        <span class="badge badge-muted">Read from the lot record — never written here</span>
+        {% if quarantine_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if view == "quarantined" %}
+      <div class="card-body">
+        <p class="text-muted">{{ lot_status_note }}</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Lot / serial</th>
+              <th>Item</th>
+              <th>Requires</th>
+              <th>Expires</th>
+              <th>On hand</th>
+              <th>Note</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in quarantine_rows %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:lotserial_detail' row.lot.pk %}" class="fw-600 mono">{{ row.lot.number }}</a>
+                  <div class="form-help">{{ row.lot.get_kind_display }}</div>
+                </td>
+                <td>
+                  <a href="{% url 'scm:item_detail' row.lot.item_id %}" class="mono">{{ row.lot.item.sku }}</a>
+                  <div class="text-muted">{{ row.lot.item.name }}</div>
+                </td>
+                <td>
+                  {% if row.lot.item.storage_condition %}
+                    <span class="badge badge-info">{% for v, label in storage_condition_choices %}{% if v == row.lot.item.storage_condition %}{{ label }}{% endif %}{% endfor %}</span>
+                  {% else %}
+                    <span class="badge badge-muted">Not classified</span>
+                  {% endif %}
+                </td>
+                {% comment %}
+                  A quarantined lot legitimately has no expiry date — an em dash, never a date the
+                  page invented and never today's.
+                {% endcomment %}
+                <td class="nowrap">
+                  {% if row.lot.expiry_date %}
+                    {{ row.lot.expiry_date|date:"M d, Y" }}
+                    {% if row.is_expired %}<div><span class="badge badge-red">Expired</span></div>{% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="nowrap mono">{{ row.on_hand }}</td>
+                <td>{{ row.lot.notes|default:"—" }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:lotserial_detail' row.lot.pk %}" class="btn-icon" title="Open the lot record"><i data-lucide="eye"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="7">
+                  <div class="empty-state">
+                    <i data-lucide="shield-check"></i>
+                    <h3>No cold-rated lot is in quarantine</h3>
+                    <p>
+                      Nothing matching these filters is on hold. Quarantine is set by a non-conformance, not
+                      here — if an excursion means product was affected, record the assessment on the
+                      <a href="{% url 'scm:temperatureexcursion_list' %}">excursion</a> and raise or link the
+                      non-conformance that acts on it.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body form-help">
+        {{ stats.quarantined }} lot{{ stats.quarantined|pluralize }} on hold.
+        <a href="{% url 'scm:cold_storage_report' %}?view=quarantined&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ days }}">Open this section</a>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %} ===================== 5. unmonitored cold storage ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Unmonitored cold storage</h2>
+      <div class="badge-group">
+        {% if stats.unmonitored_locations %}
+          <span class="badge badge-red">{{ stats.unmonitored_locations }} cold location{{ stats.unmonitored_locations|pluralize }} watched by nothing</span>
+        {% else %}
+          <span class="badge badge-green">Every cold location has an active monitor</span>
+        {% endif %}
+        <span class="badge badge-slate">{{ stats.monitored_locations }} of {{ stats.cold_locations }} monitored</span>
+        {% if unmonitored_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }}</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if view == "unmonitored" %}
+      <div class="card-body form-help">
+        A location classified chilled, frozen, deep frozen or cryogenic with
+        <span class="fw-600">no active cold-chain monitor pointed at it</span>. This section exists only
+        because both halves — the temperature class on the bin and the monitor deployment — now live in the
+        same database. A monitor that is inactive, in calibration, retired or lost does not count as cover:
+        it is watching nothing while the bin still holds product.
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Location</th>
+              <th>Class</th>
+              <th>Type</th>
+              <th>Active</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for loc in unmonitored_rows %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:location_detail' loc.pk %}" class="fw-600 mono">{{ loc.code }}</a>
+                  <div class="text-muted">{{ loc.name }}</div>
+                </td>
+                <td>
+                  {% if loc.storage_condition %}
+                    <span class="badge badge-info">{{ loc.get_storage_condition_display }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">Not classified</span>
+                  {% endif %}
+                </td>
+                <td>{{ loc.get_location_type_display }}</td>
+                <td>
+                  {% if loc.is_active %}
+                    <span class="badge badge-green">Active</span>
+                  {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:location_detail' loc.pk %}" class="btn-icon" title="Open the location record"><i data-lucide="eye"></i></a>
+                    <a href="{% url 'scm:coldchainmonitor_create' %}" class="btn-icon" title="Deploy a monitor"><i data-lucide="plus"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5">
+                  <div class="empty-state">
+                    <i data-lucide="thermometer"></i>
+                    <h3>Every cold location is monitored</h3>
+                    <p>
+                      No location classified chilled, frozen, deep frozen or cryogenic is missing an active
+                      monitor under these filters. On a workspace with no classified cold bins yet this
+                      reads as “nothing to check” rather than “all covered” — the
+                      <a href="{% url 'scm:coldchainmonitor_list' %}">monitor register</a> shows what is
+                      actually deployed.
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body form-help">
+        {{ stats.unmonitored_locations }} cold location{{ stats.unmonitored_locations|pluralize }} with no active monitor.
+        <a href="{% url 'scm:cold_storage_report' %}?view=unmonitored&amp;storage_condition={{ storage_condition|urlencode }}&amp;location={{ request.GET.location|urlencode }}&amp;expiring_within={{ days }}">Open this section</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How each section is worked out</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Cold on-hand</dt><dd>Every stock movement in a bin classified chilled, frozen, deep frozen or cryogenic, summed per item and per location. Rows that net to zero or below are dropped — an empty bin is not a stocking location.</dd></div>
+        <div class="detail-item"><dt>Mismatch</dt><dd>An item that declares a cold class sitting in a bin whose class is different. Exact inequality, both directions, plus “bin not classified” as its own kind.</dd></div>
+        <div class="detail-item"><dt>Expiring</dt><dd>Lots of cold-rated items whose expiry date falls on or before today plus the horizon, excluding consumed lots and lots with nothing left on hand.</dd></div>
+        <div class="detail-item"><dt>Quarantined</dt><dd>Lots of cold-rated items whose status is quarantine. Read only — a non-conformance is what puts a lot there and what takes it out.</dd></div>
+        <div class="detail-item"><dt>Unmonitored</dt><dd>Cold locations with no monitor in the <span class="fw-600">active</span> status pointed at them. Inactive, in-calibration, retired and lost monitors are not cover.</dd></div>
+        <div class="detail-item"><dt>Value</dt><dd>Quantity times the unit cost carried on each movement, summed. It is the ledger's own arithmetic, not a second valuation.</dd></div>
+      </dl>
+      <p class="text-muted">
+        Each section fetches at most {{ row_cap }} rows and says so when the cap bit, so the limit bounds what
+        is read from the database rather than merely what is drawn. The header counts are taken from the same
+        computation as the tables, so a chip and a table on this page can never disagree.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">A blank temperature class is never treated as ambient.</span> “Nobody has said
+        what this bin provides” and “this bin is deliberately uncontrolled” are different facts with
+        different fixes, and only one of them is closed by an edit on the location record.
+      </p>
+    </div>
+  </div>
+{% endblock %}
