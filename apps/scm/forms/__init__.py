@@ -326,3 +326,39 @@ from .LaborManagement.LaborPlans import (  # noqa: F401
     LaborPlanForm,
     LaborPlanLineForm,
 )
+
+# --- 4.15 Cold Chain Management ---------------------------------------------------------------
+# Six form classes, and what matters about them is mostly what they DON'T carry.
+#
+# `ColdChainMonitors` FIRST: it is this sub-package's root entity module and it owns the two shared
+# helpers the other two import (`_scope_to_tenant` and `_ModelErrorSafe`), so this order keeps the
+# dependency edge running one way — the 4.13 `AssetManagement/Assets.py` precedent exactly.
+#
+# Off every form by design: `tenant` (stamped by `crud_create`), the auto `number`, and — on
+# `TemperatureExcursion` — EVERY detector-written column (`started_at` / `ended_at` /
+# `duration_minutes` / `breach_direction` / `extreme_temperature` / `limit_min` / `limit_max` /
+# `reading_count` / `mkt` / `last_detected_at`), its verb-controlled `status`, and its four
+# acknowledge/assess stamps. On `TemperatureReading`: `monitor` (it comes from the URL — a parent pk
+# in a POST body is how a caller grafts a reading onto somebody else's cold room), the snapshotted
+# `interval_minutes`, and the `source` / `recorded_by` provenance pair.
+#
+# `ColdChainMonitor.status` IS on its form and that is not an inconsistency: the user is its only
+# writer, while excursion status is workflow state the four verbs own. Do not "fix" either to match.
+#
+# There is deliberately NO TemperatureReading EDIT form and no delete form — the model is
+# append-only (the `scm.StockMove` / `scm.MeterReading` posture) and a wrong reading is corrected by
+# posting a later, correct one. `TemperatureExcursionWindowForm` is the manual back-dated create and
+# types NO measured number: the view computes them from the readings in the window through
+# `apps/scm/coldchain.py`.
+from .ColdChainManagement.ColdChainMonitors import (  # noqa: F401
+    ColdChainMonitorForm,
+)
+from .ColdChainManagement.TemperatureReadings import (  # noqa: F401
+    TemperatureReadingForm,
+    TemperatureReadingImportForm,
+)
+from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
+    TemperatureExcursionForm,
+    TemperatureExcursionAssessForm,
+    TemperatureExcursionWindowForm,
+)
