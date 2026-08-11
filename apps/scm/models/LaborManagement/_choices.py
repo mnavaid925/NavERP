@@ -50,7 +50,7 @@ __all__ = [
     "SESSION_SOURCE_CHOICES", "SESSION_STATUS_CHOICES", "SESSION_STATUS_CSS",
     "PLAN_STATUS_CHOICES", "PLAN_STATUS_CSS", "PLAN_BUCKET_CHOICES",
     "VOLUME_SOURCE_CHOICES", "PLAN_METHOD_CHOICES",
-    "MAX_SESSION_MINUTES", "MAX_ACTIVITY_MINUTES",
+    "MAX_SESSION_MINUTES", "MAX_ACTIVITY_MINUTES", "MAX_ACTIVITIES_PER_SESSION",
     "MAX_HORIZON_PERIODS", "MAX_PLAN_LINES", "MIN_PLAN_YEAR", "MAX_BULK_ASSIGN",
     "MAX_STANDARD_RATE", "MAX_SNAPSHOT_MINUTES", "MAX_ALLOWANCE_PCT", "MAX_PRODUCTIVITY_PCT", "MAX_HOURS_PER_SHIFT",
     "MIN_RANKED_MINUTES", "COACHING_THRESHOLD_PCT",
@@ -360,6 +360,16 @@ MAX_STANDARD_RATE = Decimal("100000")
 #: shape — the activity's ``_earned_from_snapshots()`` and the plan generator — and a bound that is
 #: re-derived at each site is a bound that eventually disagrees with itself.
 MAX_SNAPSHOT_MINUTES = Decimal("99999999.9999")
+
+#: Most booked intervals one shift may hold. A CONSTANT, deliberately not "however many fit
+#: in the clock window": ``LaborActivity.clean()`` permits booked > attended on purpose (that
+#: is what ``over_booked_minutes`` reports) and applies no overlap rule between activities, so
+#: nothing in the model stops ten thousand one-minute rows inside one eight-hour shift.
+#: Each costs one POST to write, but every later render of that session — and of any LIST page
+#: containing it, which prefetches activities for all fifteen rows — pays for the whole set.
+#: A stored amplification rather than a request-time one, which is why the cap sits in front
+#: of the INSERT rather than in a paginator.
+MAX_ACTIVITIES_PER_SESSION = 200
 
 #: Personal, fatigue and delay allowance, as a percentage added on top of the measured time — SAP
 #: EWM's "normal time including travel, personal needs, fatigue and unavoidable delay". Capped at
