@@ -97,6 +97,30 @@ COLUMN_ALIASES = {
 #: blank rows to discover that is not a diagnosis.
 REQUIRED_COLUMNS = ("reading_at", "temperature")
 
+#: What a malformed CSV is told. Stated once because BOTH readers below refuse with it — the header
+#: map and the row walk — and two spellings of the same refusal is two support tickets.
+UNREADABLE_CSV = "That file is not readable as CSV — re-export it from the logger software."
+
+
+def _records(text):
+    """Yield every record of ``text``, with ``_csv.Error`` turned into a form refusal.
+
+    ``csv`` is a C reader carrying refusals of its own — an embedded NUL byte, a field past its
+    128 KB limit — and every one of them surfaces as ``_csv.Error`` **from the iterator**, not from
+    the reader's construction. A bare ``for record in reader`` therefore 500s the upload page
+    halfway through a walk on a crafted file, which is a stack trace where the rest of this importer
+    would have given a sentence. ``ValidationError`` keeps a bad file a statement about the file.
+    """
+    reader = csv.reader(io.StringIO(text))
+    while True:
+        try:
+            record = next(reader)
+        except StopIteration:
+            return
+        except csv.Error:
+            raise ValidationError(UNREADABLE_CSV) from None
+        yield record
+
 
 # -------------------------------------------------------------------------------------------------
 # Cell readers — pure, and every one of them answers None rather than a plausible-looking number
@@ -138,9 +162,18 @@ def _parse_decimal(raw):
             break
     text = text.replace(",", ".")
     try:
-        return Decimal(text)
+        value = Decimal(text)
     except (ArithmeticError, ValueError, TypeError):
         return None
+    # `Decimal("nan")` and `Decimal("sNaN")` PARSE CLEANLY and then raise `InvalidOperation` on the
+    # first ordering comparison — so a crafted cell reading `nan` would sail past this function and
+    # 500 the whole upload at the bounds check, taking the other 4,999 rows with it. Answering
+    # `None` drops it into the existing skip counters instead, which is what every other unreadable
+    # cell already gets. `Infinity` compares fine and is skipped as out-of-bounds on its own;
+    # NaN is the only gap, and `is_finite()` closes both at once.
+    if not value.is_finite():
+        return None
+    return value
 
 
 def _parse_int(raw):
@@ -360,8 +393,15 @@ class TemperatureReadingImportForm(forms.Form):
         return upload
 
     def _map_columns(self):
-        """``{target field: column index}`` from the header row, by alias. Unknown columns ignored."""
-        reader = csv.reader(io.StringIO(self._text))
+        """``{target field: column index}`` from the header row, by alias. Unknown columns ignored.
+
+        Read through :func:`_records` rather than ``csv.reader`` directly: a header line the C
+        reader refuses outright (an embedded NUL, an enormous field) raises ``_csv.Error``, which is
+        neither a ``UnicodeDecodeError`` nor a ``ValidationError``. Uncaught it is a 500 on a page
+        any member can post to; through the helper it is the same kind of message every other bad
+        file already gets, and — because this runs inside ``clean_file`` — it lands on the field.
+        """
+        reader = _records(self._text)
         header = next(reader, None) or []
         lookup = {}
         for index, cell in enumerate(header):
@@ -392,8 +432,12 @@ class TemperatureReadingImportForm(forms.Form):
         discovering a bad row halfway through a batch.
 
         ``skipped`` is ``{"total", "no_temperature", "bad_timestamp", "future", "out_of_bounds",
-        "duplicate_in_file", "dropped_humidity", "dropped_interval_stats"}`` — **counted, not
-        silenced.** A skip nobody can see is how an import quietly loses a third of a logger file.
+        "before_deployment", "duplicate_in_file", "dropped_humidity", "dropped_interval_stats"}`` —
+        **counted, not silenced.** A skip nobody can see is how an import quietly loses a third of a
+        logger file.
+
+        **Raises ``ValidationError`` on a file the C reader refuses** (see :func:`_records`) — the
+        caller turns that into a message rather than letting it 500 the upload.
 
         The rules, and why each is a skip rather than a substitution:
 
@@ -406,6 +450,12 @@ class TemperatureReadingImportForm(forms.Form):
           an append-only log and becomes "the current value" for a fridge that has not reached it.
         * **temperature outside the physical bounds -> SKIP.** The column's validators would reject
           it; skipping keeps the other 4,999 rows.
+        * **timestamp before the monitor's ``deployed_on`` -> SKIP.** ``clean()`` rule 4 refuses one
+          on the single-row path, and this batch path writes through ``bulk_create`` — which runs no
+          validation at all — so the rule has to be restated here or the two paths disagree. A
+          re-usable logger has one deployment per consignment, and re-uploading its whole memory
+          would file the PREVIOUS shipment's journey against this deployment, where it is counted in
+          this consignment's % time-in-range and its MKT.
         * **duplicate timestamp inside one file -> SKIP.** ``unique_together (monitor, reading_at)``
           would raise ``IntegrityError`` on the second, which fails the whole batch rather than the
           one row.
@@ -418,15 +468,19 @@ class TemperatureReadingImportForm(forms.Form):
         idempotent, which is exactly what the ``unique_together`` exists for.
         """
         skipped = {"total": 0, "no_temperature": 0, "bad_timestamp": 0, "future": 0,
-                   "out_of_bounds": 0, "duplicate_in_file": 0,
+                   "out_of_bounds": 0, "before_deployment": 0, "duplicate_in_file": 0,
                    "dropped_humidity": 0, "dropped_interval_stats": 0}
         rows = []
         if not self._text or not self._columns:
             return rows, skipped
 
         now = timezone.now()
+        # The deployment date this batch is being filed against, resolved once. `self.monitor` is the
+        # one from the ROUTE (the import URL carries it), which is the same parent the single-row
+        # form stamps before validation — so both paths judge against the same deployment.
+        deployed_on = getattr(self.monitor, "deployed_on", None) if self.monitor else None
         seen = set()
-        reader = csv.reader(io.StringIO(self._text))
+        reader = _records(self._text)
         next(reader, None)  # the header, already mapped in clean_file
 
         for record in reader:
@@ -454,6 +508,15 @@ class TemperatureReadingImportForm(forms.Form):
             if moment > now:
                 skipped["total"] += 1
                 skipped["future"] += 1
+                continue
+            # `TemperatureReading.clean()` rule 4, restated on the BATCH path — `bulk_create` never
+            # calls `full_clean()`, so a rule stated only on the model holds on the single-row form
+            # and nowhere else. Compared in LOCAL time exactly as the model compares it: a
+            # `deployed_on` is a calendar date somebody wrote down in their own world, and reading
+            # the moment in UTC would move the boundary by the offset.
+            if deployed_on and timezone.localtime(moment).date() < deployed_on:
+                skipped["total"] += 1
+                skipped["before_deployment"] += 1
                 continue
             if moment in seen:
                 skipped["total"] += 1
