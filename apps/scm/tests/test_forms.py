@@ -6947,3 +6947,575 @@ class TestMeterReadingForm:
         import apps.scm.forms as forms_pkg
         assert not hasattr(forms_pkg, "MeterReadingEditForm")
         assert not hasattr(forms_pkg, "MeterReadingUpdateForm")
+
+
+# ------------------------------------------------------------------------------------------------
+# SCM 4.14 date/time basis for the form payloads. timezone.localdate() / timezone.now(), NEVER
+# datetime.date.today() and never a literal (L16): LaborSession.clean() compares the posted
+# ``work_date`` against the LOCAL date of the posted ``clock_in``, and LaborActivity.clean() compares
+# the posted interval against its shift's clock window — so a literal in a payload rots the day the
+# calendar moves past it, and a date.today() basis disagrees with the model after local midnight.
+# ------------------------------------------------------------------------------------------------
+def _labor_form_day(days=0):
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+def _labor_form_moment(hours_ago=0, minutes_ago=0):
+    """An aware datetime that far in the past, truncated to the minute."""
+    from django.utils import timezone
+    return (timezone.now() - datetime.timedelta(hours=hours_ago, minutes=minutes_ago)
+            ).replace(second=0, microsecond=0)
+
+
+def _labor_local_input(moment):
+    """``moment`` in the exact wire shape the ``datetime-local`` control posts."""
+    from django.utils import timezone
+    return timezone.localtime(moment).strftime("%Y-%m-%dT%H:%M")
+
+
+def _standard_form_payload(**overrides):
+    """A complete, VALID ``LaborStandardForm`` body."""
+    data = {
+        "name": "Case picking", "activity": "pick", "basis": "per_unit", "source": "engineered",
+        "minutes_per_unit": "0.5000", "setup_minutes": "2.0000", "travel_minutes": "1.0000",
+        "allowance_pct": "10.00", "labour_rate": "24.0000",
+        "effective_from": _labor_form_day(-1).isoformat(), "effective_to": "",
+        "location": "", "item_category": "", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _session_form_payload(worker, location, hours_ago=4, **overrides):
+    """A complete, VALID ``LaborSessionForm`` body for an OPEN shift.
+
+    ``work_date`` is derived from the same ``clock_in`` the body carries, because that is exactly
+    what ``LaborSession.clean()`` rule (c) insists on — deriving it is the only spelling that stays
+    true either side of local midnight.
+    """
+    from django.utils import timezone
+    started = _labor_form_moment(hours_ago=hours_ago)
+    data = {
+        "worker": str(worker.pk), "location": str(location.pk),
+        "work_date": timezone.localdate(started).isoformat(),
+        "shift_label": "Early", "clock_in": _labor_local_input(started), "clock_out": "",
+        "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _activity_form_payload(session, minutes_after=0, minutes=60, **overrides):
+    """A complete, VALID ``LaborActivityForm`` body booked INSIDE ``session``'s clock window."""
+    started = session.clock_in + datetime.timedelta(minutes=minutes_after)
+    data = {
+        "activity_type": "pick", "indirect_reason": "",
+        "started_at": _labor_local_input(started),
+        "ended_at": ("" if minutes is None
+                     else _labor_local_input(started + datetime.timedelta(minutes=minutes))),
+        "quantity": "100", "error_quantity": "2",
+        "pick_task": "", "putaway_task": "", "cycle_count_task": "",
+        "reference": "WAVE-1", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+def _plan_form_payload(**overrides):
+    """A complete, VALID ``LaborPlanForm`` body."""
+    data = {
+        "name": "Next three days", "location": "",
+        "period_start": _labor_form_day(1).isoformat(),
+        "period_end": _labor_form_day(3).isoformat(),
+        "bucket": "day", "volume_source": "stock_moves", "method": "moving_average",
+        "history_days": "28", "demand_forecast": "",
+        "hours_per_shift": "8.00", "productivity_pct": "100.00", "notes": "",
+    }
+    data.update(overrides)
+    return data
+
+
+# =================================================================================================
+# SCM 4.14 Labor Management — five ModelForms.
+#
+# The recurring theme is what is NOT on them. Every provenance stamp, every workflow status, every
+# derived counter and every measurement snapshot is ``editable=False`` and off the whitelist
+# (L20/L22) — a status dropdown would let a member jump straight to ``approved`` and skip the
+# approval it is named after, and a typeable ``source`` would let a hand-keyed shift claim to have
+# come from a badge reader that never saw the worker, on a record whose minutes end in a payroll
+# export.
+# =================================================================================================
+
+# ================================================================ 4.14 · what is OFF the five forms
+class TestLaborFormsExcludeEverythingVerbOwned:
+    def test_the_standard_form_carries_no_status_and_no_number(self):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(tenant=None)
+        for field in ("status", "number", "tenant", "created_at", "updated_at"):
+            assert field not in form.fields, field
+
+    def test_the_session_form_carries_no_provenance_and_no_derived_figure(self):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(tenant=None)
+        for field in ("status", "source", "recorded_by", "login", "closed_at", "approved_at",
+                      "approved_by", "number", "tenant", "attended_minutes", "booked_minutes",
+                      "performance_pct", "utilisation_pct"):
+            assert field not in form.fields, field
+
+    def test_the_activity_form_carries_neither_its_parent_nor_its_measurement(self):
+        from apps.scm.forms import LaborActivityForm
+        form = LaborActivityForm(tenant=None)
+        for field in ("session", "standard", "standard_fixed_snapshot", "standard_rate_snapshot",
+                      "standard_allowance_snapshot", "standard_minutes_snapshot",
+                      "duration_minutes", "number", "tenant"):
+            assert field not in form.fields, field
+
+    def test_the_plan_form_carries_no_lifecycle_stamp(self):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(tenant=None)
+        for field in ("status", "generated_at", "approved_by", "approved_at", "number", "tenant"):
+            assert field not in form.fields, field
+
+    def test_the_plan_line_form_offers_the_planner_TWO_fields_and_nothing_generated(self):
+        """Letting a planner edit ``required_headcount`` would let them close the gap by editing the
+        question."""
+        from apps.scm.forms import LaborPlanLineForm
+        form = LaborPlanLineForm(tenant=None)
+        assert set(form.fields) == {"planned_headcount", "notes"}
+
+    def test_every_field_on_every_form_is_a_real_editable_column(self):
+        from apps.scm.forms import (LaborActivityForm, LaborPlanForm, LaborPlanLineForm,
+                                    LaborSessionForm, LaborStandardForm)
+        for form_class in (LaborStandardForm, LaborSessionForm, LaborActivityForm, LaborPlanForm,
+                           LaborPlanLineForm):
+            form = form_class(tenant=None)
+            model = form_class.Meta.model
+            for name in form.fields:
+                assert model._meta.get_field(name).editable is True, \
+                    f"{form_class.__name__}.{name}"
+
+
+# ================================================================ 4.14 · the standard form
+class TestLaborStandardForm:
+    def test_a_complete_body_validates_and_saves_against_the_request_tenant(self, tenant_a):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(_standard_form_payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.tenant_id == tenant_a.pk
+        assert obj.status == "draft", "a new standard measures nothing until somebody activates it"
+        assert obj.number.startswith("LST-")
+
+    @pytest.mark.parametrize("field", ["name", "activity", "effective_from"])
+    def test_the_required_fields_are_required(self, tenant_a, field):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(_standard_form_payload(**{field: ""}), tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_a_negative_determinant_is_refused(self, tenant_a):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(_standard_form_payload(minutes_per_unit="-1"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "minutes_per_unit" in form.errors
+
+    def test_an_allowance_above_the_cap_is_refused(self, tenant_a):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(_standard_form_payload(allowance_pct="101"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "allowance_pct" in form.errors
+
+    def test_a_rate_above_the_ceiling_is_refused_on_the_way_in(self, tenant_a):
+        from apps.scm.forms import LaborStandardForm
+        from apps.scm.models import MAX_STANDARD_RATE
+        form = LaborStandardForm(
+            _standard_form_payload(labour_rate=str(MAX_STANDARD_RATE + Decimal("1"))),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "labour_rate" in form.errors
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "abc", "1e999"])
+    def test_a_hostile_decimal_is_a_field_error_and_never_a_500(self, tenant_a, value):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(_standard_form_payload(minutes_per_unit=value), tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "minutes_per_unit" in form.errors
+
+    def test_the_tenant_is_stamped_BEFORE_validation_so_the_overlap_guard_runs_on_create(
+            self, tenant_a, labor_standard_a):
+        """``crud_create`` assigns the tenant only AFTER ``is_valid()``, so without the form-side
+        stamp the overlap refusal would be dead code on exactly the path that creates overlaps."""
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(_standard_form_payload(name="Second picking"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "effective_from" in form.errors
+        assert labor_standard_a.number in " ".join(form.errors["effective_from"])
+
+    def test_a_reversed_window_is_a_field_error(self, tenant_a):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(
+            _standard_form_payload(effective_from=_labor_form_day(5).isoformat(),
+                                   effective_to=_labor_form_day(1).isoformat()),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "effective_to" in form.errors
+
+    def test_a_scope_pointer_from_another_workspace_is_refused_at_the_FORM_boundary(
+            self, tenant_a, location_b, category_b):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(
+            _standard_form_payload(location=str(location_b.pk),
+                                   item_category=str(category_b.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "location" in form.errors or "item_category" in form.errors
+
+    def test_the_scope_dropdowns_are_narrowed_to_the_workspace(self, tenant_a, location_a,
+                                                               location_b, category_a,
+                                                               category_b):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(tenant=tenant_a)
+        assert location_a in form.fields["location"].queryset
+        assert location_b not in form.fields["location"].queryset
+        assert category_a in form.fields["item_category"].queryset
+        assert category_b not in form.fields["item_category"].queryset
+
+    def test_a_tenant_less_caller_is_offered_nothing_rather_than_everything(self, location_a):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(tenant=None)
+        assert form.fields["location"].queryset.count() == 0
+
+    def test_the_effective_dates_round_trip_through_the_native_date_control(self,
+                                                                            labor_standard_a,
+                                                                            tenant_a):
+        from apps.scm.forms import LaborStandardForm
+        form = LaborStandardForm(instance=labor_standard_a, tenant=tenant_a)
+        rendered = str(form["effective_from"])
+        assert 'type="date"' in rendered
+        assert labor_standard_a.effective_from.isoformat() in rendered
+
+
+# ================================================================ 4.14 · the session form
+class TestLaborSessionForm:
+    def test_a_complete_body_validates(self, tenant_a, employee_party_a, location_a):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(_session_form_payload(employee_party_a, location_a),
+                                tenant=tenant_a)
+        assert form.is_valid(), form.errors
+
+    @pytest.mark.parametrize("field", ["worker", "location", "work_date", "clock_in"])
+    def test_the_required_fields_are_required(self, tenant_a, employee_party_a, location_a,
+                                              field):
+        from apps.scm.forms import LaborSessionForm
+        # Built first and then blanked by key, NOT passed as **{field: ""}. The helper's first two
+        # positional parameters are themselves called `worker` and `location`, so two of the four
+        # values this test parametrises over collide with them:
+        #     TypeError: _session_form_payload() got multiple values for argument 'location'
+        # Overriding the built dict tests all four fields the same way and cannot collide with a
+        # parameter name.
+        payload = _session_form_payload(employee_party_a, location_a)
+        payload[field] = ""
+        form = LaborSessionForm(payload, tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_the_worker_dropdown_offers_employees_only(self, tenant_a, employee_party_a,
+                                                       supplier_a):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(tenant=tenant_a)
+        offered = set(form.fields["worker"].queryset)
+        assert employee_party_a in offered
+        assert supplier_a not in offered
+
+    def test_a_worker_from_another_workspace_is_refused(self, tenant_a, employee_party_b,
+                                                        location_a):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(_session_form_payload(employee_party_b, location_a),
+                                tenant=tenant_a)
+        assert not form.is_valid()
+        assert "worker" in form.errors
+
+    def test_a_location_from_another_workspace_is_refused(self, tenant_a, employee_party_a,
+                                                          location_b):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(_session_form_payload(employee_party_a, location_b),
+                                tenant=tenant_a)
+        assert not form.is_valid()
+        assert "location" in form.errors
+
+    def test_the_work_date_pin_reaches_the_form(self, tenant_a, employee_party_a, location_a):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(
+            _session_form_payload(employee_party_a, location_a,
+                                  work_date=_labor_form_day(-5).isoformat()),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "work_date" in form.errors
+
+    def test_the_one_open_session_rule_reaches_the_form(self, tenant_a, labor_session_a,
+                                                        location_a):
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(
+            _session_form_payload(labor_session_a.worker, location_a, hours_ago=20),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert set(form.errors) & {"worker", "clock_in"}
+
+    def test_both_clock_fields_render_a_datetime_local_control(self, tenant_a):
+        """A plain ``type="date"`` here would silently truncate the punch to midnight and collapse
+        every attended figure to a whole number of days."""
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(tenant=tenant_a)
+        for name in ("clock_in", "clock_out"):
+            assert 'type="datetime-local"' in str(form[name]), name
+            assert form.fields[name].widget.format == "%Y-%m-%dT%H:%M", name
+
+    def test_a_stored_clock_time_ROUND_TRIPS_into_the_edit_form(self, tenant_a, labor_session_a):
+        """Without a ``format`` matching the input type the box renders EMPTY on edit, and saving
+        re-posts blank clock times."""
+        from apps.scm.forms import LaborSessionForm
+        form = LaborSessionForm(instance=labor_session_a, tenant=tenant_a)
+        assert _labor_local_input(labor_session_a.clock_in) in str(form["clock_in"])
+
+    def test_the_value_the_edit_form_renders_is_the_value_it_accepts_back(self, tenant_a,
+                                                                          labor_session_a):
+        from apps.scm.forms import LaborSessionForm
+        rendered = _labor_local_input(labor_session_a.clock_in)
+        posted = LaborSessionForm(
+            _session_form_payload(labor_session_a.worker, labor_session_a.location,
+                                  clock_in=rendered,
+                                  work_date=labor_session_a.work_date.isoformat()),
+            instance=labor_session_a, tenant=tenant_a)
+        assert posted.is_valid(), posted.errors
+        saved = posted.save()
+        assert saved.clock_in == labor_session_a.clock_in
+
+    def test_a_worker_who_has_lost_the_employee_role_is_still_offered_on_EDIT(self, tenant_a,
+                                                                              labor_session_a):
+        """``worker`` is required and PROTECT, so dropping the stored party out of the select turns
+        an unrelated note edit into "Select a valid choice" on a field nobody touched."""
+        from apps.core.models import PartyRole
+        from apps.scm.forms import LaborSessionForm
+        PartyRole.objects.filter(party=labor_session_a.worker).delete()
+        form = LaborSessionForm(instance=labor_session_a, tenant=tenant_a)
+        assert labor_session_a.worker in form.fields["worker"].queryset
+
+
+# ================================================================ 4.14 · the activity form
+class TestLaborActivityForm:
+    @staticmethod
+    def _bound(session, tenant, data=None, instance=None):
+        from apps.scm.models import LaborActivity
+        from apps.scm.forms import LaborActivityForm
+        return LaborActivityForm(
+            data,
+            instance=instance if instance is not None
+            else LaborActivity(tenant=tenant, session=session),
+            tenant=tenant)
+
+    def test_a_complete_body_validates_against_the_parent_from_the_URL(self, tenant_a,
+                                                                       labor_session_a):
+        form = self._bound(labor_session_a, tenant_a, _activity_form_payload(labor_session_a))
+        assert form.is_valid(), form.errors
+
+    def test_direct_work_without_units_is_refused(self, tenant_a, labor_session_a):
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a, quantity="0",
+                                                  error_quantity="0"))
+        assert not form.is_valid()
+        assert "quantity" in form.errors
+
+    def test_indirect_work_without_a_reason_is_refused(self, tenant_a, labor_session_a):
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a, activity_type="break",
+                                                  quantity="0", error_quantity="0"))
+        assert not form.is_valid()
+        assert "indirect_reason" in form.errors
+
+    def test_an_interval_outside_the_shift_is_refused(self, tenant_a, labor_session_a):
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a, minutes_after=-30))
+        assert not form.is_valid()
+        assert "started_at" in form.errors
+
+    def test_a_still_running_interval_is_accepted(self, tenant_a, labor_session_a):
+        """``ended_at`` blank is ordinary use, not a corrupt row."""
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a, minutes=None))
+        assert form.is_valid(), form.errors
+
+    def test_a_task_pointer_from_another_workspace_is_refused(self, tenant_a, labor_session_a,
+                                                              picktask_b):
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a,
+                                                  pick_task=str(picktask_b.pk)))
+        assert not form.is_valid()
+        assert "pick_task" in form.errors
+
+    def test_the_task_dropdowns_offer_only_this_workspaces_OPEN_tasks(self, tenant_a,
+                                                                      labor_session_a, picktask_a,
+                                                                      picktask_b):
+        form = self._bound(labor_session_a, tenant_a)
+        offered = set(form.fields["pick_task"].queryset)
+        assert picktask_a in offered
+        assert picktask_b not in offered
+
+    def test_an_over_range_quantity_is_refused_rather_than_clamped(self, tenant_a,
+                                                                   labor_session_a):
+        from apps.scm.models import MAX_Q4
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a,
+                                                  quantity=str(MAX_Q4 + Decimal("1")),
+                                                  error_quantity="0"))
+        assert not form.is_valid()
+        assert "quantity" in form.errors
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "-5"])
+    def test_a_hostile_quantity_is_a_field_error_and_never_a_500(self, tenant_a, labor_session_a,
+                                                                 value):
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a, quantity=value,
+                                                  error_quantity="0"))
+        assert form.is_valid() is False
+        assert "quantity" in form.errors
+
+    def test_both_interval_fields_render_a_datetime_local_control(self, tenant_a,
+                                                                  labor_session_a):
+        form = self._bound(labor_session_a, tenant_a)
+        for name in ("started_at", "ended_at"):
+            assert 'type="datetime-local"' in str(form[name]), name
+
+    def test_a_stored_interval_ROUND_TRIPS_into_the_edit_form(self, tenant_a, labor_activity_a):
+        from apps.scm.forms import LaborActivityForm
+        form = LaborActivityForm(instance=labor_activity_a, tenant=tenant_a)
+        assert _labor_local_input(labor_activity_a.started_at) in str(form["started_at"])
+        assert _labor_local_input(labor_activity_a.ended_at) in str(form["ended_at"])
+
+    def test_the_ISO_spelling_WITH_seconds_is_accepted(self, tenant_a, labor_session_a):
+        """Browsers submit ``...T09:15:00`` from the very picker the base widget renders; refusing
+        it is "Enter a valid date/time" on a value the user never typed."""
+        from django.utils import timezone
+        started = timezone.localtime(labor_session_a.clock_in).strftime("%Y-%m-%dT%H:%M:%S")
+        form = self._bound(labor_session_a, tenant_a,
+                           _activity_form_payload(labor_session_a, started_at=started))
+        assert form.is_valid(), form.errors
+
+
+# ================================================================ 4.14 · the plan and its line
+class TestLaborPlanForms:
+    def test_a_complete_body_validates(self, tenant_a):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(_plan_form_payload(), tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        obj = form.save(commit=False)
+        obj.tenant = tenant_a
+        obj.save()
+        assert obj.status == "draft"
+        assert obj.number.startswith("LPL-")
+
+    @pytest.mark.parametrize("field", ["name", "period_start", "period_end"])
+    def test_the_required_fields_are_required(self, tenant_a, field):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(_plan_form_payload(**{field: ""}), tenant=tenant_a)
+        assert not form.is_valid()
+        assert field in form.errors
+
+    def test_a_zero_productivity_is_refused_because_it_is_a_DIVISOR(self, tenant_a):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(_plan_form_payload(productivity_pct="0"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "productivity_pct" in form.errors
+
+    def test_a_zero_shift_length_is_refused_for_the_same_reason(self, tenant_a):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(_plan_form_payload(hours_per_shift="0"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "hours_per_shift" in form.errors
+
+    def test_an_unbounded_history_window_is_refused(self, tenant_a):
+        """``history_days`` is handed straight to ``timedelta(days=...)`` and a bare
+        ``PositiveIntegerField`` accepts 4294967295 — an uncaught OverflowError, i.e. a 500."""
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(_plan_form_payload(history_days="4294967295"), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "history_days" in form.errors
+
+    def test_an_over_long_horizon_is_refused(self, tenant_a):
+        from apps.scm.forms import LaborPlanForm
+        from apps.scm.models import LaborPlan
+        form = LaborPlanForm(
+            _plan_form_payload(
+                period_end=_labor_form_day(LaborPlan.MAX_HORIZON_PERIODS + 5).isoformat()),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "period_end" in form.errors
+
+    def test_the_volume_source_pairing_is_enforced_BOTH_ways(self, tenant_a, demand_forecast_a):
+        from apps.scm.forms import LaborPlanForm
+        missing = LaborPlanForm(_plan_form_payload(volume_source="demand_forecast"),
+                                tenant=tenant_a)
+        assert not missing.is_valid()
+        assert "demand_forecast" in missing.errors
+        spurious = LaborPlanForm(_plan_form_payload(demand_forecast=str(demand_forecast_a.pk)),
+                                 tenant=tenant_a)
+        assert not spurious.is_valid()
+        assert "demand_forecast" in spurious.errors
+
+    def test_a_forecast_from_another_workspace_is_refused(self, tenant_a, demand_forecast_b):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(
+            _plan_form_payload(volume_source="demand_forecast",
+                               demand_forecast=str(demand_forecast_b.pk)),
+            tenant=tenant_a)
+        assert not form.is_valid()
+        assert "demand_forecast" in form.errors
+
+    def test_a_location_from_another_workspace_is_refused(self, tenant_a, location_b):
+        from apps.scm.forms import LaborPlanForm
+        form = LaborPlanForm(_plan_form_payload(location=str(location_b.pk)), tenant=tenant_a)
+        assert not form.is_valid()
+        assert "location" in form.errors
+
+    def test_the_line_form_accepts_a_roster_figure(self, tenant_a, labor_plan_line_a):
+        from apps.scm.forms import LaborPlanLineForm
+        form = LaborPlanLineForm({"planned_headcount": "3.50", "notes": "Two on nights"},
+                                 instance=labor_plan_line_a, tenant=tenant_a)
+        assert form.is_valid(), form.errors
+        line = form.save()
+        assert line.planned_headcount == Decimal("3.50")
+        assert line.required_headcount == Decimal("0.12"), "the generated half is untouched"
+
+    def test_the_line_form_refuses_a_negative_roster(self, tenant_a, labor_plan_line_a):
+        from apps.scm.forms import LaborPlanLineForm
+        form = LaborPlanLineForm({"planned_headcount": "-1", "notes": ""},
+                                 instance=labor_plan_line_a, tenant=tenant_a)
+        assert not form.is_valid()
+        assert "planned_headcount" in form.errors
+
+    @pytest.mark.parametrize("value", ["NaN", "Infinity", "abc", "99999999"])
+    def test_the_line_form_refuses_a_hostile_roster_rather_than_500ing(self, tenant_a,
+                                                                       labor_plan_line_a, value):
+        from apps.scm.forms import LaborPlanLineForm
+        form = LaborPlanLineForm({"planned_headcount": value, "notes": ""},
+                                 instance=labor_plan_line_a, tenant=tenant_a)
+        assert form.is_valid() is False
+        assert "planned_headcount" in form.errors
+
+    def test_the_line_form_refuses_a_parent_from_another_workspace(self, tenant_a,
+                                                                   labor_plan_line_b):
+        """The parent is resolved with ``tenant=request.tenant`` by the edit view, so a DISAGREEMENT
+        here means the form was built by something that skipped that resolution."""
+        from apps.scm.forms import LaborPlanLineForm
+        form = LaborPlanLineForm({"planned_headcount": "1", "notes": ""},
+                                 instance=labor_plan_line_b, tenant=tenant_a)
+        assert not form.is_valid()
+
+    def test_an_unparented_line_form_is_itself_a_refusal(self, tenant_a):
+        from apps.scm.models import LaborPlanLine
+        from apps.scm.forms import LaborPlanLineForm
+        form = LaborPlanLineForm({"planned_headcount": "1", "notes": ""},
+                                 instance=LaborPlanLine(), tenant=tenant_a)
+        assert not form.is_valid()
