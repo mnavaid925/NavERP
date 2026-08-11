@@ -8,9 +8,10 @@ is keeping them apart (the ``SupplyChainAlert`` detector-vs-triage split, one do
   / ``mkt`` / ``last_detected_at`` are computed by ``apps/scm/coldchain.py`` from the reading ledger.
   Every one is ``editable=False`` on the model, and **not one of them appears on any form in this
   file.** A measurement a user can retype is not a measurement.
-* **the human half is the only writable block:** severity, the product assessment, the cause code,
-  the corrective action, the notes, and the three links out to the NCR / work order / lot that
-  somebody else acts on.
+* **the human half is the only writable block:** severity, the cause code, the corrective action,
+  the notes, and the three links out to the NCR / work order / lot that somebody else acts on.
+  **``assessment`` is NOT in it** — the product release decision belongs to the gated ``assess``
+  verb, which is the only writer of that column (see ``Meta.fields`` below).
 
 **``status`` is absent from every form here**, in deliberate contrast to ``ColdChainMonitor.status``
 which IS on its form. Excursion status is workflow state moved only by the four verbs on the model,
@@ -89,7 +90,18 @@ class TemperatureExcursionForm(_ModelErrorSafe, TenantModelForm):
         #
         # Every one of those is ALREADY `editable=False` on the model, so a crafted POST naming one
         # cannot reach `cleaned_data` — the whitelist is the second lock, not the only one.
-        fields = ["severity", "assessment", "cause", "corrective_action", "notes",
+        #
+        # `assessment` is ABSENT too, and it is the one absence the whitelist itself has to enforce:
+        # the column is `editable=True` (the `assess` verb writes it), so nothing but this list keeps
+        # it off the form. The edit view is `@login_required` while `temperatureexcursion_assess` is
+        # `@tenant_admin_required`, so while it was here ANY member could POST
+        # `assessment=product_ok` and mark product released for sale — with no `assessed_by` /
+        # `assessed_on` signature, on a form that does not move `status` either. The detail page, the
+        # triage queue, the compliance report and the CSV would then all print a release verdict no
+        # admin ever gave. `TemperatureExcursion.assess()` is documented as the ONLY writer of
+        # `assessment` / `assessed_by` / `assessed_on`; leaving it off this list is what makes that
+        # sentence true rather than aspirational. A verdict with no signature on it is not a verdict.
+        fields = ["severity", "cause", "corrective_action", "notes",
                   "non_conformance", "maintenance_work_order", "lot_serial"]
         widgets = {
             "corrective_action": forms.Textarea(attrs={"rows": 3}),
