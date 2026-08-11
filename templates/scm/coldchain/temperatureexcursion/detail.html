@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — one excursion: what was measured, and what a person decided.
+
+The page is built around ONE structural fact, and the two halves are visually separated below
+because of it: the measured block is DETECTOR-WRITTEN and every column of it is editable=False on
+the model, while the triage block is the only writable part of the record. A measurement a user can
+retype is not a measurement.
+
+Renders apps/scm/views/ColdChainManagement/TemperatureExcursions.py::temperatureexcursion_detail.
+Everything this page may read, and nothing else:
+
+  obj                       the TemperatureExcursion, with the monitor (and its three subjects), the
+                            NCR, the work order and the lot (and its item) joined. status_css /
+                            severity_css / assessment_css / breach_direction_css / is_open /
+                            is_episode_running / is_editable are all safe — none of them queries
+  duration_minutes          int — the LIVE figure while it runs, the stored one once closed
+  excess_c                  Decimal or None
+  is_reportable             bool
+  limit_min / limit_max     Decimal or None — THE SNAPSHOT, printed beside snapshot_note
+  assess_form               TemperatureExcursionAssessForm, unbound — it POSTs to
+                            scm:temperatureexcursion_assess and carries assessment / cause /
+                            corrective_action
+  readings                  a LIST inside the episode window, oldest first, capped at panel_cap
+  readings_truncated        bool
+  panel_cap                 int
+  monitor_range_chip        the monitor's CURRENT (label, css) — so the page can say whether the
+                            fridge is fine NOW as well as what it did then
+  can_acknowledge / can_assess / can_close / can_dismiss / can_edit / can_delete /
+  can_raise_work_order      bools — read from the SAME tuples the routes guard on, so ONLY LEGAL
+                            MOVES ARE RENDERED and a button can never be offered for a press the
+                            view will refuse (the 4.10 "two of three shapes" finding)
+  work_order_blocked_reason str — "" exactly when a repair can be raised
+  snapshot_note / triage_note / frozen_mkt_note   strs, printed verbatim
+
+EVERY VERB IS POST-ONLY (a GET is a 405), so each is a real form with a csrf token and never a link.
+acknowledge is @login_required — seeing something is not a privileged act, and gating the fastest
+step in the ladder would slow the one response you most want to be immediate. assess, close, dismiss,
+raise-work-order and delete are all @tenant_admin_required and sit inside the house gate; showing a
+member a button they will 403 on is the 4.11 finding.
+
+None IS NEVER 0 HERE. obj.extreme_temperature is None when the window held no readable temperature;
+excess_c is None when there is no extreme or no limit on the breached side (0.00 means "it touched
+the limit exactly"); obj.mkt is None on every frozen / deep-frozen / cryogenic monitor — USP
+<1079.2> — and on a window with no readable rows, where 0.00 °C would read as a perfectly-cold store;
+obj.ended_at is None while the episode is STILL BREACHING; limit_min / limit_max are None on a legal
+one-sided band and must print "no lower limit", never 0.
+
+THIS PAGE MAKES NO 21 CFR PART 11 / EU ANNEX 11 CLAIM AND MUST NOT. Recording who assessed what and
+when is an audit TRAIL: there is no electronic signature, no re-authentication at signing and no
+tamper-evident record. Over-claiming is worse than the gap.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+        <span class="badge {{ obj.breach_direction_css }}">{{ obj.get_breach_direction_display }}</span>
+        {% if obj.is_episode_running %}<span class="badge badge-red">Still breaching</span>{% endif %}
+        {% if is_reportable %}<span class="badge badge-red">Reportable</span>{% else %}<span class="badge badge-muted">Under grace</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:temperatureexcursion_list' %}">Temperature Excursions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">On <a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="fw-600">{{ obj.monitor.number }} · {{ obj.monitor.name }}</a>, which watches {{ obj.monitor.subject_label }}. Everything in the first block below was computed by the detector from the reading ledger and cannot be typed; everything in the second is the human judgement. Keeping the two apart is what makes this record worth showing an auditor.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_profile' obj.monitor.pk %}" class="btn btn-outline"><i data-lucide="activity"></i> The monitor's profile</a>
+      <a href="{% url 'scm:temperaturereading_list' %}?monitor={{ obj.monitor.pk }}" class="btn btn-outline"><i data-lucide="list"></i> Its reading ledger</a>
+      {% if can_edit %}
+        <a href="{% url 'scm:temperatureexcursion_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit the triage block</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.is_episode_running %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">This episode has not ended</h2>
+        <div class="badge-group">
+          <span class="badge badge-red">Still breaching</span>
+          <span class="badge {{ monitor_range_chip.1 }}">Monitor now: {{ monitor_range_chip.0 }}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p style="margin:0;">There is no end time on this record, which is what "still running" means: the detector writes one on the first reading back inside the band. Until then the duration below is a <span class="fw-600">live</span> figure that grows on every page load, and this episode <span class="fw-600">cannot be closed</span> — closing an incident that is still happening would file a compliance record saying the product recovered while the store is still warming, and every duration on the report would be understated.</p>
+        <div class="form-help">Run <em>Detect</em> on the monitor once it has recovered — that is what writes the end time. If the incident is not worth a person's time at all, <span class="fw-600">Dismiss</span> is available even while it runs: a door propped open during a stock take is the ordinary case, and the detector keeps extending the episode either way because it never writes the triage status.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ===================================================== 1. THE MEASURED BLOCK — detector-written
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="timer"></i></div>
+      <div class="stat-value">{{ duration_minutes }}</div>
+      <div class="stat-label">
+        Minutes outside the limits{% if obj.is_episode_running %} <span class="fw-600">and counting</span>{% endif %} · grace is {{ obj.monitor.excursion_grace_minutes }} min
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="thermometer-sun"></i></div>
+      {% comment %}
+        None when the window held no readable temperature. NEVER 0 — that would read as a
+        measurement at freezing rather than as the absence of one.
+      {% endcomment %}
+      <div class="stat-value">{% if obj.extreme_temperature is not None %}{{ obj.extreme_temperature|floatformat:2 }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if obj.extreme_temperature is not None %}
+          °C — the worst value reached{% if excess_c is not None %}, {{ excess_c|floatformat:2 }} °C past the limit{% endif %}
+        {% else %}
+          No readable temperature in the window — blank rather than zero
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="sigma"></i></div>
+      {% comment %}
+        MKT is None on every frozen / deep-frozen / cryogenic monitor (USP <1079.2>) and on a window
+        with no readable rows. 0.00 °C would read as a perfectly-cold store — the precise opposite
+        of "this does not apply" — so the two blank cases each say which one they are.
+      {% endcomment %}
+      <div class="stat-value">
+        {% if obj.mkt is not None %}{{ obj.mkt|floatformat:2 }}{% elif obj.monitor.is_frozen_condition %}n/a{% else %}—{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if obj.mkt is not None %}
+          °C mean kinetic temperature over the episode
+        {% elif obj.monitor.is_frozen_condition %}
+          Mean kinetic temperature — not reported on a frozen range
+        {% else %}
+          Mean kinetic temperature — no readable rows in the window
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="database"></i></div>
+      <div class="stat-value">{{ obj.reading_count }}</div>
+      <div class="stat-label">Reading{{ obj.reading_count|pluralize }} the episode is built from</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What was measured</h2>
+      <span class="badge badge-slate">Detector-written · read-only</span>
+    </div>
+    <div class="card-body">
+      <p class="form-help" style="margin:0 0 .9rem;">{{ snapshot_note }}</p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Monitor</dt><dd><a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="mono">{{ obj.monitor.number }}</a></dd></div>
+        <div class="detail-item"><dt>Watching</dt><dd>{{ obj.monitor.subject_label }}</dd></div>
+        <div class="detail-item"><dt>Started</dt><dd class="mono">{{ obj.started_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item">
+          {% comment %}
+            ended_at is None while the episode is still breaching — the single most consequential
+            None on this page, and it is stated as a state rather than blanked.
+          {% endcomment %}
+          <dt>Ended</dt>
+          <dd class="mono">{% if obj.ended_at %}{{ obj.ended_at|date:"M d, Y H:i" }}{% else %}<span class="badge badge-red">Still running</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Duration</dt><dd class="mono">{{ duration_minutes }} min</dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd><span class="badge {{ obj.breach_direction_css }}">{{ obj.get_breach_direction_display }}</span></dd></div>
+        <div class="detail-item">
+          <dt>Worst reached</dt>
+          <dd class="mono">{% if obj.extreme_temperature is not None %}{{ obj.extreme_temperature|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          {% comment %}
+            0.00 means the extreme touched the limit exactly — a measurement. None means there is no
+            extreme on file, or no limit on the side that was breached.
+          {% endcomment %}
+          <dt>Excess past the limit</dt>
+          <dd class="mono">{% if excess_c is not None %}{{ excess_c|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Lower limit in force then</dt>
+          <dd class="mono">{% if limit_min is not None %}{{ limit_min|floatformat:2 }} °C{% else %}<span class="text-muted">No lower limit</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Upper limit in force then</dt>
+          <dd class="mono">{% if limit_max is not None %}{{ limit_max|floatformat:2 }} °C{% else %}<span class="text-muted">No upper limit</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Mean kinetic temperature</dt>
+          <dd class="mono">
+            {% if obj.mkt is not None %}
+              {{ obj.mkt|floatformat:2 }} °C
+            {% elif obj.monitor.is_frozen_condition %}
+              <span class="text-muted">n/a — frozen range</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Readings in the window</dt><dd class="mono">{{ obj.reading_count }}</dd></div>
+        <div class="detail-item"><dt>Last detected</dt><dd class="mono">{{ obj.last_detected_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item">
+          <dt>Reportable</dt>
+          <dd>{% if is_reportable %}<span class="badge badge-red">Yes</span>{% else %}<span class="badge badge-muted">Under grace</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>The monitor right now</dt>
+          <dd><span class="badge {{ monitor_range_chip.1 }}">{{ monitor_range_chip.0 }}</span></dd>
+        </div>
+      </dl>
+
+      {% if obj.monitor.is_frozen_condition and obj.mkt is None %}
+        <p class="text-muted" style="margin-top:.75rem;"><span class="badge badge-info">Frozen range</span> {{ frozen_mkt_note }}</p>
+      {% endif %}
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Reportable</span> means this episode outlived {{ obj.monitor.number }}'s grace period of {{ obj.monitor.excursion_grace_minutes }} minutes. It is recomputed on read and never stored, deliberately: the grace period is a setting on the monitor, and editing it has to move this answer — a stored flag would freeze last month's policy onto this month's incidents and nothing would ever recompute it. An episode under grace is still recorded; it simply is not a reportable event.
+      </p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Last detected</span> is the re-fire stamp. A breach that keeps breaching moves it and extends the duration rather than raising a second row, so this queue holds one incident per episode and not one row per logging interval.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The readings this was built from</h2>
+      <span class="badge badge-slate">{{ obj.reading_count }} in the window</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Taken at</th><th>Temperature</th><th>Against the snapshot</th><th>Humidity</th><th>Weight</th><th>Source</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for r in readings %}
+            <tr>
+              <td class="nowrap"><a href="{% url 'scm:temperaturereading_detail' r.pk %}" class="mono fw-600">{{ r.reading_at|date:"M d, H:i" }}</a></td>
+              <td class="mono nowrap">{{ r.temperature|floatformat:2 }} °C</td>
+              {% comment %}
+                Judged against the SNAPSHOTTED band on this record — the one that was in force when
+                the episode fired — and not against the monitor's limits today. That is what makes
+                the row agree with the duration and the extreme printed above it.
+              {% endcomment %}
+              <td class="nowrap">
+                {% if limit_max is not None and r.temperature > limit_max %}
+                  <span class="badge badge-red">Above</span>
+                {% elif limit_min is not None and r.temperature < limit_min %}
+                  <span class="badge badge-info">Below</span>
+                {% elif limit_min is None and limit_max is None %}
+                  <span class="badge badge-muted">No band snapshotted</span>
+                {% else %}
+                  <span class="badge badge-green">Inside</span>
+                {% endif %}
+              </td>
+              <td class="mono nowrap">{% if r.humidity_pct is not None %}{{ r.humidity_pct|floatformat:2 }} %{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono nowrap">{{ r.interval_minutes }} min</td>
+              <td class="nowrap"><span class="badge badge-muted">{{ r.get_source_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:temperaturereading_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="file-question"></i>
+                  <h3>No readings fall inside this window</h3>
+                  <p>That is why the worst temperature, the mean kinetic temperature and the reading count above are <span class="fw-600">blank rather than zero</span>. It is the expected shape for an episode filed by hand from a lost logger file or a mechanical chart. Import the logger data for the period against the monitor and the figures fill in from the ledger; nothing on this record is invented in the meantime.</p>
+                  <a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> Open the monitor</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if readings_truncated %}
+        Showing the first {{ panel_cap }} of <span class="fw-600">{{ obj.reading_count }}</span>, oldest first — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. Open the monitor's ledger for the rest.
+      {% else %}
+        Oldest first, so the episode reads in the order it happened.
+      {% endif %}
+      Each row is judged here against the <span class="fw-600">snapshotted</span> band, not against the monitor's limits today — which is exactly why this panel still agrees with the duration above after somebody re-bands the monitor.
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================== 2. THE HUMAN BLOCK — the judgement
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What a person decided</h2>
+      <div class="badge-group">
+        <span class="badge {{ obj.assessment_css }}">{{ obj.get_assessment_display }}</span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="form-help" style="margin:0 0 .9rem;">{{ triage_note }}</p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Severity</dt><dd><span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span></dd></div>
+        <div class="detail-item"><dt>Product assessment</dt><dd><span class="badge {{ obj.assessment_css }}">{{ obj.get_assessment_display }}</span></dd></div>
+        <div class="detail-item"><dt>Cause</dt><dd>{% if obj.cause %}{{ obj.get_cause_display }}{% else %}<span class="text-muted">Not coded yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Acknowledged by</dt><dd>{% if obj.acknowledged_by %}{{ obj.acknowledged_by }}{% else %}<span class="text-muted">Nobody yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Acknowledged at</dt><dd class="mono">{{ obj.acknowledged_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Assessed by</dt><dd>{% if obj.assessed_by %}{{ obj.assessed_by.name }}{% else %}<span class="text-muted">Not assessed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Assessed on</dt><dd class="mono">{{ obj.assessed_on|date:"M d, Y H:i"|default:"—" }}</dd></div>
+        <div class="detail-item">
+          <dt>Non-conformance</dt>
+          <dd>{% if obj.non_conformance %}<a href="{% url 'scm:nonconformance_detail' obj.non_conformance.pk %}" class="mono">{{ obj.non_conformance }}</a>{% else %}<span class="text-muted">Not linked</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Repair job</dt>
+          <dd>{% if obj.maintenance_work_order %}<a href="{% url 'scm:maintenanceworkorder_detail' obj.maintenance_work_order.pk %}" class="mono">{{ obj.maintenance_work_order.number }}</a>{% else %}<span class="text-muted">Not raised</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Affected lot</dt>
+          <dd>{% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}" class="mono">{{ obj.lot_serial }}</a>{% else %}<span class="text-muted">Not linked</span>{% endif %}</dd>
+        </div>
+      </dl>
+
+      {% if obj.corrective_action %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Corrective action.</span> {{ obj.corrective_action }}</p>
+      {% endif %}
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Notes.</span> {{ obj.notes }}</p>
+      {% endif %}
+
+      {% if obj.assessment == "product_affected" and not obj.non_conformance %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">No non-conformance linked</span>
+          The product was judged affected, and the <span class="fw-600">disposition</span> belongs to 4.9 — the quarantine, the disposition decision and the cost of quality are that module's, and this one never writes a lot's status. Raise or link a non-conformance on the edit form so the record somebody acts on exists.
+        </p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Recording who assessed this and when is an <span class="fw-600">audit trail</span>. It is not 21 CFR Part 11 or EU Annex 11 conformance: there is no electronic signature, no re-authentication at signing and no tamper-evident record. The assessor is a party record rather than a login, because the person who signs off product quality is frequently a QA lead with no ERP account at all.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    The assess form is the PRODUCT-LEVEL release decision and is @tenant_admin_required, so it is
+    inside the house gate and additionally behind can_assess — which is every open status. Assess is
+    reachable without acknowledging first on purpose: a triager who assesses straight off the queue
+    has still assessed it, and forcing a ceremony first would buy nothing.
+  {% endcomment %}
+  {% if request.user.is_superuser or request.user.is_tenant_admin %}{% if can_assess %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Assess the product</h2>
+        <span class="badge badge-info">Release decision</span>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{% url 'scm:temperatureexcursion_assess' obj.pk %}">
+          {% csrf_token %}
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=assess_form.assessment %}
+            {% include "partials/form_field.html" with field=assess_form.cause %}
+            {% include "partials/form_field.html" with field=assess_form.corrective_action %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="clipboard-check"></i> Record the assessment</button>
+          <div class="form-help">
+            This is the decision the whole queue exists for: <span class="fw-600">was the product actually affected?</span> Recording "unaffected — release" on an episode that never left the safe margin is how a temperature system avoids unnecessary quarantines, and it is a verdict rather than a status change you type. Marking product <span class="fw-600">affected</span> requires either a corrective action written here or a linked non-conformance — an affected-product verdict with neither is a note, not an audit record. The signature is your own party record and is never a field on this form.
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}{% endif %}
+
+  {% comment %}
+    ================================================================================= 3. the actions
+    Every can_* flag is read from the SAME tuple its route guards on, so only LEGAL moves appear.
+    can_close is False while the episode is still running — exactly what the close view refuses
+    inside its row lock, because the detector writes the end time from another transaction.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Actions</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if can_acknowledge %}
+        <form method="post" action="{% url 'scm:temperatureexcursion_acknowledge' obj.pk %}" style="margin-bottom:1rem;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="eye"></i> Acknowledge</button>
+          <div class="form-help">Records that somebody has seen it and moves this off the untouched pile into <span class="fw-600">investigating</span>. Deliberately available to any signed-in member rather than to administrators only: seeing something is not a privileged act, and this is the one step in the ladder you most want to happen immediately. The <span class="fw-600">first</span> acknowledger is the one recorded — re-acknowledging never overwrites them.</div>
+        </form>
+      {% endif %}
+
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if can_close %}
+          <form method="post" action="{% url 'scm:temperatureexcursion_close' obj.pk %}" onsubmit="return confirm('Close {{ obj.number }} as dealt with?');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_close_note">Closing note</label>
+              <input type="text" name="note" id="id_close_note" class="form-input" maxlength="500" placeholder="What settled it…">
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="check-circle"></i> Close as dealt with</button>
+            <div class="form-help">The terminal state for an incident that was <span class="fw-600">acted on</span>. The note is kept on the audit row rather than appended to the notes above, so a concurrent triage edit cannot clobber it and it cannot clobber one. Closing is refused while the episode is still running, and that refusal is re-checked at the moment of the write — the detector can end an episode from another transaction between your page load and your click.</div>
+          </form>
+        {% elif obj.is_open %}
+          <p class="text-muted" style="margin-bottom:1rem;">
+            <span class="badge badge-slate">Cannot be closed yet</span>
+            {{ obj.number }} is still outside its limits. Closing an incident that is still happening would record that the product recovered while the store is warming, so the button appears only once the monitor is back inside its band — run <em>Detect</em> on the monitor after it recovers, which is what writes the end time.
+          </p>
+        {% endif %}
+
+        {% if can_dismiss %}
+          <form method="post" action="{% url 'scm:temperatureexcursion_dismiss' obj.pk %}" onsubmit="return confirm('Dismiss {{ obj.number }} as not worth acting on? It stays on the record and leaves the queue.');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="id_dismiss_reason">Reason</label>
+              <input type="text" name="reason" id="id_dismiss_reason" class="form-input" maxlength="500" placeholder="Why this is a non-event…">
+            </div>
+            <button class="btn btn-outline" type="submit"><i data-lucide="x-circle"></i> Dismiss as a non-event</button>
+            <div class="form-help">Kept apart from <em>closed</em> on purpose, and the compliance report reads them apart: "we fixed it" and "we judged it a non-event" are different facts, and collapsing them would make the excursion count meaningless. Unlike closing, this is available <span class="fw-600">even while the episode runs</span> — a door propped open during a stock take is genuinely not worth a person's time, and the detector goes on extending the episode without ever touching your judgement.</div>
+          </form>
+        {% endif %}
+
+        {% if can_raise_work_order %}
+          <form method="post" action="{% url 'scm:temperatureexcursion_raise_work_order' obj.pk %}" onsubmit="return confirm('Raise a maintenance work order against the failing unit?');" style="margin-bottom:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="wrench"></i> Raise a repair job</button>
+            <div class="form-help">Creates one work order in <span class="fw-600">4.13 Asset Management</span> against the unit this monitor watches and points this record at it. 4.13 owns the repair from there — approving, scheduling and closing it all happen on that job. Pressing twice cannot raise two: the existing link is re-read inside a row lock and the same job comes back.</div>
+          </form>
+        {% elif work_order_blocked_reason %}
+          <p class="text-muted" style="margin-bottom:1rem;">
+            <span class="badge badge-slate">No repair job</span> {{ work_order_blocked_reason }}
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted" style="margin-bottom:1rem;">
+          Assessing the product, closing, dismissing, raising a repair job and deleting are all workspace-administrator actions — the first is a release decision on product and the rest are terminal or write another team's records. Ask an administrator; everything on this page is readable{% if can_acknowledge %}, and acknowledging it is something you can do right now{% endif %}.
+        </p>
+      {% endif %}
+
+      <div class="form-actions">
+        {% if can_edit %}
+          <a href="{% url 'scm:temperatureexcursion_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit the triage block</a>
+        {% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:temperatureexcursion_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This is the evidence record of an incident and it goes permanently. Dismissing keeps the record and takes it off the queue.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:temperatureexcursion_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to the queue</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if not can_edit %}
+          <span class="badge badge-slate">Triage frozen</span>
+          Once an excursion is assessed, closed or dismissed its human block can no longer be edited: the verdict <em>is</em> the record, and an editable record is not one. The measured block was never editable at any status.
+        {% else %}
+          The edit form reaches the <span class="fw-600">triage block only</span> — severity, the assessment, the cause, the action, the notes and the three links out. Not one measured column appears on it, and none can: they are all read-only on the model, so a crafted post naming one has nowhere to land. Note also that changing the assessment on that form does <em>not</em> move the status, because reaching "assessed" that way would record a verdict with no signature on it — the Assess button above is what stamps one.
+        {% endif %}
+        {% if not can_delete %}
+          {% if obj.is_episode_running %}
+            Deleting is refused while the episode runs: the next detection pass would simply re-open it from the same readings, and in the meantime the board would show the unit as fine while it is still warming.
+          {% elif obj.maintenance_work_order_id %}
+            Deleting is refused because a repair job was raised from this record — that job is 4.13's and its stated reason points here. Clear the link on the edit form first if it was raised in error.
+          {% endif %}
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% endblock %}
