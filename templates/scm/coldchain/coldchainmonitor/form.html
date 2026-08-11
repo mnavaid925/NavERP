@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — shared create/edit form for ColdChainMonitor.
+
+Context contract — apps/scm/views/ColdChainManagement/ColdChainMonitors.py::coldchainmonitor_create
+and ::coldchainmonitor_edit, both through the crud_* helpers. Everything this page may read:
+
+  form                            ColdChainMonitorForm — a WHITELIST of exactly 22 fields
+  is_edit                         False on create, True on edit
+  obj                             the ColdChainMonitor on the EDIT path only, so every use of it
+                                  below is guarded by is_edit and never rendered bare
+  storage_condition_ranges_note   str — the temperature-class pre-fill is a SUGGESTION
+  subject_rule_note               str — the exactly-one-subject rule, printed ABOVE the three FKs
+
+FIELDS ARE RENDERED BY NAME so they can be grouped, which couples this page to the form's whitelist:
+Meta.fields is those 22 names and nothing else, and ALL 22 appear below. A field added to the model
+and to that whitelist but missing from a group here would never reach the POST — and on the edit
+path it would be silently blanked on every save. The 22, in the form's own declaration order:
+
+  name · device_serial · device_type
+  location · asset · shipment
+  storage_condition · min_temperature · max_temperature · warning_margin_c
+  humidity_min · humidity_max · setpoint_temperature
+  excursion_grace_minutes · logging_interval_minutes
+  calibrated_on · calibration_due_on · calibration_reference
+  status · deployed_on · retired_on · notes
+
+STATUS IS ON THIS FORM, and that is a deliberate contrast with TemperatureExcursion.status, which is
+absent from every form in the sub-module. A monitor's status is USER-OWNED lifecycle with exactly one
+writer — no detector pass ever changes it — while an excursion's status is workflow state moved only
+by its own verbs, each of which validates the transition it is making. Do not "fix" either one to
+match the other; both models say so in as many words.
+
+DELIBERATELY ABSENT, and must not be added: `tenant` (stamped by the view, and by the form's
+__init__ so the model's tenant-gated rules are not dead code on the create path) and `number`
+(auto-assigned on save — nobody types a document number). Everything else editable IS here.
+
+Every rule the notes below describe is enforced by ColdChainMonitor.clean() — the exactly-one-subject
+rule, the subject freeze, the band ordering, the active-monitor-needs-a-limit rule, the humidity band,
+the warning-margin-fits-inside-the-band rule, both date orderings and the one-active-deployment-per-
+serial rule — and never by this template, so the words somebody reads and the validation that refuses
+their save cannot drift apart.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Cold Chain Monitor{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Cold Chain Monitor{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain Monitors</a><span class="sep">›</span>{% if is_edit %}<a href="{% url 'scm:coldchainmonitor_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>{% else %}<span>New</span>{% endif %}</div>
+    <p class="text-muted">One device, watching one thing, against these limits. A monitor is a <span class="fw-600">deployment</span> rather than a piece of hardware — the same re-usable logger legitimately appears on many monitors, one per shipment, each with its own band and its own reading history. The CCM- number is assigned on save.</p>
+  </div></div>
+
+  {% if is_edit %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Editing {{ obj.number }}</h2>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Watching</dt><dd>{{ obj.subject_label }}</dd></div>
+          <div class="detail-item"><dt>Readings on file</dt><dd class="mono">{{ obj.readings.count }}</dd></div>
+          <div class="detail-item"><dt>Excursions recorded</dt><dd class="mono">{{ obj.excursions.count }}</dd></div>
+        </dl>
+        <div class="form-help">A monitor stays editable at <span class="fw-600">every</span> status, deliberately: it describes a live configuration that gets renamed, re-banded and re-calibrated, and a retired deployment is often the row that most needs correcting. Nothing an edit can reach is a derived figure — in range, in the warning band, still reporting, calibration due, the open episode and the setpoint drift have no columns at all, so there is nothing here for a form to restate. The one thing an edit <em>cannot</em> do is re-point what this monitor watches once readings exist.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The device</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">There is deliberately <span class="fw-600">no device master table</span> behind this. A sensor fleet alongside a deployment table is the right shape for a company that <em>sells</em> loggers and has to track where its hardware is; here every question the sub-module asks — was the product in range, how long was it out, is this probe still reporting — is a question about the <span class="fw-600">deployment</span>, so the serial and the type are two columns on it.</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.device_serial %}
+          {% include "partials/form_field.html" with field=form.device_type %}
+        </div>
+        <div class="form-help">A serial may appear on many monitors — that is how a re-usable logger moves from consignment to consignment, and each journey keeps its own history. What is refused is a <span class="fw-600">second ACTIVE deployment sharing one serial</span>: two live monitors claiming the same probe give the readings arriving from it no defined home, and the two would report different verdicts about the same hardware. Retire the earlier deployment first; the message names it if you do not.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What it watches</h2>
+        <span class="badge badge-info">Exactly one of the three</span>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          The rule is stated ABOVE the three fields rather than only in the error message: a form
+          that refuses a save for a reason it never mentioned until the refusal is a form that
+          teaches its rule the expensive way.
+        {% endcomment %}
+        <p class="form-help" style="margin:0 0 .9rem;">{{ subject_rule_note }}</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.location %}
+          {% include "partials/form_field.html" with field=form.asset %}
+          {% include "partials/form_field.html" with field=form.shipment %}
+        </div>
+        <div class="form-help">
+          These are three typed pointers and never one polymorphic id, because a bare integer carries neither a workspace nor a type and can point at a deleted or cross-tenant row. A cold room <span class="fw-600">is</span> a Location and a reefer <span class="fw-600">is</span> an Asset — there is no parallel cold-room or reefer master anywhere in this module, so the stock ledger and the maintenance history already hanging off those rows stay the single copy.
+          {% if is_edit and obj.readings.exists %}
+            <br><span class="badge badge-slate">Frozen</span> This monitor already has readings, so the three pointers can no longer be changed and a save that moves one is refused. Last quarter's "in range 99.4% of the time" must not silently become a statement about a different cold room. Retire this deployment and start a new one instead.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The limits</h2>
+        <span class="badge badge-slate">Signed — minus eighteen is an ordinary value here</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">{{ storage_condition_ranges_note }}</p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.storage_condition %}
+          {% include "partials/form_field.html" with field=form.min_temperature %}
+          {% include "partials/form_field.html" with field=form.max_temperature %}
+          {% include "partials/form_field.html" with field=form.warning_margin_c %}
+          {% include "partials/form_field.html" with field=form.setpoint_temperature %}
+          {% include "partials/form_field.html" with field=form.humidity_min %}
+          {% include "partials/form_field.html" with field=form.humidity_max %}
+        </div>
+        <div class="form-help">
+          <span class="fw-600">A one-sided band is legitimate.</span> Leave the lower limit blank for a chiller that can never be too cold, or the upper one for the reverse — blank means "no limit on that side" and is <em>not</em> read as a limit of zero. A reading exactly <span class="fw-600">on</span> a limit is in range, which is what "2 to 8 °C" means everywhere it is printed. An <span class="fw-600">active</span> monitor must carry at least one limit: without one nothing it reports can ever be in or out of range, every badge reads "not recorded" forever and the detector skips it silently. Park a point on <em>Inactive</em> or <em>In Calibration</em> while you work out what its band should be.
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">warning margin</span> is a magnitude rather than a temperature — it says how many degrees before a limit to start warning — so unlike the boxes around it, it cannot be negative. It must also stay under half the band width, or the two warning zones meet in the middle and the monitor warns while sitting exactly where it is supposed to be; a warning that is always on is a warning nobody looks at. The <span class="fw-600">setpoint</span> is a <em>record</em> of what the unit was told and not a control channel: nothing here commands a reefer, and the number exists so a unit drifting away from its instruction is visible. Humidity is recorded because half the surveyed loggers report it, but <span class="fw-600">nothing detects on it this pass</span> — a humidity breach is a second episode type with its own duration and grace rules.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What the detector reads</h2>
+        <span class="badge badge-info">The grace period is the most important setting here</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.excursion_grace_minutes %}
+          {% include "partials/form_field.html" with field=form.logging_interval_minutes %}
+        </div>
+        <div class="form-help">
+          Without a <span class="fw-600">grace period</span> every door-open is an incident, the queue fills with noise inside a week, and then nobody reads it — which is the actual failure mode a temperature-monitoring system dies of. A breach shorter than the grace is still recorded; it simply does not read as reportable. Editing this setting <em>moves</em> the answer for episodes already on file, and that is intended: there is no stored "reportable" flag to freeze last month's policy onto this month's incidents.
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">logging interval</span> does two jobs. It is snapshotted onto every reading as that row's <em>weight</em>, which is what makes mean kinetic temperature and time-out-of-range correct when the interval changes mid-window — a single hot hour must weigh one hour and not "one row". And it is what "still reporting" is measured against: a monitor reads as offline once its newest reading is older than three logging intervals, which tolerates one missed transmission plus a retry before crying wolf. Changing it here affects <span class="fw-600">future</span> rows only; last month's arithmetic keeps the weights it was filed with.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Calibration</h2>
+        <span class="badge badge-slate">Audit trail, not a compliance claim</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.calibrated_on %}
+          {% include "partials/form_field.html" with field=form.calibration_due_on %}
+          {% include "partials/form_field.html" with field=form.calibration_reference %}
+        </div>
+        <div class="form-help">
+          An uncalibrated sensor invalidates every record it produced, which is why this is the one genuinely persistent artefact on the row. Leaving all three blank is allowed and is reported as <span class="fw-600">"no certificate recorded"</span> — its own state, kept apart from "in date", because a data gap is not a due date that has not arrived. It is never shown green: not knowing whether a probe is trustworthy is not the same as knowing that it is. The certificate PDF attaches as an ordinary document; there is no separate attachment table here.
+        </div>
+        <div class="form-help">
+          NavERP records these dates and audits every change to them. <span class="fw-600">That is an audit trail and nothing more</span> — it is not 21 CFR Part 11 or EU Annex 11 conformance: there is no electronic signature, no re-authentication at signing and no validated-system evidence. Over-claiming here would be worse than the gap.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Lifecycle</h2>
+        <span class="badge badge-info">You own the status — no detector pass changes it</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.deployed_on %}
+          {% include "partials/form_field.html" with field=form.retired_on %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">
+          Only <span class="fw-600">active</span> monitors are detected against, so <em>Inactive</em>, <em>In Calibration</em>, <em>Retired</em> and <em>Lost</em> each take a point out of the sweep without deleting the deployment or its history. <em>Lost</em> is worth reaching for rather than folding into retired: a device nobody can find is watching nothing while every page still lists the thing it was meant to watch as monitored. <span class="fw-600">Retiring is the move to reach for instead of deleting</span> — a delete is refused outright once any excursion references this monitor, and where it does succeed it takes the entire append-only reading history with it.
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">deployed</span> date is enforced rather than decorative: a reading dated before it is refused, because on a re-usable logger such a row belongs to an <em>earlier</em> deployment and filing it here would attribute another consignment's journey to this one. Leave it blank if this monitor has no meaningful start date.
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Deploy the monitor{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'scm:coldchainmonitor_detail' obj.pk %}{% else %}{% url 'scm:coldchainmonitor_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
