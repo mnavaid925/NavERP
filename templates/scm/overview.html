@@ -318,4 +318,27 @@
       </div>
     </div>
   </div>
+
+  {% comment %}
+    --- 4.15 Cold Chain Management ---
+    One card per sub-module, the convention this page states above. Every target is the same url name
+    4.15's LIVE_LINKS entry points at, plus the two surfaces that entry deliberately does NOT carry a
+    bullet for: the append-only reading ledger (a log reached from the monitor that owns it — the
+    MeterReading precedent) and nothing else. There is no button here for `coldchain_detect` or any
+    excursion verb: those routes are POST-only at the view, so an <a href> to one is a link that 405s
+    on click.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Cold Chain</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> Monitoring Points</a>
+        <a href="{% url 'scm:temperatureexcursion_list' %}" class="btn btn-outline"><i data-lucide="siren"></i> Excursions</a>
+        <a href="{% url 'scm:temperaturereading_list' %}" class="btn btn-outline"><i data-lucide="thermometer"></i> Reading Ledger</a>
+        <a href="{% url 'scm:cold_storage_report' %}" class="btn btn-outline"><i data-lucide="snowflake"></i> Cold Storage</a>
+        <a href="{% url 'scm:cold_chain_compliance_report' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Compliance</a>
+        <a href="{% url 'scm:reefer_board' %}" class="btn btn-outline"><i data-lucide="container"></i> Reefer Board</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
