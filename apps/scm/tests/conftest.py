@@ -2848,3 +2848,194 @@ def meter_reading_b(db, tenant_b, asset_b):
     return MeterReading.objects.create(
         tenant=tenant_b, asset=asset_b, meter_name="Cycles", unit="cycles",
         reading=Decimal("900"), read_at=_asset_moment(-24))
+
+
+# ------------------------------------------------------------------ SCM 4.14 Labor Management
+# L16 — EVERY reference date and time below is derived from ``timezone.now()`` /
+# ``timezone.localdate()``, never ``datetime.date.today()`` and never a literal. Two model rules make
+# that load-bearing rather than stylistic: ``LaborSession.clean()`` pins ``work_date`` to the LOCAL
+# date of ``clock_in``, and ``LaborActivity.clean()`` refuses an interval that falls outside its
+# shift's clock window. A literal date would therefore rot the day the calendar moved past it, and a
+# ``date.today()`` basis would disagree with the views for the hours after local midnight.
+def _labor_moment(hours_ago=0, minutes_ago=0):
+    """An aware datetime that far in the past, TRUNCATED to the minute.
+
+    Truncated because the ``datetime-local`` widget round-trips whole minutes: a fixture carrying
+    seconds would hold a value nothing in the product can actually write, and every edit-form
+    round-trip assertion would be measuring the fixture rather than the form.
+    """
+    from django.utils import timezone
+    return (timezone.now() - datetime.timedelta(hours=hours_ago, minutes=minutes_ago)
+            ).replace(second=0, microsecond=0)
+
+
+def _labor_workday(moment):
+    """The LOCAL date a shift starting at ``moment`` belongs to — ``LaborSession.clean()``'s rule (c).
+
+    Read through ``timezone.localdate`` rather than ``moment.date()`` so a fixture built at 23:30 UTC
+    under a non-UTC project timezone lands on the day the model would insist on.
+    """
+    from django.utils import timezone
+    return timezone.localdate(moment)
+
+
+def _labor_date(days=0):
+    """Today (or days from it) on the basis every 4.14 date reader uses."""
+    from django.utils import timezone
+    return timezone.localdate() + datetime.timedelta(days=days)
+
+
+@pytest.fixture
+def employee_party_a2(db, tenant_a):
+    """A SECOND tenant_a employee.
+
+    Needed twice over: a worker may hold only ONE open session (``LaborSession.clean()`` rule (e)),
+    so the gap-filter shifts cannot all belong to one person, and the payroll export's "a member
+    sees only their own rows" assertion needs a colleague whose name must be ABSENT.
+    """
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Rowan Picker", kind="person")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="employee")
+    return party
+
+
+@pytest.fixture
+def employee_party_b(db, tenant_b):
+    """The tenant_b worker every cross-tenant labour assertion points at."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_b, name="Globex Operator", kind="person")
+    PartyRole.objects.create(tenant=tenant_b, party=party, role="employee")
+    return party
+
+
+@pytest.fixture
+def labor_standard_a(db, tenant_a):
+    """An ACTIVE, network-wide picking standard, in force since a month ago and open-ended.
+
+    3 fixed minutes (2 setup + 1 travel) + 0.5 per unit, inflated by a 10% PF&D allowance — so
+    100 units earn ``(3 + 50) x 1.10 = 58.3000`` minutes. Every performance assertion in the 4.14
+    suite is built on that one figure, deliberately, so a change to the arithmetic shows up once.
+    """
+    from apps.scm.models import LaborStandard
+    return LaborStandard.objects.create(
+        tenant=tenant_a, name="Case picking", activity="pick", basis="per_unit",
+        source="engineered", minutes_per_unit=Decimal("0.5000"),
+        setup_minutes=Decimal("2.0000"), travel_minutes=Decimal("1.0000"),
+        allowance_pct=Decimal("10.00"), labour_rate=Decimal("24.0000"),
+        status="active", effective_from=_labor_date(-30))
+
+
+@pytest.fixture
+def draft_standard_a(db, tenant_a):
+    """A DRAFT packing standard — the activate verb's subject, and a row select_standard must SKIP."""
+    from apps.scm.models import LaborStandard
+    return LaborStandard.objects.create(
+        tenant=tenant_a, name="Carton packing", activity="pack", basis="per_case",
+        minutes_per_unit=Decimal("1.2500"), setup_minutes=Decimal("0.5000"),
+        status="draft", effective_from=_labor_date(-10))
+
+
+@pytest.fixture
+def labor_standard_b(db, tenant_b):
+    """The tenant_b standard every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import LaborStandard
+    return LaborStandard.objects.create(
+        tenant=tenant_b, name="Globex picking", activity="pick",
+        minutes_per_unit=Decimal("0.8000"), status="active", effective_from=_labor_date(-30))
+
+
+@pytest.fixture
+def labor_session_a(db, tenant_a, employee_party_a, location_a):
+    """An OPEN shift that started four hours ago and has NOT been clocked out.
+
+    Open because that is the only writable status — ``LaborActivity.clean()`` refuses to write into
+    anything else — so it is the state every booking test has to start from.
+    """
+    from apps.scm.models import LaborSession
+    started = _labor_moment(hours_ago=4)
+    return LaborSession.objects.create(
+        tenant=tenant_a, worker=employee_party_a, location=location_a,
+        work_date=_labor_workday(started), shift_label="Early", clock_in=started)
+
+
+@pytest.fixture
+def labor_session_b(db, tenant_b, employee_party_b, location_b):
+    """The tenant_b shift every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import LaborSession
+    started = _labor_moment(hours_ago=4)
+    return LaborSession.objects.create(
+        tenant=tenant_b, worker=employee_party_b, location=location_b,
+        work_date=_labor_workday(started), clock_in=started)
+
+
+@pytest.fixture
+def labor_activity_a(db, tenant_a, labor_session_a, labor_standard_a):
+    """One COMPLETED 60-minute pick of 100 units (2 of them wrong), measured against the standard.
+
+    The three input snapshots are written exactly as ``_stamp_standard`` writes them, so the row is
+    indistinguishable from one the create view filed: earned = 58.3000, performance = 97.17%.
+    """
+    from apps.scm.models import LaborActivity
+    started = labor_session_a.clock_in
+    return LaborActivity.objects.create(
+        tenant=tenant_a, session=labor_session_a, activity_type="pick",
+        started_at=started, ended_at=started + datetime.timedelta(minutes=60),
+        quantity=Decimal("100"), error_quantity=Decimal("2"),
+        standard=labor_standard_a,
+        standard_fixed_snapshot=Decimal("3.0000"),
+        standard_rate_snapshot=Decimal("0.5000"),
+        standard_allowance_snapshot=Decimal("10.00"))
+
+
+@pytest.fixture
+def labor_activity_b(db, tenant_b, labor_session_b):
+    """The tenant_b booking every ``session__tenant`` isolation assertion points at."""
+    from apps.scm.models import LaborActivity
+    started = labor_session_b.clock_in
+    return LaborActivity.objects.create(
+        tenant=tenant_b, session=labor_session_b, activity_type="pick",
+        started_at=started, ended_at=started + datetime.timedelta(minutes=30),
+        quantity=Decimal("40"))
+
+
+@pytest.fixture
+def labor_plan_a(db, tenant_a, location_a):
+    """A DRAFT daily plan over the next three days at location_a, sourced from the stock ledger."""
+    from apps.scm.models import LaborPlan
+    return LaborPlan.objects.create(
+        tenant=tenant_a, name="Next three days", location=location_a,
+        period_start=_labor_date(1), period_end=_labor_date(3), bucket="day",
+        volume_source="stock_moves", method="moving_average", history_days=28,
+        hours_per_shift=Decimal("8.00"), productivity_pct=Decimal("100.00"))
+
+
+@pytest.fixture
+def labor_plan_b(db, tenant_b, location_b):
+    """The tenant_b plan every cross-tenant IDOR assertion points at."""
+    from apps.scm.models import LaborPlan
+    return LaborPlan.objects.create(
+        tenant=tenant_b, name="Globex plan", location=location_b,
+        period_start=_labor_date(1), period_end=_labor_date(2), bucket="day",
+        volume_source="manual", method="manual")
+
+
+@pytest.fixture
+def labor_plan_line_a(db, labor_plan_a, labor_standard_a):
+    """One generated bucket of labor_plan_a's grid — the only row a planner may edit, and only
+    through ``planned_headcount``."""
+    from apps.scm.models import LaborPlanLine
+    return LaborPlanLine.objects.create(
+        plan=labor_plan_a, period_start=labor_plan_a.period_start, activity="pick",
+        forecast_volume=Decimal("100.0000"), standard=labor_standard_a,
+        standard_minutes_snapshot=Decimal("58.3000"),
+        required_minutes=Decimal("58.30"), required_headcount=Decimal("0.12"),
+        planned_headcount=Decimal("1.00"))
+
+
+@pytest.fixture
+def labor_plan_line_b(db, labor_plan_b):
+    """The tenant-LESS child that can only be reached through ``plan__tenant`` — tenant_b's."""
+    from apps.scm.models import LaborPlanLine
+    return LaborPlanLine.objects.create(
+        plan=labor_plan_b, period_start=labor_plan_b.period_start, activity="pick",
+        required_headcount=Decimal("2.00"), planned_headcount=Decimal("1.00"))
