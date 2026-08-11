@@ -168,16 +168,18 @@ def temperaturereading_list(request):
     * ``date_from`` / ``date_to`` — ``YYYY-MM-DD``, inclusive of both days, on ``reading_at``
     * ``band`` — ``in`` / ``out``, DERIVED against each row's own monitor limits
 
-    **The page is ALWAYS bounded.** Opened with neither a monitor nor a date it defaults to the last
+    **The page is ALWAYS bounded.** Opened with no usable date it defaults to the last
     :data:`DEFAULT_WINDOW_DAYS` days and sets ``window_defaulted`` so the page can SAY so — a silent
-    default is indistinguishable from a page that ignored what was asked.
+    default is indistinguishable from a page that ignored what was asked. ``?monitor=`` does NOT
+    exempt a page from the window: narrowing to one probe narrows the rows but does not bound them,
+    and a single 15-minute sensor is the fastest-growing thing in this table.
 
     **Context:** ``object_list`` / ``page_obj`` / ``q`` (from ``crud_list``), plus ``monitors``
     (queryset for the monitor dropdown), ``source_choices`` and ``band_choices`` (lists of
     ``(value, label)`` pairs), ``band`` (the RESOLVED bucket — a junk value narrowed nothing, so the
     ``<select>`` must show "All"), ``date_from`` / ``date_to`` (the raw GET strings, echoed back into
     the two date inputs so a rejected value stays visible), ``window_from`` / ``window_to`` (the
-    resolved dates actually applied, or ``None`` when the page is monitor-scoped with no dates),
+    resolved dates actually applied; either may be ``None`` when only ONE end was given),
     ``window_defaulted`` (bool), ``window_days`` (int) and ``append_only_note`` (str).
 
     **The list has NO Edit and NO Delete action** — render View only, and print
@@ -192,12 +194,14 @@ def temperaturereading_list(request):
     raw_from = (request.GET.get("date_from") or "").strip()
     raw_to = (request.GET.get("date_to") or "").strip()
     date_from, date_to = _report_day(raw_from), _report_day(raw_to)
-    monitor_pk = as_db_int(request.GET.get("monitor"))
 
-    # The bound. A page with no monitor and no usable date gets the default window rather than a
-    # full scan of the workspace's whole ledger.
+    # The bound. A page with no usable date gets the default window rather than a walk of the whole
+    # history — and that applies to `?monitor=<pk>` too, which was the ONE direction that actually
+    # grows: a probe on a 15-minute interval is ~35k rows a year, so `?monitor=7&page=3000` had the
+    # database counting off a huge OFFSET for a URL anybody can type. The monitor filter narrows the
+    # rows; it does not bound them. `window_defaulted` still tells the page to SAY it defaulted.
     window_defaulted = False
-    if date_from is None and date_to is None and monitor_pk is None:
+    if date_from is None and date_to is None:
         today = timezone.localdate()
         date_from, date_to = today - timedelta(days=DEFAULT_WINDOW_DAYS - 1), today
         window_defaulted = True
@@ -434,8 +438,11 @@ def coldchainmonitor_import_readings(request, pk):
     weight, which the optional override replaces), ``result`` (**``None`` before an import**, else a
     dict: ``imported`` (int), ``duplicates`` (int — already in the ledger), ``skipped`` (the form's
     tally dict: ``total`` / ``no_temperature`` / ``bad_timestamp`` / ``future`` / ``out_of_bounds`` /
-    ``duplicate_in_file`` / ``dropped_humidity`` / ``dropped_interval_stats``), ``parsed`` (int),
-    ``source`` (str) and ``interval_minutes`` (int — what was actually snapshotted)),
+    ``before_deployment`` / ``duplicate_in_file`` / ``dropped_humidity`` /
+    ``dropped_interval_stats``), ``parsed`` (int),
+    ``source`` (str — the raw token that was stamped), ``source_label`` (str — that token's own
+    human label, resolved off the form field's choices so the panel never prints ``logger_import``)
+    and ``interval_minutes`` (int — what was actually snapshotted)),
     ``zero_note`` (str — a blank temperature cell is reported as SKIPPED and never imported as 0),
     ``provenance_note`` and ``append_only_note``.
     """
@@ -447,10 +454,27 @@ def coldchainmonitor_import_readings(request, pk):
     if request.method == "POST":
         form = TemperatureReadingImportForm(request.POST, request.FILES,
                                             tenant=request.tenant, monitor=monitor)
+        rows = skipped = None
         if form.is_valid():
-            rows, skipped = form.parse_rows()
+            try:
+                rows, skipped = form.parse_rows()
+            except ValidationError as exc:
+                # The walk itself can still refuse the file: `csv` is a C reader with its own
+                # refusals (an embedded NUL byte, a field past its 128 KB limit) and they surface
+                # mid-walk, after `clean_file` has already passed the header. Caught here it is a
+                # message on the field, exactly like the size and extension refusals; uncaught it is
+                # a 500 on a page any member can post to.
+                form.add_error("file", exc)
+        # `rows` is `[]` for a header-only file — a legitimate import of nothing, which still gets
+        # its tally — and `None` only when there is nothing to import at all.
+        if rows is not None:
             interval = form.resolved_interval(monitor)
             source = form.cleaned_data["source"]
+            # The result panel reports the provenance it stamped, and `logger_import` is a database
+            # token, not a sentence — printed raw it read as an internal identifier leaking onto a
+            # page an auditor uses. Resolved off the FIELD'S OWN choices rather than a second copy of
+            # the mapping, so the label can never drift from the whitelist that produced the value.
+            source_label = dict(form.fields["source"].choices).get(source, source)
             party = _acting_party(request)
 
             moments = [row["reading_at"] for row in rows]
@@ -495,6 +519,7 @@ def coldchainmonitor_import_readings(request, pk):
                 "skipped": skipped,
                 "parsed": len(rows),
                 "source": source,
+                "source_label": source_label,
                 "interval_minutes": interval,
             }
             messages.success(
@@ -508,6 +533,16 @@ def coldchainmonitor_import_readings(request, pk):
                     f"{skipped['no_temperature']} row(s) had no readable temperature and were "
                     "SKIPPED — never filed as 0 °C, which would read as a measurement somebody "
                     "took. Fix those rows and re-upload; the ones already imported will not double.")
+            if skipped["before_deployment"]:
+                # Named separately from the rest of the tally because it is the one skip that is
+                # usually CORRECT and still needs saying: a re-usable logger's file holds every
+                # consignment it has ever ridden, and those rows belong to the earlier deployment.
+                messages.warning(
+                    request,
+                    f"{skipped['before_deployment']} row(s) predate {monitor.number}'s deployment "
+                    f"on {monitor.deployed_on} and were SKIPPED — a re-usable logger carries its "
+                    "earlier consignments too, and filing them here would count another shipment's "
+                    "journey in this deployment's time-in-range and MKT.")
             # A fresh unbound form beside the result panel, so the page is immediately usable again.
             form = TemperatureReadingImportForm(tenant=request.tenant, monitor=monitor)
     else:
