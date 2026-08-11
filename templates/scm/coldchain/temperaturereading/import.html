@@ -16,9 +16,13 @@ Everything this page may read, and nothing else:
   result            a dict or NONE. None before an import has run, and the panel is not drawn at all
                     in that case — an empty tally rendered as a row of zeros would read as "we
                     imported nothing", which is a different statement from "you have not imported
-                    yet". Keys: imported, duplicates, parsed, source, interval_minutes and a
+                    yet". Keys: imported, duplicates, parsed, source (the raw
+                    token), source_label (that token's human label — print THIS one), interval_minutes and a
                     `skipped` sub-dict (total, no_temperature, bad_timestamp, future, out_of_bounds,
-                    duplicate_in_file, dropped_humidity, dropped_interval_stats)
+                    before_deployment, duplicate_in_file, dropped_humidity, dropped_interval_stats).
+                    `total` counts ONLY the reasons that dropped a whole ROW — the two dropped_*
+                    counters are rows that WERE imported with a value cleared, so anything gated on
+                    `total` alone renders a clean bill of health over a partial loss
   provenance_note / append_only_note   strs, printed verbatim
 
 The view is @tenant_admin_required — one press writes up to max_rows rows into the record a regulator
@@ -49,10 +53,20 @@ and render unstyled (L33).
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">What that upload did</h2>
+        {% comment %}
+          THREE states, not two. `skipped.total` counts only the reasons that DROPPED a row; the two
+          dropped_* counters are rows that WERE imported with a value cleared. Keyed on total alone,
+          a file of 500 rows carrying 40 humidity cells of 120 % printed a green "Nothing skipped"
+          while 40 measurements went in the bin — precisely the "a skip nobody can see" failure the
+          paragraph at the foot of the reason table promises this page prevents. So a partial loss
+          gets its own amber state, and green is reserved for a file that lost nothing at all.
+        {% endcomment %}
         {% if result.skipped.total %}
           <span class="badge badge-amber">{{ result.skipped.total }} row{{ result.skipped.total|pluralize }} skipped</span>
+        {% elif result.skipped.dropped_humidity or result.skipped.dropped_interval_stats %}
+          <span class="badge badge-amber">Every row filed — some values dropped</span>
         {% else %}
-          <span class="badge badge-green">Nothing skipped</span>
+          <span class="badge badge-green">Nothing skipped or dropped</span>
         {% endif %}
       </div>
       <div class="card-body">
@@ -61,12 +75,25 @@ and render unstyled (L33).
           <div class="detail-item"><dt>Already in the ledger</dt><dd class="mono">{{ result.duplicates }}</dd></div>
           <div class="detail-item"><dt>Readable rows in the file</dt><dd class="mono">{{ result.parsed }}</dd></div>
           <div class="detail-item"><dt>Skipped</dt><dd class="mono">{{ result.skipped.total }}</dd></div>
-          <div class="detail-item"><dt>Stamped as</dt><dd>{{ result.source }}</dd></div>
+          {% comment %}
+            source_label, not source. The raw value is a database token — this printed
+            "logger_import" onto a panel that ends up in an audit pack. The view resolves the label
+            off the form field's own choices; `source` stays in the context for anything that needs
+            to compare, and nothing on this page does.
+          {% endcomment %}
+          <div class="detail-item"><dt>Stamped as</dt><dd>{{ result.source_label }}</dd></div>
           <div class="detail-item"><dt>Weight stamped on every row</dt><dd class="mono">{{ result.interval_minutes }} min</dd></div>
         </dl>
 
-        {% if result.skipped.total %}
-          <h3 class="card-title" style="margin:1rem 0 .5rem; font-size:.95rem;">Why rows were skipped</h3>
+        {% comment %}
+          The SAME widened guard as the header badge, and for the same reason: the last two rows of
+          this table are the dropped-value counters, and gating the whole table on `skipped.total`
+          meant the only place those numbers are printed was hidden in exactly the case where they
+          were the only thing that happened. The heading says "skipped or dropped" because the table
+          now answers both questions — a row that was lost, and a value that was.
+        {% endcomment %}
+        {% if result.skipped.total or result.skipped.dropped_humidity or result.skipped.dropped_interval_stats %}
+          <h3 class="card-title" style="margin:1rem 0 .5rem; font-size:.95rem;">What was skipped or dropped</h3>
           <div class="table-wrap">
             <table class="table">
               <thead><tr><th>Reason</th><th class="text-right">Rows</th><th>What it means</th></tr></thead>
@@ -92,6 +119,11 @@ and render unstyled (L33).
                   <td class="text-muted">Refused rather than clamped. A quietly clamped temperature is a measurement nobody took wearing the costume of one somebody did.</td>
                 </tr>
                 <tr>
+                  <td>Before this deployment started</td>
+                  <td class="text-right mono">{{ result.skipped.before_deployment }}</td>
+                  <td class="text-muted">The row is dated before the monitor's deployment date. A re-usable logger carries every consignment it has ridden, and those rows belong to the <span class="fw-600">earlier</span> deployment — counted here they would drive this one's time-in-range and MKT.</td>
+                </tr>
+                <tr>
                   <td>Duplicate timestamp inside the file</td>
                   <td class="text-right mono">{{ result.skipped.duplicate_in_file }}</td>
                   <td class="text-muted">Two rows claiming the same moment on one monitor. The first was kept.</td>
@@ -109,7 +141,7 @@ and render unstyled (L33).
               </tbody>
             </table>
           </div>
-          <div class="form-help">Every skip is <span class="fw-600">counted, not silenced</span>. A skip nobody can see is how an import quietly loses a third of a logger file and nobody notices until an audit. Fix the offending rows and upload the file again — the rows that landed the first time will come back as duplicates, not as a second copy.</div>
+          <div class="form-help">Every skip <span class="fw-600">and every dropped value</span> is <span class="fw-600">counted, not silenced</span>. A skip nobody can see is how an import quietly loses a third of a logger file and nobody notices until an audit. Fix the offending rows and upload the file again — the rows that landed the first time will come back as duplicates, not as a second copy.</div>
         {% endif %}
 
         <div class="form-actions" style="margin-top:1rem;">
@@ -147,7 +179,14 @@ and render unstyled (L33).
         </div>
         <div class="detail-item"><dt>Weight that will be stamped</dt><dd class="mono">{{ interval_minutes }} min</dd></div>
         <div class="detail-item"><dt>Deployed</dt><dd class="mono">{{ monitor.deployed_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
-        <div class="detail-item"><dt>Readings on file</dt><dd class="mono">{{ monitor.readings.count }}</dd></div>
+        {% comment %}
+          "Readings on file" USED to sit here as {{ monitor.readings.count }} — a query issued by the
+          template (house rule 9), unbounded, and through the related manager, which states no tenant
+          and so cannot open scm_tmp_tnt_mon_idx. It is gone rather than moved into the view: nothing
+          here branches on it, the monitor's detail page reports it properly, and what this page is
+          actually about — how many rows went in, how many were already there and how many could not
+          be read — is the result panel above, counted exactly. Do not put a `.count` back here.
+        {% endcomment %}
       </dl>
       {% if monitor.deployed_on %}
         <div class="form-help">This deployment started on <span class="fw-600">{{ monitor.deployed_on|date:"M d, Y" }}</span>. On a re-usable logger a row from before then belongs to an <em>earlier</em> deployment with its own limits and its own history, so filing it here would attribute another consignment's journey to this one.</div>
