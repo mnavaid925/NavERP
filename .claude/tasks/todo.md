@@ -22988,3 +22988,70 @@ Carried over from `research-scm-4.16.md` so nothing is lost, plus what this plan
 (filled in at the end of the pass)
 
 
+
+---
+
+# Review — SCM 4.14 Labor Management (complete)
+
+Built, migrated (`0024` + `0025`), seeded, verified and closed out through the full Module Creation
+Sequence. Sidebar shows 4.14 Live with all five NavERP.md bullets linked.
+
+## What shipped
+
+`LaborStandard` [LST-] + `select_standard()` · `LaborSession` [LSN-] · `LaborActivity` [LAB-] ·
+`LaborPlan` [LPL-] + `LaborPlanLine`, 16 templates under `templates/scm/labor/`, three computed
+pages (`labor_board`, `labor_payroll_export`, `labor_scorecard`), 37 routes, `_seed_labor_tenant`.
+
+**The sub-module is mostly defined by what it does NOT own**, and all three were verified rather than
+asserted: no attendance table (HRM owns `hrm.AttendanceRecord`; `apps/scm` still holds **zero**
+`hrm.*` imports and Django's model graph shows no scm→hrm relation), no task table or second
+assignee column (migration `0024` contains **no `AddField` at all** — that is the evidence), and no
+payroll posting (`accounting.PayrollRun` is a whole-company accrual with no employee lines).
+
+## Defects found by the review chain, and what each one taught
+
+| where | defect | why it survived until then |
+|---|---|---|
+| `code-reviewer` | `q4()` clamps to (14,4); the snapshot column is (12,4) — a large quantity raised `DataError` on the main write path | `q4()` *looks* like the bound. It is one, to the wrong column. |
+| `code-reviewer` | a still-running activity added earned minutes to the numerator and 0 duration to the denominator — performance *rose when work started and fell when it finished* | `ended_at=None` with a quantity is legal and ordinary; no fixture had one |
+| `explorer` | `_transition` was a third byte-identical copy — of the **concurrency guard** | three copies each read correctly at their own site |
+| `frontend-reviewer` | two empty-state anchors pointed at a `@require_POST` route → guaranteed 405 | see below — this is the important one |
+| `qa-smoke-tester` | `?gap=has_gap` / `?gap=over_booked` → hard 500 (non-aggregate in a `HAVING`, MariaDB-only) | the junk sweep passed a dozen malformed values and never tried either valid one |
+| `security-reviewer` | any member could download every named colleague's hours and performance | the pages were `@login_required` like the per-record pages beside them |
+
+## The one pattern worth carrying forward (recorded as L44)
+
+Four of the six were **a check that passed for the wrong reason** — green meaning "we didn't look",
+indistinguishable from "we looked and it was fine":
+
+* the junk-filter sweep exercised the **guard** and never the **feature**;
+* the empty-tenant check rendered the empty state but never followed its links, while the link sweep
+  followed links but ran against the **seeded** tenant, where `{% empty %}` never renders — **both
+  halves present, both green, neither covering the thing**;
+* my first rewrite of that sweep ran a template-source regex (`{% url %}`) against **rendered** HTML,
+  matched nothing, and reported a confident pass over **zero** anchors;
+* the privacy check would have passed on the decorator while the worker **dropdown** still listed
+  every colleague by name — it only failed because it asserted on rendered HTML.
+
+Sharpest form: **assert the denominator is non-zero.** A guard nobody has watched fail is untested,
+so the empty-vs-seeded sweep was negative-tested by re-introducing a fixed bug: seeded stayed green,
+empty failed. That is the difference between an argument and evidence.
+
+## Verification (all re-run after the final fix)
+
+`smoke_414` 134/134 · `lm_probe` 130/130 · `lm_write_paths` 184/184 · valid-filter sweep 97/97 ·
+people-privacy 13/13 · link sweep 109 seeded + 79 empty · skill-claims 30/30 · query counts flat
+(+60 rows → +0 queries) · bulk assign 3–5 queries/row → **13 flat** · `laborplan_generate` output
+byte-identical after the caching fix.
+
+## Left undone, deliberately
+
+* **`todo.md` was not otherwise edited** — two other sessions (4.15, 4.16) were writing this file
+  concurrently; appending was the only low-conflict way to touch it.
+* `security-reviewer` L2 (a member may book minutes into a colleague's *open* shift, moving their
+  scorecard) is **accepted as a residual**, not fixed: it is the documented supervisor-entry design,
+  there is no supervisor role between member and tenant admin in this app, and payroll stays
+  protected by the admin-gated approve verb. The reviewer's `_guard_other_worker` shape is recorded
+  if it is ever wanted.
+* `select_standard`'s four-rung ladder stays four queries — one `Case/When` query would cost more in
+  readability than three index seeks on a cold path are worth.
