@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — the append-only temperature ledger.
+
+Renders apps/scm/views/ColdChainManagement/TemperatureReadings.py::temperaturereading_list, which
+returns crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py); `q` searches `notes`
+  monitors                     ColdChainMonitor queryset for the ?monitor= dropdown
+  source_choices               [(value, label), …] — READING_SOURCE_CHOICES
+  band_choices                 [(value, label), …] — NOT a model vocabulary. Nothing is stored on a
+                               reading about whether it was in range, deliberately: that answer
+                               belongs to the monitor's limits and would go stale the moment a limit
+                               was edited
+  band                         the RESOLVED band filter, "" when absent or junk. The <select> binds
+                               to THIS and never to request.GET.band, so the control shows what was
+                               actually applied rather than whatever was typed into the address bar
+  date_from / date_to          the RAW GET strings, echoed back into the two date inputs so a
+                               rejected value stays visible instead of silently vanishing
+  window_from / window_to      the dates actually applied — either can be None when the page is
+                               monitor-scoped with no dates at all
+  window_defaulted             bool — nobody named a monitor or a date, so the last `window_days`
+                               days were applied. The page SAYS so: a silent default is
+                               indistinguishable from a page that ignored the request
+  window_days                  int
+  append_only_note             str, printed verbatim
+
+THERE IS NO EDIT AND NO DELETE ON THIS PAGE, and that is a decision rather than an omission. No
+temperaturereading_edit or temperaturereading_delete view exists, no form, no template and no url —
+the ledger is append-only, exactly like scm.StockMove and scm.MeterReading. A wrong reading is
+corrected by FILING A LATER, CORRECT ONE: the monitor's current value is always the newest row, so
+the fix takes effect immediately, the mistaken row stays visible (which is the point of a log rather
+than a defect in it), and every compliance figure derived from these rows stays reproducible. The
+Actions column is View only, and it must stay that way — never render a button for a route that does
+not exist.
+
+None IS NEVER 0 HERE. humidity_pct is None on the majority of probes, which do not report it, and
+0.00 % would be a claim about bone-dry air. The interval minimum and maximum are None on a
+single-sample row — a manual reading typed by a supervisor is exactly that — and a substituted 0 °C
+would read as a measurement somebody took. All three are tested with `is not None`.
+
+Filter params: q / source are strings and compare against request.GET.<param> directly; band
+compares against the RESOLVED `band` variable; monitor is a PK and compares with |stringformat:"d" —
+|slugify would be wrong on it. Both dates echo the raw strings.
+{% endcomment %}
+{% block title %}Temperature Readings{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Temperature Readings</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Temperature Readings</span></div>
+      <p class="text-muted">The record of what the goods actually experienced — one row per logging interval per monitor, forever. Every compliance figure in this sub-module is derived from these rows and the monitor's limits: time in range, time out of range, mean kinetic temperature and the excursion episodes themselves. None of that is stored anywhere, which is what makes a second, disagreeing copy impossible.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> Monitors</a>
+      <a href="{% url 'scm:temperatureexcursion_list' %}" class="btn btn-outline"><i data-lucide="siren"></i> Excursions</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The ledger</h2>
+      <div class="badge-group">
+        {% if window_defaulted %}<span class="badge badge-info">Last {{ window_days }} days</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search notes" class="form-input" placeholder="Search the notes on a reading…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A PK dropdown — |stringformat:"d" and never |slugify. It goes through crud_list's is_int
+            leg, so ?monitor=abc, ?monitor=² and an over-range pk all skip the filter instead of
+            raising out of .filter() (L11).
+          {% endcomment %}
+          <select name="monitor" aria-label="Monitor" class="form-select">
+            <option value="">Every monitor</option>
+            {% for m in monitors %}
+              <option value="{{ m.pk }}" {% if request.GET.monitor == m.pk|stringformat:"d" %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Bound to the RESOLVED `band`, never to request.GET.band: a hand-edited ?band=whatever
+            narrowed nothing, and this control has to agree with what was actually applied.
+          {% endcomment %}
+          <select name="band" aria-label="Against the band" class="form-select">
+            <option value="">Any band state</option>
+            {% for val, label in band_choices %}
+              <option value="{{ val }}" {% if band == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ date_from }}" aria-label="From" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to }}" aria-label="To" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:temperaturereading_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        {% if window_defaulted %}
+          <span class="badge badge-info">Showing the last {{ window_days }} days</span>
+          Nobody named a monitor or a date, so the page applied its default window rather than scanning the whole ledger — this is the fastest-growing table in the sub-module, roughly 17,500 rows per monitor per year at a 30-minute interval. Choose a monitor or a date range to look further back.
+        {% elif window_from or window_to %}
+          Windowed
+          {% if window_from %}from <span class="fw-600">{{ window_from|date:"M d, Y" }}</span>{% endif %}
+          {% if window_to %}to <span class="fw-600">{{ window_to|date:"M d, Y" }}</span>{% endif %}
+          — both ends are <span class="fw-600">inclusive of the whole day</span>, so a reading taken at 16:00 on the closing date is inside the window somebody asked for. A date that cannot be read skips the filter rather than refusing the page, and a "from" later than a "to" is treated as a typo and swapped.
+        {% else %}
+          Scoped to one monitor with no date range, so this is that deployment's whole history, newest first.
+        {% endif %}
+        The <span class="fw-600">band</span> filter is arithmetic rather than a column — each row is judged against <em>its own</em> monitor's limits, because this list legitimately spans many monitors with different bands. A reading from a monitor with no limits at all falls into neither bucket, which is the honest answer: it cannot be inside or outside a band that does not exist.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Taken at</th>
+            <th>Monitor</th>
+            <th>Temperature</th>
+            <th>The band it is judged against</th>
+            <th>Humidity</th>
+            <th>Interval</th>
+            <th>Filed</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="nowrap"><a href="{% url 'scm:temperaturereading_detail' obj.pk %}" class="fw-600 mono">{{ obj.reading_at|date:"M d, Y H:i" }}</a></td>
+              <td>
+                <a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="mono">{{ obj.monitor.number }}</a>
+                <div class="text-muted">{{ obj.monitor.name }}</div>
+              </td>
+              <td class="mono nowrap fw-600">{{ obj.temperature|floatformat:2 }} °C</td>
+              {% comment %}
+                The monitor's CURRENT limits, joined by select_related so this costs no query. Both
+                sides are optional — a one-sided band is legitimate — and a blank side prints "none"
+                rather than 0.00, because 0 °C is a real limit somebody may have set.
+              {% endcomment %}
+              <td class="mono nowrap">
+                {% if obj.monitor.min_temperature is not None or obj.monitor.max_temperature is not None %}
+                  {% if obj.monitor.min_temperature is not None %}{{ obj.monitor.min_temperature|floatformat:2 }}{% else %}<span class="text-muted">no lower</span>{% endif %}
+                  <span class="text-muted">to</span>
+                  {% if obj.monitor.max_temperature is not None %}{{ obj.monitor.max_temperature|floatformat:2 }}{% else %}<span class="text-muted">no upper</span>{% endif %}
+                {% else %}
+                  <span class="badge badge-muted">No band configured</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                Most probes do not report humidity at all, so None is the ordinary case — and 0.00 %
+                would be a claim about bone-dry air rather than a missing column.
+              {% endcomment %}
+              <td class="mono nowrap">{% if obj.humidity_pct is not None %}{{ obj.humidity_pct|floatformat:2 }} %{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono nowrap">
+                {% if obj.min_temperature is not None or obj.max_temperature is not None %}
+                  {% if obj.min_temperature is not None %}{{ obj.min_temperature|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  /
+                  {% if obj.max_temperature is not None %}{{ obj.max_temperature|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">Single sample</span>
+                {% endif %}
+                <div class="form-help text-muted">{{ obj.sample_count }} sample{{ obj.sample_count|pluralize }} · weighs {{ obj.interval_minutes }} min</div>
+              </td>
+              <td class="nowrap">
+                <span class="badge badge-muted">{{ obj.get_source_display }}</span>
+                <div class="form-help text-muted">{% if obj.recorded_by %}{{ obj.recorded_by.name }}{% else %}Unattributed{% endif %}</div>
+              </td>
+              <td>
+                {% comment %}
+                  VIEW ONLY. There is no edit route and no delete route for a reading — see the
+                  header comment. A pencil or a bin here would be a link to a url name that does not
+                  resolve, which is a 500 on the list page rather than a friendly refusal.
+                {% endcomment %}
+                <div class="table-actions">
+                  <a href="{% url 'scm:temperaturereading_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="thermometer"></i>
+                  <h3>No readings in this window</h3>
+                  <p>Either nothing has been filed yet, or the window and filters above exclude everything that has. Readings are always filed <span class="fw-600">against a monitor</span> — open the monitor you want and use <em>File a reading</em> for a single interval summary, or <em>Import logger file</em> for a whole download. Back-dating is expected and supported: that is what a logger download <em>is</em>.</p>
+                  <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-primary"><i data-lucide="thermometer-snowflake"></i> Choose a monitor</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered <span class="fw-600">newest first</span>. A row is an <span class="fw-600">interval summary</span> and not a raw sample: it carries the representative value for its window plus, where the logger reports them, the coldest and warmest samples inside it. Each row also carries its own <span class="fw-600">weight</span> — the logging interval snapshotted at filing time — which is what makes mean kinetic temperature and time-out-of-range correct when a monitor's interval changes mid-window, because a single hot hour must weigh an hour and not "one row".
+      <div style="margin-top:.75rem;">{{ append_only_note }}</div>
+    </div>
+  </div>
+{% endblock %}
