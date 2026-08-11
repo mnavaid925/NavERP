@@ -91,7 +91,8 @@ from apps.scm.forms._common import _employee_parties
 # coincidence. DIRECT_ACTIVITIES / INDIRECT_ACTIVITIES are the single source of truth for the
 # direct/indirect split — the `direction` filter branches on them and never on a hand-typed tuple.
 from apps.scm.models import (ACTIVITY_CHOICES, DIRECT_ACTIVITIES, INDIRECT_ACTIVITIES,
-                             INDIRECT_REASON_CHOICES, LaborActivity, LaborSession, select_standard)
+                             INDIRECT_REASON_CHOICES, MAX_ACTIVITIES_PER_SESSION, LaborActivity,
+                             LaborSession, select_standard)
 from apps.scm.forms import LaborActivityForm
 
 ZERO = Decimal("0")
@@ -462,17 +463,48 @@ def _activity_form(request, session, instance):
             instance=instance if is_edit else LaborActivity(tenant=request.tenant, session=session),
             tenant=request.tenant)
         if form.is_valid():
-            activity = form.save(commit=False)
-            # Restated rather than trusted to the instance we constructed: the parent and the
-            # workspace are the two facts this form must not be able to disagree with the URL about,
-            # and restating them costs one assignment each.
-            activity.tenant = request.tenant
-            activity.session = session
+            # RE-CHECK THE FREEZE UNDER A ROW LOCK, not against the snapshot fetched at the top of
+            # the request. `_frozen()` above and `LaborActivity.clean()`'s open-session rule both
+            # read `session.status` off an instance loaded before validation, so a member POSTing a
+            # booking while an admin presses Approve can land minutes on a shift that is `approved`
+            # by the time the INSERT commits — and `approved` is the payroll export's lock, so those
+            # minutes may already have been signed off and exported. `laboractivity_delete` locks for
+            # exactly this reason; the two write paths that CREATE minutes were the ones that did not.
+            with transaction.atomic():
+                locked = (LaborSession.objects.select_for_update()
+                          .filter(pk=session.pk, tenant=request.tenant).first())
+                if locked is None or _frozen(request, locked):
+                    return _session_detail(session.pk)
 
-            standard = None
-            if not is_edit:
-                standard = _stamp_standard(activity, session, request.tenant)
-            activity.save()   # derives duration_minutes and the earned figure — see the model
+                # A CONSTANT per-shift ceiling, checked before the insert. The docstring below used
+                # to argue the shift's own clock bounded this, and it does not: clean() deliberately
+                # permits booked > attended (that is what over_booked_minutes reports) and applies no
+                # overlap rule between activities, so nothing stops 10,000 one-minute rows inside one
+                # 8-hour shift. Each costs one POST to write, but every later render of that session
+                # — and of any LIST page containing it, which prefetches activities for all 15 rows —
+                # pays for the whole set. A stored amplification rather than a request-time one.
+                # Constant, never "the shift's remaining minutes" (L40).
+                if not is_edit and locked.activities.count() >= MAX_ACTIVITIES_PER_SESSION:
+                    messages.error(
+                        request,
+                        f"{locked.number} already holds {MAX_ACTIVITIES_PER_SESSION} booked "
+                        "activities, which is the per-shift limit. Correct or remove an existing "
+                        "row rather than adding another — a shift with this many intervals is "
+                        "almost always a double-booking rather than a day's work.")
+                    return _session_detail(locked.pk)
+
+                activity = form.save(commit=False)
+                # Restated rather than trusted to the instance we constructed: the parent and the
+                # workspace are the two facts this form must not be able to disagree with the URL
+                # about, and restating them costs one assignment each. `locked` rather than
+                # `session`, so the row written is the one whose status was just verified.
+                activity.tenant = request.tenant
+                activity.session = locked
+
+                standard = None
+                if not is_edit:
+                    standard = _stamp_standard(activity, locked, request.tenant)
+                activity.save()   # derives duration_minutes and the earned figure — see the model
 
             if is_edit:
                 write_audit_log(request.user, activity, "update",
