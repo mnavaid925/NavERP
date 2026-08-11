@@ -22985,7 +22985,112 @@ Carried over from `research-scm-4.16.md` so nothing is lost, plus what this plan
 
 ## 11. Review notes
 
-(filled in at the end of the pass)
+(the build review is filled in at the end of the pass — the method finding below was written
+mid-pass, jointly with the concurrent 4.15 Cold Chain session, and is deliberately not scoped to
+4.16)
+
+---
+
+### METHOD — "the check passes because it never reached the failing state"
+
+**Status: a shared recipe for every sub-module, not a 4.16 note.** Written here because 4.16 hit it
+first; 4.15's review notes point at this section rather than restating it. Both sessions agreed
+every line below.
+
+**For anything that asserts a system is correct, ask what state the assertion actually reached. If
+the answer is "the happy one", the check is measuring the seed data, not the code.**
+
+Five real defects were found in one night across two concurrent sub-module builds. **Every one of
+them returned green.** Not one was found by running the code and reading the result, because in
+each case the code never entered the state that fails.
+
+| # | Defect | Why every existing check passed |
+|---|--------|---------------------------------|
+| 1 | Two 4.14 empty states linked to POST-only routes (one route did not exist) | A **seeded** tenant has rows in every table, so the `{% empty %}` branch is unreachable |
+| 2 | `seed_scm --flush` died on `Table 'scm_portaldocumentshare' doesn't exist` | Only reachable when a **second session** has committed models it has not migrated |
+| 3 | `PortalDocumentShare.OWNER_PATHS` — 3 of 18 lookups raise `FieldError` | The paths **are not wrong on the page**; nothing executes a form queryset until a page renders |
+| 4 | `expires_at` editable by any member on an admin-only-revocable share | Both the gate and the form are individually correct; only the **pair** is wrong |
+| 5 | `select_for_update()` in 4.15's excursion detector | Tests run **SQLite** under `config.settings_test`; production is MariaDB. The lock is never contended, so the test passes without exercising it |
+
+#### The two moves that actually find these
+
+**1. Assert on the state, not the status code.** #1 is the proof: both broken empty states returned
+`200`. A sweep asserting `200` is not a weak version of the right check, it is the wrong
+instrument — it confirms the page rendered, and the defect *is* what rendered. So:
+
+- **Empty-tenant sweep.** A tenant with zero rows for the sub-module, GET every list and derived
+  page, and assert **the empty-state branch actually rendered** (so a future seeder change that
+  silently stops exercising it fails loudly) **AND that every `href` inside it resolves to a route
+  that accepts GET** — checked against the URLconf, never by eye.
+- **For 4.16 this is the primary path, not an edge case.** A new portal account legitimately has
+  zero orders, zero documents and zero inquiries on day one, so **the empty state is the modal
+  first session** — the first thing every real customer sees. Hence the seeder deliberately creates
+  one empty portal account (§7), so these pages render in the demo and not only under test.
+- Same family as L41's em-dash grid: structurally wrong, returns 200, invisible to every sweep.
+
+**2. Execute the thing, do not read it.** #3 was found by running all eighteen `OWNER_PATHS`
+lookups instead of reviewing them. `related.party_id` reads as an entirely reasonable attribute
+path; it raises `FieldError` because `core.Document` reaches its owner through a
+`GenericForeignKey`, which the ORM cannot join across.
+
+> **Worked example — the sub-module that did NOT have this bug, and why.** 4.15 was checked against
+> the same finding and came back clean, but *by accident*: its research pass recommended a
+> `core.Document` calibration-certificate pointer and the build simplified it to a `CharField`. Had
+> it shipped the FK as designed, it would have had the identical defect. **Five reviewers read that
+> code and none would have caught it**, because it is not wrong on the page. Reviewer count does not
+> substitute for execution.
+
+#### The constructive half — verify the shape, not the instance
+
+**When a review finds a defect, grep for the shape before fixing the line.** This was the
+highest-yield move of the night and it costs one grep:
+
+- 4.15's security reviewer found a decision field on a `@login_required` form whose real writer was
+  a `@tenant_admin_required` verb — then searched for the *pattern*: **any field a ModelForm exposes
+  whose authoritative writer is a staff-gated verb is a privilege-escalation bypass by
+  construction.**
+- One finding became **three**: the original, a 4.10 instance (`ReturnDisposition.disposition`,
+  spun out as its own task), and #4 above in 4.16 — caught *before the views existed*, which is the
+  difference between a constraint and an incident.
+- #4 is worth naming as its own shape: **a control split across two fields where only one is
+  gated.** The gate looks present in review because it genuinely is — just not on the half that
+  matters. `expires_at` blank means *never expires*, on a share only an admin may revoke, which is
+  4.10's documented residual risk reintroduced by the fix for it.
+
+#### Concurrency: a category that exists only because two sessions run
+
+#2 belongs to a class neither session's code causes. **Django's cascade collector reads the *code*,
+not the schema**, so it walks FKs whose tables do not exist yet. Both sessions were individually
+correct; the failure lived in the gap.
+
+- The rule is broader than `--flush`: **do not run anything that walks the relation graph — cascade
+  delete, `dumpdata`, a `collect_related` teardown — while another session has un-migrated models
+  on disk.** Safe order is always *they migrate, then you walk.*
+- Migration numbering has the same shape. The invariant both sessions held: **nobody pre-reserves a
+  number they have not generated**; `ls` the migrations directory immediately before generating; a
+  genuine two-leaf collision is resolved by regenerating the **later** migration, never with
+  `makemigrations --merge`, which makes the double leaf permanent in the graph.
+- Verify against **disk**, not against either session's summary of it. Saying four wire-up files
+  were "uncontended" was read as "empty"; they carried committed 4.15 content, and a `Write` on
+  that reading would have destroyed it.
+
+#### Do not over-trust the suite
+
+**The test suite runs SQLite (`config.settings_test`); production is MariaDB.** Anything whose
+behaviour is engine-specific is *not* covered by a passing test — `select_for_update()`, partial
+indexes, `NULL` distinctness under a unique index, strict-mode truncation. In 4.15 the paths that
+looked covered were actually exercised by the route sweep and seeder running through `manage.py`
+against real MariaDB — **luck of the harness, not design.** When `test-writer` runs for 4.16, do not
+claim engine-specific behaviour is covered because a test touching it went green.
+
+#### Checklist to apply per sub-module
+
+- [ ] Empty-tenant sweep: empty-state branch **rendered**, and every `href` in it GET-able per the URLconf
+- [ ] Seeder creates at least one deliberately empty parent so empty states appear in the demo
+- [ ] Every table-driven path/lookup **executed**, not reviewed
+- [ ] Every form field checked against the decorator on the verb that authoritatively writes it
+- [ ] Every finding grepped for its shape across `apps/` before being fixed as a line
+- [ ] Engine-specific behaviour marked as **not** covered by the SQLite suite
 
 
 
