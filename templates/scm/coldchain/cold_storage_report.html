@@ -18,7 +18,11 @@ may read, and nothing else — the view pins the same list in its own docstring:
   quarantine_rows   quarantine_truncated
   unmonitored_rows  unmonitored_truncated
   stats                                cold_locations monitored_locations unmonitored_locations
-                                       cold_items mismatches expiring expired quarantined (all int)
+                                       cold_items mismatches expiring expired quarantined (all int).
+                                       The first four are real COUNT(*)s and are absolute; mismatches,
+                                       expiring, expired and quarantined are counted off the SLICED
+                                       row lists, so each is at most row_cap and the tile that prints
+                                       one has to say so when its *_truncated flag is set.
   row_cap                              the per-section SLICE, 100
   reads_only_note lot_status_note      standing prose, printed verbatim
 
@@ -128,15 +132,36 @@ stat-card icon colours are blue / green / orange / purple / slate only.
       <div class="stat-value">{{ stats.cold_items }}</div>
       <div class="stat-label">Items that declare a cold requirement</div>
     </div>
+    {% comment %}
+      These last two tiles are COUNTED OFF THE SLICED ROW LISTS, not off the database: stats.mismatches
+      is len(mismatch_rows) and stats.expiring / stats.expired are worked out over expiring_rows, and
+      both lists are cut to row_cap. On a workspace with more than row_cap of either, the headline
+      would otherwise settle on exactly 100 and read as an absolute total — a stat tile that has
+      quietly stopped counting is worse than no tile, because nobody goes looking behind a number.
+
+      So the tile says so, in the same amber the section headers below already use, and the value
+      carries a "+". A true COUNT(*) was considered and rejected for BOTH: the mismatch total is a
+      GROUP BY over every cold-item StockMove in the workspace — the exact scan the slice exists to
+      bound — and the expiry totals are not a database question at all, because a row only counts once
+      its lot still has stock, and that on-hand figure is assembled per lot in Python from the ledger.
+      Counting them honestly means doing the unbounded work the cap prevents. The four tiles above
+      stay absolute: they are real COUNT(*)s over locations and items and nothing caps them.
+    {% endcomment %}
     <div class="stat-card">
       <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
-      <div class="stat-value">{{ stats.mismatches }}</div>
+      <div class="stat-value">{{ stats.mismatches }}{% if mismatch_truncated %}<span class="text-muted">+</span>{% endif %}</div>
       <div class="stat-label">Item / bin condition mismatches</div>
+      {% if mismatch_truncated %}
+        <div><span class="badge badge-amber">First {{ row_cap }} only — narrow the filters for the true total</span></div>
+      {% endif %}
     </div>
     <div class="stat-card">
       <div class="stat-icon slate"><i data-lucide="hourglass"></i></div>
-      <div class="stat-value">{{ stats.expiring }}</div>
+      <div class="stat-value">{{ stats.expiring }}{% if expiring_truncated %}<span class="text-muted">+</span>{% endif %}</div>
       <div class="stat-label">Expiring inside {{ days }} day{{ days|pluralize }} ({{ stats.expired }} already expired)</div>
+      {% if expiring_truncated %}
+        <div><span class="badge badge-amber">First {{ row_cap }} lots only — shorten the horizon for the true total</span></div>
+      {% endif %}
     </div>
   </div>
 
@@ -519,12 +544,19 @@ stat-card icon colours are blue / green / orange / purple / slate only.
                   days_to_expiry is None when the lot carries no expiry date and an int otherwise —
                   0 means "expires today" and is a real answer, so the test is `is not None` and never
                   |default. A negative value is rendered as a sentence rather than as "-14 days left".
+
+                  The sign is CUT on the expired branch, on the number and on the |pluralize alike.
+                  days_to_expiry is negative once the date is past, so the raw value printed
+                  "-14 days past" — a minus sign in a sentence that already says "past" — and
+                  |pluralize on -1 reads it as "not one" and returned "days", so a lot that expired
+                  yesterday said "-1 days past". |cut:"-" is safe here precisely because the value is
+                  an int: the only hyphen it can contain is the sign.
                 {% endcomment %}
                 <td class="nowrap mono">
                   {% if row.days_to_expiry is not None %}
                     {% if row.is_expired %}
                       <span class="badge badge-red">Expired</span>
-                      <div class="form-help">{{ row.days_to_expiry }} day{{ row.days_to_expiry|pluralize }} past</div>
+                      <div class="form-help">{{ row.days_to_expiry|cut:"-" }} day{{ row.days_to_expiry|cut:"-"|pluralize }} past</div>
                     {% elif row.days_to_expiry == 0 %}
                       <span class="badge badge-amber">Expires today</span>
                     {% else %}
