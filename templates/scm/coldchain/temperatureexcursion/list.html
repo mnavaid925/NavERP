@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — the excursion triage queue.
+
+Renders apps/scm/views/ColdChainManagement/TemperatureExcursions.py::temperatureexcursion_list.
+Everything this page may read, and nothing else:
+
+  object_list                  the page slice. Present for the house contract — THE TABLE RENDERS
+                               `rows`, which carries the same excursions plus three resolved figures
+  rows                         a list of dicts: obj / duration_minutes / excess_c / is_reportable
+  page_obj, q                  paginator page and the echoed search term
+  status_choices, severity_choices, assessment_choices, cause_choices,
+  breach_direction_choices, reportable_choices, running_choices
+                               [(value, label), …] for the seven <select>s
+  monitors                     ColdChainMonitor queryset for the ?monitor= dropdown
+  reportable, running          the RESOLVED buckets for the two DERIVED filters. Both controls bind
+                               to THESE and never to request.GET, so a hand-edited value that
+                               narrowed nothing shows "All" rather than an option that did not happen
+  date_from, date_to           the RAW GET strings, echoed back so a rejected value stays visible
+  total_count, open_count, running_count, critical_count
+                               ints, counted over the WHOLE workspace and never over the filtered page
+  frozen_mkt_note              str, printed verbatim
+
+WHY duration_minutes AND excess_c ARRIVE PRE-RESOLVED. Both are model methods, and a Django template
+re-evaluates a method call every time it appears. Neither queries, but the view calls each exactly
+once per row so the page cannot pay for the same arithmetic four times in four columns.
+
+TWO INDEPENDENT QUESTIONS RUN THROUGH THIS PAGE AND MUST NEVER BE COLLAPSED:
+
+  * is the monitor STILL OUT OF LIMITS?   ended_at IS NULL — the `running` filter, the red chip
+  * is the TRIAGE still outstanding?      status in (open, investigating, assessed) — the status chip
+
+An episode that stopped yesterday can be under investigation all week, and one that is still
+breaching can already be assessed. A page that conflated them would tell somebody an incident is
+ongoing when it ended, or that it is over while the freezer is still warming.
+
+None IS NEVER 0 HERE. excess_c is None when no extreme was recorded or there is no limit on the
+breached side — and an excess of 0.00 means "it touched the limit exactly", which is a different
+statement. obj.extreme_temperature is None when the window held no readable temperature. obj.mkt is
+None on every frozen / deep-frozen / cryogenic monitor (USP <1079.2> says mean kinetic temperature
+does not apply there) and on a window with no readable rows — 0.00 would read as a perfectly-cold
+store, the precise opposite of "this does not apply". All three are tested with `is not None`.
+
+Every badge class below is a model lookup (obj.status_css, obj.severity_css, obj.assessment_css,
+obj.breach_direction_css) or one of the six literals theme.css actually ships — badge-success /
+badge-warning / badge-danger do not exist and render unstyled (L33).
+{% endcomment %}
+{% block title %}Temperature Excursions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Temperature Excursions</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Temperature Excursions</span></div>
+      <p class="text-muted">One continuous period during which a monitor was outside its limits, plus what a person decided about it. The two halves have two different owners: everything <span class="fw-600">measured</span> is written by the detector from the reading ledger and cannot be typed or edited, and everything <span class="fw-600">judged</span> — how bad it was, whether the product was affected, why it happened, what was done — is the human block. A breach that keeps breaching extends its episode rather than raising a second row.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> Monitors</a>
+      {% comment %}
+        Detect is POST-only (@tenant_admin_required @require_POST) — a GET is a 405, so this is a
+        real form and can never be a link.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'scm:coldchain_detect' %}" onsubmit="return confirm('Sweep every active monitor for new, extended and closed excursions?');">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="radar"></i> Run detection</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'scm:temperatureexcursion_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> File an excursion</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, never over the filtered page: "2 still breaching" is a fact
+    somebody has to act on now, and a tile that re-scoped itself as you filtered would report
+    all-clear at exactly the wrong moment.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ open_count }}</div>
+      <div class="stat-label">Awaiting triage · somebody still has to judge these</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="thermometer-sun"></i></div>
+      <div class="stat-value">{{ running_count }}</div>
+      <div class="stat-label">Still breaching right now · no end time yet, so the product is still outside its band</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-octagon"></i></div>
+      <div class="stat-value">{{ critical_count }}</div>
+      <div class="stat-label">Critical and still open · the queue a quality lead works first</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="archive"></i></div>
+      <div class="stat-value">{{ total_count }}</div>
+      <div class="stat-label">Recorded in total · closed and dismissed episodes stay readable forever</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The queue</h2>
+      <div class="badge-group">
+        {% if running_count %}<span class="badge badge-red">{{ running_count }} still breaching</span>{% endif %}
+        {% if open_count %}<span class="badge badge-amber">{{ open_count }} awaiting triage</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search EXC- number or monitor name…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">Any severity</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="assessment" aria-label="Product assessment" class="form-select">
+            <option value="">Any assessment</option>
+            {% for val, label in assessment_choices %}
+              <option value="{{ val }}" {% if request.GET.assessment == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="cause" aria-label="Cause" class="form-select">
+            <option value="">Any cause</option>
+            {% for val, label in cause_choices %}
+              <option value="{{ val }}" {% if request.GET.cause == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="breach_direction" aria-label="Direction" class="form-select">
+            <option value="">Either direction</option>
+            {% for val, label in breach_direction_choices %}
+              <option value="{{ val }}" {% if request.GET.breach_direction == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A PK dropdown — |stringformat:"d" and never |slugify. It goes through as_db_int, so
+            ?monitor=abc, ?monitor=² and an over-range pk all skip the filter (L11).
+          {% endcomment %}
+          <select name="monitor" aria-label="Monitor" class="form-select">
+            <option value="">Every monitor</option>
+            {% for m in monitors %}
+              <option value="{{ m.pk }}" {% if request.GET.monitor == m.pk|stringformat:"d" %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          The two DERIVED filters bind to the RESOLVED bucket, not to request.GET. Neither is a
+          column and neither ever will be: `reportable` depends on the monitor's grace period, so
+          editing that setting has to move the answer — a stored flag would freeze last month's
+          policy onto this month's episodes.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="reportable" aria-label="Reportable" class="form-select">
+            <option value="">Reportable or not</option>
+            {% for val, label in reportable_choices %}
+              <option value="{{ val }}" {% if reportable == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="running" aria-label="Still breaching" class="form-select">
+            <option value="">Running or ended</option>
+            {% for val, label in running_choices %}
+              <option value="{{ val }}" {% if running == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ date_from }}" aria-label="Started from" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to }}" aria-label="Started to" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:temperatureexcursion_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The two dates window the moment an episode <span class="fw-600">started</span>, inclusive of both whole days; unparseable input skips the filter rather than refusing the page. <em>Reportable</em> asks whether an episode outlived its own monitor's grace period — the single setting that stops every door-open becoming an incident — and it is recomputed on read, so raising a grace period genuinely reclassifies past blips. <em>Still breaching</em> is a different question entirely: it asks whether the monitor has come back inside its limits, which has nothing to do with whether anybody has triaged the record.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Excursion</th>
+            <th>Monitor</th>
+            <th>Window</th>
+            <th>Direction</th>
+            <th>Worst reached</th>
+            <th>MKT</th>
+            <th>Reportable</th>
+            <th>Severity</th>
+            <th>Triage</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:temperatureexcursion_detail' row.obj.pk %}" class="fw-600 mono">{{ row.obj.number }}</a>
+                <div class="form-help text-muted">{{ row.obj.reading_count }} reading{{ row.obj.reading_count|pluralize }} in the window</div>
+              </td>
+              <td>
+                <a href="{% url 'scm:coldchainmonitor_detail' row.obj.monitor.pk %}" class="mono">{{ row.obj.monitor.number }}</a>
+                <div class="text-muted">{{ row.obj.monitor.name }}</div>
+                <div class="form-help text-muted">{{ row.obj.monitor.subject_label }}</div>
+              </td>
+              <td class="nowrap">
+                {{ row.obj.started_at|date:"M d, H:i" }}
+                {% if row.obj.ended_at %}
+                  <div class="form-help text-muted">to {{ row.obj.ended_at|date:"M d, H:i" }}</div>
+                {% else %}
+                  <div class="form-help"><span class="badge badge-red">Still breaching</span></div>
+                {% endif %}
+                <div class="form-help mono">{{ row.duration_minutes }} min</div>
+              </td>
+              <td class="nowrap"><span class="badge {{ row.obj.breach_direction_css }}">{{ row.obj.get_breach_direction_display }}</span></td>
+              <td class="mono nowrap">
+                {% if row.obj.extreme_temperature is not None %}
+                  {{ row.obj.extreme_temperature|floatformat:2 }} °C
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                {% comment %}
+                  An excess of 0.00 means the extreme touched the limit exactly — a measurement — and
+                  None means there is no extreme on file or no limit on the breached side. The two
+                  must not render alike, so |default is never used on it.
+                {% endcomment %}
+                {% if row.excess_c is not None %}
+                  <div class="form-help text-muted">{{ row.excess_c|floatformat:2 }} °C past the limit</div>
+                {% else %}
+                  <div class="form-help text-muted">No excess computable</div>
+                {% endif %}
+              </td>
+              <td class="mono nowrap">
+                {% if row.obj.mkt is not None %}
+                  {{ row.obj.mkt|floatformat:2 }} °C
+                {% elif row.obj.monitor.is_frozen_condition %}
+                  <span class="text-muted">n/a — frozen range</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if row.is_reportable %}
+                  <span class="badge badge-red">Reportable</span>
+                {% else %}
+                  <span class="badge badge-muted">Under grace</span>
+                {% endif %}
+                <div class="form-help text-muted">grace {{ row.obj.monitor.excursion_grace_minutes }} min</div>
+              </td>
+              <td class="nowrap"><span class="badge {{ row.obj.severity_css }}">{{ row.obj.get_severity_display }}</span></td>
+              <td class="nowrap">
+                <span class="badge {{ row.obj.status_css }}">{{ row.obj.get_status_display }}</span>
+                <div class="form-help"><span class="badge {{ row.obj.assessment_css }}">{{ row.obj.get_assessment_display }}</span></div>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:temperatureexcursion_detail' row.obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    is_editable is ("open", "investigating") and reads `status` alone, so it costs no
+                    query. Once an episode is assessed, closed or dismissed the verdict IS the
+                    record and the edit view redirects straight back with a message — the link would
+                    be a one-click failure.
+                  {% endcomment %}
+                  {% if row.obj.is_editable %}
+                    <a href="{% url 'scm:temperatureexcursion_edit' row.obj.pk %}" class="btn-icon" title="Edit the triage block"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    All three of temperatureexcursion_delete's conditions, so the button and the
+                    route cannot disagree: the @tenant_admin_required gate, "the episode has ended"
+                    (a running one would simply be re-opened by the next detection pass from the same
+                    readings) and "no repair job was raised from it" (4.13 owns that job and its
+                    stated reason points here). Only the system-generated EXC- number goes into the
+                    confirm string.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if row.obj.ended_at and not row.obj.maintenance_work_order_id %}
+                      <form method="post" action="{% url 'scm:temperatureexcursion_delete' row.obj.pk %}" onsubmit="return confirm('Delete {{ row.obj.number }}? The evidence record of this incident is removed permanently. Dismissing it instead keeps the record and takes it off the queue.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="shield-check"></i>
+                  <h3>No excursions in view</h3>
+                  <p>Either nothing has gone outside its limits, or nothing has run the detector over the readings yet — the two look identical from here, because detection is a button somebody presses rather than a nightly job. Sweep the workspace with <span class="fw-600">Run detection</span> above, or file a back-dated episode by hand for an incident the ledger never saw: a lost logger file, an event witnessed on a mechanical chart, a case carried over from another system. If you were expecting rows, try clearing the filters.</p>
+                  <a href="{% url 'scm:temperatureexcursion_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> File an excursion</a>
+                  <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> Review the monitors</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">start time, newest first</span>. The duration is the stored figure once an episode has ended and a <span class="fw-600">live</span> one while it is still running, so a breaching row's minutes climb on every page load. <em>Closed</em> and <em>dismissed</em> are kept apart on purpose: "we fixed it" and "we judged it a non-event" are different facts, and collapsing the two would make the excursion count meaningless.
+      <div style="margin-top:.75rem;">{{ frozen_mkt_note }}</div>
+    </div>
+  </div>
+{% endblock %}
