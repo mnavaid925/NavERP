@@ -873,3 +873,36 @@ had done nothing, so by construction the changes were not mine.
 Related: [[concurrent-sessions-same-tree]], L43, and the shared-file editing rules — the same session
 whose work this was is the one that later caught it, by reading `git log -S` rather than arguing from
 memory. Do that.
+
+### L44 addendum — the same shape, collected across three concurrent sessions (2026-08-11)
+
+The `?gap=` sweep above is one instance of a wider pattern: **a green result that means "we did not
+look," and is indistinguishable from "we looked and it was fine."** Four more turned up the same
+night, across three sessions building 4.14 / 4.15 / 4.16 in one tree:
+
+1. **The half-covered empty state (4.14).** That session HAD an empty-tenant smoke test and HAD a
+   dead-link sweep. Both green. The link sweep ran only against the *seeded* tenant, where the
+   `{% empty %}` branch never renders, so the two `.empty-state` anchors pointing at POST-only routes
+   were never in the HTML it read. A reviewer found them by reading the template. **Two checks each
+   covering half of a thing look exactly like full coverage** — worse than a missing check, which at
+   least shows up as an absence. Proved by re-introducing the bug and watching the seeded sweep stay
+   green while the empty one failed. Merged sweep: `temp/verify_links.py` (4.15's copy:
+   `temp/verify_links_415.py`).
+2. **The zero-anchor pass (4.14).** The first rewrite of that sweep applied the *template-source*
+   regex (`{% url %}`) to *rendered* HTML, matched nothing, and reported a confident pass over zero
+   anchors. **Assert the denominator is non-zero**, not merely that the failure list is empty.
+3. **The `--flush` collector break (4.15 ↔ 4.16).** `seed_scm --flush` died on
+   `Table 'scm_portaldocumentshare' doesn't exist` because Django's cascade *collector* walks every
+   reverse relation declared in **code**, and the other session had committed models whose tables did
+   not exist yet. Neither session's code was wrong; the failure lived only in the gap between them.
+   Safe order is always **they migrate, then you walk the graph**.
+4. **The engine-specific defect a green suite cannot see.** The `HAVING`/`GROUP BY` failure in L44
+   above is MariaDB-only — MySQL 8 accepts it via functional-dependency detection, and the pytest
+   suite runs on **SQLite** under `config.settings_test`. So a green test run is *not* evidence
+   against it. Anything touching `select_for_update()`, partial indexes, `HAVING`, or collation needs
+   a check against the real MariaDB (`manage.py` against `nav_erp`) before it counts as verified.
+
+**The unifying rule:** every check must be able to state *what it would have caught*, and you must be
+able to show it failing. If you cannot name the input that turns it red, it is not yet evidence.
+Corollary: report the denominator (rows asserted, anchors followed, values tried) alongside the
+verdict — a pass over an empty set is the most common false green in this repo.
