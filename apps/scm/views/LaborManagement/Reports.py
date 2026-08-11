@@ -151,7 +151,8 @@ from django.urls import reverse
 from django.utils.http import urlencode
 
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.views._helpers import _report_day, _report_window, _location_qs, _need_tenant
+from apps.scm.views._helpers import (_acting_party, _is_tenant_admin, _location_qs,
+                                     _need_tenant, _report_day, _report_window)
 # The tenant's employee parties — the SAME set the session form's `worker` dropdown offers, so the
 # two report filters cannot list people the module can never have booked a shift for. Imported from
 # the forms toolkit rather than restated, exactly as MaintenanceWorkOrders.py:117 does.
@@ -489,6 +490,13 @@ def _worker_aggregate(tenant, *, statuses, date_from, date_to, location_id=None,
     return out
 
 
+#: Sentinel worker id for "this login is nobody" — a negative pk no row can carry. It matters
+#: that this is NOT None: `_worker_aggregate` reads None as "no worker filter", so a member
+#: with no linked Party would be handed the ENTIRE workspace by the very branch meant to
+#: narrow them to themselves.
+_NO_WORKER = -1
+
+
 def _report_filters(request):
     """The two FK filters both report pages share, guarded and echoed.
 
@@ -588,10 +596,40 @@ def labor_payroll_export(request):
     window = _report_window(request.GET, today.replace(day=1), today)
     filters = _report_filters(request)
 
+    # WHOSE HOURS YOU MAY SEE. This page names colleagues and hands out a downloadable file of their
+    # attended hours, performance and utilisation, so it cannot be the flat @login_required page the
+    # per-record shift pages are. House policy is unambiguous: every workspace-wide roll-up keyed on
+    # named people is `@tenant_admin_required` (hrm's cost report, leave-liability and executive
+    # dashboards), while per-record people pages stay open (hrm's attendance record list).
+    #
+    # It is NOT gated outright, and that is deliberate. `LIVE_LINKS["4.14"]["Payroll Integration"]`
+    # points here, `resolve_nav` has no per-link permission concept at all, and a sidebar bullet that
+    # 403s every non-admin is its own defect (L32). So the page stays reachable and the ROWS narrow
+    # instead: an admin sees the workspace, everybody else sees exactly themselves — which is a
+    # genuinely useful page for the person whose hours they are, and leaks nobody else's.
+    #
+    # A member with no linked Party sees an empty table and a sentence saying why, never the whole
+    # floor: `worker_id=None` means "no filter" to `_worker_aggregate`, so falling through with None
+    # here would hand a member the entire workspace — the exact leak this block exists to prevent.
+    is_admin = _is_tenant_admin(request.user)
+    scope_note = ""
+    if is_admin:
+        worker_id = filters["worker_id"]
+    else:
+        acting = _acting_party(request)
+        worker_id = acting.pk if acting is not None else _NO_WORKER
+        scope_note = (
+            "Showing your own hours. A workspace administrator sees every worker here — these "
+            "figures name people, so the page narrows to you unless you are one."
+            if acting is not None else
+            "This login is not linked to a person record, so there are no hours to show. A "
+            "workspace administrator can link it, or see the whole workspace here."
+        )
+
     totals_by_worker = _worker_aggregate(
         request.tenant, statuses=("approved",),
         date_from=window["date_from"], date_to=window["date_to"],
-        location_id=filters["location_id"], worker_id=filters["worker_id"])
+        location_id=filters["location_id"], worker_id=worker_id)
 
     # Sorted by name so a period's file diffs cleanly against the previous one; a dict's insertion
     # order here is the database's row order, which nothing guarantees.
@@ -627,12 +665,21 @@ def labor_payroll_export(request):
         "location": filters["location_raw"],
         "worker": filters["worker_raw"],
         "locations": _location_qs(request.tenant),
-        "workers": _employee_parties(request.tenant),
+        # The worker dropdown is part of the same disclosure as the rows. Narrowing the TABLE but
+        # still listing every colleague by name in a <select> leaks exactly the thing the narrowing
+        # exists to protect — a roster of who works here — and it is the kind of leak that survives a
+        # review because the table above it is visibly correct. A member gets themselves or nothing.
+        "workers": (_employee_parties(request.tenant) if is_admin
+                    else _employee_parties(request.tenant).filter(pk=worker_id)),
         "export_qs": _encode(request.GET, ("date_from", "date_to", "location", "worker")),
         "approved_only_note": APPROVED_ONLY_NOTE,
         "no_writes_note": NO_WRITES_NOTE,
         "gap_note": GAP_NOTE,
         "systems_of_record": SYSTEMS_OF_RECORD,
+        # Whose rows these are. Said out loud rather than silently showing a member one row and
+        # letting them believe the warehouse employs one person.
+        "scope_note": scope_note,
+        "is_scoped_to_self": not is_admin,
         "generated_at": timezone.localtime(),
         "no_tenant": request.tenant is None,
         "no_tenant_note": NO_TENANT_NOTE,
@@ -747,7 +794,14 @@ def _scorecard_row(totals):
     }
 
 
-@login_required
+# ADMIN-GATED, and this one outright rather than by narrowing rows. A scorecard is a RANKING of
+# named colleagues against each other with a coaching band attached — there is no version of it
+# scoped to one person that is still a scorecard, and no member needs to see where a colleague
+# places. House policy for a workspace-wide roll-up over people is @tenant_admin_required (hrm
+# cost / leave-liability / executive reports all are). Unlike the payroll export this page has
+# NO sidebar bullet — it is reached from header chips, which are gated to match — so gating it
+# offers nobody a link they cannot follow (L32).
+@tenant_admin_required
 def labor_scorecard(request):
     """Per-worker productivity over ``?date_from``/``?date_to``, ranked, with a coaching chip.
 
