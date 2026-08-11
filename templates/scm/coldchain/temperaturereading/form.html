@@ -76,7 +76,15 @@ somebody reads and the validation that refuses their save cannot drift apart.
         </div>
         <div class="detail-item"><dt>Weight that will be stamped</dt><dd class="mono">{{ interval_minutes }} min</dd></div>
         <div class="detail-item"><dt>Deployed</dt><dd class="mono">{{ monitor.deployed_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
-        <div class="detail-item"><dt>Readings on file</dt><dd class="mono">{{ monitor.readings.count }}</dd></div>
+        {% comment %}
+          "Readings on file" USED to sit here as {{ monitor.readings.count }} — a query issued by the
+          template (house rule 9) and an unbounded one: at ~17,500 rows per monitor per year it is a
+          five-figure index scan on every draw of a form whose job is to file ONE row, and it went
+          through the related manager, which states no tenant and so cannot open scm_tmp_tnt_mon_idx.
+          It was decoration — nothing on this page branches on it and the monitor's own detail page
+          reports the figure properly — so it is gone rather than moved into the view. The header
+          links straight there. Do not put a `.count` back on this page.
+        {% endcomment %}
       </dl>
       <div class="form-help">This row will weigh <span class="fw-600">{{ interval_minutes }} minutes</span> in every duration and mean-kinetic-temperature figure derived from it, snapshotted from the monitor at the moment it is filed. That is not a field you can set: a hot hour has to count as an hour rather than as "one row", and re-weighting last month by editing a setting today would restate figures that have already been reported.</div>
       {% if request.user.is_superuser or request.user.is_tenant_admin %}
