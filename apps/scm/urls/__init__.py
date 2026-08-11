@@ -75,6 +75,13 @@ from .LaborManagement.LaborSessions import urlpatterns as _lm_laborsessions
 from .LaborManagement.LaborActivities import urlpatterns as _lm_laboractivities
 from .LaborManagement.LaborPlans import urlpatterns as _lm_laborplans
 from .LaborManagement.Reports import urlpatterns as _lm_reports
+# --- 4.15 Cold Chain Management ---
+# Alias `_ccm_`. NOT `_cc_` (4.12 ContractCompliance) and NOT `_cp_` (4.16 Customer Portal) — a
+# collision here would silently REBIND an earlier module's urlpatterns and drop its routes.
+from .ColdChainManagement.ColdChainMonitors import urlpatterns as _ccm_monitors
+from .ColdChainManagement.TemperatureReadings import urlpatterns as _ccm_readings
+from .ColdChainManagement.TemperatureExcursions import urlpatterns as _ccm_excursions
+from .ColdChainManagement.Reports import urlpatterns as _ccm_reports
 
 
 app_name = "scm"
@@ -291,4 +298,37 @@ urlpatterns = [
     *_lm_laboractivities,                # LaborManagement/LaborActivities (booked intervals)
     *_lm_laborplans,                     # LaborManagement/LaborPlans (plan + generate + the line)
     *_lm_reports,                        # LaborManagement/Reports (board + payroll export + scorecard)
+
+    # --- 4.15 Cold Chain Management ------------------------------------------------------------
+    # SIX new first segments, every one free — checked against this WHOLE concatenated list, not
+    # merely against the 4.15 block: nothing anywhere in `scm` starts with `cold`, `temperature` or
+    # `reefer`. Django matches WHOLE path components and never splits one at a hyphen, so
+    # `cold-chain-monitors`, `cold-storage-report`, `cold-chain-compliance`, `temperature-readings`,
+    # `temperature-excursions` and `reefer-board` are six unrelated components; none can shadow
+    # another, and none may ever be "tidied" to look like another.
+    #
+    # Near neighbours that are NOT collisions, checked rather than assumed:
+    #   compliance-requirements/ · compliance-checks/ — 4.12's. A different whole component from
+    #                     `cold-chain-compliance`, and a different thing: 4.12 tracks trade licences
+    #                     and ESG obligations, 4.15 reports the temperature record.
+    #   categories/ · locations/ · lot-serials/ — 4.3's masters, all read BY the cold-storage page
+    #                     and none of them touched by it.
+    #   labor-board/    — 4.14's computed board. `reefer-board/` is the other one; two live,
+    #                     unrelated pages.
+    #   carriers/ · shipments/ — 4.6's. A shipment can BE a monitor's subject; it takes no new route.
+    #
+    # 4.15 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` remains
+    # the app's only one. Within each module below, literal routes (`add/`, `detect/`) precede every
+    # `<int:pk>/` one. Every verb sits under its own route and is POST-only at the view, so a GET to
+    # one is a 405 rather than a silent state change.
+    #
+    # 4.15 adds NO route under `assets/`, `maintenance-plans/` or `maintenance-work-orders/`: the
+    # reefer board lives entirely on `reefer-board/` and 4.13's urlconf is untouched. The two nested
+    # reading routes (`cold-chain-monitors/<int:pk>/readings/add|import/`) are declared in the
+    # READINGS module beside the thing they create; they carry more segments than
+    # `cold-chain-monitors/<int:pk>/`, so their position after it here cannot shadow them.
+    *_ccm_monitors,                      # ColdChainManagement/ColdChainMonitors (register + detect)
+    *_ccm_readings,                      # ColdChainManagement/TemperatureReadings (append-only)
+    *_ccm_excursions,                    # ColdChainManagement/TemperatureExcursions (queue + ladder)
+    *_ccm_reports,                       # ColdChainManagement/Reports (cold storage + compliance + reefers)
 ]
