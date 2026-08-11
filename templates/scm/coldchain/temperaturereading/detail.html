@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — one interval summary: what it says, what it was judged against, and
+whether it is still the current value.
+
+Renders apps/scm/views/ColdChainManagement/TemperatureReadings.py::temperaturereading_detail.
+Everything this page may read, and nothing else:
+
+  obj               the TemperatureReading, with the monitor (and its three subjects) and
+                    recorded_by joined
+  breach            "" / "high" / "low", from coldchain.out_of_range against the monitor's CURRENT
+                    limits. "" ALSO MEANS "this monitor has no limits", which is why the band test
+                    below asks about limit_min/limit_max FIRST — rendering that case as "in range"
+                    would be the page inventing a verdict nobody can support
+  limit_min         Decimal or None — a ONE-SIDED band is legitimate; None prints "no lower limit"
+  limit_max         Decimal or None
+  previous          the reading immediately before this one on the SAME monitor, or None
+  superseded_by     the reading immediately after it, or None
+  delta             this temperature minus the previous one, or None. NEVER 0 for "no previous row":
+                    a delta of 0.00 means the probe did not move, which is a measurement, while a
+                    blank means there is nothing to compare against — the honest answer for a
+                    monitor's first reading
+  is_current        bool — True when this row IS what the monitor's latest_reading() answers with
+  episode           the TemperatureExcursion whose window contains this moment, or None
+  provenance_note / append_only_note   strs, printed verbatim
+
+ACTIONS SIDEBAR: BACK TO LIST ONLY. There is no edit view and no delete view for a reading, and no
+url name for either — the ledger is append-only, exactly like scm.StockMove. A wrong reading is
+corrected by filing a later, correct one; because the monitor always reads the newest row, the
+correction takes effect immediately and the mistaken row stays visible, which is the point of a log
+rather than a defect in it.
+
+theme.css ships COLOUR-named badges only — badge-success / badge-warning / badge-danger do not exist
+and render unstyled (L33).
+{% endcomment %}
+{% block title %}{{ obj.temperature }} °C · {{ obj.reading_at|date:"M d, Y H:i" }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.temperature|floatformat:2 }} °C
+        {% comment %}
+          The band verdict, and the ORDER of these branches is the whole point. `breach` is "" both
+          for "inside the band" and for "there is no band" — so the no-limits case is tested first
+          and renders its own muted state. A monitor with no limits shown as green would be the page
+          asserting something the detector never concluded.
+        {% endcomment %}
+        {% if limit_min is None and limit_max is None %}
+          <span class="badge badge-muted">No band configured</span>
+        {% elif breach == "high" %}
+          <span class="badge badge-red">Above the upper limit</span>
+        {% elif breach == "low" %}
+          <span class="badge badge-info">Below the lower limit</span>
+        {% else %}
+          <span class="badge badge-green">In range</span>
+        {% endif %}
+        {% if is_current %}
+          <span class="badge badge-info">Current value</span>
+        {% else %}
+          <span class="badge badge-slate">Superseded</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:temperaturereading_list' %}">Temperature Readings</a><span class="sep">›</span><span>{{ obj.reading_at|date:"M d, Y H:i" }}</span></div>
+      <p class="text-muted">One interval summary from <a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="fw-600">{{ obj.monitor.number }} · {{ obj.monitor.name }}</a>, which watches {{ obj.monitor.subject_label }}. Nothing about the verdict below is stored on this row — no <span class="mono">in_range</span> flag, no <span class="mono">is_excursion</span> boolean — because each would be a second copy of a fact the monitor's limits already determine, and each would go stale the moment a limit was edited.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="btn btn-outline"><i data-lucide="thermometer-snowflake"></i> The monitor</a>
+      <a href="{% url 'scm:temperaturereading_list' %}?monitor={{ obj.monitor.pk }}" class="btn btn-outline"><i data-lucide="list"></i> This monitor's ledger</a>
+    </div>
+  </div>
+
+  {% if episode %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">This moment falls inside a recorded excursion</h2>
+        <span class="badge {{ episode.status_css }}">{{ episode.get_status_display }}</span>
+      </div>
+      <div class="card-body">
+        <p style="margin:0;">
+          <a href="{% url 'scm:temperatureexcursion_detail' episode.pk %}" class="fw-600 mono">{{ episode.number }}</a>
+          ran from <span class="fw-600">{{ episode.started_at|date:"M d, Y H:i" }}</span>
+          {% if episode.ended_at %}
+            to <span class="fw-600">{{ episode.ended_at|date:"M d, Y H:i" }}</span>
+          {% else %}
+            and is <span class="fw-600">still running</span>
+          {% endif %}
+          — so this reading is one of the {{ episode.reading_count }} row{{ episode.reading_count|pluralize }} that episode is built from.
+        </p>
+        <div class="form-help">The episode carries the limits that were in force <em>when it fired</em>, snapshotted onto it. Those may differ from the band this reading is being judged against above, which is today's — and that difference is deliberate rather than a discrepancy: the record must read the same next year even if the monitor is re-banded next month.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this row says</h2>
+      <span class="badge badge-slate">Interval summary, not a raw sample</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Taken at</dt><dd class="fw-600 mono">{{ obj.reading_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Temperature</dt><dd class="fw-600 mono">{{ obj.temperature|floatformat:2 }} °C</dd></div>
+        {% comment %}
+          Humidity, the interval extremes and the delta are all genuinely optional. Each is tested
+          with `is not None` and prints an em dash — 0.00 in any of the three would be a measurement
+          somebody took rather than a column nobody filled.
+        {% endcomment %}
+        <div class="detail-item">
+          <dt>Humidity</dt>
+          <dd class="mono">{% if obj.humidity_pct is not None %}{{ obj.humidity_pct|floatformat:2 }} %{% else %}<span class="text-muted">Not reported</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Coldest sample in the interval</dt>
+          <dd class="mono">{% if obj.min_temperature is not None %}{{ obj.min_temperature|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Warmest sample in the interval</dt>
+          <dd class="mono">{% if obj.max_temperature is not None %}{{ obj.max_temperature|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Samples rolled up</dt><dd class="mono">{{ obj.sample_count }}</dd></div>
+        <div class="detail-item"><dt>Weight</dt><dd class="mono">{{ obj.interval_minutes }} min</dd></div>
+        <div class="detail-item">
+          <dt>Change from the previous reading</dt>
+          <dd class="mono">{% if delta is not None %}{{ delta|floatformat:2 }} °C{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+      </dl>
+      {% if delta is None %}
+        <p class="text-muted" style="margin-top:.75rem;">There is no earlier reading on this monitor to compare against, so the change is blank. It is deliberately <span class="fw-600">not</span> shown as 0.00 °C: zero would mean the probe did not move, which is a measurement, and this is the absence of one.</p>
+      {% endif %}
+      {% if obj.min_temperature is None and obj.max_temperature is None %}
+        <p class="text-muted" style="margin-top:.75rem;">No interval extremes were recorded, which is the ordinary case for a <span class="fw-600">single-sample</span> row — a reading typed by hand is exactly that. A logger reporting only a maximum is also legal and is kept as-is rather than having a minimum invented for it.</p>
+      {% endif %}
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Notes.</span> {{ obj.notes }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        The <span class="fw-600">weight</span> is what this row counts for in every duration and mean-kinetic-temperature calculation, and it was snapshotted from the monitor when the row was filed. That is why changing this monitor's logging interval next month cannot restate last month's time-in-range: a weight a user can retype is not a snapshot.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What it was judged against</h2>
+      {% if limit_min is None and limit_max is None %}
+        <span class="badge badge-muted">No band configured</span>
+      {% elif breach %}
+        <span class="badge badge-red">Outside the band</span>
+      {% else %}
+        <span class="badge badge-green">Inside the band</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <p class="mono fw-600" style="margin:0 0 .35rem;">
+        {% if limit_min is not None %}{{ limit_min|floatformat:2 }} °C{% else %}no lower limit{% endif %}
+        &nbsp;→&nbsp;
+        {% if limit_max is not None %}{{ limit_max|floatformat:2 }} °C{% else %}no upper limit{% endif %}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        These are <span class="fw-600">{{ obj.monitor.number }}'s limits as they stand today</span> — not a snapshot on this row, because a reading stores nothing about the band it was judged against. Re-band the monitor and this verdict changes, which is correct: the reading is a fact about the world and the band is the rule being applied to it.
+        {% if limit_min is None and limit_max is None %}
+          This monitor carries <span class="fw-600">no limit on either side</span>, so this reading can be neither in range nor out of it. That is the honest answer and it is why the badge above is muted rather than green.
+        {% elif limit_min is None %}
+          Only an upper limit is set, so this reading is judged on the warm side alone.
+        {% elif limit_max is None %}
+          Only a lower limit is set, so this reading is judged on the cold side alone.
+        {% endif %}
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Monitor</dt><dd><a href="{% url 'scm:coldchainmonitor_detail' obj.monitor.pk %}" class="fw-600 mono">{{ obj.monitor.number }}</a></dd></div>
+        <div class="detail-item"><dt>Watching</dt><dd>{{ obj.monitor.subject_label }}</dd></div>
+        <div class="detail-item"><dt>Temperature class</dt><dd>{{ obj.monitor.get_storage_condition_display|default:"Unclassified" }}</dd></div>
+        <div class="detail-item"><dt>Monitor status</dt><dd><span class="badge {{ obj.monitor.status_css }}">{{ obj.monitor.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Verdict</dt>
+          <dd>
+            {% if limit_min is None and limit_max is None %}
+              <span class="badge badge-muted">Cannot be judged</span>
+            {% elif breach == "high" %}
+              <span class="badge badge-red">Above the upper limit</span>
+            {% elif breach == "low" %}
+              <span class="badge badge-info">Below the lower limit</span>
+            {% else %}
+              <span class="badge badge-green">In range</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Grace period</dt><dd class="mono">{{ obj.monitor.excursion_grace_minutes }} min</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        A reading exactly <span class="fw-600">on</span> a limit is in range — that is what "2 to 8 °C" means everywhere it is printed, and the comparison is strict for exactly that reason. One reading outside the band is not by itself an excursion either: a breach has to outlive the monitor's grace period of {{ obj.monitor.excursion_grace_minutes }} minutes before it reads as reportable, or every door-open becomes an incident and the queue is ignored within a week.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Where it sits in the series</h2>
+      {% if is_current %}
+        <span class="badge badge-info">This is the monitor's current value</span>
+      {% else %}
+        <span class="badge badge-slate">A later reading exists</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Previous reading</dt>
+          <dd>
+            {% if previous %}
+              <a href="{% url 'scm:temperaturereading_detail' previous.pk %}" class="mono">{{ previous.temperature|floatformat:2 }} °C</a>
+              <div class="form-help text-muted">{{ previous.reading_at|date:"M d, Y H:i" }}</div>
+            {% else %}
+              <span class="text-muted">Nothing earlier — this is the first row on this monitor</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Superseded by</dt>
+          <dd>
+            {% if superseded_by %}
+              <a href="{% url 'scm:temperaturereading_detail' superseded_by.pk %}" class="mono">{{ superseded_by.temperature|floatformat:2 }} °C</a>
+              <div class="form-help text-muted">{{ superseded_by.reading_at|date:"M d, Y H:i" }}</div>
+            {% else %}
+              <span class="text-muted">Nothing later — this is the current value</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        The monitor's current value is always the <span class="fw-600">newest</span> row, which is what makes the append-only posture work: a mistaken reading is corrected by filing a later, correct one and the fix is believed immediately, with no record having been rewritten. Back-dating is supported and expected — that is exactly what a logger download is — but a back-dated row does <em>not</em> become the current value, and the badge above says which of the two happened here.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Provenance</h2>
+      <span class="badge badge-muted">{{ obj.get_source_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>How it reached the system</dt><dd>{{ obj.get_source_display }}</dd></div>
+        <div class="detail-item"><dt>Filed by</dt><dd>{% if obj.recorded_by %}{{ obj.recorded_by.name }}{% else %}<span class="text-muted">Unattributed</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Recorded</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Weight snapshotted</dt><dd class="mono">{{ obj.interval_minutes }} min</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">{{ provenance_note }}</p>
+    </div>
+  </div>
+
+  {% comment %}
+    ACTIONS: Back to List only, plus navigation. No Edit button and no Delete form, because neither
+    route exists — see the header comment. This is the same posture as StockMove and MeterReading.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:temperaturereading_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="badge badge-slate">Append-only</span> {{ append_only_note }}
+      </p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        If this row is wrong, file the correct one against
+        <a href="{% url 'scm:coldchainmonitor_add_reading' obj.monitor.pk %}" class="fw-600">{{ obj.monitor.number }}</a>.
+        There is one interval summary per moment per monitor, so re-filing the same timestamp is refused rather than silently doubling the series — which is also what makes re-uploading a logger file a safe no-op.
+      </p>
+    </div>
+  </div>
+{% endblock %}
