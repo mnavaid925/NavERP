@@ -37,13 +37,18 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Parent</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
+        {# Temperature Class earns a column of its own here: the other five are all short (a code, a #}
+        {# name, two badges, a parent code), and "which zones are still unclassified" is the exact #}
+        {# question the Cold Storage report sends an admin to this page to answer — an em-dash in a #}
+        {# scannable column answers it a row at a time. #}
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Temperature Class</th><th>Parent</th><th>Active</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for obj in object_list %}
             <tr>
               <td><a href="{% url 'scm:location_detail' obj.pk %}" class="fw-600">{{ obj.code }}</a></td>
               <td>{{ obj.name }}</td>
               <td><span class="badge badge-{% if obj.location_type == 'warehouse' %}green{% elif obj.location_type == 'zone' %}info{% elif obj.location_type == 'bin' %}slate{% elif obj.location_type == 'staging' %}amber{% else %}muted{% endif %}">{{ obj.get_location_type_display }}</span></td>
+              <td>{% if obj.storage_condition %}<span class="badge badge-slate">{{ obj.get_storage_condition_display }}</span>{% else %}—{% endif %}</td>
               <td>{% if obj.parent %}{{ obj.parent.code }}{% else %}—{% endif %}</td>
               <td>{% if obj.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
               <td>
@@ -57,7 +62,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6"><div class="empty-state"><i data-lucide="warehouse"></i><h3>No locations yet</h3><p>Add a warehouse, zone or bin to hold stock.</p></div></td></tr>
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="warehouse"></i><h3>No locations yet</h3><p>Add a warehouse, zone or bin to hold stock.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
