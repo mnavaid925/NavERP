@@ -143,12 +143,29 @@ class Command(BaseCommand):
             # cross-sub-module write is stamping `assigned_to` on a couple of existing 4.4 tasks so
             # the labor board has both an assignee bucket and an unassigned one.
             self._seed_labor_tenant(tenant)
+            # --- 4.15 Cold Chain Management ---
+            # 4.15 AFTER 4.13 AND 4.14, and every one of those edges is load-bearing. Its cold zones
+            # hang under 4.3's WH-MAIN and its opening stock is posted through 4.3's ledger; its
+            # condition-mismatch finding is measured against that same ambient warehouse; its cargo
+            # probe watches a reefer added to 4.13's OWN asset register (so 4.13's plans, jobs, meter
+            # log and warranty chip are what the reefer board renders); its in-transit logger rides
+            # 4.6's existing outbound consignment; and it names its technician and its QA lead from
+            # the spine's `employee` parties. Every one of those must already exist.
+            #
+            # It posts four opening `receipt` StockMoves for the two cold items and NO JournalEntry
+            # (L29). Its one cross-sub-module write is `coldchain.raise_work_order()`, which creates
+            # exactly one 4.13 MaintenanceWorkOrder against the failing reefer and stops there.
+            #
+            # And it types NO measured column: every excursion figure is written by
+            # `coldchain.detect_excursions()`, which this pass calls exactly as the Detect button
+            # does — so the detector is exercised on every `seed_scm` run.
+            self._seed_coldchain_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
             "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
-            "4.14 labor management seed complete."))
+            "4.14 labor management + 4.15 cold chain management seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -964,7 +981,45 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
-        # 4.14 Labor Management FIRST (newest sub-module). The order inside it is forced by two
+        # --- 4.15 Cold Chain Management ---
+        # 4.15 Cold Chain Management FIRST (newest sub-module), and unlike the 4.14 block below it
+        # this one is genuinely LOAD-BEARING rather than merely top-down: `ColdChainMonitor.location`,
+        # `.asset` and `.shipment` are all PROTECT, so every monitor has to go before 4.13's assets
+        # (deleted two blocks down), before 4.6's shipments and before 4.3's locations at the bottom
+        # of this method — a --flush that ran them in the other order would raise ProtectedError.
+        # That PROTECT is deliberate: a monitor with no subject is uninterpretable and instantly
+        # violates its own exactly-one-subject rule, so you retire the deployment, you do not delete
+        # the cold room out from under it.
+        #
+        # Inside 4.15 exactly ONE edge decides the order: `TemperatureExcursion.monitor` is PROTECT
+        # too — an episode is EVIDENCE and must never be one click from deletion — so the episodes go
+        # before the monitors they were raised on. `TemperatureReading.monitor` is CASCADE (a reading
+        # is meaningless without the deployment that defines the limits it is judged against), so the
+        # ledger goes with its monitor anyway; it is named first regardless so the teardown reads
+        # top-down. The excursions' three links OUT (`non_conformance`, `maintenance_work_order`,
+        # `lot_serial`) are all SET_NULL and can block nothing.
+        #
+        # The `receipt` StockMoves this pass posted carry no FK to 4.15 — only the "OPENING-COLD"
+        # reference — so `StockMove.objects.all().delete()` further down would cover them. They are
+        # named here regardless, and deliberately: the seeder's "stock the cold rooms exactly once"
+        # guard keys on precisely this filter, so flush and guard describe the SAME set of rows (the
+        # 4.13 maintenance-move reasoning). Tenant-less like every other delete in this method —
+        # --flush is workspace-wide by design.
+        #
+        # The reefer asset, its condition plan, its discharge-air meter log and the MaintenanceWorkOrder
+        # `raise_work_order()` created all live in 4.13's tables and are cleared by the 4.13 block
+        # below — 4.15 declares zero maintenance entities and does not unwind another module's rows.
+        # `Item.storage_condition` and `Location.storage_condition` are likewise NOT unwound: they are
+        # properties of the item and the bin themselves, and both tables are deleted at the bottom of
+        # this method anyway (the 4.13 `Item.is_spare_part` reasoning).
+        from apps.scm.models import (ColdChainMonitor, StockMove as _ColdStockMove,
+                                     TemperatureExcursion, TemperatureReading)
+        TemperatureReading.objects.all().delete()
+        TemperatureExcursion.objects.all().delete()
+        ColdChainMonitor.objects.all().delete()
+        _ColdStockMove.objects.filter(reference="OPENING-COLD").delete()
+
+        # 4.14 Labor Management NEXT. The order inside it is forced by two
         # things. LaborActivity.session is CASCADE and LaborPlanLine.plan is CASCADE, so the two
         # child tables would go with their parents anyway — the activities are named first regardless
         # so the teardown reads top-down like every block below it. The edge that genuinely matters is
@@ -3913,3 +3968,550 @@ class Command(BaseCommand):
             + (f", {len(assigned)} 4.4 task(s) assigned to the board" if assigned
                else ", no open 4.4 task to assign")
             + ". No StockMove and no JournalEntry — labour is measured, not posted.")
+
+    # --- 4.15 Cold Chain Management ---------------------------------------------------------------
+    def _seed_coldchain_tenant(self, tenant):
+        """4.15 demo rows: three cold zones (one deliberately unmonitored), four monitoring points on
+        all THREE subject kinds, a real interval ledger under each, and the excursions the DETECTOR
+        itself raises from those readings.
+
+        Idempotent via a ``ColdChainMonitor`` guard. It REFUSES rather than half-seeds when 4.3 is
+        missing (the 4.10-4.14 posture): a cold-chain module with no location to chill and no item to
+        keep cold would demo five pages that all read "no data".
+
+        **NOT ONE MEASURED COLUMN IS TYPED HERE.** Every figure on a ``TemperatureExcursion`` —
+        ``started_at`` / ``ended_at`` / ``duration_minutes`` / ``breach_direction`` /
+        ``extreme_temperature`` / ``limit_min`` / ``limit_max`` / ``reading_count`` / ``mkt`` /
+        ``last_detected_at`` — is ``editable=False`` and is written by exactly one thing:
+        ``coldchain.detect_excursions()``. So this pass seeds READINGS and then presses the detector's
+        own button, precisely as ``coldchain_detect`` does. A hand-written excursion row would be a
+        measurement nobody took wearing the costume of one somebody did, which is the single failure
+        mode this whole sub-module is built to prevent. The triage half is then walked with the
+        model's own verbs (``acknowledge`` / ``assess`` / ``close``), because ``status`` is
+        ``editable=False`` too (L22) and a seeded status no button can produce lets a test assert a
+        screen no user can reach.
+
+        **NO temperature passes through ``q2()``/``q4()``, and no temperature column carries
+        ``MinValueValidator(ZERO)``** — ``value or ZERO`` turns a missing reading into a perfectly
+        plausible 0 °C, and -18 °C is the normal operating point of half this sub-module. Every
+        ``Decimal`` below is an explicit literal.
+
+        **What is REUSED rather than re-invented:** ``WH-MAIN`` is the parent of all three cold zones
+        and is also the ambient bin the condition-mismatch finding is measured against; the shipment
+        probe rides 4.6's EXISTING outbound consignment; the workers, the QA lead and the admin all
+        come from the spine's parties; the reefer's repair job is raised by 4.15's own
+        ``coldchain.raise_work_order()`` into 4.13's table rather than being typed here.
+
+        **What is genuinely NEW, and why nothing already in the demo could stand in for it:** 4.3
+        seeds two ambient warehouses of IT equipment, so there is no refrigerated zone to watch, no
+        product that declares a cold requirement and — in 4.13's register of a line, a drive, a
+        forklift and a conveyor — no refrigerated unit. Pointing a cargo probe at the forklift would
+        put a forklift on the reefer board. The three zones, the two cold items and ``REEF-01`` are
+        therefore added the way 4.4 added its bins, 4.8 its bundle item and 4.10 its grading bench:
+        new rows in 4.3's and 4.13's own masters, never a second master beside them.
+
+        **Deliberately mixed state**, because a uniform week exercises nothing:
+
+        * the chilled room runs two SEPARATE breach windows, so the queue holds one fully-triaged
+          ``closed`` episode (assessed ``product_affected``, cause coded, corrective action written,
+          the affected lot linked) and one still ``investigating``;
+        * the reefer is out of limits RIGHT NOW — its episode has ``ended_at`` NULL, so
+          ``is_episode_running`` is true, the board shows cargo out of range, and the close verb's
+          "still running" refusal is reachable on a real row instead of being an unreachable branch;
+        * the freezer is perfectly in range, and its MKT is honestly ``None`` — USP <1079.2> says mean
+          kinetic temperature does not apply to frozen product, so a figure there would let a warm
+          spell be "offset" by the cold hours around it;
+        * the shipment logger stopped transmitting fourteen hours ago, so ``is_reporting`` is
+          ``False`` and the missing-logger chip fires;
+        * calibration comes out amber / overdue / not-recorded / in-date across the four points, so
+          all four buckets of the compliance report are populated — and "not recorded" is its own
+          muted state, never green.
+
+        **``LotSerial.status`` is NOT written here, and that is the point rather than a gap.**
+        Quarantine is 4.9's column: a non-conformance is what moves a lot into it, and 4.15 only ever
+        READS it. The Quarantined-lots section of the cold-storage report is therefore empty on this
+        data by design — forging a quarantine from the cold-chain seeder would be exactly the second
+        writer the sub-module's docstrings refuse.
+
+        **It posts NO ``JournalEntry`` (L29).** It does post four opening ``receipt`` StockMoves for
+        the two cold items, through the app's own ``_post_stock_move`` service so the weighted-average
+        roll follows the runtime path — guarded on their own reference so a re-run cannot stock the
+        cold rooms twice.
+        """
+        from apps.scm.models import (Asset, ColdChainMonitor, Item, ItemCategory, Location,
+                                     LotSerial, MaintenancePlan, MaintenancePlanTask, MeterReading,
+                                     Shipment, StockMove, TemperatureExcursion, TemperatureReading,
+                                     UOM)
+        # The service, imported and CALLED rather than re-implemented — the 4.13 `_post_stock_move`
+        # and 4.14 `_stamp_standard` rule. The demo data is produced by the same code path the two
+        # Detect buttons run, so the path is exercised on every `seed_scm`.
+        from apps.scm import coldchain
+        from apps.scm.views._helpers import _post_stock_move
+
+        if ColdChainMonitor.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: cold chain data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10-4.14 posture) ---------
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        each = UOM.objects.filter(tenant=tenant, code="EA").first()
+        if main is None or each is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no 4.3 locations / UOM — skipping 4.15 cold chain management (its "
+                "cold zones hang under WH-MAIN, its stock is posted through the 4.3 ledger and its "
+                "items are measured in 4.3's units)."))
+            return
+
+        now = timezone.now()
+        today = timezone.localdate()
+        admin = self._admin(tenant)
+        technician = self._employee(tenant, "Emma Williams")
+        custodian = self._employee(tenant, "Liam Johnson")
+        qa_lead = self._employee(tenant, "Olivia Martin")
+        org_unit = self._org_unit(tenant)
+        # 4.6's OUTBOUND consignment. Optional: without it the shipment-borne logger is simply not
+        # deployed, which costs the demo one subject kind and breaks nothing — inventing a second
+        # shipment to hang a probe off would fork 4.6's own record.
+        shipment = (Shipment.objects.filter(tenant=tenant, direction="outbound")
+                    .order_by("id").first())
+
+        def _at(day, hour, minute=0):
+            """An aware datetime at a FIXED local time on ``day`` — 4.13's ``_at``, same reasoning."""
+            return timezone.make_aware(datetime.datetime.combine(day, datetime.time(hour, minute)))
+
+        # The newest reading in every series lands on this instant. Floored to the half hour so the
+        # whole ledger sits on the 30-minute grid `unique_together (monitor, reading_at)` is keyed on,
+        # and — crucially — so every stamp is in the PAST: `TemperatureReading.clean()` refuses a
+        # future row outright, and a series built forward from `now` would fail validation outright
+        # rather than subtly.
+        grid = now.replace(minute=(0 if now.minute < 30 else 30), second=0, microsecond=0)
+
+        # ---- 1. the cold zones — 4.3's own master, three new rows -------------------------------
+        # `location_type="zone"` and parented on WH-MAIN, because a chiller IS a zone of a warehouse
+        # (Locations.py:50-59) and splitting temperature-controlled storage into its own master would
+        # fork the StockMove FK and the on-hand aggregate. `storage_condition` is a CLASSIFICATION —
+        # what this zone is meant to provide — and never a measurement; what it actually reached is a
+        # monitor and its readings.
+        chill_room, _ = Location.objects.get_or_create(
+            tenant=tenant, code="CR-01",
+            defaults={"name": "Cold Room 1 — chilled", "location_type": "zone", "parent": main,
+                      "storage_condition": "chilled", "pick_sequence": 10})
+        freezer, _ = Location.objects.get_or_create(
+            tenant=tenant, code="FRZ-01",
+            defaults={"name": "Freezer 1 — frozen", "location_type": "zone", "parent": main,
+                      "storage_condition": "frozen", "pick_sequence": 20})
+        # NO MONITOR ON THIS ONE, ON PURPOSE. A location classified chilled with no active probe on it
+        # is a genuine GDP audit finding, and it exists as a finding only because the classification
+        # and the monitor now live in the same database — which is the whole argument for the
+        # Cold Storage Inventory page being a query rather than a table.
+        spare_room, _ = Location.objects.get_or_create(
+            tenant=tenant, code="CR-02",
+            defaults={"name": "Cold Room 2 — chilled, awaiting probe", "location_type": "zone",
+                      "parent": main, "storage_condition": "chilled", "pick_sequence": 30})
+
+        # ---- 2. the cold items — 4.3's own master, two new rows ----------------------------------
+        cold_category, _ = ItemCategory.objects.get_or_create(
+            tenant=tenant, name="Temperature-controlled goods",
+            defaults={"description": "Product that declares a storage condition. The condition is a "
+                                     "REQUIREMENT of the goods; what a bin provides is the location's "
+                                     "own column, and the two disagreeing is the mismatch finding."})
+        vaccine, _ = Item.objects.get_or_create(
+            tenant=tenant, sku="VAC-10",
+            defaults={"name": "Influenza vaccine, 10-dose vial", "category": cold_category,
+                      "uom": each, "tracking": "lot", "costing_method": "fifo",
+                      "standard_cost": Decimal("42.0000"), "storage_condition": "chilled",
+                      "description": "Held at 2-8 °C. Lot-tracked and dated, because a cold-chain "
+                                     "record that cannot name the batch it protected is not a "
+                                     "record."})
+        frozen_pack, _ = Item.objects.get_or_create(
+            tenant=tenant, sku="FRZ-PK",
+            defaults={"name": "Frozen reagent pack, 24 x 5 mL", "category": cold_category,
+                      "uom": each, "tracking": "lot", "costing_method": "weighted_avg",
+                      "standard_cost": Decimal("18.5000"), "storage_condition": "frozen",
+                      "description": "Held at -25 to -15 °C. Its monitor reports NO mean kinetic "
+                                     "temperature — USP <1079.2> says MKT does not apply to frozen "
+                                     "product."})
+
+        # ---- 3. the batches and their opening stock ----------------------------------------------
+        # `status` is left at its default `available` on every one of them. Quarantine is 4.9's verb's
+        # to write and 4.15's only to read — see the method docstring.
+        near_lot, _ = LotSerial.objects.get_or_create(
+            tenant=tenant, item=vaccine, number="VAC-2601",
+            defaults={"kind": "lot", "expiry_date": today + datetime.timedelta(days=21),
+                      "status": "available",
+                      "notes": "Seeded 4.15 batch — inside the report's 30-day FEFO horizon."})
+        expired_lot, _ = LotSerial.objects.get_or_create(
+            tenant=tenant, item=vaccine, number="VAC-2512",
+            defaults={"kind": "lot", "expiry_date": today - datetime.timedelta(days=4),
+                      "status": "available",
+                      "notes": "Seeded 4.15 batch — ALREADY EXPIRED and still on hand, which is the "
+                              "row the expiry section exists to surface."})
+        frozen_lot, _ = LotSerial.objects.get_or_create(
+            tenant=tenant, item=frozen_pack, number="FRZ-2604",
+            defaults={"kind": "lot", "expiry_date": today + datetime.timedelta(days=240),
+                      "status": "available", "notes": "Seeded 4.15 batch — comfortably in date."})
+
+        # Guarded on the moves' OWN reference rather than on the outer monitor check, because this is
+        # the one write here with an effect outside 4.15: a second post would stock the cold rooms
+        # twice and overstate on-hand for every page that reads the ledger (the 4.13 rule). The filter
+        # is exactly the one `_flush()` deletes on, so guard and teardown describe the same rows.
+        cold_moves = 0
+        if StockMove.objects.filter(tenant=tenant, reference="OPENING-COLD").exists():
+            self.stdout.write(f"{tenant.name}: cold opening stock already posted — not re-posting.")
+        else:
+            opening = [
+                (vaccine, chill_room, near_lot, Decimal("120"), Decimal("42.00")),
+                (vaccine, chill_room, expired_lot, Decimal("18"), Decimal("41.00")),
+                # THE MISMATCH ROW, and it is the most useful finding on the whole report: a chilled
+                # product sitting in the ambient goods-in warehouse. WH-MAIN carries no
+                # storage_condition at all, so the page reports it as UNCLASSIFIED rather than as
+                # "too warm" — a bin nobody has classified is a data gap somebody closes in one edit,
+                # not a measured breach, and colouring the two the same would waste the red.
+                (vaccine, main, near_lot, Decimal("12"), Decimal("42.00")),
+                (frozen_pack, freezer, frozen_lot, Decimal("60"), Decimal("18.50")),
+            ]
+            with transaction.atomic():
+                for index, (item, location, lot, quantity, cost) in enumerate(opening):
+                    _post_stock_move(
+                        tenant, item=item, location=location, lot_serial=lot, quantity=quantity,
+                        unit_cost=cost, move_type="receipt", reference="OPENING-COLD",
+                        reason="Opening cold-chain balance",
+                        moved_at=now - datetime.timedelta(days=10, minutes=index))
+                    cold_moves += 1
+
+        # ---- 4. the reefer — 4.13's OWN register, one new row ------------------------------------
+        # `asset_type="other"`, and deliberately NOT a new `reefer` value: what makes something a
+        # reefer on the board is HAVING AN ACTIVE MONITOR POINTED AT IT, which cannot go stale the day
+        # a unit is repurposed. 4.15 adds no value to any 4.13 vocabulary (Reports.py:19-24).
+        reefer = Asset.objects.filter(tenant=tenant, code="REEF-01").first()
+        if reefer is None:
+            reefer = Asset(
+                tenant=tenant, code="REEF-01", name="Refrigerated container, 40 ft high cube",
+                asset_type="other", status="in_service", criticality="critical",
+                category="Refrigerated units", manufacturer="Carrier Transicold",
+                model_number="PrimeLINE 69NT40-561", serial_number="CT69NT40-20418",
+                tag_code="QR-REEF-01",
+                specifications="40 ft high-cube reefer, setpoint range -30 to +30 °C, "
+                               "fresh-air exchange 0-285 m³/h, 460 V 3-phase.",
+                location=main, org_unit=org_unit, custodian=custodian,
+                # The meter DEFINITION only — every number lives in MeterReading, append-only. Named
+                # DISCHARGE AIR because that is the machine-condition series 4.13's condition trigger
+                # reads; the CARGO temperature is a TemperatureReading on the monitor, and the two are
+                # different questions asked of different tables (TemperatureReadings.py:49-56).
+                meter_name="Discharge Air Temp", meter_unit="°C",
+                purchase_date=today - datetime.timedelta(days=760),
+                commissioned_on=today - datetime.timedelta(days=740),
+                warranty_expires_on=today + datetime.timedelta(days=180),
+                purchase_cost=Decimal("42000.00"),
+                notes="Seeded 4.15 reefer. It is on the reefer board because an ACTIVE cold-chain "
+                      "monitor watches it — nothing here is flagged by hand, so nothing can go "
+                      "stale. Every maintenance column on that board is 4.13's own record.")
+            reefer.full_clean(exclude=["number"])
+            reefer.save()
+
+        # The machine-condition series the condition plan counts against. Rising, and the newest row
+        # is deliberately PAST the threshold so the trigger fires on first login and is visibly
+        # working rather than merely configured (the 4.13 conveyor-bearing precedent).
+        meter_rows = 0
+        for days_ago, value in ((9, "5.80"), (4, "6.90"), (1, "9.60")):
+            read_at = _at(today - datetime.timedelta(days=days_ago), 7)
+            if MeterReading.objects.filter(tenant=tenant, asset=reefer,
+                                           meter_name="Discharge Air Temp", read_at=read_at).exists():
+                continue
+            row = MeterReading(tenant=tenant, asset=reefer, meter_name="Discharge Air Temp",
+                               unit="°C", reading=Decimal(value), read_at=read_at,
+                               recorded_by=technician, source="manual",
+                               notes="Seeded: discharge-air probe on the evaporator return.")
+            row.full_clean()
+            row.save()
+            meter_rows += 1
+
+        # A CONDITION trigger, and the threshold is POSITIVE on purpose: `condition_threshold` carries
+        # `MinValueValidator(ZERO)`, so the axis has to be a magnitude a reefer legitimately runs above
+        # — discharge air ABOVE 8 °C means the unit is not pulling its setpoint down, which is exactly
+        # the "too warm" failure a chilled load cares about. A sub-zero threshold would be refused by
+        # the validator, and inverting the operator to dodge that would make the plan fire when the
+        # machine is working correctly.
+        condition_plan = MaintenancePlan.objects.filter(
+            tenant=tenant, asset=reefer, name="Reefer discharge-air temperature watch").first()
+        if condition_plan is None:
+            condition_plan = MaintenancePlan(
+                tenant=tenant, asset=reefer, name="Reefer discharge-air temperature watch",
+                trigger_type="condition", condition_operator="gte",
+                condition_threshold=Decimal("8.00"), lead_time_days=3,
+                priority="high", work_type="predictive", estimated_hours=Decimal("2.00"),
+                assigned_to=technician, parts_location=main,
+                instructions="The machine decides when this is due, not the calendar. Discharge air "
+                             "at or above 8 °C means the unit is not pulling its setpoint down — "
+                             "check the refrigerant charge, the condenser coil and the defrost "
+                             "termination before the next load is stuffed.")
+            condition_plan.full_clean(exclude=["number"])
+            condition_plan.save()
+            for sequence, description, expected, mandatory, safety in (
+                    (10, "Read discharge and return air at steady state",
+                     "Discharge within 1.5 °C of setpoint", True, False),
+                    (20, "Inspect the condenser coil and clear any restriction",
+                     "Coil clear, no bent fins blocking airflow", True, False),
+                    (30, "Check refrigerant charge and the sight glass",
+                     "No bubbles at full load", True, False),
+                    (40, "Prove the door seals and the drain traps",
+                     "Seals compress evenly; drains clear", False, False)):
+                task = MaintenancePlanTask(
+                    plan=condition_plan, sequence=sequence, description=description,
+                    expected_result=expected, is_mandatory=mandatory, is_safety_step=safety)
+                task.full_clean()
+                task.save()
+
+        # ---- 5. the monitoring points — all THREE subject kinds ----------------------------------
+        # Existence-checked on (tenant, name) rather than bare-created, because `number` is
+        # auto-minted (the 4.12 `_license` / 4.13 `_asset` / 4.14 `_standard` pattern). Every row goes
+        # through `full_clean()`, so the seed PROVES the exactly-one-subject rule, the band rules, the
+        # warning-margin rule and the one-active-serial rule instead of side-stepping them.
+        #
+        # `status` is USER-OWNED here and is genuinely typed — unlike every workflow column in 4.13
+        # and 4.14. The detector never writes it (the Asset.status ruling), so there is no ladder to
+        # walk and setting it directly is the only path there is.
+        def _monitor(name, **fields):
+            existing = ColdChainMonitor.objects.filter(tenant=tenant, name=name).first()
+            if existing is not None:
+                return existing
+            obj = ColdChainMonitor(tenant=tenant, name=name, **fields)
+            obj.full_clean(exclude=["number"])
+            obj.save()
+            return obj
+
+        deployed = today - datetime.timedelta(days=120)
+        chill_monitor = _monitor(
+            "Cold Room 1 — product probe", location=chill_room, device_type="fixed_sensor",
+            device_serial="ELP-LIB-114872", storage_condition="chilled",
+            min_temperature=Decimal("2.00"), max_temperature=Decimal("8.00"),
+            warning_margin_c=Decimal("1.00"), setpoint_temperature=Decimal("5.00"),
+            humidity_min=Decimal("30.00"), humidity_max=Decimal("70.00"),
+            excursion_grace_minutes=30, logging_interval_minutes=30,
+            calibrated_on=today - datetime.timedelta(days=340),
+            calibration_due_on=today + datetime.timedelta(days=25),
+            calibration_reference="ISO17025/2601-114872", deployed_on=deployed, status="active",
+            notes="Seeded 4.15 monitoring point. Calibration falls inside the 30-day notice window, "
+                  "so its chip is amber rather than green — the point of the notice period is that "
+                  "somebody books the recalibration before the certificate lapses.")
+        # FROZEN, and its MKT is honestly None on every page. USP <1079.2> states mean kinetic
+        # temperature does not apply to frozen product: the Arrhenius weighting models a degradation
+        # rate frozen goods are not undergoing, so a figure here would let a warm spell be "offset"
+        # by the cold hours either side of it.
+        freezer_monitor = _monitor(
+            "Freezer 1 — deep probe", location=freezer, device_type="fixed_sensor",
+            device_serial="ELP-LIB-114873", storage_condition="frozen",
+            min_temperature=Decimal("-25.00"), max_temperature=Decimal("-15.00"),
+            warning_margin_c=Decimal("1.50"), setpoint_temperature=Decimal("-20.00"),
+            excursion_grace_minutes=60, logging_interval_minutes=30,
+            calibrated_on=today - datetime.timedelta(days=380),
+            # DELIBERATELY LAPSED, so the red overdue chip is populated on first login — and so is the
+            # case for reading it: an uncalibrated sensor invalidates every record it produced.
+            calibration_due_on=today - datetime.timedelta(days=12),
+            calibration_reference="ISO17025/2512-114873", deployed_on=deployed, status="active",
+            notes="Seeded 4.15 monitoring point. Its certificate has LAPSED, which is a compliance "
+                  "finding in its own right. Mean kinetic temperature reads 'not applicable' here "
+                  "rather than a number — USP <1079.2>, frozen product.")
+        reefer_monitor = _monitor(
+            "REEF-01 — cargo probe", asset=reefer, device_type="realtime_tracker",
+            device_serial="TIVE-5G-77120", storage_condition="chilled",
+            min_temperature=Decimal("2.00"), max_temperature=Decimal("8.00"),
+            warning_margin_c=Decimal("1.00"), setpoint_temperature=Decimal("4.00"),
+            excursion_grace_minutes=45, logging_interval_minutes=30,
+            # NO calibration recorded at all — its own MUTED state, and never green. "We never wrote
+            # the certificate down" is a different finding from "it is in date", and a page that
+            # rendered the two the same would stop somebody going to look.
+            deployed_on=deployed, status="active",
+            notes="Seeded 4.15 monitoring point on the reefer. No calibration certificate is on file, "
+                  "which is its own muted chip — not a green one. This is the probe that is OUT OF "
+                  "LIMITS right now.")
+        monitors = [chill_monitor, freezer_monitor, reefer_monitor]
+
+        shipment_monitor = None
+        if shipment is not None:
+            shipment_monitor = _monitor(
+                f"{shipment.number} — in-transit logger", shipment=shipment,
+                device_type="single_use_logger", device_serial="SEN-TT4-908331",
+                storage_condition="chilled",
+                min_temperature=Decimal("2.00"), max_temperature=Decimal("8.00"),
+                setpoint_temperature=Decimal("5.00"),
+                excursion_grace_minutes=120, logging_interval_minutes=60,
+                calibrated_on=today - datetime.timedelta(days=60),
+                calibration_due_on=today + datetime.timedelta(days=305),
+                calibration_reference="NIST/2603-908331",
+                deployed_on=today - datetime.timedelta(days=3), status="active",
+                notes="Seeded 4.15 monitoring point riding 4.6's outbound consignment. It stopped "
+                      "transmitting fourteen hours ago, so the missing-logger chip fires: a probe "
+                      "that has gone quiet is watching nothing, and the page says so rather than "
+                      "showing the last good reading as if it were current.")
+            monitors.append(shipment_monitor)
+
+        # ---- 6. the interval ledger --------------------------------------------------------------
+        # A row is an INTERVAL SUMMARY, not a raw sample, and it carries its OWN WEIGHT: every
+        # `interval_minutes` below is SNAPSHOTTED from its monitor exactly as the create and import
+        # verbs snapshot it, so editing a logging interval next month cannot restate last month's MKT
+        # or time-in-range arithmetic.
+        #
+        # `source` and `recorded_by` are `editable=False` PROVENANCE and are stamped HERE rather than
+        # typed, exactly as the import path stamps them (the 4.13 MeterReading fix): this is a logger
+        # download, so `source="logger_import"`.
+        #
+        # The baselines are FIXED cycles rather than random draws, so two runs of this seeder on two
+        # machines produce the same ledger and the same episodes — a demo whose excursion count moves
+        # between runs is a demo nobody can write a test against.
+        def _series(monitor, step_count, baseline, overrides, *, newest=None, humidity=None):
+            """File one monitor's series, oldest first, on the monitor's own interval grid.
+
+            ``overrides`` maps a STEP COUNT BACK FROM THE NEWEST ROW to an explicit temperature, which
+            is how the breach windows below are placed: step 0 is the newest reading, so a window
+            "eleven to fourteen hours ago" on a 30-minute interval is steps 22 through 28.
+
+            Every row is ``full_clean()``ed before the batch is written, so the future-reading rule,
+            the deployment-date rule, the interval-statistic bracket and the physical bounds are all
+            PROVEN on this data rather than assumed. ``bulk_create(ignore_conflicts=True)`` is the
+            import verb's own write, and ``unique_together (monitor, reading_at)`` is what makes a
+            re-run harmless instead of an IntegrityError.
+            """
+            step = monitor.logging_interval_minutes
+            end = newest or grid
+            objects = []
+            for back in range(step_count - 1, -1, -1):
+                moment = end - datetime.timedelta(minutes=step * back)
+                temperature = overrides.get(back) or baseline[back % len(baseline)]
+                row = TemperatureReading(
+                    tenant=tenant, monitor=monitor, reading_at=moment,
+                    temperature=temperature,
+                    humidity_pct=humidity,
+                    # A rolled-up interval, so it legitimately carries extremes. Both are derived
+                    # from the representative value by an explicit Decimal arithmetic — never through
+                    # q2()/q4(), whose `value or ZERO` would turn a blank into a plausible 0 °C.
+                    min_temperature=temperature - Decimal("0.30"),
+                    max_temperature=temperature + Decimal("0.30"),
+                    sample_count=step * 2,
+                    interval_minutes=step,
+                    source="logger_import", recorded_by=technician)
+                row.full_clean()
+                objects.append(row)
+            TemperatureReading.objects.bulk_create(objects, ignore_conflicts=True)
+            return len(objects)
+
+        # (a) the chilled room: 48 hours at 30 minutes, with TWO separate breach windows so the queue
+        #     ends up holding one fully-triaged episode and one still under investigation.
+        chill_baseline = [Decimal("4.10"), Decimal("4.40"), Decimal("4.80"), Decimal("5.20"),
+                          Decimal("5.00"), Decimal("4.60"), Decimal("4.30"), Decimal("4.00")]
+        chill_breaches = {}
+        # Window A — roughly 37 to 40 hours ago. A door left open on the night shift.
+        for back, value in zip(range(80, 73, -1),
+                               ("9.10", "10.40", "11.20", "11.80", "11.10", "10.00", "9.30")):
+            chill_breaches[back] = Decimal(value)
+        # Window B — roughly 11.5 to 14 hours ago. The compressor cycling short.
+        for back, value in zip(range(28, 22, -1),
+                               ("8.60", "9.40", "9.90", "9.50", "8.90", "8.40")):
+            chill_breaches[back] = Decimal(value)
+        reading_count = _series(chill_monitor, 96, chill_baseline, chill_breaches,
+                                humidity=Decimal("58.00"))
+
+        # (b) the freezer: 24 hours at 30 minutes, entirely in range. Its profile therefore reads
+        #     100% time in range and NO mean kinetic temperature — the two facts sitting side by side
+        #     is what makes the frozen-MKT rule legible instead of looking like missing data.
+        freezer_baseline = [Decimal("-19.80"), Decimal("-20.40"), Decimal("-19.20"),
+                            Decimal("-18.90"), Decimal("-19.60"), Decimal("-20.10")]
+        reading_count += _series(freezer_monitor, 48, freezer_baseline, {})
+
+        # (c) the reefer: 24 hours at 30 minutes, ending on a RISING breach that never comes back
+        #     inside the band — so the episode's `ended_at` stays NULL, `is_episode_running` is true,
+        #     the board shows cargo out of limits right now, and the close verb's "still running"
+        #     refusal is reachable on a real row.
+        reefer_baseline = [Decimal("3.60"), Decimal("4.10"), Decimal("4.50"), Decimal("4.20"),
+                           Decimal("3.90"), Decimal("4.40")]
+        reefer_breaches = {back: Decimal(value) for back, value in zip(
+            range(5, -1, -1), ("8.60", "9.40", "10.20", "11.00", "11.60", "12.10"))}
+        reading_count += _series(reefer_monitor, 48, reefer_baseline, reefer_breaches,
+                                 humidity=Decimal("64.00"))
+
+        # (d) the shipment logger: 12 hourly rows that STOP fourteen hours ago. Entirely in range
+        #     while it was transmitting — the finding here is the silence, not a breach.
+        if shipment_monitor is not None:
+            transit_baseline = [Decimal("4.90"), Decimal("5.30"), Decimal("5.80"), Decimal("5.10"),
+                                Decimal("4.70"), Decimal("5.50")]
+            reading_count += _series(
+                shipment_monitor, 12, transit_baseline, {},
+                newest=grid - datetime.timedelta(hours=14), humidity=Decimal("52.00"))
+
+        # ---- 7. PRESS THE DETECTOR'S OWN BUTTON --------------------------------------------------
+        # THE ONLY WRITER of every measured column on a TemperatureExcursion, and the reason no
+        # episode is typed above. This is verbatim what `coldchain_detect` does behind its
+        # tenant-admin POST: one transaction and one `select_for_update()` on the MONITOR row per
+        # monitor, the readings walked from the watermark forward, an episode opened at the first
+        # out-of-range row and closed at the first row back inside the band.
+        detection = coldchain.detect_excursions(tenant, user=admin)
+
+        # ---- 8. triage — the model's OWN verbs, never a typed status ------------------------------
+        # `TemperatureExcursion.status` is `editable=False` (L22) and these four methods are its only
+        # writers. Each returns the `{field: [before, after]}` diff the views hand to
+        # `write_audit_log`, so the seeder drives exactly the code path the buttons do.
+        episodes = list(TemperatureExcursion.objects
+                        .filter(tenant=tenant, monitor=chill_monitor)
+                        .select_related("monitor")
+                        .order_by("started_at", "id"))
+        triaged = []
+        if episodes:
+            # The OLDER window, walked all the way down the ladder: seen -> judged -> closed. The
+            # affected batch is linked rather than quarantined — `LotSerial.status` is 4.9's column
+            # and this module only reads it.
+            first = episodes[0]
+            if first.status == "open":
+                first.acknowledge(admin)
+                first.lot_serial = near_lot
+                first.save(update_fields=["lot_serial", "updated_at"])
+                first.assess(
+                    qa_lead, "product_affected", cause="door_left_open",
+                    corrective_action="Night-shift door interlock found taped open at the chilled "
+                                      "dock. Interlock restored and the shift briefed. The affected "
+                                      "batch was held and released against its own stability data "
+                                      "after review — the disposition itself is recorded on the "
+                                      "non-conformance, not here.")
+                # Legal ONLY because the episode has ended. The close verb refuses outright while
+                # `ended_at` is NULL, which is why the reefer's still-running episode below is left
+                # open instead: closing an incident that is still happening would file a compliance
+                # record saying the product was back in range while the room is still warming.
+                first.close(admin, note="Temperature back inside 2-8 °C and held there for the rest "
+                                        "of the shift. Closed after review.")
+                triaged.append(f"{first.number} closed")
+        if len(episodes) > 1:
+            # The NEWER window, acknowledged and no further: somebody has seen it, nobody has judged
+            # the product yet. That is the state the queue is actually for.
+            second = episodes[1]
+            if second.status == "open":
+                second.acknowledge(admin)
+                triaged.append(f"{second.number} investigating")
+
+        # ---- 9. the ONE cross-sub-module write, through 4.15's own service ------------------------
+        # `raise_work_order()` creates ONE `scm.MaintenanceWorkOrder` against the failing unit with an
+        # EXISTING 4.13 `SOURCE_CHOICES` value, and points the excursion at it. It is idempotent under
+        # its own row lock, returns None when the subject is not an Asset, and 4.15 stops there —
+        # 4.13 owns everything that happens to that job next. Nothing else here touches another
+        # sub-module's table.
+        running = (TemperatureExcursion.objects
+                   .filter(tenant=tenant, monitor=reefer_monitor, ended_at__isnull=True)
+                   .order_by("-started_at").first())
+        work_order = coldchain.raise_work_order(running, user=admin) if running is not None else None
+
+        open_episodes = TemperatureExcursion.objects.filter(
+            tenant=tenant, ended_at__isnull=True).count()
+        self.stdout.write(
+            f"{tenant.name}: 4.15 cold chain — 3 cold zones ({chill_room.code}/{freezer.code} "
+            f"monitored, {spare_room.code} deliberately UNMONITORED), 2 cold items, 3 batches "
+            f"(1 expiring, 1 already expired), {cold_moves} opening cold stock move(s), "
+            f"{reefer.code} + {condition_plan.number} "
+            f"{condition_plan.due_status_label.lower()} on {meter_rows} discharge-air reading(s), "
+            f"{len(monitors)} monitoring point(s) on "
+            f"{len({m.subject_kind for m in monitors})} subject kind(s), {reading_count} temperature "
+            f"readings, detector: {detection['opened']} episode(s) opened / "
+            f"{detection['closed']} closed / {detection['extended']} extended / "
+            f"{detection['skipped']} monitor(s) skipped for having no limit, {open_episodes} still "
+            f"breaching now"
+            + (f", triage: {', '.join(triaged)}" if triaged else ", nothing to triage")
+            + (f", {work_order.number} raised against {reefer.code}" if work_order is not None
+               else ", no repair job raised")
+            + ". Not one measured column was typed — the detector wrote every one of them.")
