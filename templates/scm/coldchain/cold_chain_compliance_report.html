@@ -12,7 +12,7 @@ this page may read, and nothing else — the view pins the same list in its own 
   window                       the SAME dict again, for a caller that prefers window.date_from
   excursions excursions_truncated excursion_count      the episode log for the window
   stats                        total reportable open critical product_affected dismissed (all int)
-  calibration_rows calibration_stats                   the certificate state of every monitor
+  calibration_rows calibration_stats calibration_truncated   certificate state, SLICED to row_cap
   profiles profiles_truncated profiled_cap             % time in range + MKT, capped at profiled_cap
   monitors status_choices assessment_choices status assessment
   max_window_days row_cap export_qs generated_at
@@ -441,6 +441,15 @@ every calibration colour from the view's chip tuple, so this template invents no
           <span class="badge badge-muted">{{ calibration_stats.not_recorded }} with no certificate recorded</span>
         {% endif %}
         <span class="badge badge-slate">{{ calibration_stats.ok }} comfortably in date</span>
+        {% comment %}
+          The register is SLICED in the view like every other block on this page, so say when the cap
+          bit: the tallies above then describe the rows listed, not the whole workspace. Due-date
+          ordering puts every overdue certificate inside the cap, so what falls off the end is the
+          in-date tail — but a reader still has to be told they are reading a window.
+        {% endcomment %}
+        {% if calibration_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} monitors — pick one above for a specific probe</span>
+        {% endif %}
       </div>
     </div>
     <div class="card-body">
