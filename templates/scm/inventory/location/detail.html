@@ -16,6 +16,11 @@
       <div class="detail-item"><dt>Code</dt><dd>{{ obj.code }}</dd></div>
       <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
       <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_location_type_display }}</dd></div>
+      {# 4.15 temperature class, sitting next to Type because that is where it sits on the form and #}
+      {# because the two together are what a zone IS. badge-slate is the same colour the Cold Storage #}
+      {# report gives a LOCATION class, so a zone reads the same on both pages. Blank is a real answer #}
+      {# (the field's own help text calls it ambient / unclassified), not missing data. #}
+      <div class="detail-item"><dt>Temperature Class</dt><dd>{% if obj.storage_condition %}<span class="badge badge-slate">{{ obj.get_storage_condition_display }}</span> <a href="{% url 'scm:cold_storage_report' %}">Cold storage</a>{% else %}<span class="badge badge-muted">Unclassified</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Path</dt><dd>{{ path|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Parent</dt><dd>{% if obj.parent %}{{ obj.parent.code }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Stock Value</dt><dd>{{ on_hand_value|floatformat:2 }}</dd></div>
