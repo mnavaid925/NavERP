@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — Maintenance of Reefers. STANDALONE at the sub-module root
+(templates/scm/coldchain/), because it is not any one entity's list / detail / form page.
+
+Renders apps/scm/views/ColdChainManagement/Reports.py::reefer_board. Everything this page may read,
+and nothing else — the view pins the same list in its own docstring:
+
+  rows row_count truncated row_cap          the board; DB-sliced at row_cap, NOT paginated
+  q criticality pm_due range_bucket         the RESOLVED filter values (junk already dropped)
+  criticality_choices pm_due_choices range_choices
+  stats                                     reefers out_of_range open_excursions pm_overdue
+                                            open_jobs (all int)
+  today now                                 date + datetime
+  owned_by_4_13_note reads_only_note        standing prose, printed verbatim
+
+ROW dict — these key names come from the view's assembly loop, not from the 4.13 models, and a key
+this page invented would render as its own silent blank (L41):
+
+  asset monitors monitor latest_reading range_chip setpoint_gap open_excursions running_episode
+  plans pm_status pm_status_label pm_status_css open_jobs open_job_rows meter_reading meter_name
+  meter_unit warranty_chip
+
+EVERY MAINTENANCE COLUMN HERE IS 4.13's. Cold chain declares no maintenance table, no reefer table
+and no `reefer` asset type: a reefer is simply an ASSET WITH AN ACTIVE COLD-CHAIN MONITOR pointed at
+it, which cannot go stale the day a unit is repurposed. So every link out of this board goes to the
+module that owns the record — scm:asset_detail, scm:maintenanceplan_detail,
+scm:maintenanceworkorder_detail — and scm:coldchainmonitor_detail for the probe. There is no edit,
+no delete and no verb on this page; it writes nothing at all.
+
+THE PLANS ARE PRIMED. row.plans entries have had their latest-reading cache filled by the view, so
+due_status_label / due_status_css / days_until_due / meter_gap are FREE to call here and fire no
+query. Calling anything else on a plan would.
+
+pm_status "none" IS NOT "scheduled". A reefer nobody has written a preventive programme for is a
+finding, not a compliant machine, and the view hands down pm_status_label / pm_status_css so this
+template invents no colour for it.
+
+THE None CONTRACT. monitor, latest_reading, setpoint_gap, running_episode and meter_reading are all
+None-able, and meter_name / meter_unit are legitimately empty strings. A missing temperature is an
+EM DASH — never 0, which on this page would read as a perfectly cold trailer. setpoint_gap of 0.00
+means "exactly on setpoint" and must still print as 0.00, so its test is `is not None` and never
+|default.
+
+range_chip and warranty_chip are plain (label, css) 2-TUPLES from the model — render .0 and .1.
+
+NOT PAGINATED, deliberately — there is no page_obj in the context, so this page includes no
+pagination partial and needs no has_previous / has_next guard (L9). The header chips have to describe
+exactly the rows the table shows, and two of the filters (PM due, cargo range) are computed in Python
+after the rows exist for precisely that reason. The board is bounded by there being one row per
+monitored asset and is DB-sliced at row_cap, which it reports when it bit.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY
+— badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+{% endcomment %}
+{% block title %}Reefer Board{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reefer Board</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain</a><span class="sep">›</span>
+        <span>Reefer Board</span>
+      </div>
+      <p class="text-muted">
+        One row per refrigerated unit, worst first: what the cargo probe is reading right now, whether an
+        episode is running, what preventive work the machine is owed, what is already open against it, and
+        where its run-hours meter and warranty stand. A <span class="fw-600">reefer</span> here is an asset
+        with an active cold-chain monitor pointed at it — nothing is flagged by hand, so nothing goes stale
+        when a unit is repurposed.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:coldchainmonitor_list' %}" class="btn btn-outline"><i data-lucide="thermometer"></i> Monitors</a>
+      <a href="{% url 'scm:pm_forecast' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> PM Forecast</a>
+      <a href="{% url 'scm:maintenanceworkorder_list' %}" class="btn btn-outline"><i data-lucide="wrench"></i> Work Orders</a>
+      <a href="{% url 'scm:asset_list' %}" class="btn btn-primary"><i data-lucide="box"></i> Assets</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The design decision in visible copy rather than a code comment. A reader who assumes cold chain
+    keeps its own reefer or maintenance table will go looking for one, will not find it, and will
+    eventually build a second maintenance queue that drifts from the real one.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Whose record is this</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ owned_by_4_13_note }}</p>
+      <p class="text-muted">{{ reads_only_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">A reefer = an asset with an active cold-chain monitor</span>
+        <span class="badge badge-slate">Plans, jobs, meter and warranty are Asset Management's own records</span>
+        <span class="badge badge-muted">Cold chain declares no maintenance table and no reefer type</span>
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As at {{ now|date:"M d, Y H:i" }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{{ stats.reefers }}</div>
+      <div class="stat-label">Reefer{{ stats.reefers|pluralize }} on this board</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="thermometer-sun"></i></div>
+      <div class="stat-value">{{ stats.out_of_range }}</div>
+      <div class="stat-label">Cargo outside its limits right now</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ stats.open_excursions }}</div>
+      <div class="stat-label">Excursion{{ stats.open_excursions|pluralize }} still awaiting triage</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="calendar-x"></i></div>
+      <div class="stat-value">{{ stats.pm_overdue }}</div>
+      <div class="stat-label">Preventive work overdue or due today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="wrench"></i></div>
+      <div class="stat-value">{{ stats.open_jobs }}</div>
+      <div class="stat-label">Open work order{{ stats.open_jobs|pluralize }} on these units</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filter the board</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ row_count }} row{{ row_count|pluralize }} shown</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} units — narrow the search to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="rb-q">Search</label>
+          <input type="text" id="rb-q" name="q" value="{{ q }}" class="form-input"
+                 placeholder="Asset code or name, monitor name, serial or number…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rb-criticality">Criticality</label>
+          <select name="criticality" id="rb-criticality" class="form-select">
+            <option value="">Any criticality</option>
+            {% for value, label in criticality_choices %}
+              <option value="{{ value }}" {% if criticality == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rb-pm">Preventive work</label>
+          <select name="pm_due" id="rb-pm" class="form-select">
+            <option value="">Any PM state</option>
+            {% for value, label in pm_due_choices %}
+              <option value="{{ value }}" {% if pm_due == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="rb-range">Cargo temperature</label>
+          <select name="range" id="rb-range" class="form-select">
+            <option value="">Any reading</option>
+            {% for value, label in range_choices %}
+              <option value="{{ value }}" {% if range_bucket == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:reefer_board' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        The three dropdowns bind to the value the view actually <span class="fw-600">resolved</span>, so a
+        hand-typed or stale option that was dropped shows as “any” rather than leaving a control claiming a
+        filter that is not in force. <span class="fw-600">Preventive work</span> and
+        <span class="fw-600">cargo temperature</span> are worked out per row rather than in the query — a plan
+        comes due because the machine moved, which no clause on a due date can see.
+      </div>
+      <div class="form-help">
+        Rows are ordered <span class="fw-600">worst first</span>: anything still breaching, then by how far
+        past due its preventive programme is, then by asset code. That is the order somebody working the board
+        needs, not alphabetical.
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Reefer</th>
+          <th>Cargo probe</th>
+          <th>Latest temperature</th>
+          <th>Setpoint gap</th>
+          <th>Excursions</th>
+          <th>Preventive programme</th>
+          <th>Open jobs</th>
+          <th>Meter</th>
+          <th>Warranty</th>
+          <th class="table-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>
+              <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="fw-600 mono">{{ row.asset.code }}</a>
+              <div class="text-muted">{{ row.asset.name }}</div>
+              <div class="badge-group">
+                <span class="badge {{ row.asset.status_css }}">{{ row.asset.get_status_display }}</span>
+                <span class="badge {{ row.asset.criticality_css }}">{{ row.asset.get_criticality_display }}</span>
+              </div>
+              {% if row.asset.location %}
+                <div class="form-help mono">{{ row.asset.location.code }}</div>
+              {% endif %}
+              {% if row.asset.custodian %}
+                <div class="form-help">{{ row.asset.custodian.name }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% comment %}
+                monitor is None only if the probe was deactivated between the view's two queries —
+                rare, and it must not blank the whole row or crash the link.
+              {% endcomment %}
+              {% if row.monitor %}
+                <a href="{% url 'scm:coldchainmonitor_detail' row.monitor.pk %}" class="mono">{{ row.monitor.number }}</a>
+                <div class="text-muted">{{ row.monitor.name }}</div>
+                {% if row.monitor.device_serial %}
+                  <div class="form-help mono">{{ row.monitor.device_serial }}</div>
+                {% endif %}
+                {% if row.monitors|length > 1 %}
+                  <div class="form-help">{{ row.monitors|length }} active probes on this unit</div>
+                {% endif %}
+              {% else %}
+                <span class="badge badge-muted">Probe no longer active</span>
+              {% endif %}
+            </td>
+            <td class="nowrap mono">
+              {% comment %}
+                A MISSING TEMPERATURE IS AN EM DASH. Never 0 — on a reefer board a printed 0 °C reads
+                as a perfectly cold trailer, which is the exact opposite of "the probe has not
+                reported". The chip beside it is the model's own verdict and already says "Not
+                recorded" in that case.
+              {% endcomment %}
+              {% if row.latest_reading %}
+                {{ row.latest_reading.temperature }} °C
+                <div><span class="badge {{ row.range_chip.1 }}">{{ row.range_chip.0 }}</span></div>
+                <div class="form-help">{{ row.latest_reading.reading_at|date:"M d, Y H:i" }}</div>
+                {% if row.latest_reading.humidity_pct is not None %}
+                  <div class="form-help">{{ row.latest_reading.humidity_pct }}% RH</div>
+                {% endif %}
+              {% else %}
+                —
+                <div><span class="badge {{ row.range_chip.1 }}">{{ row.range_chip.0 }}</span></div>
+              {% endif %}
+            </td>
+            {% comment %}
+              setpoint_gap is None when the unit has no recorded setpoint, or no reading to compare
+              with. A gap of 0.00 means "exactly on setpoint", which is the opposite of "we never
+              recorded one" — so `is not None`, never |default.
+            {% endcomment %}
+            <td class="nowrap mono">
+              {% if row.setpoint_gap is not None %}
+                {{ row.setpoint_gap }} °C
+                <div class="form-help">against a setpoint of {{ row.monitor.setpoint_temperature }} °C</div>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              {% comment %}
+                Two DIFFERENT questions, deliberately shown together. running_episode means the cargo
+                is outside its limits RIGHT NOW; open_excursions is how many episodes still need a
+                human, which includes ones that stopped days ago. A page that conflated them would
+                tell somebody an incident is ongoing when it ended yesterday.
+              {% endcomment %}
+              {% if row.running_episode %}
+                <a href="{% url 'scm:temperatureexcursion_detail' row.running_episode.pk %}" class="badge badge-red">Breaching now</a>
+                <div class="form-help mono">
+                  {{ row.running_episode.number }} · since {{ row.running_episode.started_at|date:"M d, Y H:i" }}
+                </div>
+              {% endif %}
+              {% if row.open_excursions %}
+                <div><span class="badge badge-amber">{{ row.open_excursions }} awaiting triage</span></div>
+              {% elif not row.running_episode %}
+                <span class="badge badge-green">Nothing outstanding</span>
+              {% endif %}
+            </td>
+            <td>
+              {% comment %}
+                pm_status_label / pm_status_css come from the VIEW (4.13's own DUE_STATUS maps), so
+                this template invents no judgement — including for "none", which is its own finding
+                and is deliberately not the same thing as "scheduled".
+              {% endcomment %}
+              <span class="badge {{ row.pm_status_css }}">{{ row.pm_status_label }}</span>
+              {% if row.pm_status == "none" %}
+                <div class="form-help">
+                  No preventive plan exists for this unit. That is a finding rather than a clean sheet —
+                  <a href="{% url 'scm:maintenanceplan_create' %}">write one</a>.
+                </div>
+              {% endif %}
+              {% for plan in row.plans %}
+                <div class="form-help">
+                  <a href="{% url 'scm:maintenanceplan_detail' plan.pk %}" class="mono">{{ plan.number }}</a>
+                  {{ plan.name }}
+                  <span class="badge {{ plan.due_status_css }}">{{ plan.due_status_label }}</span>
+                  {% comment %}
+                    days_until_due and meter_gap are BOTH None-able — no date on the plan, or an
+                    asset that has never been read. Neither is ever 0-by-accident: 0 days is "due
+                    today" and 0 meter units is "exactly on target", and both are real answers.
+                  {% endcomment %}
+                  {% if plan.days_until_due is not None %}
+                    <span class="mono">{{ plan.days_until_due }}d</span>
+                  {% endif %}
+                  {% if plan.meter_gap is not None %}
+                    <span class="mono">{{ plan.meter_gap }}{% if row.meter_unit %} {{ row.meter_unit }}{% endif %}</span>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </td>
+            <td class="nowrap mono">
+              {{ row.open_jobs }}
+              {% for job in row.open_job_rows %}
+                <div class="form-help">
+                  <a href="{% url 'scm:maintenanceworkorder_detail' job.pk %}" class="mono">{{ job.number }}</a>
+                  <span class="badge {{ job.status_css }}">{{ job.get_status_display }}</span>
+                  <span class="badge {{ job.priority_css }}">{{ job.get_priority_display }}</span>
+                </div>
+              {% endfor %}
+            </td>
+            <td class="nowrap mono">
+              {% comment %}
+                meter_reading is None when the asset has never been read on its PRIMARY meter — an em
+                dash, never 0, which would read as a brand-new machine. meter_name / meter_unit are
+                legitimately empty strings on an asset with no meter configured.
+              {% endcomment %}
+              {% if row.meter_reading %}
+                {{ row.meter_reading.reading }}{% if row.meter_unit %} {{ row.meter_unit }}{% endif %}
+                <div class="form-help">
+                  {% if row.meter_name %}{{ row.meter_name }} · {% endif %}{{ row.meter_reading.read_at|date:"M d, Y" }}
+                </div>
+              {% else %}
+                —
+                {% if row.meter_name %}
+                  <div class="form-help">{{ row.meter_name }} — never read</div>
+                {% else %}
+                  <div class="form-help">No meter configured</div>
+                {% endif %}
+              {% endif %}
+            </td>
+            {% comment %} warranty_chip is a plain 2-tuple: .0 label, .1 theme.css class. {% endcomment %}
+            <td><span class="badge {{ row.warranty_chip.1 }}">{{ row.warranty_chip.0 }}</span></td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'scm:asset_detail' row.asset.pk %}" class="btn-icon" title="Open the asset record"><i data-lucide="eye"></i></a>
+                {% if row.monitor %}
+                  <a href="{% url 'scm:coldchainmonitor_profile' row.monitor.pk %}" class="btn-icon" title="Temperature profile for this probe"><i data-lucide="activity"></i></a>
+                {% endif %}
+                <a href="{% url 'scm:maintenanceworkorder_list' %}?asset={{ row.asset.pk }}" class="btn-icon" title="Work orders on this unit"><i data-lucide="wrench"></i></a>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="10">
+              <div class="empty-state">
+                <i data-lucide="truck"></i>
+                <h3>No reefer matches</h3>
+                <p>
+                  A unit appears on this board once it is an <span class="fw-600">asset with an active
+                  cold-chain monitor</span> pointed at it — there is no “reefer” flag to tick, deliberately.
+                  Either nothing matches the filters above, or no monitor has been deployed against an asset
+                  yet. Clear the filters, check the
+                  <a href="{% url 'scm:asset_list' %}">asset register</a>, or
+                  <a href="{% url 'scm:coldchainmonitor_create' %}">deploy a monitor</a> onto the unit you
+                  want watched.
+                </p>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How each column is worked out</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Reefer</dt><dd>An asset that has at least one cold-chain monitor in the <span class="fw-600">active</span> status pointed at it. Retire the monitor and the unit leaves this board on the next load — no flag to remember to clear.</dd></div>
+        <div class="detail-item"><dt>Latest temperature</dt><dd>The newest reading on the unit's own probe, with the monitor's verdict beside it. A dash means the probe has not reported, which is not the same as a cold trailer.</dd></div>
+        <div class="detail-item"><dt>Setpoint gap</dt><dd>Latest temperature minus what the unit was <em>told</em> to hold. Blank when there is no recorded setpoint or no reading; 0.00 means exactly on setpoint and still prints.</dd></div>
+        <div class="detail-item"><dt>Breaching now</dt><dd>An episode with no end time — the cargo is outside its limits at this moment. Different from “awaiting triage”, which counts episodes that still need a person whether or not they have stopped.</dd></div>
+        <div class="detail-item"><dt>Preventive programme</dt><dd>The worst due state across the unit's active plans, from Asset Management's own due arithmetic — calendar, meter or condition, whichever arrives first. <span class="fw-600">“No PM plan” is a finding</span>, not a compliant machine.</dd></div>
+        <div class="detail-item"><dt>Open jobs</dt><dd>Work orders on this asset that are requested, approved, scheduled, in progress or on hold. Raised, worked and closed on Asset Management's own pages.</dd></div>
+        <div class="detail-item"><dt>Meter</dt><dd>The newest reading on the asset's <em>primary</em> meter. Readings logged under another meter name are deliberately not substituted — running hours handed to a plan measured in kilometres would schedule a service roughly never.</dd></div>
+        <div class="detail-item"><dt>Warranty</dt><dd>Asset Management's own warranty chip. “Not recorded” is its own muted state and never green.</dd></div>
+      </dl>
+      <p class="text-muted">
+        <span class="fw-600">There is no edit, no delete and no verb on this board.</span> Every record it
+        shows belongs to another part of the system — the asset, its plans, its jobs and its meter to Asset
+        Management, the probe and its episodes to cold chain — and this page only assembles the view. Follow
+        the links to act on any of them.
+      </p>
+      <p class="text-muted">
+        The whole board costs nine flat queries no matter how many units are on it: the active probes, the
+        assets, the probes' newest readings, the running episodes, the outstanding triage counts, the plans,
+        the plans' primed meter readings, the open jobs and the assets' own meter log. Not one of them runs
+        per row.
+      </p>
+    </div>
+  </div>
+{% endblock %}
