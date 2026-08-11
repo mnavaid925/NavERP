@@ -54,7 +54,9 @@ from across a room. badge-success / badge-warning / badge-danger DO NOT EXIST in
     <div class="page-actions">
       <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Shifts</a>
       <a href="{% url 'scm:laborstandard_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> Standards</a>
-      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Scorecard</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Scorecard</a>
+      {% endif %}
     </div>
   </div>
 
