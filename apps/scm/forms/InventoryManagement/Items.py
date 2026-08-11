@@ -30,5 +30,11 @@ class ItemForm(TenantUniqueMixin, TenantModelForm):
         # storeroom page (`views/AssetManagement/Reports.py` `sparepart_list`). Without it on this
         # whitelist no tenant user could ever flag a part, so that page would be permanently empty
         # outside `seed_scm` and the Django admin — a live feature reachable only by staff.
+        # `storage_condition` is 4.15's temperature class and is here for exactly that reason: it is
+        # the SOLE selector for the Cold Storage Inventory report (`scm:cold_storage_report`), whose
+        # own empty state tells the admin to "set the class on your items" and links back to this
+        # page. Off the whitelist that instruction is unfollowable and four of the report's five
+        # sections stay permanently empty.
         fields = ["sku", "name", "category", "uom", "item_type", "tracking", "costing_method",
-                  "standard_cost", "reorder_point", "is_spare_part", "description", "is_active"]
+                  "standard_cost", "reorder_point", "is_spare_part", "storage_condition",
+                  "description", "is_active"]
