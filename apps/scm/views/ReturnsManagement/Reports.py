@@ -46,7 +46,8 @@ import datetime
 from django.http import Http404
 
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.views._helpers import _date_window, _item_qs, _location_qs
+from apps.scm.views._helpers import (_customer_portal_access, _date_window, _item_qs,
+                                     _location_qs)
 from apps.scm.forms._common import _customer_parties
 from apps.scm.models._base import q2
 from apps.scm.models import (CREDIT_BEARING_DISPOSITIONS, ReturnAuthorization, ReturnDisposition,
@@ -346,19 +347,12 @@ def return_portal(request):
 
 
 # ============================================================= (a) the logged-in customer request
-def _customer_portal_access(request):
-    """The active ``crm.CustomerPortalAccess`` for the logged-in portal user, or None.
-
-    Re-used verbatim from ``crm.views.CustomerService.CustomerPortal`` rather than reimplemented —
-    a second copy of an authorisation rule is a second place for it to be wrong. Local import: SCM
-    does not import CRM at module scope.
-    """
-    if not request.user.is_authenticated:
-        return None
-    from apps.crm.models import CustomerPortalAccess
-    return (CustomerPortalAccess.objects
-            .filter(portal_user=request.user, tenant=request.tenant, is_active=True)
-            .select_related("customer_party").first())
+# `_customer_portal_access` used to be defined right here. It now lives in
+# `apps/scm/views/_helpers.py` and is imported at the top of this module, because 4.16's customer
+# portal needs the same resolver and this file's own docstring already said why that matters: *a
+# second copy of an authorisation rule is a second place for it to be wrong*. Two sub-modules now
+# share exactly one copy, which is what `_helpers.py` is for (Backend Package Structure rule 5).
+# Behaviour is unchanged — the promoted function is byte-identical apart from a fuller docstring.
 
 
 @login_required
