@@ -190,6 +190,15 @@ theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted
     </div>
   </div>
 
+  {% comment %}
+    The board's table has to sit inside a .card like every other table in 4.15. `.table-wrap` supplies
+    ONLY overflow-x — the border, the shadow and the margin come from `.card`, and `.table thead th`
+    paints itself `var(--card-bg)` while tbody does not. Bare at block level the header strip rendered
+    over a differently-coloured page in dark mode and the rows floated frameless, which is the one
+    table on this sub-module that looked like a bug. The report pages next door (the compliance
+    report's three blocks) use exactly this shape: a card of its own around the table-wrap.
+  {% endcomment %}
+  <div class="card">
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -387,6 +396,7 @@ theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted
         {% endfor %}
       </tbody>
     </table>
+  </div>
   </div>
 
   <div class="card">
