@@ -88,7 +88,9 @@ string, so nothing appended to the URL rides along into the download link.
       {% endcomment %}
       <a href="{% url 'scm:labor_payroll_export' %}?format=csv{% if export_qs %}&amp;{{ export_qs }}{% endif %}"
          class="btn btn-primary"><i data-lucide="download"></i> Download CSV</a>
-      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Productivity Scorecard</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Productivity Scorecard</a>
+      {% endif %}
       <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Labour Sessions</a>
     </div>
   </div>
@@ -114,6 +116,15 @@ string, so nothing appended to the URL rides along into the download link.
       </div>
     </div>
     <div class="card-body">
+      {% comment %}
+        WHOSE rows these are, said before the table rather than left to be inferred. This page names
+        people, so a member sees only their own figures while a workspace administrator sees
+        everyone; without this line a picker would see one row and reasonably conclude the warehouse
+        employs one person.
+      {% endcomment %}
+      {% if scope_note %}
+        <p class="text-muted"><i data-lucide="user-round"></i> <span class="fw-600">{{ scope_note }}</span></p>
+      {% endif %}
       <p class="text-muted">{{ approved_only_note }}</p>
       <p class="text-muted">{{ no_writes_note }}</p>
     </div>
