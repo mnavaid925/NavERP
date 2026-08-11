@@ -184,8 +184,23 @@ def _detail(pk):
 # the form carries minute precision (its widget's format is `%Y-%m-%dT%H:%M`), so the two agree; a
 # row imported with seconds on it could differ by under a minute per activity. The badge printed on
 # the row is always the model's own figure — this expression decides membership, never the number.
-_ATTENDED_SPAN = models.ExpressionWrapper(F("clock_out") - F("clock_in"),
-                                          output_field=models.DurationField())
+#: Wrapped in ``Max`` — and it has to be, which is not obvious. ``_BOOKED_SPAN`` below is a ``Sum``,
+#: so annotating the pair puts a GROUP BY on the query; comparing a NON-aggregate expression against
+#: an aggregate then pushes that expression into the HAVING clause, and MariaDB refuses a HAVING that
+#: names a column which is neither grouped nor aggregated:
+#:     OperationalError (1054): Unknown column 'scm_laborsession.clock_in' in 'having clause'
+#: i.e. a hard 500 on ``?gap=has_gap`` and ``?gap=over_booked`` — the filter's only two real values,
+#: on the page the sidebar's "Time & Attendance" bullet points at. (MySQL 8 would have allowed it via
+#: functional-dependency detection; MariaDB does not, so this is one of the cases where the dev
+#: database's engine decides the query.)
+#: The GROUP BY is on ``scm_laborsession.id``, so every row in a group belongs to ONE session and its
+#: clock window is constant across that group — ``Max`` of a constant is that constant. The figure is
+#: therefore identical to the plain expression, and it is now legal in a HAVING clause.
+_ATTENDED_SPAN = models.Max(
+    models.ExpressionWrapper(F("clock_out") - F("clock_in"),
+                             output_field=models.DurationField()),
+    output_field=models.DurationField(),
+)
 #: Coalesce is load-bearing rather than tidy: a session with NO activities aggregates to NULL, and
 #: `attended > NULL` is NULL, so the shift that is 100% gap time — the single most actionable row on
 #: the page — would be the one row the "unaccounted time" filter dropped.
