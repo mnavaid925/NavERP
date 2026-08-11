@@ -505,21 +505,24 @@ def temperatureexcursion_create(request):
 
 @login_required
 def temperatureexcursion_edit(request, pk):
-    """Edit the TRIAGE half only — severity, assessment, cause, action, notes and the three links.
+    """Edit the TRIAGE half only — severity, cause, action, notes and the three links.
 
-    The form is a whitelist of exactly those nine fields; every detector-written column is
+    The form is a whitelist of exactly those seven fields; every detector-written column is
     ``editable=False`` on the model, so a crafted POST naming one cannot reach ``cleaned_data``. The
     whitelist is the second lock, not the only one.
 
-    **Refused once the episode is CLOSED or DISMISSED.** ``EDITABLE_EXCURSION_STATUSES`` is
-    ``("open", "investigating")``: once an episode is assessed the verdict is the record, and an
-    editable record is not one. The refusal is a message plus a redirect to the detail page, not a
-    403 — the row is legitimately visible, it simply cannot be rewritten.
+    **``assessment`` is NOT one of the seven.** This view is ``@login_required`` while
+    ``temperatureexcursion_assess`` is ``@tenant_admin_required``, so a field for it here was a
+    member's route to marking product released for sale — with no ``assessed_by`` / ``assessed_on``
+    signature on the decision. ``TemperatureExcursion.assess()`` is the only writer of that column,
+    and the form's whitelist is what makes that true.
 
-    Note the asymmetry with ``assess``: the ASSESSED status is reached through the ``assess`` verb,
-    which stamps ``assessed_by`` / ``assessed_on``. Reaching it through this form would record a
-    verdict with no signature on it, which is why ``assessment`` being on this form does NOT move the
-    status.
+    **Refused once the episode is CLOSED or DISMISSED.** ``EDITABLE_EXCURSION_STATUSES`` is
+    ``("open", "investigating", "assessed")``: the terminal pair is where the record stops being
+    rewritable, and an assessed episode is deliberately still editable so the non-conformance the
+    verdict points at can be linked afterwards without reopening the release decision (which this
+    form can no longer touch anyway). The refusal is a message plus a redirect to the detail page,
+    not a 403 — the row is legitimately visible, it simply cannot be rewritten.
 
     Context: ``form``, ``obj``, ``is_edit`` (``True``), ``snapshot_note``, ``triage_note``.
     """
