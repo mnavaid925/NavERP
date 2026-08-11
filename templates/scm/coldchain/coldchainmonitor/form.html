@@ -8,9 +8,20 @@ and ::coldchainmonitor_edit, both through the crud_* helpers. Everything this pa
   form                            ColdChainMonitorForm — a WHITELIST of exactly 22 fields
   is_edit                         False on create, True on edit
   obj                             the ColdChainMonitor on the EDIT path only, so every use of it
-                                  below is guarded by is_edit and never rendered bare
+                                  below is guarded by is_edit and never rendered bare. Only its own
+                                  COLUMNS are read here — no related manager, no FK hop
+  subject_label                   str, EDIT path only — the view joins the three subjects so this
+                                  page never triggers a lazy FK fetch to print one line
+  has_readings                    bool, EDIT path only — one tenant-scoped EXISTS, asked in the view.
+                                  It is what freezes the three subject pointers below
   storage_condition_ranges_note   str — the temperature-class pre-fill is a SUGGESTION
   subject_rule_note               str — the exactly-one-subject rule, printed ABOVE the three FKs
+
+THIS PAGE ISSUES NO QUERIES OF ITS OWN (house rule 9). It previously ran four: two unbounded COUNTs
+over TemperatureReading/TemperatureExcursion for a decorative pair of figures, a lazy subject fetch
+and an EXISTS — all through related managers, which state no tenant and so cannot open the indexes
+that lead on it. The counts were removed rather than moved: the monitor's detail page reports both,
+and this is a form.
 
 FIELDS ARE RENDERED BY NAME so they can be grouped, which couples this page to the form's whitelist:
 Meta.fields is those 22 names and nothing else, and ALL 22 appear below. A field added to the model
@@ -57,11 +68,29 @@ their save cannot drift apart.
         <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
       </div>
       <div class="card-body">
+        {% comment %}
+          NO DB WORK HERE. This block used to render obj.subject_label, obj.readings.count,
+          obj.excursions.count and obj.readings.exists — four queries fired by the template, two of
+          them unbounded COUNTs over the fastest-growing table in the sub-module, none of them able
+          to state a tenant through the related manager and therefore none able to open the index
+          that leads on it. `subject_label` and `has_readings` now arrive from the view, joined and
+          scoped; the two counts are gone, because they were decoration on a form and the monitor's
+          own detail page reports both properly. Do not put a `.count` back on this page.
+        {% endcomment %}
         <dl class="detail-grid">
           <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
-          <div class="detail-item"><dt>Watching</dt><dd>{{ obj.subject_label }}</dd></div>
-          <div class="detail-item"><dt>Readings on file</dt><dd class="mono">{{ obj.readings.count }}</dd></div>
-          <div class="detail-item"><dt>Excursions recorded</dt><dd class="mono">{{ obj.excursions.count }}</dd></div>
+          <div class="detail-item"><dt>Watching</dt><dd>{{ subject_label }}</dd></div>
+          <div class="detail-item">
+            <dt>What it watches</dt>
+            <dd>
+              {% if has_readings %}
+                <span class="badge badge-slate">Frozen</span>
+              {% else %}
+                <span class="badge badge-info">Still re-pointable</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item"><dt>Full history</dt><dd><a href="{% url 'scm:coldchainmonitor_detail' obj.pk %}">Readings and excursions on the monitor record</a></dd></div>
         </dl>
         <div class="form-help">A monitor stays editable at <span class="fw-600">every</span> status, deliberately: it describes a live configuration that gets renamed, re-banded and re-calibrated, and a retired deployment is often the row that most needs correcting. Nothing an edit can reach is a derived figure — in range, in the warning band, still reporting, calibration due, the open episode and the setpoint drift have no columns at all, so there is nothing here for a form to restate. The one thing an edit <em>cannot</em> do is re-point what this monitor watches once readings exist.</div>
       </div>
@@ -104,7 +133,11 @@ their save cannot drift apart.
         </div>
         <div class="form-help">
           These are three typed pointers and never one polymorphic id, because a bare integer carries neither a workspace nor a type and can point at a deleted or cross-tenant row. A cold room <span class="fw-600">is</span> a Location and a reefer <span class="fw-600">is</span> an Asset — there is no parallel cold-room or reefer master anywhere in this module, so the stock ledger and the maintenance history already hanging off those rows stay the single copy.
-          {% if is_edit and obj.readings.exists %}
+          {% comment %}
+            `has_readings` from the view, not obj.readings.exists — same answer, but asked once, with
+            the tenant stated, instead of by the template on every draw.
+          {% endcomment %}
+          {% if is_edit and has_readings %}
             <br><span class="badge badge-slate">Frozen</span> This monitor already has readings, so the three pointers can no longer be changed and a save that moves one is refused. Last quarter's "in range 99.4% of the time" must not silently become a statement about a different cold room. Retire this deployment and start a new one instead.
           {% endif %}
         </div>
