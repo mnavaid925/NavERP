@@ -327,6 +327,7 @@ from .LaborManagement._choices import (  # noqa: F401
     DIRECT_ACTIVITIES,
     INDIRECT_ACTIVITIES,
     INDIRECT_REASON_CHOICES,
+    MAX_ACTIVITIES_PER_SESSION,
     MAX_ACTIVITY_MINUTES,
     MAX_ALLOWANCE_PCT,
     MAX_BULK_ASSIGN,
@@ -467,8 +468,11 @@ from .CustomerPortal._choices import (  # noqa: F401
     SHARE_DOC_TYPE_CSS,
     SHARE_DOC_TYPE_FIELDS,
     SHARE_POINTER_FIELDS,
+    STOCK_BAND_CSS,
+    STOCK_BAND_LABELS,
     STOCK_DISPLAY_CHOICES,
     THRESHOLD_STOCK_DISPLAYS,
+    stock_band,
 )
 from .CustomerPortal.PortalAccounts import (  # noqa: F401
     PortalAccount,
