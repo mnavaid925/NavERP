@@ -66,6 +66,9 @@ e-signature, and over-claiming is worse than the gap.
 from datetime import datetime, time, timedelta
 
 from django.db.models import ProtectedError
+# `reverse` rather than a hand-built path: the detect sweep's redirect carries a `?after=` cursor, and
+# a url name resolved through the URLconf cannot drift the way a literal string would.
+from django.urls import reverse
 
 from apps.scm.views._common import *  # noqa: F401,F403
 from apps.scm.views._helpers import _location_qs, _need_tenant, _report_window
@@ -455,6 +458,12 @@ def _detect_message(request, summary):
     temperature limit can never be in or out of range, which is a configuration gap somebody has to
     be told about (the 4.11 "an alert with no threshold" finding), and a capped sweep that said
     nothing would look like a sweep that found nothing.
+
+    **The two caps are told apart because they are continued differently**, and saying the wrong one
+    is worse than saying nothing. A READING cap heals itself: each pass advances the watermark, so
+    pressing again genuinely continues that monitor. A MONITOR cap does not — the sweep is ordered by
+    id, so a cursor-less re-run walks the same first page again. That one is continued by the
+    ``after`` cursor this view puts on the redirect and the list page posts back.
     """
     parts = [f"{summary['opened']} opened", f"{summary['extended']} updated",
              f"{summary['closed']} closed"]
@@ -465,11 +474,18 @@ def _detect_message(request, summary):
             f"{summary['skipped']} active monitor(s) were skipped because they carry no temperature "
             "limit at all — without one, nothing can ever be in or out of range. Set at least an "
             "upper or a lower limit on each.")
-    if summary.get("more_remain"):
+    if summary.get("more_monitors"):
         messages.info(
             request,
-            "There is more to walk than one pass covers — run Detect again to continue from where "
-            "this one stopped.")
+            f"There are more monitors than one pass covers — this one stopped after monitor "
+            f"#{summary.get('last_monitor_id')}. Run Detect again on the page you land on: the "
+            "button carries a cursor and picks up at the next monitor rather than re-walking these.")
+    elif summary.get("more_remain"):
+        messages.info(
+            request,
+            "One monitor holds more unwalked readings than a single pass covers — run Detect again "
+            "to continue from where this one stopped. Each pass moves the watermark forward, so the "
+            "next one starts at the first reading this one did not reach.")
 
 
 # =================================================================================================
@@ -703,14 +719,35 @@ def coldchainmonitor_edit(request, pk):
     snapshotted when it fired, so the incident can end. Judging an extension against the snapshot
     would leave it open forever after a legitimate re-band.
 
-    Context: ``form``, ``obj``, ``is_edit`` (``True``), plus the same two notes as the create page.
+    Context: ``form``, ``obj``, ``is_edit`` (``True``), the same two notes as the create page, plus
+    ``subject_label`` (str) and ``has_readings`` (bool) — **both computed HERE, because the template
+    may not ask the database** (house rule 9). The page used to render ``obj.subject_label``,
+    ``obj.readings.count``, ``obj.excursions.count`` and ``obj.readings.exists`` itself: two of those
+    are unbounded ``COUNT``s over the highest-volume table in the sub-module (~17,500 rows per
+    monitor per year), they fired on every draw of the form for a decorative figure the detail page
+    already reports, and going through the related manager states no ``tenant`` — so they could not
+    open ``scm_tmp_tnt_mon_idx``, whose LEADING column it is (the rule ``latest_reading()`` states in
+    as many words). The two counts are gone from the page; the one fact the FORM needs is
+    ``has_readings``, asked as a tenant-scoped ``EXISTS`` that stops at the first row.
+
+    The monitor is fetched here with its three subjects joined so ``subject_label`` costs no lazy FK
+    query either. ``crud_edit`` fetches its own copy — one primary-key hit, and the price of leaving
+    the shared helper alone.
     """
+    monitor = get_object_or_404(
+        ColdChainMonitor.objects.select_related("location", "asset", "shipment"),
+        pk=pk, tenant=request.tenant)
+    # `tenant=` is REDUNDANT AND LOAD-BEARING — the same line every reader of this table owes.
+    has_readings = (TemperatureReading.objects
+                    .filter(tenant=request.tenant, monitor_id=monitor.pk).exists())
     return crud_edit(request, model=ColdChainMonitor, pk=pk, form_class=ColdChainMonitorForm,
                      template="scm/coldchain/coldchainmonitor/form.html",
                      success_url="scm:coldchainmonitor_list",
                      extra_context={
                          "storage_condition_ranges_note": STORAGE_PREFILL_NOTE,
                          "subject_rule_note": SUBJECT_RULE_NOTE,
+                         "subject_label": monitor.subject_label,
+                         "has_readings": has_readings,
                      })
 
 
@@ -1016,12 +1053,23 @@ def coldchain_detect(request):
     All the audit rows, the row locks and the merge-not-duplicate rule live in
     ``coldchain.detect_excursions()`` — this view resolves the tenant, calls it once and renders its
     summary. **It writes nothing itself.**
+
+    **The sweep is CURSORED.** An optional ``after`` in the POST body (a monitor id, read through
+    ``as_db_int`` so junk skips the cursor rather than raising) is handed straight to the service as
+    ``after=``; when the pass stops on the monitor cap, the redirect carries the last examined id
+    back as ``?after=…`` and the list page's Detect button posts it on the next press. Without that
+    round trip every press re-walks the same first ``MAX_MONITORS_PER_SWEEP`` monitors and the ones
+    past the cap are reachable only through their own per-monitor button.
     """
     if _need_tenant(request):
         return redirect("scm:coldchainmonitor_list")
-    summary = coldchain.detect_excursions(request.tenant, user=request.user)
+    summary = coldchain.detect_excursions(
+        request.tenant, user=request.user, after=as_db_int(request.POST.get("after")))
     _detect_message(request, summary)
-    return redirect("scm:temperatureexcursion_list")
+    target = reverse("scm:temperatureexcursion_list")
+    if summary.get("more_monitors") and summary.get("last_monitor_id"):
+        target = f"{target}?after={summary['last_monitor_id']}"
+    return redirect(target)
 
 
 @tenant_admin_required
