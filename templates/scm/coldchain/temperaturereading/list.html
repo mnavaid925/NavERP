@@ -17,11 +17,12 @@ returns crud_list(...). Everything this page may read, and nothing else:
                                actually applied rather than whatever was typed into the address bar
   date_from / date_to          the RAW GET strings, echoed back into the two date inputs so a
                                rejected value stays visible instead of silently vanishing
-  window_from / window_to      the dates actually applied — either can be None when the page is
-                               monitor-scoped with no dates at all
-  window_defaulted             bool — nobody named a monitor or a date, so the last `window_days`
-                               days were applied. The page SAYS so: a silent default is
-                               indistinguishable from a page that ignored the request
+  window_from / window_to      the dates actually applied — either can be None when only ONE end
+                               was given; they are never both None, because the page is always
+                               windowed (?monitor= narrows the rows, it does not bound them)
+  window_defaulted             bool — no usable date was given, so the last `window_days` days were
+                               applied. The page SAYS so: a silent default is indistinguishable
+                               from a page that ignored the request
   window_days                  int
   append_only_note             str, printed verbatim
 
@@ -116,14 +117,18 @@ compares against the RESOLVED `band` variable; monitor is a PK and compares with
       <div class="form-help">
         {% if window_defaulted %}
           <span class="badge badge-info">Showing the last {{ window_days }} days</span>
-          Nobody named a monitor or a date, so the page applied its default window rather than scanning the whole ledger — this is the fastest-growing table in the sub-module, roughly 17,500 rows per monitor per year at a 30-minute interval. Choose a monitor or a date range to look further back.
+          No date was given, so the page applied its default window rather than paging over the whole ledger — this is the fastest-growing table in the sub-module, roughly 17,500 rows per monitor per year at a 30-minute interval. Picking a monitor narrows the rows but does not bound them, so the window still applies; set a date range to look further back.
         {% elif window_from or window_to %}
           Windowed
           {% if window_from %}from <span class="fw-600">{{ window_from|date:"M d, Y" }}</span>{% endif %}
           {% if window_to %}to <span class="fw-600">{{ window_to|date:"M d, Y" }}</span>{% endif %}
           — both ends are <span class="fw-600">inclusive of the whole day</span>, so a reading taken at 16:00 on the closing date is inside the window somebody asked for. A date that cannot be read skips the filter rather than refusing the page, and a "from" later than a "to" is treated as a typo and swapped.
-        {% else %}
-          Scoped to one monitor with no date range, so this is that deployment's whole history, newest first.
+        {% comment %}
+          No {% else %}: with the window applied to the monitor-scoped path too, window_defaulted
+          false implies at least one usable end, so the {% elif %} above always fires. The branch
+          that used to say "this is that deployment's whole history" described a page that no
+          longer exists.
+        {% endcomment %}
         {% endif %}
         The <span class="fw-600">band</span> filter is arithmetic rather than a column — each row is judged against <em>its own</em> monitor's limits, because this list legitimately spans many monitors with different bands. A reading from a monitor with no limits at all falls into neither bucket, which is the honest answer: it cannot be inside or outside a band that does not exist.
       </div>
