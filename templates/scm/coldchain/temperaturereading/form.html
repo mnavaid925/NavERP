@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.15 Cold Chain Management — file ONE interval summary against one monitor, by hand.
+
+Renders apps/scm/views/ColdChainManagement/TemperatureReadings.py::coldchainmonitor_add_reading.
+Everything this page may read, and nothing else:
+
+  form               TemperatureReadingForm — a WHITELIST of exactly seven fields:
+                     reading_at, temperature, humidity_pct, min_temperature, max_temperature,
+                     sample_count, notes
+  is_edit            ALWAYS False. There is no edit route into this template and there is no
+                     temperaturereading_edit view anywhere — the ledger is append-only. This page
+                     therefore does NOT branch on it: a create/edit conditional here would imply a
+                     path that does not exist and cannot be reached
+  monitor            the ColdChainMonitor from the ROUTE — never from the POST body
+  interval_minutes   int — the weight that will be snapshotted onto the row
+  provenance_note / append_only_note   strs, printed verbatim
+
+FIELDS ARE RENDERED BY NAME, which couples this page to the form's whitelist: Meta.fields is those
+seven names and nothing else, and all seven are below.
+
+FOUR THINGS ARE DELIBERATELY ABSENT AND MUST NOT BE ADDED:
+
+  monitor            comes from the URL. A parent pk in a POST body is how a caller grafts a reading
+                     onto somebody else's cold room — and this child's rows ARE that workspace's
+                     compliance figures
+  interval_minutes   snapshotted from the monitor. A weight a user can retype is not a snapshot, and
+                     editing the monitor's logging interval next month must not re-weight last
+                     month's arithmetic
+  source             stamped by the verb that files the row. A member must not be able to forge a
+                     system-filed reading by posting source=sensor_api onto a record that ends up in
+                     an audit pack
+  recorded_by        likewise stamped, from the signed-in user's own party record
+
+`reading_at` is rendered through the form's OWN widget (via partials/form_field.html) and never as a
+hand-written <input>. That widget is a DateTimeInput carrying type="datetime-local" AND
+format="%Y-%m-%dT%H:%M" together, and both halves are load-bearing: the type without the format
+renders an EMPTY box for a stored value, because a datetime-local control cannot parse Django's
+default rendering.
+
+Every rule the notes below describe is enforced by TemperatureReading.clean() — the future-date
+refusal, the interval-statistics bracket and the no-predate-deployment rule — plus the
+(monitor, reading_at) uniqueness at the database. None of them is enforced here, so the words
+somebody reads and the validation that refuses their save cannot drift apart.
+{% endcomment %}
+{% block title %}File a reading · {{ monitor.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">File a reading on {{ monitor.number }}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:coldchainmonitor_list' %}">Cold Chain Monitors</a><span class="sep">›</span><a href="{% url 'scm:coldchainmonitor_detail' monitor.pk %}">{{ monitor.number }}</a><span class="sep">›</span><span>File a reading</span></div>
+    <p class="text-muted">One interval summary, typed by a person — the supervisor walking a cold store with a thermometer, or somebody transcribing a mechanical chart. The monitor is taken from the page you came from and is not a field on this form, because a parent that can be named in a post body is a parent somebody else's data can be filed against.</p>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filing against {{ monitor.name }}</h2>
+      <span class="badge {{ monitor.status_css }}">{{ monitor.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Monitor</dt><dd class="fw-600 mono">{{ monitor.number }}</dd></div>
+        <div class="detail-item"><dt>Watching</dt><dd>{{ monitor.subject_label }}</dd></div>
+        {% comment %}
+          A ONE-SIDED band is legitimate, so each side is tested for None on its own and a blank side
+          prints "none" rather than 0.00 — 0 °C is a real limit somebody may have set.
+        {% endcomment %}
+        <div class="detail-item">
+          <dt>Limits it will be judged against</dt>
+          <dd class="mono">
+            {% if monitor.min_temperature is not None %}{{ monitor.min_temperature|floatformat:2 }}{% else %}<span class="text-muted">no lower</span>{% endif %}
+            <span class="text-muted">to</span>
+            {% if monitor.max_temperature is not None %}{{ monitor.max_temperature|floatformat:2 }}{% else %}<span class="text-muted">no upper</span>{% endif %}
+            °C
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Weight that will be stamped</dt><dd class="mono">{{ interval_minutes }} min</dd></div>
+        <div class="detail-item"><dt>Deployed</dt><dd class="mono">{{ monitor.deployed_on|date:"M d, Y"|default:"Not recorded" }}</dd></div>
+        <div class="detail-item"><dt>Readings on file</dt><dd class="mono">{{ monitor.readings.count }}</dd></div>
+      </dl>
+      <div class="form-help">This row will weigh <span class="fw-600">{{ interval_minutes }} minutes</span> in every duration and mean-kinetic-temperature figure derived from it, snapshotted from the monitor at the moment it is filed. That is not a field you can set: a hot hour has to count as an hour rather than as "one row", and re-weighting last month by editing a setting today would restate figures that have already been reported.</div>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="form-help">Filing a whole logger download instead? <a href="{% url 'scm:coldchainmonitor_import_readings' monitor.pk %}" class="fw-600">Import a file</a> — it takes thousands of rows at once, skips and counts anything it cannot read, and re-uploading the same file cannot double the series.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The measurement</h2>
+        <span class="badge badge-info">Date and time, not just a date</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.reading_at %}
+          {% include "partials/form_field.html" with field=form.temperature %}
+          {% include "partials/form_field.html" with field=form.humidity_pct %}
+        </div>
+        <div class="form-help">
+          The timestamp is the <span class="fw-600">end of the interval this row summarises</span> and it is deliberately not defaulted to now: a defaulted "now" would file an imported logger row under the moment of the upload, turning a back-dated journey into a claim that the whole thing happened during the import. <span class="fw-600">Back-dating is supported and expected</span>; post-dating is refused, because a future row sorts to the top of an append-only log and becomes "the current value" for a store that has not reached it yet.
+        </div>
+        <div class="form-help">
+          Temperature is <span class="fw-600">signed</span> — minus eighteen is the normal operating point of half of this module — and it is required, never defaulted. A blank temperature is not filed as 0 °C anywhere in this sub-module, on this form or in the importer: zero is a perfectly plausible temperature, so a substituted zero would read as a measurement somebody took, which is the worst thing that can happen to a record that ends up in an audit pack. Humidity is optional and most probes do not report it; leaving it blank records that fact rather than claiming bone-dry air.
+          {% if monitor.deployed_on %}
+            <br>This deployment started on <span class="fw-600">{{ monitor.deployed_on|date:"M d, Y" }}</span>, and a reading dated before then is refused — on a re-usable logger such a row belongs to an <em>earlier</em> deployment, and filing it here would attribute another consignment's journey to this one.
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Interval statistics</h2>
+        <span class="badge badge-slate">Optional — a single sample has no extremes</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.min_temperature %}
+          {% include "partials/form_field.html" with field=form.max_temperature %}
+          {% include "partials/form_field.html" with field=form.sample_count %}
+        </div>
+        <div class="form-help">
+          Leave both extremes blank for a reading you took once with a thermometer — that is a single sample and it genuinely has no minimum or maximum, which is a different statement from having one of 0 °C. If you do fill them in they have to <span class="fw-600">bracket</span> the representative value: the minimum cannot be warmer than the reading and the maximum cannot be colder. The two are checked <em>independently</em>, so a logger that reports only a maximum is perfectly legal — refusing it would push somebody into inventing a minimum.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes and provenance</h2>
+        <span class="badge badge-slate">Provenance is stamped, never typed</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <p class="text-muted" style="margin-top:.9rem;">{{ provenance_note }}</p>
+        <p class="text-muted" style="margin-top:.75rem;">
+          A reading filed here is stamped <span class="fw-600">manual entry</span>, attributed to your own party record, and weighted at the monitor's current logging interval. None of the three is on this form, and that is the mechanism rather than an omission — a source somebody can choose would let a hand-keyed row claim to have come from a sensor that never saw the goods.
+        </p>
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="fw-600">One interval summary per moment per monitor.</span> Re-typing a timestamp that already exists is refused with a message rather than silently doubling the series — the same rule that makes re-uploading a logger file a safe no-op. If a reading is wrong, file the correct one at a later timestamp: nothing here is ever edited, and the monitor always reads the newest row, so the correction is believed immediately.
+        </p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> File the reading</button>
+      <a href="{% url 'scm:coldchainmonitor_detail' monitor.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-body text-muted">{{ append_only_note }}</div>
+  </div>
+{% endblock %}
