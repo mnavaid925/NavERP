@@ -4,6 +4,7 @@ Helpers used by MORE THAN ONE sub-module/entity live here; anything used by a si
 that entity's own view module (mirrors apps/accounting/views/_helpers.py).
 """
 import datetime
+from collections import namedtuple
 
 from apps.scm.views._common import *  # noqa: F401,F403
 
@@ -447,9 +448,15 @@ def _status_transition(request, model, pk, detail, *, from_statuses, to_status, 
             setattr(obj, field, value)
             fields.append(field)
         obj.save(update_fields=list(dict.fromkeys(fields)))
+        # INSIDE the transaction, with the row still locked. Outside it, a failure between the
+        # commit and this line leaves a status change with no trail — and on this helper that is a
+        # shift approved, a plan signed off or a work order closed with nothing recording who did it.
+        # Every hand-rolled destructive verb in 4.13 and 4.14 already writes its audit row inside its
+        # own atomic block; this shared helper was the one that did not, and it now governs three
+        # ladders across two sub-modules.
+        write_audit_log(request.user, obj, "update",
+                        {"action": action, "status": to_status, **(audit or {})})
 
-    write_audit_log(request.user, obj, "update",
-                    {"action": action, "status": to_status, **(audit or {})})
     messages.success(request, message or f"{obj.number} {verb}.")
     return detail(pk)
 
@@ -513,3 +520,125 @@ def _report_window(data, default_from, default_to):
             "date_from_raw": raw_from, "date_to_raw": raw_to,
             "window_invalid": invalid,
             "period_label": f"{date_from:%d %b %Y} to {date_to:%d %b %Y}"}
+
+
+# ---------------------------------------------------------------------------------------------
+# Customer-portal identity — the resolver 4.10 and 4.16 share.
+#
+# Before either sub-module may show a logged-in customer anything, both answer the same two
+# questions: WHICH customer is this user, and is their portal switched on? 4.10's
+# `portal_return_create` needs the first; 4.16's whole gated `portal/` surface needs both. One
+# implementation lives here because a second copy of an authorisation rule is a second place for it
+# to be wrong — and the copy that gets missed is the one that keeps serving data after the rule
+# changes (Backend Package Structure rule 5: helpers used by more than one sub-module live here).
+# ---------------------------------------------------------------------------------------------
+def _customer_portal_access(request):
+    """The active ``crm.CustomerPortalAccess`` for the logged-in portal user, or ``None``.
+
+    ``CustomerPortalAccess.portal_user`` is a ``OneToOneField`` on the user
+    (``apps/crm/models/CustomerService/CustomerPortalAccess.py:12``) and is THE customer-login
+    binding for the whole application — neither 4.10 nor 4.16 declares a second one. Two bindings
+    could disagree about *which party this user is*, and that is an authorisation bug by
+    construction rather than one testing would surface.
+
+    The ``tenant=request.tenant`` term is part of the credential check, not a convenience filter: a
+    login re-pointed at another workspace must not resolve an access row from the old one. An
+    anonymous visitor takes ``request.tenant = None`` from ``TenantMiddleware``
+    (``apps/core/middleware.py:26``) and the FK is NOT NULL, so that term alone already matches
+    nothing — the ``is_authenticated`` guard is what stops ``filter(portal_user=AnonymousUser)``
+    from raising before it gets there.
+
+    Local import: SCM does not import CRM at module scope.
+    """
+    if not request.user.is_authenticated:
+        return None
+    from apps.crm.models import CustomerPortalAccess
+    return (CustomerPortalAccess.objects
+            .filter(portal_user=request.user, tenant=request.tenant, is_active=True)
+            .select_related("customer_party").first())
+
+
+#: What a resolved portal visitor IS: their CRM login binding, the ``core.Party`` it names, and the
+#: 4.16 ``PortalAccount`` that configures what they may see. Three names rather than one so no
+#: portal page has to re-derive (or re-query) any of them.
+_PortalContext = namedtuple("_PortalContext", "access party account")
+
+
+def _portal_account(request):
+    """Resolve a logged-in user to their portal identity. Returns ``(portal, refusal)``.
+
+    Exactly one of the pair is ever set: on success ``(_PortalContext(access, party, account),
+    None)``; on refusal ``(None, <redirect response>)`` with the reason already flashed. Callers
+    open with::
+
+        portal, refusal = _portal_account(request)
+        if refusal is not None:
+            return refusal
+
+    **The pair shape is the point.** The refusal is BUILT here, not left to the caller, so every
+    portal page refuses identically and a page cannot half-refuse — flash a message and then carry
+    on with an unscoped queryset. A caller that ignores the second element gets an ``AttributeError``
+    on a tuple at the first attribute access, which is a loud failure; the shape this replaces
+    (return the account or ``None``) fails QUIETLY, by scoping a query to ``None``.
+
+    **Why each step refuses rather than falls through** — ``apps/crm/views/CustomerService/
+    CustomerPortal.py:31`` states it for the case list: *"WARNING: without this,
+    Q(account=None)|Q(contact=None) would match every unlinked case in the tenant — leaking cases to
+    a misconfigured portal account."* The same shape is waiting in every 4.16 portal page: a party of
+    ``None`` turns "this customer's own orders / documents / invoices" into a filter on NULL, which
+    for an OR-composed or nullable-FK lookup is not "nothing" — it is "everybody's". One
+    misconfigured access row (an operator saved it before picking the customer) is all it takes, so
+    the party must be REFUSED, never merely absent.
+
+    The chain, in order, and what each step means:
+
+    1. ``crm.CustomerPortalAccess`` (active) — the credential. No row, inactive row, or anonymous
+       user means this user is not a portal user at all.
+    2. ``access.customer_party`` — the identity. See the WARNING above.
+    3. ``scm.PortalAccount`` (active, this tenant, this party) — the ENTITLEMENT, and it is
+       explicit per-customer opt-in: a customer with a CRM portal login but no ``PortalAccount`` row
+       has not been switched on for the supply-chain portal, and is refused rather than shown a
+       default projection. That refusal is what makes the staff enablement console meaningful.
+       ``is_active`` sits IN the lookup, so deactivating an account kills its portal in one save
+       instead of relying on every page to remember to check the flag.
+
+    ``PortalAccount`` carries ``unique_together ("tenant", "customer")``, so ``.first()`` is exact
+    rather than "one of several". ``select_related("customer")`` because every portal page renders
+    the customer's name and it is the row we already filtered on.
+
+    ``request.tenant`` is safe to use for step 3 without a None check: step 1 only resolves when the
+    access row's NOT NULL tenant equals it, so reaching here proves it is set.
+
+    A missing ``PortalAccount`` and a deactivated one take the SAME message on purpose. The
+    difference is internal configuration, the remedy is identical ("contact support"), and one
+    message is one less thing that has to stay true.
+
+    **This helper answers WHO and IS-THE-PORTAL-ON — it does not answer MAY-THEY-SEE-THIS.** The
+    per-surface entitlements (``can_track_shipments`` / ``can_view_invoices`` /
+    ``can_view_documents`` / ``can_raise_inquiries`` / ``can_request_returns`` /
+    ``show_credit_and_balance``) are still each page's own check. Do not read a successful resolve
+    as a blanket authorisation.
+
+    Local import of ``PortalAccount``: kept inside the function like every other model reference in
+    this module, so the helper module stays importable independently of model-import order.
+    """
+    access = _customer_portal_access(request)
+    if access is None:
+        messages.error(request, "You don't have customer portal access.")
+        return None, redirect("dashboard:home")
+
+    party = access.customer_party
+    if party is None:
+        messages.error(request, "Your portal account has no linked customer — contact support.")
+        return None, redirect("dashboard:home")
+
+    from apps.scm.models import PortalAccount
+    account = (PortalAccount.objects
+               .filter(tenant=request.tenant, customer=party, is_active=True)
+               .select_related("customer").first())
+    if account is None:
+        messages.error(request, "The customer portal isn't enabled for your account — "
+                                "contact support.")
+        return None, redirect("dashboard:home")
+
+    return _PortalContext(access=access, party=party, account=account), None
