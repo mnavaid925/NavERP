@@ -352,9 +352,23 @@ MAX_STANDARD_RATE = Decimal("100000")
 #: The trap this exists to close: ``q4()`` looks like it already bounds the value, and it does, but
 #: to the *other* column shape in this app — ``DecimalField(14, 4)``, i.e. TEN integer digits. So a
 #: figure that passes ``q4()`` can still be two orders of magnitude too wide for the column it is
-#: about to be written into, and the failure is a ``DataError`` raised by the driver inside
-#: ``save()`` — an uncaught 500 on the sub-module's primary write path, not a validation message.
-#: Reaching it takes only a large ``quantity``, which the form accepts up to ``MAX_Q4``.
+#: about to be written into. Reaching it takes only a large ``quantity``, which the form accepts all
+#: the way up to ``MAX_Q4``.
+#:
+#: **What an over-range value actually DOES depends on the server's ``sql_mode``, and the difference
+#: matters more than it looks.** With ``STRICT_TRANS_TABLES`` the driver raises ``DataError`` — an
+#: uncaught 500 on this sub-module's primary write path, loud and obvious. WITHOUT it — and the XAMPP
+#: MariaDB this project develops against runs
+#: ``NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION``, i.e. **not strict**, which
+#: ``manage.py check`` warns about as ``mysql.W002`` — the value is **SILENTLY TRUNCATED to the
+#: column maximum with no error and no warning**. Verified on the dev database: 100000000.9999 went
+#: in and 99999999.9999 came out, ``SHOW WARNINGS`` empty.
+#:
+#: The silent case is the worse one, which is why the clamp is not merely defensive. A 500 tells
+#: somebody the number was refused; a truncation hands a supervisor an earned-minutes figure for a
+#: named person that is quietly wrong, on a page whose entire purpose is to be trusted. Clamping in
+#: Python means the value is bounded the same way on every engine and every ``sql_mode``, instead of
+#: depending on a server setting nobody in the application can see.
 #:
 #: It lives here rather than beside either writer because there are TWO writers of this column
 #: shape — the activity's ``_earned_from_snapshots()`` and the plan generator — and a bound that is
