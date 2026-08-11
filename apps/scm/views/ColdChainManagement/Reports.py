@@ -462,9 +462,10 @@ def cold_chain_compliance_report(request):
     1. ``excursions`` — the episode log for the window, with **the limits that were in force when
        each one fired** snapshotted onto the row. That is why the record still reads correctly next
        year after somebody legitimately re-bands the fridge.
-    2. ``calibration_rows`` — every monitor's certificate state. ``not_recorded`` is its own bucket
-       and never green: an uncalibrated sensor invalidates every record it produced, and "we never
-       wrote the certificate down" is a different finding from "it is in date".
+    2. ``calibration_rows`` — the register's certificate state, **sliced to :data:`MAX_REPORT_ROWS`**
+       and ordered due-date-first so the findings are at the top of the cap. ``not_recorded`` is its
+       own bucket and never green: an uncalibrated sensor invalidates every record it produced, and
+       "we never wrote the certificate down" is a different finding from "it is in date".
     3. ``profiles`` — per-monitor % time in range and MKT over the window, from
        ``coldchain.profile()``. **Capped at :data:`MAX_PROFILED_MONITORS`** because each profile is
        two bounded queries plus a row walk; the page says it capped and points at ``?monitor=``.
@@ -476,7 +477,9 @@ def cold_chain_compliance_report(request):
     ``excursions_truncated`` (bool), ``excursion_count`` (int), ``stats`` (a dict of ints:
     ``total`` / ``reportable`` / ``open`` / ``critical`` / ``product_affected`` / ``dismissed``),
     ``calibration_rows`` (a LIST of dicts: ``monitor``, ``chip`` a ``(label, css)`` 2-tuple,
-    ``days`` int-or-**``None``**), ``calibration_stats`` (ints: ``ok`` / ``due`` / ``overdue`` /
+    ``days`` int-or-**``None``**), ``calibration_truncated`` (bool — the register is SLICED to
+    ``row_cap`` like every other block, and ``calibration_stats`` therefore counts what is listed),
+    ``calibration_stats`` (ints: ``ok`` / ``due`` / ``overdue`` /
     ``not_recorded``), ``profiles`` (a LIST of dicts: ``monitor`` plus the whole
     ``coldchain.profile()`` result under ``profile`` — **``pct_in_range`` and ``mkt`` are ``None``
     on an empty window and ``mkt`` is ``None`` for every frozen monitor; render an em dash plus
@@ -552,12 +555,25 @@ def cold_chain_compliance_report(request):
         monitor_qs = monitor_qs.filter(pk=monitor_pk)
     # `nulls_last` so "no certificate recorded" sorts to the bottom rather than to the top as the
     # most urgent thing on the page — it IS a finding, but it is not an overdue date.
-    monitors = list(monitor_qs.order_by(F("calibration_due_on").asc(nulls_last=True), "name"))
+    #
+    # SLICED like every other block on this page (L40 §1). Unbounded, this was the one query here
+    # that fetched the whole register: a workspace with a few thousand probes built a model instance,
+    # a `<tr>` AND a CSV line for every one of them, on a GET any signed-in user can open. The cap
+    # bounds what is FETCHED, `+ 1` detects that it bit, and the page SAYS so rather than quietly
+    # presenting a window as the total — the same shape the excursion log above uses.
+    monitors = list(monitor_qs.order_by(F("calibration_due_on").asc(nulls_last=True),
+                                        "name")[:MAX_REPORT_ROWS + 1])
+    calibration_truncated = len(monitors) > MAX_REPORT_ROWS
+    del monitors[MAX_REPORT_ROWS:]
     calibration_rows = [{
         "monitor": monitor,
         "chip": monitor.calibration_chip(today),
         "days": monitor.days_to_calibration_due(today),
     } for monitor in monitors]
+    # Counted over the rows actually LISTED, like `stats["reportable"]` above. The ordering is what
+    # makes that safe to read: `calibration_due_on` ascending puts every overdue certificate at the
+    # top of the cap, so the finding is never the thing that falls off the end — only the "in date"
+    # tail is, and `calibration_truncated` tells the reader the tally describes a window.
     calibration_stats = {"ok": 0, "due": 0, "overdue": 0, "not_recorded": 0}
     for row in calibration_rows:
         days = row["days"]
@@ -589,6 +605,7 @@ def cold_chain_compliance_report(request):
         "stats": stats,
         "calibration_rows": calibration_rows,
         "calibration_stats": calibration_stats,
+        "calibration_truncated": calibration_truncated,
         "profiles": profiles,
         "profiles_truncated": len(monitors) > len(profiled),
         "profiled_cap": MAX_PROFILED_MONITORS,
@@ -671,7 +688,10 @@ def _compliance_csv(context):
             ]
         yield []
 
-        yield ["Monitor calibration"]
+        # Written from the SAME capped list the page renders — a file that leaves the building has to
+        # say when it is a window, exactly as the profile block below already does.
+        yield ["Monitor calibration",
+               f"first {context['row_cap']} monitors" if context["calibration_truncated"] else ""]
         yield ["Monitor", "Name", "Watches", "Status", "Calibrated on", "Due on", "Days left",
                "Certificate", "State"]
         for row in context["calibration_rows"]:
@@ -751,9 +771,9 @@ def reefer_board(request):
 
     ``pm_due`` and ``range`` are applied in PYTHON, after the rows are built, and that is a
     deliberate exception to the "filter before pagination" rule with a reason: **this board is not
-    paginated.** It is bounded instead by there being one row per monitored asset — a workspace has
-    tens of reefers, not thousands — and the header chips have to describe the same set the table
-    shows (the ``pm_forecast`` posture). ``due_status()`` also consults the meter and condition axes,
+    paginated.** It is bounded instead by the :data:`MAX_REPORT_ROWS` SLICE on the asset query — one
+    row per monitored asset, capped, with ``truncated`` saying when the cap bit — and the header chips
+    have to describe the same set the table shows (the ``pm_forecast`` posture). ``due_status()`` also consults the meter and condition axes,
     which no ``WHERE`` clause on ``next_due_on`` can see: a plan comes due because the MACHINE moved.
 
     **Context**, exhaustively: ``rows`` (below), ``row_count`` (int), ``truncated`` (bool),
@@ -791,10 +811,11 @@ def reefer_board(request):
     ``scm:coldchainmonitor_detail`` — the record lives in the module that owns it, and this board
     only assembles the view.
 
-    QUERIES: one for the active monitors, one for the assets, one for the monitors' latest readings,
-    one for the open episodes, one grouped count for the open triage, one for the plans, one for the
-    plans' primed readings, one for the open jobs and one for the assets' own meter readings. NINE,
-    flat — not one of them per row.
+    QUERIES: one for the assets (the "is it a reefer?" test rides along as a correlated ``EXISTS``
+    rather than a fetch, so the SLICE bounds the row set), one for those assets' active monitors, one
+    for the monitors' latest readings, one for the open episodes, one grouped count for the open
+    triage, one for the plans, one for the plans' primed readings, one for the open jobs and one for
+    the assets' own meter readings. NINE, flat — not one of them per row.
     """
     tenant = request.tenant
     today = timezone.localdate()
@@ -812,29 +833,49 @@ def reefer_board(request):
         range_bucket = ""
 
     # --- who is a reefer ---------------------------------------------------------------------------
-    monitor_qs = (ColdChainMonitor.objects
-                  .filter(tenant=tenant, status="active", asset__isnull=False)
-                  .select_related("asset"))
-    if q:
-        monitor_qs = monitor_qs.filter(
-            Q(asset__code__icontains=q) | Q(asset__name__icontains=q)
-            | Q(name__icontains=q) | Q(device_serial__icontains=q) | Q(number__icontains=q))
-    monitors = list(monitor_qs.order_by("asset_id", "name", "id"))
+    # DERIVED ASSET-FIRST, and that direction is the whole point. Reading the monitors first meant
+    # fetching every active probe in the workspace to discover a hundred assets — a 3PL with 4,000
+    # probes built 4,000 instances and then handed a 4,000-element `pk__in` to the asset query, all to
+    # render 100 rows. `Exists` asks the same question ("does this asset have a live probe?") without
+    # materialising the answer, so the SLICE is what bounds the fetch (L40 §1, and this file's own
+    # rule at the top).
+    active_monitors = ColdChainMonitor.objects.filter(
+        tenant=tenant, status="active", asset_id=OuterRef("pk"))
+    # `q` spans two tables, so it splits: the asset's own columns stay on the asset row, the probe's
+    # go into a second correlated EXISTS. The union is exactly what the single monitor-side `Q` used
+    # to mean — an asset appears if IT matches or if any of its live probes does.
+    monitor_match = (Q(name__icontains=q) | Q(device_serial__icontains=q)
+                     | Q(number__icontains=q))
 
-    monitors_by_asset = {}
-    for monitor in monitors:
-        monitors_by_asset.setdefault(monitor.asset_id, []).append(monitor)
-    asset_ids = list(monitors_by_asset)
-
-    assets_qs = (Asset.objects.filter(tenant=tenant, pk__in=asset_ids)
+    assets_qs = (Asset.objects.filter(tenant=tenant)
                  .select_related("location", "custodian")
-                 .annotate(newest_reading_pk=_asset_newest_reading_case(tenant)))
+                 .annotate(newest_reading_pk=_asset_newest_reading_case(tenant))
+                 .filter(Exists(active_monitors)))
+    if q:
+        assets_qs = assets_qs.filter(
+            Q(code__icontains=q) | Q(name__icontains=q)
+            | Exists(active_monitors.filter(monitor_match)))
     if criticality:
         assets_qs = assets_qs.filter(criticality=criticality)
     assets = list(assets_qs.order_by("code")[:MAX_REPORT_ROWS + 1])
     truncated = len(assets) > MAX_REPORT_ROWS
     del assets[MAX_REPORT_ROWS:]
     asset_ids = [asset.pk for asset in assets]
+
+    # NOW the probes, for the ≤ `row_cap` assets that survived. The `q` clause is restated here so a
+    # row still lists the probes the search meant: an asset matched by its OWN code keeps all of its
+    # monitors, an asset matched only by a serial lists that probe — the same per-row content the
+    # monitor-first version produced, over a bounded `asset_id__in`.
+    monitors_by_asset = {}
+    if asset_ids:
+        monitor_qs = (ColdChainMonitor.objects
+                      .filter(tenant=tenant, status="active", asset_id__in=asset_ids)
+                      .select_related("asset"))
+        if q:
+            monitor_qs = monitor_qs.filter(
+                Q(asset__code__icontains=q) | Q(asset__name__icontains=q) | monitor_match)
+        for monitor in monitor_qs.order_by("asset_id", "name", "id"):
+            monitors_by_asset.setdefault(monitor.asset_id, []).append(monitor)
     monitor_ids = [monitor.pk for asset_id in asset_ids
                    for monitor in monitors_by_asset.get(asset_id, [])]
 
