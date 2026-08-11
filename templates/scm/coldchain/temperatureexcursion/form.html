@@ -16,7 +16,7 @@ blanks a column on every save.
                     <select> itself is the form's own field and is rendered from the form)
 
   EDIT — ::temperatureexcursion_edit, through crud_edit
-    form            TemperatureExcursionForm: severity, assessment, cause, corrective_action, notes,
+    form            TemperatureExcursionForm: severity, cause, corrective_action, notes,
                     non_conformance, maintenance_work_order, lot_serial
     obj             the TemperatureExcursion
     is_edit         True
@@ -37,11 +37,12 @@ form. Excursion status is workflow state moved only by the four verbs on the det
 which validates the transition it is making; a monitor's status is user-owned lifecycle with exactly
 one writer. Do not "fix" either one to match the other.
 
-`assessment` is on the EDIT form but NOT on the create form, and that asymmetry is the point:
-recording a product verdict stamps the assessor and the moment, and stamping a signature as a side
-effect of creating a row is exactly what the Assess verb exists to prevent. Note also that setting it
-on the edit form does not move the status — reaching "assessed" that way would record a verdict with
-nobody's name on it.
+`assessment` IS ABSENT FROM BOTH TOO, and this is the one absence with a permission behind it.
+Recording a product verdict stamps the assessor and the moment, and the Assess verb that stamps it is
+tenant-admin gated because releasing or rejecting product is a privileged decision. This page is only
+@login_required, so a field for it here — on either path — was a way for any member to mark product
+released for sale with nobody's name and no date on the decision, on a form that does not move the
+status either. TemperatureExcursion.assess() is the only writer of that column; do not put it back.
 
 started_at / ended_at are rendered through the form's OWN widgets (via partials/form_field.html) and
 never as hand-written inputs: each is a DateTimeInput carrying type="datetime-local" AND
@@ -171,9 +172,13 @@ affected-product-needs-an-action rule and the open-episode clash check — and n
         {% endif %}
         <div class="form-grid">
           {% include "partials/form_field.html" with field=form.severity %}
-          {% if is_edit %}
-            {% include "partials/form_field.html" with field=form.assessment %}
-          {% endif %}
+          {% comment %}
+            The PRODUCT ASSESSMENT is deliberately not on this form, on either path. This page is
+            reachable by any member while the Assess button on the record's own page is tenant-admin
+            gated, so a field here was a way to mark product released for sale with nobody's name and
+            no date on the decision. It is written only by the Assess verb, which stamps who decided
+            and when.
+          {% endcomment %}
           {% include "partials/form_field.html" with field=form.cause %}
           {% include "partials/form_field.html" with field=form.corrective_action %}
           {% include "partials/form_field.html" with field=form.notes %}
@@ -189,7 +194,7 @@ affected-product-needs-an-action rule and the open-episode clash check — and n
         </div>
         {% if is_edit %}
           <div class="form-help">
-            <span class="fw-600">The product assessment on this form does not move the status.</span> Reaching <em>assessed</em> is the job of the Assess button on the record's own page, because that path stamps who decided and when — and a verdict with no signature on it is not a verdict. Marking product <span class="fw-600">affected</span> still requires either a corrective action written here or a linked non-conformance: an affected-product verdict with neither is a note rather than an audit record.
+            <span class="fw-600">The product assessment is not on this form at all.</span> It is recorded by the Assess button on the record's own page, which stamps who decided and when — and a verdict with no signature on it is not a verdict. That button is restricted to workspace administrators because releasing or rejecting product is a privileged decision, so a copy of the field on this page (which anybody may open) would be a way around the restriction. Marking product <span class="fw-600">affected</span> there still requires either a corrective action or a linked non-conformance: an affected-product verdict with neither is a note rather than an audit record.
           </div>
         {% endif %}
       </div>
