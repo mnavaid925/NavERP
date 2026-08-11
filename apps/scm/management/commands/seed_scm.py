@@ -4377,7 +4377,10 @@ class Command(BaseCommand):
             objects = []
             for back in range(step_count - 1, -1, -1):
                 moment = end - datetime.timedelta(minutes=step * back)
-                temperature = overrides.get(back) or baseline[back % len(baseline)]
+                # `.get(back, default)` and NOT `.get(back) or default` — the falsy-zero trap this
+                # whole sub-module exists to prevent. An override of Decimal("0.00") is an ordinary
+                # chilled temperature, and `or` would silently swap it for the baseline value.
+                temperature = overrides.get(back, baseline[back % len(baseline)])
                 row = TemperatureReading(
                     tenant=tenant, monitor=monitor, reading_at=moment,
                     temperature=temperature,
