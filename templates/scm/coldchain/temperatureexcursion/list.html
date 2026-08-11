@@ -58,11 +58,19 @@ badge-warning / badge-danger do not exist and render unstyled (L33).
       {% comment %}
         Detect is POST-only (@tenant_admin_required @require_POST) — a GET is a 405, so this is a
         real form and can never be a link.
+
+        `after` is the SWEEP CURSOR and is the reason a second press is not a repeat of the first.
+        One pass examines at most MAX_MONITORS_PER_SWEEP monitors in id order; when it stops on that
+        cap the view redirects here with `?after=<last monitor id>`, and this hidden field posts it
+        straight back so the next press continues at the following monitor. Without it monitor 501
+        would be reachable only from its own detail page. A workspace under the cap never sees the
+        parameter at all, and a junk value is dropped by `as_db_int` in the view.
       {% endcomment %}
       {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'scm:coldchain_detect' %}" onsubmit="return confirm('Sweep every active monitor for new, extended and closed excursions?');">
           {% csrf_token %}
-          <button class="btn btn-outline" type="submit"><i data-lucide="radar"></i> Run detection</button>
+          {% if request.GET.after %}<input type="hidden" name="after" value="{{ request.GET.after }}">{% endif %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="radar"></i> {% if request.GET.after %}Continue detection{% else %}Run detection{% endif %}</button>
         </form>
       {% endif %}
       <a href="{% url 'scm:temperatureexcursion_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> File an excursion</a>
@@ -279,10 +287,12 @@ badge-warning / badge-danger do not exist and render unstyled (L33).
                 <div class="table-actions">
                   <a href="{% url 'scm:temperatureexcursion_detail' row.obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% comment %}
-                    is_editable is ("open", "investigating") and reads `status` alone, so it costs no
-                    query. Once an episode is assessed, closed or dismissed the verdict IS the
+                    is_editable is ("open", "investigating", "assessed") and reads `status` alone, so
+                    it costs no query. Once an episode is closed or dismissed the verdict IS the
                     record and the edit view redirects straight back with a message — the link would
-                    be a one-click failure.
+                    be a one-click failure. An ASSESSED one is still editable on purpose: an
+                    affected-product verdict has to be able to gain the non-conformance 4.9 acts on,
+                    and the assessment itself is not on that form at all.
                   {% endcomment %}
                   {% if row.obj.is_editable %}
                     <a href="{% url 'scm:temperatureexcursion_edit' row.obj.pk %}" class="btn-icon" title="Edit the triage block"><i data-lucide="pencil"></i></a>
