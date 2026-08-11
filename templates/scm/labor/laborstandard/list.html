@@ -64,7 +64,9 @@ quote and the dialog breaks.
       <p class="text-muted">A standard is how long one unit of one activity is <span class="fw-600">expected</span> to take, in one scope, over one date range — and it is the keystone of the whole sub-module: without one, a labor module is a timeclock. Every performance figure downstream is <em>earned minutes over actual minutes</em>, and earned minutes come from exactly one formula: <span class="mono">(setup + travel + qty × per-unit) × (1 + allowance%)</span>. Nothing on this page measures anything on its own — only an <span class="fw-600">active</span> standard whose window covers today is ever selected.</p>
     </div>
     <div class="page-actions">
-      <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="trophy"></i> Scorecard</a>
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+  <a href="{% url 'scm:labor_scorecard' %}" class="btn btn-outline"><i data-lucide="trophy"></i> Scorecard</a>
+      {% endif %}
       <a href="{% url 'scm:labor_board' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Labor Board</a>
       <a href="{% url 'scm:laborsession_list' %}" class="btn btn-outline"><i data-lucide="clock"></i> Sessions</a>
       <a href="{% url 'scm:laborstandard_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Standard</a>
