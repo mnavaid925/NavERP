@@ -454,9 +454,9 @@ tamper-evident record. Over-claiming is worse than the gap.
       <p class="text-muted" style="margin-top:.75rem;">
         {% if not can_edit %}
           <span class="badge badge-slate">Triage frozen</span>
-          Once an excursion is assessed, closed or dismissed its human block can no longer be edited: the verdict <em>is</em> the record, and an editable record is not one. The measured block was never editable at any status.
+          Once an excursion is closed or dismissed its human block can no longer be edited: the verdict <em>is</em> the record, and an editable record is not one. The measured block was never editable at any status.
         {% else %}
-          The edit form reaches the <span class="fw-600">triage block only</span> — severity, the assessment, the cause, the action, the notes and the three links out. Not one measured column appears on it, and none can: they are all read-only on the model, so a crafted post naming one has nowhere to land. Note also that changing the assessment on that form does <em>not</em> move the status, because reaching "assessed" that way would record a verdict with no signature on it — the Assess button above is what stamps one.
+          The edit form reaches the <span class="fw-600">triage block only</span> — severity, the cause, the action, the notes and the three links out. Not one measured column appears on it, and none can: they are all read-only on the model, so a crafted post naming one has nowhere to land. The <span class="fw-600">product assessment is not on it either</span>: that decision is the Assess button above, which is restricted to workspace administrators and stamps who decided and when. An assessed excursion stays editable for exactly this reason — so the non-conformance the verdict points at can be linked afterwards, without the release decision itself ever being reachable from a form.
         {% endif %}
         {% if not can_delete %}
           {% if obj.is_episode_running %}
