@@ -417,8 +417,11 @@ class LaborActivity(TenantNumbered):
         # to be written into is DecimalField(12, 4), which holds EIGHT. So q4() alone is not the
         # bound it looks like: a quantity the form happily accepts (validated only up to MAX_Q4)
         # produces a figure two orders of magnitude too wide for the column, and the failure is a
-        # DataError raised by the driver inside save() — an uncaught 500 on this sub-module's
-        # primary write path, not a validation message a user could act on.
+        # what happens next depends on the server's sql_mode: STRICT_TRANS_TABLES raises DataError
+        # (an uncaught 500), and WITHOUT it — as on this project's XAMPP MariaDB, which manage.py
+        # check flags as mysql.W002 — the value is SILENTLY TRUNCATED to the column maximum, no
+        # error, no warning. The silent case is the worse one on a page that measures named people.
+        # See MAX_SNAPSHOT_MINUTES for the verified evidence.
         # Clamping rather than raising matches q4()'s own posture: a single absurd row degrades to
         # an absurd-but-storable number instead of taking down the save.
         return min(earned, MAX_SNAPSHOT_MINUTES)
