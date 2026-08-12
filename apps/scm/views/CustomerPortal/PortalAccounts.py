@@ -393,7 +393,20 @@ def portalaccount_list(request):
 
 
 # ======================================================================================= the CRUD
-@login_required
+# @tenant_admin_required, matching `_delete` below and CRM's `customerportalaccess_create`, whose
+# decorator comment reads "granting a customer a portal login that reads their cases is an IAM
+# action". This row decides more than that one does: `show_credit_and_balance` publishes the
+# workspace's AR balance, credit limit and payment terms to an outsider; `can_view_invoices`
+# publishes the invoice history; `stock_display="exact_quantity"` plus `show_by_location` publishes
+# per-warehouse quantities, which tells a competitor buying one pallet exactly where our position
+# sits; and `catalog_scope="all_active"` plus `price_basis` publishes the catalogue and prices.
+#
+# At plain `@login_required` any member of the workspace — a warehouse clerk, an intern — could set
+# all of that for any customer with no admin in the loop. The model's own help text says
+# `show_credit_and_balance` is "exposed only when someone deliberately turns them on"; until this
+# decorator, "someone" was anybody with a login. Gating DELETE while leaving CREATE and EDIT open
+# guarded the cheap half of the decision and left the expensive one open (L27).
+@tenant_admin_required
 def portalaccount_create(request):
     """Switch the portal on for one customer. This row IS the configuration — there is no lifecycle.
 
@@ -420,7 +433,10 @@ def portalaccount_create(request):
                        success_url="scm:portalaccount_list")
 
 
-@login_required
+# @tenant_admin_required for the same reason as `_create` above — and MORE so, because edit is the
+# verb that flips `show_credit_and_balance` from False to True on an account that already has a
+# bound, active portal login reading it.
+@tenant_admin_required
 def portalaccount_edit(request, pk):
     """Change what this customer sees. Every field on the form is editable, always.
 
@@ -517,9 +533,15 @@ def portalaccount_detail(request, pk):
     # the module-wide scoping rule mechanically, and PortalActivity's own Meta says its
     # (tenant, portal_account, created_at) index has tenant as the LEADING column — a query through
     # the related manager alone cannot open it and falls back to a filesort.
+    # Fetch MAX+1 and only pay for the COUNT when the slice actually hid something — otherwise the
+    # list length IS the count, and a round trip to learn what we already hold is a query for
+    # nothing. `portaldocumentshare_detail` already does it this way; this is that shape copied.
     recent_activity = list(obj.activities.filter(tenant=request.tenant)
-                           .select_related("user")[:MAX_PANEL_ROWS])
-    activity_count = obj.activities.filter(tenant=request.tenant).count()
+                           .select_related("user")[:MAX_PANEL_ROWS + 1])
+    activity_truncated = len(recent_activity) > MAX_PANEL_ROWS
+    del recent_activity[MAX_PANEL_ROWS:]
+    activity_count = (obj.activities.filter(tenant=request.tenant).count()
+                      if activity_truncated else len(recent_activity))
 
     live_shares = list(obj.document_shares.filter(_live_share_q(now), tenant=request.tenant)
                        [:MAX_PANEL_ROWS])
