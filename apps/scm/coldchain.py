@@ -170,17 +170,30 @@ def _decimal(value):
     This is the whole of Trap 1 in one function. ``Decimal(value or ZERO)`` (what ``q2``/``q4`` do)
     would turn a missing measurement into ``Decimal("0")``, and 0 °C is an ordinary reading. A value
     that cannot be read answers ``None`` and its caller skips the row.
+
+    **Non-finite values answer ``None`` too, and that guard is load-bearing rather than defensive.**
+    ``Decimal("nan")`` and ``Decimal("sNaN")`` CONSTRUCT cleanly and only raise ``InvalidOperation``
+    at the first ordering comparison — so without this, ``severity_for("nan", …)`` and
+    ``out_of_range("nan", …)`` did not answer wrongly, they RAISED, several frames below any caller
+    that could have handled it. ``Infinity`` is the quieter half: it compares fine, so it answered a
+    fabricated ``"critical"`` severity off a measurement that does not exist.
+
+    This is the same gap that was fixed in ``TemperatureReadingImportForm._parse_decimal`` after the
+    review pass found a crafted CSV cell 500-ing the import. **Fixing that instance and not grepping
+    for this sibling is what left it here** — the two functions are the sub-module's only two
+    string-to-``Decimal`` doors, and a rule that holds at one of them is not a rule.
     """
     if value is None:
         return None
     if isinstance(value, Decimal):
-        return value
+        return value if value.is_finite() else None
     if isinstance(value, str) and not value.strip():
         return None
     try:
-        return Decimal(str(value).strip())
+        parsed = Decimal(str(value).strip())
     except (InvalidOperation, ValueError, TypeError):
         return None
+    return parsed if parsed.is_finite() else None
 
 
 def _weight(row):
