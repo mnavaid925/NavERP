@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — the document share register (PDS-).
+
+Renders apps/scm/views/CustomerPortal/PortalDocumentShares.py::portaldocumentshare_list, which
+returns crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py) — page_obj.window drives the
+                               shared pagination partial
+  doc_type_choices             SHARE_DOC_TYPE_CHOICES (invoice / pod / packing_list / trade_document
+                               / contract / coa / statement / other)
+  state_choices                SHARE_STATE_CHOICES — the three DERIVED buckets, not a model
+                               vocabulary and never a column
+  portal_accounts              PortalAccount queryset for the pk dropdown (select_related customer)
+  state                        the RESOLVED bucket ("" when the param was absent or junk). The
+                               select binds its `selected` to THIS, never to request.GET.state, so
+                               ?state=soon shows "Any state" rather than a phantom pick that
+                               narrowed nothing
+  stats                        dict: live / expiring / expired / revoked / never_opened, counted
+                               over the WHOLE workspace rather than the filtered page
+  expiring_soon_days           the notice horizon the amber chip and the `expiring` count use
+
+Each ROW carries four annotations from _annotate_state() — grepped there, not guessed:
+  obj.share_state    "live" / "expired" / "revoked" — the same vocabulary the filter accepts
+  obj.expiring_soon  bool, only ever True on a row whose share_state is "live"
+  obj.state_label    the chip words ("Live" / "Expired" / "Revoked" / "Expires soon")
+  obj.state_css      the chip colour. RENDERED, never re-derived here: the filter's WHERE clause and
+                     these CASE expressions are built from the same three Q objects, so a row the
+                     filter puts in a bucket cannot wear a different bucket's chip. A template
+                     picking its own class is how one value ends up styled two ways on two pages.
+
+"Expires soon" is a REFINEMENT of live, never a fourth bucket — such a row still answers ?state=live,
+which is why the cell prints the lapse date underneath rather than a second badge.
+
+The type badge comes from the model's own lookup (obj.doc_type_css -> SHARE_DOC_TYPE_CSS), with an
+{% else %} back to get_doc_type_display. theme.css ships COLOUR-named badges only; badge-success /
+badge-warning / badge-danger do not exist and render completely unstyled (L33).
+
+# WARNING (security) — public_token is a bearer credential and is NOT on this page: not a column, not
+a tooltip, not a title= attribute, not a link. The view .defer()s it, so naming it here would
+silently re-query the one value nobody can rotate and put it into browser cache, screenshots and any
+proxy that logs response bodies. There is deliberately no "copy link" affordance either.
+
+Nothing in a row is a query: the view select_relateds portal_account + its customer and all six
+pointer columns (target_label walks whichever one is set). obj.shared_by is deliberately NOT rendered
+— it is outside that join list and would cost one query per row.
+
+Edit, Delete and Revoke are all @tenant_admin_required, so all three sit inside the house gate:
+showing a member a button they will 403 on is the 4.11 finding. Delete and Revoke are @require_POST
+and are real <form method="post"> elements with a csrf token.
+
+Only the system-generated PDS- number goes into either confirm string, and neither contains an
+apostrophe: an apostrophe or an interpolated user string is decoded by the HTML parser before the JS
+engine sees it, which silently disables the guard (L42).
+{% endcomment %}
+{% block title %}Document Shares{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Document Shares</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Document Shares</span></div>
+      <p class="text-muted">A share is a grant: one document, made retrievable by one portal account, until it lapses or somebody kills it. This is the only page in 4.16 that hands out a <span class="fw-600">file</span> rather than a projection of rows the customer already owns, so every line here is read access to another company's paperwork — and the two questions worth asking of it are <em>can this still be fetched</em> and <em>was it ever opened</em>. Both are answered below without ever printing the link itself.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Portal Accounts</a>
+      <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="history"></i> Activity Log</a>
+      <a href="{% url 'scm:portaldocumentshare_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Publish Document</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The five tiles are counted over the WHOLE workspace, not the filtered page — "3 expiring this
+    week" is a fact somebody has to act on, and a number that re-scoped itself as you browsed would
+    report all-clear the moment you filtered to one customer. stat-icon ships blue / green / orange /
+    purple / slate only; there is no red, so the row that needs acting on takes orange.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="link"></i></div>
+      <div class="stat-value">{{ stats.live }}</div>
+      <div class="stat-label">Live — fetchable right now by whoever holds the link</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock-alert"></i></div>
+      <div class="stat-value">{{ stats.expiring }}</div>
+      <div class="stat-label">Lapsing within {{ expiring_soon_days }} days — renew them or let them die on purpose</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="eye-off"></i></div>
+      <div class="stat-value">{{ stats.never_opened }}</div>
+      <div class="stat-label">Live and never once opened — either the link never reached them or they did not need it</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="calendar-x"></i></div>
+      <div class="stat-value">{{ stats.expired }}</div>
+      <div class="stat-label">Expired on their own — nothing to do to them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-off"></i></div>
+      <div class="stat-value">{{ stats.revoked }}</div>
+      <div class="stat-label">Killed by an admin — the download record survives the revocation</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Shares</h2>
+      <div class="badge-group">
+        {% if stats.expiring %}<span class="badge badge-amber">{{ stats.expiring }} expiring</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search PDS- number, title or customer…">
+        </div>
+        <div class="form-group">
+          <select name="doc_type" aria-label="Document type" class="form-select">
+            <option value="">All document types</option>
+            {% for val, label in doc_type_choices %}
+              <option value="{{ val }}" {% if request.GET.doc_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A pk filter, so the comparison is |stringformat:"d" — |slugify would agree only by
+            accident and would silently drop the selection on any pk it renders differently.
+          {% endcomment %}
+          <select name="portal_account" aria-label="Portal account" class="form-select">
+            <option value="">Every portal account</option>
+            {% for a in portal_accounts %}
+              <option value="{{ a.pk }}" {% if request.GET.portal_account == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.number }} · {{ a.customer }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `state` is the value the VIEW resolved, not the raw query string — ?state=soon narrowed
+            nothing and must show "Any state" here rather than a phantom selection. "Expires soon" is
+            deliberately absent from this list: it is a refinement of live, so it is reachable as
+            ?state=live and is not a fourth bucket.
+          {% endcomment %}
+          <select name="state" aria-label="State" class="form-select">
+            <option value="">Any state</option>
+            {% for val, label in state_choices %}
+              <option value="{{ val }}" {% if state == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">State</span> is a question about two nullable timestamps and the clock, not a stored column, and it must never become one: the answer changes by time passing, so a column would need something running every minute to keep it true — and it would go stale in the direction that says a dead link is live. A blank expiry means <span class="fw-600">no expiry</span>, which is what makes an old share worth hunting: a forwarded link outlives the person it was sent to. <span class="fw-600">Revoked</span> wins over an expiry that has also passed, because revocation is a deliberate act with a timestamp somebody may one day have to defend.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Share</th>
+            <th>Audience</th>
+            <th>Type</th>
+            <th>Target</th>
+            <th>Lifetime</th>
+            <th>State</th>
+            <th>Retrievals</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:portaldocumentshare_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                {% comment %}
+                  `title` is customer-typed and is printed escaped, never |safe. It is also the only
+                  string the customer ever sees for this row — the storage path is deliberately not
+                  rendered anywhere, on this page or theirs.
+                {% endcomment %}
+                <div class="text-muted">{{ obj.title }}</div>
+                <div class="form-help">Published {{ obj.created_at|date:"M d, Y H:i" }}</div>
+              </td>
+              <td>
+                <span class="mono">{{ obj.portal_account.number }}</span>
+                <div class="text-muted">{{ obj.portal_account.customer }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  The colour comes from the model's own lookup so this page and the detail page
+                  cannot style the same value two ways; the else-branch is the plain label rather
+                  than a guessed class.
+                {% endcomment %}
+                {% if obj.doc_type_css %}
+                  <span class="badge {{ obj.doc_type_css }}">{{ obj.get_doc_type_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_doc_type_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  target_label is the STAFF-side reference (the target's own number or name). Every
+                  pointer is SET_NULL, so a deleted target is a real state and returns "" — an em
+                  dash, never a blank cell, because "the record this grant pointed at is gone" is a
+                  different fact from "nothing here".
+                {% endcomment %}
+                {% if obj.target_label %}
+                  <span class="mono">{{ obj.target_label }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help">Target record deleted — the share and its evidence survive it</div>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  Both columns are nullable and each blank means something specific, so each is its
+                  own branch rather than a |default filter: no expiry is a permanent grant, and no
+                  revocation is simply a share nobody has killed.
+                {% endcomment %}
+                {% if obj.expires_at %}
+                  Expires {{ obj.expires_at|date:"M d, Y H:i" }}
+                {% else %}
+                  <span class="badge badge-amber">No expiry</span>
+                {% endif %}
+                {% if obj.revoked_at %}
+                  <div class="form-help">Revoked {{ obj.revoked_at|date:"M d, Y H:i" }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  state_label + state_css verbatim from the annotation. Nothing is derived here — see
+                  the header note. An expiring row wears the amber "Expires soon" words while its
+                  share_state stays `live`, so the line underneath states the bucket it still answers
+                  to rather than adding a second badge that would read like a fourth state.
+                {% endcomment %}
+                <span class="badge {{ obj.state_css }}">{{ obj.state_label }}</span>
+                {% if obj.expiring_soon %}
+                  <div class="form-help">Still live — lapses in under {{ expiring_soon_days }} days unless renewed</div>
+                {% endif %}
+              </td>
+              <td class="mono nowrap">
+                {% comment %}
+                  download_count is a non-nullable counter incremented in the database, so a real 0
+                  prints as 0 — here a zero is a fact (never fetched), not a missing measurement. The
+                  two timestamps beside it ARE nullable and take the em dash.
+                {% endcomment %}
+                {{ obj.download_count }} <span class="text-muted">retrieval{{ obj.download_count|pluralize }}</span>
+                {% if obj.first_viewed_at %}
+                  <div class="form-help">First opened {{ obj.first_viewed_at|date:"M d, Y H:i" }}</div>
+                  <div class="form-help">Last {% if obj.last_downloaded_at %}{{ obj.last_downloaded_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</div>
+                {% else %}
+                  <div class="form-help">Never opened</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portaldocumentshare_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    All three write paths are @tenant_admin_required. Edit is gated because
+                    `expires_at` is on its form and blanking it grants permanent access on a row only
+                    an admin may revoke — the two are halves of one control, so they sit behind one
+                    gate. Revoke and Delete are additionally @require_POST, so both are real forms
+                    with a csrf token rather than links.
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <a href="{% url 'scm:portaldocumentshare_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    {% comment %}
+                      Revoke is offered on anything not already revoked, including an expired share:
+                      expiry is not revocation, and killing a lapsed link is a legitimate, recorded
+                      act. The view is idempotent anyway — a second press updates 0 rows and says the
+                      first revocation is the one on the record.
+                    {% endcomment %}
+                    {% if obj.share_state != "revoked" %}
+                      <form method="post" action="{% url 'scm:portaldocumentshare_revoke' obj.pk %}" onsubmit="return confirm('Revoke {{ obj.number }}? The link stops resolving for everyone holding it, including anyone it was forwarded to, and a revoked share is indistinguishable from a wrong token. The download record is kept. This cannot be undone.');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Revoke"><i data-lucide="shield-off"></i></button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'scm:portaldocumentshare_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This is revoke PLUS the destruction of the evidence: the retrieval count and the dates it was opened go with the row, so a download can no longer be proved from it. Revoke instead if you only want access to stop.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="file-lock-2"></i>
+                  <h3>No document shares</h3>
+                  <p>Nothing in this workspace has been published to a customer, so no paperwork of ours is retrievable from outside it — which is the safe state, not a gap to fill. Publishing a document grants one portal account read access to one record until the expiry you set, and every retrieval after that is counted and dated on the row itself. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <span class="fw-600">Revoke, do not delete.</span> Revoking kills the link and keeps the three columns that make <em>we published that proof of delivery on the 3rd and they downloaded it on the 4th</em> defensible; deleting removes them with the row, which is why it sits on the same rung as revoking rather than a lower one. Neither this page nor the detail page prints the share link, and there is no copy-link button anywhere in the module: the token is a bearer credential nobody can rotate, and the customer reaches a live share through their own signed-in portal instead. Renewing a lapsed share is an edit to its expiry — the link itself never changes, so a customer who kept the old mail can use it again the moment the date moves.
+    </div>
+  </div>
+{% endblock %}
