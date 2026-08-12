@@ -688,10 +688,16 @@ def portalorderinquiry_detail(request, pk):
     # what is rendered) and taken newest-first so the slice keeps the RECENT end, then reversed in
     # Python so the page reads top-to-bottom like a conversation.
     from apps.crm.models import CaseComment
-    thread = (CaseComment.objects.filter(tenant_id=obj.tenant_id, case_id=obj.case_id)
-              .select_related("author").order_by("-created_at", "-id")[:MAX_THREAD_ROWS])
-    comments = list(reversed(list(thread)))
-    comment_count = CaseComment.objects.filter(tenant_id=obj.tenant_id, case_id=obj.case_id).count()
+    # MAX+1, so the COUNT is only paid for when the slice genuinely hid something — the
+    # `portaldocumentshare_detail` shape. Sliced newest-first then reversed in Python, because the
+    # newest N is what a thread wants and the database is the right place to take that slice.
+    thread = list(CaseComment.objects.filter(tenant_id=obj.tenant_id, case_id=obj.case_id)
+                  .select_related("author").order_by("-created_at", "-id")[:MAX_THREAD_ROWS + 1])
+    thread_truncated = len(thread) > MAX_THREAD_ROWS
+    del thread[MAX_THREAD_ROWS:]
+    comments = list(reversed(thread))
+    comment_count = (CaseComment.objects.filter(tenant_id=obj.tenant_id, case_id=obj.case_id).count()
+                     if thread_truncated else len(comments))
 
     return render(request, "scm/portal/portalorderinquiry/detail.html", {
         "obj": obj,
