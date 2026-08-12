@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — My Details (the GATED customer-facing profile page). READ-ONLY BY DESIGN.
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_profile (Portal.py:1283-1375). Everything
+this page may read, and nothing else — the view pins the same list in its module docstring at
+Portal.py:115-117:
+
+  addresses            core.Address queryset for THIS party, ordered kind then id ([] if no party)
+  contacts             core.ContactMethod queryset for THIS party, same ordering ([] if no party)
+  default_ship_to      the core.Address the account defaults to, or None
+  invoices             list of dicts — [] when can_view_invoices is off. Row keys below.
+  finance              dict, or None when show_credit_and_balance is off. Keys below.
+  account customer access
+  can_track_shipments can_view_invoices can_view_documents
+  can_raise_inquiries can_request_returns show_credit_and_balance
+
+ROW / DICT KEYS — read off the code that BUILDS them, not guessed from model fields. A wrong key
+resolves to empty and renders a silent em-dash on a 200 page, which is L41's whole point:
+
+  invoices row (built inline at Portal.py:1334-1339, NOT by a shared _rows helper):
+      obj           the accounting.Invoice (number kind issue_date due_date status total currency)
+      balance_due   Decimal — total minus CONFIRMED payment allocations only, already q2-clamped
+      is_open       bool — obj.status in Invoice.OPEN_STATUSES ("sent", "partial")
+
+  finance dict (built at Portal.py:1346-1353):
+      has_profile          bool — False is NORMAL. A customer with no accounting.CustomerProfile is
+                           a customer nobody has agreed terms with yet, not an error.
+      credit_limit         Decimal, or None when there is no profile
+      credit_on_hold       bool (False when there is no profile)
+      payment_terms        the accounting.PaymentTerm, or None
+      currency             the accounting.Currency, or None
+      outstanding_balance  Decimal, or None — and None means THERE ARE NO INVOICES, never "you owe
+                           nothing". Rendered as an em-dash. Note it is computed from the customer's
+                           open invoices whether or not has_profile is True, so the two are shown as
+                           separate facts rather than nested.
+
+WHY THERE IS NO EDIT AFFORDANCE ANYWHERE ON THIS PAGE. The view is read-only and says why: a
+customer silently re-pointing their own delivery address from a portal session is how a compromised
+login becomes a diverted pallet, so address maintenance stays a staff action with a person in it.
+There is no scm:portal_profile_edit route to link to, and no update_profile activity is ever written
+here. The page therefore carries no form, no POST, no CSRF token and no confirm() dialog — and the
+read-only posture is stated in visible copy on the money block rather than only in this comment, so
+a customer is not left hunting for a Save button that was never built.
+
+core.Address carries kind / line1 / city / country and NOTHING ELSE — there is no postal-code,
+county, state or line2 column (verified in apps/core/models/Address.py; already documented at 4.10
+and again on PortalAccount.default_ship_to). No column header, label or sentence below may imply one
+exists: naming a field we do not hold invites a customer to report it "missing" from an address that
+is complete.
+
+BADGES. core.Address and core.ContactMethod are foundation models with no *_css property, and
+_choices.py maps only the 4.16 vocabularies (SHARE_DOC_TYPE_CSS / INQUIRY_*_CSS / PORTAL_ACTION_CSS)
+— so the two kind badges below are mapped inline against the COLOUR-named classes theme.css actually
+ships, each with a final else branch falling back to badge-muted plus the model's own
+get_kind_display. The invoice status badge follows accounting's own convention from
+templates/accounting/receivable/invoice/list.html so one invoice is not styled two ways across the
+product. Only badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate exist;
+badge-success / badge-warning / badge-danger render completely unstyled (L33).
+
+Every value on this page is user-typed or staff-typed — a party name, a street, an email address, a
+welcome/support address — so all of it renders ESCAPED and never with |safe. No public_token appears
+here in any form; this page never handles a share.
+{% endcomment %}
+{% block title %}My Details{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Details</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:portal_home' %}">My Account</a><span class="sep">›</span>
+        <span>My Details</span>
+      </div>
+      <p class="text-muted">
+        What we hold on file for
+        {% if customer %}<span class="fw-600">{{ customer.name }}</span>{% else %}your organisation{% endif %}
+        — the addresses we deliver and invoice to, the ways we reach you, and the account terms our
+        accounts team works to. This page shows those records; it does not change them.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if can_track_shipments %}
+        <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="package"></i> My Orders</a>
+      {% endif %}
+      {% if can_view_documents %}
+        <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder-open"></i> Documents</a>
+      {% endif %}
+      <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Catalogue</a>
+      <a href="{% url 'scm:portal_home' %}" class="btn btn-primary"><i data-lucide="home"></i> My Account</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The read-only posture, said once and up front rather than discovered by a customer who clicked
+    around looking for a Save button. It is deliberately worded as a safeguard, because that is what
+    it is — see the view docstring — and not as a feature that is "coming soon".
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">These details are read-only</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="lock"></i> View only</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">
+        Nothing on this page can be edited from the portal. Delivery addresses in particular are
+        changed by our team with a person checking the request, which is what stops a delivery being
+        quietly re-routed if someone else ever gets hold of a login.
+        {% if can_raise_inquiries %}
+          If something here is out of date,
+          <a href="{% url 'scm:portal_inquiry_create' %}">raise an inquiry</a> and we will correct it.
+        {% else %}
+          If something here is out of date, contact your usual account contact and we will correct it.
+        {% endif %}
+        {% if account.support_email %}
+          You can also email <a href="mailto:{{ account.support_email }}">{{ account.support_email }}</a>.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="map-pin"></i></div>
+      <div class="stat-value">{{ addresses|length }}</div>
+      <div class="stat-label">Address{{ addresses|length|pluralize:"es" }} on file</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="contact"></i></div>
+      <div class="stat-value">{{ contacts|length }}</div>
+      <div class="stat-label">Way{{ contacts|length|pluralize }} we can reach you</div>
+    </div>
+    {% comment %}
+      Two gated tiles. Each states WHY it is blank rather than printing a reassuring zero: an
+      outstanding balance of None means no invoices exist, and a gate that is off means we are not
+      showing the figure — those are three different sentences and a bare 0.00 would tell all three
+      the same lie.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">
+        {% if not show_credit_and_balance %}
+          <span class="text-muted">—</span>
+        {% elif finance.outstanding_balance is not None %}
+          {% if finance.currency %}{{ finance.currency.code }} {% endif %}{{ finance.outstanding_balance|floatformat:2 }}
+        {% else %}
+          <span class="text-muted">—</span>
+        {% endif %}
+      </div>
+      <div class="stat-label">
+        {% if not show_credit_and_balance %}Balance not shown on your account
+        {% elif finance.outstanding_balance is not None %}Outstanding balance
+        {% else %}No open invoices on your account{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="receipt-text"></i></div>
+      <div class="stat-value">
+        {% if can_view_invoices %}{{ invoices|length }}{% else %}<span class="text-muted">—</span>{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if can_view_invoices %}Recent invoice{{ invoices|length|pluralize }} listed below
+        {% else %}Invoice history not shown on your account{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Your account with us</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Account name</dt>
+          <dd class="fw-600">{% if customer %}{{ customer.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Reference to quote</dt>
+          <dd class="mono">{{ account.number|default:"—" }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Signed in as</dt>
+          <dd>{{ request.user.get_username }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Tax registration we hold</dt>
+          <dd>{% if customer.tax_id %}<span class="mono">{{ customer.tax_id }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        {% comment %}
+          activated_on is null until the account is first switched on and is never restamped, so a
+          blank one is an honest em-dash rather than today's date.
+        {% endcomment %}
+        <div class="detail-item">
+          <dt>Portal available since</dt>
+          <dd class="nowrap">{% if account.activated_on %}{{ account.activated_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+      </dl>
+      <div class="form-help">
+        Quote the reference above when you contact us and we can find your account straight away.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Addresses</h2>
+      <div class="badge-group">
+        {% if default_ship_to %}
+          <span class="badge badge-green"><i data-lucide="truck"></i> Default delivery address set</span>
+        {% else %}
+          <span class="badge badge-muted"><i data-lucide="truck"></i> No default delivery address</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Use</th>
+            <th>Street</th>
+            <th>Town or city</th>
+            <th>Country</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in addresses %}
+            <tr>
+              <td>
+                {% comment %}
+                  Inline colour map with an else branch — core.Address ships no kind_css property and
+                  4.16's _choices.py owns no map for a foundation model's vocabulary. get_kind_display
+                  is printed in every branch so an added kind stays readable rather than silent.
+                {% endcomment %}
+                {% if a.kind == 'shipping' %}
+                  <span class="badge badge-info">{{ a.get_kind_display }}</span>
+                {% elif a.kind == 'billing' %}
+                  <span class="badge badge-slate">{{ a.get_kind_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ a.get_kind_display }}</span>
+                {% endif %}
+              </td>
+              <td>{% if a.line1 %}{{ a.line1 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if a.city %}{{ a.city }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if a.country %}{{ a.country }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if default_ship_to and default_ship_to.pk == a.pk %}
+                  <span class="badge badge-green"><i data-lucide="check"></i> Deliveries default here</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="map-pin"></i>
+                  <h3>No addresses on file</h3>
+                  <p>We do not hold a delivery or billing address for your account yet. Send us one and we will add it — orders cannot be despatched without it.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body form-help">
+      {% comment %}
+        Says exactly what the three columns are and stops there. core.Address holds no postal code,
+        so nothing here may name one — a customer told a field is missing will keep sending a
+        correction for an address that is already complete as we hold it.
+      {% endcomment %}
+      We hold each address as a street line, a town or city and a country. To add an address, change
+      one, or move which one your deliveries default to, ask us — that change is made by our team
+      rather than from this page.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How we reach you</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in contacts %}
+            <tr>
+              <td>
+                {% if c.kind == 'email' %}
+                  <span class="badge badge-info"><i data-lucide="mail"></i> {{ c.get_kind_display }}</span>
+                {% elif c.kind == 'phone' or c.kind == 'mobile' %}
+                  <span class="badge badge-slate"><i data-lucide="phone"></i> {{ c.get_kind_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ c.get_kind_display }}</span>
+                {% endif %}
+              </td>
+              {% comment %}
+                Printed as plain escaped text, deliberately not as a mailto:/tel: link. The value is
+                free text somebody typed into a contact record, and turning an arbitrary typed string
+                into a URL is a scheme nobody vetted; there is nothing to gain here that is worth it.
+              {% endcomment %}
+              <td>{% if c.value %}{{ c.value }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="2">
+                <div class="empty-state">
+                  <i data-lucide="contact"></i>
+                  <h3>No contact details on file</h3>
+                  <p>We have no email address or phone number recorded against your account. Let us know the best way to reach you and we will add it.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    Delivery-update preferences. Recorded intent only — 4.16 dispatches no message of any kind, so
+    the copy below states what is on file and stops short of promising anything will be sent.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Preferences on file</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Preferred channel</dt>
+          <dd>{{ account.get_preferred_channel_display|default:"—" }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>When goods are despatched</dt>
+          <dd>
+            {% if account.notify_on_shipment %}<span class="badge badge-green">Wanted</span>
+            {% else %}<span class="badge badge-muted">Not wanted</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>When goods are delivered</dt>
+          <dd>
+            {% if account.notify_on_delivery %}<span class="badge badge-green">Wanted</span>
+            {% else %}<span class="badge badge-muted">Not wanted</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>If a delivery hits a problem</dt>
+          <dd>
+            {% if account.notify_on_exception %}<span class="badge badge-green">Wanted</span>
+            {% else %}<span class="badge badge-muted">Not wanted</span>{% endif %}
+          </dd>
+        </div>
+      </dl>
+      <div class="form-help">
+        These are the preferences recorded against your account so our team knows how you would like
+        to be kept informed. Ask us if you would like any of them changed.
+      </div>
+    </div>
+  </div>
+
+  {% if show_credit_and_balance %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Terms, credit and balance</h2>
+        <div class="badge-group">
+          {% comment %}
+            The read-only claim repeated where the money is, and it is literally true: these figures
+            are read from accounting's own records at page load and recomputed nowhere in SCM (L29).
+            There is no control in this block — no edit link, no form, no button.
+          {% endcomment %}
+          <span class="badge badge-slate"><i data-lucide="lock"></i> Read-only — from our accounts records</span>
+          {% if finance.credit_on_hold %}
+            <span class="badge badge-red"><i data-lucide="alert-triangle"></i> Account on hold</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item">
+            <dt>Payment terms</dt>
+            <dd>
+              {% if finance.payment_terms %}
+                <span class="fw-600">{{ finance.payment_terms.name }}</span>
+                <div class="form-help">
+                  Net {{ finance.payment_terms.days_due }} day{{ finance.payment_terms.days_due|pluralize }}
+                  {% if finance.payment_terms.discount_pct %}
+                    · {{ finance.payment_terms.discount_pct|floatformat:2 }}% if settled within
+                    {{ finance.payment_terms.discount_days }} day{{ finance.payment_terms.discount_days|pluralize }}
+                  {% endif %}
+                </div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Credit limit</dt>
+            <dd class="mono">
+              {% if finance.credit_limit is not None %}
+                {% if finance.currency %}{{ finance.currency.code }} {% endif %}{{ finance.credit_limit|floatformat:2 }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Outstanding balance</dt>
+            {% comment %}
+              None here means no open invoice exists — a different fact from a balance of zero, and
+              the em-dash is the only honest rendering of it. The sub-line says which one it is.
+            {% endcomment %}
+            <dd class="mono fw-600">
+              {% if finance.outstanding_balance is not None %}
+                {% if finance.currency %}{{ finance.currency.code }} {% endif %}{{ finance.outstanding_balance|floatformat:2 }}
+              {% else %}
+                <span class="text-muted">—</span>
+                <div class="form-help">No open invoices on your account.</div>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Currency</dt>
+            <dd>
+              {% if finance.currency %}
+                <span class="mono">{{ finance.currency.code }}</span> <span class="text-muted">{{ finance.currency.name }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Credit status</dt>
+            <dd>
+              {% if finance.credit_on_hold %}
+                <span class="badge badge-red">On hold</span>
+              {% else %}
+                <span class="badge badge-muted">No hold recorded</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+        {% if not finance.has_profile %}
+          <div class="form-help">
+            We have not agreed credit terms with you yet, so no terms or limit are recorded — that is
+            perfectly normal for a newer account. Any balance shown above is still real and is taken
+            from the invoices we have sent you.
+          </div>
+        {% else %}
+          <div class="form-help">
+            These figures come from our accounts records and are shown here as they stand. The balance
+            counts your open invoices less the payments we have confirmed, so a payment still clearing
+            may not be reflected yet. Nothing on this page changes any of it.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Terms, credit and balance</h2></div>
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="lock"></i>
+          <h3>Not shown on your account</h3>
+          <p>
+            Payment terms, credit limit and outstanding balance are not displayed on this portal
+            account. Ask us if you would like them switched on, or contact our accounts team for a
+            statement.
+          </p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if can_view_invoices %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recent invoices</h2>
+        <div class="badge-group">
+          <span class="badge badge-slate"><i data-lucide="lock"></i> Read-only — issued by our accounts team</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Issued</th>
+              <th>Due</th>
+              <th>Status</th>
+              <th>Total</th>
+              <th>Still to pay</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in invoices %}
+              <tr>
+                <td>
+                  <div class="fw-600 mono">{{ row.obj.number|default:"—" }}</div>
+                  {% if row.obj.kind == 'credit_note' %}
+                    <div class="form-help">{{ row.obj.get_kind_display }} — this one is in your favour</div>
+                  {% endif %}
+                </td>
+                <td class="nowrap">{% if row.obj.issue_date %}{{ row.obj.issue_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                {% comment %}
+                  due_date is null=True and a NULL is "no due date was set", never today's date and
+                  never a blank cell.
+                {% endcomment %}
+                <td class="nowrap">{% if row.obj.due_date %}{{ row.obj.due_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>
+                  {% if row.obj.status == 'paid' %}
+                    <span class="badge badge-green">{{ row.obj.get_status_display }}</span>
+                  {% elif row.obj.status == 'partial' %}
+                    <span class="badge badge-amber">{{ row.obj.get_status_display }}</span>
+                  {% elif row.obj.status == 'sent' %}
+                    <span class="badge badge-info">{{ row.obj.get_status_display }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ row.obj.get_status_display }}</span>
+                  {% endif %}
+                  {% if row.is_open %}
+                    <div class="form-help">Still open</div>
+                  {% endif %}
+                </td>
+                <td class="mono nowrap">
+                  {% if row.obj.total is not None %}
+                    {% if row.obj.currency %}{{ row.obj.currency.code }} {% endif %}{{ row.obj.total|floatformat:2 }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="mono nowrap">
+                  {% if row.balance_due is not None %}
+                    <span class="{% if row.is_open %}fw-600{% endif %}">
+                      {% if row.obj.currency %}{{ row.obj.currency.code }} {% endif %}{{ row.balance_due|floatformat:2 }}
+                    </span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6">
+                  <div class="empty-state">
+                    <i data-lucide="receipt-text"></i>
+                    <h3>No invoices yet</h3>
+                    <p>Nothing has been invoiced to your account so far. Invoices appear here once we have issued them — drafts and cancelled documents never do.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body form-help">
+        The ten most recent invoices we have issued to you. What you still owe on each one is your
+        total less the payments we have confirmed, so anything paid in the last day or two may not be
+        reflected yet. Nothing here can be edited from the portal — query anything that looks wrong
+        {% if can_raise_inquiries %}
+          by <a href="{% url 'scm:portal_inquiry_create' %}">raising an inquiry</a>
+        {% endif %}
+        and our accounts team will pick it up.
+      </div>
+    </div>
+  {% else %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Recent invoices</h2></div>
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="receipt-text"></i>
+          <h3>Not shown on your account</h3>
+          <p>Invoice history is not displayed on this portal account. Ask us if you would like it switched on, or contact our accounts team for copies.</p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-body form-help">
+      Everything above is shown exactly as we hold it. Changes are made by our team rather than from
+      the portal, which is deliberate: it keeps a person in the loop on the details that decide where
+      your goods go and who we bill.
+      {% if can_raise_inquiries %}
+        <a href="{% url 'scm:portal_inquiry_create' %}">Raise an inquiry</a> and quote
+        <span class="mono">{{ account.number|default:"your account reference" }}</span> to get anything corrected.
+      {% endif %}
+      {% if account.support_email %}
+        You can also email <a href="mailto:{{ account.support_email }}">{{ account.support_email }}</a>.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
