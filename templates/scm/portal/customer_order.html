@@ -1,0 +1,522 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — ONE ORDER'S TIMELINE. A GATED CUSTOMER PAGE, never a staff page.
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_order_detail. Everything this page may read,
+and nothing else (the view pins the same list in its module docstring):
+
+  obj                  the SalesOrder itself
+  lines                list of dicts — built INLINE in portal_order_detail, NOT by _order_rows()
+  shipments            list of dicts — built INLINE in portal_order_detail, NOT by _order_rows()
+  inquiry_url          the pre-filled inquiry url; "" when can_raise_inquiries is off
+  order_inquiries      PortalOrderInquiry queryset — this account's own tickets about THIS order
+  account customer access
+  can_track_shipments can_view_invoices can_view_documents can_raise_inquiries
+  can_request_returns show_credit_and_balance
+
+LINE dict — the key names come from the `for line in order.lines` loop inside portal_order_detail,
+NOT from SalesOrderLine's own field names, and a wrong one renders as a silent blank on a 200 (L41):
+
+  obj sku description quantity_ordered quantity_allocated quantity_backordered unit_price line_total
+
+  quantity_allocated / quantity_backordered are 4.5's SalesOrderLine.quantity_allocated() /
+  .quantity_backordered(), which return Decimal("0") — never None. So a 0 in those two columns is a
+  REAL fact ("nothing reserved for this line yet") and is printed as 0. The em-dash rule below
+  applies to the figures that genuinely can be None, which these two cannot.
+
+SHIPMENT dict — from the `for shipment in order.shipments` loop in the same view. _order_rows() builds
+a same-NAMED but different row for the LIST page (it carries shipment / shipment_count and no
+events), so nothing here may be copied from that page:
+
+  obj events status_text last_known_location eta is_delayed pod_received pod_received_at
+  tracking_number
+
+  `events` is a LIST of TrackingEvent, NEWEST FIRST (TrackingEvent.Meta.ordering = -event_at, -id)
+  and DB-sliced by the view at MAX_TIMELINE_EVENTS, so a GPS-fed consignment cannot render hundreds
+  of pings. The shipments themselves are ordered -id, so shipments.0 is the current consignment —
+  the same convention _order_rows() uses for the list page's single shipment.
+
+  eta / pod_received_at are datetime|None; status_text / last_known_location / tracking_number are
+  str|"". Every one of them is absent for the whole window between submission and dispatch — which is
+  the state EVERY order is in at first, not an edge case — and each renders as an em dash there.
+  Never a 0 (no ETA is not an ETA of zero) and never a blank cell.
+
+WHAT THIS PAGE DELIBERATELY DOES NOT RENDER — a customer reads it, so a field being on the object is
+not a reason to print it:
+
+  obj.notes obj.hold_reason obj.credit_hold obj.fraud_flag   internal; hold_reason in particular is
+                                                             the credit/fraud evaluation's own words
+  shipment.notes shipment.freight_cost_estimate              internal remarks and OUR cost
+  event.recorded_by event.latitude event.longitude
+  event.notes                                                staff/carrier free text; the milestone
+                                                             itself is shown via get_event_type_display
+                                                             and via Shipment.current_status_text,
+                                                             which apply_tracking_event() sets from
+                                                             the event's LABEL, never from free text
+  every scm: staff url                                       there is no link to shipment_detail or
+                                                             salesorder_detail anywhere on this page
+
+NO public_token, anywhere — not a column, not a title, not an attribute. It is a bearer credential
+and this page has no document surface at all; the library is portal_documents.
+
+NOT PAGINATED — there is no page_obj in the context, so this page includes no pagination partial.
+The two lists are an order's own lines and its own consignments; the only bound is the view's
+MAX_TIMELINE_EVENTS slice on each timeline.
+
+NO WRITES — every control here is a GET link, so there is no form, no csrf token and no confirm()
+guard to get wrong (L42). The one thing a customer can start from this page is an inquiry, and that
+is a link to a form on another page.
+
+THE PRE-FILL. portal_inquiry_create accepts EXACTLY three query params — `sales_order`, `shipment`
+and `inquiry_type` (Portal.py, the as_db_int / _resolved_choice block above the form). inquiry_url
+already carries `?sales_order=<pk>`, so every button below only ever APPENDS to it. There is
+deliberately no per-LINE link: the view accepts no sales_order_line param and would silently drop it,
+which is the "renders fine, does nothing" bug this comment block exists to prevent. Each pre-filled
+type is one the model will accept with only an order attached — `wismo` and `delivery_exception` are
+both in ORDER_BOUND_INQUIRY_TYPES and the order pk is always the first param on the url.
+
+Badges are COLOUR-named only: badge-green / badge-red / badge-amber / badge-info / badge-muted /
+badge-slate. badge-success / badge-danger / badge-warning do not exist in theme.css and render
+completely unstyled (L33). The inquiry rows take their classes from the model
+(customer_status_css / inquiry_type_css) so this template invents no colour and cannot drift from the
+staff list; the order and shipment status maps are copied verbatim from the staff pages that own
+those models (templates/scm/orders/salesorder/detail.html and
+templates/scm/transportation/shipment/detail.html).
+
+The inquiry rows show customer_status_label, NOT `outcome` and NOT `sla_state`: the customer's
+vocabulary is deliberately not the agent's (CUSTOMER_STATUS_MAP exists for exactly this), and an SLA
+is a promise we made to ourselves.
+
+Everything on this page is user-typed somewhere — a line description, an inquiry subject, an address
+— so every value renders escaped and NOTHING uses |safe.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {{ obj.number }}
+        <span class="badge badge-{% if obj.status == 'fulfilled' or obj.status == 'closed' %}green{% elif obj.status == 'allocated' or obj.status == 'invoiced' %}info{% elif obj.status == 'submitted' or obj.status == 'partially_fulfilled' %}amber{% elif obj.status == 'on_hold' or obj.status == 'cancelled' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:portal_home' %}">My Portal</a><span class="sep">›</span>
+        <a href="{% url 'scm:portal_order_list' %}">My Orders</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        Placed by {{ customer.name }}. Everything below is read live from the order and from its
+        consignments each time this page loads — the lines, what is reserved against them, and every
+        milestone the carrier has reported.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> My Orders</a>
+      {% if can_view_documents %}
+        <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder-open"></i> My Documents</a>
+      {% endif %}
+      {% if can_request_returns %}
+        {% comment %}
+          4.10's existing route. 4.16 builds no second returns document — a second place for a credit
+          to come from is exactly what §4 of the plan refuses.
+        {% endcomment %}
+        <a href="{% url 'scm:portal_return_create' %}" class="btn btn-outline"><i data-lucide="undo-2"></i> Request a Return</a>
+      {% endif %}
+      {% if inquiry_url %}
+        {% comment %}
+          inquiry_url is "" exactly when can_raise_inquiries is off, so the test is on the url itself
+          rather than on the boolean — a button the view would refuse is the 4.11 finding.
+        {% endcomment %}
+        <a href="{{ inquiry_url }}" class="btn btn-primary"><i data-lucide="message-square-plus"></i> Raise an Inquiry About This Order</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    The exception banner, one per affected consignment. is_delayed is 4.6's own property (past its
+    planned delivery date and still moving) — read from the row, never recomputed here, so this page
+    and the shipment's own record cannot disagree about whether it is late.
+  {% endcomment %}
+  {% for s in shipments %}
+    {% if s.obj.status == 'exception' or s.is_delayed %}
+      <div class="card" style="border-inline-start:3px solid var(--bad); background:var(--bad-bg);">
+        <div class="card-body">
+          <h3 class="text-danger">
+            <i data-lucide="alert-triangle"></i>
+            {% if s.obj.status == 'exception' %}
+              Consignment {{ s.obj.number }} has hit an exception{% if s.status_text %} — {{ s.status_text }}{% endif %}
+            {% else %}
+              Consignment {{ s.obj.number }} is running late — it was planned to arrive {{ s.obj.planned_delivery_date|date:"M d, Y" }}
+            {% endif %}
+          </h3>
+          <p class="text-muted">
+            {% if s.last_known_location %}Last reported at {{ s.last_known_location }}.{% endif %}
+            {% if s.eta %}The carrier's current estimate is {{ s.eta|date:"M d, Y H:i" }}.{% else %}The carrier has given no revised estimate yet.{% endif %}
+          </p>
+          {% if inquiry_url %}
+            <a href="{{ inquiry_url }}&amp;shipment={{ s.obj.pk }}&amp;inquiry_type=delivery_exception" class="btn btn-primary">
+              <i data-lucide="message-square-warning"></i> Ask us about this delay
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ lines|length }}</div>
+      <div class="stat-label">Line{{ lines|length|pluralize }} on this order</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{{ shipments|length }}</div>
+      <div class="stat-label">Consignment{{ shipments|length|pluralize }} despatched</div>
+    </div>
+    {% comment %}
+      Order total is the order's OWN stored figure, recomputed from its lines by recalc_totals() —
+      this page adds nothing up itself. It is the customer's own order, so it carries no
+      show_credit_and_balance gate: that switch governs AR balance and credit limit, and this page
+      shows neither.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ obj.total|floatformat:2 }}</div>
+      <div class="stat-label">Order total{% if obj.currency %} ({{ obj.currency.code }}){% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="message-square"></i></div>
+      <div class="stat-value">{{ order_inquiries|length }}</div>
+      <div class="stat-label">Inquir{{ order_inquiries|length|pluralize:"y,ies" }} you raised about it</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Order</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Order</dt><dd class="mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge badge-{% if obj.status == 'fulfilled' or obj.status == 'closed' %}green{% elif obj.status == 'allocated' or obj.status == 'invoiced' %}info{% elif obj.status == 'submitted' or obj.status == 'partially_fulfilled' %}amber{% elif obj.status == 'on_hold' or obj.status == 'cancelled' %}red{% else %}muted{% endif %}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Ordered</dt><dd>{% if obj.order_date %}{{ obj.order_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>You asked for</dt><dd>{% if obj.requested_date %}{{ obj.requested_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+        {% comment %}
+          promised_date is stamped ONCE, the first time the order is fully reserved, and never moved
+          afterwards — a promise already given does not silently change. Blank until then, and blank
+          is an honest answer: nothing has been promised yet.
+        {% endcomment %}
+        <div class="detail-item"><dt>We promised</dt><dd>{% if obj.promised_date %}{{ obj.promised_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Deliver to</dt><dd>{% if obj.ship_to_address %}{{ obj.ship_to_address }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Currency</dt><dd>{% if obj.currency %}{{ obj.currency.code }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Subtotal</dt><dd>{{ obj.subtotal|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Tax</dt><dd>{{ obj.tax_total|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Total</dt><dd class="fw-600">{{ obj.total|floatformat:2 }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What you ordered</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">Reserved = set aside for you in our warehouse</span>
+        <span class="badge badge-slate">Backordered = still to be covered from stock</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="text-right">Ordered</th>
+            <th class="text-right">Reserved</th>
+            <th class="text-right">Backordered</th>
+            <th>Cover</th>
+            <th class="text-right">Unit price</th>
+            <th class="text-right">Line total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in lines %}
+            <tr>
+              <td>
+                <span class="fw-600 mono">{{ r.sku|default:"—" }}</span>
+                {% comment %}
+                  description is already the view's fallback chain (the line's own override, else the
+                  item's name, else ""), so this template does no second guess at what to call it.
+                  A line converted from a quote can legitimately have no stock item at all.
+                {% endcomment %}
+                {% if r.description %}<div class="form-help">{{ r.description }}</div>{% endif %}
+              </td>
+              <td class="text-right nowrap mono">
+                {{ r.quantity_ordered|floatformat:"-2" }}
+                {% if r.obj.item and r.obj.item.uom %}<span class="text-muted">{{ r.obj.item.uom.code }}</span>{% endif %}
+              </td>
+              {% comment %}
+                A genuine 0 is printed as 0 in these two columns — quantity_allocated() /
+                quantity_backordered() return Decimal("0") and never None, so "nothing reserved yet"
+                is a fact we have, not a figure we are missing.
+              {% endcomment %}
+              <td class="text-right nowrap mono">{{ r.quantity_allocated|floatformat:"-2" }}</td>
+              <td class="text-right nowrap mono">
+                {% if r.quantity_backordered > 0 %}
+                  <span class="badge badge-amber">{{ r.quantity_backordered|floatformat:"-2" }}</span>
+                {% else %}
+                  0
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if r.quantity_backordered > 0 %}
+                  {% if r.quantity_allocated > 0 %}
+                    <span class="badge badge-amber">Partly reserved</span>
+                  {% else %}
+                    <span class="badge badge-slate">Not yet reserved</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-green">Reserved in full</span>
+                {% endif %}
+              </td>
+              <td class="text-right nowrap mono">{{ r.unit_price|floatformat:2 }}</td>
+              <td class="text-right nowrap mono fw-600">{{ r.line_total|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="package-x"></i>
+                  <h3>This order has no lines</h3>
+                  <p>Nothing has been added to it yet. If that is not what you expected, raise an inquiry and we will look at it with you.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================================
+    The consignments, newest first. One card each, because a timeline belongs to ONE parcel: merging
+    four carriers' milestones into a single stream would produce a sequence that never happened.
+    ================================================================================================
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Delivery</h2>
+      <div class="badge-group">
+        {% if shipments %}
+          <span class="badge badge-info">{{ shipments|length }} consignment{{ shipments|length|pluralize }} on this order</span>
+        {% else %}
+          <span class="badge badge-muted">Nothing despatched yet</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if not shipments %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="truck"></i>
+          <h3>This order has not been despatched yet</h3>
+          <p>
+            Tracking appears here the moment the first consignment leaves us. Until then there is no
+            carrier, no tracking number and no estimated arrival — not an arrival of zero, simply
+            nothing to report yet.
+          </p>
+          {% if inquiry_url %}
+            <a href="{{ inquiry_url }}&amp;inquiry_type=wismo" class="btn btn-outline"><i data-lucide="help-circle"></i> Ask when this will ship</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% for s in shipments %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">
+          Consignment {{ s.obj.number }}
+          <span class="badge badge-{% if s.obj.status == 'delivered' %}green{% elif s.obj.status == 'in_transit' %}info{% elif s.obj.status == 'booked' %}amber{% elif s.obj.status == 'exception' or s.obj.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ s.obj.get_status_display }}</span>
+          {% if s.is_delayed %}<span class="badge badge-red">Running late</span>{% endif %}
+          {% comment %}
+            POD state, said in full. pod_received is the flag 4.6 stamps when a pod_signed event
+            lands; pod_received_at is when. A delivered consignment with no POD yet is a real and
+            common state (the driver's paperwork has not come back), and it is stated rather than
+            left blank — "no proof of delivery on file" is not the same claim as "not delivered".
+          {% endcomment %}
+          {% if s.pod_received %}
+            <span class="badge badge-green">Proof of delivery on file</span>
+          {% elif s.obj.status == 'delivered' %}
+            <span class="badge badge-amber">Delivered — proof of delivery not yet on file</span>
+          {% else %}
+            <span class="badge badge-muted">No proof of delivery yet</span>
+          {% endif %}
+        </h2>
+        {% if inquiry_url %}
+          <div class="page-actions">
+            {% if s.obj.status == 'delivered' or s.obj.status == 'cancelled' %}
+              {% comment %}
+                No inquiry_type pre-filled on a closed consignment: what went wrong with a parcel that
+                has already arrived is the customer's to say (damaged, wrong item, short shipment),
+                and guessing it for them puts our word in their ticket.
+              {% endcomment %}
+              <a href="{{ inquiry_url }}&amp;shipment={{ s.obj.pk }}" class="btn btn-outline">
+                <i data-lucide="message-square-plus"></i> Report a problem with this delivery
+              </a>
+            {% else %}
+              <a href="{{ inquiry_url }}&amp;shipment={{ s.obj.pk }}&amp;inquiry_type=wismo" class="btn btn-outline">
+                <i data-lucide="map-pin"></i> Where is this consignment?
+              </a>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Carrier</dt><dd>{% if s.obj.carrier %}{{ s.obj.carrier.name }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Transport mode</dt><dd>{{ s.obj.get_mode_display }}</dd></div>
+          {% comment %}
+            The four projections below are Shipment's own summary columns, written by
+            apply_tracking_event() from the latest milestone. Each is empty for the whole window
+            between booking and the carrier's first update, and each renders as an em dash there.
+          {% endcomment %}
+          <div class="detail-item"><dt>Tracking number</dt><dd class="mono">{% if s.tracking_number %}{{ s.tracking_number }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Latest milestone</dt><dd>{% if s.status_text %}{{ s.status_text }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Last reported at</dt><dd>{% if s.last_known_location %}{{ s.last_known_location }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Estimated arrival</dt><dd>{% if s.eta %}{{ s.eta|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Planned delivery</dt><dd>{% if s.obj.planned_delivery_date %}{{ s.obj.planned_delivery_date|date:"M d, Y" }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Delivered</dt><dd>{% if s.obj.actual_delivery_at %}{{ s.obj.actual_delivery_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Proof of delivery</dt><dd>{% if s.pod_received_at %}{{ s.pod_received_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Destination</dt><dd>{% if s.obj.destination_text %}{{ s.obj.destination_text }}{% elif s.obj.ship_to_address %}{{ s.obj.ship_to_address }}{% else %}—{% endif %}</dd></div>
+          <div class="detail-item"><dt>Packages</dt><dd>{% if s.obj.package_count is not None %}{{ s.obj.package_count }}{% else %}—{% endif %}</dd></div>
+        </dl>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Milestone</th>
+              <th>Where</th>
+              <th>Reported by</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ev in s.events %}
+              <tr>
+                <td class="nowrap">{{ ev.event_at|date:"M d, Y H:i" }}</td>
+                <td>
+                  <span class="badge badge-{% if ev.event_type == 'delivered' or ev.event_type == 'pod_signed' %}green{% elif ev.event_type == 'exception' or ev.event_type == 'delayed' or ev.event_type == 'customs_hold' %}red{% elif ev.event_type == 'booked' %}slate{% else %}info{% endif %}">{{ ev.get_event_type_display }}</span>
+                </td>
+                <td>{% if ev.location_text %}{{ ev.location_text }}{% else %}—{% endif %}</td>
+                {% comment %}
+                  The SOURCE of the update (carrier API, driver app, GPS, a person here), never the
+                  PERSON — recorded_by is our staff and belongs on the staff page, not on a customer's.
+                {% endcomment %}
+                <td class="text-muted">{{ ev.get_source_display }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4">
+                  <div class="empty-state">
+                    <i data-lucide="map-pinned"></i>
+                    <h3>No milestones on this consignment yet</h3>
+                    <p>It has been created but the carrier has not reported against it. Nothing is wrong — there is simply nothing to show until the first scan.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if s.events %}
+        <div class="card-body">
+          <p class="form-help">
+            Newest first. A long-running consignment shows only its most recent milestones — a
+            GPS-fed parcel reports far more often than anyone can read.
+          </p>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Your inquiries about this order</h2>
+      <div class="badge-group">
+        {% if order_inquiries %}
+          <span class="badge badge-info">{{ order_inquiries|length }} raised by you</span>
+        {% else %}
+          <span class="badge badge-muted">None raised yet</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>About</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th>Raised</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inq in order_inquiries %}
+            <tr>
+              <td class="mono fw-600">{{ inq.number|default:"—" }}</td>
+              {% comment %}
+                Both classes come off the model (inquiry_type_css, customer_status_css), so this page
+                cannot drift from the staff list, and customer_status_label is the CUSTOMER's word for
+                the case — deliberately not the agent's status and never the internal outcome.
+              {% endcomment %}
+              <td><span class="badge {{ inq.inquiry_type_css }}">{{ inq.get_inquiry_type_display }}</span></td>
+              {% comment %}
+                The subject lives on the wrapped crm.Case, not on the inquiry — PortalOrderInquiry
+                has no `subject` column at all, so `inq.subject` resolved to empty and this cell
+                rendered an em dash on every row while still returning 200. `case` is already
+                select_related by the view, so this costs no extra query.
+              {% endcomment %}
+              <td>{{ inq.case.subject|default:"—" }}</td>
+              <td><span class="badge {{ inq.customer_status_css }}">{{ inq.customer_status_label }}</span></td>
+              <td class="nowrap">
+                {{ inq.created_at|date:"M d, Y" }}
+                {% if inq.age_days is not None %}<div class="form-help">{{ inq.age_days }} day{{ inq.age_days|pluralize }} ago</div>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    The conversation lives in CRM — 4.16 builds no second thread page, because a
+                    second one is a second place for an internal note to leak. There is no pencil and
+                    no bin: a customer does not edit or delete a ticket they have filed.
+                  {% endcomment %}
+                  {% if inq.case_id %}
+                    <a href="{% url 'crm:portal_case_detail' inq.case_id %}" class="btn-icon" title="Open the conversation"><i data-lucide="eye"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="message-square"></i>
+                  <h3>You have not asked us anything about this order</h3>
+                  {% if inquiry_url %}
+                    <p>If something does not look right — a date, a quantity, a delivery that has not moved — raise an inquiry and it reaches the team that handles this order, with the order already attached.</p>
+                    <a href="{{ inquiry_url }}" class="btn btn-primary"><i data-lucide="message-square-plus"></i> Raise an inquiry about this order</a>
+                  {% else %}
+                    <p>Raising inquiries is not enabled on your account. Contact your account manager and they will open one for you.</p>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to my orders</a>
+{% endblock %}
