@@ -232,6 +232,11 @@ class PortalDocumentShare(TenantNumbered):
             # readable out there" question an audit asks. Low cardinality as a column but highly
             # selective as a NULL test, which is the shape the filter actually uses.
             models.Index(fields=["tenant", "revoked_at"], name="scm_pds_tnt_revoked_idx"),
+            # The staff list's ORDER BY. It sorts ``-created_at, -id`` with only ``tenant``
+            # guaranteed — none of the three indexes above carries a date column, so the sort was a
+            # filesort on every page load. Cheaper than it looks to add: this table grows per
+            # document published, not per page view.
+            models.Index(fields=["tenant", "created_at"], name="scm_pds_tnt_at_idx"),
         ]
         # No UniqueConstraint: unique_together is this app's shipped idiom and mixing the two makes
         # the next migration diff harder to read for no behavioural gain.
@@ -386,12 +391,24 @@ class PortalDocumentShare(TenantNumbered):
                         f"cannot be proved to be {account.customer}'s. Link it first.")
                 # DOCUMENTED WEAKENING, and the only one: core.Document is a generic attachment
                 # with no party column, so when its related record names no owner either there is
-                # nothing left to check beyond the tenant. Refusing here would make 'statement' and
-                # 'other' — the two types that exist precisely for files with no structured home —
-                # impossible to share at all. What carries the weight instead is the form, which
-                # offers only this customer's own documents, and the download view, which re-runs
-                # every check above. Anything stronger needs a party FK on core.Document, which is
-                # a Module 0 schema change and not 4.16's to make.
+                # nothing left to PROVE ownership with beyond the tenant. Refusing here would make
+                # 'statement' and 'other' — the two types that exist precisely for files with no
+                # structured home — impossible to share at all. Anything stronger needs a party FK
+                # on core.Document, which is a Module 0 schema change and not 4.16's to make.
+                #
+                # It is a weakening of the OWNERSHIP proof, and it must not become a licence to
+                # share anything: `classification` is the one thing core.Document does state about
+                # itself, and the check below is where 4.16 honours it. A `confidential` attachment
+                # is a file whose own record says it is not for outsiders, and publishing it as a
+                # bearer link — fetchable by anyone it is forwarded to, revocable only by an admin —
+                # is the single worst thing this model can do. The form already declines to offer
+                # one; this refuses a crafted pk, and the download view re-checks it a third time,
+                # because a form queryset has never been an access control (L39 §2).
+                if (pointer == "document"
+                        and getattr(target, "classification", "") == "confidential"):
+                    errors[pointer] = (
+                        "That document is classified confidential and cannot be published to a "
+                        "customer portal. Re-classify it, or share a customer-facing copy.")
 
         if errors:
             raise ValidationError(errors)
