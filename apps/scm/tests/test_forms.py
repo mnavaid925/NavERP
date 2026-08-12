@@ -7022,8 +7022,15 @@ def _activity_form_payload(session, minutes_after=0, minutes=60, **overrides):
     return data
 
 
-def _plan_form_payload(**overrides):
-    """A complete, VALID ``LaborPlanForm`` body."""
+def _labor_plan_form_payload(**overrides):
+    """A complete, VALID ``LaborPlanForm`` body.
+
+    ``_labor_`` prefixed because ``_plan_form_payload`` was ALREADY taken, by 4.13's
+    ``MaintenancePlanForm`` builder several thousand lines above. Defining it twice bound the last
+    one for the whole module, so 4.13's three plan-form tests silently started building their bodies
+    out of a LaborPlan payload — three failures in a sub-module nobody had touched, from a diff that
+    was pure addition (L41 §2). ``test_suite_hygiene.py`` caught it, which is exactly what it is for.
+    """
     data = {
         "name": "Next three days", "location": "",
         "period_start": _labor_form_day(1).isoformat(),
@@ -7408,7 +7415,7 @@ class TestLaborActivityForm:
 class TestLaborPlanForms:
     def test_a_complete_body_validates(self, tenant_a):
         from apps.scm.forms import LaborPlanForm
-        form = LaborPlanForm(_plan_form_payload(), tenant=tenant_a)
+        form = LaborPlanForm(_labor_plan_form_payload(), tenant=tenant_a)
         assert form.is_valid(), form.errors
         obj = form.save(commit=False)
         obj.tenant = tenant_a
@@ -7419,19 +7426,19 @@ class TestLaborPlanForms:
     @pytest.mark.parametrize("field", ["name", "period_start", "period_end"])
     def test_the_required_fields_are_required(self, tenant_a, field):
         from apps.scm.forms import LaborPlanForm
-        form = LaborPlanForm(_plan_form_payload(**{field: ""}), tenant=tenant_a)
+        form = LaborPlanForm(_labor_plan_form_payload(**{field: ""}), tenant=tenant_a)
         assert not form.is_valid()
         assert field in form.errors
 
     def test_a_zero_productivity_is_refused_because_it_is_a_DIVISOR(self, tenant_a):
         from apps.scm.forms import LaborPlanForm
-        form = LaborPlanForm(_plan_form_payload(productivity_pct="0"), tenant=tenant_a)
+        form = LaborPlanForm(_labor_plan_form_payload(productivity_pct="0"), tenant=tenant_a)
         assert not form.is_valid()
         assert "productivity_pct" in form.errors
 
     def test_a_zero_shift_length_is_refused_for_the_same_reason(self, tenant_a):
         from apps.scm.forms import LaborPlanForm
-        form = LaborPlanForm(_plan_form_payload(hours_per_shift="0"), tenant=tenant_a)
+        form = LaborPlanForm(_labor_plan_form_payload(hours_per_shift="0"), tenant=tenant_a)
         assert not form.is_valid()
         assert "hours_per_shift" in form.errors
 
@@ -7439,7 +7446,7 @@ class TestLaborPlanForms:
         """``history_days`` is handed straight to ``timedelta(days=...)`` and a bare
         ``PositiveIntegerField`` accepts 4294967295 — an uncaught OverflowError, i.e. a 500."""
         from apps.scm.forms import LaborPlanForm
-        form = LaborPlanForm(_plan_form_payload(history_days="4294967295"), tenant=tenant_a)
+        form = LaborPlanForm(_labor_plan_form_payload(history_days="4294967295"), tenant=tenant_a)
         assert not form.is_valid()
         assert "history_days" in form.errors
 
@@ -7447,7 +7454,7 @@ class TestLaborPlanForms:
         from apps.scm.forms import LaborPlanForm
         from apps.scm.models import LaborPlan
         form = LaborPlanForm(
-            _plan_form_payload(
+            _labor_plan_form_payload(
                 period_end=_labor_form_day(LaborPlan.MAX_HORIZON_PERIODS + 5).isoformat()),
             tenant=tenant_a)
         assert not form.is_valid()
@@ -7455,11 +7462,11 @@ class TestLaborPlanForms:
 
     def test_the_volume_source_pairing_is_enforced_BOTH_ways(self, tenant_a, demand_forecast_a):
         from apps.scm.forms import LaborPlanForm
-        missing = LaborPlanForm(_plan_form_payload(volume_source="demand_forecast"),
+        missing = LaborPlanForm(_labor_plan_form_payload(volume_source="demand_forecast"),
                                 tenant=tenant_a)
         assert not missing.is_valid()
         assert "demand_forecast" in missing.errors
-        spurious = LaborPlanForm(_plan_form_payload(demand_forecast=str(demand_forecast_a.pk)),
+        spurious = LaborPlanForm(_labor_plan_form_payload(demand_forecast=str(demand_forecast_a.pk)),
                                  tenant=tenant_a)
         assert not spurious.is_valid()
         assert "demand_forecast" in spurious.errors
@@ -7467,7 +7474,7 @@ class TestLaborPlanForms:
     def test_a_forecast_from_another_workspace_is_refused(self, tenant_a, demand_forecast_b):
         from apps.scm.forms import LaborPlanForm
         form = LaborPlanForm(
-            _plan_form_payload(volume_source="demand_forecast",
+            _labor_plan_form_payload(volume_source="demand_forecast",
                                demand_forecast=str(demand_forecast_b.pk)),
             tenant=tenant_a)
         assert not form.is_valid()
@@ -7475,7 +7482,7 @@ class TestLaborPlanForms:
 
     def test_a_location_from_another_workspace_is_refused(self, tenant_a, location_b):
         from apps.scm.forms import LaborPlanForm
-        form = LaborPlanForm(_plan_form_payload(location=str(location_b.pk)), tenant=tenant_a)
+        form = LaborPlanForm(_labor_plan_form_payload(location=str(location_b.pk)), tenant=tenant_a)
         assert not form.is_valid()
         assert "location" in form.errors
 
