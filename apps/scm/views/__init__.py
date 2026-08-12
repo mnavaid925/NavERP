@@ -466,3 +466,54 @@ from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
 from .ColdChainManagement.Reports import (  # noqa: F401
     cold_storage_report, cold_chain_compliance_report, reefer_board,
 )
+
+# --- 4.16 Customer Portal -----------------------------------------------------------------------
+# Every name below is referenced as `views.<name>` from apps/scm/urls/CustomerPortal/, so a missing
+# one is an AttributeError at STARTUP, not a 404 at request time.
+#
+# Only the PUBLIC view functions are listed. The private `_`-prefixed helpers inside those modules
+# (`_gate`, `_sla_buckets`, `_stock_for_page`, …) stay private on purpose, and the shared
+# `_portal_account` resolver lives in `apps/scm/views/_helpers.py` and is imported directly by
+# `Portal.py` — none of them belongs in this namespace.
+from .CustomerPortal.PortalAccounts import (  # noqa: F401
+    portalaccount_list, portalaccount_create, portalaccount_detail,
+    portalaccount_edit, portalaccount_delete,
+)
+# Three verbs beyond CRUD. They are the ONLY writers of `outcome` / `resolved_at` /
+# `return_authorization` (all editable=False, so no ModelForm can reach them), they are
+# @require_POST, and each writes its own audit row because it bypasses crud_edit.
+from .CustomerPortal.PortalOrderInquiries import (  # noqa: F401
+    portalorderinquiry_list, portalorderinquiry_create, portalorderinquiry_detail,
+    portalorderinquiry_edit, portalorderinquiry_delete,
+    portalorderinquiry_resolve, portalorderinquiry_reopen, portalorderinquiry_raise_return,
+)
+# `portaldocumentshare_edit` is @tenant_admin_required, matching `_revoke`. That is not symmetry for
+# its own sake: `expires_at` is on the form while `revoked_at` is editable=False and admin-gated, and
+# the two are HALVES OF ONE CONTROL — how much longer a bearer token may fetch a customer's
+# document. Leaving edit at plain @login_required would let any member blank `expires_at` (blank =
+# never expires) on a share only an admin may revoke.
+from .CustomerPortal.PortalDocumentShares import (  # noqa: F401
+    portaldocumentshare_list, portaldocumentshare_create, portaldocumentshare_detail,
+    portaldocumentshare_edit, portaldocumentshare_delete, portaldocumentshare_revoke,
+)
+# LIST + DETAIL ONLY, deliberately — PortalActivity is append-only, every field is editable=False,
+# and it has no form. The StockMoveAdmin / MeterReadingAdmin precedent. Do not "complete" this CRUD.
+from .CustomerPortal.PortalActivities import (  # noqa: F401
+    portalactivity_list, portalactivity_detail,
+)
+# TWO COMPUTED STAFF PAGES over tables that already exist — 4.16 declares no order table and no
+# catalog table. Order tracking joins 4.5's SalesOrder to 4.6's Shipment/TrackingEvent in one row,
+# which neither module's own list shows; the catalog preview renders a customer's projection
+# server-side. Both write NOTHING. (# SECURITY: the preview is render-as, never authenticate-as.)
+from .CustomerPortal.Reports import (  # noqa: F401
+    portal_order_tracking, portal_catalog_preview,
+)
+# The GATED CUSTOMER surface. All @login_required except `portal_document_download`, whose bearer
+# credential IS the unguessable token — it takes its tenant off the OBJECT (request.tenant is None
+# for an anonymous visitor), re-checks tenant/account active state and target ownership, enforces
+# revoke+expiry INSIDE the lookup so a dead token is indistinguishable from a wrong one, and streams
+# via FileResponse because config/urls.py serves MEDIA_URL directly under DEBUG.
+from .CustomerPortal.Portal import (  # noqa: F401
+    portal_home, portal_order_list, portal_order_detail, portal_documents,
+    portal_document_download, portal_inquiry_create, portal_catalog, portal_profile,
+)
