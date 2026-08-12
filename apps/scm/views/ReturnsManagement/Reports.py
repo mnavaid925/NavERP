@@ -52,6 +52,10 @@ from apps.scm.forms._common import _customer_parties
 from apps.scm.models._base import q2
 from apps.scm.models import (CREDIT_BEARING_DISPOSITIONS, ReturnAuthorization, ReturnDisposition,
                              ReturnLine, ReturnPolicy, ReturnReason, SalesOrder, select_policy)
+# 4.16, read by `portal_return_create` only: `PortalAccount` carries the `can_request_returns`
+# entitlement this route has to enforce (hiding the button is not an access control), and
+# `PortalActivity` is the customer-read log the same route appends to.
+from apps.scm.models import PortalAccount, PortalActivity
 from apps.scm.forms import PortalReturnRequestForm, PublicReturnUpdateForm
 
 ZERO = Decimal("0")
@@ -372,6 +376,39 @@ def portal_return_create(request):
         messages.error(request, "Your portal account has no linked customer — contact support.")
         return redirect("dashboard:home")
 
+    # --- 4.16's `can_request_returns` entitlement, ENFORCED here -----------------------------------
+    # 4.16 hides the "Request a return" button on four of its customer pages when this entitlement
+    # is off. Hiding a button is not an access control: this route is a plain GET/POST URL, so
+    # without the check below the entitlement was decoration and anyone who typed the address filed
+    # an RMA anyway. 4.16's own `_gate` docstring states the rule it was itself breaking — *an
+    # entitlement checked after the data is fetched is a template-level secret, not an access
+    # control* — and the seeded `restricted` demo account has `can_request_returns=False`, so the
+    # demo data exercised the hole on every run.
+    #
+    # **A MISSING `PortalAccount` IS STILL ALLOWED, DELIBERATELY.** This route predates 4.16 and its
+    # entry condition has always been "has a CRM customer portal access row". Requiring a
+    # `PortalAccount` would silently switch off returns for every tenant that never adopts 4.16 —
+    # a regression in 4.10 caused by a later sub-module, which is exactly the coupling 4.16 was
+    # written to avoid everywhere else. So the rule is narrow and only ever *subtracts*: when the
+    # customer HAS a portal account, that account's configuration is authoritative; when they do
+    # not, nothing changed.
+    #
+    # A deactivated account refuses for the same reason its live document links die: switching a
+    # customer's portal off has to mean off, or the switch is another decoration.
+    portal_account = (PortalAccount.objects
+                      .filter(tenant=request.tenant, customer=party)
+                      .only("id", "is_active", "can_request_returns").first())
+    if portal_account is not None:
+        if not portal_account.is_active:
+            messages.error(request, "Your customer portal is not active — contact support.")
+            return redirect("dashboard:home")
+        if not portal_account.can_request_returns:
+            messages.error(
+                request,
+                "Online return requests aren't enabled for your account — contact support and we "
+                "will raise it for you.")
+            return redirect("dashboard:home")
+
     def _portal_currency_id(tenant, customer, order, so_line):
         """The currency a portal-filed return should settle in.
 
@@ -429,6 +466,24 @@ def portal_return_create(request):
                     condition_reported=(form.cleaned_data.get("condition_reported") or "")[:120])
             write_audit_log(request.user, rma, "create",
                             {"via": "customer_portal", "customer": party.name})
+            # 4.16's customer-read log. `core.AuditLog` above records that a STAFF-visible object
+            # was created; this records that the CUSTOMER did something in the portal, which
+            # AuditLog structurally cannot express (its actions are create/update/delete only).
+            #
+            # Without this the `request_return` action was a vocabulary entry nothing ever wrote:
+            # `PORTAL_ACTION_CHOICES` declared it, the activity list rendered it as a filter option,
+            # and selecting it could only ever return an empty page — the "a filter that can never
+            # match" defect 4.11 already produced once. Recording it here is what makes the option
+            # mean something, and it is the right place: this is the moment the customer requested
+            # the return.
+            #
+            # Guarded on the account existing, because a customer with no `PortalAccount` reaches
+            # this route legitimately (see the entitlement block above) and has no portal log to
+            # append to. `record()` fails soft, so a logging problem can never break the submission
+            # the customer just made.
+            if portal_account is not None:
+                PortalActivity.record(portal_account, "request_return", request=request,
+                                      user=request.user, object_label=rma.number)
             messages.success(request, f"Return request {rma.number} submitted — we'll email you "
                                       "once it has been reviewed.")
             return redirect("scm:returnauthorization_public", token=rma.public_token)
