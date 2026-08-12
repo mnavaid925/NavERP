@@ -89,7 +89,15 @@ a bearer credential, and the share querysets .defer() it precisely so touching i
       <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="share-2"></i> Shares</a>
       <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Activity</a>
       <a href="{% url 'scm:portal_catalog_preview' %}" class="btn btn-outline"><i data-lucide="eye"></i> Catalog Preview</a>
-      <a href="{% url 'scm:portalaccount_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Enable Customer</a>
+      {% comment %}
+        Admin-only, matching the view. Enabling a portal decides whether an outsider sees our AR
+        balance, credit limit, invoice history and per-warehouse stock quantities, so the decorator
+        is @tenant_admin_required — and a button a non-admin can press only to be refused is the
+        4.11 finding. The view is the access control; this is the honesty.
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'scm:portalaccount_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Enable Customer</a>
+      {% endif %}
     </div>
   </div>
 
@@ -364,7 +372,9 @@ a bearer credential, and the share querysets .defer() it precisely so touching i
               <td>
                 <div class="table-actions">
                   <a href="{% url 'scm:portalaccount_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'scm:portalaccount_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    <a href="{% url 'scm:portalaccount_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
                   {% comment %}
                     Admin-gated because the route is: showing a member a button they will 403 on is
                     the 4.11 finding. Hidden as well on any row with open inquiries — an inquiry
