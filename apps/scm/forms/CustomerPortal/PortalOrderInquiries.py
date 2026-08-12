@@ -71,20 +71,35 @@ class _InquiryFormBase(TenantModelForm):
                 lines = lines.filter(sales_order__customer=self.customer)
                 shipments = shipments.filter(sales_order__customer=self.customer)
 
-        # The `select_related` differs per field and MUST: `SalesOrder` has no `sales_order`
-        # column, so a uniform `.select_related("sales_order")` across all three raises
-        # `FieldError: Invalid field name(s) given in select_related` — but only when the widget
-        # actually iterates its queryset to render the options, i.e. never at import time, never in
-        # `manage.py check`, and never on any page that does not draw this form. It shipped that way
-        # and the first thing to execute it was the smoke sweep.
+        # PREFETCH THE HOP EACH `__str__` ACTUALLY WALKS — verified in the source, not guessed:
+        #   SalesOrder.__str__      -> self.customer.name        => select_related("customer")
+        #   SalesOrderLine.__str__  -> self.item.sku             => select_related("item")
+        #   Shipment.__str__        -> number + a display method  => NO join needed at all
         #
-        # Each queryset is prefetched along the hop its `__str__` really walks: an order names its
-        # customer, while a line and a shipment each name their parent order.
+        # This got it wrong twice. First a uniform `select_related("sales_order")` raised
+        # `FieldError` on the `SalesOrder` queryset, which has no such column — caught by a smoke
+        # sweep, because a bad `select_related` only fails when the widget iterates to render its
+        # options. The repair then pointed the LINE picker at `sales_order`, a column its `__str__`
+        # never reads: the join was silently useless and every option with an item fired its own
+        # query. A wrong `select_related` fails loudly; a merely *unhelpful* one is invisible and
+        # costs one query per `<option>`.
+        #
+        # NOT capped with a slice, and that is deliberate. `_return_candidates` caps with
+        # `[:MAX_PICKER_ROWS + 1]`, but that is a DISPLAY LIST rendered by a template. A
+        # `ModelChoiceField.queryset` is also the VALIDATOR — `to_python()` calls `.get(pk=…)` on it
+        # — and Django raises `Cannot filter a query once a slice has been taken`, so slicing here
+        # would turn every POST into a 500. Capping with `pk__in=<first N>` avoids the crash but
+        # silently rejects a legitimate choice outside the window, which is worse than a long list.
+        #
+        # The unbounded `<option>` count is therefore left as a known payload cost (it is one query
+        # either way, now that the joins are right). Fixing it properly means an autocomplete
+        # widget that queries on demand, which is a UI change rather than a queryset change.
         for name, queryset, related in (("sales_order", orders, "customer"),
-                                        ("sales_order_line", lines, "sales_order"),
-                                        ("shipment", shipments, "sales_order")):
+                                        ("sales_order_line", lines, "item"),
+                                        ("shipment", shipments, None)):
             if name in self.fields:
-                self.fields[name].queryset = queryset.select_related(related)
+                self.fields[name].queryset = (queryset.select_related(related) if related
+                                              else queryset)
 
         # CREATE ONLY. On edit the case already exists and open_for() has already run, so a bound
         # subject/description would collect text this form has no writer for. Removing the fields
