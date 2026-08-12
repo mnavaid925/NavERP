@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — "Catalog Browsing" (NavERP bullet 5), the STAFF preview.
+
+Renders apps/scm/views/CustomerPortal/Reports.py::portal_catalog_preview. Everything this page may
+read, and nothing else (the view pins the same list in its module docstring):
+
+  rows row_count page_obj item_count            the projection, one row per Item on this page
+  account account_id portal_accounts account_is_active            the picker
+  stock_display stock_display_label show_quantity show_band band_as_text show_locations
+  low_stock_threshold price_basis price_basis_label show_price
+  catalog_scope catalog_scope_label scope_categories             the projection this account configures
+  q category item_categories                    the RAW echoed GET values + the pk dropdown's queryset
+  stock_display_choices catalog_scope_choices price_basis_choices
+  render_as_note no_account_note inactive_note preview_scope_note
+  generated_at no_tenant no_tenant_note
+
+CATALOG ROW dict — these key names come from the row builder at the END of
+portal_catalog_preview() (the `rows.append({...})` block), NOT from Item's own fields, and a wrong
+one renders as a silent blank on a 200 response (L41):
+
+  obj pk sku name url category uom item_type_label is_stocked
+  on_hand band band_label band_css locations last_price last_price_date last_order_number
+
+LOCATION dict (row.locations, built in the same loop just above the append):
+
+  location_id location on_hand band band_label band_css
+
+READ-ONLY. The view writes nothing at all — not a StockMove, not an Invoice, not a JournalEntry
+(L29), and deliberately not even a PortalActivity row, because that log records a read BY A
+CUSTOMER and a member of staff opening a staff console is not one. So there is no form that POSTs
+anywhere on this page, no pencil, no bin and no confirm dialog: every write for this customer is
+made on the portal account's own pages, one hop through the buttons in the header.
+
+RENDER-AS, NOT IMPERSONATION — and the banner says so above the fold. No session is swapped, no
+token is issued and no login is borrowed; the page reads one PortalAccount row and renders the
+projection it configures. That distinction is the first thing a reader must not have to guess at.
+
+Every derived figure is None-or-a-number and prints an em dash when None, NEVER 0 and never blank:
+"no ledger rows exist for this item" and "we have none left" are different facts, and the second
+one is what "Out of stock" says. Hence `is not None` tests throughout, never |default (which
+swallows a genuine 0) and never a substituted zero.
+
+on_hand / band / band_css are handed over as None whenever the account's stock_display forbids
+them, so this template cannot leak a figure the customer may not see — the suppressed value never
+reaches the page. The `{% else %}` arms below print "Hidden", which is the truthful render of the
+`hidden` setting on a STAFF configuration-check page, not a leak.
+
+COLOUR IS NEVER THE ONLY CARRIER OF THE MEANING. The `band` display prints a colour chip with no
+visible words, so every chip carries role="img" + aria-label + title = band_label — a colour-only
+chip is invisible to a screen reader and to the ~8% of men with a red/green deficiency. The words
+and the colours both come from _choices.py (STOCK_BAND_LABELS / STOCK_BAND_CSS) through the view,
+so this template invents neither.
+
+Badge classes: badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY.
+badge-success / badge-warning / badge-danger do not exist in theme.css and render completely
+unstyled (L33). band_css is handed down by the view, so no colour is picked here.
+{% endcomment %}
+{% block title %}Catalog Preview{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Catalog Preview — as seen by one customer</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:portalaccount_list' %}">Customer Portal</a><span class="sep">›</span>
+        <span>Catalog Preview</span>
+      </div>
+      <p class="text-muted">
+        Stock presentation, catalog scope and pricing are all set <span class="fw-600">per account</span>, so the
+        only way to check a configuration before a customer meets it is to render that customer's own projection.
+        Pick a customer below and this is the catalog their portal builds for them.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portal_order_tracking' %}" class="btn btn-outline"><i data-lucide="truck"></i> Order Tracking</a>
+      <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Portal Accounts</a>
+      {% if account %}
+        <a href="{% url 'scm:portalaccount_edit' account.pk %}" class="btn btn-primary"><i data-lucide="sliders-horizontal"></i> Change this configuration</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    THE BANNER, above everything else and never behind a condition. A reader who assumes this page
+    signs them in as the customer will assume every other page does too — and would then read a
+    staff action attributed to a customer as fact. It is the whole security posture of the page, so
+    it is stated in visible copy rather than in a code comment nobody opens.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="shield-check"></i> Render-as preview — nobody is impersonated</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As at {{ generated_at|date:"M d, Y H:i" }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted">{{ render_as_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">You are still signed in as {{ request.user }}</span>
+        <span class="badge badge-muted">No session swapped · no login borrowed · no token issued</span>
+        <span class="badge badge-muted">Nothing on this page is written</span>
+        <span class="badge badge-muted">The customer's activity log is not touched</span>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    The picker is its own form, deliberately WITHOUT the search and category inputs: the category
+    dropdown is built from the categories reachable inside THIS account's scope, so carrying a
+    category pk across a change of customer would carry a filter that belongs to somebody else's
+    catalog. Switching customer starts clean, and the help text says so.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Preview as</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:280px;">
+          <label class="form-label" for="cp-account">Customer</label>
+          {% comment %}
+            pk dropdown — |stringformat:"d", NEVER |slugify. Two tests because the page also accepts
+            ?customer=<Party pk> (the button on the account detail page), which the view resolves to
+            an account: account_id then echoes the PARTY pk, and matching only on that would leave
+            the dropdown showing "Pick a customer" above a fully rendered projection. A junk or
+            another workspace's pk resolves to nothing and correctly selects nothing.
+          {% endcomment %}
+          <select name="account" id="cp-account" class="form-select">
+            <option value="">Pick a customer…</option>
+            {% for a in portal_accounts %}
+              <option value="{{ a.pk }}" {% if account_id == a.pk|stringformat:"d" or account.pk == a.pk %}selected{% endif %}>
+                {{ a.customer.name }} — {{ a.number }}{% if not a.is_active %} (switched off){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="eye"></i> Render this customer's catalog</button>
+          <a href="{% url 'scm:portal_catalog_preview' %}" class="btn btn-outline">Clear</a>
+        </div>
+      </form>
+      <div class="form-help">
+        Switching customer clears the search and category filters on purpose — the category list is built from the
+        items each account can actually reach, so a filter carried across would be one account's category applied
+        to another's catalog. Accounts that are switched off are still listed: the preview then shows what they
+        <span class="fw-600">would</span> see, which is exactly the thing to check before switching one back on.
+      </div>
+    </div>
+  </div>
+
+  {% if not account %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="user-search"></i>
+          <h3>No customer picked</h3>
+          <p>{{ no_account_note }}</p>
+          <p>
+            There is no such thing as "the catalog" on this page — every figure below is per-account, so rendering
+            a default would mean inventing a customer. A pk that does not resolve inside this workspace lands here
+            too, rather than quietly falling back to somebody else's projection.
+          </p>
+        </div>
+      </div>
+    </div>
+  {% else %}
+
+    {% if inactive_note %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">This portal account is switched off</h2>
+          <div class="badge-group"><span class="badge badge-amber"><i data-lucide="power-off"></i> Customer sees none of this today</span></div>
+        </div>
+        <div class="card-body"><p class="text-muted">{{ inactive_note }}</p></div>
+      </div>
+    {% endif %}
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="package"></i></div>
+        <div class="stat-value">{{ item_count }}</div>
+        <div class="stat-label">Item{{ item_count|pluralize }} in this customer's catalog</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="rows-3"></i></div>
+        <div class="stat-value">{{ row_count }}</div>
+        <div class="stat-label">Row{{ row_count|pluralize }} rendered on this page</div>
+      </div>
+      {% comment %}
+        The threshold is a real stored number and prints as itself, including a genuine 0 — this is
+        the account's setting, not a derived aggregate, so an em dash would be wrong here. The
+        sub-label states when the setting is inert instead: only the availability-text and colour-band
+        displays consume it (THRESHOLD_STOCK_DISPLAYS), and the model's clean() refuses one set
+        against the other two rather than silently dropping it.
+      {% endcomment %}
+      <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="gauge"></i></div>
+        <div class="stat-value">{{ low_stock_threshold|floatformat:"-4" }}</div>
+        <div class="stat-label">
+          Low-stock threshold
+          {% if stock_display != "availability_text" and stock_display != "band" %}
+            — not read by this display
+          {% endif %}
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon {% if account_is_active %}green{% else %}slate{% endif %}"><i data-lucide="toggle-right"></i></div>
+        <div class="stat-value">{% if account_is_active %}Live{% else %}Off{% endif %}</div>
+        <div class="stat-label">Portal account state</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What this account configures</h2>
+        <div class="badge-group">
+          <a href="{% url 'scm:portalaccount_detail' account.pk %}" class="badge badge-info">{{ account.number }}</a>
+          {% if account_is_active %}
+            <span class="badge badge-green">Portal switched on</span>
+          {% else %}
+            <span class="badge badge-muted">Portal switched off</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item">
+            <dt>Customer</dt>
+            <dd><a href="{% url 'core:party_detail' account.customer.pk %}" class="fw-600">{{ account.customer.name }}</a></dd>
+          </div>
+          <div class="detail-item">
+            <dt>Catalog scope</dt>
+            <dd>{% if catalog_scope_label %}<span class="badge badge-slate">{{ catalog_scope_label }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Stock presentation</dt>
+            <dd>{% if stock_display_label %}<span class="badge badge-slate">{{ stock_display_label }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Pricing</dt>
+            <dd>{% if price_basis_label %}<span class="badge badge-slate">{{ price_basis_label }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Per-location breakdown</dt>
+            <dd>
+              {% if show_locations %}
+                <span class="badge badge-amber">Shown</span>
+              {% else %}
+                <span class="badge badge-muted">Not shown</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>Low-stock threshold</dt>
+            <dd class="mono">{{ low_stock_threshold|floatformat:"-4" }}</dd>
+          </div>
+        </dl>
+
+        {% if show_locations %}
+          <p class="text-muted" style="margin:.9rem 0 0;">
+            A per-location breakdown tells whoever is reading it where our stock physically sits, which is a
+            competitive disclosure as much as a service one — it is off by default and on for this account. It
+            breaks down by <span class="fw-600">stock location</span>, which on a WMS-managed workspace is a bin
+            rather than a warehouse.
+          </p>
+        {% endif %}
+
+        {% comment %}
+          The scope's categories, straight from the prefetched M2M the view handed over (scope_categories) —
+          not account.catalog_categories.all(), which would be a second fetch of the same rows. An account set
+          to `categories` with none chosen shows an EMPTY catalog, and that is the truthful projection rather
+          than a bug in this page: it is the misconfiguration itself, and hiding it behind a full catalog is
+          how it would survive to meet a customer.
+        {% endcomment %}
+        {% if catalog_scope == "categories" %}
+          <div class="form-help" style="margin-top:.9rem;">Categories this account may browse</div>
+          <div class="badge-group">
+            {% for c in scope_categories %}
+              <span class="badge badge-info">{{ c.name }}</span>
+            {% empty %}
+              <span class="badge badge-red">No categories chosen — this customer's catalog is empty</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The three vocabularies, and where this account sits in each</h2></div>
+      <div class="card-body">
+        {% comment %}
+          The whole vocabulary is printed, not only the chosen value, because the question a staff member is
+          answering here is "should this account be on a different setting" — which needs the alternatives
+          visible. The lists come from _choices.py through the view (stock_display_choices /
+          catalog_scope_choices / price_basis_choices), so the preview can never offer a value the real portal
+          does not implement.
+        {% endcomment %}
+        <div class="form-help">Stock presentation</div>
+        <div class="badge-group">
+          {% for value, label in stock_display_choices %}
+            <span class="badge {% if stock_display == value %}badge-info{% else %}badge-muted{% endif %}">{{ label }}</span>
+          {% endfor %}
+        </div>
+        <div class="form-help" style="margin-top:.9rem;">Catalog scope</div>
+        <div class="badge-group">
+          {% for value, label in catalog_scope_choices %}
+            <span class="badge {% if catalog_scope == value %}badge-info{% else %}badge-muted{% endif %}">{{ label }}</span>
+          {% endfor %}
+        </div>
+        <div class="form-help" style="margin-top:.9rem;">Pricing</div>
+        <div class="badge-group">
+          {% for value, label in price_basis_choices %}
+            <span class="badge {% if price_basis == value %}badge-info{% else %}badge-muted{% endif %}">{{ label }}</span>
+          {% endfor %}
+        </div>
+        <div class="form-help" style="margin-top:.9rem;">
+          There is no customer price list on the supply-chain side, so the only price this build can state
+          truthfully is the one this customer themselves last paid — derived at render time from their own orders
+          and never stored. Draft and cancelled orders are excluded: a price on a document they never agreed to is
+          not a price they last paid.
+        </div>
+      </div>
+    </div>
+
+    {% if account.welcome_message %}
+      {% comment %}
+        Customer-typed / staff-typed free text. Rendered with a plain {{ }} and never |safe — this string
+        reaches a customer-facing page as well, and one |safe here would be the same stored-XSS hole in two
+        places at once.
+      {% endcomment %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Greeting this account is shown</h2></div>
+        <div class="card-body"><p class="text-muted">{{ account.welcome_message }}</p></div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The catalog</h2>
+        <div class="badge-group">
+          <span class="badge badge-slate">{{ item_count }} item{{ item_count|pluralize }} in scope</span>
+          {% if q or category %}<span class="badge badge-info">Filtered</span>{% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <form method="get" class="filter-bar">
+          {% comment %}
+            The resolved account's pk, not the echoed account_id — the page also accepts ?customer=, and
+            re-posting that raw value under the name `account` would send a Party pk to the account lookup and
+            silently drop the customer between one filter press and the next.
+          {% endcomment %}
+          <input type="hidden" name="account" value="{{ account.pk }}">
+          <div class="form-group" style="flex:1; min-width:240px;">
+            <label class="form-label" for="cp-q">Search</label>
+            <input type="text" id="cp-q" name="q" value="{{ q }}" class="form-input"
+                   placeholder="SKU, item name or description…">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cp-category">Category</label>
+            {% comment %}
+              pk dropdown — |stringformat:"d", NEVER |slugify. The list is exactly the categories reachable
+              inside THIS projection, so it can never offer a value that returns an empty page.
+            {% endcomment %}
+            <select name="category" id="cp-category" class="form-select">
+              <option value="">Every category in scope</option>
+              {% for c in item_categories %}
+                <option value="{{ c.pk }}" {% if category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+            <a href="{% url 'scm:portal_catalog_preview' %}?account={{ account.pk }}" class="btn btn-outline">Reset</a>
+          </div>
+        </form>
+        <div class="form-help">
+          There is deliberately no "in stock only" filter. Availability is a band computed from a grouped
+          aggregate taken over <span class="fw-600">this page's</span> items, and it is a projection of the
+          account's display setting rather than a property of the item — filtering on it would mean a second
+          aggregate over the whole catalog on every page load, and would offer the customer's own catalog a
+          filter it does not have.
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Category</th>
+              <th>Type</th>
+              <th>UoM</th>
+              <th>Availability</th>
+              <th>Last ordered price</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>
+                  <a href="{{ row.url }}" class="fw-600 mono">{{ row.sku|default:"—" }}</a>
+                  <div class="form-help">{{ row.name|default:"—" }}</div>
+                </td>
+                <td>{% if row.category %}{{ row.category }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>
+                  <span class="badge badge-slate">{{ row.item_type_label|default:"—" }}</span>
+                  {% if not row.is_stocked %}<div class="form-help">Not stocked</div>{% endif %}
+                </td>
+                <td class="mono">{% if row.uom %}{{ row.uom }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+
+                {% comment %}
+                  ONE cell, four renders — the four values of stock_display, decided by the view's booleans
+                  rather than re-derived here. `hidden` prints the fact that it is hidden, which on a STAFF
+                  configuration page is the answer to the question being asked; the customer's own catalog
+                  prints nothing at all, and the figure never left the view in either case.
+                {% endcomment %}
+                <td>
+                  {% if show_quantity %}
+                    {% if row.on_hand is not None %}
+                      <span class="mono fw-600">{{ row.on_hand|floatformat:"-4" }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                      <div class="form-help">
+                        {% if row.is_stocked %}No ledger rows yet — never counted, which is not the same as none left{% else %}Not a stocked item, so there is no ledger to read{% endif %}
+                      </div>
+                    {% endif %}
+                  {% elif band_as_text %}
+                    {% if row.band %}
+                      <span class="badge {{ row.band_css }}">{{ row.band_label }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                      <div class="form-help">
+                        {% if row.is_stocked %}No ledger rows yet — never counted, which is not the same as out of stock{% else %}Not a stocked item, so there is no ledger to read{% endif %}
+                      </div>
+                    {% endif %}
+                  {% elif show_band %}
+                    {% comment %}
+                      Colour band: no visible words by design, so role="img" + aria-label carry the meaning and
+                      title repeats it on hover. A bare coloured chip would be invisible to a screen reader and
+                      to a red/green colour deficiency — the label is the same STOCK_BAND_LABELS string the
+                      text display prints, handed over as band_label so the two can never disagree.
+                    {% endcomment %}
+                    {% if row.band %}
+                      <span class="badge {{ row.band_css }}" role="img"
+                            aria-label="{{ row.band_label }}" title="{{ row.band_label }}">&#9679;</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                      <div class="form-help">
+                        {% if row.is_stocked %}No ledger rows yet — never counted, which is not the same as out of stock{% else %}Not a stocked item, so there is no ledger to read{% endif %}
+                      </div>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge badge-muted">Hidden from this customer</span>
+                  {% endif %}
+
+                  {% if show_locations %}
+                    {% for loc in row.locations %}
+                      <div class="form-help">
+                        <span class="mono">{{ loc.location|default:"—" }}</span>
+                        {% if loc.on_hand is not None %}<span class="mono fw-600">{{ loc.on_hand|floatformat:"-4" }}</span>{% endif %}
+                        {% if loc.band %}
+                          {% if band_as_text %}
+                            <span class="badge {{ loc.band_css }}">{{ loc.band_label }}</span>
+                          {% else %}
+                            <span class="badge {{ loc.band_css }}" role="img"
+                                  aria-label="{{ loc.band_label }}" title="{{ loc.band_label }}">&#9679;</span>
+                          {% endif %}
+                        {% endif %}
+                      </div>
+                    {% empty %}
+                      <div class="form-help">No location breakdown — nothing for this item on the ledger</div>
+                    {% endfor %}
+                  {% endif %}
+                </td>
+
+                <td>
+                  {% if show_price %}
+                    {% comment %}
+                      A genuine 0.00 is a price somebody agreed to (a free-of-charge line), so the test is
+                      `is not None` and never truthiness — |default would print an em dash over a real zero.
+                    {% endcomment %}
+                    {% if row.last_price is not None %}
+                      <span class="mono fw-600">{{ row.last_price|floatformat:2 }}</span>
+                      <div class="form-help">
+                        {% if row.last_price_date %}{{ row.last_price_date|date:"M d, Y" }}{% else %}Order date not recorded{% endif %}
+                        {% if row.last_order_number %} · <span class="mono">{{ row.last_order_number }}</span>{% endif %}
+                      </div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                      <div class="form-help">This customer has never ordered it on a live order</div>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge badge-muted">Hidden from this customer</span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  <div class="table-actions">
+                    <a href="{{ row.url }}" class="btn-icon" title="Open the item in Inventory"><i data-lucide="eye"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="7">
+                  {% comment %}
+                    Three genuinely different empty states. "Nothing matching a filter" is not "this catalog is
+                    empty", and neither of those is "this account is set to categories and has none chosen" —
+                    which is a misconfiguration the customer would meet as a blank shop.
+                  {% endcomment %}
+                  {% if q or category %}
+                    <div class="empty-state">
+                      <i data-lucide="search-x"></i>
+                      <h3>Nothing in this customer's catalog matches</h3>
+                      <p>The filters above excluded everything in scope — which is not the same as this customer having an empty catalog. Reset the filters to see the whole projection.</p>
+                    </div>
+                  {% elif catalog_scope == "categories" and not scope_categories %}
+                    <div class="empty-state">
+                      <i data-lucide="folder-x"></i>
+                      <h3>This account is scoped to categories, and none are chosen</h3>
+                      <p>The customer sees an empty shop. That is the truthful projection of the configuration rather than a fault on this page — choose at least one category on the account, or move it to a different scope.</p>
+                    </div>
+                  {% else %}
+                    <div class="empty-state">
+                      <i data-lucide="package-open"></i>
+                      <h3>This customer's catalog is empty</h3>
+                      <p>Nothing in scope for this account. On the "items previously ordered" scope that simply means they have not bought anything yet, and on a workspace with no active items it is the correct answer rather than an error — a withdrawn item is history, not stock, so it never appears here.</p>
+                    </div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% include "partials/pagination.html" %}
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How this preview is worked out</h2></div>
+      <div class="card-body">
+        <p class="text-muted">{{ preview_scope_note }}</p>
+        <p class="text-muted">
+          Availability is derived live from the append-only stock ledger, one grouped query over this page's items
+          — never a stored band. A band is recomputed every time a page renders because on-hand is itself derived,
+          and a stored copy would be stale the moment a move posts, in the direction that tells a customer
+          something is in stock when it is not.
+        </p>
+        <p class="text-muted">
+          <span class="fw-600">An em dash is not a zero.</span> An item with no rows on the ledger has never been
+          counted, which is a different fact from having none left — the first prints —, the second prints
+          "Out of stock". Printing 0 for the first would tell a customer an item is unavailable when the truth is
+          that nobody has ever counted it.
+        </p>
+        <p class="text-muted">
+          <span class="fw-600">Nothing on this page can be edited here.</span> The items belong to Inventory and the
+          settings belong to the portal account, so the eye opens the real item one hop away and the header button
+          opens the account's own form. This console holds a read-only projection and no write of any kind.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
