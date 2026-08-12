@@ -380,7 +380,7 @@ a bearer credential, and the share querysets .defer() it precisely so touching i
                     without a trace (L42).
                   {% endcomment %}
                   {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                    {% if not obj.open_inquiries %}
+                    {% if not obj.has_inquiries %}
                       <form method="post" action="{% url 'scm:portalaccount_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its whole document share register and its entire append-only customer read log are destroyed with it, and nothing rebuilds either — that log is the only thing that can prove when a document was published and when it was downloaded. Switching the account off closes the portal just as completely and keeps every row.');">
                         {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                       </form>
