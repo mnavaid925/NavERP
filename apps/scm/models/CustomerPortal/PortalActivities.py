@@ -120,9 +120,19 @@ class PortalActivity(TenantOwned):
             # caller states a "redundant" tenant= that narrows nothing and buys the whole index.
             models.Index(fields=["tenant", "portal_account", "created_at"],
                          name="scm_pact_tnt_acct_at_idx"),
-            # Whole-workspace views (the staff activity list filtered to logins, any deflection
-            # count) cannot use the index above — portal_account is not a prefix of the filter.
-            models.Index(fields=["tenant", "action"], name="scm_pact_tnt_action_idx"),
+            # THE WHOLE-WORKSPACE SORT. The staff activity list filters (tenant, a date window) and
+            # orders by ``-created_at, -id`` with ``portal_account`` unconstrained — so the index
+            # above degrades to a tenant-prefix scan and both the range and the sort become a
+            # filesort over the tenant's entire log. This is the fastest-growing table in the
+            # sub-module and its DEFAULT view is whole-workspace, so that is the common case rather
+            # than an edge one.
+            models.Index(fields=["tenant", "created_at"], name="scm_pact_tnt_at_idx"),
+            # Supersedes a bare ``(tenant, action)``: filtering to one action and sorting by date is
+            # what the page actually does, and a two-column index carrying no date could satisfy the
+            # filter but never the ORDER BY. ``StockMove``, ``WarrantyClaim`` and 4.15's
+            # ``TemperatureReading`` all ship this pair of shapes for the same reason.
+            models.Index(fields=["tenant", "action", "created_at"],
+                         name="scm_pact_tnt_act_at_idx"),
         ]
 
     def __str__(self):
