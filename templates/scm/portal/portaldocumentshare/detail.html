@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — one document share: the grant, its lifetime, and the proof of what was
+fetched.
+
+Every other 4.16 page renders rows the customer already owns. This one describes a GRANT — a bearer
+token that lets somebody who may not be logged in at all fetch another company's paperwork — so the
+page is built around the three questions a grant raises and a plain detail page never answers: who
+can fetch this, for how much longer, and what has actually been taken.
+
+Renders apps/scm/views/CustomerPortal/PortalDocumentShares.py::portaldocumentshare_detail. Everything
+this page may read, and nothing else:
+
+  obj                   the PortalDocumentShare, carrying the FOUR state annotations the list page
+                        uses — share_state (live / expired / revoked), expiring_soon (bool),
+                        state_label and state_css. The chip is those last two, never a colour picked
+                        here: the CASE expressions that annotate them are built from the same three Q
+                        objects as the ?state= filter, so the chip on this page and the chip in the
+                        register are one definition. The type badge is obj.doc_type_css with
+                        obj.get_doc_type_display (SHARE_DOC_TYPE_CSS in _choices.py)
+  pointer               which of the six pointer columns is set — invoice / shipment /
+                        trade_document / contract / quality_inspection / document, or ""
+  pointer_label         the human name of that column (PortalDocumentShare.POINTER_LABELS), "" when
+                        there is none
+  target                the object itself, or None
+  target_label          its own reference — a number or a name, NEVER a storage path
+  target_url            the owning app's detail page, or None (another app may have renamed its
+                        route; _target_url swallows NoReverseMatch) — link ONLY when not None
+  target_missing        True when every pointer is NULL. All six are SET_NULL, so a deleted target
+                        is a real state rather than a bug
+  has_file              True when the download STREAMS a file; False when the target is a RENDERED
+                        page — an invoice, a contract and a CoA have no file on disk, and a shipment
+                        records POD as a fact rather than a scan
+  expires_in_days       int, or None when the share has no expiry or is already dead
+  max_expiry_days       the ceiling clean() enforces on expires_at
+  expiring_soon_days    the notice window that turns the chip amber
+  activities            PortalActivity MODEL ROWS for this share, newest first, DB-sliced. Read
+                        created_at / action / get_action_display / action_css / user (may be None —
+                        an anonymous bearer is a real, recordable visitor) / ip_address /
+                        object_label. Nothing else exists on them
+  activities_truncated  True when the slice hid rows
+  activity_count        how many there are in total
+  can_revoke            False once already revoked — the verb's real guard is the UPDATE's own WHERE
+                        clause, so this only stops the page offering a button that would do nothing
+
+=== obj.public_token IS NOT ON THIS PAGE, AND THE OMISSION IS THE FEATURE ===
+The token is a bearer credential (secrets.token_urlsafe(32), minted once, never rotated). The view's
+queryset .defer()s it, so the column is not even loaded — but that is exposure reduction and NOT an
+access control: naming obj.public_token here would simply re-fetch it. The view's module docstring
+pins the rule and the reason: "There is deliberately no 'copy link' context key, on the list page OR
+the detail page. Such a key would put the credential into rendered staff HTML, and from there into
+browser cache, screenshots, print-to-PDF, and any proxy that logs response bodies — for a value
+nobody can rotate."
+
+So there is no copy-link button here, and the card below says where the link legitimately comes from
+instead (the customer's own gated portal documents page, which is the only place
+scm:portal_document_download is linked). If a hand-out affordance is ever genuinely wanted it has to
+be its own @tenant_admin_required view that returns the URL on demand and writes an audit row
+recording the reveal — not a variable on a page anyone can screenshot. Printing the public_token here,
+in any form, would defeat all of that silently and for a value that can never be rotated.
+
+=== the rest of the rules this page is written to ===
+Revoke, Edit and Delete are ALL @tenant_admin_required, so all three are wrapped in the house gate —
+showing a member a button they will 403 on is the 4.11 finding. Confirm strings carry the PDS- number
+and a COUNT and nothing else: an apostrophe or an interpolated user string inside confirm() is
+decoded by the HTML parser before the JS engine sees it and silently disables the guard (L42).
+title, object_label and every customer name are user-typed and are escaped by Django's default —
+nothing on this page is |safe.
+
+expires_in_days, first_viewed_at and last_downloaded_at print an EM DASH when absent, never 0 and
+never blank: "no expiry" and "expires today" are different facts, and "never opened" is different
+from "opened at the epoch". download_count is the one figure whose 0 is printed as 0 — it is a real
+count, and zero retrievals is a fact somebody acts on rather than a missing measurement.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render as completely unstyled text (L33). Every badge class here is either a lookup
+(obj.state_css, obj.doc_type_css, a.action_css) or one of the six literals.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.title }}
+        <span class="badge {{ obj.state_css }}">{{ obj.state_label }}</span>
+        <span class="badge {{ obj.doc_type_css }}">{{ obj.get_doc_type_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portaldocumentshare_list' %}">Document Shares</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">This row is not a copy of a document — it is <span class="fw-600">permission to fetch one</span>. The state chip above is recomputed from two nullable timestamps and the clock every time this page is opened, never stored, because the answer changes by time passing and a stored one would go stale in the direction that calls a dead link live.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portaldocumentshare_list' %}?portal_account={{ obj.portal_account_id }}" class="btn btn-outline"><i data-lucide="folder-open"></i> Everything shared with them</a>
+      <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="download"></i></div>
+      {% comment %}
+        The one figure on this page whose zero is PRINTED. download_count is a real count and 0 is a
+        fact — "nobody has ever fetched this" — not a missing measurement, which is what the em dash
+        means everywhere else here.
+      {% endcomment %}
+      <div class="stat-value">{{ obj.download_count }}</div>
+      <div class="stat-label">Recorded retrieval{{ obj.download_count|pluralize }}{% if not obj.download_count %} — never fetched{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="timer"></i></div>
+      {% comment %}
+        None — never 0 — when there is nothing to count down: no expiry set, or the share is already
+        expired or revoked. A 0 here would read as "expires today", which is a different fact from
+        "this link has no end date at all", and merging the two is exactly the 4.11 lesson.
+      {% endcomment %}
+      <div class="stat-value">{% if expires_in_days is not None %}{{ expires_in_days }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if expires_in_days is not None %}
+          Day{{ expires_in_days|pluralize }} of access left{% if not expires_in_days %} — less than 24 hours{% endif %}
+        {% elif obj.share_state == "revoked" %}
+          Nothing to count down — revoked
+        {% elif obj.share_state == "expired" %}
+          Nothing to count down — already lapsed
+        {% else %}
+          No expiry date — this link lives until somebody revokes it
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="eye"></i></div>
+      <div class="stat-value">{% if obj.first_viewed_at %}{{ obj.first_viewed_at|date:"M d" }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if obj.first_viewed_at %}First opened {{ obj.first_viewed_at|date:"M d, Y H:i" }}{% else %}Never opened — the link may never have reached them{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="history"></i></div>
+      <div class="stat-value">{{ activity_count }}</div>
+      <div class="stat-label">Customer activity row{{ activity_count|pluralize }} naming this share</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 1. the fact the whole page turns on
+    Stated at the top rather than buried beside the revoke button: a person renewing an expiry or
+    deciding whether to delete a row needs to know what a share actually IS before they touch either.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">This link is a bearer credential</h2>
+      <span class="badge badge-amber">Whoever holds it can fetch this document</span>
+    </div>
+    <div class="card-body">
+      <p style="margin:0 0 .75rem;">
+        The URL behind this share carries an unguessable token and <span class="fw-600">no login</span>. Anyone holding it — the person we sent it to, anyone they forward it to, anyone reading a mailbox it lands in — can retrieve
+        {% if pointer_label %}the {{ pointer_label|lower }}{% else %}this document{% endif %}
+        until it expires or is revoked. That is what makes a share convenient, and it is why the two controls below exist: <span class="fw-600">an expiry date is the only thing that ends this on its own</span>, and revoking is the only thing that ends it now.
+      </p>
+      <p class="text-muted" style="margin:0 0 .75rem;">
+        Four things are re-checked on every fetch, so this row is not the only guard: the token must match, this workspace must still be active, the share must be un-revoked and inside its expiry, and <span class="fw-600">{{ obj.portal_account.customer }}'s portal account must still be active</span> — deactivating the account kills its live links without touching a single share row. A refused fetch 404s rather than explaining itself: a revoked share is indistinguishable from a wrong token, so it leaks not even its own existence.
+      </p>
+      {% comment %}
+        The absence of a copy-link button is deliberate and is explained ON the page, because an
+        unexplained omission is the kind of thing a later change "fixes". See the header comment and
+        the view's module docstring.
+      {% endcomment %}
+      <p class="text-muted" style="margin:0;">
+        <span class="badge badge-slate">There is no copy-link button here, on purpose</span>
+        The token is never rendered on a staff page — not in a column, not a tooltip, not an attribute — because printing it once puts a value nobody can rotate into browser cache, screenshots, print-to-PDF and any proxy that logs response bodies. The staff queryset does not even load the column. The customer reaches a live share through <span class="fw-600">their own signed-in portal documents page</span>, which is the one place the download route is legitimately linked, so nothing is lost by leaving it off this screen. If a share has to be handed out again, the honest move is to publish a fresh one with an expiry — a new grant is visible in the register and leaves a create row; a quietly copied token leaves nothing.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 2. the audience and the target
+    Two questions that only make sense together: a share is legal exactly when the document belongs
+    to the customer this account belongs to, which is what the model's clean() block (d) enforces at
+    save time. The page restates the pairing so a wrong grant is visible rather than merely refused.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Who may fetch it, and what it points at</h2>
+      {% if target_missing %}
+        <span class="badge badge-red">Target deleted</span>
+      {% else %}
+        <span class="badge badge-info">{{ pointer_label }}</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <p style="margin:0 0 .35rem;">
+        <span class="fw-600">{{ obj.portal_account.customer }}</span>
+        <span class="text-muted">·</span>
+        <a href="{% url 'scm:portalaccount_detail' obj.portal_account_id %}" class="mono">{{ obj.portal_account.number }}</a>
+        {% if obj.portal_account.is_active %}
+          <span class="badge badge-green">Account active</span>
+        {% else %}
+          <span class="badge badge-muted">Account deactivated</span>
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        {% if obj.portal_account.is_active %}
+          A share is tied to one portal account, and the document must belong to <em>that account's customer</em> — checked on the model at save time, not merely narrowed in the form's dropdowns, because a narrowed dropdown has never held against a crafted POST. That check is what keeps one customer's invoice from ever being publishable to another customer's portal.
+        {% else %}
+          This account is deactivated, so the link does not resolve for anyone right now — the download route re-checks the account on every fetch. That is a <span class="fw-600">reversible</span> block rather than a revocation: reactivating the account brings every un-revoked, un-expired share with it, which is why deactivating an account is not a substitute for revoking a link you actually want dead.
+        {% endif %}
+      </p>
+
+      {% comment %}
+        The typed target, in ONE line: which of the six columns is set, and the record's own staff-side
+        reference. target_url is None both when the pointer is empty and when another app has renamed
+        its route, so the link is conditional and the label always prints either way — a page whose
+        only ambition was to show a name must not 500 because somebody else moved a url.
+      {% endcomment %}
+      <p style="margin:0 0 .35rem;">
+        <span class="fw-600">Target:</span>
+        {% if target_missing %}
+          <span class="badge badge-red">Gone</span>
+          <span class="text-muted">every pointer on this row is empty</span>
+        {% else %}
+          {{ pointer_label }} ·
+          {% if target_url %}
+            <a href="{{ target_url }}" class="mono fw-600">{{ target_label }}</a>
+          {% else %}
+            <span class="mono fw-600">{{ target_label }}</span>
+          {% endif %}
+          {% if has_file %}
+            <span class="badge badge-info">Streams a file</span>
+          {% else %}
+            <span class="badge badge-slate">Renders a page</span>
+          {% endif %}
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        {% if target_missing %}
+          The record this share published has been deleted — every pointer is <span class="fw-600">SET_NULL</span>, so this is a real state rather than a broken row, and the share survives its target on purpose (deleting an invoice must not erase the record that we sent it). A share pointing at nothing can no longer serve anything, so <span class="fw-600">revoke it</span>: leaving it live is a token in circulation with no defined answer behind it.
+        {% elif not target_url %}
+          The target exists but its owning page could not be resolved — another app has renamed that route. Nothing is wrong with this share; the link is simply omitted rather than 500-ing a page that only wanted to print a name.
+        {% elif has_file %}
+          A fetch streams the stored file itself. 4.16 owns none of these six record types — it links out to whichever app owns this one rather than re-rendering somebody else's row, and it stores no second copy of the document.
+        {% else %}
+          There is no file on disk for this type: a fetch <span class="fw-600">renders</span> the owning app's page instead. An invoice, a contract and a certificate of analysis are printed by their own views, and a shipment records proof of delivery as a fact rather than as a scan — so a share of one is a live view of the record, not a snapshot of it.
+        {% endif %}
+      </p>
+
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>What the customer sees</dt><dd>{{ obj.title }}</dd></div>
+        <div class="detail-item"><dt>Document type</dt><dd><span class="badge {{ obj.doc_type_css }}">{{ obj.get_doc_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Pointer column</dt><dd>{% if pointer_label %}{{ pointer_label }} <span class="text-muted mono">({{ pointer }})</span>{% else %}<span class="text-muted">None — the target was deleted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Target reference</dt><dd class="mono">{% if target_label %}{{ target_label }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Retrieval</dt><dd>{% if has_file %}Streams the stored file{% else %}Renders the owning page{% endif %}</dd></div>
+        <div class="detail-item"><dt>Portal account</dt><dd><a href="{% url 'scm:portalaccount_detail' obj.portal_account_id %}" class="mono">{{ obj.portal_account.number }}</a></dd></div>
+        <div class="detail-item"><dt>Customer</dt><dd>{{ obj.portal_account.customer }}</dd></div>
+        <div class="detail-item"><dt>Published by</dt><dd>{% if obj.shared_by %}{{ obj.shared_by }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Published</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Last changed</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>State</dt><dd><span class="badge {{ obj.state_css }}">{{ obj.state_label }}</span></dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Published by</span> is stamped server-side and is not on the form — who handed a customer's document out is evidence, and a value a POST body could carry is not evidence.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 3. lifetime — expiry and revoke
+    expires_at and revoked_at are two halves of ONE control: how much longer may this bearer token
+    fetch this document? That is why editing the share is tenant-admin-only alongside revoking —
+    at plain @login_required any member could blank expires_at (blank = never expires) on a share
+    only an admin may kill, which is strictly worse than not revoking it.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How much longer it can be fetched</h2>
+      <span class="badge {{ obj.state_css }}">{{ obj.state_label }}</span>
+    </div>
+    <div class="card-body">
+      <p style="margin:0 0 .9rem;">
+        {% if obj.share_state == "revoked" %}
+          <span class="badge badge-muted">Revoked</span>
+          Killed on <span class="fw-600">{{ obj.revoked_at|date:"M d, Y H:i" }}</span>. The link 404s for everyone holding it from that moment, and no expiry date can bring it back — the download route's state guard sits in the lookup itself. That timestamp is the record of when access actually stopped, and a second revoke can never move it forward.
+        {% elif obj.share_state == "expired" %}
+          <span class="badge badge-slate">Expired</span>
+          Lapsed on its own on <span class="fw-600">{{ obj.expires_at|date:"M d, Y H:i" }}</span> — nobody had to do anything, which is the entire argument for setting a date. There is nothing to act on here: an expired share needs no revoking. If the customer still needs the document, publish a <span class="fw-600">new</span> share rather than extending this one, so the register keeps an honest record of what was readable when.
+        {% elif obj.expiring_soon %}
+          <span class="badge badge-amber">Expires soon</span>
+          Live now, and lapses on <span class="fw-600">{{ obj.expires_at|date:"M d, Y H:i" }}</span> — inside the {{ expiring_soon_days }}-day notice window, which is what turns the chip amber. This is still the <em>live</em> bucket rather than a fourth state: it is a live share wearing a reminder. Renew it by editing the date, or let it die.
+        {% elif obj.expires_at %}
+          <span class="badge badge-green">Live</span>
+          Fetchable now, and lapses on its own on <span class="fw-600">{{ obj.expires_at|date:"M d, Y H:i" }}</span>. It will start wearing the amber chip {{ expiring_soon_days }} days before that, which is one working week of notice — long enough to renew it, short enough that the amber count in the register is a real to-do list rather than permanent decoration.
+        {% else %}
+          <span class="badge badge-green">Live, with no end date</span>
+          This share has <span class="fw-600">no expiry</span>, so it stays fetchable until somebody revokes it or the account is deactivated. A forwarded link outlives the person it was sent to — an expiry is the only control that ends this without anyone remembering to. Setting one costs an edit; the ceiling is {{ max_expiry_days }} days, so even the most generous date eventually closes.
+        {% endif %}
+      </p>
+
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Expires</dt><dd class="mono">{% if obj.expires_at %}{{ obj.expires_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">No end date</span>{% endif %}</dd></div>
+        {% comment %}
+          None, never 0 — see the stat card. Both branches of "there is nothing to count down" print
+          the dash, and the label beside it says WHICH of the two it is.
+        {% endcomment %}
+        <div class="detail-item"><dt>Days of access left</dt><dd class="mono">{% if expires_in_days is not None %}{{ expires_in_days }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Revoked</dt><dd class="mono">{% if obj.revoked_at %}{{ obj.revoked_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Expiry ceiling</dt><dd class="mono">{{ max_expiry_days }} days</dd></div>
+        <div class="detail-item"><dt>Notice window</dt><dd class="mono">{{ expiring_soon_days }} days</dd></div>
+        <div class="detail-item"><dt>Account still active</dt><dd>{% if obj.portal_account.is_active %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No — every link on it is blocked</span>{% endif %}</dd></div>
+      </dl>
+
+      {% comment %}
+        Revoke is @require_POST + @tenant_admin_required, so it is a real POST form behind the house
+        gate. can_revoke is the exact condition the verb enforces (the UPDATE's own WHERE clause), so
+        the button is never offered for a press that would update zero rows. The confirm string
+        carries the PDS- number and NOTHING user-typed, and contains no apostrophe: an apostrophe is
+        escaped to &#39; and the HTML parser hands it to JavaScript as a bare quote, which silently
+        disables the guard altogether (L42).
+      {% endcomment %}
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if can_revoke %}
+          <form method="post" action="{% url 'scm:portaldocumentshare_revoke' obj.pk %}" onsubmit="return confirm('Revoke {{ obj.number }}? The link stops resolving immediately for everyone holding it, including the customer. This cannot be undone, and no expiry date brings it back. The download record is kept.');" style="margin-top:1rem;">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Revoke this link</button>
+            <div class="form-help">
+              Revoking is the kill switch, and it is the move to reach for whenever a link has gone somewhere it should not have. It is <span class="fw-600">immediate and permanent</span>: the revocation timestamp is evidence of when access stopped, so a second press updates nothing rather than moving that moment forward. Everything that makes the grant defensible survives — the download count, the first view and the last retrieval all stay on the row, which is precisely what deleting would destroy.
+            </div>
+          </form>
+        {% else %}
+          <p class="text-muted" style="margin-top:1rem;">
+            <span class="badge badge-muted">Already revoked</span>
+            There is nothing left to revoke — the first revocation is the one on the record, and the button is withheld rather than offered as a press that would change nothing. The row is kept because the evidence on it is the point: it says what we published, to whom, and how often they took it.
+          </p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted" style="margin-top:1rem;">
+          Revoking is a workspace-administrator action, and so is editing the expiry — they are two halves of one control (<em>how much longer may this token fetch this document?</em>), so they are gated the same way. Ask an administrator if this link needs to end sooner; everything on this page is readable either way.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ======================================================================= 4. the download record
+    The three columns that make "we published that POD on the 3rd and they downloaded it on the 4th"
+    a defensible sentence. All three are editable=False and written only by record_download(), which
+    is deliberately NOT gated on the share being live: if a file left the building that is a fact
+    worth recording even if the share died microseconds earlier.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The download record</h2>
+      {% if obj.download_count %}
+        <span class="badge badge-amber">{{ obj.download_count }} retrieval{{ obj.download_count|pluralize }}</span>
+      {% else %}
+        <span class="badge badge-muted">Never fetched</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Times retrieved</dt><dd class="mono fw-600">{{ obj.download_count }}</dd></div>
+        <div class="detail-item"><dt>First opened</dt><dd class="mono">{% if obj.first_viewed_at %}{{ obj.first_viewed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last retrieved</dt><dd class="mono">{% if obj.last_downloaded_at %}{{ obj.last_downloaded_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if not obj.download_count %}
+          Nobody has ever fetched this. The two timestamps are <span class="fw-600">blank rather than zero</span> for the same reason the counter is not: never-opened is a state, not a date, and an em dash says so where a formatted epoch would look like a real event.
+          {% if obj.share_state == "live" %}
+            A live share nobody has opened is worth a moment before it is renewed — it is either a link that never reached the customer, or a document they did not need.
+          {% endif %}
+        {% else %}
+          These three are stamped by the download route itself and are on no form anywhere: a retrieval count somebody can type is not evidence. The count increments in the database rather than being read and re-saved, so two simultaneous fetches count as two — which is the whole reason the number can be quoted in a dispute. <span class="fw-600">First opened</span> is written exactly once, by a statement that only fires while it is still empty, so it records the genuine first retrieval and not the most recent one.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin-top:.5rem;">
+        The record is kept whatever the state above says — a retrieval that happened moments before a revocation is still a file that left the building, and a trail that declined to record inconvenient events would not be a trail. This is also the difference between revoking and deleting: <span class="fw-600">revoking keeps these three columns and deleting destroys them.</span>
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 5. the itemisation of the same story
+    The counters above are the summary; this panel is every recorded touch, newest first. The rows
+    are PortalActivity models (not dicts): created_at / action / get_action_display / action_css /
+    user / ip_address / object_label, and nothing else exists on them. `user` is genuinely nullable —
+    an anonymous bearer following a forwarded link is a real, recordable visitor and the most
+    interesting row on the page when it appears.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Customer activity naming this share</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ activity_count }} row{{ activity_count|pluralize }}</span>
+        {% comment %}
+          portalactivity_list filters on ?portal_account= and ?action= and NOTHING ELSE — there is no
+          ?document_share= param, so linking one would silently show the whole workspace's log while
+          claiming to show this share's. The honest link is the one the log can actually answer: this
+          customer's downloads. The panel above is the only view narrowed to this row.
+        {% endcomment %}
+        <a href="{% url 'scm:portalactivity_list' %}?portal_account={{ obj.portal_account_id }}&amp;action=download_document" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Downloads by this customer</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Action</th><th>Who</th><th>From</th><th>What they saw</th></tr></thead>
+        <tbody>
+          {% for a in activities %}
+            <tr>
+              <td class="nowrap">{{ a.created_at|date:"M d, Y H:i" }}</td>
+              <td><span class="badge {{ a.action_css }}">{{ a.get_action_display }}</span></td>
+              <td>
+                {% if a.user %}
+                  {{ a.user }}
+                {% else %}
+                  <span class="badge badge-amber">Anonymous bearer</span>
+                {% endif %}
+              </td>
+              <td class="mono nowrap">{% if a.ip_address %}{{ a.ip_address }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if a.object_label %}{{ a.object_label }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="footprints"></i>
+                  <h3>Nothing has been recorded against this share</h3>
+                  <p>No signed-in visit and no anonymous fetch has named this row yet. On a live share that usually means the link has not been used — the counters above say the same thing from the other direction. The log is append-only and is written only by the portal views and the download route, so an empty panel is a genuine absence of activity rather than a gap in the recording.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if activities_truncated %}
+        Showing the newest {{ activities|length }} of <span class="fw-600">{{ activity_count }}</span> — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. The older rows are still in the activity log; this panel is the newest window onto them, not the whole record.
+      {% else %}
+        Every recorded touch is shown.
+      {% endif %}
+      A row with <span class="fw-600">no user</span> is not a fault in the log: the download route needs no login, so a forwarded link produces exactly this — a real retrieval by somebody we cannot name, recorded with its address and its moment. Those are the rows worth reading before renewing an expiry. These entries survive even if this share is deleted, because each keeps its own label and timestamp; what they lose is the pointer back here, and nothing reconstructs it.
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================= 6. the actions
+    Edit and Delete are both @tenant_admin_required, for two different reasons that both hold. Edit
+    because expires_at is on that form and blanking it (blank = never expires) on a share only an
+    admin may revoke is a privilege escalation, not a milder version of revoking. Delete because it
+    is revoke PLUS the destruction of the download evidence — a member who may not kill a link
+    certainly may not erase the record that it existed and was used.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <div class="form-actions">
+          <a href="{% url 'scm:portaldocumentshare_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+          {% comment %}
+            The confirm string carries the PDS- number and the retrieval COUNT and nothing else. No
+            apostrophe anywhere in it, and no user-typed value: interpolating one into a confirm()
+            attribute was stored XSS in 4.13, and an escaped apostrophe silently kills the dialog.
+          {% endcomment %}
+          <form method="post" action="{% url 'scm:portaldocumentshare_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This kills the link AND destroys its download record: {{ obj.download_count }} retrieval(s) can no longer be proved from this row. Revoke instead if that evidence matters.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+          <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="fw-600">Editing is admin-only here and nowhere else in the module</span>, and the reason is easy to mistake for a convention: the expiry date is on that form, blank means never expires, and revoking is admin-gated — so a member who could edit could grant a share immortality on a link only an administrator may kill. Editing a <em>revoked</em> share is allowed and changes nothing about access, because the download route's guard sits in the lookup; it exists so a title can still be corrected on a row somebody has to read in a dispute.
+        </p>
+        <p class="text-muted" style="margin-top:.5rem;">
+          <span class="badge badge-red">Deleting is almost always the wrong verb</span>
+          It does what revoking does and then destroys the proof: the retrieval count, the first view and the last download go with the row, and <em>we published that document and they collected it</em> stops being provable. The customer-side activity above survives — each entry keeps its label and its timestamp — but it no longer points at anything. Revoke unless the row itself was a mistake.
+        </p>
+      {% else %}
+        <div class="form-actions">
+          <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+        </div>
+        <p class="text-muted" style="margin-top:.75rem;">
+          Editing, revoking and deleting a share are all workspace-administrator actions: each of the three changes how much longer somebody outside this company can fetch this document, or erases the record that they did. Publishing a <span class="fw-600">new</span> share is not gated — that is the module's ordinary business operation, it lands at the top of the register wearing its state chip, and it leaves a create entry in the audit log. Everything on this page is readable.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
