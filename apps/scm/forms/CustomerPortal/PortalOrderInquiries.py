@@ -132,6 +132,19 @@ class PortalInquiryCustomerForm(_InquiryFormBase):
        attach the invoice during triage, which is where the entitlement is already known.
     """
 
+    #: Inquiry types this form cannot legally accept, because the model's ``clean()`` requires a
+    #: field the form does not have.
+    #:
+    #: ``invoice_dispute`` requires ``invoice``, and this form has no invoice picker by design (see
+    #: point 3 above). Leaving the choice on the dropdown was a **500**, not a validation error:
+    #: ``clean()`` raises ``{"invoice": …}``, ``_post_clean`` forwards it to ``add_error("invoice")``,
+    #: and ``add_error`` on a field the form does not declare raises ``ValueError`` — on the
+    #: customer-facing page, for any customer who picked "Invoice dispute". Removing the option is
+    #: the honest fix: the form genuinely cannot take that inquiry, so it must not offer it.
+    #: A customer with a billing question raises it as ``other``, and staff re-type it during triage
+    #: where the invoice picker exists.
+    UNSUPPORTED_TYPES = ("invoice_dispute",)
+
     class Meta:
         model = PortalOrderInquiry
         fields = [
@@ -143,3 +156,13 @@ class PortalInquiryCustomerForm(_InquiryFormBase):
             "quantity_affected":
                 "How many units are affected, if it is only part of the order.",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Narrow the vocabulary rather than validating against it afterwards — an option the form
+        # cannot process must not be renderable, and a crafted POST carrying one is then refused by
+        # ChoiceField's own validation with an ordinary field error rather than by a guard of ours.
+        field = self.fields.get("inquiry_type")
+        if field is not None:
+            field.choices = [(value, label) for value, label in field.choices
+                             if value not in self.UNSUPPORTED_TYPES]
