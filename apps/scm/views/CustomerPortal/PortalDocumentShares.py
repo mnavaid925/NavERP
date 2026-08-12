@@ -464,7 +464,15 @@ def portaldocumentshare_create(request):
                 "is revoked.")
             return _detail(obj.pk)
     else:
+        # `?portal_account=<pk>` pre-selects the audience, and that is not merely a convenience:
+        # the six pointer dropdowns can only be narrowed to "this customer's own documents" once
+        # the account is known, so without it the unbound form legitimately offers nothing to
+        # share. The account detail page links here with the param for exactly that reason; a
+        # visitor arriving without one picks the account, submits, and the bound re-render fills
+        # the pointers in. `as_db_int` is applied inside the form, so junk in the query string
+        # leaves the dropdowns empty rather than raising.
         form = PortalDocumentShareForm(tenant=request.tenant,
+                                       initial={"portal_account": request.GET.get("portal_account")},
                                        instance=PortalDocumentShare(tenant=request.tenant))
 
     ctx = {"form": form, "is_edit": False}
