@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — My Documents (the GATED customer-facing document library).
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_documents. Everything this page may read,
+and nothing else (the view pins the same list in its module docstring):
+
+  object_list            list of dicts — built by _share_rows(), keys spelled out below
+  page_obj               the paginated PortalDocumentShare page (PORTAL_PAGE_SIZE = 12)
+  q                      the echoed search term
+  doc_type_choices       SHARE_DOC_TYPE_CHOICES — [(value, label)]
+  doc_type               the RESOLVED filter value ("" when absent or junk)
+  account customer access
+  can_track_shipments can_view_invoices can_view_documents
+  can_raise_inquiries can_request_returns show_credit_and_balance
+
+ROW dict — these key names come from _share_rows() (Portal.py:381-403), NOT from the model fields,
+and a wrong one renders as a silent blank on a 200 (L41):
+
+  obj                the PortalDocumentShare itself
+  download_url       str — "" when the row somehow carries no token
+  has_file           bool — True when bytes will stream, False when the target is a printed document
+  is_available       bool — False when the pointed-at record has since been deleted (every pointer
+                     is SET_NULL, so that is a real state rather than a bug)
+
+**public_token is deliberately NOT a row key, and is never rendered here in any form.** It is a
+bearer credential: whoever holds it retrieves the file with no login at all. _share_rows() builds
+`download_url` server-side precisely so this template is never handed the value it could print as
+text, as a tooltip or as a data- attribute. The href IS the one legitimate exposure — anything
+beyond it (a "copy token" affordance, a title=, a visible column) hands the credential to anyone
+who can see the screen or read the page source out of a shoulder-surf. Do not add one.
+
+LIVENESS is not a template concern. _live_shares() drops revoked and expired rows in SQL before
+pagination, so every row rendered here is retrievable and page_obj.paginator.count counts exactly
+what is shown. There is no {% if obj.is_live %} to forget.
+
+expires_at is null=True and a NULL means "this link does not expire" — an em dash, never a blank
+cell and never a substituted date. is_available False and has_file False are both real, common
+states and each gets its own honest cell rather than a broken-looking link: a share whose target was
+deleted 404s at the token route, and a share pointing at a RENDERED document (an invoice, a
+contract, a certificate of analysis) has no bytes on disk at all and the route answers with the
+"contact us and quote PDS-…" sentence reproduced inline below.
+
+The doc_type <select> binds to `doc_type` (the RESOLVED value) and NOT to request.GET.doc_type:
+a hand-edited value that narrowed nothing must not be rendered as the selected option, or the page
+shows a filter that did not happen (the 4.14 `effective` finding, and the view says so at
+_resolved_choice()).
+
+Everything on this page is user-typed — a share `title` is free text a staff member entered — so it
+renders escaped and never with |safe. Badges come from PortalDocumentShare.doc_type_css, which
+resolves through SHARE_DOC_TYPE_CSS and only ever returns one of the six classes that exist in
+theme.css: badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate.
+badge-success / badge-warning / badge-danger do not exist and render unstyled (L33).
+{% endcomment %}
+{% block title %}My Documents{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Documents</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:portal_home' %}">My Account</a><span class="sep">›</span>
+        <span>Documents</span>
+      </div>
+      <p class="text-muted">
+        Every document {% if customer %}<span class="fw-600">{{ customer.name }}</span>{% else %}your
+        organisation{% endif %} has been given access to — invoices, delivery proofs, shipping
+        paperwork, contracts and certificates. Only documents that are still available to you are
+        listed; anything withdrawn or past its date disappears from this page rather than failing
+        when you open it.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if can_track_shipments %}
+        <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="package"></i> My Orders</a>
+      {% endif %}
+      <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Catalogue</a>
+      <a href="{% url 'scm:portal_home' %}" class="btn btn-primary"><i data-lucide="home"></i> My Account</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="folder-open"></i></div>
+      <div class="stat-value">{{ page_obj.paginator.count|default_if_none:"—" }}</div>
+      <div class="stat-label">
+        {% if q or doc_type %}Document{{ page_obj.paginator.count|pluralize }} matching your filters
+        {% else %}Document{{ page_obj.paginator.count|pluralize }} available to you{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Find a document</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="pd-q">Search</label>
+          <input type="text" id="pd-q" name="q" value="{{ q }}" class="form-input"
+                 placeholder="Document title or reference…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="pd-doc-type">Document type</label>
+          <select name="doc_type" id="pd-doc-type" class="form-select">
+            <option value="">All types</option>
+            {% for value, label in doc_type_choices %}
+              <option value="{{ value }}" {% if doc_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        A document type we do not recognise is ignored rather than shown as selected, so the list you
+        see always matches the filters drawn above it.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Shared with you</h2>
+      <div class="badge-group">
+        <span class="badge badge-info"><i data-lucide="shield-check"></i> Download links are personal — please do not forward them</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Type</th>
+            <th>Shared</th>
+            <th>Available until</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td>
+                <div class="fw-600">{{ row.obj.title }}</div>
+                <div class="form-help mono">{{ row.obj.number|default:"—" }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  doc_type_css is the model's own property (SHARE_DOC_TYPE_CSS, falling back to
+                  badge-muted), so this page and the staff pages cannot style the same type two ways.
+                  The {% else %} keeps the label readable if a type ever arrives without a class.
+                {% endcomment %}
+                {% if row.obj.doc_type_css %}
+                  <span class="badge {{ row.obj.doc_type_css }}">{{ row.obj.get_doc_type_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ row.obj.get_doc_type_display }}</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if row.obj.created_at %}{{ row.obj.created_at|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% if row.obj.expires_at %}
+                  {{ row.obj.expires_at|date:"M d, Y" }}
+                  <div class="form-help">{{ row.obj.expires_at|date:"H:i" }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help">Does not expire</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    Three genuinely different rows, three different cells. Only the first carries a
+                    link, and the link is the ONLY place the share's token ever appears — built by
+                    _share_rows() as `download_url`, printed in the href and nowhere else.
+                  {% endcomment %}
+                  {% if not row.is_available %}
+                    <span class="badge badge-muted"><i data-lucide="file-x"></i> No longer available</span>
+                  {% elif not row.has_file %}
+                    <span class="badge badge-slate"><i data-lucide="printer"></i> Issued as a printed page</span>
+                  {% elif row.download_url %}
+                    <a href="{{ row.download_url }}" class="btn btn-primary"><i data-lucide="download"></i> Download</a>
+                  {% else %}
+                    <span class="badge badge-muted"><i data-lucide="link-2-off"></i> Link unavailable</span>
+                  {% endif %}
+                </div>
+                {% if not row.is_available %}
+                  <div class="form-help">This document has been withdrawn from our records. Contact us quoting {{ row.obj.number|default:"this reference" }}.</div>
+                {% elif not row.has_file %}
+                  <div class="form-help">There is no file to download for this one. Contact us quoting {{ row.obj.number|default:"this reference" }} and we will send it to you.</div>
+                {% elif not row.download_url %}
+                  <div class="form-help">This link is not ready yet. Contact us quoting {{ row.obj.number|default:"this reference" }}.</div>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  {% if q or doc_type %}
+                    <i data-lucide="search-x"></i>
+                    <h3>No documents match those filters</h3>
+                    <p>Nothing shared with you matches that search or document type. Clear the filters above to see everything that is available to you.</p>
+                  {% else %}
+                    <i data-lucide="folder-open"></i>
+                    <h3>No documents yet</h3>
+                    <p>Nothing has been shared with your account so far. Invoices, delivery proofs, shipping paperwork and certificates appear here as soon as we publish them to you.</p>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-body form-help">
+      A download link works for anyone who has it, so please treat one like a password: open it
+      yourself rather than forwarding it on. Some links stop working on the date shown above, and any
+      of them can be withdrawn — if one stops working, the document simply disappears from this list
+      and you can ask us to share it again.
+      {% if can_raise_inquiries %}
+        <a href="{% url 'scm:portal_inquiry_create' %}">Raise an inquiry</a> if something you expected is missing.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
