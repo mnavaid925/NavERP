@@ -272,7 +272,17 @@ badge-warning / badge-danger do not exist in theme.css and render completely uns
                         ways: title, aria-label and an .sr-only span inside the chip.
                       {% endcomment %}
                       {% if row.band %}
+                        {% comment %}
+                          role="img" is load-bearing, not decoration: aria-label on a bare <span>
+                          (implicit role=generic) is ignored per the ARIA spec, so without it the
+                          label reached assistive tech only through the .sr-only child — the
+                          weakest of the three carriers. The staff twin in catalog_preview.html
+                          already does it this way. Colour must never be the only carrier of the
+                          meaning: this chip is the entire availability signal in band mode, and it
+                          is invisible to a screen reader and to red/green colour deficiency.
+                        {% endcomment %}
                         <span class="badge {% if row.band_css %}{{ row.band_css }}{% else %}badge-muted{% endif %}"
+                              role="img"
                               title="{{ row.band_label|default:row.band }}"
                               aria-label="{{ row.band_label|default:row.band }}">
                           <span class="sr-only">{{ row.band_label|default:row.band }}</span>
@@ -327,9 +337,16 @@ badge-warning / badge-danger do not exist in theme.css and render completely uns
                             · {{ site.quantity|floatformat:2 }}{% if row.obj.uom %} {{ row.obj.uom.code }}{% endif %}
                           {% endif %}
                           {% if site.band %}
+                            {% comment %}
+                              role="img" for the same reason as the row chip above. The location
+                              name is defaulted here too: the visible line renders it as an em dash
+                              when it is null, so an undefaulted label announced "None: In stock"
+                              while the page showed "—".
+                            {% endcomment %}
                             <span class="badge {% if site.band_css %}{{ site.band_css }}{% else %}badge-muted{% endif %}"
+                                  role="img"
                                   title="{{ site.band_label|default:site.band }}"
-                                  aria-label="{{ site.location.name }}: {{ site.band_label|default:site.band }}">
+                                  aria-label="{{ site.location.name|default:'This site' }}: {{ site.band_label|default:site.band }}">
                               {% if stock_display == 'band' %}
                                 <span class="sr-only">{{ site.band_label|default:site.band }}</span>
                               {% else %}
