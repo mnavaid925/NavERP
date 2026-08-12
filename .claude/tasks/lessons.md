@@ -964,3 +964,48 @@ that would ever show a third session inheriting it.
 
 See [[concurrent-sessions-same-tree]], L41 §3 (the rule this failed to apply), L44 (the checks-that-
 pass-for-the-wrong-reason family this belongs to) and L45.
+
+---
+
+## L47 — A `-k` filtered test run cannot detect a name collision, because the damage lands outside the filter
+
+**Context:** SCM 4.14. I appended `_plan_form_payload` to `test_forms.py` for the LaborPlan form.
+That name was already taken — 4.13's `MaintenancePlanForm` builder, ~800 lines above. Python binds
+the **last** module-level definition for the whole module, so 4.13's three plan-form tests silently
+began building their request bodies out of a LaborPlan payload and failed.
+
+I had warned the agent about this explicitly, citing L41 §2. It happened anyway. And then **I
+committed it**, because I verified with:
+
+```
+pytest apps/scm/tests -k "Labor or labor"      -> 505 passed
+```
+
+### Why that run could not possibly have caught it
+
+A shadowing collision **does not break the new tests**. The new tests call the new helper and get
+the new helper — they are correct, and they pass. What breaks is every **earlier** caller of the
+name, which in this case was 4.13. `-k "Labor"` excluded exactly the tests the defect damaged.
+
+That is not bad luck. It is structural: the blast radius of a name collision is, by definition, the
+code that used the name **before** you — and a filter selecting *your* work selects the complement of
+that set. The more precisely you scope the run to what you changed, the more completely you exclude
+what you broke.
+
+`test_suite_hygiene.py` caught it on the full run, naming both line numbers, exactly as designed.
+
+**Rules:**
+1. **Run the FULL suite before committing anything that appends to a shared test module.** A `-k`
+   run is a development loop, never a merge gate. This applies to any change whose failure mode is
+   "something else now behaves differently" — collisions, shared fixtures, conftest edits, promoted
+   helpers.
+2. When a subset passes and you are about to commit, ask **which tests did this filter exclude, and
+   could my change reach them?** If the answer is "it adds a module-level name" the answer is always
+   yes.
+3. Prefix a helper with its sub-module (`_labor_plan_form_payload`) rather than trusting a grep you
+   might not run. The prefix makes the collision impossible instead of detectable.
+4. This is the L44 family again with the filter as the culprit rather than the assertion: a green
+   result that means *"we did not look there"*, indistinguishable from *"we looked and it was fine"*.
+
+See L41 §2 (the collision itself), L44 (checks that pass for the wrong reason), and
+`apps/scm/tests/test_suite_hygiene.py`, which is the working example of a rule with teeth.
