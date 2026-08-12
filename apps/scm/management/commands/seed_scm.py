@@ -4666,7 +4666,12 @@ class Command(BaseCommand):
         # ---- 1. the fully-enabled account -------------------------------------------------------
         rich = PortalAccount.objects.create(
             tenant=tenant, customer=rich_customer, is_active=True,
-            stock_display="exact_quantity", low_stock_threshold=Decimal("10.0000"),
+            # NO low_stock_threshold with `exact_quantity`: PortalAccount.clean() refuses that pair
+            # (only `availability_text` and `band` consume a threshold). `objects.create()` skips
+            # `full_clean()`, so the row saved happily — and then opening the seeded account in the
+            # edit form and pressing Save was rejected on a row nobody had touched. Demo data that
+            # cannot survive its own edit form is a trap laid for whoever clicks it first.
+            stock_display="exact_quantity",
             show_by_location=True,
             catalog_scope="categories" if categories else "all_active",
             price_basis="last_ordered", show_credit_and_balance=True,
@@ -4822,9 +4827,13 @@ class Command(BaseCommand):
             if PortalActivity.record(rich, action, user=candidate or admin, **targets) is not None:
                 written += 1
         if restricted is not None:
-            PortalActivity.record(restricted, "login", user=candidate or admin)
-            PortalActivity.record(restricted, "view_catalog", user=candidate or admin)
-            written += 2
+            # Counted the same way as the loop above rather than `written += 2`. `record()` FAILS
+            # SOFT by design and returns None on any error, so an unconditional increment would let
+            # the summary line report rows that were never written — a seeder that overstates what
+            # it created is the one thing a seeder must not do.
+            for action in ("login", "view_catalog"):
+                if PortalActivity.record(restricted, action, user=candidate or admin) is not None:
+                    written += 1
 
         accounts = [a for a in (rich, restricted, empty) if a is not None]
         self.stdout.write(
