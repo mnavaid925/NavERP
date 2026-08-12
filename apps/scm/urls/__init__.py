@@ -83,6 +83,16 @@ from .ColdChainManagement.TemperatureReadings import urlpatterns as _ccm_reading
 from .ColdChainManagement.TemperatureExcursions import urlpatterns as _ccm_excursions
 from .ColdChainManagement.Reports import urlpatterns as _ccm_reports
 
+# 4.16 Customer Portal. Alias `_cp_` — verified free against all fifteen shipped aliases, and in
+# particular it is NOT `_cc_` (4.12 ContractCompliance) or `_ccm_` (4.15 ColdChainManagement).
+# Rebinding either of those would silently drop another sub-module's routes with no import error.
+from .CustomerPortal.PortalAccounts import urlpatterns as _cp_accounts
+from .CustomerPortal.PortalOrderInquiries import urlpatterns as _cp_inquiries
+from .CustomerPortal.PortalDocumentShares import urlpatterns as _cp_shares
+from .CustomerPortal.PortalActivities import urlpatterns as _cp_activity
+from .CustomerPortal.Reports import urlpatterns as _cp_reports
+from .CustomerPortal.Portal import urlpatterns as _cp_portal
+
 
 app_name = "scm"
 
@@ -331,4 +341,28 @@ urlpatterns = [
     *_ccm_readings,                      # ColdChainManagement/TemperatureReadings (append-only)
     *_ccm_excursions,                    # ColdChainManagement/TemperatureExcursions (queue + ladder)
     *_ccm_reports,                       # ColdChainManagement/Reports (cold storage + compliance + reefers)
+
+    # --- 4.16 Customer Portal ---
+    # EIGHT unrelated first segments: `portal-accounts`, `portal-inquiries`,
+    # `portal-document-shares`, `portal-activity`, `portal-order-tracking`,
+    # `portal-catalog-preview`, `portal` and `portal-documents`. Django matches WHOLE path
+    # components and never splits one at a hyphen, so none of these shadows another and none may
+    # ever be "tidied" into another's shape. The only pre-existing `portal` paths in this app are
+    # 4.10's `return-portal/` and `return-portal/request/` — a different first segment entirely.
+    # `crm`'s own `portal/` and `portal-access/` routes live in a different app mounted at `/crm/`
+    # and cannot collide.
+    #
+    # VIEW-NAME check (the `scm:` namespace is flat): 4.10 already owns `return_portal` and
+    # `portal_return_create`; 4.16 reuses neither.
+    #
+    # `portal-documents/<str:token>/` is only the SECOND greedy `<str:…>` converter in the whole app
+    # (4.10's `return-tracking/<str:token>/` was the first). It sits alone on its own first segment,
+    # so it cannot swallow a neighbour — the next greedy converter added WITHOUT this check is the
+    # one that breaks something.
+    *_cp_accounts,                       # CustomerPortal/PortalAccounts (the enablement console)
+    *_cp_inquiries,                      # CustomerPortal/PortalOrderInquiries (triage over crm.Case)
+    *_cp_shares,                         # CustomerPortal/PortalDocumentShares (+ admin-gated revoke)
+    *_cp_activity,                       # CustomerPortal/PortalActivities (append-only, list+detail)
+    *_cp_reports,                        # CustomerPortal/Reports (order tracking + catalog preview)
+    *_cp_portal,                         # CustomerPortal/Portal (gated customer surface + token download)
 ]
