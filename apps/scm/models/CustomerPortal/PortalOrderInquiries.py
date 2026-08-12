@@ -230,6 +230,15 @@ class PortalOrderInquiry(TenantNumbered):
             models.Index(fields=["tenant", "inquiry_type"], name="scm_piq_tnt_type_idx"),
             models.Index(fields=["tenant", "sales_order"], name="scm_piq_tnt_so_idx"),
             models.Index(fields=["tenant", "case"], name="scm_piq_tnt_case_idx"),
+            # The staff list's ORDER BY (``-created_at, -id`` with only ``tenant`` guaranteed) —
+            # none of the four indexes above carries a date column, so the sort was a filesort.
+            models.Index(fields=["tenant", "created_at"], name="scm_piq_tnt_at_idx"),
+            # `(tenant, portal_account)` was missing while THREE hot queries correlate on exactly
+            # that pair: the account list's open-inquiry `Subquery` and its `has_inquiries`
+            # `Exists`, both evaluated ONCE PER ROW of that list, and the account detail panel.
+            # They were falling back to the bare `portal_account_id` FK index, which carries no
+            # tenant and therefore cannot serve the correlated pair.
+            models.Index(fields=["tenant", "portal_account"], name="scm_piq_tnt_acct_idx"),
         ]
 
     def __str__(self):
@@ -312,6 +321,43 @@ class PortalOrderInquiry(TenantNumbered):
                     errors["quantity_affected"] = (
                         f"That line only ordered {ordered}. A claim can't cover more units than "
                         "were sold.")
+
+        # (e) THE COUNTERPARTY RULE. Same tenant is NOT the same customer.
+        #
+        # Everything above proves the FKs belong to this workspace and that the line/shipment belong
+        # to the named order. None of it proved they belong to the customer whose portal this
+        # inquiry is filed under — and the staff form's `sales_order` queryset is tenant-wide, so a
+        # POST naming Acme's portal account and Contoso's order validated cleanly. The consequence
+        # is not abstract: `portal_home` filters `recent_inquiries` on `portal_account` alone, so
+        # Acme's own portal page would render Contoso's order number, and the wrapped `crm.Case`
+        # would put whatever staff typed onto Acme's thread.
+        #
+        # `PortalDocumentShare.clean()` already enforces exactly this rule for its six pointers, and
+        # `link_return()` enforces it for the RMA — the context FKs were simply the ones left out.
+        #
+        # Keyed on the field names the STAFF form declares. `invoice` is in FORM_INVISIBLE below, so
+        # a customer-form submission re-homes rather than raising ValueError.
+        account = getattr(self, "portal_account", None)
+        owner_id = getattr(account, "customer_id", None) if account is not None else None
+        if owner_id is not None:
+            for name, path in (("sales_order", "customer_id"),
+                               ("shipment", "sales_order.customer_id"),
+                               ("invoice", "party_id")):
+                if getattr(self, f"{name}_id", None) is None or name in errors:
+                    continue
+                found = getattr(self, name, None)
+                for part in path.split("."):
+                    found = getattr(found, part, None)
+                    if found is None:
+                        break
+                # `None` means the target names no customer at all (a shipment with no order). That
+                # is not a mismatch and is left alone — the order-bound `clean()` rules above already
+                # decide which types may arrive without an order.
+                if found is not None and found != owner_id:
+                    errors[name] = (
+                        f"That record belongs to a different customer — an inquiry filed under "
+                        f"{account.customer}'s portal account may only name {account.customer}'s "
+                        f"own documents.")
 
         # RE-HOME any error keyed on a column no ModelForm can declare.
         #
