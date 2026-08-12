@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — one portal order inquiry, triaged.
+
+A PortalOrderInquiry is a crm.Case with supply-chain context bolted to it, and this page is built
+around that split rather than hiding it. CRM owns the conversation, the case status, the SLA clocks
+and CSAT; 4.16 owns which order/line/parcel/invoice the ticket is about, and how it ended. Every
+figure below that belongs to CRM is READ here and computed nowhere, and every document below is
+opened in the sub-module that owns it — this console points at those rows, it does not edit them.
+
+Renders apps/scm/views/CustomerPortal/PortalOrderInquiries.py::portalorderinquiry_detail. Everything
+this page may read, and nothing else:
+
+  obj                         the PortalOrderInquiry, every context FK joined. Badges are the model's
+                              own lookups — obj.inquiry_type_css / obj.outcome_css /
+                              obj.customer_status_css — never a colour invented here. obj.age_days is
+                              None on an unsaved row.
+  case                        the wrapped crm.Case: number, subject, status, priority, owner, origin,
+                              sla_policy and the four SLA/CSAT timestamps. Nothing on this page
+                              writes it and nothing recomputes it.
+  customer                    the core.Party the inquiry is about, or None. None means UNKNOWN — a
+                              staff-filed general inquiry with neither a portal account nor an order
+                              — and never "matches anything".
+  context_rows                a LIST OF DICTS, and the keys are the resolver's, not the model's:
+                              label / value / url_name / pk / owner. url_name is "" for the order
+                              line (it has no page of its own), so every link is guarded on it.
+                              `owner` is the sentence naming the sub-module that owns that document
+                              — it is rendered because it is the point, not as decoration.
+  sla_chip                    a plain (label, css) 2-tuple — render .0 and .1
+  sla_state                   the raw breached / due_soon / ok / none token, for conditionals.
+                              `none` is nobody promised anything, deliberately NOT `ok`.
+  case_comments               the window onto CRM's thread, oldest-first: is_public / author_name /
+                              author / body / created_at. case_comment_count is the true total and
+                              case_comments_truncated says the window hid some.
+  can_resolve / can_reopen / can_raise_return
+                              read from the SAME conditions the three verbs enforce, so a button and
+                              the route behind it cannot disagree about whether a move is available
+                              (the 4.11 finding). ONLY the legal next moves are drawn.
+  resolvable_outcomes         (value, label) pairs — render .0 and .1. `rma_raised` is absent by
+                              construction: it is a claim about a document and only the raise-return
+                              verb may set it.
+  return_candidates           ReturnAuthorization rows the picker may offer, already tenant- and
+                              customer-scoped exactly as link_return refuses.
+  return_candidates_truncated / max_picker_rows / max_note_length
+
+MAX_THREAD_ROWS is not in the context, so the thread panel describes its cap as "the window shown"
+rather than quoting a number this page cannot see.
+
+age_days, quantity_affected, satisfaction_rating and every SLA timestamp are tested with
+`is not None` (or an explicit {% if %}) and print an em dash when unset. A 0 in the age tile would
+claim the customer has waited no time; a 0 CSAT would claim they hated it. Neither is what "we do not
+know" means, and |default would swallow a genuine zero on the first of those.
+
+Resolve, reopen, raise-return and delete are all @require_POST, so each is a real <form method="post">
+with a csrf token. Every confirm string carries the system-generated PIQ- number and NOTHING a user
+typed: HTML decodes &#39; inside an attribute before the JS engine sees it, which silently disables
+the guard, and interpolating a user-typed value there was stored XSS in 4.13 (L42). No apostrophe
+appears in any of them for the same reason.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33). Every badge class here is a model lookup (obj.inquiry_type_css,
+obj.outcome_css, obj.customer_status_css, sla_chip.1) or one of the six literals. The internal
+case-status ladder mirrors CRM's own case detail page so the same status is the same colour in both
+consoles.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {{ obj.inquiry_type_css }}">{{ obj.get_inquiry_type_display }}</span>
+        <span class="badge {{ obj.outcome_css }}">{{ obj.get_outcome_display }}</span>
+        <span class="badge {{ sla_chip.1 }}">{{ sla_chip.0 }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portalorderinquiry_list' %}">Portal Inquiries</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">
+        This inquiry is a <span class="fw-600">support case with supply-chain context attached</span>, and the two halves have different owners. CRM owns the conversation, the case status, the SLA clocks and the satisfaction score; this module owns which order, line, parcel and invoice the ticket is about, and how it ended. Nothing on this page writes a case status, recomputes an SLA or invents a customer-facing label — every document below opens in the sub-module that owns it.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'crm:case_detail' case.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> Open the case thread</a>
+      <a href="{% url 'scm:portalorderinquiry_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit context</a>
+      <a href="{% url 'scm:portalorderinquiry_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clock"></i></div>
+      {% comment %}
+        age_days is None only on an unsaved row, and a real 0 (raised today) is a fact rather than a
+        gap — so the test is `is not None` and never |default, which would print an em dash over a
+        legitimate zero.
+      {% endcomment %}
+      <div class="stat-value">{% if obj.age_days is not None %}{{ obj.age_days }}{% else %}—{% endif %}</div>
+      <div class="stat-label">
+        {% if obj.age_days is not None %}
+          Day{{ obj.age_days|pluralize }} since it was raised{% if not obj.is_open %} — measured to the resolution, so an inquiry answered on day nine keeps saying nine{% else %} — still counting, which is how long the customer has waited so far{% endif %}
+        {% else %}
+          Not yet raised
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ sla_chip.0 }}</div>
+      <div class="stat-label">
+        {% if sla_state == "none" %}
+          No policy was resolved when this case was opened — nobody promised anything, which is not the same as meeting a promise
+        {% else %}
+          Read off the case deadlines below. 4.16 recomputes no SLA of its own
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="eye"></i></div>
+      <div class="stat-value" style="font-size:1.35rem;">{{ obj.customer_status_label }}</div>
+      <div class="stat-label">What the customer is being shown · internally this case is <span class="fw-600">{{ case.get_status_display }}</span></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="star"></i></div>
+      {% comment %}
+        CSAT is CRM's survey. None means the customer has not answered — a 0 here would read as the
+        worst possible score, which is the opposite statement.
+      {% endcomment %}
+      <div class="stat-value">{% if case.satisfaction_rating is not None %}{{ case.satisfaction_rating }} / 5{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if case.satisfaction_rating is not None %}Satisfaction score, recorded by CRM{% else %}No satisfaction score — CRM has not had an answer{% endif %}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 1. the supply-chain context
+    The reason this model exists: a plain crm.Case cannot say which order, line, parcel or invoice
+    the argument is about. Every row is built by _context_rows() and carries its own `owner`
+    sentence, so the page states out loud that 4.16 points at these documents and owns none of them.
+    Only rows that EXIST are returned — an empty list is the real answer for a general question with
+    no order behind it, and gets the empty state rather than four em dashes.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this inquiry is about</h2>
+      <span class="badge badge-slate">{{ context_rows|length }} linked document{{ context_rows|length|pluralize }}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Document</th><th>Reference</th><th>Which sub-module owns it</th><th class="table-actions">Open</th></tr></thead>
+        <tbody>
+          {% for row in context_rows %}
+            <tr>
+              <td class="fw-600 nowrap">{{ row.label }}</td>
+              <td>{{ row.value }}</td>
+              <td class="text-muted">{{ row.owner }}</td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    url_name is "" for the order line, which has no page of its own — reversing an
+                    empty name is a NoReverseMatch, so the link is guarded rather than assumed.
+                  {% endcomment %}
+                  {% if row.url_name %}
+                    <a href="{% url row.url_name row.pk %}" class="btn-icon" title="Open in the owning module"><i data-lucide="eye"></i></a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4">
+                <div class="empty-state">
+                  <i data-lucide="unlink"></i>
+                  <h3>No document is attached to this inquiry</h3>
+                  <p>That is a real answer rather than a gap: a product question or a general complaint can be about the relationship instead of about a purchase, and the order-bound types are refused at save time precisely so the ones that <em>should</em> carry an order always do. Attach whatever is known through Edit context — the type, the line and the parcel are corrections somebody must be able to make after the fact.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Each link above leaves this console. <span class="fw-600">Nothing here edits any of those documents</span> — the order stays 4.5's, the parcel and its tracking events stay 4.6's, the invoice stays 2.4's and the return stays 4.10's. A portal inquiry is an annotation on them, and the moment it starts behaving like a second place to fix an order there are two answers to "what did we ship?".
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 2. the two statuses, side by side
+    The most important panel on the page. The internal status is the agent queue's word; the
+    customer status is what the portal has actually been telling them. Showing only one of them is
+    how somebody tells a customer their ticket is "In Progress" while the portal has said "Awaiting
+    your reply" for three days.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Both statuses — ours and theirs</h2>
+      <div class="badge-group">
+        <span class="badge {{ obj.customer_status_css }}">{{ obj.customer_status_label }}</span>
+        <span class="badge badge-{% if case.status == 'resolved' %}green{% elif case.status == 'closed' %}slate{% elif case.status == 'in_progress' %}amber{% elif case.status == 'new' or case.status == 'open' or case.status == 'waiting' %}info{% else %}muted{% endif %}">{{ case.get_status_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        The customer is not shown our queue vocabulary, and deliberately: <span class="fw-600">new</span>, <span class="fw-600">open</span> and <span class="fw-600">in progress</span> all collapse to one customer word, because which of the three a ticket sits in is a fact about how <em>we</em> work rather than about their order. The mapping lives in one place and is read here, so nobody spells a customer-facing label inline. Both words are printed together because the gap between them is what a customer phones about.
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Support case</dt><dd><a href="{% url 'crm:case_detail' case.pk %}" class="fw-600 mono">{{ case.number }}</a></dd></div>
+        <div class="detail-item"><dt>Subject</dt><dd>{{ case.subject }}</dd></div>
+        <div class="detail-item"><dt>Customer</dt><dd>{% if customer %}{{ customer.name }}{% else %}<span class="text-muted">Unknown — filed with no portal account and no order</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Portal account</dt><dd>{% if obj.portal_account_id %}<a href="{% url 'scm:portalaccount_detail' obj.portal_account_id %}">{{ obj.portal_account }}</a>{% else %}<span class="text-muted">Not on the portal</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Inquiry type</dt><dd><span class="badge {{ obj.inquiry_type_css }}">{{ obj.get_inquiry_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>What they asked for</dt><dd>{{ obj.get_requested_resolution_display }}</dd></div>
+        <div class="detail-item"><dt>Units affected</dt><dd class="mono">{% if obj.quantity_affected is not None %}{{ obj.quantity_affected|floatformat:"-4" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Outcome</dt><dd><span class="badge {{ obj.outcome_css }}">{{ obj.get_outcome_display }}</span></dd></div>
+        <div class="detail-item"><dt>Resolved at</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Still open</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raised through</dt><dd><span class="badge badge-muted">{{ obj.get_source_display }}</span></dd></div>
+        <div class="detail-item"><dt>Case type</dt><dd>{{ case.get_type_display }}</dd></div>
+        <div class="detail-item"><dt>Case origin</dt><dd>{{ case.get_origin_display }}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd><span class="badge badge-{% if case.priority == 'critical' %}red{% elif case.priority == 'high' %}amber{% elif case.priority == 'medium' %}info{% else %}muted{% endif %}">{{ case.get_priority_display }}</span></dd></div>
+        <div class="detail-item"><dt>Owner</dt><dd>{% if case.owner %}{{ case.owner.get_full_name|default:case.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raised</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if case.description %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">What they told us.</span> {{ case.description }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Priority, owner and the case status are CRM's columns</span> and are set on the case, not here — this page reads them so an agent triaging supply-chain context is not working blind, but moving the ticket through the agent queue is done on its own page. Editing this inquiry can correct which order, line, parcel or invoice it is about, in any outcome; it can never move the outcome, so a closed inquiry cannot be quietly reopened through the edit form.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 3. the SLA clocks and CSAT — CRM's
+    Every figure in this card is a column on crm.Case, written by CRM's own policy engine and its own
+    survey. 4.16 computes NO SLA and runs NO survey: the bucket chip above is a question about these
+    two deadlines and the clock, which is why it is derived on every page load and is not a column.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">SLA clocks and satisfaction — read here, computed nowhere</h2>
+      <span class="badge {{ sla_chip.1 }}">{{ sla_chip.0 }}</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        Every figure in this card belongs to <span class="fw-600">CRM</span>. The deadlines were stamped from the policy resolved when the case was opened, the breach test is the case's own, and the satisfaction score comes from CRM's survey — this module reads all four and recomputes none of them, so a policy change moves the CRM case list and the chip above together rather than leaving two consoles arguing about whether a ticket is late. The bucket itself is <em>not</em> stored: it is a question about two deadlines and the current time, and a stored flag would need something running every night to stay true.
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>SLA policy</dt><dd>{% if case.sla_policy %}{{ case.sla_policy }}{% else %}<span class="badge badge-muted">No policy</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Bucket</dt><dd><span class="badge {{ sla_chip.1 }}">{{ sla_chip.0 }}</span></dd></div>
+        <div class="detail-item">
+          <dt>First response due</dt>
+          <dd>{% if case.first_response_due %}{{ case.first_response_due|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>First responded at</dt>
+          {% comment %}
+            An unanswered case is the point of the response clock, so "not yet" is spelled out rather
+            than left as a bare dash — the clock is still running, which is a different fact from
+            there being no clock at all.
+          {% endcomment %}
+          <dd>{% if case.first_responded_at %}{{ case.first_responded_at|date:"M d, Y H:i" }}{% elif case.first_response_due %}<span class="text-muted">Not yet answered — this clock is still running</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Resolution due</dt>
+          <dd>{% if case.resolution_due %}{{ case.resolution_due|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Case closed at</dt>
+          <dd>{% if case.closed_at %}{{ case.closed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Satisfaction score</dt>
+          <dd class="mono">{% if case.satisfaction_rating is not None %}{{ case.satisfaction_rating }} / 5{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Scored at</dt>
+          <dd>{% if case.satisfaction_at %}{{ case.satisfaction_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+      </dl>
+
+      {% if case.satisfaction_comment %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">What they said about it.</span> {{ case.satisfaction_comment }}</p>
+      {% endif %}
+
+      {% if sla_state == "breached" %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-red">Breached</span>
+          A deadline on this case has passed with the case still open. The breach test is the case's own, so this chip and CRM's overdue list are the same statement — resolving the inquiry here does <span class="fw-600">not</span> stop the clock, because the clock belongs to the case and the case status is set on its own page.
+        </p>
+      {% elif sla_state == "due_soon" %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Due soon</span>
+          The nearest deadline still to be met falls inside the warning window. A first response that has already been given stops counting, because the clock it belonged to has been stopped and re-warning about it would send agents chasing work that is done.
+        </p>
+      {% elif sla_state == "none" %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-muted">No SLA policy</span>
+          Neither deadline exists, which means no policy was resolved when this case was opened. That is deliberately <em>not</em> the same bucket as on track: a case nobody promised anything about is not a case that is meeting a promise, and collapsing the two would quietly inflate every compliance figure the workspace reports.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ======================================================================= 4. the thread, windowed
+    A window onto CRM's conversation, not a second thread page — 4.16 builds no second thread. The
+    slice is applied by the DATABASE (it bounds what is FETCHED), taken newest-first and reversed so
+    it reads like a conversation. MAX_THREAD_ROWS is not in the context, so the cap is described as
+    the window shown rather than quoted as a number this page cannot see.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The conversation so far</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ case_comment_count }} message{{ case_comment_count|pluralize }}</span>
+        <a href="{% url 'crm:case_detail' case.pk %}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Full thread in CRM</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th class="nowrap">When</th><th>Who</th><th>Visibility</th><th>Message</th></tr></thead>
+        <tbody>
+          {% for c in case_comments %}
+            <tr>
+              <td class="nowrap">{{ c.created_at|date:"M d, Y H:i" }}</td>
+              <td>
+                {% comment %}
+                  author_name is a SNAPSHOT taken when the comment was written, because author is
+                  SET_NULL — a deactivated agent must not silently un-sign a reply the customer has
+                  already read. The live author is the fallback, and "unattributed" is the honest
+                  third answer rather than a blank cell.
+                {% endcomment %}
+                {% if c.author_name %}{{ c.author_name }}{% elif c.author %}{{ c.author.get_full_name|default:c.author.username }}{% else %}<span class="text-muted">Unattributed</span>{% endif %}
+              </td>
+              <td>
+                {% if c.is_public %}
+                  <span class="badge badge-green">Customer has read this</span>
+                {% else %}
+                  <span class="badge badge-slate">Internal note</span>
+                {% endif %}
+              </td>
+              <td style="white-space:pre-line;">{{ c.body }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4">
+                <div class="empty-state">
+                  <i data-lucide="message-square"></i>
+                  <h3>Nothing has been said yet</h3>
+                  <p>The case was opened with the description above and nobody has replied. The note on the resolve form below is posted here as a <span class="fw-600">public</span> reply — the customer asked a question, so the answer goes in the thread they can actually read rather than into a field only staff ever open.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if case_comments_truncated %}
+        Showing the most recent {{ case_comments|length }} of <span class="fw-600">{{ case_comment_count }}</span> — the window is applied by the database, so it bounds what is fetched rather than what is drawn. The full conversation is on the case in CRM; this is a window onto it and not a second thread.
+      {% else %}
+        The whole conversation, oldest first.
+      {% endif %}
+      <span class="fw-600">The visibility column is not decoration</span>: an internal note is invisible to the customer, and an agent who cannot tell which of these the customer has already read will either repeat an answer or assume one was given.
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================= 5. the triage
+    can_resolve / can_reopen / can_raise_return come from the SAME conditions the three verbs
+    enforce, so only the legal next moves are drawn — offering a button the route then refuses is
+    the 4.11 finding. resolve is open -> a resolvable outcome; reopen is resolved -> open; raise
+    return is legal in any state, but only when there is an RMA it could legally be linked to.
+
+    Every confirm string uses obj.number (system-generated, PIQ-) and no user-typed value, and none
+    of them contains an apostrophe: HTML decodes &#39; inside the attribute before the JS engine
+    sees it, which disables the guard entirely (L42).
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Triage</h2>
+      <span class="badge {{ obj.outcome_css }}">{{ obj.get_outcome_display }}</span>
+    </div>
+    <div class="card-body">
+      {% if can_resolve %}
+        <form method="post" action="{% url 'scm:portalorderinquiry_resolve' obj.pk %}" onsubmit="return confirm('Resolve {{ obj.number }}? A note typed below is posted to the thread the customer can read, and a second resolution is refused — reopen it first if the answer changes.');" style="margin-bottom:1.25rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="resolve-outcome">How did this end?</label>
+            <select class="form-select" id="resolve-outcome" name="outcome" required>
+              <option value="">Pick an outcome…</option>
+              {% for o in resolvable_outcomes %}
+                <option value="{{ o.0 }}">{{ o.1 }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-help">
+              <span class="fw-600">RMA raised is not in this list</span>, and its absence is the rule rather than an oversight: it is a claim about a document, so only the raise-return action below — which has the return in its hand — may set it. An inquiry badged RMA raised with no return to click is a lie the list page then repeats forever. <span class="fw-600">Duplicate</span> is offered for the same kind of honesty: without it, closing the third copy of one WISMO looks identical to answering one, and the deflection figures become fiction.
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="resolve-note">Reply to the customer <span class="text-muted">(optional)</span></label>
+            <textarea class="form-textarea" id="resolve-note" name="note" rows="3" maxlength="{{ max_note_length }}" placeholder="What you are telling them, in their words rather than ours."></textarea>
+            <div class="form-help">
+              Posted as a <span class="fw-600">public</span> reply on the case thread, not as an internal note and not as a column on this row — the customer asked a question and this is the answer, so it goes where they can read it. It also signs the resolution: there is no resolved-by column, because the comment signs itself and the audit trail already records who pressed the button on the rows with no note. Truncated to {{ max_note_length }} characters by the view whatever the browser allows.
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="check-circle"></i> Resolve</button>
+          <div class="form-help">
+            Resolving records the outcome and stamps the resolution time. <span class="fw-600">It does not touch the case status</span> — that is CRM's queue to manage, and "we have raised the RMA" is not the same statement as "this conversation is over". A second press is refused as a no-op rather than restamping the time, because the first resolver gave the customer the answer and letting a later press move the clock would make "how long did we take?" unanswerable.
+          </div>
+        </form>
+      {% endif %}
+
+      {% if can_reopen %}
+        <form method="post" action="{% url 'scm:portalorderinquiry_reopen' obj.pk %}" onsubmit="return confirm('Reopen {{ obj.number }}? The outcome and the resolution time are cleared. Any linked return stays linked, and the CRM case status is not touched.');" style="margin-bottom:1.25rem;">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit"><i data-lucide="rotate-ccw"></i> Reopen</button>
+          <div class="form-help">
+            Puts it back in the queue by clearing the outcome and the resolution time, and <span class="fw-600">nothing else</span>. A linked return authorisation is deliberately left in place: the RMA is a document that exists in the world, and reopening the conversation about it does not un-raise it. This is the supported way to change an answer that turned out to be wrong — it keeps the original resolution time honest instead of overwriting it.
+          </div>
+        </form>
+      {% endif %}
+
+      {% if can_raise_return %}
+        <form method="post" action="{% url 'scm:portalorderinquiry_raise_return' obj.pk %}" onsubmit="return confirm('Link this return to {{ obj.number }}? The outcome becomes RMA raised. The return document itself belongs to Returns Management and is settled there.');" style="margin-bottom:1.25rem;">
+          {% csrf_token %}
+          <div class="form-group">
+            <label class="form-label" for="raise-return-rma">Link an existing return authorisation</label>
+            <select class="form-select" id="raise-return-rma" name="return_authorization" required>
+              <option value="">Pick a return…</option>
+              {% for rma in return_candidates %}
+                <option value="{{ rma.pk }}">{{ rma.number }} · {{ rma.customer.name }} · {{ rma.get_status_display }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-help">
+              {% if return_candidates_truncated %}
+                Showing {{ max_picker_rows }} of the returns this inquiry could be linked to — the window is applied by the database. Raise or find the right one in Returns Management if it is not here.
+              {% else %}
+                {{ return_candidates|length }} return{{ return_candidates|length|pluralize }} in this workspace can legally be linked here.
+              {% endif %}
+              The list is scoped to the same tenant and — when this inquiry has a known customer — the same customer, exactly as the action itself refuses. That is convenience, not the boundary: the write re-checks both, because linking another customer's return here would publish its number, dates and disposition on this customer's inquiry, which is an authorisation question rather than a typo.
+            </div>
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="package-x"></i> Raise return</button>
+          <div class="form-help">
+            <span class="fw-600">This raises no return document.</span> It links 4.10's existing RMA and records the outcome as RMA raised — a second returns document would be a second place a credit could come from. Create the return in Returns Management first (or let the customer raise it themselves on the portal) and link it here. Re-linking a <em>different</em> return is allowed and audited, because an agent correcting a mis-link is a real event; re-linking the same one is a no-op.
+          </div>
+        </form>
+      {% endif %}
+
+      {% if not can_resolve and not can_reopen and not can_raise_return %}
+        <p class="text-muted" style="margin-bottom:1rem;">
+          <span class="badge badge-muted">No move available</span>
+          This inquiry is resolved and there is no return in this workspace it could legally be linked to, so there is nothing to press here. Reopening is offered whenever it is closed; the return picker appears as soon as a linkable RMA exists.
+        </p>
+      {% elif not can_raise_return %}
+        <p class="text-muted" style="margin-bottom:1rem;">
+          No return authorisation in this workspace can be linked to this inquiry{% if customer %} for {{ customer.name }}{% endif %}, so the raise-return action is not offered. Create the return in Returns Management first — 4.16 links an existing RMA and never raises a second one.
+        </p>
+      {% endif %}
+
+      <div class="form-actions">
+        <a href="{% url 'scm:portalorderinquiry_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit context</a>
+        {% comment %}
+          Delete is @require_POST and not admin-gated: triage is ordinary agent work, and gating it
+          would push people into the Django admin, which leaves a thinner trail than this does.
+        {% endcomment %}
+        <form method="post" action="{% url 'scm:portalorderinquiry_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? The order, line, shipment and invoice context recorded here is destroyed and nothing reconstructs it. The support case, its thread and its SLA clocks belong to CRM and are not touched.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:portalorderinquiry_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        Deleting removes <span class="fw-600">this annotation</span> and not the ticket: the customer's case, their words and every reply they have already read are CRM's and survive. What is destroyed is the supply-chain half — which order, which line, which parcel, what was claimed and how it ended — and nothing anywhere reconstructs it. Editing is the move for a mis-filed pointer; it is allowed in every outcome, because discovering after the fact that a damage claim was against a different line is a correction somebody has to be able to make.
+      </p>
+    </div>
+  </div>
+{% endblock %}
