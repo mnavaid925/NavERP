@@ -52,6 +52,18 @@ from apps.scm.forms._common import _reject_foreign
 # leave the dropdowns empty, never raise out of `.filter()`.
 from apps.core.crud import as_db_int
 
+#: pointer -> the FK its target's ``__str__`` walks, or absent when it walks none.
+#:
+#: Table-driven beside ``SHARE_DOC_TYPE_FIELDS`` and ``OWNER_PATHS`` for the same reason those are:
+#: a seventh pointer added later must add a row here too, and forgetting to is then a visible hole
+#: in a dict rather than an invisible missing ``elif``. **Only entries that a ``__str__`` actually
+#: reads belong here** — a join nothing renders is not free, it is a wider row fetched per option
+#: for nothing, and unlike a WRONG ``select_related`` (which raises ``FieldError`` the moment the
+#: widget iterates) a merely useless one is completely silent.
+SHARE_POINTER_SELECT_RELATED = {
+    "quality_inspection": "item",   # QualityInspection.__str__ -> f"{number} · {item.sku}"
+}
+
 from apps.core.models import Document
 from apps.scm.models import (
     SHARE_DOC_TYPE_CHOICES,
@@ -89,9 +101,10 @@ class PortalDocumentShareForm(TenantUniqueMixin, TenantModelForm):
                 "The label the CUSTOMER sees. Never paste an internal filename or a storage path "
                 "here — this string is rendered on their portal.",
             "expires_at":
-                "Leave blank for a link that does not expire. A share can always be revoked, but an "
-                "expiry is the safer default: the link is a bearer credential, so anyone the "
-                "customer forwards it to can fetch the document until it lapses or is revoked.",
+                "Required when publishing. The link is a bearer credential — anyone the customer "
+                "forwards it to can fetch the document until it lapses or is revoked — so a new "
+                "share always gets an end date. An admin can clear it later to make the link "
+                "permanent.",
         }
 
     def __init__(self, *args, **kwargs):
@@ -101,6 +114,21 @@ class PortalDocumentShareForm(TenantUniqueMixin, TenantModelForm):
             self.fields["portal_account"].queryset = (
                 PortalAccount.objects.filter(tenant=self.tenant).select_related("customer")
                 if self.tenant is not None else PortalAccount.objects.none())
+
+        # AN EXPIRY IS REQUIRED ON CREATE, optional on edit.
+        #
+        # `portaldocumentshare_edit` and `_revoke` are both `@tenant_admin_required`, but CREATE is
+        # `@login_required` so any member may publish. Without this, a member could mint a link that
+        # NEVER EXPIRES and that only an admin can then kill — the same split-control problem the
+        # module docstring describes for `expires_at`/`revoked_at`, arriving through the one verb
+        # that was not gated. The argument that a create is visible (an audit row, top of a
+        # `-created_at` register) is true but only DETECTS; this prevents.
+        #
+        # Optional on edit rather than always-required, because clearing it is a real decision an
+        # admin is entitled to make — and edit is where admins are. So the permanent link stays
+        # possible and becomes something an admin chose, instead of something a member defaulted to.
+        if "expires_at" in self.fields and self.instance.pk is None:
+            self.fields["expires_at"].required = True
 
         self._scope_pointers()
 
@@ -180,11 +208,31 @@ class PortalDocumentShareForm(TenantUniqueMixin, TenantModelForm):
 
             queryset = model.objects.filter(tenant=self.tenant)
             if pointer == "document":
-                # GenericForeignKey — no join to filter across. Tenant is the only scope available;
-                # see the module docstring for why this is a documented weakening rather than an
-                # oversight, and clean() carries the matching note.
-                self.fields[pointer].queryset = queryset
+                # GenericForeignKey — no join to filter across, so ownership cannot be proved by
+                # query here (the documented weakening; clean() carries the matching note).
+                #
+                # But `core.Document.classification` CAN be: it is that model's own
+                # public / internal / confidential flag, and a column whose entire purpose is "this
+                # file is not for outsiders" was being ignored by the one surface in the codebase
+                # that publishes files TO outsiders. A confidential attachment offered here becomes
+                # a bearer link that anyone it is forwarded to can fetch until an admin revokes it.
+                #
+                # `internal` is deliberately still offered: internal-vs-public is about origin, not
+                # about permission to share, and refusing it would make the default classification
+                # unshareable. `confidential` is the one that states the answer outright.
+                self.fields[pointer].queryset = queryset.exclude(classification="confidential")
                 continue
+
+            # Prefetch the hop this pointer's `__str__` walks, where it walks one. Checked all six
+            # in source rather than assumed — five build their label from local columns only
+            # (`Document.name`; `Invoice.number`; `Shipment.number` + a display method;
+            # `TradeDocument.number` + a display method; `ContractDocument.number` + `name`) and so
+            # need no join at all. `QualityInspection.__str__` reads `self.item.sku`, so without
+            # this it fired one query per rendered `<option>` — invisible, because an unhelpful
+            # `select_related` is silent where a wrong one raises.
+            related = SHARE_POINTER_SELECT_RELATED.get(pointer)
+            if related:
+                queryset = queryset.select_related(related)
 
             owner = Q()
             for path in PortalDocumentShare.OWNER_PATHS.get(pointer, ()):
