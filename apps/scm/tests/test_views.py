@@ -18352,3 +18352,409 @@ class TestImpossibleDatesAreSkippedNotRaised:
         resp = client_a.get(reverse("scm:sparepart_list"), {"date_from": value})
         assert resp.status_code == 200
         assert resp.context["window_invalid"] is True
+
+
+# =================================================================================================
+# SCM 4.14 Labor Management — views.
+#
+# Every class marked REGRESSION LOCK pins a defect this sub-module's review chain found and fixed,
+# and each was checked to FAIL against the pre-fix behaviour. A lock nobody has watched fail is a
+# lock nobody has tested (L40 §1).
+#
+# The filter classes are the ones to read first. `?gap=has_gap` and `?gap=over_booked` returned a
+# hard 500 on MariaDB (a non-aggregate reaching a HAVING clause) while a twelve-value junk sweep
+# over the SAME parameter passed every time — because every junk value hit the "unrecognised,
+# narrow nothing" branch. The junk sweep proved the GUARD and said nothing about the FEATURE (L44).
+# So these assert the ROWS each valid value returns, not merely a 200: under SQLite the original
+# 500 does not even reproduce, so a status-only assertion here would be worth nothing at all.
+#
+# `_messages` / `_message_blob` are REUSED from earlier in this file, never redefined —
+# test_suite_hygiene.py fails the suite on a duplicate module-level name, and the two return
+# different types, so a second definition silently rebinds it for every caller above (L41 §2).
+# =================================================================================================
+
+
+# The 4.14 date helpers are module-level functions in conftest.py, not fixtures, so pytest does
+# not inject them — they are imported. Imported rather than re-declared because
+# test_suite_hygiene.py fails the suite on a duplicate module-level name, and because two
+# copies of "what does work_date mean" is exactly the drift L16 is about.
+from apps.scm.tests.conftest import _labor_moment, _labor_workday  # noqa: E402
+
+
+class TestLaborPagesRender:
+    """Every 4.14 page a tenant admin can reach answers 200."""
+
+    @pytest.mark.parametrize("url_name", [
+        "scm:laborstandard_list", "scm:laborsession_list", "scm:laboractivity_list",
+        "scm:laborplan_list", "scm:labor_board", "scm:labor_payroll_export",
+        "scm:labor_scorecard", "scm:laborstandard_create", "scm:laborsession_create",
+        "scm:laborplan_create",
+    ])
+    def test_the_argument_free_pages_render(self, client_a, url_name, labor_standard_a,
+                                            labor_activity_a, labor_plan_line_a):
+        assert client_a.get(reverse(url_name)).status_code == 200
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:laborstandard_detail", "labor_standard_a"),
+        ("scm:laborstandard_edit", "labor_standard_a"),
+        ("scm:laborsession_detail", "labor_session_a"),
+        ("scm:laborsession_edit", "labor_session_a"),
+        ("scm:laboractivity_detail", "labor_activity_a"),
+        ("scm:laboractivity_edit", "labor_activity_a"),
+        ("scm:laborplan_detail", "labor_plan_a"),
+        ("scm:laborplan_edit", "labor_plan_a"),
+        ("scm:laborplanline_edit", "labor_plan_line_a"),
+        ("scm:laborsession_add_activity", "labor_session_a"),
+    ])
+    def test_the_per_object_pages_render(self, client_a, request, url_name, fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 200
+
+    def test_a_list_shows_its_own_row(self, client_a, labor_standard_a):
+        html = client_a.get(reverse("scm:laborstandard_list")).content.decode()
+        assert labor_standard_a.number in html
+
+    @pytest.mark.parametrize("url_name", [
+        "scm:laborstandard_list", "scm:laborsession_list", "scm:laboractivity_list",
+        "scm:laborplan_list", "scm:labor_board", "scm:labor_payroll_export",
+        "scm:labor_scorecard",
+    ])
+    def test_every_page_renders_on_an_EMPTY_tenant(self, client_a, url_name):
+        """No fixtures at all, so the empty branch of each template renders.
+
+        Both of this sub-module's 405 links lived in an empty state and shipped, because every
+        sweep in this project logs in against a tenant that has rows in every table by
+        construction — so that branch was never rendered by any check any session had run.
+        """
+        assert client_a.get(reverse(url_name)).status_code == 200
+
+
+class TestLaborFilterValidValues:
+    """L44 — every VALID value of every closed vocabulary, not just the junk ones."""
+
+    @pytest.mark.parametrize("param,value", [
+        ("activity", "pick"), ("activity", "pack"), ("activity", "cycle_count"),
+        ("basis", "per_unit"), ("basis", "per_case"), ("basis", "per_task"),
+        ("source", "engineered"), ("source", "observed"), ("source", "benchmark"),
+        ("status", "draft"), ("status", "active"), ("status", "archived"),
+        ("effective", "current"), ("effective", "future"), ("effective", "expired"),
+    ])
+    def test_standard_list_accepts_every_valid_value(self, client_a, labor_standard_a,
+                                                     draft_standard_a, param, value):
+        assert client_a.get(reverse("scm:laborstandard_list"),
+                            {param: value}).status_code == 200
+
+    @pytest.mark.parametrize("value", ["open", "closed", "approved", "cancelled"])
+    def test_session_list_accepts_every_status(self, client_a, labor_session_a, value):
+        assert client_a.get(reverse("scm:laborsession_list"),
+                            {"status": value}).status_code == 200
+
+    @pytest.mark.parametrize("value", ["direct", "indirect"])
+    def test_activity_list_accepts_every_direction(self, client_a, labor_activity_a, value):
+        assert client_a.get(reverse("scm:laboractivity_list"),
+                            {"direction": value}).status_code == 200
+
+    @pytest.mark.parametrize("value", ["pick", "pack", "break", "meeting", "equipment_wait"])
+    def test_activity_list_accepts_every_activity_type(self, client_a, labor_activity_a, value):
+        assert client_a.get(reverse("scm:laboractivity_list"),
+                            {"activity_type": value}).status_code == 200
+
+    @pytest.mark.parametrize("param,value", [
+        ("status", "draft"), ("status", "planned"), ("status", "approved"), ("status", "archived"),
+        ("bucket", "day"), ("bucket", "week"),
+        ("volume_source", "stock_moves"), ("volume_source", "pick_tasks"),
+        ("volume_source", "goods_receipts"), ("volume_source", "demand_forecast"),
+        ("volume_source", "manual"),
+        ("method", "naive"), ("method", "moving_average"),
+        ("method", "same_period_last_year"), ("method", "manual"),
+    ])
+    def test_plan_list_accepts_every_valid_value(self, client_a, labor_plan_a, param, value):
+        assert client_a.get(reverse("scm:laborplan_list"), {param: value}).status_code == 200
+
+    @pytest.mark.parametrize("value", ["pick", "putaway", "count"])
+    def test_board_accepts_every_kind(self, client_a, value):
+        assert client_a.get(reverse("scm:labor_board"), {"kind": value}).status_code == 200
+
+    @pytest.mark.parametrize("url_name,param", [
+        ("scm:laborsession_list", "worker"), ("scm:laborstandard_list", "location"),
+        ("scm:laboractivity_list", "session"), ("scm:laborplan_list", "location"),
+        ("scm:labor_board", "assignee"),
+    ])
+    @pytest.mark.parametrize("junk", ["abc", "99999999999999999999", "-1"])
+    def test_junk_int_params_skip_the_filter_rather_than_500(self, client_a, url_name, param,
+                                                             junk):
+        assert client_a.get(reverse(url_name), {param: junk}).status_code == 200
+
+    @pytest.mark.parametrize("junk", ["lastweek", "9999-99-99", "0001-01-01"])
+    def test_junk_dates_skip_the_filter(self, client_a, junk):
+        assert client_a.get(reverse("scm:laborsession_list"),
+                            {"date_from": junk}).status_code == 200
+
+
+class TestGapFilterReturnsTheRightRows:
+    """REGRESSION LOCK — ?gap= 500'd on both of its real values while every junk value passed.
+
+    Asserted on ROWS, not status. The defect was MariaDB refusing a non-aggregate in a HAVING
+    clause, which SQLite permits, so a 200 here proves nothing by itself — what these pin is that
+    each value selects the shifts it claims to.
+    """
+
+    @pytest.fixture
+    def three_shifts(self, db, tenant_a, location_a):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import LaborActivity, LaborSession
+
+        def worker(name):
+            p = Party.objects.create(tenant=tenant_a, name=name, kind="person")
+            PartyRole.objects.create(tenant=tenant_a, party=p, role="employee")
+            return p
+
+        def shift(who, attended_minutes, booked_minutes):
+            start = _labor_moment(hours_ago=10)
+            s = LaborSession(tenant=tenant_a, worker=who, location=location_a,
+                             work_date=_labor_workday(start), clock_in=start,
+                             clock_out=start + datetime.timedelta(minutes=attended_minutes))
+            s.save()
+            if booked_minutes:
+                LaborActivity.objects.create(
+                    tenant=tenant_a, session=s, activity_type="pick", started_at=start,
+                    ended_at=start + datetime.timedelta(minutes=booked_minutes),
+                    quantity=Decimal("10"))
+            s.status = "closed"
+            s.save(update_fields=["status", "updated_at"])
+            return s
+
+        return {
+            "gapped": shift(worker("Gap Worker"), 480, 400),   # 80 minutes unaccounted
+            "over": shift(worker("Over Worker"), 300, 360),    # booked exceeds attended
+            "running": LaborSession.objects.create(
+                tenant=tenant_a, worker=worker("Running Worker"), location=location_a,
+                work_date=_labor_workday(_labor_moment(hours_ago=2)),
+                clock_in=_labor_moment(hours_ago=2)),
+        }
+
+    @staticmethod
+    def _numbers(resp):
+        return {o.number for o in resp.context["object_list"]}
+
+    def test_has_gap_returns_only_the_shift_with_unaccounted_time(self, client_a, three_shifts):
+        resp = client_a.get(reverse("scm:laborsession_list"), {"gap": "has_gap"})
+        assert resp.status_code == 200
+        numbers = self._numbers(resp)
+        assert three_shifts["gapped"].number in numbers
+        assert three_shifts["over"].number not in numbers
+
+    def test_over_booked_returns_only_the_over_booked_shift(self, client_a, three_shifts):
+        resp = client_a.get(reverse("scm:laborsession_list"), {"gap": "over_booked"})
+        assert resp.status_code == 200
+        numbers = self._numbers(resp)
+        assert three_shifts["over"].number in numbers
+        assert three_shifts["gapped"].number not in numbers
+
+    @pytest.mark.parametrize("value", ["has_gap", "over_booked"])
+    def test_a_still_running_shift_is_in_NEITHER_bucket(self, client_a, three_shifts, value):
+        """Attended minutes are unknown until a shift clocks out, so it cannot have a gap yet."""
+        resp = client_a.get(reverse("scm:laborsession_list"), {"gap": value})
+        assert three_shifts["running"].number not in self._numbers(resp)
+
+    @pytest.mark.parametrize("junk", ["", "nonsense", "HAS_GAP", "1"])
+    def test_an_unrecognised_gap_value_narrows_nothing(self, client_a, three_shifts, junk):
+        resp = client_a.get(reverse("scm:laborsession_list"), {"gap": junk})
+        assert resp.status_code == 200
+        numbers = self._numbers(resp)
+        assert three_shifts["gapped"].number in numbers
+        assert three_shifts["over"].number in numbers
+
+
+class TestLaborSessionVerbLadder:
+    """The status ladder through the HTTP layer, including every illegal move."""
+
+    def test_the_ladder_walks_open_to_closed_to_approved(self, client_a, labor_session_a):
+        s = labor_session_a
+        assert client_a.post(reverse("scm:laborsession_clock_out", args=[s.pk])).status_code == 302
+        s.refresh_from_db()
+        assert s.clock_out is not None
+
+        assert client_a.post(reverse("scm:laborsession_close", args=[s.pk])).status_code == 302
+        s.refresh_from_db()
+        assert s.status == "closed"
+
+        assert client_a.post(reverse("scm:laborsession_approve", args=[s.pk])).status_code == 302
+        s.refresh_from_db()
+        assert s.status == "approved"
+        assert s.approved_by_id is not None and s.approved_at is not None
+
+    def test_approving_an_OPEN_shift_is_refused_with_a_message(self, client_a, labor_session_a):
+        resp = client_a.post(reverse("scm:laborsession_approve", args=[labor_session_a.pk]),
+                             follow=True)
+        labor_session_a.refresh_from_db()
+        assert labor_session_a.status == "open"
+        assert "cannot be approved" in _message_blob(resp)
+
+    def test_reopen_unfreezes_an_approved_shift(self, client_a, labor_session_a):
+        client_a.post(reverse("scm:laborsession_clock_out", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_close", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_approve", args=[labor_session_a.pk]))
+        assert client_a.post(
+            reverse("scm:laborsession_reopen", args=[labor_session_a.pk])).status_code == 302
+        labor_session_a.refresh_from_db()
+        assert labor_session_a.status == "open"
+
+    def test_an_approved_shift_refuses_a_new_activity(self, client_a, labor_session_a):
+        """approved is the payroll export's lock — minutes cannot be added behind it."""
+        from apps.scm.models import LaborActivity
+        client_a.post(reverse("scm:laborsession_clock_out", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_close", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_approve", args=[labor_session_a.pk]))
+        before = LaborActivity.objects.filter(session=labor_session_a).count()
+        resp = client_a.post(
+            reverse("scm:laborsession_add_activity", args=[labor_session_a.pk]),
+            {"activity_type": "pick", "quantity": "5",
+             "started_at": _labor_moment(hours_ago=3).strftime("%Y-%m-%dT%H:%M"),
+             "ended_at": _labor_moment(hours_ago=2).strftime("%Y-%m-%dT%H:%M")},
+            follow=True)
+        assert resp.status_code == 200
+        assert LaborActivity.objects.filter(session=labor_session_a).count() == before
+
+    def test_clock_in_refuses_when_the_login_has_no_linked_party(self, member_client):
+        """A refusal in words, not a 500 — the system does not know whose minutes these are."""
+        from apps.scm.models import LaborSession
+        before = LaborSession.objects.count()
+        resp = member_client.post(reverse("scm:laborsession_clock_in"), follow=True)
+        assert resp.status_code == 200
+        assert LaborSession.objects.count() == before
+
+
+class TestLaborPlanGenerate:
+    """REGRESSION LOCK — the refusal must land BEFORE the previous grid is deleted."""
+
+    def test_generate_builds_a_grid(self, client_a, labor_plan_a, labor_standard_a):
+        from apps.scm.models import LaborPlanLine
+        assert client_a.post(
+            reverse("scm:laborplan_generate", args=[labor_plan_a.pk])).status_code == 302
+        labor_plan_a.refresh_from_db()
+        assert labor_plan_a.status == "planned"
+        assert LaborPlanLine.objects.filter(plan=labor_plan_a).exists()
+
+    def test_regenerate_is_idempotent(self, client_a, labor_plan_a, labor_standard_a):
+        from apps.scm.models import LaborPlanLine
+        client_a.post(reverse("scm:laborplan_generate", args=[labor_plan_a.pk]))
+        first = sorted(LaborPlanLine.objects.filter(plan=labor_plan_a)
+                       .values_list("period_start", "activity", "required_minutes"))
+        client_a.post(reverse("scm:laborplan_generate", args=[labor_plan_a.pk]))
+        second = sorted(LaborPlanLine.objects.filter(plan=labor_plan_a)
+                        .values_list("period_start", "activity", "required_minutes"))
+        assert first == second and first
+
+    def test_a_refusal_leaves_the_previous_grid_INTACT(self, client_a, labor_plan_a,
+                                                       labor_standard_a):
+        """The guard runs before `lines.all().delete()`, so a refused regenerate loses nothing."""
+        from apps.scm.models import LaborPlanLine
+        client_a.post(reverse("scm:laborplan_generate", args=[labor_plan_a.pk]))
+        before = LaborPlanLine.objects.filter(plan=labor_plan_a).count()
+        assert before
+
+        # remove every resolvable standard, so the next generate has nothing to price
+        labor_standard_a.status = "archived"
+        labor_standard_a.save(update_fields=["status", "updated_at"])
+        client_a.post(reverse("scm:laborplan_generate", args=[labor_plan_a.pk]), follow=True)
+        assert LaborPlanLine.objects.filter(plan=labor_plan_a).count() == before
+
+
+class TestLaborBoardBulkAssign:
+    """Writes 4.4's EXISTING assigned_to column and nothing else."""
+
+    @pytest.fixture
+    def open_pick(self, db, tenant_a, location_a):
+        from apps.scm.models import PickTask
+        return PickTask.objects.create(tenant=tenant_a, strategy="zone", status="released",
+                                       zone=location_a, wave_ref="T-1")
+
+    def test_assign_sets_assigned_to(self, client_a, admin_user, open_pick):
+        resp = client_a.post(reverse("scm:labor_board_assign"),
+                             {"task_kind": "pick", "assign_to": str(admin_user.pk),
+                              "ids": [str(open_pick.pk)]})
+        assert resp.status_code == 302
+        open_pick.refresh_from_db()
+        assert open_pick.assigned_to_id == admin_user.pk
+
+    def test_unassign_clears_it(self, client_a, admin_user, open_pick):
+        client_a.post(reverse("scm:labor_board_assign"),
+                      {"task_kind": "pick", "assign_to": str(admin_user.pk),
+                       "ids": [str(open_pick.pk)]})
+        client_a.post(reverse("scm:labor_board_unassign"),
+                      {"task_kind": "pick", "ids": [str(open_pick.pk)]})
+        open_pick.refresh_from_db()
+        assert open_pick.assigned_to_id is None
+
+    def test_over_the_cap_is_refused_with_NO_write(self, client_a, admin_user, open_pick):
+        from apps.scm.models import MAX_BULK_ASSIGN
+        ids = [str(open_pick.pk)] * (MAX_BULK_ASSIGN + 1)
+        client_a.post(reverse("scm:labor_board_assign"),
+                      {"task_kind": "pick", "assign_to": str(admin_user.pk), "ids": ids},
+                      follow=True)
+        open_pick.refresh_from_db()
+        assert open_pick.assigned_to_id is None
+
+    def test_a_foreign_tenant_task_is_skipped_not_written(self, client_a, admin_user, tenant_b,
+                                                          location_b):
+        from apps.scm.models import PickTask
+        theirs = PickTask.objects.create(tenant=tenant_b, strategy="zone", status="released",
+                                         zone=location_b, wave_ref="T-B")
+        client_a.post(reverse("scm:labor_board_assign"),
+                      {"task_kind": "pick", "assign_to": str(admin_user.pk),
+                       "ids": [str(theirs.pk)]}, follow=True)
+        theirs.refresh_from_db()
+        assert theirs.assigned_to_id is None
+
+    def test_an_audit_row_is_written_per_changed_task(self, client_a, admin_user, open_pick,
+                                                      tenant_a):
+        from django.contrib.contenttypes.models import ContentType
+        from apps.core.models import AuditLog
+        from apps.scm.models import PickTask
+        ct = ContentType.objects.get_for_model(PickTask)
+        before = AuditLog.objects.filter(content_type=ct, object_id=open_pick.pk).count()
+        client_a.post(reverse("scm:labor_board_assign"),
+                      {"task_kind": "pick", "assign_to": str(admin_user.pk),
+                       "ids": [str(open_pick.pk)]})
+        rows = AuditLog.objects.filter(content_type=ct, object_id=open_pick.pk)
+        assert rows.count() == before + 1
+        row = rows.order_by("-id").first()
+        assert row.tenant_id == tenant_a.pk
+        assert row.user_id == admin_user.pk
+        assert row.action == "update"
+        assert row.changes.get("action") == "assign"
+        assert row.changes.get("assigned_to") == [None, admin_user.pk]
+        assert row.target
+
+
+class TestLaborPayrollExport:
+    """Approved sessions only, and the CSV carries the same figures as the page."""
+
+    @pytest.fixture
+    def approved_session(self, db, client_a, labor_activity_a, labor_session_a):
+        client_a.post(reverse("scm:laborsession_clock_out", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_close", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_approve", args=[labor_session_a.pk]))
+        labor_session_a.refresh_from_db()
+        return labor_session_a
+
+    def test_an_approved_worker_appears(self, client_a, approved_session):
+        html = client_a.get(reverse("scm:labor_payroll_export")).content.decode()
+        assert approved_session.worker.name in html
+
+    def test_an_unapproved_shift_does_not(self, client_a, labor_session_a, labor_activity_a):
+        """Asserted on the ROWS, not the page. For an ADMIN the worker filter dropdown correctly
+        lists every employee, so the name is in the HTML whether or not it is in the table — a
+        raw-HTML assertion here passes for the wrong reason in one direction and fails for the
+        wrong reason in the other (L41)."""
+        resp = client_a.get(reverse("scm:labor_payroll_export"))
+        workers_with_rows = {r["worker"] for r in resp.context["rows"]}
+        assert labor_session_a.worker.name not in workers_with_rows
+
+    def test_the_csv_names_the_same_worker(self, client_a, approved_session):
+        resp = client_a.get(reverse("scm:labor_payroll_export"), {"format": "csv"})
+        assert resp.status_code == 200
+        body = (b"".join(resp.streaming_content).decode() if resp.streaming
+                else resp.content.decode())
+        assert approved_session.worker.name in body
