@@ -71,11 +71,20 @@ class _InquiryFormBase(TenantModelForm):
                 lines = lines.filter(sales_order__customer=self.customer)
                 shipments = shipments.filter(sales_order__customer=self.customer)
 
-        for name, queryset in (("sales_order", orders),
-                               ("sales_order_line", lines),
-                               ("shipment", shipments)):
+        # The `select_related` differs per field and MUST: `SalesOrder` has no `sales_order`
+        # column, so a uniform `.select_related("sales_order")` across all three raises
+        # `FieldError: Invalid field name(s) given in select_related` — but only when the widget
+        # actually iterates its queryset to render the options, i.e. never at import time, never in
+        # `manage.py check`, and never on any page that does not draw this form. It shipped that way
+        # and the first thing to execute it was the smoke sweep.
+        #
+        # Each queryset is prefetched along the hop its `__str__` really walks: an order names its
+        # customer, while a line and a shipment each name their parent order.
+        for name, queryset, related in (("sales_order", orders, "customer"),
+                                        ("sales_order_line", lines, "sales_order"),
+                                        ("shipment", shipments, "sales_order")):
             if name in self.fields:
-                self.fields[name].queryset = queryset.select_related("sales_order")
+                self.fields[name].queryset = queryset.select_related(related)
 
         # CREATE ONLY. On edit the case already exists and open_for() has already run, so a bound
         # subject/description would collect text this form has no writer for. Removing the fields
