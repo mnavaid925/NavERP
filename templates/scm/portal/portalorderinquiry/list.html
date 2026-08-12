@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — the staff triage queue for portal order inquiries (PIQ-).
+
+Renders apps/scm/views/CustomerPortal/PortalOrderInquiries.py::portalorderinquiry_list, which
+returns crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q      from crud_list (apps/core/crud.py) — page_obj.window drives the
+                                  shared pagination partial
+  inquiry_type_choices            INQUIRY_TYPE_CHOICES        (the 11 reported failure modes)
+  outcome_choices                 INQUIRY_OUTCOME_CHOICES     (open + the six endings)
+  requested_resolution_choices    REQUESTED_RESOLUTION_CHOICES (what the customer ASKED for)
+  source_choices                  INQUIRY_SOURCE_CHOICES      (portal / staff)
+  sla_choices                     SLA_CHOICES — the four DERIVED SLA buckets, declared on the VIEW.
+                                  Not a model vocabulary, not a column, and not a filter the ORM
+                                  spec can express (it is two deadline comparisons across a join)
+  sla                             the RESOLVED bucket ("" when the param was absent or junk). The
+                                  select below binds its `selected` to THIS, never to
+                                  request.GET.sla, so ?sla=urgent shows "Any SLA state" rather than
+                                  a phantom pick that narrowed nothing
+  portal_accounts                 PortalAccount queryset for the pk dropdown
+  sales_orders                    SalesOrder queryset — deliberately only orders that HAVE an
+                                  inquiry, so no option in it is a dead end
+  stats                           dict: open / breached / due_soon / from_portal, counted over the
+                                  WHOLE workspace so the figures do not move as you filter
+
+Filter params: q / inquiry_type / outcome / requested_resolution / source / sla, plus the two pk
+params sales_order / portal_account. The five string params compare against request.GET.<param>
+directly; the two pks compare with |stringformat:"d" — never |slugify.
+
+EACH ROW carries two SQL annotations, `sla_label` and `sla_css`, built by _sla_annotations() from
+the very Q objects _sla_buckets() gives the filter. They are READ, never recomputed here: the chip
+is the filter printed, so a row the filter put in `breached` structurally cannot render "On track".
+The template must not touch obj.sla_state (the Python dialect of the same rule) — it would be a
+second opinion about the row, and a Django template cannot subscript SLA_LABELS with a variable key
+anyway. Every other badge class comes from the model's own lookups: obj.inquiry_type_css
+(INQUIRY_TYPE_CSS), obj.outcome_css (INQUIRY_OUTCOME_CSS) and obj.customer_status_css
+(CUSTOMER_STATUS_MAP). theme.css ships COLOUR-named badges only — badge-success / badge-warning /
+badge-danger do not exist and render completely unstyled (L33).
+
+THE STATUS CELL PRINTS BOTH VOCABULARIES ON PURPOSE. `outcome` is SCM's answer, case.status is
+CRM's agent queue, and obj.customer_status_label is the only one of the three the customer can see —
+CUSTOMER_STATUS_MAP collapses new/open/in_progress to one customer word deliberately (Zendesk
+documents that its portal statuses are not its agent statuses). Rendering one of them alone is how
+somebody tells a customer their ticket is "In Progress" while the portal has been saying "Awaiting
+your reply" for three days. crm.Case exposes no status_css, so the internal chip takes the neutral
+badge-slate rather than inventing a colour mapping this page cannot keep in step with CRM.
+
+`source` has choices but NO css map in _choices.py, so both values take badge-slate for the same
+reason: an invented two-colour mapping here would drift the day a third provenance is added. The
+distinction is carried by the word, and by the "filed by customers" tile above.
+
+Nothing in a row is a query: select_related covers case, portal_account (+ its customer) and
+sales_order (+ its customer), and .defer("case__description") drops the only column not rendered
+here. The shipment / invoice / RMA / line pointers are therefore shown as PRESENCE chips read off
+the *_id columns already in hand — dereferencing obj.shipment or obj.invoice would be one extra
+query per row for a string this column does not have room for. Their values live on the detail page.
+
+Delete is @login_required and @require_POST but is NOT admin-gated and NOT status-gated — triage is
+ordinary agent work and the route accepts every outcome, so the button is offered on every row
+rather than hidden from rows the view would happily accept (the 4.11 finding, in the other
+direction). Edit is likewise legal in every outcome: the form can only correct the supply-chain
+context, and editable=False keeps the outcome, the provenance and the case itself out of it.
+
+Only the system-generated PIQ- number goes into the confirm string, and it is written without an
+apostrophe: HTML decodes &#39; inside the attribute before the JS engine sees it, which silently
+disables the guard (L42).
+{% endcomment %}
+{% block title %}Order Inquiries{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Order Inquiries</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Order Inquiries</span></div>
+      <p class="text-muted">The <span class="fw-600">WISMO queue</span> — every question a customer has asked about an order, wrapped in the supply-chain context a plain support ticket cannot carry: which order, which line, which parcel, which invoice. Each row is a <span class="fw-600">crm.Case</span> plus that context; CRM owns the conversation, the SLA clocks and the ownership, and 4.16 owns what the claim was about and how it ended. Nothing on this page recomputes an SLA or invents a customer-facing word.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portal_order_tracking' %}" class="btn btn-outline"><i data-lucide="map-pinned"></i> Order Tracking</a>
+      <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Portal Activity</a>
+      <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Portal Accounts</a>
+      <a href="{% url 'scm:portalorderinquiry_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inquiry</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The four tiles are counted over the WHOLE workspace, not the filtered page — "3 breached" is a
+    fact somebody has to act on now, and a number that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one inquiry type. stat-icon ships blue / green / orange /
+    purple / slate only; there is no red, so the breach tile takes orange and due-soon takes purple.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ stats.open }}</div>
+      <div class="stat-label">Open — a customer is waiting on an answer to each of these</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ stats.breached }}</div>
+      <div class="stat-label">SLA breached — past a deadline CRM promised, and still open</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ stats.due_soon }}</div>
+      <div class="stat-label">Due within four hours — the window that is still winnable</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="user-check"></i></div>
+      <div class="stat-value">{{ stats.from_portal }}</div>
+      <div class="stat-label">Filed by customers themselves — the deflection denominator, honest only because provenance is forced server-side</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Triage queue</h2>
+      <div class="badge-group">
+        {% if stats.breached %}<span class="badge badge-red">{{ stats.breached }} breached</span>{% endif %}
+        {% if stats.due_soon %}<span class="badge badge-amber">{{ stats.due_soon }} due soon</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search PIQ- number, subject or order number…">
+        </div>
+        <div class="form-group">
+          <select name="inquiry_type" aria-label="Inquiry type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in inquiry_type_choices %}
+              <option value="{{ val }}" {% if request.GET.inquiry_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="outcome" aria-label="Outcome" class="form-select">
+            <option value="">Any outcome</option>
+            {% for val, label in outcome_choices %}
+              <option value="{{ val }}" {% if request.GET.outcome == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `sla` is the value the VIEW resolved, not the raw query string — ?sla=urgent narrows
+            nothing and must show "Any SLA state" here rather than a phantom selection.
+          {% endcomment %}
+          <select name="sla" aria-label="SLA state" class="form-select">
+            <option value="">Any SLA state</option>
+            {% for val, label in sla_choices %}
+              <option value="{{ val }}" {% if sla == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="requested_resolution" aria-label="Requested resolution" class="form-select">
+            <option value="">Any ask</option>
+            {% for val, label in requested_resolution_choices %}
+              <option value="{{ val }}" {% if request.GET.requested_resolution == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Source" class="form-select">
+            <option value="">Any source</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A pk filter, so the comparison is |stringformat:"d" — |slugify would agree only by
+            accident and would silently drop the selection on any pk it renders differently.
+          {% endcomment %}
+          <select name="portal_account" aria-label="Portal account" class="form-select">
+            <option value="">Every portal account</option>
+            {% for a in portal_accounts %}
+              <option value="{{ a.pk }}" {% if request.GET.portal_account == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.number }} · {{ a.customer.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="sales_order" aria-label="Sales order" class="form-select">
+            <option value="">Every order</option>
+            {% for o in sales_orders %}
+              <option value="{{ o.pk }}" {% if request.GET.sales_order == o.pk|stringformat:"d" %}selected{% endif %}>{{ o.number }}{% if o.customer_id %} · {{ o.customer.name }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:portalorderinquiry_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        The <span class="fw-600">SLA state</span> filter is a question about two deadlines and the clock, not a column — there is no stored “is breached” flag and there must not be one, because the answer changes as the clock moves and a stored flag would need something running every night to stay true. It is read off the wrapped case: <span class="fw-600">4.16 recomputes no SLA of its own.</span> <span class="fw-600">No SLA policy</span> is deliberately a different answer from <span class="fw-600">On track</span> — a case nobody promised anything about is not a case that is meeting a promise. The <span class="fw-600">order</span> dropdown lists only orders that already have an inquiry, so no option in it can return an empty page.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Inquiry</th>
+            <th>Type / ask</th>
+            <th>Order &amp; context</th>
+            <th>SLA</th>
+            <th>Outcome &amp; status</th>
+            <th>Age</th>
+            <th>Source</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:portalorderinquiry_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                {% comment %}
+                  The case subject is what the CUSTOMER typed. Escaped by Django and never |safe —
+                  this and the portal note fields are the only user-authored strings on the page.
+                {% endcomment %}
+                <div class="text-muted">{{ obj.case.subject }}</div>
+                <div class="form-help mono">{{ obj.case.number }}</div>
+                {% if obj.portal_account_id %}
+                  <div class="form-help"><a href="{% url 'scm:portalaccount_detail' obj.portal_account_id %}">{{ obj.portal_account.number }}</a> · {{ obj.portal_account.customer.name }}</div>
+                {% else %}
+                  <div class="form-help">Not on the portal — filed for the customer</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ obj.inquiry_type_css }}">{{ obj.get_inquiry_type_display }}</span>
+                <div class="form-help">Asked for: {{ obj.get_requested_resolution_display }}</div>
+                {% comment %}
+                  quantity_affected is an OPTIONAL STORED column, not a derived figure: a claim with
+                  no quantity is a fact (a WISMO question covers no units), so the line is omitted
+                  rather than printed as an em dash on every general inquiry. A genuine 0 still
+                  prints as 0 — the `is not None` test, not truthiness.
+                {% endcomment %}
+                {% if obj.quantity_affected is not None %}
+                  <div class="form-help mono">{{ obj.quantity_affected|floatformat:"-4" }} units claimed</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.sales_order_id %}
+                  <a href="{% url 'scm:salesorder_detail' obj.sales_order_id %}" class="mono">{{ obj.sales_order.number }}</a>
+                  {% if obj.sales_order.customer_id %}
+                    <div class="form-help">{{ obj.sales_order.customer.name }}</div>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">No order attached</span>
+                {% endif %}
+                {% comment %}
+                  Presence chips read off the *_id columns already loaded. Dereferencing the objects
+                  would be up to four extra queries per row (none of them is select_related) for
+                  strings this column has no room for — the values are on the detail page.
+                {% endcomment %}
+                <div class="badge-group">
+                  {% if obj.sales_order_line_id %}<span class="badge badge-muted">Line</span>{% endif %}
+                  {% if obj.shipment_id %}<span class="badge badge-muted">Shipment</span>{% endif %}
+                  {% if obj.invoice_id %}<span class="badge badge-muted">Invoice</span>{% endif %}
+                  {% if obj.return_authorization_id %}<span class="badge badge-info">RMA</span>{% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  The annotation, never obj.sla_state. Both come from one rule written twice, and
+                  reading the annotation is what makes "the row the filter put in a bucket renders
+                  that bucket's chip" structural rather than a discipline somebody has to keep.
+                {% endcomment %}
+                <span class="badge {{ obj.sla_css }}">{{ obj.sla_label }}</span>
+              </td>
+              <td>
+                {% comment %}
+                  Three vocabularies, and only the third is the customer's. Internal outcome (SCM),
+                  internal queue status (CRM — no status_css exists there, hence neutral slate), and
+                  what the portal is actually showing them right now.
+                {% endcomment %}
+                <span class="badge {{ obj.outcome_css }}">{{ obj.get_outcome_display }}</span>
+                <div class="form-help">Internal queue: <span class="badge badge-slate">{{ obj.case.get_status_display }}</span></div>
+                <div class="form-help">Customer sees: <span class="badge {{ obj.customer_status_css }}">{{ obj.customer_status_label }}</span></div>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  age_days is DERIVED and returns None on an unsaved row, so None prints an em dash
+                  and never a zero: "filed today" (0) and "no creation stamp yet" are different
+                  facts. It counts to the resolution for a closed inquiry and to now for an open
+                  one, and is never frozen — an inquiry answered on day nine keeps saying nine.
+                {% endcomment %}
+                {% if obj.age_days is not None %}
+                  <span class="fw-600">{{ obj.age_days }}</span> <span class="text-muted">d</span>
+                {% else %}
+                  —
+                {% endif %}
+                <div class="form-help">raised {{ obj.created_at|date:"M d, Y" }}</div>
+                {% if obj.resolved_at %}
+                  <div class="form-help">closed {{ obj.resolved_at|date:"M d, Y" }}</div>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  badge-slate for both values: INQUIRY_SOURCE_CHOICES has no css map, and a colour
+                  mapping invented here would be a second opinion the day a third provenance exists.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_source_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portalorderinquiry_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit is legal in every outcome — the form corrects the supply-chain context only,
+                    and the outcome, provenance and case are editable=False — so it is offered on
+                    every row rather than hidden from rows the view accepts.
+                  {% endcomment %}
+                  <a href="{% url 'scm:portalorderinquiry_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    @require_POST, so a real form with a csrf token. The confirm string carries the
+                    PIQ- number and nothing user-typed, and contains no apostrophe: an escaped &#39;
+                    is decoded inside the attribute before JavaScript parses it and would break the
+                    dialog open (L42).
+                  {% endcomment %}
+                  <form method="post" action="{% url 'scm:portalorderinquiry_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? The customer support case survives with its whole conversation, its SLA clocks and every reply they have already read. What is destroyed is the supply-chain context — which order, which line, which parcel, what was claimed and how it ended — and nothing rebuilds that.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="message-circle"></i>
+                  <h3>No order inquiries</h3>
+                  <p>Nobody has asked about an order yet — or every question is still arriving by phone and email, where it leaves no order, no shipment and no claim anybody can count later. An inquiry filed here carries the supply-chain context with it, which is what turns “where is my order?” from a conversation into a figure the module can report on. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Nothing on this screen writes. The three triage verbs — <span class="fw-600">resolve</span>, <span class="fw-600">reopen</span> and <span class="fw-600">raise a return</span> — live on an inquiry's own page, behind the row lock, because each one changes the answer a customer was given and each writes its own audit row saying who changed it. <span class="fw-600">RMA raised</span> is never something anybody picks from a dropdown: it is a claim about a document, so only the verb that has the return in its hand may set it, and an inquiry badged that way always has a return to click. Resolving twice is refused as a no-op rather than an error — the first answer is the one the customer received, and a second stamp would make “how long did we take?” unanswerable.
+    </div>
+  </div>
+{% endblock %}
