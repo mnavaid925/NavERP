@@ -732,7 +732,9 @@ user-typed value there was the stored XSS at 4.13.
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
       <div class="form-actions">
-        <a href="{% url 'scm:portalaccount_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          <a href="{% url 'scm:portalaccount_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
           {% if can_delete %}
             <form method="post" action="{% url 'scm:portalaccount_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This also destroys {{ share_count }} document share(s) and {{ activity_count }} activity log row(s) for this customer, and nothing reconstructs either. Untick Active instead to close the portal and keep the trail.');">
