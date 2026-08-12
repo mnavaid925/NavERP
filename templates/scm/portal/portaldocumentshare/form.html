@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — shared create/edit form for PortalDocumentShare [PDS-].
+
+Rendered by apps/scm/views/CustomerPortal/PortalDocumentShares.py::portaldocumentshare_create (hand
+rolled, so it can stamp shared_by and hand the form a tenant-stamped instance) and
+::portaldocumentshare_edit (via crud_edit). Both call _form_context(), so the pinned contract in that
+module's docstring gives this page exactly six keys and nothing else here reads anything else:
+
+  form                — PortalDocumentShareForm (bound on POST)
+  is_edit             — False on create, True on edit
+  obj                 — the PortalDocumentShare on the EDIT path only (crud_edit puts it in the
+                        context; the create view does not), so every use of it below sits inside
+                        {% if is_edit %} and is never rendered bare
+  pointer_field_names — the six pointer field names as STRINGS (invoice, shipment, trade_document,
+                        contract, quality_inspection, document — SHARE_POINTER_FIELDS order). The
+                        six inputs are grouped by testing `field.name in pointer_field_names` while
+                        looping the form, exactly as the view's docstring specifies, so a seventh
+                        pointer added to the model lands in this card for free instead of being
+                        silently dropped off the POST.
+  doc_type_matrix     — a list of dicts, keys `doc_type` / `label` / `pointer` / `pointer_label`
+                        (built by _form_context() from SHARE_DOC_TYPE_FIELDS — the same table
+                        clean() validates against, so the matrix printed below cannot disagree with
+                        the rule that will refuse the save)
+  max_expiry_days     — MAX_SHARE_EXPIRY_DAYS, the ceiling on how far out expires_at may be set
+
+Meta.fields is a WHITELIST of 10 names and all 10 are below: portal_account / doc_type / title ·
+document / invoice / shipment / trade_document / contract / quality_inspection · expires_at. The
+first three and the last are rendered BY NAME; the six pointers arrive through the
+`pointer_field_names` loop, which is what covers the six. A field added to the model and to that
+whitelist but to neither route here would never reach the POST — and on edit it would be silently
+blanked on every save.
+
+Six columns are deliberately absent and none of them is an oversight:
+  public_token — THE BEARER CREDENTIAL. Not on the form, not on this page, not in a hidden input, an
+                 attribute or a tooltip, and there is deliberately no "copy link" affordance
+                 anywhere in this sub-module. It is minted once by save() from the CSPRNG and is the
+                 only thing between a URL and a customer's document; the staff list and detail
+                 querysets .defer() it, so naming it in a template would re-query for a value that
+                 must never reach rendered HTML, a screenshot or a print-to-PDF.
+  revoked_at   — editable=False, written ONLY by the admin-gated revoke verb on the detail page.
+  shared_by    — editable=False, stamped server-side by the create view. Who published this is
+                 evidence, and a value a POST body can carry is not evidence.
+  download_count / first_viewed_at / last_downloaded_at — editable=False, written only by
+                 record_download(). Evidence again: a figure a person can type is not proof of a
+                 fetch.
+  number       — auto-assigned on save (PDS-).
+  created_at / updated_at — automatic.
+There is NO status field to be missing. live / expired / revoked is DERIVED from expires_at,
+revoked_at and the clock, never stored — which is also why this page renders no state chip: the
+badge classes for those three buckets live in one place (SHARE_STATE_CSS, annotated onto the row by
+the list and detail views), and crud_edit does not annotate them. A chip invented here would be the
+second dialect the view's docstring warns about, so the edit path states the lifetime in words
+instead.
+
+Every refusal this form can produce lands on a FIELD except one, so each field renders its own
+errors through partials/form_field.html and form.non_field_errors is rendered at the top of the
+first card:
+  non-field                — the ("tenant", "number") collision under concurrency (TenantUniqueMixin
+                             turns what would be an IntegrityError 500 into a message).
+  a pointer / doc_type     — "pick exactly one" (keyed on the pointer this type expects, so the box
+                             the user should have filled is the one that lights up), "only one
+                             target per share" (keyed on the second pointer), and the type/pointer
+                             mismatch.
+  expires_at               — an expiry already in the past (CREATE only — an existing lapsed share
+                             must stay editable, which is how somebody extends it) and the
+                             max_expiry_days ceiling.
+  portal_account / the six — the cross-tenant guard, checked at BOTH the form and the model
+                             boundary, and the ownership rule (the target must belong to this
+                             account's customer) — because a narrowed <select> has never held
+                             against a crafted POST.
+
+The six pointers each carry the doc-type → pointer matrix in their own help_text, built by the
+form's __init__ from the same table as the card's matrix below. partials/form_field.html renders
+help_text, so it repeats under each of the six on purpose: somebody who scrolled past the rule and
+is filling in the fourth picker reads it there rather than after the save has been refused.
+
+The expires_at widget is NOT declared here: TenantModelForm.__init__ replaces the widget of every
+forms.DateTimeField outright with a native datetime-local input and sets the matching input_formats,
+and it runs AFTER ModelForm has built the fields — anything declared for it here would be silently
+overwritten and would read like the mechanism while being dead code.
+
+title is user-typed and portal_account renders a customer name: both go through the form widgets and
+through Django's autoescaping. No |safe anywhere on this page, and nothing user-typed is
+interpolated into an attribute.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Document Share{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Document Share</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portaldocumentshare_list' %}">Document Shares</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        <span class="fw-600">This page is admin-only, and that is a security requirement rather than a convention.</span> The expiry below and the revoke button on the share's own page are two halves of <span class="fw-600">one</span> control — both answer <em>how much longer may this link fetch this customer's document?</em> — so they are held to the same bar. If editing sat at ordinary member access, anybody could blank an expiry (blank means never) on a share only an admin is allowed to kill, and an unrevokable-in-practice permanent link is worse than an un-revoked one. Every change you save here is written into the audit trail, which is the other half of why this gate is enough.
+      {% else %}
+        This publishes <span class="fw-600">one</span> document to <span class="fw-600">one</span> portal account. What it creates is a link that behaves like a key: anyone the customer forwards it to can fetch the document until it expires or is revoked, so the expiry at the bottom of this page is the part worth thinking about hardest. The PDS- number is assigned on save and the link itself is minted server-side — neither is a field here, and the link is never printed on any staff page.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Who may retrieve it, and what they will call it</h2>
+        <span class="badge badge-info">The title is customer-facing</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The <span class="fw-600">account</span> is the audience, and it is also the authorisation: the document you pick below must belong to that account's customer, and the save refuses it if it does not. That check runs on the record itself rather than on the dropdown, because a narrowed picker has never held against a crafted request — it is the one rule standing between publishing customer B's invoice on customer A's portal.
+        </p>
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The <span class="fw-600">document type</span> is not decoration: it decides which of the six pointers below is the legal one, it colours the badge the customer sees, and it selects what the download actually does. A “Certificate of analysis” holding an invoice is refused rather than quietly published under the wrong heading. The <span class="fw-600">title</span> is the only string from this row that the customer ever reads — an internal filename or a storage path pasted there names our systems and our conventions to somebody outside them, so write what the document <em>is</em>.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.portal_account %}
+          {% include "partials/form_field.html" with field=form.doc_type %}
+          {% include "partials/form_field.html" with field=form.title %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The one thing being shared</h2>
+        <span class="badge badge-amber">Fill in exactly one of the six</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">Pick exactly ONE target across the six fields below, and it must be the one the document type expects.</span> This is stated here rather than only in the error message because six empty pickers give nobody a way to know the rule until they have already filled two in and been told off. <span class="fw-600">None</span> is refused — a share with no target is a live link to nothing. <span class="fw-600">Two</span> is refused as well, and not out of tidiness: the type would decide which pointer is honoured and the other would silently do nothing, so the row would mean one thing to the download and another to the person who created it. If two documents genuinely need publishing, that is two shares.
+        </p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Document type</th><th>The field that must hold the target</th><th>Where the record lives</th></tr></thead>
+            <tbody>
+              {% for row in doc_type_matrix %}
+                <tr>
+                  <td class="fw-600">{{ row.label }}</td>
+                  <td>{{ row.pointer_label }}</td>
+                  <td class="text-muted">
+                    {% if row.pointer == "invoice" %}Accounts receivable — 4.16 reads accounting and computes no AR of its own
+                    {% elif row.pointer == "shipment" %}The 4.6 consignment whose proof of delivery is being published
+                    {% elif row.pointer == "trade_document" %}4.12 paperwork — a bill of lading, a commercial invoice or a packing list
+                    {% elif row.pointer == "contract" %}The customer-side contract from CRM 1.9. Supplier contracts are our terms with somebody else and are deliberately unreachable from here
+                    {% elif row.pointer == "quality_inspection" %}The 4.9 inspection whose certificate of analysis is being published
+                    {% elif row.pointer == "document" %}An uploaded file held against another record
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="3" class="text-muted">—</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin:.75rem 0 .9rem;">
+          Two document types share the trade-document field and two share the uploaded-document field. That is the table above being read literally rather than a duplicate: the type still decides the badge and the wording the customer sees, so a packing list and a bill of lading are the same <em>kind</em> of pointer and two different <em>things</em> to be told you are receiving.
+        </div>
+        <div class="form-grid">
+          {% comment %}
+          The six are grouped by name against pointer_field_names rather than listed one by one, so a
+          seventh pointer added to the model and to Meta.fields appears here automatically instead of
+          being dropped off the POST and blanked on the next save. Each renders its own help_text —
+          the matrix again, in one sentence — and its own errors, which is where "pick exactly one",
+          "only one target per share", the type mismatch and the ownership refusal all land.
+          {% endcomment %}
+          {% for field in form %}
+            {% if field.name in pointer_field_names %}
+              {% include "partials/form_field.html" with field=field %}
+            {% endif %}
+          {% endfor %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Each picker offers <span class="fw-600">only that account's customer's own records</span>, derived from the same ownership table the save validates against — so a picker cannot offer something the model will then refuse. A form that does not yet know which account it is for therefore starts with all six empty, rather than listing every customer's invoices in one select where the first one scrolled to belongs to whoever happens to be nearby. The uploaded-document picker is the single exception: a generic attachment carries no customer of its own to filter on, so it is scoped to this workspace alone and its ownership is proved from whatever record it hangs off.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">How long the link may be used</h2>
+        <span class="badge badge-slate">Blank = never expires</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">Leaving the expiry blank means the link never expires</span> — it keeps working until somebody revokes it, which is a deliberate act nobody may remember to perform. A date is the safer answer for the same reason a key is: the link is a bearer credential, so it works for whoever is holding it, and a forwarded one outlives the person you sent it to. At most <span class="fw-600">{{ max_expiry_days }} days</span> out; a share dated years ahead is the never-expiring link this field exists to abolish, wearing a date, and a mistyped year produces one by accident.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.expires_at %}
+        </div>
+        {% if is_edit %}
+          <div class="form-help" style="margin-top:.75rem;">
+            Current expiry: <span class="fw-600">{% if obj.expires_at %}{{ obj.expires_at|date:"d M Y, H:i" }}{% else %}—{% endif %}</span>{% if not obj.expires_at %} — this link does not expire on its own{% elif obj.is_expired %} — already lapsed, so the link is dead until this date is moved forward{% endif %}.
+            {% if obj.revoked_at %}
+              This share was <span class="fw-600">revoked</span> on {{ obj.revoked_at|date:"d M Y, H:i" }}. Editing it is allowed and is deliberately a no-op for access: the download refuses a revoked share by the lookup that finds it, so no date typed here can bring the link back. Correcting the title on a row somebody still has to read in a dispute is what this path is for.
+            {% endif %}
+          </div>
+          <div class="form-help" style="margin-top:.35rem;">
+            An expiry already in the past is refused only when a share is first created. On an existing row it is allowed, because moving a lapsed date forward is exactly how a share gets extended — and refusing it would leave an expired row impossible to touch.
+          </div>
+        {% else %}
+          <div class="form-help" style="margin-top:.75rem;">
+            The expiry must be in the future. A share created already lapsed is a link nobody can open and a row that reads as published — the two facts disagree, so the save refuses it rather than leaving somebody to discover it from the customer.
+          </div>
+        {% endif %}
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Revoking is the other half of this control and lives on the share's own page</span>, as an admin-only button with its consequence printed beside it — deliberately not a checkbox here. Expiry lets a link die on schedule; revoking kills one that is out in the wild now, and it is recorded with a timestamp somebody may have to defend. Neither belongs on a select scrolled past while fixing a typo in a title, which is also why this whole page is admin-only.
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:portaldocumentshare_detail' obj.pk %}{% else %}{% url 'scm:portaldocumentshare_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to the register and records what changed. It does not mint a new link: the credential is created once and never rotated on an edit, because the old one has already been sent and silently swapping it would break a share the customer is holding without telling anybody. Rotation is spelled <span class="fw-600">revoke this one and publish another</span>, which leaves both facts on the record.
+      {% else %}
+        Saving publishes the share and lands on its own page, where the expiry, the audience and the revoke button are. Who published it is stamped from your session rather than from this form, and the link is not shown there or anywhere else in the console — the customer reaches the document through their own portal, which is what keeps a credential nobody can rotate out of screenshots, browser caches and printed pages.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
