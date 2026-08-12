@@ -1061,6 +1061,39 @@ LIVE_LINKS = {
         "Compliance Reporting":    "scm:cold_chain_compliance_report",    # bullet (COMPUTED + CSV)
         "Maintenance of Reefers":  "scm:reefer_board",                    # bullet (COMPUTED over 4.13)
     },
+    # 4.16 Customer Portal. Five bullets, five STAFF-reachable pages — and the staff/customer split
+    # is the whole design decision here, so it is worth stating rather than inferring.
+    #
+    # **Every bullet points at a STAFF page (L32).** The sidebar is the staff application; a bullet
+    # that opened a login-gated customer page would be a dead end for the person clicking it, since
+    # a staff user has no `crm.CustomerPortalAccess` row and `_portal_account()` would refuse them
+    # at the first step. The gated customer surface (`scm:portal_home` and its seven siblings) is
+    # reached BY CUSTOMERS at `/scm/portal/`, and by staff only through the render-as preview. Same
+    # resolution 4.1's "Vendor Portal" and 4.10's "Return Portal" already reached.
+    #
+    # **"Order Tracking" and "Catalog Browsing" are COMPUTED pages, not tables** — the `labor_board`
+    # / `sparepart_list` precedent. 4.16 declares NO order table, NO shipment table and NO catalog
+    # table: 4.5 owns the order, 4.6 owns tracking and POD, 4.3 owns the item and the append-only
+    # ledger that on-hand is derived from. `portal_order_tracking` exists because it JOINS 4.5 to
+    # 4.6 in one row, which neither module's own list page shows; `portal_catalog_preview` renders
+    # one customer's projection server-side (# SECURITY: render-as, never authenticate-as).
+    #
+    # **"Account Management" points at `portalaccount_list`, not at a customer profile page.** The
+    # bullet is about MANAGING accounts — enablement, entitlements, who has never logged in — and
+    # L32 bars a staff bullet from targeting the login-gated `portal_profile`.
+    #
+    # **NO sidebar key for `PortalActivity`.** NavERP.md gives 4.16 five bullets and the sidebar
+    # mirrors it exactly. The activity log is a panel on the account detail page and has its own
+    # list page reached from there. That is the established WorkCenter / ReorderRule / ReturnReason
+    # / InspectionPlan / KpiTarget / MeterReading rule: a child or master reached from the page that
+    # uses it takes no bullet of its own.
+    "4.16": {
+        "Order Tracking":     "scm:portal_order_tracking",      # bullet (COMPUTED join of 4.5 + 4.6 - no table)
+        "Account Management": "scm:portalaccount_list",         # bullet (the enablement + entitlement console)
+        "Document Retrieval": "scm:portaldocumentshare_list",   # bullet (what was shared, and the proof it was fetched)
+        "Support Ticketing":  "scm:portalorderinquiry_list",    # bullet (the triage queue over crm.Case)
+        "Catalog Browsing":   "scm:portal_catalog_preview",     # bullet (staff as-seen-by-customer-X, render-as)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
