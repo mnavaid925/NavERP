@@ -283,9 +283,17 @@ def _outstanding_balance(tenant, party):
     open_invoices = Invoice.objects.filter(
         tenant=tenant, party=party, kind="invoice",
         status__in=Invoice.OPEN_STATUSES)
-    if not open_invoices.exists():
+    # ONE aggregate answers both questions. `exists()` followed by `Sum()` asked the database twice
+    # about the same rows; `Count` alongside the `Sum` distinguishes "no invoices at all" (return
+    # None -> the page prints an em dash) from "invoices totalling zero" in the same round trip.
+    #
+    # That distinction is the reason this function returns None rather than ZERO: "you have no
+    # invoices" and "you owe nothing" are different statements, and only one of them is a promise.
+    # This runs on `portal_home`, the hottest page in the sub-module, and again on `portal_profile`.
+    summary = open_invoices.aggregate(n=Count("id"), s=Sum("total"))
+    if not summary["n"]:
         return None
-    billed = open_invoices.aggregate(s=Sum("total"))["s"] or ZERO
+    billed = summary["s"] or ZERO
     paid = (PaymentAllocation.objects
             .filter(invoice__in=open_invoices, payment__status="confirmed")
             .aggregate(s=Sum("allocated_amount"))["s"] or ZERO)
@@ -628,15 +636,33 @@ def portal_order_detail(request, pk):
         _customer_orders(request.tenant, party).select_related("ship_to_address"), pk=pk)
 
     lines = []
-    for line in order.lines.select_related("item", "item__uom").order_by("id"):
-        allocated = line.quantity_allocated()
+    # ONE grouped aggregate for every line, not two per line.
+    #
+    # `line.quantity_allocated()` is an aggregate, and `line.quantity_backordered()`
+    # (`SalesOrders.py`) calls `quantity_allocated()` AGAIN internally — re-deriving from the
+    # database the exact figure this loop already holds. A 40-line order cost 80 queries, and the
+    # second forty of them asked a question we had just answered.
+    #
+    # The annotation excludes cancelled allocations, matching `quantity_allocated()` exactly (a
+    # cancelled claim releases its hold and stops counting; a released one still counts, because
+    # released means "sent to the floor", not "gone"). `SalesOrder.recompute_allocation_status()`
+    # and this sub-module's own `Reports.py::_line_figures` both already do it this way and both
+    # say why in their docstrings.
+    line_qs = (order.lines
+               .select_related("item", "item__uom")
+               .annotate(_allocated=Sum("allocations__quantity",
+                                        filter=~Q(allocations__status="cancelled")))
+               .order_by("id"))
+    for line in line_qs:
+        allocated = line._allocated or ZERO
+        remaining = (line.quantity_ordered or ZERO) - allocated
         lines.append({
             "obj": line,
             "sku": (line.item.sku if line.item_id else ""),
             "description": (line.description or (line.item.name if line.item_id else "")),
             "quantity_ordered": line.quantity_ordered,
             "quantity_allocated": allocated,
-            "quantity_backordered": line.quantity_backordered(),
+            "quantity_backordered": remaining if remaining > ZERO else ZERO,
             "unit_price": line.unit_price,
             "line_total": q2(line.line_total),
         })
@@ -772,6 +798,15 @@ def _target_still_owned(share):
         return False
     if getattr(target, "tenant_id", None) != share.tenant_id:
         return False
+    # A CONFIDENTIAL attachment is refused outright, whatever its ownership says. `classification`
+    # is `core.Document`'s own "not for outsiders" flag, and this route is the only place in the
+    # codebase that hands a file to someone with no login at all. Checked here as well as in the
+    # form (which does not offer one) and `clean()` (which refuses a crafted pk), because this is
+    # the boundary that actually serves the bytes — and a share created before this rule existed
+    # must stop working now rather than keep resolving.
+    if getattr(target, "classification", "") == "confidential":
+        return False
+
     customer_id = share.portal_account.customer_id
     owners = [share._resolve(target, path)
               for path in PortalDocumentShare.OWNER_PATHS.get(pointer, ())]
@@ -781,6 +816,12 @@ def _target_still_owned(share):
     return pointer == "document" and not owners
 
 
+# @require_GET, not because anything here writes on POST — the view has no POST branch — but because
+# an unauthenticated endpoint should accept exactly the method it is for. A POST reaching a bare
+# view is a CSRF-shaped request arriving at a route with no CSRF protection (there is none to have:
+# the token IS the credential and there is no session). Refusing the method outright is one fewer
+# thing to reason about, and it costs nothing.
+@require_GET
 def portal_document_download(request, token):
     """Serve a shared document to whoever holds the link. **NO DECORATOR — read this first.**
 
@@ -849,6 +890,13 @@ def portal_document_download(request, token):
         raise Http404("No such document.")
     if not share.portal_account.is_active:
         raise Http404("No such document.")
+    # `can_view_documents`, re-checked here for exactly the reason `is_active` is re-checked one
+    # line above: turning the switch off has to kill the live links, not merely hide the page that
+    # lists them. An admin who unticks it reasonably believes the outstanding links died — and every
+    # link already sitting in a customer's inbox stayed live. The entitlement's own help text calls
+    # it "the document library", which is the page; the library and its links are one control.
+    if not share.portal_account.can_view_documents:
+        raise Http404("No such document.")
     if not _target_still_owned(share):
         raise Http404("No such document.")
 
@@ -881,13 +929,28 @@ def portal_document_download(request, token):
 
     # Recorded only now, once the file is genuinely open and about to stream. Both are quoted in a
     # dispute, so neither may fire for a retrieval that failed.
-    share.record_download()
-    # `user=None` for the anonymous case; `record()` still picks up `request.user` when the holder
-    # happens to be signed in, which is the honest attribution either way. The IP comes from
-    # REMOTE_ADDR inside `record()` and from no forwarding header — see the field's own comment.
-    PortalActivity.record(share.portal_account, "download_document", request=request, user=None,
-                          document_share=share, shipment=share.shipment,
-                          object_label=share.number or "")
+    #
+    # AND ONLY FOR A REAL NAVIGATION. This endpoint is unauthenticated and writes into the one table
+    # whose whole value is being believable, so anyone who has ever held a token could otherwise
+    # forge a record: `<img src="https://erp.example/scm/portal-documents/<token>/">` on any page
+    # the customer visits makes their browser fetch it, and `record()` falls back to `request.user`,
+    # so the row would name that customer and their IP. A download they never made, in the log we
+    # would quote at them.
+    #
+    # `Sec-Fetch-Dest` is set by the browser and cannot be overridden by page script: a genuine
+    # navigation or link click sends `document`, an `<img>`/`<script>`/`<iframe>` sends
+    # `image`/`script`/`iframe`. Absent (older browsers, curl) defaults to `document` — this decides
+    # whether to WRITE EVIDENCE, not whether to serve, so the failure we choose on an unknown client
+    # is to record it. The bytes are served either way; suppressing the row is not access control
+    # and must not be mistaken for it.
+    if request.headers.get("Sec-Fetch-Dest", "document") == "document":
+        share.record_download()
+        # `user=None` for the anonymous case; `record()` still picks up `request.user` when the
+        # holder happens to be signed in, which is the honest attribution either way. The IP comes
+        # from REMOTE_ADDR inside `record()` and from no forwarding header — see the field's comment.
+        PortalActivity.record(share.portal_account, "download_document", request=request, user=None,
+                              document_share=share, shipment=share.shipment,
+                              object_label=share.number or "")
 
     return FileResponse(handle, as_attachment=True, filename=filename)
 
