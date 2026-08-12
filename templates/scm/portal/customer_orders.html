@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — MY ORDERS. A GATED CUSTOMER page, not a staff page.
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_order_list (gated on can_track_shipments,
+so that flag is always true by the time this file runs and is never re-tested here). Everything this
+page may read, and nothing else — the view pins the same list in its module docstring:
+
+  object_list      list of ROW DICTS (see below), NOT SalesOrder instances
+  page_obj         paginated at PORTAL_PAGE_SIZE = 12
+  q                the search box value
+  status_choices   [(value, label)] — the portal vocabulary, `draft` deliberately excluded
+  status           the RESOLVED status. The <select> below binds to THIS, never to
+                   request.GET.status: a hand-edited ?status=abc narrowed nothing, so echoing it as
+                   the selected option would show a filter that did not happen.
+  account customer access
+  can_track_shipments can_view_invoices can_view_documents can_raise_inquiries
+  can_request_returns show_credit_and_balance
+
+ROW DICT — these key names come from _order_rows() in the same view module, NOT from SalesOrder or
+Shipment fields, and a wrong one renders as a silent blank on a 200 page (L41):
+
+  obj              the SalesOrder      shipment    the latest Shipment, or None
+  shipment_count   int                 status_text the carrier's own words, or ""
+  last_known_location str or ""        eta         datetime or None
+  is_delayed bool  pod_received bool   pod_received_at datetime or None
+  tracking_number  str or ""
+
+There is deliberately NO `order`, `number`, `total` or `status` key on a row — the order itself is
+reached through `row.obj`, so every order column below goes through it.
+
+Every shipment-derived value is None/""/False for an order that has not been dispatched, which is
+the state EVERY order sits in between submission and dispatch — the common case, not an edge one.
+Each renders as an em dash or an explicit "not dispatched yet" chip, never as 0 and never as blank:
+"no shipment exists" is a different fact from "the ETA is zero".
+
+NO WRITES. The customer portal offers no edit and no delete on an order — there is no pencil, no bin
+and therefore no confirm() dialog anywhere on this page (L42 is moot here by construction). The only
+row control is the eye, plus an optional pre-filled inquiry link, and both are plain GET routes.
+
+EMPTY IS THE MODAL FIRST SESSION. A brand-new portal account legitimately has zero orders, so the
+no-rows-and-no-filters branch renders a WELCOME card — not the table, and not the filter bar, which
+would read as a search that broke. Every link in it is a GET-able route the customer is actually
+entitled to: the catalogue and profile are ungated views, documents/inquiry/return are each wrapped
+in their own entitlement so nobody is offered a page that would only bounce them back.
+
+The filtered-to-nothing case is a SEPARATE message: "nothing matches" is not "you have no orders".
+
+Everything here is escaped and nothing uses |safe. `status_text` and `last_known_location` are the
+carrier's own free text, and the search box echoes whatever the customer typed.
+
+Carrier NAME is deliberately not a column. Carrier.name is a property that reads through to
+core.Party, and the view's select_related stops at "carrier" — so printing it would be a query per
+row on a customer-facing page (the 4.13 asset_list finding). Mode is a plain choice field on the
+shipment and costs nothing, so it carries the "who/how" weight here; the carrier itself belongs on
+the order detail page, one hop through the eye.
+
+Badge classes: badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY.
+badge-success / badge-warning / badge-danger do not exist in theme.css and render unstyled (L33).
+The two status maps mirror the shipped staff pages (scm/orders/salesorder/list.html and
+scm/transportation/shipment/list.html) so a customer and a colleague reading the same order see the
+same colour, and both end in an {% else %} that falls back to the model's own display label.
+{% endcomment %}
+{% block title %}My Orders{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Orders</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:portal_home' %}">My Account</a><span class="sep">›</span>
+        <span>Orders</span>
+      </div>
+      <p class="text-muted">
+        Every order on {% if customer %}{{ customer.name }}{% else %}your account{% endif %}, newest first, each
+        row carrying where its goods actually are. Tracking updates land here as the carrier reports them.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline"><i data-lucide="book-open"></i> Catalogue</a>
+      {% if can_view_documents %}
+        <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder"></i> Documents</a>
+      {% endif %}
+      {% if can_request_returns %}
+        <a href="{% url 'scm:portal_return_create' %}" class="btn btn-outline"><i data-lucide="package-x"></i> Request a Return</a>
+      {% endif %}
+      {% if can_raise_inquiries %}
+        <a href="{% url 'scm:portal_inquiry_create' %}" class="btn btn-primary"><i data-lucide="help-circle"></i> Ask About an Order</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    The filter bar and the table exist only when there is something to filter OR a filter is already
+    in force. A first-session account with no orders gets the welcome card in the {% else %} branch
+    instead: a search box above an empty grid reads as a broken page, which is the wrong first
+    impression for the one state every account starts in.
+  {% endcomment %}
+  {% if object_list or q or status %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Your orders</h2>
+        <div class="badge-group">
+          {% comment %}
+            "matching", not "on your account" — paginator.count is the FILTERED total, so under a
+            search or a status it is a smaller claim than the size of the account's order book.
+          {% endcomment %}
+          <span class="badge badge-info">{{ page_obj.paginator.count }} order{{ page_obj.paginator.count|pluralize }} matching</span>
+          {% if q or status %}
+            <span class="badge badge-slate">Filtered</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <form method="get" class="filter-bar">
+          <div class="form-group" style="flex:1; min-width:220px;">
+            <label class="form-label" for="po-q">Search</label>
+            <input type="text" id="po-q" name="q" value="{{ q }}" class="form-input"
+                   placeholder="Order number, product code or description…">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="po-status">Status</label>
+            <select name="status" id="po-status" class="form-select">
+              <option value="">All statuses</option>
+              {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Filter</button>
+            <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline">Reset</a>
+          </div>
+        </form>
+        <div class="form-help">
+          Search matches your order number and the products on it. A status we do not recognise simply
+          drops the filter rather than emptying the page.
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Ordered</th>
+              <th>Status</th>
+              <th>Promised</th>
+              <th>Total</th>
+              <th>Shipment</th>
+              <th>Where it is</th>
+              <th>Expected</th>
+              <th class="table-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in object_list %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:portal_order_detail' row.obj.pk %}" class="fw-600 mono">{{ row.obj.number|default:"—" }}</a>
+                </td>
+                <td class="nowrap">{{ row.obj.order_date|date:"M d, Y"|default:"—" }}</td>
+                <td>
+                  <span class="badge badge-{% if row.obj.status == 'fulfilled' or row.obj.status == 'closed' %}green{% elif row.obj.status == 'allocated' or row.obj.status == 'invoiced' %}info{% elif row.obj.status == 'submitted' or row.obj.status == 'partially_fulfilled' %}amber{% elif row.obj.status == 'on_hold' or row.obj.status == 'cancelled' %}red{% else %}muted{% endif %}">{{ row.obj.get_status_display }}</span>
+                </td>
+                {% comment %}
+                  promised_date is stamped ONCE, the first time the order reaches `allocated` — so an
+                  order still being reserved has none, and that is an em dash rather than a blank cell
+                  or today's date.
+                {% endcomment %}
+                <td class="nowrap">{{ row.obj.promised_date|date:"M d, Y"|default:"—" }}</td>
+                <td class="nowrap">
+                  {% if row.obj.total is not None %}
+                    {{ row.obj.total|floatformat:2 }}{% if row.obj.currency %} <span class="text-muted">{{ row.obj.currency.code }}</span>{% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.shipment %}
+                    <span class="badge badge-{% if row.shipment.status == 'delivered' %}green{% elif row.shipment.status == 'in_transit' %}info{% elif row.shipment.status == 'booked' %}amber{% elif row.shipment.status == 'exception' or row.shipment.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ row.shipment.get_status_display }}</span>
+                    <div class="form-help mono">{{ row.shipment.number|default:"—" }} · {{ row.shipment.get_mode_display }}</div>
+                    {% if row.tracking_number %}
+                      <div class="form-help mono">Tracking {{ row.tracking_number }}</div>
+                    {% endif %}
+                    {% if row.shipment_count > 1 %}
+                      <div class="form-help">{{ row.shipment_count }} consignments on this order</div>
+                    {% endif %}
+                  {% else %}
+                    {% comment %}
+                      Not "no shipment" as an error — every order looks like this between submission
+                      and dispatch, which is most of an order's visible life.
+                    {% endcomment %}
+                    <span class="badge badge-muted">Not dispatched yet</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% comment %}
+                    Both values are the CARRIER's own free text, projected onto the shipment by 4.6's
+                    tracking events. Escaped, never |safe.
+                  {% endcomment %}
+                  {% if row.last_known_location %}
+                    <div>{{ row.last_known_location }}</div>
+                  {% endif %}
+                  {% if row.status_text %}
+                    <div class="form-help">{{ row.status_text }}</div>
+                  {% endif %}
+                  {% if not row.last_known_location and not row.status_text %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="nowrap">
+                  {% if row.pod_received %}
+                    <span class="badge badge-green">Delivered</span>
+                    {% if row.pod_received_at is not None %}
+                      <div class="form-help">{{ row.pod_received_at|date:"M d, Y H:i" }}</div>
+                    {% endif %}
+                  {% elif row.eta is not None %}
+                    {{ row.eta|date:"M d, Y H:i" }}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                  {% if row.is_delayed %}
+                    <div><span class="badge badge-red">Running late</span></div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:portal_order_detail' row.obj.pk %}" class="btn-icon" title="View this order"><i data-lucide="eye"></i></a>
+                    {% comment %}
+                      A GET pre-fill, not a write: the inquiry page re-resolves ?sales_order= against
+                      this customer's own orders before it trusts it.
+                    {% endcomment %}
+                    {% if can_raise_inquiries %}
+                      <a href="{% url 'scm:portal_inquiry_create' %}?sales_order={{ row.obj.pk }}" class="btn-icon" title="Ask about this order"><i data-lucide="help-circle"></i></a>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              {% comment %}
+                Reached only when a filter is in force — the no-filter case never renders this table.
+                "Nothing matches" is a different statement from "you have no orders" and must not be
+                worded as the welcome below.
+              {% endcomment %}
+              <tr>
+                <td colspan="9">
+                  <div class="empty-state">
+                    <i data-lucide="search-x"></i>
+                    <h3>No orders match that search</h3>
+                    <p>Nothing on your account matches what you typed. Clear the filters to see every order again.</p>
+                  </div>
+                  <div class="page-actions" style="justify-content: center;">
+                    <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline">Show all my orders</a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "partials/pagination.html" %}
+    </div>
+  {% else %}
+    {% comment %}
+      THE WELCOME. This is what a switched-on account looks like on day one, so it reads as a start
+      rather than a fault: no error colour, no "no results", and a next step for each thing the
+      account is actually entitled to. The buttons sit OUTSIDE .empty-state on purpose — theme.css
+      sizes every <i> inside that block to 40px, so an icon button placed within it renders enormous.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Welcome{% if customer %}, {{ customer.name }}{% endif %}</h2>
+        <div class="badge-group">
+          <span class="badge badge-info">Order tracking is switched on</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="shopping-bag"></i>
+          <h3>No orders on your account yet</h3>
+          <p>
+            When we accept an order for you it appears here within moments, and this page then tracks it
+            all the way to the door — its status, the date we have promised, and where the consignment
+            actually is. Nothing is missing; there is simply nothing to show yet.
+          </p>
+        </div>
+        <div class="page-actions" style="justify-content: center; flex-wrap: wrap;">
+          <a href="{% url 'scm:portal_catalog' %}" class="btn btn-primary"><i data-lucide="book-open"></i> Browse the Catalogue</a>
+          {% if can_view_documents %}
+            <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder"></i> My Documents</a>
+          {% endif %}
+          {% if can_raise_inquiries %}
+            <a href="{% url 'scm:portal_inquiry_create' %}" class="btn btn-outline"><i data-lucide="help-circle"></i> Ask a Question</a>
+          {% endif %}
+          {% if can_request_returns %}
+            <a href="{% url 'scm:portal_return_create' %}" class="btn btn-outline"><i data-lucide="package-x"></i> Request a Return</a>
+          {% endif %}
+          <a href="{% url 'scm:portal_profile' %}" class="btn btn-outline"><i data-lucide="user"></i> My Details</a>
+          <a href="{% url 'scm:portal_home' %}" class="btn btn-outline"><i data-lucide="home"></i> My Account</a>
+        </div>
+        {% if account.support_email %}
+          <p class="form-help" style="text-align: center; margin-top: 1rem;">
+            Expecting an order that is not listed? Email
+            <a href="mailto:{{ account.support_email }}">{{ account.support_email }}</a> and we will look into it.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
