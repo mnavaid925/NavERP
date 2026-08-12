@@ -1199,12 +1199,25 @@ class PortalDocumentShareAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "doc_type")
     search_fields = ("number", "title", "portal_account__number", "portal_account__customer__name")
     date_hierarchy = "created_at"
-    # The token is minted once in save() and never rotated — rotating it silently breaks a link the
-    # customer already holds. `revoked_at` is written only by the admin-gated revoke verb, and the
-    # download audit trio is the evidence that the share was fetched; all four are read-only because
-    # an editable revoke stamp is an un-revoke, and an editable download count is a forged receipt.
-    readonly_fields = ("number", "public_token", "revoked_at", "download_count", "first_viewed_at",
+    # `revoked_at` is written only by the admin-gated revoke verb, and the download audit trio is
+    # the evidence that the share was fetched; all are read-only because an editable revoke stamp is
+    # an un-revoke, and an editable download count is a forged receipt.
+    #
+    # **`public_token` is deliberately NOT in this tuple, and that is the opposite of an oversight.**
+    # `readonly_fields` does not mean "hidden" — Django adds those names to `get_fields()` and
+    # RENDERS their values on the change page. Listing the token there would print the plaintext
+    # bearer credential onto a page, into a browser history and into every screenshot of it, which
+    # is precisely the invariant the rest of this sub-module is built around (both staff querysets
+    # `.defer()` it so it is not even loaded). The column is already `editable=False`, so it cannot
+    # reach a form regardless — the entry bought nothing and cost the whole rule.
+    readonly_fields = ("number", "revoked_at", "download_count", "first_viewed_at",
                        "last_downloaded_at", "shared_by", "created_at", "updated_at")
+    # Belt and braces: even a future `readonly_fields` edit cannot surface it, because the change
+    # form is built from this explicit list.
+    fields = ("number", "tenant", "portal_account", "doc_type", "title",
+              "document", "invoice", "shipment", "trade_document", "contract", "quality_inspection",
+              "expires_at", "revoked_at", "download_count", "first_viewed_at", "last_downloaded_at",
+              "shared_by", "created_at", "updated_at")
 
 
 @admin.register(PortalActivity)
