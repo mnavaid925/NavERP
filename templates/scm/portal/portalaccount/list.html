@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — the ENABLEMENT CONSOLE (PAC-).
+
+Renders apps/scm/views/CustomerPortal/PortalAccounts.py::portalaccount_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q    from crud_list (apps/core/crud.py) — page_obj.window drives the
+                                shared pagination partial
+  stock_display_choices         STOCK_DISPLAY_CHOICES  (hidden / availability text / band / exact)
+  catalog_scope_choices         CATALOG_SCOPE_CHOICES  (all active / previously ordered / categories)
+  price_basis_choices           PRICE_BASIS_CHOICES    (hidden / last ordered)
+  customers                     Party queryset for the pk dropdown — deliberately NARROWER than the
+                                form's list: only parties that already HAVE a portal account, because
+                                a filter option that can only ever return an empty page is not a
+                                filter
+  stats                         dict: total / active / inactive / never_logged_in / unlinked.
+                                `never_logged_in` and `unlinked` are counted over ACTIVE accounts
+                                only — a deliberately switched-off portal is not a problem to chase
+
+Filter params: q / is_active / stock_display / catalog_scope / price_basis / customer. The three
+vocabulary params compare against request.GET.<param> directly; `is_active`'s option VALUES are the
+strings "True"/"False", which is what crud_list maps to real booleans (a bare "False" would otherwise
+coerce through bool("False") == True and return every row); `customer` is a pk and compares with
+|stringformat:"d" — never |slugify.
+
+--------------------------------------------------------------------------------------------------
+THE FOUR PER-ROW FIGURES ARE ANNOTATIONS, AND ONLY THE ANNOTATIONS MAY BE READ
+--------------------------------------------------------------------------------------------------
+PortalAccount exposes `linked_user_count` and `has_never_logged_in` as PER-ROW PROPERTIES. Both are
+correct, both are meant for a single row on a detail page, and both are one query each per row — 15
+rows a page is 30 extra queries for this screen (the 4.13 asset_list finding). The view therefore
+annotates the same facts as correlated scalar subqueries and this page reads:
+
+  obj.linked_users     (int) NOT obj.linked_user_count
+  obj.last_login_at    (datetime or None) NOT obj.has_never_logged_in
+  obj.open_inquiries   (int, coalesced to 0)
+  obj.live_shares      (int, coalesced to 0 — neither revoked nor expired)
+
+The trap is that the property versions would still RENDER, correctly, so nothing would ever look
+broken. The annotation cannot be NAMED `linked_user_count` either — assigning over a read-only
+property raises AttributeError — which is why the names differ by a word.
+
+`last_login_at` is the one figure with NO Coalesce, on purpose: NULL is the ANSWER ("never signed
+in"), not a missing zero, and it is this console's headline. It never renders as a blank cell.
+
+**Do NOT render obj.catalog_categories.all here** — it is a many-to-many, i.e. a query per row, for
+a detail nobody triages by. get_catalog_scope_display is what the Catalog column is for.
+
+Nothing else in a row is a query either: select_related covers `customer`, and .defer() drops only
+welcome_message and notes, neither of which this page prints (both are user-typed and would need
+escaping anyway — nothing on this page is ever |safe).
+
+--------------------------------------------------------------------------------------------------
+Colour, and what this page refuses to invent
+--------------------------------------------------------------------------------------------------
+_choices.py ships a *_CSS map for the INQUIRY / SHARE / ACTION vocabularies and deliberately none for
+stock_display, catalog_scope or price_basis — those three are taxonomies, not severities. This page
+therefore renders them with the neutral badge-slate rather than inventing a per-value colour it
+cannot keep in step with a map that does not exist. theme.css ships COLOUR-named badges only;
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+
+The only amber on a row is a diagnosis: "nobody bound", "never opened", "inquiries waiting". Each is
+scoped to ACTIVE accounts, matching how `stats.unlinked` and `stats.never_logged_in` are counted, so
+the chip on a row and the tile above it can never describe different populations.
+
+Delete is @tenant_admin_required and @require_POST, so it is a real <form method="post"> with a csrf
+token behind the house gate. It is additionally hidden on any row with open inquiries: the route
+refuses while ANY inquiry (open or resolved) references the account, and open_inquiries > 0 implies
+total > 0 — so hiding there can never hide a deletable row, while a row showing 0 open may still be
+refused by resolved ones, which the view answers with a sentence somebody can act on. Only the
+system-generated PAC- number goes into the confirm string: the customer name is user-typed and an
+apostrophe in it is escaped to &#39;, which HTML decodes back to a bare quote before JavaScript ever
+sees it — the dialog then breaks open and the guard is silently gone (L42).
+
+`public_token` is not on this page in any form — not a column, not a tooltip, not an attribute. It is
+a bearer credential, and the share querysets .defer() it precisely so touching it would be visible.
+{% endcomment %}
+{% block title %}Portal Accounts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Portal Accounts</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Portal Accounts</span></div>
+      <p class="text-muted">One row per customer: what their portal shows them, how much of the live stock figure they may read, and which documents and financials they are entitled to. <span class="fw-600">This row is not a login.</span> A customer is only actually on the portal when three separate things line up — an <em>active</em> CRM portal access exists for one of their users, that access names their party, and an <em>active</em> account here configures what the party may see. Each of the three is administered on a different screen and each can be true on its own while the customer still sees nothing, so the two columns worth reading first are <span class="fw-600">Users</span> and <span class="fw-600">Last sign-in</span>.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portalorderinquiry_list' %}" class="btn btn-outline"><i data-lucide="message-square-warning"></i> Inquiries</a>
+      <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="share-2"></i> Shares</a>
+      <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Activity</a>
+      <a href="{% url 'scm:portal_catalog_preview' %}" class="btn btn-outline"><i data-lucide="eye"></i> Catalog Preview</a>
+      <a href="{% url 'scm:portalaccount_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Enable Customer</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The five tiles are counted over the WHOLE workspace, not the filtered page — "4 never signed in"
+    is a fact somebody has to act on, and a number that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one customer. stat-icon ships blue / green / orange / purple
+    / slate only; there is no red, so the two adoption failures take orange and purple.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="building-2"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Customers configured — enablement is per-customer opt-in, so this is every portal that exists</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Active — the resolver puts this flag in its own lookup, so only these can open a page</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="eye-off"></i></div>
+      <div class="stat-value">{{ stats.never_logged_in }}</div>
+      <div class="stat-label">Active and never once opened — a portal somebody switched on and nobody ever used</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="user-x"></i></div>
+      <div class="stat-value">{{ stats.unlinked }}</div>
+      <div class="stat-label">Active with no user bound — fully configured and literally nobody can sign in</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="log-out"></i></div>
+      <div class="stat-value">{{ stats.inactive }}</div>
+      <div class="stat-label">Switched off — every gated page and every live document link closed, every row of evidence kept</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Accounts</h2>
+      <div class="badge-group">
+        {% if stats.never_logged_in %}<span class="badge badge-amber">{{ stats.never_logged_in }} never opened</span>{% endif %}
+        {% if stats.unlinked %}<span class="badge badge-amber">{{ stats.unlinked }} with nobody bound</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search PAC- number, customer or support email…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The option VALUES are the literal strings "True"/"False" — crud_list maps exactly those
+            two to real booleans, and anything else (?is_active=maybe) is caught and skipped rather
+            than silently returning every row.
+          {% endcomment %}
+          <select name="is_active" aria-label="State" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Switched off</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="stock_display" aria-label="Stock display" class="form-select">
+            <option value="">Any stock display</option>
+            {% for val, label in stock_display_choices %}
+              <option value="{{ val }}" {% if request.GET.stock_display == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="catalog_scope" aria-label="Catalog scope" class="form-select">
+            <option value="">Any catalog scope</option>
+            {% for val, label in catalog_scope_choices %}
+              <option value="{{ val }}" {% if request.GET.catalog_scope == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="price_basis" aria-label="Price basis" class="form-select">
+            <option value="">Any price basis</option>
+            {% for val, label in price_basis_choices %}
+              <option value="{{ val }}" {% if request.GET.price_basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A pk filter, so the comparison is |stringformat:"d" — |slugify would agree only by
+            accident and would silently drop the selection on any pk it renders differently. The
+            list is only the parties that already hold an account, so every option here can return
+            at least one row.
+          {% endcomment %}
+          <select name="customer" aria-label="Customer" class="form-select">
+            <option value="">Every customer</option>
+            {% for c in customers %}
+              <option value="{{ c.pk }}" {% if request.GET.customer == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">Active</span> and <span class="fw-600">reachable</span> are different questions and this page keeps them apart. Switching an account off is the safe alternative to deleting it: the resolver puts <span class="mono">is_active</span> in its own lookup, so one save closes every gated page and every live document link for that customer while leaving the inquiry trail, the share register and the append-only read log completely intact. Deleting does not — inquiries protect the row outright, and shares and activity would cascade away with it.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Customer</th>
+            <th>Entitlements</th>
+            <th>Stock display</th>
+            <th>Catalog</th>
+            <th>Price</th>
+            <th>Users</th>
+            <th>Open</th>
+            <th>Shares</th>
+            <th>State</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:portalaccount_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                {% comment %}
+                  activated_on is stamped ONCE, the first time the account is active, and never
+                  restamped — so a blank one is not a missing date, it is an account that has never
+                  been switched on at all. It says that in words rather than as a bare em dash,
+                  because the two facts read identically otherwise.
+                {% endcomment %}
+                <div class="form-help">
+                  {% if obj.activated_on %}enabled {{ obj.activated_on|date:"M d, Y" }}{% else %}never enabled{% endif %}
+                </div>
+              </td>
+              <td>
+                {{ obj.customer.name }}
+                <div class="form-help">
+                  {% if obj.support_email %}{{ obj.support_email }}{% else %}tenant support routing{% endif %}
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  Six fixed chips in a fixed order, granted green and withheld muted — the same
+                  reading the detail page's entitlement panel uses. All six are printed even when
+                  withheld, because a panel that renders only what is switched ON cannot answer "is
+                  this customer seeing our balances?", and the credit switch is the one somebody
+                  opens this page to check. The labels are short; the full sentence behind each is
+                  the field's own help text and lives on the detail page and the form.
+                {% endcomment %}
+                <div class="badge-group">
+                  <span class="badge {% if obj.can_track_shipments %}badge-green{% else %}badge-muted{% endif %}" title="Order tracking, shipment status and proof of delivery">Tracking</span>
+                  <span class="badge {% if obj.can_view_invoices %}badge-green{% else %}badge-muted{% endif %}" title="Read-only invoice history — accounting invoices, shown, never recalculated">Invoices</span>
+                  <span class="badge {% if obj.can_view_documents %}badge-green{% else %}badge-muted{% endif %}" title="The document library — only ever documents shared to this account">Documents</span>
+                  <span class="badge {% if obj.can_raise_inquiries %}badge-green{% else %}badge-muted{% endif %}" title="Raise an order inquiry from the portal, which opens a CRM case">Inquiries</span>
+                  <span class="badge {% if obj.can_request_returns %}badge-green{% else %}badge-muted{% endif %}" title="Routes to the existing customer return request — no second returns flow">Returns</span>
+                  <span class="badge {% if obj.show_credit_and_balance %}badge-green{% else %}badge-muted{% endif %}" title="Outstanding balance, credit limit and payment terms. Off unless deliberately turned on">Credit</span>
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  badge-slate is a fixed taxonomy colour, not a severity: _choices.py ships no
+                  STOCK_DISPLAY_CSS and PortalAccount exposes no stock_display_css, so this page must
+                  not invent a per-value mapping there is nothing to keep it in step with.
+
+                  The threshold is only read by the availability-text and colour-band displays
+                  (THRESHOLD_STOCK_DISPLAYS) — clean() refuses a non-zero one against the other two
+                  rather than ignoring it, so a row can never carry a number that quietly does
+                  nothing. A threshold of zero is a fact, not a gap: stock_band() treats zero as "no
+                  low band", so nothing is ever amber and a positive quantity is simply in stock.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_stock_display_display }}</span>
+                <div class="form-help">
+                  {% if obj.stock_display == "availability_text" or obj.stock_display == "band" %}
+                    {% if obj.low_stock_threshold > 0 %}low at or below {{ obj.low_stock_threshold|floatformat:"-4" }}{% else %}no low band set{% endif %}
+                  {% else %}
+                    threshold not read by this display
+                  {% endif %}
+                </div>
+                <div class="form-help">{% if obj.show_by_location %}broken down by warehouse{% else %}one network figure{% endif %}</div>
+              </td>
+              <td>
+                {% comment %}
+                  The scope LABEL only. obj.catalog_categories is a many-to-many and rendering it
+                  here is one query per row for a detail nobody triages by — the chosen categories
+                  are on the detail page, where there is one row and one query.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_catalog_scope_display }}</span>
+              </td>
+              <td>
+                {% comment %}
+                  Two values, and the vocabulary is short because of a documented gap rather than
+                  because pricing is simple: there is no customer price master on the SCM side, so
+                  the only price this build can state truthfully is the one this customer themselves
+                  last paid — derived at render time from their own most recent order line, never
+                  stored, because a stored copy quietly becomes a quote nobody agreed to.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_price_basis_display }}</span>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  obj.linked_users — the ANNOTATION, counting ACTIVE crm.CustomerPortalAccess rows
+                  that resolve to this customer party. Never obj.linked_user_count, which is the
+                  identical fact as a per-row property and a query per row.
+
+                  Zero is the NORMAL state of a freshly enabled account — staff configure the portal
+                  first and bind the people afterwards — so it is only a diagnosis on an ACTIVE
+                  account, which is exactly how stats.unlinked is counted above.
+                {% endcomment %}
+                {% if obj.linked_users == 0 %}
+                  {% if obj.is_active %}
+                    <span class="badge badge-amber">Nobody bound</span>
+                  {% else %}
+                    <span class="badge badge-muted">Nobody bound</span>
+                  {% endif %}
+                {% else %}
+                  <span class="fw-600">{{ obj.linked_users }}</span> <span class="text-muted">signed-in users</span>
+                {% endif %}
+                <div class="form-help">
+                  {% comment %}
+                    last_login_at is the only annotation with no Coalesce: NULL means never, and
+                    that is the answer this console exists to surface — it must never render as a
+                    blank cell or as an em dash on its own.
+                  {% endcomment %}
+                  {% if obj.last_login_at %}
+                    last in {{ obj.last_login_at|date:"M d, Y" }}
+                  {% elif obj.is_active %}
+                    <span class="badge badge-amber">Never signed in</span>
+                  {% else %}
+                    <span class="badge badge-muted">Never signed in</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  Coalesced to 0 in the view, so a zero here is a real count of open inquiries and
+                  not a missing figure — it prints as 0 rather than an em dash.
+                {% endcomment %}
+                {% if obj.open_inquiries %}
+                  <span class="badge badge-amber">{{ obj.open_inquiries }} open</span>
+                {% else %}
+                  <span class="text-muted mono">0</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  "Live" is neither revoked nor expired, evaluated against the clock this page was
+                  rendered at — the SQL twin of PortalDocumentShare.is_live, so the number here and
+                  the badges on the share list cannot disagree. The share LINK itself is a bearer
+                  credential and appears on that share's own detail page and nowhere else.
+                {% endcomment %}
+                {% if obj.live_shares %}
+                  <span class="badge badge-info">{{ obj.live_shares }} live</span>
+                {% else %}
+                  <span class="text-muted mono">0</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Switched off</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portalaccount_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:portalaccount_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Admin-gated because the route is: showing a member a button they will 403 on is
+                    the 4.11 finding. Hidden as well on any row with open inquiries — an inquiry
+                    PROTECTs this row, so open > 0 guarantees the route refuses, and hiding on that
+                    condition can never hide a row that would have been deletable. A row showing 0
+                    open may still be refused by RESOLVED inquiries, which the list cannot count
+                    without a sixth subquery; the view answers that case with a sentence naming the
+                    number and pointing at the switch-off instead.
+
+                    The confirm string carries the PAC- number and nothing else: the customer name
+                    is user-typed, and an apostrophe in it escapes to &#39;, which HTML decodes back
+                    to a bare quote before JavaScript parses the attribute — the guard then vanishes
+                    without a trace (L42).
+                  {% endcomment %}
+                  {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                    {% if not obj.open_inquiries %}
+                      <form method="post" action="{% url 'scm:portalaccount_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its whole document share register and its entire append-only customer read log are destroyed with it, and nothing rebuilds either — that log is the only thing that can prove when a document was published and when it was downloaded. Switching the account off closes the portal just as completely and keeps every row.');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="11">
+                <div class="empty-state">
+                  <i data-lucide="users"></i>
+                  <h3>No portal accounts</h3>
+                  <p>No customer in this workspace has a portal. That is not a gap to fill in bulk — enablement is a deliberate per-customer opt-in, and until a row exists here a customer simply has no portal at all, whatever access their users hold in CRM. Enable one customer, decide what their stock figure and prices look like, then bind their people through their CRM portal access. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Nothing on this screen writes and nothing here is a promise. The <span class="fw-600">notification preferences</span> on each account — shipment, delivery, exception, preferred channel — are stored intent and this module dispatches nothing: no email, no SMS, no webhook, exactly as the order-confirmation stamps have sat unfired since 4.5. They are captured now so that on the day a mailer exists it reads a column carrying real customer intent instead of defaulting everyone to email. Prices and stock are the same posture from the other direction: the account configures how those figures are <em>rendered</em> and stores neither, so a change here takes effect on the customer's very next page load rather than the next time something is recalculated.
+    </div>
+  </div>
+{% endblock %}
