@@ -341,4 +341,31 @@
       </div>
     </div>
   </div>
+
+  {% comment %}
+    --- 4.16 Customer Portal ---
+    The five staff pages 4.16's LIVE_LINKS entry points at, plus the activity log, which
+    deliberately carries no sidebar bullet of its own (NavERP.md gives 4.16 five bullets and the
+    sidebar mirrors it exactly) but is worth a link from here.
+
+    NOT linked from this card: the gated CUSTOMER surface (scm:portal_home and its siblings). Those
+    pages resolve the visitor through crm.CustomerPortalAccess -> PortalAccount and refuse anyone
+    without one, so a staff member clicking through from here would land on a refusal and a
+    redirect. That is L32 applied one level out from the sidebar: a staff-facing link must go
+    somewhere a staff user can actually stand. Staff see a customer's view through
+    "Catalog Preview", which renders that projection server-side and swaps no session.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Customer Portal</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="user-cog"></i> Portal Accounts</a>
+        <a href="{% url 'scm:portal_order_tracking' %}" class="btn btn-outline"><i data-lucide="radar"></i> Order Tracking</a>
+        <a href="{% url 'scm:portalorderinquiry_list' %}" class="btn btn-outline"><i data-lucide="life-buoy"></i> Order Inquiries</a>
+        <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="file-lock-2"></i> Document Shares</a>
+        <a href="{% url 'scm:portal_catalog_preview' %}" class="btn btn-outline"><i data-lucide="eye"></i> Catalog Preview</a>
+        <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="history"></i> Portal Activity</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
