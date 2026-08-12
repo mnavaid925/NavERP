@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — My Catalogue (the GATED customer-facing item list).
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_catalog. Everything this page may read,
+and nothing else (the view pins the same list in its module docstring at Portal.py:110-114):
+
+  object_list          list of dicts — built inline in portal_catalog(), keys spelled out below
+  page_obj             the paginated Item page (PORTAL_PAGE_SIZE = 12)
+  q                    the echoed search term
+  item_categories      ItemCategory queryset — only categories IN SCOPE for this account
+  category             the RESOLVED category pk as a string ("" when absent or junk)
+  stock_display        "hidden" / "availability_text" / "band" / "exact_quantity"
+  stock_display_label  account.get_stock_display_display()
+  show_by_location     bool — already ANDed with "stock is not hidden" by the view (wants_split)
+  price_basis          "hidden" / "last_ordered"
+  show_prices          bool — price_basis == "last_ordered"
+  catalog_scope        "all_active" / "previously_ordered" / "categories"
+  catalog_scope_label  account.get_catalog_scope_display()
+  account customer access
+  can_track_shipments can_view_invoices can_view_documents
+  can_raise_inquiries can_request_returns show_credit_and_balance
+
+ROW dict — these key names come from the row builder in portal_catalog() (Portal.py:1221-1251) and
+are pinned in that function's docstring at Portal.py:1137-1142. They are NOT the Item's own fields,
+and a wrong one renders as a silent blank on a 200 (L41):
+
+  obj                 the Item itself (sku, name, description, category, uom — select_related)
+  on_hand             Decimal|None — populated ONLY for the exact_quantity display
+  band                "out" / "low" / "in" / None
+  band_label          str|"" — STOCK_BAND_LABELS
+  band_css            str|"" — STOCK_BAND_CSS (badge-red / badge-amber / badge-green)
+  by_location         list of dicts, [] unless show_by_location. Its OWN keys, from the same
+                      builder (Portal.py:1232-1240): location (a Location object) / quantity
+                      (Decimal|None — a number only on the exact_quantity display) / band /
+                      band_label / band_css
+  last_price          Decimal|None
+  replenishment_days  int|None
+
+STOCK_DISPLAY IS ENFORCED BY THE VIEW, NOT BY THIS TEMPLATE. When the account is set to hidden the
+row carries no quantity, no band and no per-location split at all; on availability_text and band it
+carries the bucket but NOT the number. The {% if stock_display %} branches below choose WORDING and
+LAYOUT — they are not the access control, and a template cannot leak a figure it was never handed.
+
+THE COLOUR BAND IS NEVER THE ONLY CARRIER OF THE MEANING. A colour-only chip is invisible to a
+screen reader and to the ~8% of men with a red/green deficiency, so the band display renders
+band_label as title AND aria-label AND an .sr-only span. STOCK_BAND_LABELS' docstring puts that rule
+in the model layer precisely so it is not remembered per template.
+
+account.low_stock_threshold is deliberately NOT printed anywhere on this page. It is available on
+`account`, but a customer who is shown an amber chip AND told the threshold behind it has been told
+the number the whole availability_text / band setting exists to withhold — the reason to hide a
+stock figure is commercial (a competitor buying one pallet must not read our position), and a
+threshold plus a bucket is that figure to within a bracket.
+
+THERE IS NO ATP KEY IN THIS CONTEXT AND THIS PAGE INVENTS NONE. What the view derives is on-hand —
+the SUM of the append-only StockMove ledger — with nothing netted off for open allocations. Printing
+it under an "available to promise" heading would turn a live count into a commitment we have not
+made, so the copy below says what the figure is: what we hold now, not a quantity reserved for you.
+
+replenishment_days is offered ONLY for a row whose band is "out", and it is the LONGEST active
+ReorderRule lead time rather than the shortest, so that it is an estimate that can be kept. It is
+labelled a replenishment ESTIMATE, NOT A PROMISE, in visible copy on the row and again in the note
+at the foot of the page. None renders as an em dash — never as a reassuring zero.
+
+EVERY DERIVED FIGURE RENDERS None AS AN EM DASH. `on_hand` of None means no ledger row exists for
+this item, which is a different statement from "we have none left" (stock_band() returns None for
+exactly that reason); `last_price` of None means this customer has never bought this item, not that
+it is free; `replenishment_days` of None means no reorder rule exists, not "back tomorrow". Each
+test is `is not None` — never |default, which would swallow a genuine 0.
+
+Both filters bind to the RESOLVED values (`q`, `category`) and never to request.GET: a hand-edited
+`?category=abc` is skipped by as_db_int() and must not be drawn as a selected option, or the page
+shows a filter that did not happen. The category comparison uses |stringformat:"d" — NEVER |slugify.
+
+The empty state sits OUTSIDE the table rather than inside a {% empty %} cell, because the column
+count varies with stock_display / show_prices / can_raise_inquiries and a hard-coded colspan would
+be wrong on three of the eight combinations.
+
+There are no writes on this page — no cart, no checkout, no order placement (the view says so) — so
+there is no POST, no destructive control and no confirm() dialog anywhere below.
+
+Everything here is user-typed — an item name, an item description, a category name — so it renders
+escaped and never with |safe. Badge classes come from band_css only: badge-green / badge-red /
+badge-amber / badge-info / badge-muted / badge-slate are the six that exist. badge-success /
+badge-warning / badge-danger do not exist in theme.css and render completely unstyled (L33).
+{% endcomment %}
+{% block title %}Catalogue{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Catalogue</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:portal_home' %}">My Account</a><span class="sep">›</span>
+        <span>Catalogue</span>
+      </div>
+      <p class="text-muted">
+        What {% if customer %}<span class="fw-600">{{ customer.name }}</span>{% else %}your
+        organisation{% endif %} can order from us.
+        {% if catalog_scope == 'previously_ordered' %}
+          This list is built from your own order history — every item you have bought from us before.
+        {% elif catalog_scope == 'categories' %}
+          This list covers the product ranges set up for your account.
+        {% else %}
+          This list covers everything we currently sell.
+        {% endif %}
+        Nothing here is a quotation and nothing is reserved: placing an order is still a
+        conversation with us.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if can_track_shipments %}
+        <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="package"></i> My Orders</a>
+      {% endif %}
+      {% if can_view_documents %}
+        <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder-open"></i> My Documents</a>
+      {% endif %}
+      {% if can_raise_inquiries %}
+        <a href="{% url 'scm:portal_inquiry_create' %}?inquiry_type=product_question" class="btn btn-outline"><i data-lucide="message-square"></i> Ask a Product Question</a>
+      {% endif %}
+      <a href="{% url 'scm:portal_home' %}" class="btn btn-primary"><i data-lucide="home"></i> My Account</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="book-open"></i></div>
+      <div class="stat-value">{{ page_obj.paginator.count|default_if_none:"—" }}</div>
+      <div class="stat-label">
+        {% if q or category %}Item{{ page_obj.paginator.count|pluralize }} matching your filters
+        {% else %}Item{{ page_obj.paginator.count|pluralize }} in your catalogue{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    The projection stated in visible copy rather than left for the customer to infer from an empty
+    column. Each badge below is a context value the view passed — no label is invented here, except
+    the two price sentences, because the context carries `price_basis` as a raw value and no label
+    map for it.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How your catalogue is set up</h2></div>
+    <div class="card-body">
+      <div class="badge-group">
+        <span class="badge badge-slate"><i data-lucide="layers"></i> {{ catalog_scope_label }}</span>
+        <span class="badge badge-info"><i data-lucide="eye"></i> Availability: {{ stock_display_label }}</span>
+        {% if show_prices %}
+          <span class="badge badge-info"><i data-lucide="tag"></i> Prices: the price you last paid</span>
+        {% else %}
+          <span class="badge badge-muted"><i data-lucide="tag"></i> Prices are not shown online</span>
+        {% endif %}
+        {% if show_by_location %}
+          <span class="badge badge-slate"><i data-lucide="map-pin"></i> Broken down by site</span>
+        {% endif %}
+      </div>
+      <div class="form-help" style="margin-top:.6rem;">
+        {% if stock_display == 'hidden' %}
+          Stock levels are not published to your account. Ask us and we will confirm availability for
+          the quantity you need.
+        {% else %}
+          Availability is read live from our stock records each time this page loads — it is what we
+          hold right now, not a quantity reserved or promised to you. Stock moves during the day, so
+          please confirm anything time-critical with us before you rely on it.
+        {% endif %}
+        If any of this is not how you expect to see your catalogue, let us know and we will change it.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Find an item</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="pc-q">Search</label>
+          <input type="text" id="pc-q" name="q" value="{{ q }}" class="form-input"
+                 placeholder="Product code, name or description…">
+        </div>
+        {% if item_categories %}
+          <div class="form-group">
+            <label class="form-label" for="pc-category">Category</label>
+            <select name="category" id="pc-category" class="form-select">
+              <option value="">All categories</option>
+              {% for cat in item_categories %}
+                <option value="{{ cat.pk }}" {% if category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        Only the categories your catalogue actually contains are offered, and a category we do not
+        recognise is ignored rather than shown as selected — so the list you see always matches the
+        filters drawn above it.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Items</h2>
+      {% if stock_display != 'hidden' %}
+        <div class="badge-group">
+          <span class="badge badge-info"><i data-lucide="activity"></i> Availability read live — held now, not reserved for you</span>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if object_list %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Category</th>
+              {% if stock_display != 'hidden' %}<th>Availability</th>{% endif %}
+              {% if show_prices %}<th class="text-right">Your last price</th>{% endif %}
+              {% if can_raise_inquiries %}<th class="table-actions">Actions</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in object_list %}
+              <tr>
+                <td>
+                  <div class="fw-600">{{ row.obj.name }}</div>
+                  <div class="form-help mono">{{ row.obj.sku|default:"—" }}</div>
+                  {% if row.obj.description %}
+                    <div class="form-help">{{ row.obj.description|truncatechars:140 }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div>{{ row.obj.category.name|default:"—" }}</div>
+                  <div class="form-help">Sold in {{ row.obj.uom.code|default:"—" }}</div>
+                </td>
+
+                {% if stock_display != 'hidden' %}
+                  <td>
+                    {% comment %}
+                      Three genuinely different renderings of the SAME bucket, chosen by the account
+                      setting. band_css / band_label are handed down by the view (STOCK_BAND_CSS /
+                      STOCK_BAND_LABELS) so a colour and a word can never disagree about one figure.
+                      The {% else %} on each branch keeps the row readable if a band ever arrives
+                      without a class.
+                    {% endcomment %}
+                    {% if stock_display == 'exact_quantity' %}
+                      {% if row.on_hand is not None %}
+                        <div class="fw-600">
+                          {{ row.on_hand|floatformat:2 }}
+                          {% if row.obj.uom %}<span class="form-help">{{ row.obj.uom.code }}</span>{% endif %}
+                        </div>
+                        {% if row.band %}
+                          {% if row.band_css %}
+                            <span class="badge {{ row.band_css }}">{{ row.band_label|default:row.band }}</span>
+                          {% else %}
+                            <span class="badge badge-muted">{{ row.band_label|default:row.band }}</span>
+                          {% endif %}
+                        {% endif %}
+                      {% else %}
+                        <span class="text-muted">—</span>
+                        <div class="form-help">We hold no stock record for this item. Ask us and we will confirm.</div>
+                      {% endif %}
+
+                    {% elif stock_display == 'band' %}
+                      {% comment %}
+                        Colour band ONLY — no number and no visible word by design. The label still
+                        has to reach a screen reader and a colour-blind reader, so it goes out three
+                        ways: title, aria-label and an .sr-only span inside the chip.
+                      {% endcomment %}
+                      {% if row.band %}
+                        <span class="badge {% if row.band_css %}{{ row.band_css }}{% else %}badge-muted{% endif %}"
+                              title="{{ row.band_label|default:row.band }}"
+                              aria-label="{{ row.band_label|default:row.band }}">
+                          <span class="sr-only">{{ row.band_label|default:row.band }}</span>
+                        </span>
+                      {% else %}
+                        <span class="text-muted" title="Availability not known" aria-label="Availability not known">—</span>
+                        <div class="form-help">We hold no stock record for this item.</div>
+                      {% endif %}
+
+                    {% else %}
+                      {% if row.band %}
+                        {% if row.band_css %}
+                          <span class="badge {{ row.band_css }}">{{ row.band_label|default:row.band }}</span>
+                        {% else %}
+                          <span class="badge badge-muted">{{ row.band_label|default:row.band }}</span>
+                        {% endif %}
+                      {% else %}
+                        <span class="text-muted">—</span>
+                        <div class="form-help">We hold no stock record for this item.</div>
+                      {% endif %}
+                    {% endif %}
+
+                    {% comment %}
+                      The replenishment line. The view offers it ONLY where band == "out", and it is
+                      the LONGEST active lead time, so it is the conservative end of the estimate —
+                      the one that can actually be kept. It is never worded as a delivery date.
+                    {% endcomment %}
+                    {% if row.band == 'out' %}
+                      <div class="form-help">
+                        {% if row.replenishment_days is not None %}
+                          Expected back in stock in about {{ row.replenishment_days }} day{{ row.replenishment_days|pluralize }} —
+                          a replenishment estimate, not a promise.
+                        {% else %}
+                          Expected back in stock: <span class="text-muted">—</span>
+                          We have no replenishment estimate for this item. Ask us and we will find out.
+                        {% endif %}
+                      </div>
+                    {% endif %}
+
+                    {% comment %}
+                      by_location is [] unless the account is set to a per-site split, and its
+                      `quantity` is a number only on the exact-quantity display — otherwise each site
+                      carries its own band and no figure. Same three-way label rule as above.
+                    {% endcomment %}
+                    {% if show_by_location and row.by_location %}
+                      <div class="form-help" style="margin-top:.4rem;">By site:</div>
+                      {% for site in row.by_location %}
+                        <div class="form-help">
+                          {{ site.location.name|default:"—" }}
+                          <span class="mono">{{ site.location.code|default:"" }}</span>
+                          {% if site.quantity is not None %}
+                            · {{ site.quantity|floatformat:2 }}{% if row.obj.uom %} {{ row.obj.uom.code }}{% endif %}
+                          {% endif %}
+                          {% if site.band %}
+                            <span class="badge {% if site.band_css %}{{ site.band_css }}{% else %}badge-muted{% endif %}"
+                                  title="{{ site.band_label|default:site.band }}"
+                                  aria-label="{{ site.location.name }}: {{ site.band_label|default:site.band }}">
+                              {% if stock_display == 'band' %}
+                                <span class="sr-only">{{ site.band_label|default:site.band }}</span>
+                              {% else %}
+                                {{ site.band_label|default:site.band }}
+                              {% endif %}
+                            </span>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+                    {% endif %}
+                  </td>
+                {% endif %}
+
+                {% if show_prices %}
+                  <td class="text-right nowrap">
+                    {% comment %}
+                      The one price we can state truthfully: what THIS customer last paid for THIS
+                      item, derived at render time and never stored. None means they have never
+                      bought it — an em dash, never a zero, and never a substituted list price.
+                    {% endcomment %}
+                    {% if row.last_price is not None %}
+                      <div class="fw-600">{{ row.last_price|floatformat:2 }}</div>
+                      <div class="form-help">per {{ row.obj.uom.code|default:"unit" }}, last ordered</div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                      <div class="form-help">Not ordered before</div>
+                    {% endif %}
+                  </td>
+                {% endif %}
+
+                {% if can_raise_inquiries %}
+                  <td>
+                    <div class="table-actions">
+                      {% comment %}
+                        A labelled button, not a bare icon: the customer pages in this folder label
+                        their row action in words (the Download button on customer_documents.html),
+                        and the staff-list eye/pencil/bin idiom assumes a reader who knows it. The
+                        aria-label carries the product code so a screen reader can tell twelve
+                        otherwise identical links apart. The inquiry form takes no item parameter —
+                        only sales_order / shipment / inquiry_type — so the type is pre-selected and
+                        the help text below asks for the code rather than pretending it was carried.
+                      {% endcomment %}
+                      <a href="{% url 'scm:portal_inquiry_create' %}?inquiry_type=product_question"
+                         class="btn btn-outline"
+                         aria-label="Ask a question about product {{ row.obj.sku }}">
+                        <i data-lucide="message-square"></i> Ask
+                      </a>
+                    </div>
+                  </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "partials/pagination.html" %}
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          {% if q or category %}
+            <i data-lucide="search-x"></i>
+            <h3>No items match those filters</h3>
+            <p>Nothing in your catalogue matches that search or category. Clear the filters above to
+               see everything available to you.</p>
+          {% elif catalog_scope == 'previously_ordered' %}
+            <i data-lucide="book-open"></i>
+            <h3>Nothing here yet</h3>
+            <p>Your catalogue is built from what you have ordered before, and there are no orders on
+               your account yet. Items appear here as soon as your first order is placed.</p>
+          {% else %}
+            <i data-lucide="book-open"></i>
+            <h3>Your catalogue is empty</h3>
+            <p>No items have been made available to your account yet. Get in touch and we will set
+               your product ranges up.</p>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-body form-help">
+      {% if stock_display != 'hidden' %}
+        Availability shown here is what we physically hold at the moment the page loaded. It is not
+        reserved for you and nothing is allocated until an order is placed, so a figure or a status
+        can change between now and your order.
+        <span class="fw-600">Any date for an item that is out of stock is a replenishment estimate,
+        not a promise</span> — it is based on the longest lead time we hold for that item, and we
+        will confirm a real date when you order.
+      {% else %}
+        Stock levels are not published to your account. Ask us for availability on the quantity you
+        need and we will confirm it.
+      {% endif %}
+      {% if show_prices %}
+        A price shown is the price you last paid for that item, not a quotation — prices, taxes and
+        charges are confirmed on your order.
+      {% endif %}
+      {% if can_raise_inquiries %}
+        <a href="{% url 'scm:portal_inquiry_create' %}?inquiry_type=product_question">Ask a product question</a>
+        if something you expected to see is missing, quoting the product code.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
