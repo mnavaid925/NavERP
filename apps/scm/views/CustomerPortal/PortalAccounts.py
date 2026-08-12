@@ -325,6 +325,21 @@ def portalaccount_list(request):
                         models.Subquery(_OPEN_INQUIRY_COUNT, output_field=models.IntegerField()),
                         models.Value(0), output_field=models.IntegerField()),
                     live_shares=_live_share_count(now),
+                    # ANY inquiry, not just an open one — this is what the Delete button must be
+                    # gated on, because `portalaccount_delete` refuses on the TOTAL count (an
+                    # inquiry is the record of an argument about an order and must keep the account
+                    # it was raised under, whether or not it is still open).
+                    #
+                    # Gating the row's bin on `open_inquiries` instead meant an account with zero
+                    # open and one resolved inquiry showed a button the route would then refuse:
+                    # handled, never a 500, but still the 4.11 shape — the list and the detail page
+                    # disagreeing about the same action. `Exists` rather than a sixth `Count`
+                    # subquery, so it costs one correlated semi-join that stops at the first match
+                    # instead of aggregating the whole child table.
+                    has_inquiries=models.Exists(
+                        PortalOrderInquiry.objects.filter(
+                            tenant=models.OuterRef("tenant_id"),
+                            portal_account=models.OuterRef("pk"))),
                     # No Coalesce: NULL is the ANSWER here ("never signed in"), not a missing zero.
                     last_login_at=models.Subquery(_LAST_LOGIN_AT,
                                                   output_field=models.DateTimeField()),
