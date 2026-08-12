@@ -1,0 +1,764 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — one portal account, read as an ENABLEMENT question rather than a form.
+
+A portal account is not a login. A customer is only actually on the portal when three separate
+things line up, each administered on a different screen: an ACTIVE crm.CustomerPortalAccess row
+exists for one of their users, that access row names this party, and this row is active. Every one
+of the three can be true on its own while the customer still sees nothing — which is why the first
+card on this page is the chain rather than the configuration.
+
+Renders apps/scm/views/CustomerPortal/PortalAccounts.py::portalaccount_detail. Everything this page
+may read, and nothing else:
+
+  obj                     the PortalAccount, with `customer` and `default_ship_to` joined.
+                          core.Address carries kind / line1 / city / country and NO postal-code
+                          field — no label here may imply one exists.
+  entitlements            list of dicts from _entitlements(). The row keys are ITS, not the
+                          model's: field / label / granted / help_text. `help_text` is read off the
+                          model FIELD, so the chip explanation and the form's explanation are one
+                          string and cannot drift.
+  catalog_categories      a LIST of scm.ItemCategory (already evaluated in the view — never
+                          re-queried here as obj.catalog_categories.all)
+  portal_users            a LIST of crm.CustomerPortalAccess for this customer, active first, with
+                          `portal_user` joined. access.portal_user may be None — a binding with no
+                          user is a misconfiguration worth SHOWING, not hiding.
+  portal_users_truncated  bool
+  linked_user_count       int — ACTIVE bindings only, off the model's own property. Read THIS, not
+                          obj.linked_user_count, so the page pays for it once.
+  last_login_at           datetime or None. None renders "Never signed in" — never a blank cell.
+  has_never_logged_in     bool, straight off the model
+  recent_activity         a LIST of PortalActivity, newest first, capped at panel_limit. Badge
+                          class is each row's own action_css.
+  activity_count          int — the account's WHOLE log, not the window
+  live_shares             a LIST of PortalDocumentShare, neither revoked nor expired, capped.
+                          Badge class doc_type_css.
+  live_share_count        int
+  share_count             int — every share ever published under this account, dead ones included
+  open_inquiries          a LIST of PortalOrderInquiry (outcome="open"), capped, `sales_order` and
+                          `case` joined. Each row carries sla_state / sla_state_css and
+                          customer_status_label / customer_status_css.
+  open_inquiry_count      int
+  inquiry_count           int — every inquiry ever raised here. THIS is what blocks a delete.
+  panel_limit             the row cap the three panels were sliced at
+  can_delete              bool — False when inquiry_count is non-zero, mirroring exactly what
+                          portalaccount_delete refuses
+
+public_token is NOT on this page in any form — not a column, not a tooltip, not an attribute. It is
+a bearer credential and a share's link belongs on that share's own detail page and nowhere else.
+share.target_label is likewise avoided: the view select_relateds no pointer column, so reading it
+would be one extra query per row for a label the share's own title already carries.
+
+The notification block says out loud that 4.16 dispatches NOTHING. Three green "notify" chips with
+no such sentence is a page promising a message nobody sends — the same posture SalesOrder's
+confirmation_sent_at and its siblings have held unfired since 4.5.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33). Every badge class below is either a model lookup
+(a.action_css, s.doc_type_css, i.inquiry_type_css / sla_state_css / customer_status_css) or one of
+the six literals. The delete confirm carries the system-generated PAC- number and two counts only:
+an apostrophe would be escaped to &#39; and silently disable the guard, and interpolating a
+user-typed value there was the stored XSS at 4.13.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.customer.name }}
+        {% if obj.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-muted">Switched off</span>
+        {% endif %}
+        {% if linked_user_count == 0 %}
+          <span class="badge badge-red">Nobody can sign in</span>
+        {% elif has_never_logged_in %}
+          <span class="badge badge-amber">Never opened</span>
+        {% else %}
+          <span class="badge badge-slate">Last seen {{ last_login_at|date:"M d, Y" }}</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portalaccount_list' %}">Portal Accounts</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">This row is configuration, not a document — there is no status ladder and no frozen state, and every field on it takes effect on the customer's <span class="fw-600">next page load</span> rather than at some sync. What it cannot do on its own is let anybody in: the login binding lives in CRM, so an account can be perfectly configured and still be a portal nobody can open. That is the first question this page answers, before it shows a single entitlement.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portal_catalog_preview' %}?account={{ obj.pk }}" class="btn btn-primary"><i data-lucide="eye"></i> Preview catalog as this customer</a>
+      <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="users"></i></div>
+      <div class="stat-value">{{ linked_user_count }}</div>
+      <div class="stat-label">
+        {% if linked_user_count == 0 %}
+          No active login is bound — nobody can open this portal
+        {% else %}
+          Active portal login{{ linked_user_count|pluralize }} bound to this customer
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="log-in"></i></div>
+      {% comment %}
+        None is NOT a blank and NOT an em dash here — "never signed in" is the console's headline
+        fact, and a dash would read as "we did not look".
+      {% endcomment %}
+      <div class="stat-value">{% if last_login_at %}{{ last_login_at|date:"M d, Y" }}{% else %}Never{% endif %}</div>
+      <div class="stat-label">
+        {% if last_login_at %}
+          Last signed in at {{ last_login_at|date:"H:i" }}
+        {% elif obj.activated_on %}
+          Enabled {{ obj.activated_on|date:"M d, Y" }} and never once opened
+        {% else %}
+          Never signed in
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="message-square-warning"></i></div>
+      <div class="stat-value">{{ open_inquiry_count }}</div>
+      <div class="stat-label">Open inquir{{ open_inquiry_count|pluralize:"y,ies" }} · {{ inquiry_count }} ever raised under this account</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="share-2"></i></div>
+      <div class="stat-value">{{ live_share_count }}</div>
+      <div class="stat-label">Document{{ live_share_count|pluralize }} still fetchable · {{ share_count }} ever published</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="activity"></i></div>
+      <div class="stat-value">{{ activity_count }}</div>
+      <div class="stat-label">Logged customer action{{ activity_count|pluralize }} — append-only, and the only record of what left the building</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ====================================================== 1. is this portal actually reachable?
+    The headline. Every other card on this page describes what the customer WOULD see; this one
+    says whether anybody is in a position to see it.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Can this customer actually get in?</h2>
+      {% if obj.is_active and linked_user_count > 0 and not has_never_logged_in %}
+        <span class="badge badge-green">Enabled, bound and in use</span>
+      {% elif obj.is_active and linked_user_count > 0 %}
+        <span class="badge badge-amber">Enabled and bound, never used</span>
+      {% elif obj.is_active %}
+        <span class="badge badge-red">Enabled, but no login reaches it</span>
+      {% else %}
+        <span class="badge badge-muted">Switched off</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        Every gated portal request walks the same chain and <span class="fw-600">refuses at each step</span>: the signed-in user resolves to an active <span class="fw-600">crm.CustomerPortalAccess</span>, that access row names a customer party, and that party has an <em>active</em> portal account. 4.16 builds no second binding on purpose — two bindings can disagree about which party a user is, and whichever one a page happened to read would decide whose orders, invoices and delivery proofs that user saw. That is an authorisation bug by construction, so the login stays in CRM and this screen reads it rather than writing it.
+      </p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Step</th><th>What has to be true</th><th>Where it is administered</th><th>Right now</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">1</td>
+              <td>An <span class="fw-600">active</span> CRM portal access row exists for one of this customer's people</td>
+              <td><a href="{% url 'crm:customerportalaccess_list' %}">CRM · Customer portal access</a></td>
+              <td>
+                {% if linked_user_count > 0 %}
+                  <span class="badge badge-green">{{ linked_user_count }} active</span>
+                {% else %}
+                  <span class="badge badge-red">None</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">2</td>
+              <td>That access row points at <span class="fw-600">this</span> party</td>
+              <td><a href="{% url 'core:party_detail' obj.customer.pk %}">{{ obj.customer.name }}</a></td>
+              <td>
+                {% if portal_users %}
+                  <span class="badge badge-green">{{ portal_users|length }} row{{ portal_users|length|pluralize }} found</span>
+                {% else %}
+                  <span class="badge badge-red">No binding at all</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="fw-600">3</td>
+              <td>This portal account is <span class="fw-600">active</span> — <span class="mono">is_active</span> is IN the resolver's lookup, not merely a label</td>
+              <td>This page</td>
+              <td>
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Switched off</span>
+                {% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {% if linked_user_count == 0 %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-red">Configured, but unreachable</span>
+          Nothing below this line is wrong — and none of it is visible to anyone. An account with no active binding is a portal somebody switched on and nobody can open, and it looks identical to a healthy one on every other column, which is exactly why it is stated here. Bind a user in CRM; this page needs no further change.
+        </p>
+      {% elif has_never_logged_in %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-amber">Enabled, never opened</span>
+          {{ linked_user_count }} login{{ linked_user_count|pluralize }} can reach this portal and not one of them ever has. That is an adoption fact rather than a fault: nobody was told, or the invitation went to the wrong person. It is worth acting on precisely because nothing anywhere reports it.
+        </p>
+      {% endif %}
+      {% if not obj.is_active %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          <span class="badge badge-muted">Switched off</span>
+          Deactivating shuts the customer's portal and every live document link on the next request, and destroys nothing: the inquiries, the shares and the whole activity log stay readable. It is the move to reach for instead of deleting.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 2. the six entitlement chips
+    Rendered from `entitlements`, whose row keys are the helper's (field / label / granted /
+    help_text) and NOT the model's field names. `help_text` is pulled off the model field itself, so
+    the sentence here is literally the sentence the form shows.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this customer is entitled to see</h2>
+      <div class="badge-group">
+        {% for e in entitlements %}
+          <span class="badge {% if e.granted %}badge-green{% else %}badge-muted{% endif %}">{{ e.label }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Entitlement</th><th class="nowrap">Granted</th><th>What it opens</th></tr></thead>
+        <tbody>
+          {% for e in entitlements %}
+            <tr>
+              <td class="fw-600">{{ e.label }}</td>
+              <td>
+                {% if e.granted %}
+                  <span class="badge badge-green">Yes</span>
+                {% else %}
+                  <span class="badge badge-muted">No</span>
+                {% endif %}
+              </td>
+              <td class="text-muted">{{ e.help_text }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      Five of the six default ON because they are read-only views of the customer's <em>own</em> documents. The sixth — <span class="fw-600">credit &amp; balance</span> — defaults OFF because it is money: an aggregate balance, a credit limit and payment terms are the one thing on the portal somebody has to consciously decide to expose, and a panel that quietly omitted the money switch would be the panel nobody could use to answer "is this customer seeing our balances?".
+      {% if obj.show_credit_and_balance %}
+        It is <span class="fw-600">on</span> for this account.
+      {% endif %}
+      Turning any of these off closes that surface immediately — the resolver re-reads this row on every gated request rather than caching it into a session.
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 3. stock, catalog scope and price
+    None of the three figures behind these settings is stored on this row: on-hand is derived over
+    the append-only StockMove ledger, and "last ordered" is resolved at render time from the
+    customer's own most recent SalesOrderLine. This card configures the RENDERING and is the source
+    of neither.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What their catalog shows</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ obj.get_stock_display_display }}</span>
+        <span class="badge badge-slate">{{ obj.get_catalog_scope_display }}</span>
+        <span class="badge {% if obj.price_basis == 'hidden' %}badge-muted{% else %}badge-amber{% endif %}">{{ obj.get_price_basis_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Stock presentation</dt><dd>{{ obj.get_stock_display_display }}</dd></div>
+        <div class="detail-item">
+          <dt>Low-stock threshold</dt>
+          <dd class="mono">
+            {{ obj.low_stock_threshold|floatformat:"-4" }}
+            {% if obj.stock_display != "availability_text" and obj.stock_display != "band" %}
+              <div class="form-help">Not read by this display — only the availability-text and colour-band displays compare against it, and a threshold typed against either of the other two is refused at save rather than silently dropped.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Break down by warehouse</dt>
+          <dd>{% if obj.show_by_location %}<span class="badge badge-amber">Yes</span>{% else %}<span class="badge badge-muted">One network figure</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Catalog scope</dt><dd>{{ obj.get_catalog_scope_display }}</dd></div>
+        <div class="detail-item"><dt>Pricing</dt><dd>{{ obj.get_price_basis_display }}</dd></div>
+        <div class="detail-item">
+          <dt>Selected categories</dt>
+          <dd>
+            {% if catalog_categories %}
+              <div class="badge-group">
+                {% for cat in catalog_categories %}<span class="badge badge-slate">{{ cat.name }}</span>{% endfor %}
+              </div>
+            {% elif obj.catalog_scope == "categories" %}
+              <span class="badge badge-red">None selected</span>
+            {% else %}
+              <span class="text-muted">Not used by this scope</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin-top:.9rem;">
+        {% if obj.stock_display == "hidden" %}
+          <span class="fw-600">No quantity and no availability word reaches this customer.</span> The reason to hide the number is commercial rather than technical, and it varies by who is looking — which is why the setting is per account and not a tenant switch.
+        {% elif obj.stock_display == "exact_quantity" %}
+          <span class="fw-600">This customer sees the real number.</span> It is derived over the append-only stock ledger every time the page renders, never a stored copy — so it is right at the instant they read it and it also tells them exactly how much we hold.
+        {% elif obj.stock_display == "band" %}
+          <span class="fw-600">A colour band only</span> — the same three buckets as the availability text, rendered as a chip. The word is still carried for screen readers: a colour on its own is invisible to a reader and to the readers with a red/green deficiency, so the label travels with it.
+        {% else %}
+          <span class="fw-600">Availability text</span> — out of stock, low, in stock. The three buckets are recomputed from the derived on-hand figure on every render, and <em>no ledger rows at all</em> is deliberately a different answer from <em>none left</em>: the first reads as an em dash, the second as "Out of stock".
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:0;">
+        {% if obj.price_basis == "hidden" %}
+          <span class="fw-600">No prices are printed.</span> There is no customer price master on the SCM side yet, so the only price this build could state truthfully is the one this customer themselves last paid — and hidden is the honest default until a real price engine exists.
+        {% else %}
+          <span class="fw-600">This customer's own last-ordered price</span> is resolved at render time from their most recent order line and is <em>never stored</em>. A stored copy would quietly become a quote we never agreed to. Tiers, contracts and volume breaks are a later module; this is the one price we can state without inventing it.
+        {% endif %}
+        {% if obj.catalog_scope == "categories" and not catalog_categories %}
+          <br><span class="badge badge-red">Empty category set</span> The scope says "selected categories only" and no category is selected, so this catalog can contain nothing at all. The form refuses that combination — a row in this state predates it or was written another way, and editing the account is what fixes it.
+        {% endif %}
+      </p>
+      <div class="form-actions">
+        <a href="{% url 'scm:portal_catalog_preview' %}?account={{ obj.pk }}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Preview catalog as this customer</a>
+      </div>
+      <div class="form-help" style="margin-top:.5rem;">The preview renders the catalog through <em>these</em> settings rather than describing them — the scope, the stock presentation and the price basis all applied at once, which is the only way to see what the combination actually produces.</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 4. the ship-to
+    core.Address carries kind / line1 / city / country and NOTHING ELSE. There is no postal-code
+    column, so no label here may imply one — a blank field a user believes exists is worse than an
+    absent one.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Default delivery address</h2>
+      {% if obj.default_ship_to %}
+        <span class="badge badge-info">{{ obj.default_ship_to.get_kind_display }}</span>
+      {% else %}
+        <span class="badge badge-muted">None set</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if obj.default_ship_to %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Kind</dt><dd>{{ obj.default_ship_to.get_kind_display }}</dd></div>
+          <div class="detail-item"><dt>Address</dt><dd>{{ obj.default_ship_to.line1 }}</dd></div>
+          <div class="detail-item"><dt>City</dt><dd>{% if obj.default_ship_to.city %}{{ obj.default_ship_to.city }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Country</dt><dd>{% if obj.default_ship_to.country %}{{ obj.default_ship_to.country }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        </dl>
+        <p class="text-muted" style="margin:.9rem 0 0;">
+          Pre-selected on anything that reads the customer's default, and guarded on the model as well as in the form: an address belonging to a different party is not a typo, it is somebody else's delivery address sitting on this customer's portal. A narrowed dropdown is presentation and has never held against a crafted POST, so the ownership rule is enforced where the row is saved.
+        </p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="map-pin"></i>
+          <h3>No default delivery address</h3>
+          <p>Nothing is pre-selected for this customer, which is a perfectly ordinary state — they pick a destination per order instead. Only one of their <em>own</em> addresses may be set here.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    =========================================================== 5. notifications — stored, not sent
+    The standing note this page MUST carry. Three green "notify" chips without it is a page
+    promising a message nobody sends.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Notification preferences</h2>
+      <span class="badge badge-amber">Stored intent — nothing is dispatched</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        <span class="fw-600">4.16 sends no message of any kind</span> — no email, no SMS, no webhook. These four settings record what this customer <em>would</em> prefer, exactly as the sales order's confirmation and shipped/delivered stamps have sat unfired since 4.5. The preference is captured now so that on the day a mailer exists it reads a column carrying real customer intent instead of defaulting everybody to email. Read a green chip below as "they asked for this", never as "this was sent".
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>On shipment</dt><dd>{% if obj.notify_on_shipment %}<span class="badge badge-green">Wanted</span>{% else %}<span class="badge badge-muted">Not wanted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>On delivery</dt><dd>{% if obj.notify_on_delivery %}<span class="badge badge-green">Wanted</span>{% else %}<span class="badge badge-muted">Not wanted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>On exception</dt><dd>{% if obj.notify_on_exception %}<span class="badge badge-green">Wanted</span>{% else %}<span class="badge badge-muted">Not wanted</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Preferred channel</dt><dd><span class="badge badge-slate">{{ obj.get_preferred_channel_display }}</span></dd></div>
+      </dl>
+      {% if obj.preferred_channel == "none" %}
+        <p class="text-muted" style="margin:.9rem 0 0;">"No notifications" is a real answer rather than an empty one — it is the customer declining, recorded, and it should survive the day the mailer arrives.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 6. who is bound to this account
+    INACTIVE bindings are listed on purpose: "this customer has three logins and all three are
+    switched off" is the exact diagnosis somebody opens this page to make, and a panel that filtered
+    them out would show an empty list under an account that looks fully configured.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Who can sign in</h2>
+      <div class="badge-group">
+        {% if linked_user_count > 0 %}
+          <span class="badge badge-green">{{ linked_user_count }} active</span>
+        {% else %}
+          <span class="badge badge-red">0 active</span>
+        {% endif %}
+        <a href="{% url 'crm:customerportalaccess_list' %}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Manage in CRM</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Access</th><th>User</th><th>Active</th><th>May file cases</th><th class="nowrap">Accepted</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for access in portal_users %}
+            <tr>
+              <td><a href="{% url 'crm:customerportalaccess_detail' access.pk %}" class="fw-600 mono">{{ access.number }}</a></td>
+              <td>
+                {% if access.portal_user %}
+                  <span class="fw-600">{{ access.portal_user.get_full_name }}</span>
+                  <div class="text-muted">{{ access.portal_user.email }}</div>
+                {% else %}
+                  <span class="badge badge-red">No user attached</span>
+                  <div class="form-help">A binding with nobody on the other end lets nobody in. Point it at a user in CRM or deactivate it.</div>
+                {% endif %}
+              </td>
+              <td>{% if access.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>{% if access.can_submit_cases %}<span class="badge badge-info">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              <td class="nowrap">
+                {% if access.accepted_at %}
+                  {{ access.accepted_at|date:"M d, Y" }}
+                {% else %}
+                  <span class="text-muted">Not accepted</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'crm:customerportalaccess_detail' access.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="user-x"></i>
+                  <h3>No login is bound to this customer</h3>
+                  <p>This account is configuration with nobody on the other side of it. 4.16 administers no login of its own — create the access row in CRM against {{ obj.customer.name }}, and everything configured on this page becomes visible to them on their next sign-in.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if portal_users_truncated %}
+        Showing the first {{ panel_limit }} bindings, active ones first — the cap is applied by the database, so it bounds what is fetched rather than what is drawn. The full set lives in CRM.
+      {% endif %}
+      Inactive bindings are listed deliberately: an account with three switched-off logins looks exactly like an account with none until somebody can see both numbers side by side, and only the <span class="fw-600">active</span> ones count towards the {{ linked_user_count }} above. The binding is created, deactivated and re-pointed entirely in CRM, so this figure is counted live rather than cached here — a stale "3 users" beside a portal nobody can open is the one reading this console must never produce.
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================= 7. the read log
+    Append-only evidence: no edit, no delete and no Actions column on these rows. The timestamp
+    links to the row's own read-only page, which is navigation rather than an action.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this customer has actually done</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ activity_count }} row{{ activity_count|pluralize }} logged</span>
+        <a href="{% url 'scm:portalactivity_list' %}?portal_account={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="history"></i> Open the full log</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th class="nowrap">When</th><th>Action</th><th>What</th><th>Who</th><th class="nowrap">From</th></tr></thead>
+        <tbody>
+          {% for a in recent_activity %}
+            <tr>
+              <td class="nowrap"><a href="{% url 'scm:portalactivity_detail' a.pk %}" class="mono">{{ a.created_at|date:"M d, Y H:i" }}</a></td>
+              <td><span class="badge {{ a.action_css }}">{{ a.get_action_display }}</span></td>
+              <td>
+                {% if a.object_label %}
+                  <span class="mono">{{ a.object_label }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if a.user %}
+                  {{ a.user.get_full_name }}
+                {% else %}
+                  <span class="text-muted">Not signed in</span>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">{% if a.ip_address %}{{ a.ip_address }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="activity"></i>
+                  <h3>Nothing has been logged against this account</h3>
+                  <p>No sign-in, no order viewed, no document fetched. On an account with active bindings that is the adoption gap rather than a data problem — the log is written by the customer's own page loads, so it stays empty until somebody opens the portal.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if activity_count > panel_limit %}
+        Showing the newest {{ panel_limit }} of <span class="fw-600">{{ activity_count }}</span> — a database slice, so it bounds what is fetched rather than what is drawn.
+      {% endif %}
+      This table is <span class="fw-600">append-only</span> and has no edit, no delete and no form anywhere: it is the only thing that can answer "we published the delivery proof on the 3rd and you downloaded it on the 4th", and a log somebody can tidy up is not evidence. It exists separately from the staff audit trail because that trail records <em>changes made by staff</em> and cannot express a <em>read by a customer</em>. The address column is the socket address the request arrived from and nothing else — a forwarding header can be typed by whoever sent it, and a precise value that is forgeable is worth less here than a coarse one that is true.
+    </div>
+  </div>
+
+  {% comment %}
+    ======================================================================== 8. what is fetchable
+    public_token is NOT rendered — not a column, not a title attribute, not a data- attribute. It is
+    a bearer credential: whoever holds it can fetch the document without signing in, so the link is
+    shown on the share's own page and nowhere else. target_label is avoided too: no pointer column
+    is joined here, so reading it would be an extra query per row.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Documents this customer can fetch right now</h2>
+      <div class="badge-group">
+        <span class="badge badge-green">{{ live_share_count }} live</span>
+        <span class="badge badge-muted">{{ share_count }} ever published</span>
+        <a href="{% url 'scm:portaldocumentshare_list' %}?portal_account={{ obj.pk }}&amp;state=live" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the share register</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Share</th><th>Document</th><th>Type</th><th class="nowrap">Expires</th><th class="nowrap">Fetched</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for s in live_shares %}
+            <tr>
+              <td><a href="{% url 'scm:portaldocumentshare_detail' s.pk %}" class="fw-600 mono">{{ s.number }}</a></td>
+              <td>{{ s.title }}</td>
+              <td><span class="badge {{ s.doc_type_css }}">{{ s.get_doc_type_display }}</span></td>
+              <td class="nowrap">
+                {% if s.expires_at %}
+                  {{ s.expires_at|date:"M d, Y" }}
+                {% else %}
+                  <span class="badge badge-amber">No expiry</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if s.download_count %}
+                  {{ s.download_count }}×
+                  {% if s.last_downloaded_at %}<div class="form-help">Last {{ s.last_downloaded_at|date:"M d, Y H:i" }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">Never fetched</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portaldocumentshare_detail' s.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="file-text"></i>
+                  <h3>Nothing is currently shared with this customer</h3>
+                  <p>{% if share_count %}All {{ share_count }} share{{ share_count|pluralize }} published under this account have since expired or been revoked, which is the register working rather than a gap.{% else %}No document has ever been published to this account. A share is created against the document itself, in the share register.{% endif %}</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if live_share_count > panel_limit %}
+        Showing {{ panel_limit }} of the <span class="fw-600">{{ live_share_count }}</span> live shares — a database slice.
+      {% endif %}
+      <span class="fw-600">Live</span> means neither revoked nor expired, counted against the same clock this page was rendered at. A share carries a link that works without signing in, so the link itself is shown on that share's own page and never in a list: a page that printed it would hand a credential to everyone who could read the page or its source. An expiry date is not decoration either — it is what stops a forwarded link from being permanent read access, which is precisely the defect it was added to close.
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 9. open arguments
+    Each row carries its OWN sla_state / sla_state_css and customer_status_label /
+    customer_status_css. The customer-facing status is rendered NEXT TO the internal one, never
+    instead of it — the internal queue's words are an internal matter, and the customer's word is
+    what they are actually looking at.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Open inquiries</h2>
+      <div class="badge-group">
+        {% if open_inquiry_count %}
+          <span class="badge badge-amber">{{ open_inquiry_count }} open</span>
+        {% else %}
+          <span class="badge badge-green">None open</span>
+        {% endif %}
+        <span class="badge badge-muted">{{ inquiry_count }} ever raised</span>
+        <a href="{% url 'scm:portalorderinquiry_list' %}?portal_account={{ obj.pk }}&amp;outcome=open" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the inquiry list</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Inquiry</th><th>About</th><th>Order</th><th>SLA</th><th>Customer sees</th><th class="nowrap">Age</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for i in open_inquiries %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:portalorderinquiry_detail' i.pk %}" class="fw-600 mono">{{ i.number }}</a>
+                <div><span class="badge {{ i.inquiry_type_css }}">{{ i.get_inquiry_type_display }}</span></div>
+              </td>
+              <td>
+                {% if i.case %}
+                  <a href="{% url 'crm:case_detail' i.case.pk %}">{{ i.case.subject }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                <div class="form-help">Wants: {{ i.get_requested_resolution_display }}</div>
+              </td>
+              <td class="nowrap">
+                {% if i.sales_order %}
+                  <a href="{% url 'scm:salesorder_detail' i.sales_order.pk %}" class="mono">{{ i.sales_order.number }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                <span class="badge {{ i.sla_state_css }}">
+                  {% if i.sla_state == "breached" %}SLA breached{% elif i.sla_state == "due_soon" %}Due soon{% elif i.sla_state == "ok" %}On track{% else %}No SLA policy{% endif %}
+                </span>
+              </td>
+              <td class="nowrap"><span class="badge {{ i.customer_status_css }}">{{ i.customer_status_label }}</span></td>
+              <td class="nowrap mono">{% if i.age_days is not None %}{{ i.age_days }}d{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portalorderinquiry_detail' i.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="message-square"></i>
+                  <h3>Nothing open</h3>
+                  <p>{% if inquiry_count %}All {{ inquiry_count }} inquir{{ inquiry_count|pluralize:"y,ies" }} raised under this account have been closed out.{% else %}This customer has never raised an inquiry here. On an account nobody has ever signed into, that is silence rather than satisfaction.{% endif %}</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if open_inquiry_count > panel_limit %}
+        Showing {{ panel_limit }} of the <span class="fw-600">{{ open_inquiry_count }}</span> open inquiries — a database slice.
+      {% endif %}
+      The SLA badge is read off the wrapped CRM case and <span class="fw-600">recomputed nowhere</span>: a policy change moves the CRM queue and this column together, by construction rather than by discipline. "No SLA policy" is deliberately not the same as "On track" — a case nobody promised anything about is not a case that is meeting a promise. The <em>customer sees</em> column is a presentation map over the case status and is shown beside the internal state rather than instead of it: which triage lane a ticket sits in is a fact about our queue, and a customer reading "New" on a four-day-old ticket draws a conclusion no status badge should be volunteering.
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 10. the plain record
+    welcome_message, support_email and notes are user-typed and are ESCAPED — there is no |safe on
+    this page. notes is internal and is never rendered on a customer-facing page.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The record</h2>
+      <span class="badge badge-slate">{{ obj.number }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Customer</dt><dd><a href="{% url 'core:party_detail' obj.customer.pk %}" class="fw-600">{{ obj.customer.name }}</a></dd></div>
+        <div class="detail-item"><dt>Portal</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Switched off</span>{% endif %}</dd></div>
+        <div class="detail-item">
+          <dt>First enabled</dt>
+          {% comment %}
+            Stamped ONCE, the first time the account was active, and never restamped — so a
+            deactivate/reactivate cycle cannot rewrite the adoption date this console reports. None
+            is a real state (an account created switched off), and it is an em dash rather than a
+            confident blank.
+          {% endcomment %}
+          <dd class="mono">{% if obj.activated_on %}{{ obj.activated_on|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Last signed in</dt><dd>{% if last_login_at %}<span class="mono">{{ last_login_at|date:"M d, Y H:i" }}</span>{% else %}<span class="badge badge-amber">Never signed in</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Support address</dt><dd>{% if obj.support_email %}<a href="mailto:{{ obj.support_email }}">{{ obj.support_email }}</a>{% else %}<span class="text-muted">Falls back to the workspace default</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+
+      {% if obj.welcome_message %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.9rem;"><span class="fw-600">Welcome message</span> — shown on this customer's portal home page. <br>{{ obj.welcome_message }}</p>
+      {% endif %}
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Internal notes.</span> Never rendered on a customer page. <br>{{ obj.notes }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================ 11. the actions
+    can_delete is the EXACT condition portalaccount_delete enforces (no inquiry references this
+    account), read from the same statement of the rule, so a button and its route cannot disagree.
+    Delete is additionally @tenant_admin_required, so it is wrapped in the house gate as well —
+    offering a member a button they will 403 on is the 4.11 finding.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:portalaccount_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_delete %}
+            <form method="post" action="{% url 'scm:portalaccount_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This also destroys {{ share_count }} document share(s) and {{ activity_count }} activity log row(s) for this customer, and nothing reconstructs either. Untick Active instead to close the portal and keep the trail.');">
+              {% csrf_token %}
+              <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+            </form>
+          {% endif %}
+        {% endif %}
+        <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.9rem;">
+        Every field on this account is editable, always — there is no status ladder and no frozen state, because the row is configuration rather than a document and there is no history for an edit to rewrite. What an edit <em>does</em> do is take effect on the customer's very next page load: switching an entitlement off closes that surface immediately, since the resolver re-reads this row on every gated request rather than caching it into a session.
+      </p>
+      <p class="text-muted" style="margin:0;">
+        {% if not can_delete %}
+          <span class="badge badge-slate">Delete refused</span>
+          {{ inquiry_count }} inquir{{ inquiry_count|pluralize:"y,ies" }} reference{{ inquiry_count|pluralize:"s," }} this account and the database protects them: an inquiry is the record of an argument about an order and it must keep the account it was raised under. <span class="fw-600">Untick "Active" instead</span> — that is not a soft delete dressed up, because <span class="mono">is_active</span> is inside the resolver's own lookup, so one save shuts the portal and every live document link while leaving every row of evidence readable.
+        {% else %}
+          <span class="badge badge-red">Deleting is destructive in a way the button cannot show</span>
+          No inquiry references this account, so the delete would go through — and it would take the entire share register and the whole append-only read log with it, because both cascade. That log is the only thing that can answer "we published the proof on the 3rd and you downloaded it on the 4th", and nothing reconstructs it. <span class="fw-600">Deactivating does the same job to the customer</span> — the portal and every live link shut on the next request — and keeps the evidence.
+        {% endif %}
+        {% if not request.user.is_superuser and not request.user.is_tenant_admin %}
+          Deleting is a workspace-administrator action for exactly that reason; ask an administrator. Everything else on this page is yours to change.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% endblock %}
