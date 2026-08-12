@@ -4842,7 +4842,12 @@ class Command(BaseCommand):
             + (f"{restricted.number} restricted, " if restricted is not None else "")
             + (f"{empty.number} DELIBERATELY EMPTY" if empty is not None
                else "no spare customer for an empty account")
-            + f"), 3 inquiries via open_for(){rma_note}, {len(shares)} document share(s) "
+            # COUNTED, not hard-coded: `short` is conditional on the first order having a line, so
+            # a lineless order creates two inquiries and the literal "3" would have lied. Same rule
+            # the activity count above already follows — a seeder that overstates what it created is
+            # the one thing a seeder must not do — applied here too rather than two lines away.
+            + f"), {len([i for i in (wismo, short, ret) if i is not None])} inquiries via "
+              f"open_for(){rma_note}, {len(shares)} document share(s) "
             f"(1 revoked via the verb), {written} activity row(s)"
             + (f", portal login bound to {candidate.username}" if bound is not None
                else ", no unbound user to give a portal login")
