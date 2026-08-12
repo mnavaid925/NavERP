@@ -1,0 +1,533 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — the MyAccount landing page.
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_home. This is a CUSTOMER surface, not a
+staff one: every link below points at another portal route, and nothing here links into the staff
+side of scm (no scm:overview breadcrumb, no salesorder_detail, no portaldocumentshare_detail).
+
+CONTEXT this page may read, and nothing else (the view pins the same list in its module docstring):
+
+  account customer access                       the PortalAccount, its core.Party, the crm access row
+  can_track_shipments can_view_invoices can_view_documents
+  can_raise_inquiries can_request_returns show_credit_and_balance
+  stats                                         dict: open_orders in_transit live_documents
+                                                open_inquiries outstanding_balance
+  recent_orders recent_documents                lists of dicts — row keys below
+  recent_inquiries                              PortalOrderInquiry queryset (select_related case,
+                                                sales_order) — MODEL objects, not dicts
+  welcome_message support_email                 staff-authored free text
+
+ROW DICTS — these key names come from _order_rows() / _share_rows() in the view, NOT from the model
+fields, and a wrong one resolves to empty and renders a silent em-dash on a 200 page (L41):
+
+  recent_orders    -> obj shipment shipment_count status_text last_known_location eta
+                      is_delayed pod_received pod_received_at tracking_number
+  recent_documents -> obj download_url has_file is_available
+
+  `public_token` is deliberately NOT a key of a share row and is never rendered here: it is a bearer
+  credential. The ONLY legitimate exposure is the URL it forms, which the view already built as
+  `download_url`, so that value is used as an href and never printed as text, a title or a tooltip.
+
+EVERY TILE IS GATED, and its data was never fetched when the entitlement is off (the view leaves the
+stat at None rather than at 0), so a forgotten {% if %} here would print an em-dash, not a figure.
+Catalog and My details are ungated on purpose — portal_catalog and portal_profile carry no gate — and
+the inquiry HISTORY is shown regardless of can_raise_inquiries, which governs FILING a new one.
+
+ZERO OF EVERYTHING IS THE MODAL FIRST SESSION, not an edge case: a brand-new account has no orders,
+no shipments, no documents, no inquiries and no invoices. Every section below therefore carries its
+own .empty-state and the page reads as a working portal with nothing in it yet.
+
+None is rendered as an em-dash and never as 0: "no invoice exists" is not "you owe nothing", and
+"no shipment yet" is not "an ETA of zero". Counts that are genuinely counted (0 shipments on an
+order) say so in words instead of printing a bare 0.
+
+Badge classes are colour-named only — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-danger / badge-warning do not exist in theme.css and
+render completely unstyled (L33). doc_type_css, customer_status_css and inquiry_type_css are the
+models' own properties, so this template invents no colour for them; the SalesOrder and Shipment
+status chains mirror the shipped scm/orders/salesorder/list.html and scm/transportation/shipment
+pages exactly, because neither model carries a *_css property.
+
+welcome_message, a share title and a case subject are all free text somebody typed. Everything here
+is rendered escaped — |linebreaks autoescapes, and there is no |safe anywhere on this page.
+
+There are no destructive actions and no forms on this page, hence no confirm() and no csrf token.
+No pagination either: the view passes no page_obj, only the five most recent rows of each kind.
+{% endcomment %}
+{% block title %}My Account{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">My Account</h1>
+      <div class="breadcrumb">
+        <span>Customer Portal</span><span class="sep">›</span>
+        <span>{{ customer }}</span>
+      </div>
+      <p class="text-muted">
+        Your purchases, billing, documents, support and catalogue in one place. Everything on this
+        page is your own account's — nothing is shared between customers.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if can_track_shipments %}
+        <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Orders</a>
+      {% endif %}
+      {% if can_view_documents %}
+        <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder-open"></i> Documents</a>
+      {% endif %}
+      <a href="{% url 'scm:portal_profile' %}" class="btn btn-outline"><i data-lucide="user"></i> My Details</a>
+      <a href="{% url 'scm:portal_catalog' %}" class="btn btn-primary"><i data-lucide="book-open"></i> Browse Catalogue</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Staff-authored announcement. |linebreaks keeps the paragraphs a staff user typed AND escapes the
+    text — it is not |safe and must never become |safe.
+  {% endcomment %}
+  {% if welcome_message %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Welcome</h2>
+        <span class="badge badge-info"><i data-lucide="mail"></i> From your account team</span>
+      </div>
+      <div class="card-body">
+        <div class="text-muted">{{ welcome_message|linebreaks }}</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="stat-grid">
+    {% if can_track_shipments %}
+      <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="package"></i></div>
+        <div class="stat-value">{{ stats.open_orders|default_if_none:"—" }}</div>
+        <div class="stat-label">Open order{{ stats.open_orders|pluralize }} with us</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="truck"></i></div>
+        <div class="stat-value">{{ stats.in_transit|default_if_none:"—" }}</div>
+        <div class="stat-label">Consignment{{ stats.in_transit|pluralize }} on the move</div>
+      </div>
+    {% endif %}
+    {% if can_view_documents %}
+      <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="file-text"></i></div>
+        <div class="stat-value">{{ stats.live_documents|default_if_none:"—" }}</div>
+        <div class="stat-label">Document{{ stats.live_documents|pluralize }} available to you</div>
+      </div>
+    {% endif %}
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="life-buoy"></i></div>
+      <div class="stat-value">{{ stats.open_inquiries|default_if_none:"—" }}</div>
+      <div class="stat-label">Open inquir{{ stats.open_inquiries|pluralize:"y,ies" }}</div>
+    </div>
+    {% comment %}
+      show_credit_and_balance is OFF by default, so this tile is usually absent altogether. When it
+      is on, a balance of None means THERE ARE NO INVOICES — not that the account owes nothing — so
+      it prints an em-dash with the difference spelled out underneath rather than a reassuring 0.00.
+    {% endcomment %}
+    {% if show_credit_and_balance %}
+      <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+        <div class="stat-value">
+          {% if stats.outstanding_balance is not None %}{{ stats.outstanding_balance|floatformat:2 }}{% else %}—{% endif %}
+        </div>
+        <div class="stat-label">
+          {% if stats.outstanding_balance is not None %}
+            Outstanding across your open invoices
+          {% else %}
+            No open invoices on your account
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %} ---------- Purchases ---------------------------------------------------------- {% endcomment %}
+  {% if can_track_shipments %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recent orders</h2>
+        <div class="page-actions">
+          <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="arrow-right"></i> All orders
+          </a>
+        </div>
+      </div>
+      {% if recent_orders %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Placed</th>
+                <th>Status</th>
+                <th>Shipment</th>
+                <th>Last seen</th>
+                <th>Expected</th>
+                <th class="text-right">Total</th>
+                <th class="th-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in recent_orders %}
+                <tr>
+                  <td class="nowrap">
+                    <a href="{% url 'scm:portal_order_detail' r.obj.pk %}" class="fw-600">{{ r.obj.number }}</a>
+                  </td>
+                  <td class="nowrap">{{ r.obj.order_date|date:"M d, Y"|default:"—" }}</td>
+                  <td>
+                    <span class="badge badge-{% if r.obj.status == 'fulfilled' or r.obj.status == 'closed' %}green{% elif r.obj.status == 'allocated' or r.obj.status == 'invoiced' %}info{% elif r.obj.status == 'submitted' or r.obj.status == 'partially_fulfilled' %}amber{% elif r.obj.status == 'on_hold' or r.obj.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ r.obj.get_status_display }}</span>
+                  </td>
+                  {% comment %}
+                    Every shipment-derived value is None / "" / False between submission and dispatch,
+                    which is where MOST orders sit. That state is written in words — an order with no
+                    parcel yet has not been delayed, has no ETA and has no tracking number.
+                  {% endcomment %}
+                  <td>
+                    {% if r.shipment %}
+                      <span class="badge badge-{% if r.shipment.status == 'delivered' %}green{% elif r.shipment.status == 'in_transit' %}info{% elif r.shipment.status == 'booked' %}amber{% elif r.shipment.status == 'exception' or r.shipment.status == 'cancelled' %}red{% else %}slate{% endif %}">{{ r.shipment.get_status_display }}</span>
+                      {% if r.shipment_count > 1 %}
+                        <span class="badge badge-muted">{{ r.shipment_count }} consignments</span>
+                      {% endif %}
+                      {% if r.is_delayed %}
+                        <span class="badge badge-red"><i data-lucide="clock"></i> Running late</span>
+                      {% endif %}
+                      {% if r.pod_received %}
+                        <span class="badge badge-green">
+                          <i data-lucide="check-circle"></i>
+                          Delivered{% if r.pod_received_at %} {{ r.pod_received_at|date:"M d" }}{% endif %}
+                        </span>
+                      {% endif %}
+                      {% if r.tracking_number %}
+                        <div class="text-muted mono nowrap">{{ r.tracking_number }}</div>
+                      {% endif %}
+                    {% else %}
+                      <span class="text-muted">Awaiting dispatch</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if r.last_known_location %}
+                      <span class="nowrap"><i data-lucide="map-pin"></i> {{ r.last_known_location }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                    {% if r.status_text %}
+                      <div class="text-muted">{{ r.status_text }}</div>
+                    {% endif %}
+                  </td>
+                  <td class="nowrap">
+                    {% if r.eta %}
+                      {{ r.eta|date:"M d, Y H:i" }}
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-right nowrap">
+                    {{ r.obj.total|floatformat:2 }}{% if r.obj.currency %} <span class="text-muted">{{ r.obj.currency.code }}</span>{% endif %}
+                  </td>
+                  <td>
+                    <div class="table-actions">
+                      <a href="{% url 'scm:portal_order_detail' r.obj.pk %}" class="btn btn-icon" title="View this order">
+                        <i data-lucide="eye"></i>
+                      </a>
+                      {% if can_raise_inquiries %}
+                        <a href="{% url 'scm:portal_inquiry_create' %}?sales_order={{ r.obj.pk }}"
+                           class="btn btn-icon" title="Ask about this order">
+                          <i data-lucide="message-square"></i>
+                        </a>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card-body">
+          <div class="empty-state">
+            <i data-lucide="package-open"></i>
+            <h3>No orders yet</h3>
+            <p>
+              As soon as an order is placed for your account it appears here, with its shipments and
+              tracking alongside it.
+            </p>
+            <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline">
+              <i data-lucide="book-open"></i> Browse the catalogue
+            </a>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% comment %} ---------- Billing ------------------------------------------------------------- {% endcomment %}
+  {% if can_view_invoices %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Billing</h2>
+        <div class="page-actions">
+          <a href="{% url 'scm:portal_profile' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="receipt-text"></i> Invoice history
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="text-muted">Outstanding balance</span>
+            <span class="fw-600">
+              {% if not show_credit_and_balance %}
+                <span class="text-muted">Not shown on your account</span>
+              {% elif stats.outstanding_balance is not None %}
+                {{ stats.outstanding_balance|floatformat:2 }}
+              {% else %}
+                — <span class="text-muted">no open invoices</span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="detail-item">
+            <span class="text-muted">Where to look</span>
+            <span>
+              Your invoices, payment terms and delivery details live on
+              <a href="{% url 'scm:portal_profile' %}">My Details</a>.
+            </span>
+          </div>
+        </div>
+        <p class="text-muted">
+          Invoices are read straight from our finance system — nothing is recalculated here, so what
+          you see is exactly the document that was issued to you.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %} ---------- Documents ----------------------------------------------------------- {% endcomment %}
+  {% if can_view_documents %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recent documents</h2>
+        <div class="page-actions">
+          <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="arrow-right"></i> All documents
+          </a>
+        </div>
+      </div>
+      {% if recent_documents %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Type</th>
+                <th>Shared</th>
+                <th>Available until</th>
+                <th class="th-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in recent_documents %}
+                <tr>
+                  <td>
+                    <span class="fw-600">{{ r.obj.title }}</span>
+                    <div class="text-muted mono nowrap">{{ r.obj.number }}</div>
+                  </td>
+                  <td>
+                    <span class="badge {{ r.obj.doc_type_css|default:'badge-muted' }}">{{ r.obj.get_doc_type_display }}</span>
+                  </td>
+                  <td class="nowrap">{{ r.obj.created_at|date:"M d, Y"|default:"—" }}</td>
+                  {% comment %}
+                    A share with no expiry never expires — that is a fact, not a missing figure, so it
+                    says so in words rather than printing an em-dash.
+                  {% endcomment %}
+                  <td class="nowrap">
+                    {% if r.obj.expires_at %}
+                      {{ r.obj.expires_at|date:"M d, Y H:i" }}
+                    {% else %}
+                      <span class="text-muted">No expiry</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="table-actions">
+                      {% comment %}
+                        download_url already carries the one-time link the view built. The token
+                        itself is never printed — not here, not as a title, not as any attribute.
+                        is_available is False when the record behind the share was deleted, which is a
+                        real state (every pointer is SET_NULL) rather than a bug.
+                      {% endcomment %}
+                      {% if r.is_available and r.download_url %}
+                        <a href="{{ r.download_url }}" class="btn btn-outline btn-sm">
+                          {% if r.has_file %}
+                            <i data-lucide="download"></i> Download
+                          {% else %}
+                            <i data-lucide="eye"></i> View
+                          {% endif %}
+                        </a>
+                      {% else %}
+                        <span class="badge badge-muted">No longer available</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card-body">
+          <div class="empty-state">
+            <i data-lucide="folder-open"></i>
+            <h3>No documents shared with you yet</h3>
+            <p>
+              Invoices, proofs of delivery, packing lists, certificates and contracts published to
+              your account will appear here.
+            </p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% comment %} ---------- Support -------------------------------------------------------------
+    The inquiry HISTORY is ungated on purpose: can_raise_inquiries governs FILING a new one, and
+    hiding tickets the customer already has would be a different and worse rule than the one that
+    entitlement states. So the table is always rendered and only the buttons are gated.
+  --------------------------------------------------------------------------------------------- {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Support</h2>
+      <div class="page-actions">
+        {% if can_request_returns %}
+          <a href="{% url 'scm:portal_return_create' %}" class="btn btn-outline btn-sm">
+            <i data-lucide="rotate-ccw"></i> Request a return
+          </a>
+        {% endif %}
+        {% if can_raise_inquiries %}
+          <a href="{% url 'scm:portal_inquiry_create' %}" class="btn btn-primary btn-sm">
+            <i data-lucide="plus"></i> Raise an inquiry
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    {% if recent_inquiries %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Subject</th>
+              <th>About</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Raised</th>
+              <th class="th-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inquiry in recent_inquiries %}
+              <tr>
+                <td class="mono nowrap">{{ inquiry.number }}</td>
+                <td>{{ inquiry.case.subject|default:"—" }}</td>
+                <td class="nowrap">
+                  {% if inquiry.sales_order %}
+                    {% if can_track_shipments %}
+                      <a href="{% url 'scm:portal_order_detail' inquiry.sales_order.pk %}">{{ inquiry.sales_order.number }}</a>
+                    {% else %}
+                      {{ inquiry.sales_order.number }}
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge {{ inquiry.inquiry_type_css|default:'badge-muted' }}">{{ inquiry.get_inquiry_type_display }}</span>
+                </td>
+                {% comment %}
+                  customer_status_label / customer_status_css are the model's own CUSTOMER-facing map
+                  over the case status — deliberately not the agent's vocabulary, and never a label
+                  spelled inline here.
+                {% endcomment %}
+                <td>
+                  <span class="badge {{ inquiry.customer_status_css|default:'badge-muted' }}">{{ inquiry.customer_status_label }}</span>
+                </td>
+                <td class="nowrap">{{ inquiry.created_at|date:"M d, Y"|default:"—" }}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if inquiry.case_id %}
+                      <a href="{% url 'crm:portal_case_detail' inquiry.case_id %}" class="btn btn-icon" title="Open this conversation">
+                        <i data-lucide="eye"></i>
+                      </a>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="life-buoy"></i>
+          <h3>Nothing open with our team</h3>
+          <p>
+            {% if can_raise_inquiries %}
+              Missing goods, a damaged delivery, a query on an invoice — raise it here and it lands
+              straight with the people who can answer it.
+            {% else %}
+              Inquiries raised for your account will be listed here with their progress.
+            {% endif %}
+          </p>
+          {% if can_raise_inquiries %}
+            <a href="{% url 'scm:portal_inquiry_create' %}" class="btn btn-outline">
+              <i data-lucide="plus"></i> Raise an inquiry
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %} ---------- Catalogue + contact (both ungated) ---------------------------------- {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Catalogue and contact</h2></div>
+    <div class="card-body">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <span class="text-muted">What you can buy</span>
+          <span>
+            Your catalogue shows the products set up for your account, with availability as your
+            account is configured to see it.
+          </span>
+          <div class="page-actions">
+            <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline btn-sm">
+              <i data-lucide="book-open"></i> Browse the catalogue
+            </a>
+          </div>
+        </div>
+        <div class="detail-item">
+          <span class="text-muted">Your details</span>
+          <span>
+            Delivery addresses, contacts and billing information are held on your account and changed
+            by our team — ask us and we will update them for you.
+          </span>
+          <div class="page-actions">
+            <a href="{% url 'scm:portal_profile' %}" class="btn btn-outline btn-sm">
+              <i data-lucide="user"></i> My details
+            </a>
+          </div>
+        </div>
+        <div class="detail-item">
+          <span class="text-muted">Need a hand?</span>
+          {% if support_email %}
+            <span><a href="mailto:{{ support_email }}">{{ support_email }}</a></span>
+          {% else %}
+            <span class="text-muted">Contact your usual account contact and they will pick it up.</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
