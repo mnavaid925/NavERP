@@ -1289,6 +1289,30 @@ states *and* assigned them, so every "what needs doing" surface — 4.4's own li
 empty. It now also creates **one OPEN unassigned task of each kind**; 4.14 claims two of them and leaves the
 put-away unassigned, so both halves of the board populate from one set of rows.
 
+### Tests (`apps/scm/tests/`, ~505 for 4.14)
+
+Appended to the shared suite, never a new module: `conftest.py` (fixtures), `test_models.py` (16
+classes), `test_forms.py` (5), `test_views.py` (6), `test_security.py` (6). **`grep` any helper name
+before defining one** — `test_suite_hygiene.py` fails the suite on a duplicate module-level name, and
+`test_views.py` already owns `_messages` / `_message_blob` / `_returns_query_count`. The 4.14 date
+helpers (`_labor_moment` / `_labor_workday` / `_labor_date`) are plain functions in `conftest.py`, not
+fixtures, so they are **imported**, not injected.
+
+The classes worth knowing, because each pins a defect that shipped and was fixed:
+`TestRunningActivityIsCountedWhenItLands` · `TestSnapshotClamping` · `TestSnapshotImmutability` ·
+`TestIndirectWorkIsNeverMeasured` · `TestSelectStandardPrecedence` · `TestGapFilterReturnsTheRightRows`
+· `TestLaborPayrollExportPrivacy`.
+
+**What this suite CANNOT prove**, because it runs on SQLite (`config.settings_test`) while production
+is MariaDB — verified separately against the real database and worth re-checking by hand after any
+change in these areas:
+* the `HAVING`/`GROUP BY` shape behind `?gap=` (SQLite permits the non-aggregate MariaDB refuses);
+* every `select_for_update` guard (SQLite has no row-level locking, so a concurrency test is vacuous);
+* **column bounds — blind on BOTH engines.** This project's MariaDB runs without
+  `STRICT_TRANS_TABLES` (`manage.py check` says so as `mysql.W002`), so an over-range decimal is
+  **silently truncated**, not rejected. Verified: `100000000.9999` in, `99999999.9999` out, no
+  warning. That is why `MAX_SNAPSHOT_MINUTES` clamps in Python — it is the only layer that holds.
+
 ### Non-negotiables for 4.14
 
 1. **Every productivity figure answers `None`, never `0`, on a zero denominator.** An unmeasured job printed as
