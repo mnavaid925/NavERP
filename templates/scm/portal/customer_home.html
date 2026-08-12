@@ -229,12 +229,12 @@ No pagination either: the view passes no page_obj, only the five most recent row
                   </td>
                   <td>
                     <div class="table-actions">
-                      <a href="{% url 'scm:portal_order_detail' r.obj.pk %}" class="btn btn-icon" title="View this order">
+                      <a href="{% url 'scm:portal_order_detail' r.obj.pk %}" class="btn-icon" title="View this order">
                         <i data-lucide="eye"></i>
                       </a>
                       {% if can_raise_inquiries %}
                         <a href="{% url 'scm:portal_inquiry_create' %}?sales_order={{ r.obj.pk }}"
-                           class="btn btn-icon" title="Ask about this order">
+                           class="btn-icon" title="Ask about this order">
                           <i data-lucide="message-square"></i>
                         </a>
                       {% endif %}
@@ -275,10 +275,17 @@ No pagination either: the view passes no page_obj, only the five most recent row
         </div>
       </div>
       <div class="card-body">
-        <div class="detail-grid">
+        {% comment %}
+          <dl>/<dt>/<dd>, not <div>/<span>. theme.css styles this family ONLY through child
+          selectors (`.detail-item dt` / `.detail-item dd`), so a span-based grid inherits the
+          flex column and silently loses the uppercase muted label and the value weight — it looks
+          nearly right, which is exactly why nothing catches it. Every other detail-grid in 4.16
+          uses the <dl> form.
+        {% endcomment %}
+        <dl class="detail-grid">
           <div class="detail-item">
-            <span class="text-muted">Outstanding balance</span>
-            <span class="fw-600">
+            <dt>Outstanding balance</dt>
+            <dd class="fw-600">
               {% if not show_credit_and_balance %}
                 <span class="text-muted">Not shown on your account</span>
               {% elif stats.outstanding_balance is not None %}
@@ -286,16 +293,16 @@ No pagination either: the view passes no page_obj, only the five most recent row
               {% else %}
                 — <span class="text-muted">no open invoices</span>
               {% endif %}
-            </span>
+            </dd>
           </div>
           <div class="detail-item">
-            <span class="text-muted">Where to look</span>
-            <span>
+            <dt>Where to look</dt>
+            <dd>
               Your invoices, payment terms and delivery details live on
               <a href="{% url 'scm:portal_profile' %}">My Details</a>.
-            </span>
+            </dd>
           </div>
-        </div>
+        </dl>
         <p class="text-muted">
           Invoices are read straight from our finance system — nothing is recalculated here, so what
           you see is exactly the document that was issued to you.
@@ -456,7 +463,7 @@ No pagination either: the view passes no page_obj, only the five most recent row
                 <td>
                   <div class="table-actions">
                     {% if inquiry.case_id %}
-                      <a href="{% url 'crm:portal_case_detail' inquiry.case_id %}" class="btn btn-icon" title="Open this conversation">
+                      <a href="{% url 'crm:portal_case_detail' inquiry.case_id %}" class="btn-icon" title="Open this conversation">
                         <i data-lucide="eye"></i>
                       </a>
                     {% endif %}
@@ -494,40 +501,47 @@ No pagination either: the view passes no page_obj, only the five most recent row
   <div class="card">
     <div class="card-header"><h2 class="card-title">Catalogue and contact</h2></div>
     <div class="card-body">
-      <div class="detail-grid">
+      {% comment %}
+        <dl>/<dt>/<dd> for the same reason as the balance grid above — theme.css styles this family
+        only through `.detail-item dt` / `.detail-item dd` child selectors. The page-actions blocks
+        sit inside the <dd> quite legally.
+      {% endcomment %}
+      <dl class="detail-grid">
         <div class="detail-item">
-          <span class="text-muted">What you can buy</span>
-          <span>
+          <dt>What you can buy</dt>
+          <dd>
             Your catalogue shows the products set up for your account, with availability as your
             account is configured to see it.
-          </span>
-          <div class="page-actions">
-            <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline btn-sm">
-              <i data-lucide="book-open"></i> Browse the catalogue
-            </a>
-          </div>
+            <div class="page-actions">
+              <a href="{% url 'scm:portal_catalog' %}" class="btn btn-outline btn-sm">
+                <i data-lucide="book-open"></i> Browse the catalogue
+              </a>
+            </div>
+          </dd>
         </div>
         <div class="detail-item">
-          <span class="text-muted">Your details</span>
-          <span>
+          <dt>Your details</dt>
+          <dd>
             Delivery addresses, contacts and billing information are held on your account and changed
             by our team — ask us and we will update them for you.
-          </span>
-          <div class="page-actions">
-            <a href="{% url 'scm:portal_profile' %}" class="btn btn-outline btn-sm">
-              <i data-lucide="user"></i> My details
-            </a>
-          </div>
+            <div class="page-actions">
+              <a href="{% url 'scm:portal_profile' %}" class="btn btn-outline btn-sm">
+                <i data-lucide="user"></i> My details
+              </a>
+            </div>
+          </dd>
         </div>
         <div class="detail-item">
-          <span class="text-muted">Need a hand?</span>
-          {% if support_email %}
-            <span><a href="mailto:{{ support_email }}">{{ support_email }}</a></span>
-          {% else %}
-            <span class="text-muted">Contact your usual account contact and they will pick it up.</span>
-          {% endif %}
+          <dt>Need a hand?</dt>
+          <dd>
+            {% if support_email %}
+              <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+            {% else %}
+              <span class="text-muted">Contact your usual account contact and they will pick it up.</span>
+            {% endif %}
+          </dd>
         </div>
-      </div>
+      </dl>
     </div>
   </div>
 {% endblock %}
