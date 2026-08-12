@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — shared create/edit form for PortalAccount [PAC-].
+
+Rendered by apps/scm/views/CustomerPortal/PortalAccounts.py::portalaccount_create (via crud_create)
+and ::portalaccount_edit (via crud_edit). The pinned contract in that module's docstring gives this
+page exactly three keys, and nothing else on this page reads anything else:
+
+  form     — PortalAccountForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the PortalAccount on the EDIT path only (crud_edit puts it in the context; crud_create
+             does not), so every use of it below sits inside {% if is_edit %} and is never bare
+
+Fields are rendered BY NAME, grouped the way the model groups them, which couples this page to
+PortalAccountForm's whitelist. Meta.fields is an EXPLICIT list of 22 names and all 22 appear below:
+customer / is_active · can_track_shipments / can_view_invoices / can_view_documents /
+can_raise_inquiries / can_request_returns / show_credit_and_balance · stock_display /
+low_stock_threshold / show_by_location · catalog_scope / catalog_categories · price_basis ·
+default_ship_to · notify_on_shipment / notify_on_delivery / notify_on_exception / preferred_channel ·
+welcome_message / support_email / notes. A field added to the model and to that whitelist but not to
+a group here would never reach the POST — and on edit it would be silently blanked on every save.
+
+Every field goes through partials/form_field.html, which renders the field's own help_text and its
+own errors. That is deliberate rather than incidental: PortalAccount's help_text strings are the
+same words the detail page's entitlement chips print (views/…/PortalAccounts.py::_entitlements pulls
+help_text off the FIELD), so the explanation here and the explanation there cannot drift.
+
+Four columns are deliberately absent and none of them is an oversight:
+  tenant       — stamped by crud_create, and again in the form's __init__ (TenantUniqueMixin) so the
+                 ("tenant", "customer") uniqueness check and the model's cross-tenant ship-to guard
+                 have a tenant to validate against on the CREATE path.
+  number       — auto-assigned on save (PAC-).
+  activated_on — editable=False. It is evidence of when enablement first happened, stamped once by
+                 PortalAccount.save() and never restamped, so a deactivate/reactivate cycle cannot
+                 rewrite the adoption date the console reports. Shown read-only below, never as an
+                 input, and None renders as an em dash rather than as a blank or a made-up date.
+  created_at / updated_at — automatic.
+There is NO status field to be missing: this row IS the configuration. No lifecycle, no verb that
+owns a column, so every field is editable on every save.
+
+Refusals and where they land:
+  form.non_field_errors — the ("tenant", "customer") duplicate, i.e. enabling the portal twice for
+                 the same company. Django reports a unique_together break as a NON-FIELD error, so
+                 the first card renders form.non_field_errors or that message is invisible.
+  catalog_categories  — the form-only rule: a "Selected categories only" scope with no categories.
+                 It cannot live on the model (an M2M has no rows until after save(), so on create it
+                 would see an empty set for every new account).
+  low_stock_threshold — a threshold typed against a display that never reads it.
+  default_ship_to     — the ownership guard (another workspace, or another customer's address),
+                 checked at the form boundary AND at the model boundary.
+  customer / default_ship_to — the cross-tenant pointer guard, because a narrowed <select> has never
+                 held against a crafted POST.
+
+welcome_message, support_email and notes are user-typed and are rendered through the form widgets
+only — no |safe anywhere on this page, and this form prints none of those values back as markup.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Portal Account{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Portal Account</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portalaccount_list' %}">Portal Accounts</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Every field here is editable and there is no draft to publish: this row <span class="fw-600">is</span> the configuration, and a save takes effect on this customer's very next page load. Turning an entitlement off closes that surface immediately, because each gated request re-reads this row rather than caching it into a session. What a save does <span class="fw-600">not</span> touch is the evidence — the activity log, the inquiries and the share register are separate rows and no edit here rewrites any of them.
+      {% else %}
+        This switches the portal on for one customer and decides what they may see. It is <span class="fw-600">not</span> a login: named users bind to the company through their CRM customer portal access, and a customer is only actually on the portal when an active access row, the party it names, and an active account here all line up. Enabling this account is one of those three — expect the new row to show <span class="fw-600">no linked users</span> until somebody is bound on the CRM side, which is normal rather than broken. The PAC- number is assigned on save, so there is no number field here.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Which customer, and is it live</h2>
+        <span class="badge badge-info">One account per company</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The account is held at <span class="fw-600">company</span> level, not per person — several named users can bind to it, and they all see the same entitlements. Exactly one account per customer is enforced by the database, so a second one for a company that already has one is refused at the top of this card rather than crashing on save: two accounts would hand the same company two different sets of entitlements, and which one applied would depend on row order.
+        </p>
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The dropdown offers parties tagged as <span class="fw-600">customers</span> only — suppliers and carriers are not on this list. <span class="fw-600">Switching the account off is the safe alternative to deleting it:</span> deactivating leaves every inquiry, share and log line intact and still kills the customer's access on the next request, because the live check reads this flag. Deleting takes the whole share register and the entire read log with it.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.customer %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+        </div>
+        {% if is_edit %}
+          <div class="form-help" style="margin-top:.75rem;">
+            First enabled: <span class="fw-600">{% if obj.activated_on %}{{ obj.activated_on|date:"d M Y" }}{% else %}—{% endif %}</span>. That date is stamped once, the first time the account is active, and is never restamped — pausing and resuming a customer must not rewrite when they first got the portal, which is the question the adoption console exists to answer. It is not a field on this form for that reason.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Entitlements</h2>
+        <span class="badge badge-muted">Six switches, one audience</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          These are read-only views of the customer's <span class="fw-600">own</span> documents, which is why five of them default on. The sixth is money, and it defaults <span class="fw-600">off</span>: an outstanding balance, a credit limit and payment terms are the one thing on the portal somebody has to consciously decide to expose. Each switch gates a whole surface — a customer without an entitlement does not get a page they cannot use, they get no page at all.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.can_track_shipments %}
+          {% include "partials/form_field.html" with field=form.can_view_invoices %}
+          {% include "partials/form_field.html" with field=form.can_view_documents %}
+          {% include "partials/form_field.html" with field=form.can_raise_inquiries %}
+          {% include "partials/form_field.html" with field=form.can_request_returns %}
+          {% include "partials/form_field.html" with field=form.show_credit_and_balance %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Two of these hand off rather than build something new: invoices are <span class="fw-600">accounting's</span> invoices shown read-only and never recalculated here, and a return request routes into the returns flow that already exists — there is no second returns process behind that switch. The document library shows only what has been deliberately shared to <span class="fw-600">this</span> account; the entitlement opens the page, it does not share anything.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          Everything above is company-wide. There is deliberately <span class="fw-600">no</span> "each buyer sees only their own orders" switch: nothing records which portal user placed a given sales order, so that switch could not do what it says — and an administrator who set it would believe their buyers were separated when they were not.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Stock presentation</h2>
+        <span class="badge badge-slate">Rendering only — never the source</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          How much of the live stock figure this customer may read. The reason to hide a number is commercial and it varies by who is looking, which is why it is set per account rather than per item. Whichever display is chosen, the quantity behind it is <span class="fw-600">derived from the stock ledger every time the page renders</span> — nothing here stores a stock figure, and nothing here changes one.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.stock_display %}
+          {% include "partials/form_field.html" with field=form.low_stock_threshold %}
+          {% include "partials/form_field.html" with field=form.show_by_location %}
+        </div>
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Display</th><th>What the customer sees</th><th>Reads the threshold?</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="fw-600">Hidden</td>
+                <td>No stock information at all — the catalog still lists the item</td>
+                <td><span class="badge badge-muted">No</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Availability text</td>
+                <td>In stock / low stock / out of stock, in words</td>
+                <td><span class="badge badge-green">Yes</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Colour band</td>
+                <td>The same three buckets as a colour chip, with the words kept as the accessible label</td>
+                <td><span class="badge badge-green">Yes</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Exact quantity</td>
+                <td>The derived on-hand number itself</td>
+                <td><span class="badge badge-muted">No</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">A threshold set against a display that cannot consume it is refused, not ignored.</span> Hidden and exact-quantity never compare against it, so a number typed against either one would take no effect at all — and a value somebody entered that the system silently dropped is worse than an error, because they leave believing it applied. Clear the threshold, or change the display. A threshold of zero means nothing is ever "low", which is a real answer rather than a gap.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          The per-warehouse breakdown is off by default on purpose: one network figure says what a buyer needs, while a site-by-site breakdown tells anybody who buys a single pallet exactly where our stock sits.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Catalog scope</h2>
+        <span class="badge badge-muted">Which items exist for this customer</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">All active items</span> is the whole live catalog. <span class="fw-600">Items previously ordered</span> is derived from this customer's own order history and needs no curation at all — it is the cheapest useful scope for a repeat buyer, and it starts empty for a customer who has never ordered. <span class="fw-600">Selected categories only</span> is the curated one, and it is the only scope that reads the category picker.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.catalog_scope %}
+          {% include "partials/form_field.html" with field=form.catalog_categories %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Picking <span class="fw-600">Selected categories only</span> with no categories is refused rather than saved: it would give this customer a catalog with nothing in it, and it would look like a working portal from this screen. Under the other two scopes the picker is simply not read — leaving categories selected there changes nothing and breaks nothing.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Pricing</h2>
+        <span class="badge badge-amber">No customer price list exists yet</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">There is no customer price list, price book or contract pricing in this system yet</span>, so there are only two honest answers below and neither one quotes a new price. <span class="fw-600">This customer's last ordered price</span> shows them their own most recent unit price for each item, worked out when the page renders and never stored — a stored copy would quietly turn into a quote nobody agreed to. <span class="fw-600">Hidden</span> shows no price at all, which is the default and the right answer whenever the number a customer would read is not a number we are prepared to stand behind. A real price engine — tiers, contracts, volume breaks, currency — is a later module, and when it arrives it adds a choice here rather than changing what these two mean.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.price_basis %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          An item this customer has never bought has no last price, so it renders with no price rather than with a zero — nothing on this portal prints 0.00 for a figure that does not exist.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Default delivery address</h2>
+        {% if not is_edit %}<span class="badge badge-amber">Empty until the account is saved</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% if is_edit %}
+          <p class="form-help" style="margin:0 0 .9rem;">
+            The list below holds <span class="fw-600">this customer's own addresses and nothing else</span>. That is not only tidiness: a default pointing at another company's address would sit pre-selected on anything that reads it, so the ownership rule is checked again when you save and a mismatch is refused with the address named. Leaving it blank is a first-class answer — it means the portal asks rather than assumes.
+          </p>
+        {% else %}
+          <p class="form-help" style="margin:0 0 .9rem;">
+            <span class="fw-600">On a new account this list is empty until the account is saved.</span> There is no customer yet when a blank form is drawn, and offering every address in the workspace would mean the first one picked belongs to whichever company you happened to scroll to — a choice the save would then reject. So: pick the customer, save, then come back and edit this account to set the default. The list is a genuine blank, not a loading failure.
+          </p>
+        {% endif %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.default_ship_to %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notification preferences</h2>
+        <span class="badge badge-amber">Stored intent — nothing is dispatched</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">These switches send nothing.</span> This module owns no mailer and dispatches no message, on any channel, for any event — the toggles and the channel below record what this customer <span class="fw-600">would prefer</span>, and that is the whole of it. Do not read a shipment notification switched on here as a promise that anybody is told anything. Capturing the preference now means that on the day messaging exists it reads a column carrying real customer intent, instead of defaulting every account to email and mailing people who never asked.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notify_on_shipment %}
+          {% include "partials/form_field.html" with field=form.notify_on_delivery %}
+          {% include "partials/form_field.html" with field=form.notify_on_exception %}
+          {% include "partials/form_field.html" with field=form.preferred_channel %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">No notifications</span> is a real preference rather than an empty one — a customer who has asked not to be contacted is a fact worth storing, and storing it here is what stops somebody re-deriving a default for them later.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the portal says to this customer</h2></div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The welcome message is shown on this customer's own portal home page — a dealer-zone style greeting or announcement. It is stored and rendered as <span class="fw-600">plain text</span>: markup typed into it is displayed as the characters that were typed, never interpreted, which is what stops a note written on this screen from becoming a script running in a customer's browser. Leave the support address blank to fall back to the workspace's own support routing; fill it in when this customer should be pointed somewhere specific.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.welcome_message %}
+          {% include "partials/form_field.html" with field=form.support_email %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Internal notes</h2>
+        <span class="badge badge-slate">Never shown to the customer</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Staff-only: why this account is configured the way it is, who asked for the credit figures to be exposed, which categories were agreed and with whom. No customer-facing page in this sub-module reads this field. That is exactly why the commercial reasoning belongs here rather than in the welcome message, where the customer would read it.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:portalaccount_detail' obj.pk %}{% else %}{% url 'scm:portalaccount_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to the list. Every change above is live on this customer's next request — there is nothing further to publish and no approval step, which is the point of keeping this row configuration rather than a document.
+      {% else %}
+        Saving returns to the list, where the new account appears with its PAC- number. Two things are worth doing straight after: bind at least one of the customer's users on the CRM side, or nobody can sign in to the portal you just switched on, and come back into this account to set the default delivery address now that the address list has a customer to scope itself to.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
