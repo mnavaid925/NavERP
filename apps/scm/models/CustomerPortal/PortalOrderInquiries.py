@@ -45,6 +45,11 @@ three workflow verbs, so no ModelForm can ever offer them and no crafted POST ca
 from datetime import timedelta
 
 from apps.scm.models._base import *  # noqa: F401,F403
+# Not re-exported by `_base` (which carries `ValidationError` but not this), and named explicitly
+# rather than assumed: `clean()` re-homes errors keyed on `editable=False` columns onto it, and that
+# line runs only when validation actually fails — so a missing import would surface as a NameError
+# on the error path, i.e. exactly where nobody is looking.
+from django.core.exceptions import NON_FIELD_ERRORS
 from apps.scm.models.CustomerPortal._choices import (
     CUSTOMER_STATUS_MAP,
     INQUIRY_OUTCOME_CHOICES,
@@ -307,6 +312,34 @@ class PortalOrderInquiry(TenantNumbered):
                     errors["quantity_affected"] = (
                         f"That line only ordered {ordered}. A claim can't cover more units than "
                         "were sold.")
+
+        # RE-HOME any error keyed on a column no ModelForm can declare.
+        #
+        # `case`, `return_authorization`, `outcome`, `source` and `raised_by` are all
+        # `editable=False`, so Django omits them from every ModelForm — and `_post_clean` forwards a
+        # model `ValidationError` straight to `form.add_error(<key>)`, which raises `ValueError` on
+        # a field the form does not have. That turns a validation failure into a **500**, and it
+        # already did once in this sub-module: the customer inquiry form offered `invoice_dispute`
+        # while deliberately having no `invoice` picker, so `clean()`'s `{"invoice": …}` crashed the
+        # page instead of rendering a message.
+        #
+        # `invoice` is in the list because it is genuinely absent from `PortalInquiryCustomerForm`
+        # (that form now also drops the choice that requires it, which is the primary fix — this is
+        # the backstop for any future form with a narrower field set).
+        #
+        # Moving the message to NON_FIELD_ERRORS keeps it visible and keeps the row un-saveable,
+        # which is the correct outcome; losing the field anchor is a far smaller cost than a 500.
+        FORM_INVISIBLE = ("case", "return_authorization", "outcome", "resolved_at", "source",
+                          "raised_by", "invoice")
+        homeless = []
+        for name in FORM_INVISIBLE:
+            if name in errors:
+                message = errors.pop(name)
+                homeless.extend(message if isinstance(message, list) else [message])
+        if homeless:
+            existing = errors.get(NON_FIELD_ERRORS, [])
+            errors[NON_FIELD_ERRORS] = (
+                (existing if isinstance(existing, list) else [existing]) + homeless)
 
         if errors:
             raise ValidationError(errors)
