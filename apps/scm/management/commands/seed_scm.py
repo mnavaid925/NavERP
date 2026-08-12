@@ -161,11 +161,28 @@ class Command(BaseCommand):
             # does — so the detector is exercised on every `seed_scm` run.
             self._seed_coldchain_tenant(tenant)
 
+            # 4.16 LAST — it is a PROJECTION, and every row it touches has to already exist.
+            # It reads 4.5's sales orders and lines, 4.6's shipments, 4.3's items and categories,
+            # 4.10's RMAs and `accounting`'s invoices, and it binds to CRM's existing
+            # `CustomerPortalAccess`. It writes NO StockMove and NO JournalEntry; its only
+            # cross-app write is the `crm.Case` rows its inquiries wrap, and even those go through
+            # `PortalOrderInquiry.open_for()` rather than being hand-built — so the seeder exercises
+            # the real path on every run and the demo cannot drift from the implementation.
+            #
+            # It also seeds ONE DELIBERATELY EMPTY portal account. That is not filler: a new
+            # customer legitimately has zero orders, zero documents and zero inquiries on day one,
+            # so the empty state is the MODAL first session of this sub-module rather than an edge
+            # case — and no smoke sweep in this project has ever rendered an `{% empty %}` branch,
+            # because a seeded tenant has rows in every table by construction. Seeding an empty
+            # account is what makes those pages visible in the demo instead of only under test.
+            self._seed_portal_tenant(tenant)
+
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
             "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
-            "4.14 labor management + 4.15 cold chain management seed complete."))
+            "4.14 labor management + 4.15 cold chain management + 4.16 customer portal "
+            "seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -980,6 +997,57 @@ class Command(BaseCommand):
         orphaned_bills = Bill.objects.filter(scm_goods_receipts__isnull=False).distinct()
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
+
+        # --- 4.16 Customer Portal ---
+        # 4.16 FIRST (newest sub-module), and like 4.15 below it this order is LOAD-BEARING rather
+        # than merely top-down.
+        #
+        # `PortalOrderInquiry.portal_account` and `.sales_order` are both PROTECT, so the inquiries
+        # have to go before the portal accounts here AND before 4.5's sales-order block much further
+        # down — running them the other way round raises ProtectedError. That PROTECT is deliberate:
+        # an inquiry is an argument ABOUT an order, and deleting the subject of the argument in one
+        # click is not a delete anybody should be able to make by accident.
+        #
+        # THE CASES GO FIRST, AND THE CASCADE TAKES THE INQUIRIES WITH THEM. `PortalOrderInquiry.case`
+        # is CASCADE, so deleting the inquiries directly would sever the reverse link and strand every
+        # `crm.Case` this seeder opened — one orphaned case per `--flush` cycle, accumulating
+        # invisibly in CRM. Deleting from the case side collects both. Exactly the shape of the
+        # orphaned-bills teardown at the top of this method, and the same reasoning.
+        #
+        # `PortalDocumentShare` and `PortalActivity` both CASCADE from the account and would go with
+        # it regardless; they are named explicitly so the teardown reads top-down and so a future
+        # reader does not have to re-derive which edges are cascades. `PortalAccount.customer` is
+        # PROTECT onto `core.Party`, which is why the whole 4.16 tree precedes any party cleanup.
+        #
+        # There is NO StockMove and NO JournalEntry to unwind — 4.16 posts neither, so nothing below
+        # is filtering for its movements and nobody should go looking for one.
+        # Local imports, matching 4.15's block below and the rest of this file — the module-level
+        # import list stops at 4.1's tables on purpose. The CRM import is local for the additional
+        # reason that `apps/scm` does not import `apps/crm` at module scope anywhere.
+        from apps.crm.models import Case as _PortalCase
+        from apps.scm.models import (PortalAccount, PortalActivity, PortalDocumentShare,
+                                     PortalOrderInquiry)
+
+        portal_cases = _PortalCase.objects.filter(scm_portal_inquiries__isnull=False).distinct()
+        portal_cases.delete()               # CASCADE takes the PortalOrderInquiry rows with them
+        # Any inquiry a staff member filed whose case somehow went first, plus belt-and-braces if a
+        # future path ever creates one without a case.
+        PortalOrderInquiry.objects.all().delete()
+        PortalDocumentShare.objects.all().delete()
+        PortalActivity.objects.all().delete()
+        PortalAccount.objects.all().delete()
+
+        # THE `crm.CustomerPortalAccess` LOGIN BINDING IS DELIBERATELY LEFT ALONE, and this is a
+        # decision rather than an oversight. `_seed_portal_tenant` reaches it with `get_or_create`,
+        # so on any run after the first it did not create the row — and nothing on the row records
+        # who did. CRM 1.4 seeds into that same table for its own customer portal. Deleting on a
+        # guess would destroy another module's data to tidy up after this one, which is the exact
+        # trade the orphaned-bills block at the top of this method refuses ("scoped to bills
+        # actually linked to a receipt, so a hand-entered bill is never touched").
+        #
+        # Leaving it costs nothing: it is a login binding pointing at a `core.Party` that still
+        # exists, it grants access to no 4.16 row once the `PortalAccount` above is gone (the
+        # resolver refuses at its third step), and the next `seed_scm` `get_or_create`s it back.
 
         # --- 4.15 Cold Chain Management ---
         # 4.15 Cold Chain Management FIRST (newest sub-module), and unlike the 4.14 block below it
@@ -4518,3 +4586,255 @@ class Command(BaseCommand):
             + (f", {work_order.number} raised against {reefer.code}" if work_order is not None
                else ", no repair job raised")
             + ". Not one measured column was typed — the detector wrote every one of them.")
+
+    def _seed_portal_tenant(self, tenant):
+        """4.16 Customer Portal demo rows — three accounts, and one of them deliberately empty.
+
+        **This pass is a PROJECTION and invents no master data.** Every order, shipment, item,
+        category, invoice and RMA it references is found with ``.first()`` among rows the earlier
+        passes already seeded, and an optional link whose subject does not exist is SKIPPED rather
+        than created. 4.16 posts **no ``StockMove`` and no ``JournalEntry``**; its only cross-app
+        write is the ``crm.Case`` rows its inquiries wrap.
+
+        **Every inquiry is created through ``PortalOrderInquiry.open_for()`` and every share is
+        revoked through ``revoke()``** — never hand-built. That is the 4.13 ``_post_stock_move`` /
+        4.14 ``_stamp_standard`` rule: the demo data is produced by the same code path the buttons
+        run, so the path is exercised on every ``seed_scm`` and the demo cannot drift from the
+        implementation.
+
+        **THE THIRD ACCOUNT HAS NOTHING AND THAT IS THE POINT.** A new portal customer legitimately
+        has zero orders, zero documents, zero inquiries and has never logged in, so the empty state
+        is this sub-module's *modal first session* rather than an edge case — it is the first thing
+        every real customer sees. No smoke sweep in this project has ever rendered an ``{% empty %}``
+        branch, because a seeded tenant has rows in every table by construction; two 4.14 empty
+        states shipped with dead links for exactly that reason, and both returned 200. Seeding an
+        empty account is what puts those pages in front of a human in the demo.
+
+        The other two are deliberately opposites so every presentation branch renders somewhere:
+        one fully enabled with exact quantities, a category-scoped catalogue, last-ordered pricing
+        and financials visible; one restricted to availability text, previously-ordered items, no
+        pricing, no invoices and no balance.
+        """
+        from apps.accounting.models import Invoice
+        from apps.crm.models import CustomerPortalAccess
+        from apps.scm.models import (Item, ItemCategory, PortalAccount, PortalActivity,
+                                     PortalDocumentShare, PortalOrderInquiry, ReturnAuthorization,
+                                     SalesOrder, Shipment)
+
+        if PortalAccount.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: customer portal data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10-4.15 posture) --------
+        # 4.16 renders a customer's OWN orders and stock; with no order or no item there is nothing
+        # for a portal to show, and inventing either here would put rows in 4.3/4.5 that those
+        # sub-modules' own guards deliberately did not create.
+        orders = list(SalesOrder.objects.filter(tenant=tenant)
+                      .select_related("customer").order_by("id")[:6])
+        if not orders:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no 4.5 sales orders — skipping 4.16 customer portal (it renders a "
+                "customer's own orders and has nothing to project without them)."))
+            return
+        if not Item.objects.filter(tenant=tenant).exists():
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no 4.3 items — skipping 4.16 customer portal (its catalogue is a "
+                "projection over the item master and the StockMove ledger)."))
+            return
+
+        admin = self._admin(tenant)
+        now = timezone.now()
+
+        # Customers that actually HAVE orders, so the enabled account's pages are not empty by
+        # accident — an empty page is only informative when it is empty on purpose (see below).
+        ordered_by_customer = {}
+        for order in orders:
+            if order.customer_id:
+                ordered_by_customer.setdefault(order.customer_id, []).append(order)
+        if not ordered_by_customer:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: 4.5 orders exist but none names a customer — skipping 4.16."))
+            return
+
+        customer_ids = list(ordered_by_customer)
+        rich_customer = orders[0].customer
+        restricted_customer = next(
+            (o.customer for o in orders if o.customer_id != rich_customer.pk), rich_customer)
+
+        categories = list(ItemCategory.objects.filter(tenant=tenant).order_by("id")[:2])
+
+        # ---- 1. the fully-enabled account -------------------------------------------------------
+        rich = PortalAccount.objects.create(
+            tenant=tenant, customer=rich_customer, is_active=True,
+            stock_display="exact_quantity", low_stock_threshold=Decimal("10.0000"),
+            show_by_location=True,
+            catalog_scope="categories" if categories else "all_active",
+            price_basis="last_ordered", show_credit_and_balance=True,
+            preferred_channel="email",
+            welcome_message="Welcome to your order portal. Live stock, documents and delivery "
+                            "tracking are all here — raise an inquiry on any order and it reaches "
+                            "the same team that handles your account.",
+            support_email="support@example.com",
+            notes="Seeded demo account — every entitlement on, exact stock, category catalogue.",
+        )
+        if categories:
+            rich.catalog_categories.set(categories)
+
+        # ---- 2. the restricted account — the opposite of every switch above ---------------------
+        restricted = PortalAccount.objects.create(
+            tenant=tenant, customer=restricted_customer, is_active=True,
+            stock_display="availability_text", low_stock_threshold=Decimal("25.0000"),
+            show_by_location=False, catalog_scope="previously_ordered", price_basis="hidden",
+            can_view_invoices=False, show_credit_and_balance=False, can_request_returns=False,
+            preferred_channel="none",
+            notify_on_shipment=False, notify_on_delivery=False, notify_on_exception=True,
+            welcome_message="Your account portal.",
+            notes="Seeded demo account — restricted: no pricing, no invoices, no balance.",
+        ) if restricted_customer.pk != rich_customer.pk else None
+
+        # ---- 3. THE EMPTY ACCOUNT — enabled, never used ----------------------------------------
+        # Picked as a customer with NO orders where one exists, so its pages are genuinely empty
+        # rather than merely sparse. Falls back to skipping entirely rather than inventing a Party.
+        empty_customer = (Party.objects
+                          .filter(tenant=tenant, roles__role="customer")
+                          .exclude(pk__in=customer_ids)
+                          .order_by("id").first())
+        empty = None
+        if empty_customer is not None:
+            empty = PortalAccount.objects.create(
+                tenant=tenant, customer=empty_customer, is_active=True,
+                stock_display="band", catalog_scope="all_active", price_basis="hidden",
+                notes="Seeded demo account — DELIBERATELY EMPTY. No orders, no documents, no "
+                      "inquiries, never logged in. This is what a brand-new portal customer sees, "
+                      "and it is the state no smoke sweep in this project had ever rendered.",
+            )
+
+        # ---- the CRM login binding, so the gated pages are reachable in the demo -----------------
+        # get_or_create, and `portal_user` is a OneToOneField — pick a user with no binding yet
+        # rather than stealing one, and skip rather than fail when every candidate is already bound.
+        User = get_user_model()
+        bound = None
+        candidate = (User.objects.filter(tenant=tenant, crm_customer_portal_access__isnull=True)
+                     .order_by("id").first())
+        if candidate is not None:
+            bound, _ = CustomerPortalAccess.objects.get_or_create(
+                tenant=tenant, portal_user=candidate,
+                defaults={"customer_party": rich_customer, "can_submit_cases": True,
+                          "is_active": True, "accepted_at": now},
+            )
+
+        # ---- inquiries, every one through open_for() --------------------------------------------
+        rich_orders = ordered_by_customer.get(rich_customer.pk, orders)
+        first_order = rich_orders[0]
+        shipment = (Shipment.objects.filter(tenant=tenant, sales_order=first_order).first()
+                    or Shipment.objects.filter(tenant=tenant, direction="outbound").first())
+        line = first_order.lines.first()
+
+        wismo = PortalOrderInquiry.open_for(
+            tenant=tenant, portal_account=rich, user=admin, source="portal",
+            subject=f"Where is my order {first_order.number}?",
+            description="The tracking page has not moved for two days. Can you confirm it is still "
+                        "on schedule for the promised date?",
+            inquiry_type="wismo", requested_resolution="information",
+            sales_order=first_order,
+            **({"shipment": shipment} if shipment is not None
+               and shipment.sales_order_id == first_order.pk else {}),
+        )
+
+        short = None
+        if line is not None:
+            short = PortalOrderInquiry.open_for(
+                tenant=tenant, portal_account=rich, user=admin, source="portal",
+                subject=f"Short shipment on {first_order.number}",
+                description="Two units short against the packing list. Photographs of the pallet "
+                            "as delivered are attached to the delivery note.",
+                inquiry_type="short_shipment", requested_resolution="credit",
+                sales_order=first_order, sales_order_line=line,
+                quantity_affected=min(Decimal("2.0000"), line.quantity_ordered or Decimal("1")),
+            )
+            # Walked through the REAL verb, so `outcome`, `resolved_at` and the public reply all
+            # follow the shipped path rather than being typed onto the row.
+            short.resolve(admin, "credit_drafted",
+                          note="Credit raised for the two short units. Apologies for the shortfall.")
+
+        rma = ReturnAuthorization.objects.filter(tenant=tenant).order_by("id").first()
+        ret = PortalOrderInquiry.open_for(
+            tenant=tenant, portal_account=rich, user=admin, source="portal",
+            subject=f"Return request against {first_order.number}",
+            description="One unit is not required after all — unopened and in original packaging.",
+            inquiry_type="return_request", requested_resolution="return",
+            sales_order=first_order,
+        )
+        if rma is not None and rma.customer_id == rich_customer.pk:
+            # link_return refuses a cross-customer RMA, which is why the guard above is a real
+            # condition and not ceremony — 4.10's seeded RMA may belong to another party entirely.
+            ret.link_return(rma, admin)
+            rma_note = f", {ret.number} linked to {rma.number}"
+        else:
+            rma_note = f", {ret.number} left open (no RMA for this customer to link)"
+
+        # ---- document shares: live-with-expiry, live-forever, and revoked -----------------------
+        shares = []
+        invoice = Invoice.objects.filter(tenant=tenant, party=rich_customer).order_by("id").first()
+        if invoice is not None:
+            shares.append(PortalDocumentShare.objects.create(
+                tenant=tenant, portal_account=rich, doc_type="invoice", title="Invoice — latest",
+                invoice=invoice, shared_by=admin,
+                expires_at=now + datetime.timedelta(days=30)))
+        delivered = (Shipment.objects.filter(tenant=tenant, pod_received=True,
+                                             sales_order__customer=rich_customer).first())
+        if delivered is not None:
+            # No expiry ON PURPOSE — the never-expires branch has to render somewhere, and a POD is
+            # the honest example of a document a customer keeps.
+            shares.append(PortalDocumentShare.objects.create(
+                tenant=tenant, portal_account=rich, doc_type="pod",
+                title=f"Proof of delivery — {delivered.number}", shipment=delivered,
+                shared_by=admin))
+        if invoice is not None:
+            dead = PortalDocumentShare.objects.create(
+                tenant=tenant, portal_account=rich, doc_type="invoice",
+                title="Invoice — superseded copy", invoice=invoice, shared_by=admin,
+                expires_at=now + datetime.timedelta(days=7))
+            dead.revoke(admin)          # through the verb, so the conditional UPDATE is exercised
+            shares.append(dead)
+
+        # ---- activity: the rich account has a history, the empty one has none --------------------
+        # Written through record() so the single-writer path runs. created_at is auto_now_add, so
+        # these all land "now" rather than back-dated — the log is a sequence, and inventing dates
+        # would need a second writer bypassing record(), which is the thing record() exists to stop.
+        activity_targets = [
+            ("login", {}),
+            ("view_order", {"sales_order": first_order, "object_label": first_order.number}),
+            ("track_shipment", ({"shipment": shipment, "object_label": shipment.number}
+                                if shipment is not None else {})),
+            ("view_catalog", {}),
+            ("raise_inquiry", {"object_label": wismo.number}),
+            ("view_order", {"sales_order": first_order, "object_label": first_order.number}),
+            ("login", {}),
+            ("update_profile", {}),
+        ]
+        if shares:
+            activity_targets.append(
+                ("download_document", {"document_share": shares[0],
+                                       "object_label": shares[0].number}))
+        written = 0
+        for action, targets in activity_targets:
+            if PortalActivity.record(rich, action, user=candidate or admin, **targets) is not None:
+                written += 1
+        if restricted is not None:
+            PortalActivity.record(restricted, "login", user=candidate or admin)
+            PortalActivity.record(restricted, "view_catalog", user=candidate or admin)
+            written += 2
+
+        accounts = [a for a in (rich, restricted, empty) if a is not None]
+        self.stdout.write(
+            f"{tenant.name}: 4.16 customer portal — {len(accounts)} portal account(s) "
+            f"({rich.number} full, "
+            + (f"{restricted.number} restricted, " if restricted is not None else "")
+            + (f"{empty.number} DELIBERATELY EMPTY" if empty is not None
+               else "no spare customer for an empty account")
+            + f"), 3 inquiries via open_for(){rma_note}, {len(shares)} document share(s) "
+            f"(1 revoked via the verb), {written} activity row(s)"
+            + (f", portal login bound to {candidate.username}" if bound is not None
+               else ", no unbound user to give a portal login")
+            + ". No StockMove and no JournalEntry — 4.16 posts neither.")
