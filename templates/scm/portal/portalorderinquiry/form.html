@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — shared create/edit form for PortalOrderInquiry.
+
+Rendered by apps/scm/views/CustomerPortal/PortalOrderInquiries.py::portalorderinquiry_create (a
+HAND-ROLLED view, because PortalOrderInquiry.open_for() has to write the crm.Case before the row can
+be validated at all) and ::portalorderinquiry_edit (crud_edit, unchanged). Everything this page may
+read, and nothing else:
+
+  form                — PortalOrderInquiryForm (bound on POST)
+  is_edit             — False on create, True on edit
+  obj                 — the PortalOrderInquiry on the EDIT path only (crud_edit adds it;
+                        the hand-rolled create context does not), so every use of it below sits
+                        inside an is_edit branch and is never rendered bare
+  order_bound_labels  — a list of plain LABEL STRINGS (not dicts, not pairs): the inquiry types
+                        that clean() refuses without a sales order. Built by _order_bound_labels()
+                        off ORDER_BOUND_INQUIRY_TYPES — the same tuple the refusal branches on — so
+                        the hint below and the rule that rejects the submission cannot disagree.
+                        Each entry is a bare string printed as-is — there is no row key to reach for,
+                        which is the one thing to re-check if this ever renders as blanks.
+
+THE FIELD SET DIFFERS BY PATH, AND THAT IS THE POINT OF THIS PAGE
+  subject / description are NON-MODEL fields belonging to the crm.Case, and _InquiryFormBase.__init__
+  POPS them when the instance already has a pk. They are therefore rendered only under the
+  "not is_edit" branch — the same condition the form itself uses — because on edit they are ABSENT,
+  not read-only: a bound field that silently discards what the user typed is worse than no field, and
+  the conversation continues on the case's own thread (linked instead, below).
+
+  The eight MODEL fields are PortalOrderInquiryForm.Meta.fields in full and all eight are rendered:
+  portal_account / sales_order / sales_order_line / shipment / invoice / inquiry_type /
+  requested_resolution / quantity_affected. A field added to that whitelist but not to a group here
+  would never reach the POST — and on edit it would be silently blanked on every save.
+
+Six columns are deliberately absent and not one of them is an oversight. case / outcome /
+resolved_at / return_authorization / source / raised_by are all editable=False on the model, so
+Django omits them from every ModelForm automatically — a crafted
+`source=portal&raised_by=<pk>&outcome=rejected&case=<other pk>` in the POST body reaches
+cleaned_data for none of them, and open_for()'s CONTEXT_FIELDS whitelist refuses them a second time.
+`number` is auto-assigned on save (PIQ-), created_at / updated_at are automatic.
+
+Every refusal arrives as a FIELD error where it can, so each field renders its own errors through
+partials/form_field.html; form.non_field_errors is rendered at the very top of the form because
+_apply_validation_error() folds anything the form has no field for (an __all__ refusal, a `subject`
+complaint on a path where the field was popped) onto the form as a whole rather than raising a 500.
+The field-level refusals: sales_order (an order-bound type with no order), invoice (an invoice
+dispute naming no invoice), sales_order_line (a line from a different order), shipment (a parcel not
+linked to the named order), quantity_affected (no line to be a quantity of, or more units than the
+line sold), and the cross-tenant guard on any of the four scoped pointers.
+
+No badge class below is hand-picked: obj.inquiry_type_css / obj.outcome_css / obj.customer_status_css
+are the model's own properties (INQUIRY_TYPE_CSS / INQUIRY_OUTCOME_CSS / CUSTOMER_STATUS_MAP), which
+is what keeps this page, the list chip and the detail chip the same colour. badge-success /
+badge-warning / badge-danger do not exist in theme.css and render unstyled (L33).
+
+obj.age_days is DERIVED and is None on an unsaved row, so it goes through |default_if_none:"—" —
+|default would swallow a genuine 0, and an inquiry filed this morning is a real zero, not a blank.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Order Inquiry{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Order Inquiry</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portalorderinquiry_list' %}">Order Inquiries</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        This form corrects what the inquiry is <span class="fw-600">about</span> — the order, the line, the parcel, the invoice, the claim. It cannot touch the outcome, the provenance or the case, so nothing here can quietly re-open a closed inquiry or restate who raised it. That is also why editing stays available in <span class="fw-600">every</span> outcome, resolved ones included: discovering after the fact that a damage claim was filed against the wrong line is a correction somebody has to be able to make.
+      {% else %}
+        An inquiry is a <span class="fw-600">crm.Case wrapped in supply-chain context</span> — the thing a plain support ticket cannot say. Saving opens both at once: the case carries the conversation, the SLA clocks, ownership and CSAT, and this row carries the order, the line, the parcel and the claim. The PIQ- number is assigned on save, so there is no number field here.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="card"><div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      </div></div>
+    {% endif %}
+
+    {% if is_edit %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The conversation lives on the case</h2>
+          <span class="badge {{ obj.inquiry_type_css }}">{{ obj.get_inquiry_type_display }}</span>
+        </div>
+        <div class="card-body">
+          <p class="form-help" style="margin:0 0 .9rem;">
+            The subject and the description are the <span class="fw-600">case's</span> columns, not this row's, and they are typed once when the inquiry is opened. This form does not show them read-only, because a field that collects text nobody writes anywhere is worse than no field: everything said to the customer after that first message belongs on the case thread, which is CRM's page and the only place with the reply box, the public/internal distinction and the SLA response clock attached.
+          </p>
+          {% if obj.case_id %}
+            <div class="table-wrap">
+              <table class="table">
+                <tbody>
+                  <tr><td class="fw-600">Case</td><td class="mono">{{ obj.case.number }}</td></tr>
+                  <tr><td class="fw-600">Subject</td><td>{{ obj.case.subject }}</td></tr>
+                  <tr><td class="fw-600">Internal status</td><td>{{ obj.case.get_status_display }}</td></tr>
+                  <tr><td class="fw-600">Customer sees</td><td><span class="badge {{ obj.customer_status_css }}">{{ obj.customer_status_label }}</span></td></tr>
+                  <tr><td class="fw-600">Days since raised</td><td>{{ obj.age_days|default_if_none:"—" }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="form-actions">
+              <a href="{% url 'crm:case_detail' obj.case.pk %}" class="btn btn-outline"><i data-lucide="message-square"></i> Open the case thread</a>
+            </div>
+            <div class="form-help" style="margin-top:.35rem;">
+              The two statuses are printed side by side deliberately. <span class="fw-600">{{ obj.case.get_status_display }}</span> is the agent queue's word for this ticket; <span class="fw-600">{{ obj.customer_status_label }}</span> is what the customer is actually being shown, because the triage states collapse to one customer word on the portal. Reading only the first is how somebody tells a customer their ticket is in progress while the portal has been asking them for a reply for three days.
+            </div>
+          {% else %}
+            <div class="empty-state">This inquiry has no case attached, which should not be possible — the case pointer is NOT NULL and is written by open_for(). Nothing on this form can repair it.</div>
+          {% endif %}
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">The support case</h2>
+          <span class="badge badge-info">Opened server-side, with this row</span>
+        </div>
+        <div class="card-body">
+          <p class="form-help" style="margin:0 0 .9rem;">
+            These two boxes are the only part of the case anybody types. Everything else about it is <span class="fw-600">derived</span> when the row is saved, by the one method allowed to create a case — which is what stops a console inventing a ticket type, and a portal user filing against a company that is not theirs. The case and the inquiry are written in a single transaction, so a submission this form refuses leaves <span class="fw-600">no</span> orphaned, customer-visible ticket sitting in the CRM queue.
+          </p>
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.subject %}
+          </div>
+          <div class="form-grid">
+            {% include "partials/form_field.html" with field=form.description %}
+          </div>
+          <div class="table-wrap" style="margin-top:1rem;">
+            <table class="table">
+              <thead><tr><th>Set on the case</th><th>How, and why it is not typeable</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="fw-600">Origin</td>
+                  <td>Recorded as the <span class="fw-600">portal</span> channel whoever files it — origin says which queue this came through, and it is a separate fact from whether the customer or an agent typed the words. Guessing "phone" for a staff-filed row would be a guess written into somebody else's reporting.</td>
+                </tr>
+                <tr>
+                  <td class="fw-600">SLA policy</td>
+                  <td>The workspace's <span class="fw-600">default active</span> policy, resolved at the moment the case is opened. It is applied here rather than by the case itself, which only computes deadlines from a policy already set — without this step every portal ticket would land with no clock at all. If no default policy exists, the inquiry honestly reads <span class="badge badge-muted">No SLA policy</span> rather than pretending to be on track.</td>
+                </tr>
+                <tr>
+                  <td class="fw-600">Case type</td>
+                  <td>Derived from the inquiry type you pick below, so the CRM breakdown and the supply-chain breakdown answer the same question the same way.</td>
+                </tr>
+                <tr>
+                  <td class="fw-600">Customer</td>
+                  <td>The portal account's customer when there is one, otherwise the customer on the order named below. A case attached to nobody is invisible on every account page that would need it.</td>
+                </tr>
+                <tr>
+                  <td class="fw-600">Raised by / source</td>
+                  <td>Stamped as <span class="fw-600">staff</span> and as you. This is the denominator of every self-service figure the portal reports, so it is forced rather than offered — a provenance a user can type is not one.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="form-help" style="margin-top:.75rem;">
+            The subject is what the customer sees as the title of their ticket, and it is required — a case with no subject is a row nobody can find. Long descriptions are trimmed to fit the case's column rather than rejected.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Who it is for</h2>
+        <span class="badge badge-muted">Optional</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Leave this blank when you are filing for a customer who is not on the portal — the inquiry is still recorded, it simply has no portal account behind it, and the case is attached to the customer on the order instead. What the account adds is the <span class="fw-600">self-service</span> half of the story: it is the login that could have answered this question without you, and the reason the queue can tell "our portal is not working" apart from "our portal is not adopted".
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.portal_account %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What was reported, and what was asked for</h2>
+        <span class="badge badge-info">Two questions, not one</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The <span class="fw-600">type</span> is what went wrong; the <span class="fw-600">requested resolution</span> is what the customer wants done about it. They are recorded separately because "my box arrived damaged, just credit me" is a different job from the same damage with "send another one", and an agent who has to infer the ask guesses wrong. Both are closed sets on purpose: which failure mode drives the volume is then a total anyone can compute, rather than a pile of free text nobody can add up.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.inquiry_type %}
+          {% include "partials/form_field.html" with field=form.requested_resolution %}
+        </div>
+        {% if order_bound_labels %}
+          <div class="form-help" style="margin-top:.35rem;">
+            These types are refused without an order, because each of them is a question about a specific purchase and none can ever join to a shipment on its own:
+            {% for label in order_bound_labels %}<span class="fw-600">{{ label }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}.
+            An <span class="fw-600">invoice dispute</span> has its own version of that rule and needs the invoice named instead. The rest — a quality question, a return, a product question — may legitimately be about goods rather than about an order, so they are left free.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The supply-chain context</h2>
+        <span class="badge badge-slate">Pointers, not copies</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          This block is the entire reason the model exists — it is what a plain support ticket cannot say. Every one of these is a <span class="fw-600">pointer at a document another sub-module owns</span>: the order and the line belong to order management, the parcel to transportation, the invoice to receivables. Nothing here copies a figure out of them, so none of it can go stale, and nothing on this page edits them either.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.sales_order %}
+          {% include "partials/form_field.html" with field=form.sales_order_line %}
+          {% include "partials/form_field.html" with field=form.shipment %}
+          {% include "partials/form_field.html" with field=form.invoice %}
+        </div>
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Pairing</th><th>What the save refuses, and what it would otherwise let through</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="fw-600">Line vs. order</td>
+                <td>A line always has a parent, so a line that is not the named order's is rejected — and so is a line attached to an inquiry naming no order at all. Without that one comparison, a short-shipment claim can quote a quantity against another customer's line.</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Parcel vs. order</td>
+                <td>Checked only when an order is named: attaching a parcel that is not linked to it asserts "this shipment is part of that order" with nothing in the data behind the claim. An order-less inquiry — a quality question about goods already delivered — may still name the parcel.</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Anything from another workspace</td>
+                <td>Refused at the model boundary as well as narrowed in these dropdowns. A narrowed select is how the page helps; it has never been what holds against a crafted submission.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          None of the four is narrowed to open or recent documents. An inquiry is very often filed precisely <em>because</em> the order closed, the parcel was delivered or the invoice went out — the subject being finished is the reason somebody is arguing about it.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">How much is claimed</h2>
+        <span class="badge badge-amber">Needs a line</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Fill this in for a short shipment or a damage claim, and leave it blank for everything else — blank means "the whole thing, or not a quantity question at all", which is a real answer rather than a gap. It is refused without a line, because a quantity has to be a quantity <em>of</em> something, and it is refused above what that line ordered: a claim covering more units than were sold is a credit note waiting to be written for goods that never existed.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.quantity_affected %}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'scm:portalorderinquiry_detail' obj.pk %}{% else %}{% url 'scm:portalorderinquiry_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving changes the context and nothing else, then returns you to the queue. The outcome stays <span class="badge {{ obj.outcome_css }}">{{ obj.get_outcome_display }}</span>: <span class="fw-600">Resolve</span>, <span class="fw-600">Reopen</span> and <span class="fw-600">Raise return</span> are buttons on the inquiry's own page, each with its consequence printed beside it, and deliberately not a dropdown on this form. An outcome somebody picks while fixing a typo in a line reference is a label, not an outcome — and it is also the answer a customer was given.
+      {% else %}
+        Saving opens the inquiry and its case together and takes you straight to the triage page, because that is where the three verbs live and triaging is the next thing anyone does. The inquiry starts <span class="badge badge-amber">Open</span> — the normal state of a row a minute after it was filed — and only those verbs ever move it.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
