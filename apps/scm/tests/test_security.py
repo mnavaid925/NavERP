@@ -6457,3 +6457,265 @@ class TestAssetManagementInlineChildIsolation:
                          "scm:maintenanceworkorderpart_delete"):
             with pytest.raises(NoReverseMatch):
                 reverse(url_name, args=[1])
+
+# The 4.14 date helpers are module-level functions in conftest.py rather than fixtures, so pytest
+# does not inject them. Imported, not re-declared: test_suite_hygiene.py fails the suite on a
+# duplicate module-level name.
+from apps.scm.tests.conftest import _labor_moment, _labor_workday  # noqa: E402
+
+
+# =================================================================================================
+# SCM 4.14 Labor Management — auth, tenant isolation, method gates and people-data privacy.
+#
+# Three things need naming before the tests below read correctly.
+#
+# TWO of the five tables cannot be reached by their own tenant column. `LaborPlanLine` has NO tenant
+# field at all and is scoped through `plan__tenant`; `LaborActivity` is scoped through BOTH its own
+# tenant AND `session__tenant`. On those, a bare pk lookup is a cross-tenant read or WRITE with no
+# query anywhere that would reveal it — the parent join IS the authorization check, so each gets its
+# own IDOR test rather than being assumed covered by its parent's.
+#
+# THIRTEEN routes are @tenant_admin_required, and `labor_scorecard` is one of them — it RANKS named
+# colleagues against each other with a coaching band attached, and there is no version of that
+# scoped to one person which is still a ranking. House policy for a workspace-wide roll-up over
+# people is admin-only (hrm's cost / leave-liability / executive reports all are).
+#
+# `labor_payroll_export` is deliberately NOT gated, and that asymmetry is the subtlest thing here.
+# It is a sidebar destination and `resolve_nav` has no per-link permission concept, so gating it
+# would hand every member a bullet that 403s (L32). Instead the ROWS narrow: an admin sees the
+# workspace, everyone else sees only themselves. Two things had to be right for that to hold and
+# both are tested — a member with no linked Party must see NOTHING (a `None` worker id means "no
+# filter" to the aggregate and would have returned the whole floor), and the worker DROPDOWN must
+# narrow too, because listing every colleague by name in a <select> leaks exactly the roster the
+# table just hid.
+# =================================================================================================
+
+#: Every 4.14 route that is @tenant_admin_required, as (url_name, fixture_name). A member POSTing
+#: any of these is 403. Kept as one list so the count assertion below fails if a route is added or
+#: gated later without this file noticing.
+_LABOR_ADMIN_ONLY = [
+    ("scm:laborstandard_delete", "labor_standard_a"),
+    ("scm:laborstandard_activate", "draft_standard_a"),
+    ("scm:laborstandard_archive", "labor_standard_a"),
+    ("scm:laborsession_delete", "labor_session_a"),
+    ("scm:laborsession_approve", "labor_session_a"),
+    ("scm:laborsession_reopen", "labor_session_a"),
+    ("scm:laborsession_cancel", "labor_session_a"),
+    ("scm:laboractivity_delete", "labor_activity_a"),
+    ("scm:laborplan_delete", "labor_plan_a"),
+    ("scm:laborplan_generate", "labor_plan_a"),
+    ("scm:laborplan_approve", "labor_plan_a"),
+]
+# NOTE `laborplan_archive` is deliberately NOT on that list. Archiving a plan is the SAFE move —
+# every line, every snapshot and the approval stamp survive and the plan simply stops being live —
+# so it is @login_required while `laborplan_delete` is admin-gated. That asymmetry is the point of
+# having both verbs: refusing a planner the safe one only pushes them towards asking an
+# administrator for the destructive one. Pinned by its own test below so it is not "tidied" into
+# matching its siblings.
+
+#: Every 4.14 verb, as (url_name, needs_pk). A GET must be 405 on all of them — a state change
+#: reachable by typing a URL is a state change a link, a prefetch or a crawler can trigger.
+_LABOR_VERBS = [
+    ("scm:laborstandard_activate", True), ("scm:laborstandard_archive", True),
+    ("scm:laborstandard_delete", True),
+    ("scm:laborsession_clock_in", False), ("scm:laborsession_clock_out", True),
+    ("scm:laborsession_close", True), ("scm:laborsession_approve", True),
+    ("scm:laborsession_reopen", True), ("scm:laborsession_cancel", True),
+    ("scm:laborsession_delete", True),
+    ("scm:laboractivity_delete", True),
+    ("scm:laborplan_generate", True), ("scm:laborplan_approve", True),
+    ("scm:laborplan_archive", True), ("scm:laborplan_delete", True),
+    ("scm:labor_board_assign", False), ("scm:labor_board_unassign", False),
+]
+
+
+class TestLaborCrossTenantIsolation:
+    """A tenant-A admin against tenant-B rows: 404 everywhere, children included."""
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:laborstandard_detail", "labor_standard_b"),
+        ("scm:laborstandard_edit", "labor_standard_b"),
+        ("scm:laborsession_detail", "labor_session_b"),
+        ("scm:laborsession_edit", "labor_session_b"),
+        ("scm:laboractivity_detail", "labor_activity_b"),
+        ("scm:laboractivity_edit", "labor_activity_b"),
+        ("scm:laborplan_detail", "labor_plan_b"),
+        ("scm:laborplan_edit", "labor_plan_b"),
+        ("scm:laborplanline_edit", "labor_plan_line_b"),
+        ("scm:laborsession_add_activity", "labor_session_b"),
+    ])
+    def test_a_foreign_pk_is_404_on_every_get_route(self, client_a, request, url_name,
+                                                    fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        assert client_a.get(reverse(url_name, args=[obj.pk])).status_code == 404
+
+    @pytest.mark.parametrize("url_name,fixture_name", [
+        ("scm:laborstandard_activate", "labor_standard_b"),
+        ("scm:laborstandard_archive", "labor_standard_b"),
+        ("scm:laborstandard_delete", "labor_standard_b"),
+        ("scm:laborsession_clock_out", "labor_session_b"),
+        ("scm:laborsession_close", "labor_session_b"),
+        ("scm:laborsession_approve", "labor_session_b"),
+        ("scm:laborsession_delete", "labor_session_b"),
+        ("scm:laboractivity_delete", "labor_activity_b"),
+        ("scm:laborplan_generate", "labor_plan_b"),
+        ("scm:laborplan_approve", "labor_plan_b"),
+        ("scm:laborplan_delete", "labor_plan_b"),
+    ])
+    def test_a_foreign_pk_is_404_on_every_verb(self, client_a, request, url_name, fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        assert client_a.post(reverse(url_name, args=[obj.pk])).status_code == 404
+
+    def test_the_tenant_less_plan_line_is_scoped_through_its_PLAN(self, client_a,
+                                                                  labor_plan_line_b):
+        """LaborPlanLine has no tenant column, so `plan__tenant` is the only thing guarding it."""
+        assert client_a.get(
+            reverse("scm:laborplanline_edit", args=[labor_plan_line_b.pk])).status_code == 404
+        assert client_a.post(
+            reverse("scm:laborplanline_edit", args=[labor_plan_line_b.pk]),
+            {"planned_headcount": "9"}).status_code == 404
+
+    def test_a_foreign_row_is_never_in_a_list(self, client_a, labor_standard_a, labor_standard_b):
+        html = client_a.get(reverse("scm:laborstandard_list")).content.decode()
+        assert labor_standard_a.number in html
+        assert labor_standard_b.name not in html
+
+
+class TestLaborTenantAdminGates:
+    """The thirteen privileged routes, and the count that catches a fourteenth."""
+
+    @pytest.mark.parametrize("url_name,fixture_name", _LABOR_ADMIN_ONLY)
+    def test_a_plain_member_is_403(self, member_client, request, url_name, fixture_name):
+        obj = request.getfixturevalue(fixture_name)
+        assert member_client.post(reverse(url_name, args=[obj.pk])).status_code == 403
+
+    @pytest.mark.parametrize("url_name", ["scm:labor_board_assign", "scm:labor_board_unassign"])
+    def test_a_member_cannot_write_another_sub_modules_table(self, member_client, url_name):
+        """The board verbs write 4.4's assigned_to, which is why they are admin-gated."""
+        assert member_client.post(reverse(url_name), {"task_kind": "pick"}).status_code == 403
+
+    def test_the_scorecard_is_admin_only(self, member_client):
+        """It ranks named colleagues — there is no per-person version that is still a ranking."""
+        assert member_client.get(reverse("scm:labor_scorecard")).status_code == 403
+
+    def test_a_member_CAN_archive_a_plan(self, member_client, labor_plan_a):
+        """The deliberate exception, pinned. Archiving destroys nothing, so a planner may do it;
+        deleting is the admin-gated one. Making these two match would remove the reason both
+        exist."""
+        assert member_client.post(
+            reverse("scm:laborplan_archive", args=[labor_plan_a.pk])).status_code == 302
+        labor_plan_a.refresh_from_db()
+        assert labor_plan_a.status == "archived"
+
+    def test_but_a_member_still_cannot_DELETE_that_plan(self, member_client, labor_plan_a):
+        assert member_client.post(
+            reverse("scm:laborplan_delete", args=[labor_plan_a.pk])).status_code == 403
+
+    def test_the_admin_gated_set_is_exactly_fourteen_routes(self):
+        """A count, so adding a route without gating it — or gating one silently — fails here."""
+        names = {n for n, _ in _LABOR_ADMIN_ONLY}
+        names |= {"scm:labor_board_assign", "scm:labor_board_unassign", "scm:labor_scorecard"}
+        assert len(names) == 14, sorted(names)
+
+
+class TestLaborPayrollExportPrivacy:
+    """The export names people, so who may read whose figures is the security question."""
+
+    @pytest.fixture
+    def approved_shift(self, db, client_a, labor_activity_a, labor_session_a):
+        client_a.post(reverse("scm:laborsession_clock_out", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_close", args=[labor_session_a.pk]))
+        client_a.post(reverse("scm:laborsession_approve", args=[labor_session_a.pk]))
+        labor_session_a.refresh_from_db()
+        return labor_session_a
+
+    def test_an_admin_sees_the_worker(self, client_a, approved_shift):
+        html = client_a.get(reverse("scm:labor_payroll_export")).content.decode()
+        assert approved_shift.worker.name in html
+
+    def test_a_member_still_gets_200_because_it_is_a_sidebar_bullet(self, member_client,
+                                                                   approved_shift):
+        """Gating it would hand every member a sidebar bullet that 403s (L32)."""
+        assert member_client.get(reverse("scm:labor_payroll_export")).status_code == 200
+
+    def test_a_member_sees_NO_colleague_name_in_the_html(self, member_client, approved_shift):
+        html = member_client.get(reverse("scm:labor_payroll_export")).content.decode()
+        assert approved_shift.worker.name not in html
+
+    def test_a_member_sees_NO_colleague_name_in_the_csv(self, member_client, approved_shift):
+        resp = member_client.get(reverse("scm:labor_payroll_export"), {"format": "csv"})
+        body = (b"".join(resp.streaming_content).decode() if resp.streaming
+                else resp.content.decode())
+        assert approved_shift.worker.name not in body
+
+    def test_a_member_with_no_linked_party_sees_no_rows_at_all(self, member_client,
+                                                              approved_shift):
+        """The sentinel case. A `None` worker id means "no filter" to `_worker_aggregate`, so
+        falling through with None here would have handed a member the ENTIRE workspace — through
+        the very branch written to narrow them to themselves."""
+        resp = member_client.get(reverse("scm:labor_payroll_export"))
+        assert resp.status_code == 200
+        assert not resp.context["rows"]
+
+    def test_the_worker_dropdown_narrows_too(self, member_client, approved_shift):
+        """Narrowing the table while listing every colleague in a <select> leaks the roster."""
+        resp = member_client.get(reverse("scm:labor_payroll_export"))
+        names = [str(w) for w in resp.context["workers"]]
+        assert approved_shift.worker.name not in " ".join(names)
+
+
+class TestLaborMethodGates:
+    """A GET to a verb is 405 — a state change must not be reachable by typing a URL."""
+
+    @pytest.mark.parametrize("url_name,needs_pk", _LABOR_VERBS)
+    def test_get_to_every_verb_is_405(self, client_a, labor_standard_a, labor_session_a,
+                                      labor_activity_a, labor_plan_a, url_name, needs_pk):
+        args = [1] if needs_pk else []
+        assert client_a.get(reverse(url_name, args=args)).status_code == 405
+
+
+class TestLaborAnonymousRedirect:
+    """Nothing in 4.14 is public — every route sends an anonymous visitor to the login page."""
+
+    @pytest.mark.parametrize("url_name", [
+        "scm:laborstandard_list", "scm:laborsession_list", "scm:laboractivity_list",
+        "scm:laborplan_list", "scm:labor_board", "scm:labor_payroll_export",
+        "scm:labor_scorecard", "scm:laborstandard_create", "scm:laborsession_create",
+        "scm:laborplan_create",
+    ])
+    def test_anonymous_is_redirected(self, db, url_name):
+        resp = Client().get(reverse(url_name))
+        assert resp.status_code == 302
+        assert "/login" in resp["Location"] or "/accounts/" in resp["Location"]
+
+
+class TestLaborCsvInjection:
+    """A worker's NAME reaches a spreadsheet cell, and a name is user-supplied."""
+
+    @pytest.mark.parametrize("hostile", ["=cmd|'/c calc'!A0", "+1+1", "-1+1", "@SUM(A1)"])
+    def test_a_formula_prefixed_name_is_neutralised(self, client_a, tenant_a, location_a,
+                                                    hostile):
+        from apps.core.models import Party, PartyRole
+        from apps.scm.models import LaborActivity, LaborSession
+
+        party = Party.objects.create(tenant=tenant_a, name=hostile, kind="person")
+        PartyRole.objects.create(tenant=tenant_a, party=party, role="employee")
+        start = _labor_moment(hours_ago=9)
+        s = LaborSession(tenant=tenant_a, worker=party, location=location_a,
+                         work_date=_labor_workday(start), clock_in=start,
+                         clock_out=start + datetime.timedelta(minutes=480))
+        s.save()
+        LaborActivity.objects.create(tenant=tenant_a, session=s, activity_type="pick",
+                                     started_at=start,
+                                     ended_at=start + datetime.timedelta(minutes=60),
+                                     quantity=Decimal("10"))
+        s.status = "approved"
+        s.save(update_fields=["status", "updated_at"])
+
+        resp = client_a.get(reverse("scm:labor_payroll_export"), {"format": "csv"})
+        body = (b"".join(resp.streaming_content).decode() if resp.streaming
+                else resp.content.decode())
+        for line in body.splitlines():
+            for cell in line.split(","):
+                bare = cell.strip().strip('"')
+                assert not bare.startswith(("=", "+", "-", "@")), bare
