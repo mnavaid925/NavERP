@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — Order Tracking (NavERP bullet 1). A STAFF console.
+
+Renders apps/scm/views/CustomerPortal/Reports.py::portal_order_tracking. Everything this page may
+read, and nothing else (the view pins the identical list in its module docstring):
+
+  rows row_count page_obj                         the joined order rows + paginate()
+  exception_row_count delayed_row_count           counted over THIS PAGE, never the whole set —
+  unshipped_row_count awaiting_pod_count          every tile below says so out loud
+  q portal_account carrier status shipment_status  the RAW echoed GET values
+  state portal_active date_from date_to
+  portal_accounts carriers                        querysets behind the two pk dropdowns
+  status_choices shipment_status_choices
+  state_choices portal_active_choices
+  tracking_note generated_at no_tenant no_tenant_note
+
+ORDER ROW dict — these names come from the row loop in portal_order_tracking() together with
+_line_figures() / _shipment_rows() / _row_state() / _pod_state(), NOT from the 4.5 model fields. A
+guessed key renders as a silent blank and the page still returns 200 (L41):
+
+  obj pk number url customer customer_id status status_label is_held hold_reason
+  order_date requested_date promised_date portal_account portal_account_number portal_active
+  line_count lines quantity_ordered quantity_allocated quantity_backordered backordered_line_count
+  shipments shipment_count cancelled_shipment_count eta delivered_count delayed_count
+  exception_count exception_reason state state_label state_css pod_state pod_label pod_css
+  pod_received_at
+
+SHIPMENT dict (built by _shipment_rows(), one per LIVE shipment — cancelled ones are counted into
+cancelled_shipment_count and deliberately not listed):
+
+  obj pk number url status status_label mode_label carrier tracking_number current_status_text
+  last_known_location eta planned_delivery_date is_delayed pod_received pod_received_at
+  exception_reason
+
+ORDER LINE dict (built by _line_figures()):
+
+  pk sku description quantity_ordered quantity_allocated quantity_backordered is_backordered
+
+THE EXCEPTION COLUMN PRINTS A SENTENCE, NEVER A CODE. exception_reason is already the
+customer-readable wording — EXCEPTION_REASONS / UNEXPLAINED_EXCEPTION_REASON / DERIVED_DELAY_REASON
+resolved by _shipment_reason(). This template must not reach for the event type or call
+get_event_type_display(): "Customs Hold" is a label for whoever wrote the integration, not an answer
+to "where is my order", and the whole point of the map is that one sentence is said in one place.
+
+BADGE CLASSES. state_css and pod_css are handed down by the view (TRACKING_STATE_CSS /
+POD_STATE_CSS) so this page invents no colour for the two roll-up chips. SalesOrder and Shipment
+expose no *_css helper of their own, so their status chips take the neutral badge-slate rather than
+a hand-picked mapping this template could not keep in step — the delay and the exception are carried
+by their OWN chips, which read the view's booleans (is_delayed, exception_count) instead of
+re-deriving _row_state()'s rule per shipment. theme.css ships COLOUR-named badges only:
+badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate. badge-success /
+badge-warning / badge-danger do not exist and render completely unstyled (L33).
+
+EVERY None IS AN EM DASH, NEVER A 0 AND NEVER A BLANK. eta, promised_date, requested_date and
+pod_received_at are all nullable, and "no shipment carries an ETA" is a different fact from "it
+arrives today". The date filter returns "" for None, so the tests below are `{% if %}` blocks rather
+than |default_if_none chained after |date, which would never see the None at all.
+
+NO EDIT AND NO DELETE ON A ROW. This page owns nothing: 4.5 owns the order, 4.6 owns the shipment
+and its tracking events, and the view writes not one row — not even a PortalActivity, because a
+member of staff opening a staff console is not a customer read. The eye opens the real record. There
+is therefore no destructive control and no confirm() on this page at all (L42 has nothing to guard).
+
+hold_reason is INTERNAL credit/fraud text written by 4.5's submit evaluation. It is shown here
+because this is a staff console, and it must never be echoed onto a customer-facing portal page.
+Nothing on this page is |safe: the reason, the customer name and every note are escaped.
+
+public_token is not read, not linked and not printed anywhere on this page — it is a bearer
+credential, and the portal account is reached only through its own pk.
+{% endcomment %}
+{% block title %}Order Tracking{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Order Tracking</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:portalaccount_list' %}">Customer Portal</a><span class="sep">›</span>
+        <span>Order Tracking</span>
+      </div>
+      <p class="text-muted">
+        Every open order belonging to a customer with a <span class="fw-600">portal account</span>, with what is
+        allocated against it, where its parcels are, when they are expected, what has gone wrong and whether the
+        proof of delivery is in — <span class="fw-600">on one row</span>. The order list has no shipment column and
+        the shipment list has no backorder figure, so today this question is answered by opening two lists and
+        reconciling them by order number. The join is the page.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portalorderinquiry_list' %}" class="btn btn-outline"><i data-lucide="messages-square"></i> Order Inquiries</a>
+      <a href="{% url 'scm:portal_catalog_preview' %}" class="btn btn-outline"><i data-lucide="eye"></i> Catalog Preview</a>
+      <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Portal Activity</a>
+      <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-primary"><i data-lucide="users"></i> Portal Accounts</a>
+    </div>
+  </div>
+
+  {% if no_tenant %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="building"></i>
+          <h3>No workspace on this login</h3>
+          <p>{{ no_tenant_note }}</p>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    The four counters are taken from the CURRENT PAGE, because the state verdict is a per-row
+    computation the page is built to do once. Saying "on this page" is not a hedge — a tile silently
+    reporting page 2 of 6 as the whole workspace is how somebody concludes there are three
+    exceptions when there are thirty. The `state` filter is how the whole-set question is asked: it
+    narrows in SQL and the paginator then reports the real total.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="package-search"></i></div>
+      <div class="stat-value">{{ row_count }}</div>
+      <div class="stat-label">Order{{ row_count|pluralize }} on this page — {{ page_obj.paginator.count }} matching in total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ exception_row_count }}</div>
+      <div class="stat-label">Exceptions on this page — a carrier has reported a problem somebody has to pick up</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ delayed_row_count }}</div>
+      <div class="stat-label">Delayed on this page — past the delivery date we planned for, still moving</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="package-x"></i></div>
+      <div class="stat-value">{{ unshipped_row_count }}</div>
+      <div class="stat-label">Not shipped yet on this page — no live shipment raised against the order</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="file-clock"></i></div>
+      <div class="stat-value">{{ awaiting_pod_count }}</div>
+      <div class="stat-label">Delivered on this page with the proof of delivery still outstanding — the row a billing dispute turns on</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ tracking_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">Reads 4.5 orders, 4.3 allocation and 4.6 shipments live</span>
+        <span class="badge badge-slate">Writes nothing — not a stock move, not a journal entry, not an activity log</span>
+        <span class="badge badge-muted">Only customers with a portal account appear here</span>
+        <span class="badge badge-slate"><i data-lucide="clock"></i> As at {{ generated_at|date:"M d, Y H:i" }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filter the console</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} order{{ page_obj.paginator.count|pluralize }} matching</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="ot-q">Search</label>
+          <input type="text" id="ot-q" name="q" value="{{ q }}" class="form-input"
+                 placeholder="Order number, customer name or carrier tracking number…">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-account">Portal account</label>
+          {% comment %}
+            pk dropdown — |stringformat:"d", NEVER |slugify. The view matches through the ACCOUNT's
+            own row with the tenant term travelling alongside the pk, so a foreign id matches nothing
+            rather than widening the page.
+          {% endcomment %}
+          <select name="portal_account" id="ot-account" class="form-select">
+            <option value="">Every portal customer</option>
+            {% for a in portal_accounts %}
+              <option value="{{ a.pk }}" {% if portal_account == a.pk|stringformat:"d" %}selected{% endif %}>
+                {{ a }}{% if not a.is_active %} (switched off){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-state">Tracking state</label>
+          <select name="state" id="ot-state" class="form-select">
+            <option value="">Any state</option>
+            {% for value, label in state_choices %}
+              <option value="{{ value }}" {% if state == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-status">Order status</label>
+          <select name="status" id="ot-status" class="form-select">
+            <option value="">Any tracked status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-shipment-status">Shipment status</label>
+          <select name="shipment_status" id="ot-shipment-status" class="form-select">
+            <option value="">Any shipment status</option>
+            {% for value, label in shipment_status_choices %}
+              <option value="{{ value }}" {% if shipment_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-carrier">Carrier</label>
+          <select name="carrier" id="ot-carrier" class="form-select">
+            <option value="">Any carrier</option>
+            {% for c in carriers %}
+              <option value="{{ c.pk }}" {% if carrier == c.pk|stringformat:"d" %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-portal-active">Portal switch</label>
+          <select name="portal_active" id="ot-portal-active" class="form-select">
+            <option value="">On or off</option>
+            {% for value, label in portal_active_choices %}
+              <option value="{{ value }}" {% if portal_active == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-date-from">Ordered from</label>
+          <input type="date" id="ot-date-from" name="date_from" value="{{ date_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ot-date-to">Ordered to</label>
+          <input type="date" id="ot-date-to" name="date_to" value="{{ date_to }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+          <a href="{% url 'scm:portal_order_tracking' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        A value that is not a real id, a status this console does not track or a date that will not parse
+        <span class="fw-600">drops the filter</span> rather than emptying the page — a stale bookmark must never
+        render "there is nothing to chase". Draft, cancelled and closed orders are outside this console
+        altogether, so they are not offered above.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Open orders</h2>
+      <div class="badge-group">
+        {% if exception_row_count %}<span class="badge badge-red">{{ exception_row_count }} exception{{ exception_row_count|pluralize }} on this page</span>{% endif %}
+        {% if delayed_row_count %}<span class="badge badge-amber">{{ delayed_row_count }} delayed on this page</span>{% endif %}
+        {% if awaiting_pod_count %}<span class="badge badge-amber">{{ awaiting_pod_count }} awaiting proof of delivery</span>{% endif %}
+        <span class="badge badge-muted">Newest order date first</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Customer</th>
+            <th>Promised</th>
+            <th>Fulfilment</th>
+            <th>Shipment</th>
+            <th>ETA</th>
+            <th>Exception</th>
+            <th>Proof of delivery</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>
+                <a href="{{ r.url }}" class="fw-600 mono">{{ r.number|default:"—" }}</a>
+                <div class="form-help">
+                  {% if r.order_date %}Ordered {{ r.order_date|date:"M d, Y" }}{% else %}No order date{% endif %}
+                </div>
+                <div>
+                  {% comment %}
+                    SalesOrder has no status_css helper, so the neutral badge-slate rather than a
+                    colour mapping invented here that 4.5 would not know it had to keep in step with.
+                    The `{% else %}` falls back to the model's own display method, exactly as the
+                    house rule requires, for the case where the view ever hands over a bare value.
+                  {% endcomment %}
+                  <span class="badge badge-slate">{{ r.status_label|default:r.obj.get_status_display }}</span>
+                  {% if r.is_held %}
+                    <span class="badge badge-red">On hold</span>
+                  {% endif %}
+                </div>
+                {% if r.is_held and r.hold_reason %}
+                  {% comment %}
+                    INTERNAL credit / fraud wording. Staff console only — never echo this onto a
+                    customer-facing portal page. Escaped, like everything else here.
+                  {% endcomment %}
+                  <div class="form-help">{{ r.hold_reason }}</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="fw-600">{% if r.customer %}{{ r.customer }}{% else %}—{% endif %}</span>
+                <div class="form-help">
+                  {% if r.portal_account %}
+                    <a href="{% url 'scm:portalaccount_detail' r.portal_account.pk %}" class="mono">{{ r.portal_account_number|default:"—" }}</a>
+                  {% else %}
+                    <span class="text-muted">No portal account</span>
+                  {% endif %}
+                </div>
+                <div>
+                  {% if r.portal_active %}
+                    <span class="badge badge-green">Portal on</span>
+                  {% else %}
+                    <span class="badge badge-muted">Portal off</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  Nullable dates. |date returns "" for None, so |default_if_none chained after it
+                  would never see the None — hence the explicit test, here and everywhere below.
+                {% endcomment %}
+                {% if r.promised_date %}
+                  <span class="fw-600">{{ r.promised_date|date:"M d, Y" }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                <div class="form-help">
+                  {% if r.requested_date %}Requested {{ r.requested_date|date:"M d, Y" }}{% else %}No requested date{% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="mono">
+                  {% if r.quantity_allocated is not None %}{{ r.quantity_allocated|floatformat:2 }}{% else %}—{% endif %}
+                  /
+                  {% if r.quantity_ordered is not None %}{{ r.quantity_ordered|floatformat:2 }}{% else %}—{% endif %}
+                </div>
+                <div class="form-help">allocated / ordered across {{ r.line_count }} line{{ r.line_count|pluralize }}</div>
+                {% if r.backordered_line_count %}
+                  <div>
+                    <span class="badge badge-amber">
+                      {{ r.backordered_line_count }} line{{ r.backordered_line_count|pluralize }} backordered
+                      ({% if r.quantity_backordered is not None %}{{ r.quantity_backordered|floatformat:2 }}{% else %}—{% endif %})
+                    </span>
+                  </div>
+                  {% for l in r.lines %}
+                    {% if l.is_backordered %}
+                      <div class="form-help">
+                        <span class="mono">{{ l.sku|default:"—" }}</span>
+                        {{ l.description|default:"—" }}
+                        <span class="mono">· short {% if l.quantity_backordered is not None %}{{ l.quantity_backordered|floatformat:2 }}{% else %}—{% endif %}</span>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  state_css comes from the view's TRACKING_STATE_CSS, which is the SQL filter's own
+                  verdict printed — a row the ?state= filter selected structurally cannot chip as
+                  something else.
+                {% endcomment %}
+                <span class="badge {{ r.state_css }}">{{ r.state_label }}</span>
+                <div class="form-help">
+                  {{ r.shipment_count }} live shipment{{ r.shipment_count|pluralize }}
+                  {% if r.delivered_count %} · {{ r.delivered_count }} delivered{% endif %}
+                  {% if r.cancelled_shipment_count %} · {{ r.cancelled_shipment_count }} cancelled{% endif %}
+                </div>
+                {% for s in r.shipments %}
+                  <div class="form-help">
+                    <a href="{{ s.url }}" class="mono">{{ s.number|default:"—" }}</a>
+                    {% comment %}
+                      Shipment exposes no status_css either, so badge-slate for the word and the two
+                      chips beside it carry the meaning — both read the view's own booleans rather
+                      than re-deriving _row_state()'s rule one shipment at a time.
+                    {% endcomment %}
+                    <span class="badge badge-slate">{{ s.status_label|default:"—" }}</span>
+                    {% if s.status == "exception" %}<span class="badge badge-red">Exception</span>{% endif %}
+                    {% if s.is_delayed %}<span class="badge badge-amber">Delayed</span>{% endif %}
+                    <span class="text-muted">{{ s.mode_label|default:"—" }}</span>
+                    {% if s.carrier %}<span class="text-muted">· {{ s.carrier }}</span>{% endif %}
+                    {% if s.tracking_number %}<span class="mono">· {{ s.tracking_number }}</span>{% endif %}
+                  </div>
+                  {% if s.current_status_text or s.last_known_location %}
+                    <div class="form-help">
+                      {% if s.current_status_text %}{{ s.current_status_text }}{% endif %}
+                      {% if s.last_known_location %}<span class="text-muted">· {{ s.last_known_location }}</span>{% endif %}
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  The order's ETA is the LATEST of its shipments' — the order is not complete until
+                  the last box lands. None when no shipment carries one at all, which is an em dash
+                  and never "today".
+                {% endcomment %}
+                {% if r.eta %}
+                  <span class="fw-600">{{ r.eta|date:"M d, Y H:i" }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                {% if r.delayed_count %}
+                  <div><span class="badge badge-amber">{{ r.delayed_count }} delayed</span></div>
+                {% endif %}
+                {% if r.exception_count %}
+                  <div><span class="badge badge-red">{{ r.exception_count }} flagged</span></div>
+                {% endif %}
+                {% for s in r.shipments %}
+                  {% if s.planned_delivery_date %}
+                    <div class="form-help">{{ s.number|default:"—" }} planned {{ s.planned_delivery_date|date:"M d, Y" }}</div>
+                  {% endif %}
+                {% endfor %}
+              </td>
+              <td>
+                {% comment %}
+                  A SENTENCE, never a raw event_type. _shipment_reason() has already chosen between
+                  what the carrier said, a flag with no narrative behind it and our own derived
+                  lateness — this cell prints its answer and adds nothing to it.
+                {% endcomment %}
+                {% if r.exception_reason %}
+                  <span class="badge badge-red">Needs attention</span>
+                  <div class="form-help">{{ r.exception_reason }}</div>
+                  {% for s in r.shipments %}
+                    {% if s.exception_reason %}
+                      <div class="form-help">
+                        <a href="{{ s.url }}" class="mono">{{ s.number|default:"—" }}</a> — {{ s.exception_reason }}
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help">Nothing reported against this order</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge {{ r.pod_css }}">{{ r.pod_label }}</span>
+                {% if r.pod_received_at %}
+                  <div class="form-help">Received {{ r.pod_received_at|date:"M d, Y H:i" }}</div>
+                {% elif r.pod_state == "awaiting" %}
+                  <div class="form-help">Goods are with the customer and we cannot yet prove it — chase the carrier for the signature.</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% comment %}
+                    One eye, no pencil and no bin: 4.5 owns this order's lifecycle and 4.6 owns its
+                    shipments. Every change is made on their own pages, one hop away.
+                  {% endcomment %}
+                  <a href="{{ r.url }}" class="btn-icon" title="Open the sales order"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="package-check"></i>
+                  <h3>No orders matching</h3>
+                  <p>
+                    Nothing open belongs to a portal customer under the filters above — which on a narrowed console
+                    means the filter excluded it, not that every order has landed. Reset the filters to see the whole
+                    picture. On a workspace where the portal has just been switched on for its first customer, an
+                    empty console is simply the correct answer: only customers who have a portal account appear here.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The shared L9-safe partial: it guards has_previous / has_next so page 1 and the last page never
+      call previous_page_number / next_page_number, and it carries every current filter param except
+      `page` — so page 2 of a filtered console is still filtered.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">How this console is worked out</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        <span class="fw-600">Nothing here is stored.</span> The allocated and backordered quantities are summed
+        from the allocation ledger at read time, so they cannot drift from it the way a cached column would; the
+        shipment status, its ETA and its last known location are read from 4.6's own records; and the tracking
+        state, the ETA roll-up and the proof-of-delivery state are worked out on this page from those figures.
+        No stock move is posted, no bill is drafted and no journal entry is written.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">The tracking state is decided in one order</span> — not shipped, then exception, then
+        delayed, then delivered, then on the way — and the filter above is the same rule written in SQL. That is
+        why a row the filter selected can never chip as something else. An order counts as
+        <span class="fw-600">delivered</span> only when every live shipment on it is; a cancelled booking is left
+        out of that roll-up, because a withdrawn booking is not a movement of goods, but it is still counted and
+        shown so it is not quietly dropped.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Delayed</span> means past the delivery date we planned for with the parcel still
+        expected to move. It is our own arithmetic, not something a carrier reported — the exception column says
+        which of the two you are looking at in plain words, and the words are the ones a customer can be given
+        as they stand. A raw carrier code never reaches this page.
+      </p>
+      <p class="text-muted">
+        <span class="fw-600">Proof of delivery is its own column</span> because it answers a different question
+        from "where is it". A parcel can be delivered and still have no signature against it, and that row —
+        delivered, unproven — is the one an invoice dispute turns on.
+      </p>
+    </div>
+  </div>
+{% endblock %}
