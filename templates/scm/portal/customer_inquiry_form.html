@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — the customer files an inquiry (deflect first, then ask).
+
+Renders apps/scm/views/CustomerPortal/Portal.py::portal_inquiry_create. This is a CUSTOMER surface,
+not a staff one: every link points at another portal route, and nothing here reaches the staff side
+of scm (no scm:overview breadcrumb, no portalorderinquiry_list, no salesorder_detail). The staff
+twin of this form is templates/scm/portal/portalorderinquiry/form.html and the two are deliberately
+NOT the same page — that one carries portal_account and invoice, which a customer may not name.
+
+CONTEXT this page may read, and nothing else (the view pins the same list in its module docstring):
+
+  form              — PortalInquiryCustomerForm, bound on POST. SIX model fields only:
+                      sales_order sales_order_line shipment inquiry_type requested_resolution
+                      quantity_affected — plus the two non-model case fields subject / description.
+                      There is no portal_account field and no invoice field ON PURPOSE (naming
+                      another account is the whole attack; an invoice picker would offer a document
+                      can_view_invoices may not entitle this customer to see at all).
+  is_edit           — ALWAYS False. The portal files inquiries and never edits them, so the one
+                      branch below on it exists to honour the key, not because an edit path exists.
+  kb_articles       — list of dicts. Keys, EXACTLY: `title` and `url`, and no others — built by
+                      _kb_articles() in the view, which turns each published+external
+                      crm.KnowledgeArticle into its crm:kb_public URL. `article`, `name`, `link`
+                      and `public_token` are NOT keys here; a guessed one renders a row of blank
+                      links on a 200 page (L41). [] for a workspace with no KB, which is most of
+                      them at first, and the whole block is then omitted rather than shown empty.
+  prefill_order     — a SalesOrder MODEL object or None (re-resolved against this customer's own
+                      orders by the view, so it is never a pk the URL merely claimed).
+  account customer access
+  can_track_shipments can_view_invoices can_view_documents
+  can_raise_inquiries can_request_returns show_credit_and_balance
+
+The KB block is ABOVE the form deliberately — the Zendesk / Salesforce deflection pattern. A
+customer who finds their answer costs nobody a ticket, and an answer offered AFTER the form has been
+filled in is not a deflection, it is an insult. Each article opens in a new tab so a half-typed
+question is not lost. `url` is used as an href and never printed: it carries the article's public
+token, and a credential is a link, never a label.
+
+THE CASE IS OPENED SERVER-SIDE and this page says so in words. PortalOrderInquiry.open_for() is the
+single writer of the crm.Case — it derives the case type from the inquiry type, forces
+origin="portal", sets the account to the resolved party and picks up the workspace's default SLA
+policy, all in ONE transaction with this row. There is therefore no case field, no priority field
+and no "who is this for" field to render: everything about the ticket other than the two boxes below
+is derived, and a refused submission leaves no orphaned ticket in the CRM queue.
+
+Refusals arrive as FIELD errors wherever the customer form has that field, so each renders through
+partials/form_field.html. form.non_field_errors is rendered at the top because the view re-homes any
+refusal keyed on a field this narrower form does NOT carry (`invoice`, which only staff may attach)
+onto the form as a whole — add_error("invoice", …) on a form without that field raises ValueError,
+which is a 500 where a validation message belongs.
+
+SalesOrder carries no *_css property, so the one status chip below mirrors the shipped
+scm/portal/customer_orders.html chain exactly rather than inventing a third colour scheme. Badge
+classes are colour-named only — badge-green / badge-red / badge-amber / badge-info / badge-muted /
+badge-slate. badge-success / badge-danger / badge-warning do not exist in theme.css and render
+completely unstyled (L33).
+
+Everything on this page is user-typed or staff-typed — an article title, an order number, the
+customer's own name — so it renders escaped and there is no |safe anywhere. A derived figure with no
+input prints an em-dash and never a 0: an order with no total recorded is not an order worth
+nothing. No pagination (the view passes no page_obj), no destructive action, and therefore no
+confirm() dialog on this page.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit Your Question{% else %}Ask Us a Question{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Your Question{% else %}Ask Us a Question{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:portal_home' %}">My Account</a><span class="sep">›</span>
+        <span>Ask a question</span>
+      </div>
+      <p class="text-muted">
+        Tell us what has happened and what you would like us to do about it. Sending this opens a
+        support ticket for
+        {% if customer %}<span class="fw-600">{{ customer.name }}</span>{% else %}your organisation{% endif %}
+        straight away — you do not need to email anyone as well — and every reply from us arrives on
+        that same ticket, so the whole conversation stays in one place.
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if can_track_shipments %}
+        <a href="{% url 'scm:portal_order_list' %}" class="btn btn-outline"><i data-lucide="package"></i> My Orders</a>
+      {% endif %}
+      {% if can_view_documents %}
+        <a href="{% url 'scm:portal_documents' %}" class="btn btn-outline"><i data-lucide="folder-open"></i> My Documents</a>
+      {% endif %}
+      <a href="{% url 'scm:portal_home' %}" class="btn btn-primary"><i data-lucide="home"></i> My Account</a>
+    </div>
+  </div>
+
+  {% comment %}
+  DEFLECTION FIRST. Offered before the form, never after it — the point is to answer the question
+  without a ticket, and an article shown under a submit button has already failed to. Row keys are
+  `title` and `url` and nothing else; the url is an href and is never printed as text.
+  {% endcomment %}
+  {% if kb_articles %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Before you send this — one of these may already answer it</h2>
+        <div class="badge-group">
+          <span class="badge badge-info"><i data-lucide="book-open"></i> Help articles</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          These are the answers we publish for customers, newest first. They open in a new tab, so
+          anything you have already typed below stays exactly where it is.
+        </p>
+        <div class="table-wrap">
+          <table class="table">
+            <tbody>
+              {% for article in kb_articles %}
+                <tr>
+                  <td>
+                    <a href="{{ article.url }}" target="_blank" rel="noopener" class="fw-600">
+                      <i data-lucide="help-circle"></i> {{ article.title }}
+                    </a>
+                  </td>
+                  <td class="text-right nowrap">
+                    <a href="{{ article.url }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">
+                      <i data-lucide="external-link"></i> Read
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Still not what you needed? Carry straight on with the form underneath — nobody minds, and a
+          question we keep being asked is how the next article gets written.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if prefill_order %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">About this order</h2>
+        <div class="badge-group">
+          <span class="badge badge-{% if prefill_order.status == 'fulfilled' or prefill_order.status == 'closed' %}green{% elif prefill_order.status == 'allocated' or prefill_order.status == 'invoiced' %}info{% elif prefill_order.status == 'submitted' or prefill_order.status == 'partially_fulfilled' %}amber{% elif prefill_order.status == 'on_hold' or prefill_order.status == 'cancelled' %}red{% else %}muted{% endif %}">{{ prefill_order.get_status_display }}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          You came here from one of your orders, so it is already selected below. You can change it —
+          the picker only ever offers your own orders.
+        </p>
+        <div class="table-wrap">
+          <table class="table">
+            <tbody>
+              <tr>
+                <td class="fw-600">Order</td>
+                <td class="mono">{{ prefill_order.number|default:"—" }}</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Ordered</td>
+                <td class="nowrap">{{ prefill_order.order_date|date:"M d, Y"|default:"—" }}</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Order total</td>
+                <td>
+                  {% if prefill_order.total is not None %}
+                    {{ prefill_order.total|floatformat:2 }}{% if prefill_order.currency %} <span class="text-muted">{{ prefill_order.currency.code }}</span>{% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {% if can_track_shipments %}
+          <div class="form-actions">
+            <a href="{% url 'scm:portal_order_detail' prefill_order.pk %}" class="btn btn-outline">
+              <i data-lucide="eye"></i> Open the order first
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="card">
+        <div class="card-body">
+          {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    {% comment %}
+    subject / description are the CASE's columns, not this row's, and _InquiryFormBase pops them once
+    the instance has a pk. is_edit is always False here so they are always present — the guard is
+    kept anyway, because a field rendered from a form that does not have it prints nothing at all and
+    would take the label with it.
+    {% endcomment %}
+    {% if form.subject or form.description %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Your question</h2>
+          <div class="badge-group">
+            <span class="badge badge-info"><i data-lucide="message-square-plus"></i> Opens a support ticket</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="form-help" style="margin:0 0 .9rem;">
+            These two boxes are the only part of the ticket anybody types. Everything else about it —
+            who it belongs to, which team picks it up, the response clock we hold ourselves to — is
+            set for you when you send this, in the same moment the ticket is created, so there is
+            nothing here to get wrong.
+          </p>
+          <div class="form-grid">
+            {% if form.subject %}{% include "partials/form_field.html" with field=form.subject %}{% endif %}
+          </div>
+          <div class="form-grid">
+            {% if form.description %}{% include "partials/form_field.html" with field=form.description %}{% endif %}
+          </div>
+          <div class="form-help" style="margin-top:.35rem;">
+            Dates, reference numbers and what you were expecting all help. Anything you write here is
+            the first message on the ticket and is visible to the team who will answer it.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What happened, and what you would like us to do</h2>
+        <div class="badge-group">
+          <span class="badge badge-slate">Two questions, not one</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The first box is what went wrong; the second is what you want done about it. We record them
+          separately because "it arrived damaged, just credit me" is a different job from the same
+          damage with "please send another one", and guessing between the two is how a reply arrives
+          that answers nothing.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.inquiry_type %}
+          {% include "partials/form_field.html" with field=form.requested_resolution %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          Some kinds of question are about one specific purchase — a missing delivery, a short or
+          damaged shipment, the wrong item, a repeat order — and we cannot act on them without
+          knowing which order you mean. If you pick one of those, choose the order below too; if you
+          forget, this page will simply ask you for it rather than sending an unanswerable ticket.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Which order, line or parcel</h2>
+        <div class="badge-group">
+          <span class="badge badge-muted">Optional for a general question</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Every picker here shows <span class="fw-600">your own</span> orders, lines and parcels and
+          nothing else. Pointing at the exact line or parcel is what lets us answer in one reply
+          instead of asking you which one you meant — and it is what turns this into a supply-chain
+          question rather than a general enquiry. Leave them blank if your question is not about a
+          particular purchase.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.sales_order %}
+          {% include "partials/form_field.html" with field=form.sales_order_line %}
+          {% include "partials/form_field.html" with field=form.shipment %}
+          {% include "partials/form_field.html" with field=form.quantity_affected %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          Fill in the quantity for a shortage or a damage claim only, and leave it blank otherwise —
+          blank means "all of it, or this is not a quantity question", which is a real answer rather
+          than a gap. It needs a line to be a quantity <em>of</em>, and it cannot exceed what that
+          line ordered.
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Send this to our team</button>
+      <a href="{% if prefill_order and can_track_shipments %}{% url 'scm:portal_order_detail' prefill_order.pk %}{% else %}{% url 'scm:portal_home' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      Sending this opens your ticket and takes you straight to it, where you can read our replies and
+      add anything you have forgotten. You will get a reference beginning
+      <span class="mono">PIQ-</span> — quote it if you call us. Nothing is sent to us until you press
+      the button, and nothing here changes your order.
+    </p>
+  </form>
+
+  {% if can_request_returns %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Want to send something back instead?</h2>
+        <div class="badge-group">
+          <span class="badge badge-amber"><i data-lucide="package-open"></i> Returns</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          A return is a different request from a question: it needs the item and the quantity you are
+          returning, and it comes back with its own reference you can track. Ask here if you want to
+          know <span class="fw-600">whether</span> something can go back; start a return request if
+          you already know it should.
+        </p>
+        <div class="form-actions">
+          <a href="{% url 'scm:portal_return_create' %}" class="btn btn-outline">
+            <i data-lucide="package-open"></i> Start a return request
+          </a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
