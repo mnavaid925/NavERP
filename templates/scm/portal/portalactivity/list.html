@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — the APPEND-ONLY customer activity trail.
+
+Renders apps/scm/views/CustomerPortal/PortalActivities.py::portalactivity_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q    from crud_list (apps/core/crud.py) — page_obj.window drives the
+                                shared pagination partial
+  action_choices                PORTAL_ACTION_CHOICES — the eight closed action tokens
+  action                        the RESOLVED token ("" when the param was absent or junk). The
+                                <select> below binds its `selected` to THIS, never to
+                                request.GET.action, so ?action=browsed shows "Any action" rather
+                                than a phantom pick that narrowed nothing (_resolved_action)
+  portal_accounts               PortalAccount queryset for the pk dropdown, select_related on
+                                customer — every option prints a customer name
+  window                        the dict _report_window() returns, and the ONLY source of the two
+                                date boxes' values. Its keys, verbatim from
+                                apps/scm/views/_helpers.py::_report_window: date_from (date),
+                                date_to (date), date_from_raw (str), date_to_raw (str),
+                                window_invalid (bool), period_label (str). date_from and
+                                date_from_raw are different things — the raw one is what somebody
+                                typed, the resolved one is what was actually queried, and the boxes
+                                echo the RESOLVED value so a rejected or reversed entry shows the
+                                window that really ran
+  window_days                   int — the default window's length, quoted in the note below
+  window_defaulted              bool — True when NEITHER date was supplied, so the page must SAY it
+                                chose the window itself. A window that appeared without being asked
+                                for reads as "there is nothing older than this"
+  append_only_note              str — printed as the banner, escaped like everything else
+
+Filter params: q / action / portal_account / date_from / date_to. `action` compares against the
+view's resolved `action`; `portal_account` is a pk and compares with |stringformat:"d" — never
+|slugify.
+
+--------------------------------------------------------------------------------------------------
+NO ADD BUTTON, NO EDIT, NO DELETE, AND NO ACTIONS COLUMN — THAT IS THE DESIGN, NOT AN OMISSION
+--------------------------------------------------------------------------------------------------
+Do not "complete the CRUD" here. There is no portalactivity_create / _edit / _delete view, no form
+module for the model, and no route for any of them — only list and detail. Every field PortalActivity
+declares is editable=False and PortalActivity.record() is the single writer, called ONLY from the
+gated customer surface and the token download view. The reasons, each sufficient on its own:
+
+  * The table is EVIDENCE. "We published that POD on the 3rd and you downloaded it on the 4th" is the
+    sentence it exists to make defensible, and a log staff can revise after a dispute opens is not
+    evidence — one they can add to is worse, because it is a place to manufacture a customer read
+    that never happened.
+  * A staff-written row would corrupt the one figure the table supports: how much the customer
+    actually served themselves.
+  * It records a customer READ, which core.AuditLog deliberately cannot express — its ACTION_CHOICES
+    are create / update / delete only, and a read is not a mutation dressed differently. Staff
+    changes to portal records still go through write_audit_log exactly as before; the two tables
+    answer two different questions and neither replaces the other.
+  * Precedent already shipped: StockMoveAdmin and MeterReadingAdmin refuse add/change/delete in
+    apps/scm/admin.py, and 4.3's stock_ledger / 4.13's meterreading_list are read-only pages of this
+    same shape.
+
+The row's only affordance is the View link on its timestamp. There is no <form method="post"> on this
+page at all, so there is no confirm() dialog either.
+
+--------------------------------------------------------------------------------------------------
+Colour, silences, and what this page refuses to invent
+--------------------------------------------------------------------------------------------------
+The action badge class is the model's own obj.action_css (-> _choices.PORTAL_ACTION_CSS), so the list
+badge and the detail badge cannot drift apart, and the else branch falls back to
+get_action_display. theme.css ships COLOUR-named badges only; badge-success / badge-warning /
+badge-danger do not exist and render completely unstyled (L33).
+
+Three cells can be legitimately empty and each renders an em dash rather than a blank or a zero:
+`user` is NULL for a token-link visitor, which is a real recordable event and not a gap; `ip_address`
+is NULL when REMOTE_ADDR was not captured; and `object_label` is blank for actions that describe a
+session or a whole page. "Not recorded" and "nothing happened" are different facts.
+
+Nothing in a row costs a query: the view's select_related covers portal_account,
+portal_account__customer and user, and the three SET_NULL pointers are deliberately NOT rendered here
+(each would be a join for a column nobody scans a log by — they are on the detail page, where
+_targets() resolves them one row at a time).
+
+No stat tiles: the view computes none, and a page must not total a windowed queryset into a figure
+that reads like a workspace fact.
+{% endcomment %}
+{% block title %}Portal Activity{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Portal Activity</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Portal Activity</span></div>
+      <p class="text-muted">Every recorded thing a customer did on their own portal — signed in, opened an order, tracked a shipment, downloaded a document. It is the only honest input to any self-service figure this sub-module claims, and the record a delivery dispute turns on. <span class="fw-600">Read-only by construction:</span> a row is written once by the portal and never edited or deleted.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portalaccount_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Portal Accounts</a>
+      <a href="{% url 'scm:portaldocumentshare_list' %}" class="btn btn-outline"><i data-lucide="share-2"></i> Shares</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The banner. It is the view's own PORTAL_LOG_NOTE constant rather than a paragraph typed here, so
+    the list and the detail cannot end up explaining the table differently — and it is printed
+    precisely so the missing Add / Edit / Delete reads as the decision it is instead of an unfinished
+    page. Escaped like everything else; nothing on this page is ever |safe.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-body text-muted">
+      <i data-lucide="lock"></i> {{ append_only_note }}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recorded Activity</h2>
+      <div class="badge-group">
+        {% if window_defaulted %}<span class="badge badge-info">Last {{ window_days }} days</span>{% endif %}
+        {% if window.window_invalid %}<span class="badge badge-amber">Dates corrected</span>{% endif %}
+        <span class="badge badge-muted">{{ window.period_label }}</span>
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search the recorded label, PAC- number or customer…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Bound to the view's RESOLVED `action`, not to request.GET.action: the vocabulary is
+            closed and known in-process, so ?action=junk narrows nothing and this select must show
+            "Any action" rather than a selection that never happened (L11 applied to a string).
+          {% endcomment %}
+          <select name="action" aria-label="Action" class="form-select">
+            <option value="">Any action</option>
+            {% for val, label in action_choices %}
+              <option value="{{ val }}" {% if action == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            A pk filter, so the comparison is |stringformat:"d" — |slugify would agree only by
+            accident and would silently drop the selection on any pk it renders differently.
+          {% endcomment %}
+          <select name="portal_account" aria-label="Portal account" class="form-select">
+            <option value="">Every account</option>
+            {% for a in portal_accounts %}
+              <option value="{{ a.pk }}" {% if request.GET.portal_account == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.number }} · {{ a.customer.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Both boxes echo window.date_from / window.date_to — the RESOLVED dates — and never
+            window.date_from_raw. An unparseable, out-of-bounds or reversed entry has already been
+            replaced or swapped by _report_window, and re-printing the raw string would show a
+            window that was not the one queried. The badge above says when that happened.
+          {% endcomment %}
+          <label class="form-label" for="pa-from">From</label>
+          <input type="date" id="pa-from" name="date_from" value="{{ window.date_from|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="pa-to">To</label>
+          <input type="date" id="pa-to" name="date_to" value="{{ window.date_to|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        This page is <span class="fw-600">always</span> windowed, and it is showing <span class="fw-600">{{ window.period_label }}</span>{% if window_defaulted %} — the default {{ window_days }} days, because neither date was supplied{% endif %}.
+        {% if window.window_invalid %}
+          One of the dates was rejected or the pair was the wrong way round, so the window above is the corrected one that actually ran — not the one that was typed.
+        {% endif %}
+        Narrowing to a single account does not lift the window: an account filter makes the result smaller without making it <em>bounded</em>, and this is the fastest-growing table in the sub-module — every order view, every tracking check and every document download by every portal user writes a row. The one question a window would answer wrongly, <em>“has this customer ever signed in at all?”</em>, is deliberately not asked here: it is answered unwindowed on the <a href="{% url 'scm:portalaccount_list' %}">portal accounts console</a>.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Account</th>
+            <th>Action</th>
+            <th>What they looked at</th>
+            <th>User</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="nowrap">
+                {% comment %}
+                  The timestamp is the row's only affordance — there is no Actions column here, on
+                  purpose (see the header comment). created_at is auto_now_add and cannot be
+                  back-dated by a caller, which is exactly why there is no separate `at` column.
+                {% endcomment %}
+                <a href="{% url 'scm:portalactivity_detail' obj.pk %}" class="fw-600">{{ obj.created_at|date:"M d, Y" }}</a>
+                <div class="form-help mono">{{ obj.created_at|date:"H:i:s" }}</div>
+              </td>
+              <td>
+                <a href="{% url 'scm:portalaccount_detail' obj.portal_account.pk %}" class="mono">{{ obj.portal_account.number }}</a>
+                <div class="text-muted">{{ obj.portal_account.customer.name }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  obj.action_css -> _choices.PORTAL_ACTION_CSS, so the colour is decided once for the
+                  whole vocabulary and this page invents nothing. The else branch is the guard for a
+                  ninth action added to the choices without a colour: it still renders its label.
+                {% endcomment %}
+                {% if obj.action_css %}
+                  <span class="badge {{ obj.action_css }}">{{ obj.get_action_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_action_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  object_label is DENORMALISED and user-influenced — escaped, never |safe. Blank is a
+                  real answer, not a gap: "signed in" and "browsed the catalog" point at nothing by
+                  design, so the em dash here means "this action names no single record", which the
+                  detail page spells out in target_note. The three SET_NULL pointers are not rendered
+                  on this page — see the header comment.
+                {% endcomment %}
+                {% if obj.object_label %}
+                  <span class="mono">{{ obj.object_label }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  NULL user is a token-link visitor: somebody who opened a shared document link
+                  without signing in. That is a real, recordable event — the em dash is the honest
+                  rendering of it, and it must never read as "unknown user" or as a blank cell.
+                {% endcomment %}
+                {% if obj.user %}
+                  {{ obj.user.get_full_name }}
+                  <div class="form-help">{{ obj.user.email }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                  <div class="form-help">Token link, not signed in</div>
+                {% endif %}
+              </td>
+              <td class="mono nowrap">
+                {% comment %}
+                  REMOTE_ADDR only — the model records no forwarding header, because X-Forwarded-For
+                  is caller-supplied and an attacker-chosen string in an evidence table is worse than
+                  a less precise one that is true. NULL means it was not captured, and prints as an
+                  em dash rather than as blank.
+                {% endcomment %}
+                {% if obj.ip_address %}
+                  {{ obj.ip_address }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="scroll-text"></i>
+                  <h3>No recorded activity in this window</h3>
+                  <p>Nothing was recorded between <span class="fw-600">{{ window.period_label }}</span>, which is a statement about <em>this window</em> and not about the account: the page is always bounded, so an empty result never means “they have never used the portal”. Widen the dates or clear the filters. To ask whether a customer has <span class="fw-600">ever</span> signed in, read the Last sign-in column on the <a href="{% url 'scm:portalaccount_list' %}">portal accounts console</a> — that question is answered unwindowed, on purpose.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Rows land here from one writer only — the portal itself, as the customer acts. Nothing on this screen writes, and no button anywhere in the application edits or removes one of these rows: <span class="fw-600">if a row looks wrong, that is what the log says happened</span>, and correcting it would destroy the only thing the table is for. Staff activity is a different trail entirely and lives in the audit log, unchanged. A missing row is possible and is the deliberate trade: recording an action fails soft, so a hiccup in the log never takes down the page the customer was reading.
+    </div>
+  </div>
+{% endblock %}
