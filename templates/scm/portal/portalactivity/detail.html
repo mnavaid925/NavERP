@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.16 Customer Portal — one recorded customer action, read as evidence rather than as a record.
+
+A row in this table is never corrected, so this page is not a form with the inputs turned off: it is
+the readable form of a single fact ("this account did this, at this moment, to this record") plus the
+two things that make that fact usable in an argument — what it pointed at, and what the same account
+did either side of it. "Signed in, opened SO-00012, downloaded the POD" is the reading that settles a
+dispute, and no single row can say it.
+
+Renders apps/scm/views/CustomerPortal/PortalActivities.py::portalactivity_detail. Everything this
+page may read, and nothing else:
+
+  obj                the PortalActivity (select_related: portal_account, portal_account__customer,
+                     user, sales_order, shipment, document_share). Badge class is obj.action_css
+                     (PORTAL_ACTION_CSS in models/CustomerPortal/_choices.py) — never hand-picked
+  targets            a LIST OF DICTS built by _targets(), so the keys are ITS and not the model's:
+                     field / label / obj / reference / url_name. Possibly EMPTY. url_name is "" for
+                     any pointer with no presentation entry — render the reference unlinked then,
+                     rather than dropping the row
+  target_note        str, and "" exactly when targets is non-empty. Printed INSTEAD of an empty
+                     table; it distinguishes the two silences (an action that never carried a
+                     pointer from one whose target has since been deleted)
+  previous_activity  the next-OLDER row for the same account, or None at the start of the trail
+  next_activity      the next-NEWER row for the same account, or None when this is the latest
+  is_latest          bool — True when next_activity is None
+  append_only_note   str — the one paragraph both 4.16 activity pages print, so the list and the
+                     detail cannot end up explaining the table differently
+
+obj.user and obj.ip_address are None for a visitor who arrived on a share token, and BOTH print an em
+dash. That is the point of the field rather than a gap in it: an unauthenticated download is a real,
+recordable event, and "no signed-in user" is a fact about what happened — printing "unknown" would
+claim we failed to capture something we never had. object_label takes the same treatment when blank.
+
+The three target references come from _target_reference() — a number, then a title, then a name — and
+this page renders THAT string and t.obj.pk only. It never prints str(t.obj): SalesOrder.__str__ walks
+customer, so a reference would cost a join, and PortalDocumentShare's carries public_token's row into
+scope for no reason. public_token is a bearer credential and appears NOWHERE on this page — not in a
+column, not a title attribute, not a link.
+
+Actions: BACK TO LIST ONLY. There is no portalactivity_create, no _edit and no _delete — no view, no
+form, no route. Every field the model declares is editable=False. A button here would 404, and the
+absence is the decision the append-only note explains.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33). Every badge below is either obj.action_css / n.action_css or
+one of the six literals.
+{% endcomment %}
+{% block title %}{{ obj.get_action_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      {% comment %}
+        The label is user-visible portal data and is escaped like everything else here — never
+        |safe, on this page or any other in 4.16.
+      {% endcomment %}
+      <h1 class="page-title">{% if obj.object_label %}{{ obj.object_label }}{% else %}{{ obj.portal_account.number }}{% endif %}
+        <span class="badge {{ obj.action_css }}">{{ obj.get_action_display }}</span>
+        {% if is_latest %}
+          <span class="badge badge-green">Latest for this account</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:portalactivity_list' %}">Customer activity</a><span class="sep">›</span><span>{{ obj.created_at|date:"M d, Y H:i" }}</span></div>
+      <p class="text-muted">This row was written once by the customer portal and has not been touched since — there is no edit history to show because there is no edit path to produce one. What it is worth in a dispute is what it can be read <span class="fw-600">alongside</span>, so this page carries the pointer it was filed with and the account's neighbouring actions rather than the row on its own.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:portalactivity_list' %}?portal_account={{ obj.portal_account_id }}" class="btn btn-outline"><i data-lucide="history"></i> This account&rsquo;s trail</a>
+      <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ obj.created_at|date:"H:i" }}</div>
+      <div class="stat-label">{{ obj.created_at|date:"M d, Y" }} · stamped on write and not settable by any caller</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="user"></i></div>
+      {% comment %}
+        None — never blank and never "unknown". A visitor on a share-token link legitimately has no
+        login, which is a recordable event rather than a missing measurement.
+      {% endcomment %}
+      <div class="stat-value">{% if obj.user %}{{ obj.user.get_full_name }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if obj.user %}Signed in as {{ obj.user.email }}{% else %}No signed-in user — reached on a share link, not through a portal login{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="link"></i></div>
+      {% comment %}
+        The reference of the first pointer, or an em dash. NOT a count: "0 records" would read as a
+        failure, while most actions on this table legitimately point at nothing at all.
+      {% endcomment %}
+      <div class="stat-value">{% if targets %}{{ targets.0.reference }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if targets %}{{ targets.0.label }}{% if targets|length > 1 %} · and {{ targets|length|add:"-1" }} more pointer{{ targets|length|add:"-1"|pluralize }}{% endif %}{% else %}Points at no record — see the note below for which silence this is{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="globe"></i></div>
+      <div class="stat-value mono">{% if obj.ip_address %}{{ obj.ip_address }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if obj.ip_address %}The socket address the request arrived from{% else %}Not captured — an em dash rather than a placeholder, because a forged address is worse than none{% endif %}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 1. the row exactly as recorded
+    object_label is DENORMALISED on the row on purpose: every pointer below is SET_NULL, so once a
+    target is deleted the label is the only thing left saying what was looked at.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What was recorded</h2>
+      <span class="badge {{ obj.action_css }}">{{ obj.get_action_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Portal account</dt>
+          <dd><a href="{% url 'scm:portalaccount_detail' obj.portal_account_id %}" class="fw-600 mono">{{ obj.portal_account.number }}</a></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Customer</dt>
+          <dd>{{ obj.portal_account.customer.name }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Action</dt>
+          <dd><span class="badge {{ obj.action_css }}">{{ obj.get_action_display }}</span></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Recorded label</dt>
+          {% comment %}
+            Blank is possible and is not an error — 'login' and 'view_catalog' describe a session and
+            a whole page, and neither has a reference to denormalise. An em dash says "nothing was
+            recorded here", which is exactly what happened.
+          {% endcomment %}
+          <dd class="mono">{% if obj.object_label %}{{ obj.object_label }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Recorded at</dt>
+          <dd class="mono">{{ obj.created_at|date:"M d, Y H:i:s" }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Signed in as</dt>
+          <dd>{% if obj.user %}{{ obj.user.get_full_name }} <span class="text-muted">{{ obj.user.email }}</span>{% else %}<span class="text-muted">— no login</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Source address</dt>
+          <dd class="mono">{% if obj.ip_address %}{{ obj.ip_address }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Position in the trail</dt>
+          <dd>{% if is_latest %}<span class="badge badge-green">Most recent</span>{% else %}<span class="badge badge-muted">Followed by later activity</span>{% endif %}</dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        The label is stored <span class="fw-600">on the row</span> rather than looked up through the pointer, and that duplication is the point: every pointer here is <span class="mono">SET_NULL</span>, so a deleted order leaves an activity row that still knows what was opened. A log whose oldest entries read &ldquo;viewed an order&rdquo; with no order attached is not evidence of anything.
+        {% if not obj.ip_address %}
+          The source address is blank because none was captured. It is only ever taken from the socket the request arrived on and never from a forwarding header a client can set for itself — a precise address anybody could forge is worth less to a dispute than an honest blank.
+        {% else %}
+          The address comes from the socket the request arrived on, never from a client-supplied forwarding header. Behind a reverse proxy that records the proxy rather than the visitor — deliberately less precise, and true.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 2. what it points at
+    _targets() walks the MODEL's TARGET_FIELDS tuple, so a fourth pointer added later still appears
+    here — unlinked, when TARGET_PRESENTATION has no route for it — instead of vanishing silently.
+    That is why url_name is tested rather than assumed.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this action pointed at</h2>
+      {% if targets %}
+        <span class="badge badge-info">{{ targets|length }} record{{ targets|length|pluralize }}</span>
+      {% else %}
+        <span class="badge badge-muted">No pointer</span>
+      {% endif %}
+    </div>
+    {% if targets %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Pointer</th><th>Reference</th><th>Link</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for t in targets %}
+              <tr>
+                <td class="fw-600">{{ t.label }}</td>
+                <td class="mono">
+                  {% if t.url_name %}
+                    <a href="{% url t.url_name t.obj.pk %}" class="fw-600">{{ t.reference }}</a>
+                  {% else %}
+                    {{ t.reference }}
+                  {% endif %}
+                </td>
+                <td>
+                  {% if t.url_name %}
+                    <span class="badge badge-slate">Opens the staff record</span>
+                  {% else %}
+                    <span class="badge badge-muted">No staff page for this pointer</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    {% if t.url_name %}
+                      <a href="{% url t.url_name t.obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        These are live pointers, so each one opens the record <span class="fw-600">as it is now</span> — not as it was when the customer read it. The recorded label above is the frozen half of the pair, and the two are meant to be read together: when they disagree, the record has changed since it was looked at, which is very often the fact the argument is actually about.
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="unlink"></i>
+          <h3>This row points at no record</h3>
+          <p>{{ target_note }}</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %}
+    ================================================================== 3. the sequence around the row
+    Newest at the top, matching the list's own -created_at order, so the three rows read down the
+    page in the same direction the trail does. Each neighbour is one indexed probe on
+    scm_pact_tnt_acct_at_idx and both can legitimately be None — at either end of the trail, and on a
+    brand-new account where this is the only row there is.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Where this sits in {{ obj.portal_account.customer.name }}&rsquo;s trail</h2>
+      <div class="badge-group">
+        {% if is_latest %}<span class="badge badge-green">Nothing newer</span>{% endif %}
+        <a href="{% url 'scm:portalactivity_list' %}?portal_account={{ obj.portal_account_id }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the full trail</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Step</th><th>Action</th><th>Label</th><th class="nowrap">Recorded</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">Next (newer)</td>
+            {% if next_activity %}
+              <td><span class="badge {{ next_activity.action_css }}">{{ next_activity.get_action_display }}</span></td>
+              <td class="mono">{% if next_activity.object_label %}{{ next_activity.object_label }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono nowrap">{{ next_activity.created_at|date:"M d, Y H:i:s" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portalactivity_detail' next_activity.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            {% else %}
+              <td colspan="3" class="text-muted">— nothing newer; this is the last thing this account has done</td>
+              <td></td>
+            {% endif %}
+          </tr>
+          <tr>
+            <td class="fw-600">This row</td>
+            <td><span class="badge {{ obj.action_css }}">{{ obj.get_action_display }}</span></td>
+            <td class="mono">{% if obj.object_label %}{{ obj.object_label }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td class="mono nowrap fw-600">{{ obj.created_at|date:"M d, Y H:i:s" }}</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="fw-600">Previous (older)</td>
+            {% if previous_activity %}
+              <td><span class="badge {{ previous_activity.action_css }}">{{ previous_activity.get_action_display }}</span></td>
+              <td class="mono">{% if previous_activity.object_label %}{{ previous_activity.object_label }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="mono nowrap">{{ previous_activity.created_at|date:"M d, Y H:i:s" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:portalactivity_detail' previous_activity.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            {% else %}
+              <td colspan="3" class="text-muted">— nothing older; this is the first recorded thing this account did</td>
+              <td></td>
+            {% endif %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if previous_activity or next_activity %}
+        A single row rarely settles anything on its own. The neighbours are what turn it into a sequence — &ldquo;signed in, opened the order, downloaded the delivery note&rdquo; — and both are the account&rsquo;s own rows, in the account&rsquo;s own order, with no date window applied: this panel steps to the adjacent action however long ago it happened, which the windowed list deliberately does not.
+      {% else %}
+        This is the only activity recorded for this account, so there is no sequence to read yet — no earlier row and no later one, rather than a window that hid them. Every portal sign-in, order view, tracking check and document download appends another.
+      {% endif %}
+      Two rows can share a second, which is ordinary, so the step either way is resolved by timestamp <span class="fw-600">and then by row id</span> — a total order, so &ldquo;the previous activity&rdquo; is always the same row on every page load rather than whichever one the database returned first.
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================= 4. the actions
+    Back to list ONLY. There is no create, edit or delete view for this model, no form module and no
+    route — offering a button the app would 404 on is the 4.11 finding, and offering one that
+    "worked" would be worse: it would let staff traffic and staff corrections into the one table
+    whose value is that it records what the CUSTOMER did and nothing else.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">{{ append_only_note }}</p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        <span class="badge badge-slate">Append-only</span>
+        There is no Edit and no Delete on this page, and neither is missing: every field the model declares is non-editable, so an edit form here would have nothing to render, and a row somebody could revise after the dispute started would not be evidence. If this row is wrong, that is what the log says happened — the staff-side mutation trail lives in the audit log and is unaffected.
+      </p>
+      <div class="form-actions">
+        <a href="{% url 'scm:portalactivity_list' %}?portal_account={{ obj.portal_account_id }}" class="btn btn-outline"><i data-lucide="history"></i> This account&rsquo;s trail</a>
+        <a href="{% url 'scm:portalaccount_detail' obj.portal_account_id %}" class="btn btn-outline"><i data-lucide="user-cog"></i> Portal account</a>
+        <a href="{% url 'scm:portalactivity_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
