@@ -47,6 +47,11 @@ they are held to the same bar.
 from apps.scm.forms._common import *  # noqa: F401,F403
 from apps.scm.forms._common import _reject_foreign
 
+# The same int-FK guard the list views apply to a GET param (L11): a submitted `portal_account`
+# that is not a pk — junk, a Unicode superscript, an over-range integer — must resolve to None and
+# leave the dropdowns empty, never raise out of `.filter()`.
+from apps.core.crud import as_db_int
+
 from apps.core.models import Document
 from apps.scm.models import (
     SHARE_DOC_TYPE_CHOICES,
@@ -141,7 +146,29 @@ class PortalDocumentShareForm(TenantUniqueMixin, TenantModelForm):
         from apps.accounting.models import Invoice
         models_by_pointer["invoice"] = Invoice
 
-        account = getattr(self.instance, "portal_account", None)
+        # RESOLVE THE ACCOUNT FROM THE SUBMITTED DATA FIRST, then fall back to the instance.
+        #
+        # Reading it off `self.instance` alone is why this form could never create a share: the
+        # create view hands in `PortalDocumentShare(tenant=...)` with no `portal_account`, so
+        # `customer_id` was None, every one of the six pointer querysets collapsed to `.none()`, and
+        # the user was offered nothing to pick — on the GET *and* on the POST, so a valid choice
+        # could not even be re-validated. The seeder builds its rows with `objects.create()`, which
+        # never touches a form, which is exactly why the demo data looked healthy.
+        #
+        # `self.data` is the raw POST, so the pk is a string and may be anything a caller typed;
+        # `as_db_int` refuses a non-pk (junk, a Unicode superscript, an over-range integer) instead
+        # of raising out of `.filter()` (L11), and the lookup stays tenant-scoped so a crafted pk
+        # from another workspace resolves to None and the querysets stay empty.
+        account = None
+        source = (self.data.get(self.add_prefix("portal_account")) if self.is_bound
+                  else self.initial.get("portal_account"))
+        chosen = as_db_int(source if source is None or isinstance(source, str) else str(source))
+        if chosen is not None and self.tenant is not None:
+            account = (PortalAccount.objects
+                       .filter(tenant=self.tenant, pk=chosen)
+                       .select_related("customer").first())
+        if account is None:
+            account = getattr(self.instance, "portal_account", None)
         customer_id = getattr(account, "customer_id", None) if account is not None else None
 
         for pointer, model in models_by_pointer.items():
