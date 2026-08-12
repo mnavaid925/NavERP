@@ -34,6 +34,13 @@ from apps.scm.models import (
     KpiTarget,
     SupplyChainAlert,
 )
+# 4.16 Customer Portal
+from apps.scm.models import (
+    PortalAccount,
+    PortalActivity,
+    PortalDocumentShare,
+    PortalOrderInquiry,
+)
 
 
 class PurchaseRequisitionLineInline(admin.TabularInline):
@@ -1140,3 +1147,88 @@ class TemperatureExcursionAdmin(admin.ModelAdmin):
                        "extreme_temperature", "limit_min", "limit_max", "reading_count", "mkt",
                        "last_detected_at", "status", "acknowledged_by", "acknowledged_at",
                        "assessed_by", "assessed_on", "created_at", "updated_at")
+
+
+# --- 4.16 Customer Portal -----------------------------------------------------------------------
+# The admin is a second write path into every one of these tables, and it does NOT go through the
+# forms, the gated verbs or `full_clean()`. So every column the application treats as
+# system-written has to be re-declared read-only HERE as well — otherwise the admin is exactly the
+# bypass the `editable=False` flags exist to prevent, one URL over.
+
+
+@admin.register(PortalAccount)
+class PortalAccountAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "customer", "is_active", "activated_on", "stock_display",
+                    "catalog_scope", "price_basis", "show_credit_and_balance")
+    list_filter = ("tenant", "is_active", "stock_display", "catalog_scope", "price_basis",
+                   "show_credit_and_balance", "preferred_channel")
+    search_fields = ("number", "customer__name", "support_email", "notes")
+    filter_horizontal = ("catalog_categories",)
+    # `activated_on` is evidence of when enablement first happened, stamped once in save() and never
+    # restamped. An admin who can retype it can rewrite the adoption history the enablement console
+    # exists to report.
+    readonly_fields = ("number", "activated_on", "created_at", "updated_at")
+
+
+@admin.register(PortalOrderInquiry)
+class PortalOrderInquiryAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "portal_account", "inquiry_type", "requested_resolution",
+                    "sales_order", "outcome", "source", "resolved_at", "created_at")
+    list_filter = ("tenant", "inquiry_type", "requested_resolution", "outcome", "source")
+    search_fields = ("number", "case__subject", "sales_order__number", "portal_account__number")
+    date_hierarchy = "created_at"
+    # `case` is the wrapped crm.Case and is written ONLY by open_for(), inside a transaction that
+    # also forces origin and the SLA policy — re-pointing it here would orphan a case and silently
+    # hand this inquiry somebody else's conversation. `outcome`, `resolved_at` and
+    # `return_authorization` are written ONLY by the resolve / reopen / link_return verbs, each of
+    # which writes an audit row; an editable dropdown here would move an inquiry to `credit_drafted`
+    # with nobody's name on it. `source` and `raised_by` are attribution, forced server-side by
+    # whichever view filed it — an editable `source` lets a staff-filed inquiry claim to be the
+    # customer's own words.
+    readonly_fields = ("number", "case", "outcome", "resolved_at", "return_authorization",
+                       "source", "raised_by", "created_at", "updated_at")
+
+
+@admin.register(PortalDocumentShare)
+class PortalDocumentShareAdmin(admin.ModelAdmin):
+    # `public_token` appears in NO list_display, NO search_fields and NO filter. It is a bearer
+    # credential: anything that renders it into a changelist puts a working link to a customer's
+    # document into a page, a browser history and every screenshot of that page (L20).
+    list_display = ("number", "tenant", "portal_account", "doc_type", "title", "expires_at",
+                    "revoked_at", "download_count", "last_downloaded_at")
+    list_filter = ("tenant", "doc_type")
+    search_fields = ("number", "title", "portal_account__number", "portal_account__customer__name")
+    date_hierarchy = "created_at"
+    # The token is minted once in save() and never rotated — rotating it silently breaks a link the
+    # customer already holds. `revoked_at` is written only by the admin-gated revoke verb, and the
+    # download audit trio is the evidence that the share was fetched; all four are read-only because
+    # an editable revoke stamp is an un-revoke, and an editable download count is a forged receipt.
+    readonly_fields = ("number", "public_token", "revoked_at", "download_count", "first_viewed_at",
+                       "last_downloaded_at", "shared_by", "created_at", "updated_at")
+
+
+@admin.register(PortalActivity)
+class PortalActivityAdmin(admin.ModelAdmin):
+    """FULLY read-only — the StockMoveAdmin / MeterReadingAdmin posture.
+
+    This is an append-only evidence log of what a customer read, written solely by
+    ``PortalActivity.record()``. A row that can be added, edited or deleted from the admin is not
+    evidence of anything: the whole value of the table in a dispute is that nobody could have
+    adjusted it afterwards. Every field is ``editable=False`` on the model; these three methods are
+    what stop the admin being the one place that ignores it.
+    """
+
+    list_display = ("created_at", "tenant", "portal_account", "action", "object_label", "user",
+                    "ip_address")
+    list_filter = ("tenant", "action")
+    search_fields = ("object_label", "portal_account__number", "portal_account__customer__name")
+    date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
