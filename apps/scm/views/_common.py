@@ -23,7 +23,10 @@ from django.db import models
 from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+# `require_GET` alongside `require_POST`: 4.16's token document download is unauthenticated, and an
+# endpoint with no session and no CSRF protection (the bearer token IS the credential) should accept
+# exactly the one method it is for, rather than leaving a POST to fall through to a GET handler.
+from django.views.decorators.http import require_GET, require_POST
 
 from apps.core.crud import crud_create, crud_delete, crud_detail, crud_edit, crud_list, paginate
 # The int-FK filter guard `crud_list` applies to its own `filters` spec (L11: a GET value that is
