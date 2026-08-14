@@ -79,13 +79,17 @@ def landedcostvoucher_list(request):
     qs = (LandedCostVoucher.objects.filter(tenant=request.tenant)
           .select_related("goods_receipt", "party", "shipment", "currency", "bill"))
 
-    # TWO aggregate() calls, and the split is REQUIRED rather than stylistic. Inside a SINGLE
-    # `aggregate()` Django resolves a column name against the aliases declared in that same call
-    # first, so a `Sum("actual_total")` sitting next to an alias named `total` resolves to the COUNT
-    # and raises `FieldError: Cannot compute Sum(...)` — a hard 500 on the list page (the 4.6
-    # FreightInvoice / 4.17 ClientBillingRun trap). The money aggregate additionally uses INTERNAL
-    # alias names (`sum_actual`, `sum_variance`) that shadow no column at all, and is remapped onto
-    # the frozen `stats.actual_total` / `stats.variance_total` keys below.
+    # ONE aggregate() call, deliberately — this model is NOT the 4.17 `ClientBillingRun` case.
+    # That model has to split its counts from its money because it carries a money column literally
+    # named `total`, which the `total=Count("id")` alias shadows: inside a single `aggregate()`
+    # Django resolves a name against the aliases declared in that same call first, so a
+    # `Sum("total")` next to it computes over the COUNT and raises `FieldError`.
+    # `LandedCostVoucher` has NO field named `total`, `draft`, `allocated`, `accrued`, `reconciled`
+    # or `cancelled` — its money columns are `estimated_total` / `actual_total` / `allocated_total` /
+    # `variance_amount` / `variance_pct` — and the two money aliases (`sum_actual`, `sum_variance`)
+    # shadow nothing either, so no alias here can collide and the split bought only a second round
+    # trip on every list page load. They are remapped onto the frozen `stats.actual_total` /
+    # `stats.variance_total` template keys below.
     #
     # Stats are computed over the WHOLE workspace, never over the filtered page — a tile that moved
     # every time somebody typed in the search box would be a different number from the dashboard's.
@@ -96,14 +100,12 @@ def landedcostvoucher_list(request):
         accrued=Count("id", filter=Q(status="accrued")),
         reconciled=Count("id", filter=Q(status="reconciled")),
         cancelled=Count("id", filter=Q(status="cancelled")),
-    )
-    money = LandedCostVoucher.objects.filter(tenant=request.tenant).aggregate(
         sum_actual=Coalesce(Sum("actual_total"), Value(ZERO), output_field=_MONEY),
         sum_variance=Coalesce(Sum("variance_amount"), Value(ZERO), output_field=_MONEY),
     )
     stats = {**counts,
-             "actual_total": money["sum_actual"],
-             "variance_total": money["sum_variance"]}
+             "actual_total": counts["sum_actual"],
+             "variance_total": counts["sum_variance"]}
 
     return crud_list(
         request, qs, "scm/finance/landedcostvoucher/list.html",
