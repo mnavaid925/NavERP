@@ -452,6 +452,8 @@ from .ColdChainManagement.TemperatureExcursions import (  # noqa: F401
 from .CustomerPortal._choices import (  # noqa: F401
     CATALOG_SCOPE_CHOICES,
     CUSTOMER_STATUS_MAP,
+    CUSTOMER_VISIBLE_INVOICE_KIND,
+    CUSTOMER_VISIBLE_INVOICE_STATUSES,
     INQUIRY_OUTCOME_CHOICES,
     INQUIRY_OUTCOME_CSS,
     INQUIRY_SOURCE_CHOICES,
