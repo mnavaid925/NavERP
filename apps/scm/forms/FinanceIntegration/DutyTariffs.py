@@ -39,7 +39,7 @@ moment a charge is entered, so editing a tariff here changes what the NEXT looku
 never what an already-costed receipt was costed at.
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
-from apps.scm.forms._common import TenantUniqueMixin, _reject_foreign
+from apps.scm.forms._common import TenantUniqueMixin, _keep_current, _reject_foreign
 
 # `TaxCode` is accounting's MASTER, not scm's — the same one-way peer-app import `_common.py`
 # already makes for `Currency`. Named explicitly rather than taken off the star import: `_common`
@@ -64,33 +64,6 @@ def _tax_code_qs(tenant):
     return TaxCode.objects.filter(tenant=tenant, is_active=True).order_by("name")
 
 
-def _keep_current(form, name, base_queryset):
-    """Union the field's CURRENTLY-STORED choice back into the narrowed queryset.
-
-    ``tax_code`` is narrowed to ``is_active=True``. A tax code that was deactivated AFTER a tariff
-    was pointed at it would therefore vanish from the dropdown — and because the field is optional
-    (``null=True``), the missing option does not fail validation: it silently resolves to ``None``
-    and **clears the link** for somebody who only came to fix a typo in the description. Silent data
-    loss on an edit is worse than an extra option, so the stored value is unioned back in.
-
-    A no-op whenever the stored value still qualifies, which is the common case; it exists for the
-    one that no longer does. ``base_queryset`` is the UN-narrowed one so any ``select_related`` a
-    dropdown's ``__str__`` needs survives the rebuild.
-
-    (This is an addition to the frozen contract, which specified only the ``is_active=True``
-    narrowing — see the module note in the agent hand-off. It changes no context key and no field
-    list.)
-    """
-    if name not in form.fields:
-        return
-    current = getattr(form.instance, f"{name}_id", None)
-    if current is None:
-        return
-    narrowed = form.fields[name].queryset
-    form.fields[name].queryset = base_queryset.filter(
-        Q(pk__in=narrowed.values("pk")) | Q(pk=current)).distinct()
-
-
 class DutyTariffForm(TenantUniqueMixin, TenantModelForm):
     """The duty schedule row: classification, origin, rate, window and the recoverable counterpart."""
 
@@ -112,7 +85,14 @@ class DutyTariffForm(TenantUniqueMixin, TenantModelForm):
 
         if "tax_code" in self.fields:
             self.fields["tax_code"].queryset = _tax_code_qs(self.tenant)
-            _keep_current(self, "tax_code", TaxCode.objects.all())
+            # The narrowing above is `is_active=True`; a tax code deactivated AFTER a tariff was
+            # pointed at it would otherwise vanish from the dropdown and — the field being optional —
+            # silently clear the link for somebody who came to fix a typo in the description. The
+            # base is TENANT-SCOPED, not `.objects.all()`, so the union cannot re-admit another
+            # workspace's row (the shared helper re-admits the stored pk unconditionally).
+            _keep_current(self, "tax_code",
+                          TaxCode.objects.filter(tenant=self.tenant) if self.tenant is not None
+                          else TaxCode.objects.none())
 
         # The two help texts the frozen contract names verbatim. Set here rather than on the model so
         # they read as INSTRUCTIONS TO THE TYPIST — the model's own help_text states what the column
