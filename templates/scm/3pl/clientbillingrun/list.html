@@ -48,9 +48,11 @@ get_status_display, so a value added to RUN_STATUS_CHOICES later renders readabl
 stat-icon ships blue / green / orange / purple / slate and no red.
 
 Edit is offered only while status is draft or calculated (EDITABLE_RUN_STATUSES), which is exactly
-what clientbillingrun_edit refuses on. Delete is offered until the run is invoiced, which is exactly
-what clientbillingrun_delete refuses on. Both gates read obj.status — a column, not a query — so the
-button a row shows and the answer the route gives can never disagree.
+what clientbillingrun_edit refuses on. Delete is offered on the SAME two statuses (VOIDABLE_STATUSES,
+the same tuple), which is exactly what clientbillingrun_delete refuses on: an approved run carries an
+admin's signature, an invoiced one carries an AR document and a void one is the record that the
+period was cancelled — none of the three is deleted from here. Both gates read obj.status — a column,
+not a query — so the button a row shows and the answer the route gives can never disagree.
 
 Delete is @require_POST, so it is a real <form method="post"> with a csrf token and never a link. The
 confirm string carries the system-generated CBR- number and nothing user-typed: an apostrophe in a
@@ -212,7 +214,7 @@ the dialog then breaks open and the guard is silently gone (L42). Nothing on thi
                   {% if obj.status == 'draft' or obj.status == 'calculated' %}
                     <a href="{% url 'scm:clientbillingrun_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                   {% endif %}
-                  {% if obj.status != 'invoiced' %}
+                  {% if obj.status == 'draft' or obj.status == 'calculated' %}
                     <form method="post" action="{% url 'scm:clientbillingrun_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every charge line on it goes too, including any manual charges that were typed by hand and cannot be recalculated back. Voiding the run keeps the whole record.');">
                       {% csrf_token %}
                       <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
