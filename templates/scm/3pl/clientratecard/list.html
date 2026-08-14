@@ -192,7 +192,7 @@ status rule: a live tariff must not have its rates moved under a billing run tha
                   {% endcomment %}
                   <form method="post" action="{% url 'scm:clientratecard_delete' obj.pk %}" style="display:inline;">
                     {% csrf_token %}
-                    <button class="btn-icon" type="submit" title="Delete" onclick="return confirm('Delete {{ obj.number }}? The card\'s {{ obj.line_count }} priced line(s) go with it. If any billing run has ever been priced against this tariff the delete is refused and nothing changes.');"><i data-lucide="trash-2"></i></button>
+                    <button class="btn-icon danger" type="submit" title="Delete" onclick="return confirm('Delete {{ obj.number }}? The card\'s {{ obj.line_count }} priced line(s) go with it. If any billing run has ever been priced against this tariff the delete is refused and nothing changes.');"><i data-lucide="trash-2"></i></button>
                   </form>
                 </div>
               </td>
