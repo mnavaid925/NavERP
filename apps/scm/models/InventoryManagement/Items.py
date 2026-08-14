@@ -20,6 +20,16 @@ from apps.scm.models._base import *  # noqa: F401,F403
 # circular, the fix is to MOVE the constant, never to duplicate the list.
 from apps.scm.models._choices import STORAGE_CONDITION_CHOICES
 
+#: The widest value `Item.average_cost` — DecimalField(max_digits=14, decimal_places=4) — can hold.
+#: Both writers below are DERIVED figures divided by an on-hand quantity, so neither is bounded by
+#: anything a validator sees: `LandedCostCharge.estimated_amount`/`actual_amount` are (14, 2) with
+#: only a MinValueValidator, so a charge of 999,999,999,999.99 spread over an on-hand of 1 exceeds
+#: this column by two orders of magnitude. Un-clamped that reaches the driver as
+#: `DataError: Out of range value` — a 500 on the Allocate button, or (with MySQL strict mode off) a
+#: SILENTLY TRUNCATED inventory valuation, which is worse. Same shape as
+#: `LandedCostVoucher.MAX_VARIANCE_PCT` / `MAX_BILL_TAX_RATE_PCT` for their narrower columns.
+MAX_AVERAGE_COST = Decimal("9999999999.9999")
+
 
 class ItemCategory(TenantOwned):
     """A hierarchical grouping of items (e.g. Electronics › Laptops)."""
@@ -218,8 +228,13 @@ class Item(TenantOwned):
         prior_val = prior_qty * (self.average_cost or ZERO)
         new_qty = prior_qty + quantity
         if new_qty > ZERO:
-            self.average_cost = ((prior_val + quantity * (unit_cost or ZERO)) / new_qty).quantize(
-                Decimal("0.0001"))
+            # Capped at the column's own width — see MAX_AVERAGE_COST. Much harder to trip here than
+            # in `apply_landed_cost` (the result is bounded by the receipt's `unit_cost`, itself a
+            # 14,4 column), but the ceiling is the same ceiling and one writer honouring it while the
+            # other does not is how the guard stops being believed.
+            self.average_cost = min(
+                MAX_AVERAGE_COST,
+                (prior_val + quantity * (unit_cost or ZERO)) / new_qty).quantize(Decimal("0.0001"))
             self.save(update_fields=["average_cost", "updated_at"])
 
     def apply_landed_cost(self, total_amount):
@@ -237,8 +252,12 @@ class Item(TenantOwned):
         is a period expense rather than inventory value; loading it onto an empty item would make
         the next receipt inherit a cost that belongs to goods already sold.
 
-        The result is clamped at zero: an over-large reversal (possible when stock was consumed
-        between the two allocations) must never leave a negative unit cost behind.
+        The result is clamped at BOTH ends. At zero, because an over-large reversal (possible when
+        stock was consumed between the two allocations) must never leave a negative unit cost behind.
+        At ``MAX_AVERAGE_COST``, because the quotient is a derived figure nothing else bounds: a
+        charge that is large relative to the receipt's on-hand would otherwise raise
+        ``DataError: Out of range value`` out of ``.save()`` — inside ``LandedCostVoucher.allocate()``,
+        i.e. an uncaught 500 on the Allocate button.
         """
         total_amount = total_amount or ZERO
         if total_amount == ZERO:
@@ -247,7 +266,9 @@ class Item(TenantOwned):
         if on_hand <= ZERO:
             return
         moved = (self.average_cost or ZERO) + (total_amount / on_hand)
-        self.average_cost = max(ZERO, moved).quantize(Decimal("0.0001"))
+        # Clamped BEFORE `quantize`, which is also what keeps a wildly out-of-scale quotient from
+        # raising `InvalidOperation` against the decimal context's own precision.
+        self.average_cost = min(MAX_AVERAGE_COST, max(ZERO, moved)).quantize(Decimal("0.0001"))
         self.save(update_fields=["average_cost", "updated_at"])
 
     def __str__(self):
