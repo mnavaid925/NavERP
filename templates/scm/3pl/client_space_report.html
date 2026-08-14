@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — Warehouse Rental Management. STANDALONE at the sub-module root
+(templates/scm/3pl/), because it is not any one entity's list / detail / form page — the
+cold_storage_report / labor_board / sparepart_list precedent.
+
+Renders apps/scm/views/ThirdPartyLogistics/Reports.py::client_space_report. Everything this page may
+read, and nothing else — the view pins the same list in its own docstring:
+
+  rows                 LIST of dicts: client (a LogisticsClient, .party joined), space_model (the RAW
+                       value), space_model_label, committed_sqft (Decimal),
+                       committed_pallet_positions (int), dedicated_locations (int),
+                       dedicated_capacity (Decimal or None), contract_start (date or None),
+                       contract_end (date or None), days_to_expiry (int or None)
+  totals               dict: committed_sqft, committed_pallet_positions, dedicated_locations,
+                       dedicated_capacity (the last is None when nothing recorded a capacity)
+  space_model_choices  [(value, label)] for the ?space_model= dropdown — STRINGS, compared directly
+  clients              queryset for the ?client= dropdown — a pk, so |stringformat:"d"
+  truncated row_cap    bool / int
+  today                date
+  capacity_note reads_only_note        standing prose, printed VERBATIM
+
+TWO NULLS THAT MUST NEVER RENDER AS 0, and this is the whole reason this template is careful:
+
+  * dedicated_capacity is None when NO reserved bin records a capacity at all. "No bin records a
+    capacity" is a different statement from "the capacity is zero", and only one of them means
+    somebody should go and fill the field in. Every test is `is not None`, never truthiness and never
+    |default — |default:"—" would also swallow a genuine 0.
+  * days_to_expiry is None when no contract end date is on file. Rendered as 0 it would read as
+    "expires today", which is the single most alarming thing this page could say by accident. It goes
+    NEGATIVE once a contract has ended, so a plain `{% if %}` on it is wrong twice over.
+
+NO CONVERSION IS INVENTED ON THIS PAGE. committed_sqft and committed_pallet_positions are what the
+contract says; dedicated_capacity is the SUM of Location.capacity over the reserved bins, and 4.3's
+own field help text describes that number as being "in the bin's own units" — not square feet, not
+pallet positions, and not necessarily the same unit from one bin to the next. The three columns sit
+side by side and `capacity_note` (printed verbatim, not optional) is what makes the capacity column
+honest rather than misleading. An occupied-pallet-positions column is deliberately NOT offered at
+all: Item carries no dimensions, so any such figure would be an estimate presented as a measurement.
+
+space_model is the RAW value in `space_model`, with the label already resolved into
+`space_model_label` — so no {% for %} over the choices is needed to print it, and the badge chain
+branches on the raw value.
+
+THIS PAGE WRITES NOTHING. No POST target, no form except the GET filter bar, no verb button. Space is
+reserved by setting the owner on a location (4.3) and committed by editing the client (4.17), which
+is where the empty states below link to.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Warehouse Rental Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Warehouse Rental Management</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:logisticsclient_list' %}">Third-Party Logistics</a><span class="sep">›</span>
+        <span>Warehouse Rental Management</span>
+      </div>
+      <p class="text-muted">
+        What each client agreed to rent, beside the bins actually reserved to them. The two are shown
+        <span class="fw-600">side by side and are deliberately not converted into one another</span> — see the
+        note below the capacity column for why a single tidy square-foot figure here would be fiction.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Clients</a>
+      <a href="{% url 'scm:client_inventory_report' %}" class="btn btn-outline"><i data-lucide="boxes"></i> Client Inventory</a>
+      <a href="{% url 'scm:location_list' %}" class="btn btn-primary"><i data-lucide="map-pin"></i> Locations</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ reads_only_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">Commitments read from the client agreement</span>
+        <span class="badge badge-slate">Reserved space read from the location master</span>
+        <span class="badge badge-muted">No stock movement, no journal entry, no column written</span>
+        <span class="badge badge-slate"><i data-lucide="calendar"></i> As at {{ today|date:"M d, Y" }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="building-2"></i></div>
+      <div class="stat-value">{{ rows|length }}</div>
+      <div class="stat-label">Client{{ rows|length|pluralize }} listed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="ruler"></i></div>
+      <div class="stat-value">{{ totals.committed_sqft|floatformat:2 }}</div>
+      <div class="stat-label">Committed floor area (sq ft)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="layers"></i></div>
+      <div class="stat-value">{{ totals.committed_pallet_positions }}</div>
+      <div class="stat-label">Committed pallet positions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="warehouse"></i></div>
+      <div class="stat-value">{{ totals.dedicated_locations }}</div>
+      <div class="stat-label">Bin{{ totals.dedicated_locations|pluralize }} reserved to a client</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Filters</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="cs-client">Client</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="client" id="cs-client" class="form-select">
+            <option value="">Every client</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if request.GET.client == c.pk|stringformat:"d" %}selected{% endif %}>
+                {{ c.code }} — {{ c.party.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cs-model">Space model</label>
+          {% comment %}
+            A STRING value, so it is compared against request.GET.space_model directly — no
+            |stringformat here. The view ignores an unrecognised value rather than filtering to
+            nothing, so a hand-edited query string widens back to every client instead of emptying
+            the page with no explanation.
+          {% endcomment %}
+          <select name="space_model" id="cs-model" class="form-select">
+            <option value="">Every model</option>
+            {% for value, label in space_model_choices %}
+              <option value="{{ value }}" {% if request.GET.space_model == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:client_space_report' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        A <span class="fw-600">shared</span>-space client carries no commitment by design — the client form
+        refuses one — so those rows legitimately show zeros in the first two columns and are not a data gap.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Committed space versus reserved space</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ rows|length }} client{{ rows|length|pluralize }}</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} — narrow the filters to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    {% comment %}
+      THE CAPACITY CAVEAT, printed verbatim and above the table rather than in a footnote. It is the
+      whole difference between an honest column and a misleading one, and a reader who meets the
+      number first and the caveat afterwards has already drawn the wrong conclusion.
+    {% endcomment %}
+    <div class="card-body form-help">{{ capacity_note }}</div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Space model</th>
+            <th class="text-right">Committed sq ft</th>
+            <th class="text-right">Committed pallets</th>
+            <th class="text-right">Reserved bins</th>
+            <th class="text-right">Reserved capacity <span class="text-muted">(bin units)</span></th>
+            <th>Contract</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:logisticsclient_detail' row.client.pk %}" class="fw-600">{{ row.client.code }}</a>
+                <div class="form-help">{{ row.client.party.name }}</div>
+              </td>
+              <td>
+                {% comment %} Branching on the RAW value; the label is already resolved by the view. {% endcomment %}
+                {% if row.space_model == "dedicated" %}
+                  <span class="badge badge-info">{{ row.space_model_label }}</span>
+                {% elif row.space_model == "hybrid" %}
+                  <span class="badge badge-slate">{{ row.space_model_label }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ row.space_model_label }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.committed_sqft|floatformat:2 }}</td>
+              <td class="text-right">{{ row.committed_pallet_positions }}</td>
+              <td class="text-right">{{ row.dedicated_locations }}</td>
+              <td class="text-right">
+                {% comment %}
+                  `is not None`, never truthiness: a genuine 0 capacity is a recorded fact and must print
+                  as 0, while None means no reserved bin records a capacity at all — which is what the
+                  words say instead.
+                {% endcomment %}
+                {% if row.dedicated_capacity is not None %}
+                  {{ row.dedicated_capacity|floatformat:2 }}
+                {% else %}
+                  <span class="text-muted">Not recorded</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.contract_start %}{{ row.contract_start|date:"M d, Y" }}{% else %}<span class="text-muted">No start date</span>{% endif %}
+                {% if row.contract_end %}
+                  <div class="form-help">to {{ row.contract_end|date:"M d, Y" }}</div>
+                {% endif %}
+                {% comment %}
+                  days_to_expiry is int|None and goes NEGATIVE after the end date, so every branch here
+                  tests `is not None` first. None must never render as 0 — that would read as "expires
+                  today" for a client who simply has no end date on file.
+                {% endcomment %}
+                {% if row.days_to_expiry is not None %}
+                  {% if row.days_to_expiry < 0 %}
+                    <div><span class="badge badge-red">Ended {{ row.days_to_expiry|floatformat:0|cut:"-" }} day{{ row.days_to_expiry|pluralize }} ago</span></div>
+                  {% elif row.days_to_expiry <= 90 %}
+                    <div><span class="badge badge-amber">{{ row.days_to_expiry }} day{{ row.days_to_expiry|pluralize }} to expiry</span></div>
+                  {% else %}
+                    <div><span class="badge badge-green">{{ row.days_to_expiry }} days to expiry</span></div>
+                  {% endif %}
+                {% else %}
+                  <div><span class="badge badge-muted">Open-ended</span></div>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="warehouse"></i>
+                  <h3>No rented space to show</h3>
+                  <p>No logistics client matches the current filters. Rental here is not a separate agreement table — the commitment is a field block on the client record, and the space actually reserved is the set of locations assigned to that client. Set a client's space model to dedicated or hybrid with a committed area, then assign them the bins you have set aside. If you were expecting rows, try clearing the filters.</p>
+                  <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-primary"><i data-lucide="building-2"></i> Logistics clients</a>
+                  <a href="{% url 'scm:location_list' %}" class="btn btn-outline"><i data-lucide="map-pin"></i> Locations</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td colspan="2" class="fw-600">Total over the clients listed</td>
+              <td class="text-right fw-600">{{ totals.committed_sqft|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.committed_pallet_positions }}</td>
+              <td class="text-right fw-600">{{ totals.dedicated_locations }}</td>
+              <td class="text-right fw-600">
+                {% if totals.dedicated_capacity is not None %}
+                  {{ totals.dedicated_capacity|floatformat:2 }}
+                {% else %}
+                  <span class="text-muted">Not recorded</span>
+                {% endif %}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      The capacity total sums only the bins that record one, so it is a total of what was measured rather
+      than of what exists. Where it reads “Not recorded”, not one reserved bin on the page carries a capacity
+      — which is a field to go and fill in, not a warehouse with no room in it.
+    </div>
+  </div>
+{% endblock %}
