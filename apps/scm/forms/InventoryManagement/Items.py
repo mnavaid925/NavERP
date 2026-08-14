@@ -42,6 +42,13 @@ class ItemForm(TenantUniqueMixin, TenantModelForm):
         # and links back to this page. Off the whitelist that instruction is unfollowable, every
         # client's on-hand is permanently zero, and every billing run that measures stock bills
         # nothing — the column could only ever be set by `seed_scm` and the Django admin.
+        # `weight_kg` / `volume_cbm` are 4.18's landed-cost bases and they join this whitelist for
+        # precisely the reason the three flags above did: `LandedCostVoucher.allocate()` spreads
+        # freight by weight and insurance by volume, and both bases FALL BACK to quantity when the
+        # received items carry neither. Off the whitelist no tenant user could ever populate them,
+        # so allocate-by-weight and allocate-by-volume would be reachable only through `seed_scm`
+        # and the Django admin — a live feature that silently degrades to the fallback for every
+        # real workspace, with a plausible number to show for it.
         fields = ["sku", "name", "category", "uom", "item_type", "tracking", "costing_method",
-                  "standard_cost", "reorder_point", "is_spare_part", "storage_condition",
-                  "owner_client", "description", "is_active"]
+                  "standard_cost", "reorder_point", "weight_kg", "volume_cbm", "is_spare_part",
+                  "storage_condition", "owner_client", "description", "is_active"]
