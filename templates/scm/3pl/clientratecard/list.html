@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics (3PL) Management — the client tariff register.
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientRateCards.py::clientratecard_list. Everything this
+page may read, and nothing else:
+
+  object_list        the page slice of ClientRateCard (crud_list)
+  page_obj           the paginator page — pagination is delegated to partials/pagination.html, which
+                     guards has_previous / has_next so page 1 and the last page never call
+                     previous_page_number / next_page_number unconditionally (L9)
+  q                  the echoed search term. It searches number, name, client__code and
+                     client__party__name
+  clients            LogisticsClient queryset for the ?client= dropdown
+  status_choices     RATE_CARD_STATUS_CHOICES — [(value, label), …] for the ?status= <select>
+  stats              dict with EXACTLY these keys: total, draft, active, superseded, expired
+
+PER-ROW, the contract pins exactly: obj.number, obj.name, obj.version, obj.client.code,
+obj.effective_from, obj.effective_to, obj.status / obj.get_status_display and obj.line_count —
+the last of which is ANNOTATED onto the queryset by the view. The model also carries an
+`active_line_count` property, and calling it from here would be one query per row for one number in
+one column: the measured 4.13 asset_list finding. This page must never reach for the property.
+
+THE STATUS BADGE IS A LITERAL LADDER on the exact RATE_CARD_STATUS_CHOICES keys — draft, active,
+superseded, expired — because theme.css ships COLOUR-named badges only. badge-success /
+badge-warning / badge-danger do not exist and render as unstyled text (L33). Every ladder below ends
+in an {% else %} that still prints get_status_display, so a choice added to the model later shows up
+plainly rather than vanishing.
+
+TWO FILTERS, AND THEY ARE COMPARED DIFFERENTLY ON PURPOSE. ?status= is a plain string compared
+against request.GET.status. ?client= is a pk and is compared with |stringformat:"d" and NEVER
+|slugify — |slugify on "12" happens to work and on any value that is not a bare integer silently
+does not, which is how a dropdown quietly forgets its own selection. The view puts ?client= through
+as_db_int, so ?client=abc, ?client=² and a 21-digit value SKIP the filter instead of raising out of
+.filter() (L11).
+
+DELETE IS ON EVERY ROW AND IS NOT STATUS-GATED, which is deliberate rather than an oversight.
+clientratecard_delete refuses on ProtectedError — ClientBillingRun.rate_card is PROTECT, so a card
+that has ever been billed against cannot be removed — and that is a fact about billing runs, not
+about status: a draft card can be undeletable and a superseded one can be perfectly deletable. This
+list carries no per-row run count, so the honest thing is to offer the button and let the route
+answer with its actionable message; the card's own page carries `can_delete`, which mirrors the
+route exactly. EDIT is gated on status == "draft" (EDITABLE_RATE_CARD_STATUSES), because that IS a
+status rule: a live tariff must not have its rates moved under a billing run that already used them.
+{% endcomment %}
+{% block title %}Client Rate Cards{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Client Rate Cards</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Client Rate Cards</span></div>
+      <p class="text-muted">A tariff is what a 3PL client is charged for storage, handling and everything around them — one dated, versioned card per client, holding the priced lines a billing run reads. A card is <span class="fw-600">drafted, activated, then superseded</span> rather than edited in place: the run that billed last month must still be able to say which rate it used, so a rate change is a new version with its own effective dates and not an overwrite of the old one.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="users"></i> Logistics Clients</a>
+      <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Billing Runs</a>
+      <a href="{% url 'scm:clientratecard_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rate Card</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace and deliberately not over the filtered page: "4 active" is a
+    statement about what is billable right now, and a tile that re-scoped itself as you browsed
+    would read all-clear the moment you filtered to one client. The filtered figure is the badge in
+    the card header below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Rate card{{ stats.total|pluralize }} on file across every client</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="badge-check"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Active — the only status a billing run should be pricing against</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="pencil-ruler"></i></div>
+      <div class="stat-value">{{ stats.draft }}</div>
+      <div class="stat-label">Still draft · lines can be added and rates changed only while a card is here</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="archive"></i></div>
+      <div class="stat-value">{{ stats.superseded }}</div>
+      <div class="stat-label">Superseded · {{ stats.expired }} expired — both are kept, because a past run has to be able to name the rate it used</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Tariffs</h2>
+      <div class="badge-group">
+        {% if stats.draft %}<span class="badge badge-muted">{{ stats.draft }} draft</span>{% endif %}
+        {% if stats.active %}<span class="badge badge-green">{{ stats.active }} active</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search TAR- number, card name or client…">
+        </div>
+        {% comment %}
+          The pk dropdown — |stringformat:"d" and NEVER |slugify.
+        {% endcomment %}
+        <div class="form-group">
+          <select name="client" aria-label="Client" class="form-select">
+            <option value="">Every client</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if request.GET.client == c.pk|stringformat:"d" %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:clientratecard_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">Cards are listed <span class="fw-600">newest effective date first</span>, then by version. A blank end date means <em>open-ended</em> and not "already finished" — it is the ordinary shape for the tariff a client is on today. Two <span class="fw-600">active</span> cards for one client may never overlap in time: the card refuses the save and names the one it collides with, because a run that found two live tariffs would have no defined answer about which rate applies.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rate card</th>
+            <th>Client</th>
+            <th>Version</th>
+            <th>Effective</th>
+            <th>Lines</th>
+            <th>Status</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:clientratecard_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+              </td>
+              <td class="nowrap">
+                <a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="mono">{{ obj.client.code }}</a>
+              </td>
+              <td class="mono nowrap">v{{ obj.version }}</td>
+              <td class="nowrap">
+                <span class="mono">{{ obj.effective_from|date:"M d, Y" }}</span>
+                {% comment %}
+                  effective_to is NULL for an open-ended card, which is +infinity and not "expired".
+                  |default would collapse the two, so it is tested explicitly.
+                {% endcomment %}
+                <div class="form-help text-muted">
+                  {% if obj.effective_to %}to {{ obj.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}
+                </div>
+              </td>
+              <td class="mono nowrap">{{ obj.line_count }}</td>
+              <td class="nowrap">
+                {% if obj.status == "draft" %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "active" %}
+                  <span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "superseded" %}
+                  <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "expired" %}
+                  <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientratecard_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    EDITABLE_RATE_CARD_STATUSES is ("draft",) and nothing else — the same rule the
+                    detail page's `can_edit` carries and the same one the route enforces.
+                  {% endcomment %}
+                  {% if obj.status == "draft" %}
+                    <a href="{% url 'scm:clientratecard_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% comment %}
+                    POST-only. The apostrophe in the confirm text is escaped as \' — &#39; does NOT
+                    escape inside this attribute and would reach the browser as a literal entity,
+                    ending the JS string early (L42).
+                  {% endcomment %}
+                  <form method="post" action="{% url 'scm:clientratecard_delete' obj.pk %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button class="btn-icon" type="submit" title="Delete" onclick="return confirm('Delete {{ obj.number }}? The card\'s {{ obj.line_count }} priced line(s) go with it. If any billing run has ever been priced against this tariff the delete is refused and nothing changes.');"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="file-text"></i>
+                  <h3>No rate cards yet</h3>
+                  <p>Nothing in this workspace prices a 3PL client. Create one with <span class="fw-600">New Rate Card</span>: pick the client, give the card a name and a start date, then add the priced lines — storage per pallet position, a handling charge per order, a receipt fee, whatever the contract says. A card starts as a <span class="fw-600">draft</span> and only an <span class="fw-600">active</span> one is billed against, so nothing goes on an invoice until you activate it. If you were expecting rows here, try clearing the filters.</p>
+                  <a href="{% url 'scm:clientratecard_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Create a rate card</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      A rate card is <span class="fw-600">evidence as much as configuration</span>. Once a billing run has priced against it the card can no longer be deleted — the run snapshots each line's category, basis and rate onto its own rows precisely so the arithmetic stays readable years later, and the card is what those snapshots refer back to. Raise a <span class="fw-600">new version</span> and supersede the old one when prices change; the superseded card keeps its dates and its lines, and every past run keeps pointing at the tariff that was actually in force.
+    </div>
+  </div>
+{% endblock %}
