@@ -316,7 +316,7 @@ linked to its own record, which carries the name.
                     <a href="{% url 'scm:clientratecardline_edit' line.pk %}" class="btn-icon" title="Edit line"><i data-lucide="pencil"></i></a>
                     <form method="post" action="{% url 'scm:clientratecardline_delete' line.pk %}" style="display:inline;">
                       {% csrf_token %}
-                      <button class="btn-icon" type="submit" title="Delete line" onclick="return confirm('Delete this {{ line.get_charge_basis_display|lower }} line? It stops being priced on the next run. Runs that already used it keep their own snapshot of the category, basis and rate, so nothing already billed changes.');"><i data-lucide="trash-2"></i></button>
+                      <button class="btn-icon danger" type="submit" title="Delete line" onclick="return confirm('Delete this {{ line.get_charge_basis_display|lower }} line? It stops being priced on the next run. Runs that already used it keep their own snapshot of the category, basis and rate, so nothing already billed changes.');"><i data-lucide="trash-2"></i></button>
                     </form>
                   {% else %}
                     <span class="text-muted">Locked</span>
