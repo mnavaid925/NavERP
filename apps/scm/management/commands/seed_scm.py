@@ -4978,10 +4978,11 @@ class Command(BaseCommand):
         ``recompute()`` — never hand-stamped. That is the 4.13 ``_post_stock_move`` / 4.14
         ``_stamp_standard`` / 4.16 ``open_for()`` rule: the demo is produced by the same code the
         buttons run, so the path is exercised on every ``seed_scm`` and the demo cannot drift from
-        the implementation. It is also why a rate card's ``status`` is never assigned here — the
-        card is saved as a draft and ``activate()``... does not exist on the model, so the seeder
-        sets ``status="active"`` on CREATE only, which is the one thing a fixture may do that a form
-        may not (the form has no status field at all).
+        the implementation. The one deliberate exception is a rate card's ``status``: it is stamped
+        ``"active"`` on CREATE rather than walked through ``clientratecard_activate``, because the
+        verb is a VIEW and the seeder has no request to run it with. ``status`` is a real field on
+        ``ClientRateCardForm`` too, so this fixture is doing something a user could also do — it is
+        simply doing it in one statement instead of two.
 
         **THE THIRD CLIENT HAS NOTHING AND THAT IS THE POINT.** A client in onboarding legitimately
         has no tariff, no billing history and no measured SLA, so the empty state is this
@@ -5162,9 +5163,10 @@ class Command(BaseCommand):
             reserved_bins.append(bin_row)
 
         # ---- the tariffs ------------------------------------------------------------------------
-        # `status` is set on CREATE here and nowhere else. The FORM carries no status field at all —
-        # a card moves draft -> active -> superseded through the two verbs — so a fixture stamping
-        # the opening state is the one write no user path duplicates. It is NOT edited afterwards.
+        # `status` is set on CREATE here and NOT edited afterwards. A user reaches the same state
+        # either through `clientratecard_activate` (the preferred, audited path) or through
+        # `ClientRateCardForm`, which does carry a status field — the seeder skips the verb only
+        # because it is a view and there is no request here to call it with.
         cards = {}
         card = ClientRateCard.objects.create(
             tenant=tenant, client=dedicated,
