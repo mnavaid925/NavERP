@@ -517,3 +517,48 @@ from .CustomerPortal.Portal import (  # noqa: F401
     portal_home, portal_order_list, portal_order_detail, portal_documents,
     portal_document_download, portal_inquiry_create, portal_catalog, portal_profile,
 )
+
+# --- 4.17 Third-Party Logistics (3PL) Management --------------------------------------------------
+# The client master. Plain CRUD, no verbs: `LogisticsClient.status` is staff configuration an account
+# manager sets on the form (the `PortalAccount` posture), not a ladder a button walks.
+from .ThirdPartyLogistics.LogisticsClients import (  # noqa: F401
+    logisticsclient_list, logisticsclient_create, logisticsclient_detail,
+    logisticsclient_edit, logisticsclient_delete,
+)
+# TWO verbs beyond CRUD, and they are the whole reason pricing is auditable. `status` is NOT on
+# `ClientRateCardForm`, so `activate` and `supersede` are its only writers: activating stamps the
+# effective window and closes the previous active card for that client, superseding retires one.
+# Both are @require_POST. Editing a card's LINES is refused once it leaves `draft`
+# (EDITABLE_RATE_CARD_STATUSES) — otherwise last quarter's invoice could be re-priced this quarter.
+from .ThirdPartyLogistics.ClientRateCards import (  # noqa: F401
+    clientratecard_list, clientratecard_create, clientratecard_detail,
+    clientratecard_edit, clientratecard_delete,
+    clientratecard_activate, clientratecard_supersede,
+    clientratecardline_create, clientratecardline_edit, clientratecardline_delete,
+)
+# FOUR verbs. `calculate` walks the StockMove ledger and the active rate card and REPLACES the run's
+# computed lines (no total is ever typed); `approve` freezes it; `draft_invoice` hands off to
+# `accounting` as a DRAFT and never posts a journal entry itself (L29); `void` is how a wrong run is
+# retracted, because an approved run is not deleted. All @require_POST.
+from .ThirdPartyLogistics.ClientBillingRuns import (  # noqa: F401
+    clientbillingrun_list, clientbillingrun_create, clientbillingrun_detail,
+    clientbillingrun_edit, clientbillingrun_delete,
+    clientbillingrun_calculate, clientbillingrun_approve,
+    clientbillingrun_draft_invoice, clientbillingrun_void,
+    clientbillingrunline_create, clientbillingrunline_edit, clientbillingrunline_delete,
+)
+# `recompute` (one SLA) and `recompute_all` (the sweep, capped) are the ONLY writers of the achieved
+# figure, the breach flag and the credit — all editable=False, so no ModelForm can reach them. Both
+# are @require_POST and both derive from 4.5/4.6/4.10 rows through SLA_METRIC_META. A metric this
+# build cannot measure reports "not measured" rather than a confident 100%.
+from .ThirdPartyLogistics.ClientSlas import (  # noqa: F401
+    clientsla_list, clientsla_create, clientsla_detail, clientsla_edit, clientsla_delete,
+    clientsla_recompute, clientsla_recompute_all,
+)
+# TWO COMPUTED PAGES over tables that already exist — 4.17 declares no client-stock table and no
+# rental table. Segregation reads `Item.owner_client` against the append-only StockMove ledger;
+# the space page prints committed space beside reserved bin capacity and invents NO conversion
+# between them. Both write NOTHING: no stock move, no journal entry, no column.
+from .ThirdPartyLogistics.Reports import (  # noqa: F401
+    client_inventory_report, client_space_report,
+)
