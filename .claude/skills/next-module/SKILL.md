@@ -200,6 +200,11 @@ future migration (lessons L28/L29).
 
 ## Step 2 — Build the sub-module (prefer a parallel agent Workflow for speed)
 
+**Before you write a single file:** run `git rev-parse HEAD` and keep that sha as **`BASE`** — Step 5a reviews
+`BASE...HEAD`, and by then the working tree is clean (the build commits as it goes), so there is no other way to
+name the changeset. Also run `git status`: a dirty tree at session start belongs to a concurrent session — leave
+those files alone (L45), and agree the migration number before generating one (L43).
+
 **Existing module vs. new module.** First check whether `apps/<slug>/` already exists:
 - **App exists (the common case — you're adding a sub-module):** you **extend** it by **adding a new
   `<SubModule>/` folder to each of the four packages** (`models/`, `forms/`, `views/`, `urls/`) with one
@@ -350,13 +355,43 @@ Credentials: tenant admins `admin_acme` / `admin_globex`, password `password` (p
 
 ---
 
-## Step 5 — Close with the specialist review agents (CLAUDE.md "Module Creation Sequence")
-After the build verifies, run the review agents **one at a time, in order** — `code-reviewer`, `explorer`,
-`frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`, `test-writer` — scoped to the
-sub-module's new files, applying each one's findings and committing between steps (per CLAUDE.md). This is the
-quality bar, not optional (lesson L18). Then **update the module's existing skill** (`.claude/skills/<slug>/SKILL.md`)
-to document the new sub-module's models/routes/templates/seeder rows — for an existing module you *update* the skill,
-you do NOT create a new one (a new skill is only authored on a brand-new-app run). Commit the skill on its own.
+## Step 5 — Close with the parallel review wave, the fixer, and the test wave (CLAUDE.md "Module Creation Sequence")
+
+This is the quality bar, not optional (lesson L18) — but it runs **in parallel**, not as a serial chain of agents.
+Three phases, in order:
+
+**5a. Review wave — six agents at once.** One Workflow, scoped to the changeset you captured before building:
+
+```
+Workflow({ scriptPath: '.claude/workflows/module-review.js',
+           args: { slug: '<slug>', submodule: '<N.M>', title: '<sub-module title>',
+                   base: '<BASE sha from before the build>', date: '<today>' } })
+```
+
+`code-reviewer · explorer · frontend-reviewer · performance-reviewer · qa-smoke-tester · security-reviewer` run
+concurrently, read-only, each in its own lane. Write the returned `markdown` to
+**`.claude/tasks/review-<slug>-<N.M>.md`** and commit it. Re-run any lane the summary table marks `NO RESULT`.
+
+**5b. `code-fixer` agent.** Hand it that file. It fixes every finding in ID order (Critical → Important → Minor),
+verifies each, commits **one file per commit**, and marks each finding `[x] fixed` / `[~] skipped — reason`. Do
+**not** apply findings yourself in the main session. Confirm nothing is left `[ ] open` when it reports back.
+
+**5c. Test wave — four writers at once.**
+
+```
+Workflow({ scriptPath: '.claude/workflows/module-tests.js',
+           args: { slug: '<slug>', submodule: '<N.M>', subslug: '<short-slug>',
+                   title: '<sub-module title>' } })
+```
+
+A solo agent pins the contract and owns `tests/conftest.py`, four `test-writer` agents then write
+`test_<subslug>_{models,forms,views,security}.py` in parallel, and a final agent runs the **full unfiltered** app
+suite to green (never `-k` filtered — a filter cannot see the name collisions a fan-out causes, L47). Commit each
+test file on its own.
+
+Then **update the module's existing skill** (`.claude/skills/<slug>/SKILL.md`) to document the new sub-module's
+models/routes/templates/seeder rows — for an existing module you *update* the skill, you do NOT create a new one
+(a new skill is only authored on a brand-new-app run). Commit the skill on its own.
 
 ---
 
