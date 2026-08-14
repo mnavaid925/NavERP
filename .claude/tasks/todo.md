@@ -23435,3 +23435,936 @@ collector walking FKs declared in code whose tables a sibling had not yet migrat
 committing another session's uncommitted working-tree work under first-person messages (**L45**).
 Migration numbering held (`0025 → 0026 → 0027`, a single linear leaf) because the sessions agreed one
 rule: **nobody pre-reserves a number they have not generated.**
+
+---
+# Sub-module 4.17 — Third-Party Logistics (3PL) Management (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.17.md  (2026-08-14)
+
+## 0. Read this first — the two things that will break this build
+
+**(a) The research file contains one factual error about the spine. It is corrected here, and the
+correction changes a whole billing path.** `research-scm-4.17.md:239` claims *"every `StockMove`,
+`PickTaskLine`, `PutawayTask`, `CycleCountTaskLine` and `GoodsReceiptLine` already reaches an
+`Item`"*. **`GoodsReceiptLine` does NOT.** Verified on disk:
+
+```
+apps/scm/models/ProcurementManagement/GoodsReceiptNotes.py:170   po_line = FK("scm.PurchaseOrderLine")
+apps/scm/models/ProcurementManagement/PurchaseOrders.py:176      item_description = CharField(255)
+apps/scm/models/ProcurementManagement/PurchaseOrders.py:177      sku_hint         = CharField(64)
+```
+
+`PurchaseOrderLine` carries **free-text `item_description` / `sku_hint` and no `item` FK** (4.1
+shipped before the item catalog did — the documented L28 stand-in; `SalesOrderLine.py:190-193` says
+so in as many words). So `GoodsReceiptLine → po_line → item → owner_client` **does not exist and must
+not be written.** Receipt attribution runs through the two paths that are real:
+`PutawayTask.goods_receipt` (reverse accessor **`putaway_tasks`**, verified `PutawayTasks.py:38-41`)
+→ `PutawayTask.item.owner_client`, **or** `GoodsReceiptNote.location.owner_client`. Both are pinned
+in §4.3 below. Do not "restore" the po_line path.
+
+**(b) `accounting.InvoiceLine` will silently re-price every line the billing run hands it.** Verified
+`apps/accounting/models/AccountsReceivable/Invoices.py:84-96`:
+
+```python
+quantity   = models.DecimalField(max_digits=14, decimal_places=4, default=1)
+unit_price = models.DecimalField(max_digits=14, decimal_places=2, default=0)   # <- 2dp
+def save(self, *args, **kwargs):
+    self.line_total = (self.quantity or ZERO) * (self.unit_price or ZERO)      # <- recomputed
+```
+
+A rate card line's `rate` is **`Decimal(14, 4)`**. Writing a 4dp rate into a 2dp `unit_price` and
+letting `InvoiceLine.save()` recompute means the drafted invoice total **will not equal the billing
+run total** — a storage rate of `0.0450`/pallet/day becomes `0.05` and over-bills the client by 11 %,
+with no error anywhere. The hand-off therefore writes **`quantity=Decimal("1")`,
+`unit_price=q2(run_line.amount)`** and carries the real quantity × rate in the line `description`.
+Pinned in §4.3 `draft_invoice()`, and asserted in the smoke sweep (§8).
+
+**(c) Shared working tree.** Another session may be building a different sub-module in this checkout.
+- [ ] **Never `Write` a shared file — anchored `Edit` only** (L43). The shared files this pass touches:
+      `apps/scm/models/__init__.py`, `apps/scm/forms/__init__.py`, `apps/scm/views/__init__.py`,
+      `apps/scm/urls/__init__.py`, `apps/scm/admin.py`,
+      `apps/scm/management/commands/seed_scm.py` (**five anchored edits in this one file** — the new
+      `_seed_3pl_tenant`, its call site in `handle()`, its branch in `_flush()`, the `help` string,
+      the closing SUCCESS message), `apps/core/navigation.py`, `templates/scm/overview.html`,
+      `README.md`, `.claude/skills/scm/SKILL.md`, and the four 4.3 files in §5.
+- [ ] **Migration number is CLAIMED: `0029`.** Verified current leaf on disk is
+      `0028_remove_portalactivity_scm_pact_tnt_action_idx_and_more.py`. If a sibling session lands
+      `0029` first, **delete this one and re-run `makemigrations scm`** — never `--merge`, never
+      renumber theirs.
+- [ ] **Never run `seed_scm --flush`.** Shared MySQL `nav_erp`. Plain `python manage.py seed_scm`.
+- [ ] One file per commit, PowerShell-safe (`;` not `&&`). **Never `git push`.**
+
+---
+
+## 1. What this pass is — an EXTEND run
+
+- [ ] `apps/scm` already ships **4.1–4.16**. This adds 4.17 alongside them.
+- [ ] **No `config/settings.py` change and no `config/urls.py` change.** `apps.scm` is already in
+      `INSTALLED_APPS` and already `include()`d at `scm/`. Touching either on an extend run is the
+      error this line exists to prevent.
+- [ ] **Backend sub-package: `ThirdPartyLogistics/`** in all four layers — PascalCase of the NavERP.md
+      title, following the shipped `LaborManagement/` → `ColdChainManagement/` → `CustomerPortal/`.
+- [ ] **Template sub-module folder: `templates/scm/3pl/`** — the short-slug convention all sixteen
+      shipped scm template folders use (`labor/`, `coldchain/`, `portal/`, `assets/`, …).
+      **The backend-package / template-folder asymmetry is the house rule, not a defect** — repeat the
+      one-line note `PortalAccounts.py:45-47` carries into this sub-module's model package docstring
+      and into SKILL.md, so no review agent "fixes" `templates/scm/3pl/` into
+      `templates/scm/thirdpartylogistics/`.
+- [ ] Reference implementations to copy verbatim where possible:
+      `apps/scm/models/CustomerPortal/PortalAccounts.py` (the `clean()` ownership guard + the
+      stamped-once `save()`), `apps/scm/models/TransportationManagement/FreightInvoices.py` (the
+      accounting hand-off + `recalc_amounts` Python-sum), `apps/scm/models/TransportationManagement/
+      Carriers.py` (`CarrierRateCard` field vocabulary; `recompute_scorecard()` = the
+      evidence-not-opinion measurement pattern), `apps/scm/models/ReturnsManagement/
+      ReturnAuthorizations.py:194` (the `credit_note` FK shape), `apps/scm/urls/CustomerPortal/
+      PortalAccounts.py` (the COLLISION CHECK docstring), `templates/scm/portal/portalaccount/
+      {list,detail,form}.html`.
+- [ ] Views use `apps/core/crud.py` via `apps/scm/views/_common.py`'s star import (`crud_list`,
+      `crud_create`, `crud_edit`, `crud_detail`, `crud_delete`, `paginate`, `as_db_int`,
+      `write_audit_log`, `tenant_admin_required`). **Context-var contract is pinned:**
+      list → `object_list` + `page_obj` + `q`; detail/edit → `obj`; form → `form` + `is_edit`.
+      A hand-rolled save path (every POST verb in §6) **must call `write_audit_log` itself** — only
+      the `crud_*` helpers do it automatically.
+- [ ] Auto-numbers come from `TenantNumbered` in `apps/scm/models/_base.py`; `q2` / `q4` / `ZERO` /
+      `MAX_Q2` / `MAX_Q4` come from the same star import. **Every computed money figure goes through
+      `q2()`** (it clamps as well as quantizes — see `_base.py:38-50`).
+- [ ] **`theme.css` badges are COLOUR-named only** — `badge-green / badge-red / badge-amber /
+      badge-info / badge-muted / badge-slate`. `badge-success` / `badge-danger` / `badge-warning`
+      **do not exist** and render completely unstyled (**L33**, shipped 5× already). Stat-icon colours
+      are `blue / green / orange / purple / slate` — there is no red and no amber.
+- [ ] **L32 — all five `LIVE_LINKS["4.17"]` bullets point at STAFF-reachable pages.** There is no
+      client-facing surface in 4.17 at all: the 3PL client portal is **4.16's** `PortalAccount` /
+      `PortalDocumentShare`, and 4.17 builds no second portal and no second login binding.
+- [ ] **SECURITY, non-negotiable (L20):** 4.17 stores **no** client API key, no endpoint URL, no EDI
+      password, no token, no secret of any kind. `integration_mode` / `client_system` /
+      `edi_partner_id` / `edi_qualifier` are non-secret partner identifiers and nothing more. Secret
+      handling belongs to **4.19** with a real secrets store. If a reviewer asks for a "connection
+      settings" field, the answer is no, and this line is why.
+
+### Spine re-verified on disk at plan time (L28 — the grep is the truth, never the ERD)
+
+| Entity | Verified at | 4.17 use |
+|---|---|---|
+| `core.Party` / `PartyRole` / `Document` / `Tenant` | `apps/core/models/{Party,PartyRole,Document,Tenant}.py:5` | the client IS a Party (`PartyRole.ROLE_CHOICES` has `customer`); contract attachment |
+| `accounting.Invoice` / `InvoiceLine` | `AccountsReceivable/Invoices.py:6,81` | the draft hand-off. `kind` ∈ `invoice\|credit_note`; `status` ∈ `draft/sent/partial/paid/void`; `party`→`core.Party` PROTECT; `recalc_totals()` `:49`. **`InvoiceLine` has `tax_rate_pct` Decimal(5,2) and NO `tax_code` FK** |
+| `accounting.Currency` / `PaymentTerm` / `GLAccount` | `GeneralLedger/Currencies.py:6`, `AccountsPayable/PaymentTerms.py:6`, `GeneralLedger/GLAccounts.py:5` | tariff currency, terms, revenue account. `Currency` is GLOBAL (`models.Model`), not tenant-scoped |
+| `accounting.JournalEntry` | `GeneralLedger/…` | **read never, written never (L29)** |
+| `scm.Item` / `ItemCategory` / `UOM` | `InventoryManagement/Items.py:82,27,46` | `sku`, `category`, `uom`, `tracking`, `costing_method`, `average_cost` (editable=False), `is_active`. **Gets the new `owner_client` column** |
+| `scm.Location` | `InventoryManagement/Locations.py:31` | `code`, `name`, `location_type`, `parent`, `capacity` (nullable, **"in the bin's own units"**), `is_pickable`. **Gets the new `owner_client` column** |
+| `scm.StockMove` | `InventoryManagement/StockMoves.py:38-50` | `item`, `location`, signed `quantity` Dec(16,4), `unit_cost` Dec(14,4), `move_type` ∈ `receipt/issue/transfer/adjustment/consumption/production/maintenance`, `moved_at` DateTime, `reference`. **Append-only — every storage quantity is an aggregate over this (L37)** |
+| `scm.GoodsReceiptNote` / `GoodsReceiptLine` | `ProcurementManagement/GoodsReceiptNotes.py:37-53,169-178` | `receipt_date` (Date), `status`, `location`, `bill`. **Line has `po_line`, `quantity_received/rejected` and NO `item` — see §0(a)** |
+| `scm.PutawayTask` | `WarehouseManagement/PutawayTasks.py:38-55` | `goods_receipt` (`related_name="putaway_tasks"`), **`item`**, `to_location`, `quantity`, `status`, `completed_at`. **The only verified GRN→Item bridge** |
+| `scm.PickTask` / `PickTaskLine` | `WarehouseManagement/PickTasks.py:40-58,87-97` | task: `status`, `zone`, `package_count`, `picked_at`, `packed_at`, **no order FK**; line: **`item`**, `from_location`, `quantity_requested/picked` |
+| `scm.CycleCountTask` / `CycleCountTaskLine` | `WarehouseManagement/CycleCountTasks.py:37-48,93-102` | task: `counted_at`, `location`; line: **`item`**, `expected_quantity` (editable=False), `counted_quantity` (nullable) → the inventory-accuracy SLA |
+| `scm.SalesOrder` / `SalesOrderLine` | `OrderManagement/SalesOrders.py:54-91,195-212` | `customer`→`core.Party`, `order_date`, `promised_date` (editable=False), `status` ∈ `draft/submitted/on_hold/allocated/partially_fulfilled/fulfilled/invoiced/cancelled/closed` (editable=False), `invoice`. Line: **`item` (nullable FK)**, `quantity_ordered` |
+| `scm.Shipment` | `TransportationManagement/Shipments.py:38-75` | `direction`, `carrier`, **`sales_order` (nullable)**, `planned_pickup_date`, `planned_delivery_date`, `actual_pickup_at`, `actual_delivery_at` (both editable=False), `weight_kg`, `volume_cbm`, `package_count`, `freight_cost_estimate`, `pod_received`. **No item FK — client attribution runs `sales_order→lines→item→owner_client`** |
+| `scm.Carrier` / `CarrierRateCard` | `TransportationManagement/Carriers.py:47,151` | the rate-card precedent (`rate_basis`, `base_rate`, `min_charge`, `effective_from/to`, `is_active`) |
+| `scm.FreightInvoice` | `TransportationManagement/FreightInvoices.py:16` | the hand-off precedent: sets `bill`→`accounting.Bill` (nullable, editable=False), posts **no** JournalEntry |
+| `scm.PortalAccount` | `CustomerPortal/PortalAccounts.py:63` | 4.16 already owns the client-facing console keyed on `customer`→`core.Party` |
+| `scm.KpiTarget` | `SupplyChainAnalytics/KpiTargets.py` | **cannot be reused** — `SCOPE_CHOICES` = `all/category/location/carrier/vendor`, **no client scope**, and `METRIC_META` carries no 3PL service metric |
+
+**Verified NOT to exist — no hopeful FK is planned against any of them:**
+- **No `Client` / `Depositor` / `StockOwner` / `Warehouse` / `Tariff` model anywhere in the repo.**
+- **No owner/client column on `Item`, `Location` or `StockMove`** — 4.17 adds the first two (§5) and
+  deliberately adds **none** to `StockMove` (attribution is derived through the item; a column on an
+  append-only ledger would be a second source of truth).
+- **No item weight, item dimensions, or `Location` square-footage.** `Location.capacity` is
+  explicitly *"in the bin's own units"*. This is why `per_sqft` / `per_cbm` / `per_kg` are
+  **manual-quantity** bases (§3, `MANUAL_ONLY_BASES`) — priceable and modelled, never fabricated.
+- **No parcel-invoice feed, no accounting-package sync, no EDI transport.** All → 4.19 / deferred.
+- **No SLA / service-level model in `scm`.** `crm.SlaPolicy` is a helpdesk response-time policy in
+  another app and is not reused.
+
+### Free auto-number prefixes re-verified against every `NUMBER_PREFIX` in `apps/scm/models/`
+`3PL` · `TAR` · `CBR` · `SLA` — all four unused. (Taken: PR RFQ QT PO GRN SCR SRA SC CAT TRF ADJ PUT
+PIK CC YRD SO SHP LD CAR FRT SEA DF DS FA WC BOM WO PRD QC QA NCR CAPA RMA WTY ALR KPI LIC CR TD ESG
+AST PM MWO LAB LST LSN LPL CCM EXC PAC PIQ PDS.)
+
+---
+
+## 2. Sub-module vocabulary — `apps/scm/models/ThirdPartyLogistics/_choices.py`
+
+- [ ] Create `_choices.py` **first** — all four entity modules import from it, it imports nothing
+      (not even `_base`), so the dependency edge runs one way and no cycle is possible.
+- [ ] **Import it BY NAME in `models/__init__.py`, never `import *`.** Three `_choices` modules are
+      already star-imported above (package-root, 4.12's, 4.13's); a fourth star import that
+      re-declared a shared token would shadow one of them with the winner decided by import order.
+      4.14 / 4.15 / 4.16 all spell their names out for this reason.
+- [ ] **Every token is prefixed** so it cannot collide with 4.11's `METRIC_CHOICES` /
+      `DIRECTION_CHOICES` / `SEVERITY_CHOICES` / `BAND_CHOICES` / `PERIOD_GRAIN_CHOICES` or 4.13's
+      `MAX_LABOUR_RATE`. In particular: `SLA_METRIC_CHOICES` (not `METRIC_CHOICES`),
+      `SLA_DIRECTION_CHOICES` (not `DIRECTION_CHOICES`), `RATE_PERIOD_CHOICES` (not `PERIOD_*`).
+
+- [ ] `CLIENT_STATUS_CHOICES` = `prospect` · `onboarding` · `active` · `suspended` · `terminated`
+      (driver: *client lifecycle, suspension has billing consequences, onboarding speed is a
+      competitive claim* — Deposco, Extensiv, Softeon)
+- [ ] `CLIENT_STATUS_CSS` = `{prospect: badge-muted, onboarding: badge-info, active: badge-green,
+      suspended: badge-amber, terminated: badge-slate}`
+- [ ] `BILLING_CYCLE_CHOICES` = `weekly` · `biweekly` · `monthly` · `quarterly` (driver: *clients on
+      different cycles in one building* — CartonCloud, Extensiv, SphereWMS)
+- [ ] `STORAGE_BILLING_METHOD_CHOICES` = `calendar_month` · `anniversary` · `split_month` ·
+      `average_daily` · `snapshot` (driver: **the single most 3PL-specific concept in the sub-module**
+      — Extensiv names snapshot/anniversary/average-daily explicitly, Shippers Group split-month,
+      COREflex anniversary worked example, Da Vinci "two dozen storage options")
+- [ ] `SPACE_MODEL_CHOICES` = `shared` · `dedicated` · `hybrid`;
+      `COMMITTED_SPACE_MODELS = ("dedicated", "hybrid")` (driver: *Extensiv Dedicated Space
+      Agreements — "5,000 square feet or 200 pallet positions regardless of actual usage"*)
+- [ ] `INTEGRATION_MODE_CHOICES` = `none` · `manual` · `csv` · `api` · `edi` · `marketplace`
+      (driver: *Cleo / DCKAP 3PL integration guides, EDI 940/943/944/945/947; Extensiv Integration
+      Manager; Logiwa headless API*)
+- [ ] `RATE_CARD_STATUS_CHOICES` = `draft` · `active` · `superseded` · `expired`;
+      `RATE_CARD_STATUS_CSS`; `EDITABLE_RATE_CARD_STATUSES = ("draft",)`
+- [ ] `CHARGE_CATEGORY_CHOICES` = `storage` · `receiving` · `outbound` · `value_added` ·
+      `accessorial` · `transportation` · `recurring` · `minimum` (driver: *the charge-code taxonomy
+      every surveyed product ships* — Da Vinci's 50+ codes collapse to these eight)
+- [ ] `CHARGE_CATEGORY_CSS` (colour names only)
+- [ ] `CHARGE_BASIS_CHOICES` = `per_pallet_position` · `per_sqft` · `per_cbm` · `per_unit` ·
+      `per_order` · `per_line` · `per_receipt` · `per_carton` · `per_shipment` · `per_kg` ·
+      `per_hour` · `flat_recurring` · `dedicated_space` · `pct_of_value`
+      (driver: **the heart of the model** — Extensiv pallet-position/sq-ft/cubic + per-order/per-line/
+      per-unit picks, CartonCloud weight/cubic/quantity/zone, Infoplus per-order/per-item/storage/
+      pick-pack, SphereWMS space/weight/duration)
+- [ ] `RATE_PERIOD_CHOICES` = `day` · `week` · `month`
+- [ ] `PERIODIC_BASES = ("per_pallet_position", "per_sqft", "per_cbm", "flat_recurring",
+      "dedicated_space")` — the only bases on which `period` means anything
+- [ ] `MANUAL_ONLY_BASES = ("per_sqft", "per_cbm", "per_kg", "per_hour", "per_carton",
+      "pct_of_value")` — **priceable but not measurable today**: `Item` has no weight and no
+      dimensions, `Location` has no area, and labour attribution per client is 4.14's, not 4.17's.
+      `calculate()` writes these lines with `quantity=0`, `needs_manual_quantity=True` and a
+      description that says so, so the reviewer sees the gap instead of a fabricated number.
+      **This list is the honest half of the "50+ charge codes" claim. Do not shrink it by guessing a
+      conversion factor.**
+- [ ] `RUN_STATUS_CHOICES` = `draft` · `calculated` · `approved` · `invoiced` · `void`;
+      `RUN_STATUS_CSS`; `EDITABLE_RUN_STATUSES = ("draft", "calculated")`
+- [ ] `SLA_METRIC_CHOICES` = `on_time_shipment_pct` · `otif_pct` · `same_day_ship_pct` ·
+      `order_accuracy_pct` · `inventory_accuracy_pct` · `dock_to_stock_hours` ·
+      `order_cycle_time_hours` · `damage_rate_pct` · `shrinkage_pct`
+      (driver: *the standard 3PL scorecard* — Red Stag, DCL, Cahoot, Shipium, SVDirect)
+- [ ] `SLA_METRIC_META` — a **closed registry**, one dict per metric:
+      `{"label", "unit", "direction", "default_target", "source"}` where `source` is a one-line
+      plain-English statement of which as-built rows the figure is measured from. The `KpiTarget`
+      `METRIC_META` precedent; it is what makes `clean()` able to refuse a nonsense unit/direction.
+      Suggested defaults from the survey: order accuracy `99.50`, inventory accuracy `99.00`,
+      on-time shipment `98.00`, OTIF `95.00`, same-day ship `95.00`, dock-to-stock `24` h,
+      order cycle time `24` h, damage `0.50` %, shrinkage `0.65` %.
+- [ ] `SLA_UNIT_CHOICES` = `pct` · `hours` · `days`;
+      `SLA_DIRECTION_CHOICES` = `higher_is_better` · `lower_is_better`
+- [ ] `SLA_WINDOW_CHOICES` = `monthly` · `quarterly` · `rolling_30` · `rolling_90`
+- [ ] `SLA_STATUS_CHOICES` = `meeting` · `at_risk` · `breached` · `no_data`;
+      `SLA_STATUS_CSS` = `{meeting: badge-green, at_risk: badge-amber, breached: badge-red,
+      no_data: badge-muted}` — **`no_data` is NOT `meeting`** (the `PortalOrderInquiry.sla_state`
+      rule, and the whole reason it has its own colour)
+- [ ] Bounds: `MAX_RUN_LINES = 500` · `MAX_RATE_CARD_LINES = 200` · `MAX_RUN_PERIOD_DAYS = 366` ·
+      `MAX_MEASUREMENT_ROWS = 20000` · `MAX_COMMITTED_SQFT = Decimal("9999999.99")` ·
+      `MAX_COMMITTED_PALLETS = 1000000` · `MAX_CLIENT_DEPTH = 10` (parent-chain walk)
+
+---
+
+## 3. Models — 4 tenant-scoped models (+2 tenant-less children) in `apps/scm/models/ThirdPartyLogistics/`
+
+Every model gets `tenant` + `created_at` + `updated_at` from `TenantOwned` / `TenantNumbered`, a
+`__str__`, and an explicit `Meta.ordering`. **Every derived figure is an aggregate at read time — no
+stored on-hand, no stored occupancy, no stored balance (L37).**
+
+### 3.1 `LogisticsClient` [`3PL-`, `TenantNumbered`] — `models/ThirdPartyLogistics/LogisticsClients.py`
+*The depositor / stock-owner account. One row per client `core.Party`. **Identity stays on the Party** —
+this row carries only the commercial configuration, exactly as `scm.Carrier` and `SupplierProfile` do.
+It is the ROOT of the sub-module: every other 4.17 table and both new 4.3 columns point at it.*
+
+- [ ] `party` — FK `"core.Party"`, `PROTECT`, `related_name="scm_logistics_clients"`, **required**
+      (driver: *client account master* — Extensiv "customer", Infoplus "customer", Mecalux "stock
+      owner", Softeon "client")
+- [ ] `code` — `CharField(max_length=8)` (driver: *the 3–8 char code stamped on labels, feeds and
+      invoices* — Extensiv, Infoplus, Mecalux). Unique per tenant.
+- [ ] `parent_client` — FK `"self"`, `SET_NULL`, null/blank, `related_name="child_clients"`
+      (driver: *Extensiv parent-child accounts for clients with multiple divisions*)
+- [ ] `status` — `CharField(16, choices=CLIENT_STATUS_CHOICES, default="prospect")`
+- [ ] `onboarded_on` — `DateField(null=True, blank=True, **editable=False**)`, stamped **once** in
+      `save()` the first time `status == "active"`, never restamped (the verified
+      `PortalAccount.activated_on` pattern incl. its `update_fields` fix-up)
+- [ ] **Billing configuration** — `billing_cycle` `CharField(12, choices=BILLING_CYCLE_CHOICES,
+      default="monthly")`; `billing_day` `PositiveSmallIntegerField(default=1,
+      validators=[MinValueValidator(1), MaxValueValidator(**28**)])` — **28, not 31**: a "31st" cycle
+      silently skips February, and a control that silently does nothing is worse than one that
+      refuses; `next_billing_date` `DateField(null=True, blank=True)` — **data for a future
+      scheduler; 4.17 ships no scheduler and reads this column nowhere.** Say so in `help_text`.
+- [ ] `storage_billing_method` — `CharField(16, choices=STORAGE_BILLING_METHOD_CHOICES,
+      default="calendar_month")` (driver: **the strongest differentiator vs a generic WMS**)
+- [ ] `minimum_monthly_charge` — `Decimal(14,2)` default 0, `MinValueValidator(ZERO)` (driver:
+      *Extensiv "$10,000 monthly minimum, transactional charges applied against the minimum"*)
+- [ ] `default_tax_rate_pct` — **`Decimal(5,2)`** default 0, `Min 0 / Max 100`. **A decimal, NOT a
+      `TaxCode` FK** — `InvoiceLine.tax_rate_pct` is `Decimal(5,2)` (verified `Invoices.py:86`) and
+      `InvoiceLine` has no `tax_code` column. Widths must match exactly.
+- [ ] `currency` — FK `"accounting.Currency"`, `SET_NULL`, null/blank, `related_name="+"`
+- [ ] `payment_terms` — FK `"accounting.PaymentTerm"`, `SET_NULL`, null/blank, `related_name="+"`
+- [ ] `default_revenue_account` — FK `"accounting.GLAccount"`, `SET_NULL`, null/blank,
+      `related_name="+"` (driver: *storage revenue vs handling revenue split in the ledger*)
+- [ ] **Space commitment (bullet 5)** — `space_model` `CharField(10, choices=SPACE_MODEL_CHOICES,
+      default="shared")`; `committed_sqft` `Decimal(12,2)` default 0 `Min 0`;
+      `committed_pallet_positions` `PositiveIntegerField(default=0)`
+- [ ] **Contract term** — `contract_start` / `contract_end` `DateField(null=True, blank=True)`;
+      `notice_days` `PositiveSmallIntegerField(default=0)`; `contract_document` FK `"core.Document"`,
+      `SET_NULL`, null/blank, `related_name="+"` (driver: *Knight-Swift / 3PLGuys — dedicated 3–7 yr,
+      shared 1–3 yr with cancellation clauses*). **This is the commercial date set 4.17 bills
+      against, not a contract repository** — that is 4.2 / 4.12.
+- [ ] **Integration profile (bullet 4, DATA ONLY)** — `integration_mode`
+      `CharField(12, choices=INTEGRATION_MODE_CHOICES, default="none")`; `client_system`
+      `CharField(60, blank=True)` (help: "SAP, NetSuite, Dynamics, Shopify, Amazon…");
+      `edi_partner_id` `CharField(32, blank=True)`; `edi_qualifier` `CharField(8, blank=True)`;
+      `last_synced_at` `DateTimeField(null=True, blank=True, **editable=False**)` — **written by
+      nothing in 4.17**; the column exists so 4.19 reads a real one. **NO endpoint, NO credential
+      (§1, L20).** Every label, help text and template string must record intent and **must not imply
+      anything is dispatched** — the verified `PortalAccount.notify_on_*` posture.
+- [ ] `account_manager` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank, `related_name="+"`
+- [ ] `notes` — `TextField(blank=True)`
+- [ ] **Meta** — `ordering = ["code", "id"]`;
+      `unique_together = (("tenant","number"), ("tenant","code"), ("tenant","party"))`
+      (**one client account per Party** — a second row would hand the same company two tariffs and
+      which applied would depend on row order);
+      `indexes = [Index(["tenant","status"], name="scm_3pl_tnt_status_idx"),
+      Index(["tenant","code"], name="scm_3pl_tnt_code_idx")]`
+- [ ] `__str__` → `f"{self.code} · {self.party}"`
+- [ ] **`clean()`** — six guards, each a real rule, not decoration:
+      (a) `party.tenant_id != self.tenant_id` → refuse (cross-tenant);
+      (b) `parent_client` is self, or a cycle within `MAX_CLIENT_DEPTH` hops, or belongs to another
+          tenant → refuse;
+      (c) `space_model in COMMITTED_SPACE_MODELS` **and** both commitments are 0 → refuse
+          ("a dedicated or hybrid space model has to commit something") — **L39, the conjunction that
+          can never be true**;
+      (d) `space_model == "shared"` **and** either commitment > 0 → refuse ("shared space bills what
+          is measured; a commitment here would never be charged") — the mirror rule, and the same
+          reasoning as the verified `PortalAccount.low_stock_threshold` check: a value the system
+          silently ignores is worse than an error;
+      (e) `contract_end < contract_start` → refuse;
+      (f) guard every FK read with `getattr(self, "…", None)` and an `…_id is not None` test —
+          `RelatedObjectDoesNotExist` subclasses `AttributeError`, so a dangling pointer degrades to
+          `None` instead of 500-ing inside validation (the `PortalAccount.clean()` note).
+      **NOT checked here: that `party` carries a `customer` `PartyRole`.** Role rows are managed in
+      `core` and a missing one is a data-entry gap, not a reason to refuse a client. It is surfaced as
+      form help text plus a detail-page chip. **Do not "fix" it into a hard error** — it would block
+      legitimate creates on a fresh tenant.
+- [ ] **`save()`** — stamp `onboarded_on` once (see above), then `super().save()`.
+- [ ] **Derived — nothing below is a column:** `on_hand_quantity()` (signed `Sum("quantity")` over
+      `StockMove.objects.filter(tenant=…, item__owner_client=self)`); `on_hand_value()`
+      (`.values("item").annotate(qty=Sum("quantity"))` then × `item.average_cost` in Python,
+      `q2()`-ed); `sku_count()`; `dedicated_location_count()`; `open_sla_breaches()`
+      (`self.slas.filter(is_active=True, status="breached").count()`); `last_billing_run()`
+      (`self.billing_runs.order_by("-period_end","-id").first()`).
+      **`occupied_pallet_positions` is NOT offered** — `Location.capacity` is "in the bin's own
+      units" and `Item` has no dimensions, so there is no honest conversion. The space report
+      (§6, `client_space_report`) shows committed positions/sq-ft **beside** the summed `capacity` of
+      the client's dedicated locations and **labels the units as the bins' own**. Do not invent a
+      factor.
+- [ ] **Form excludes:** `tenant`, `number`, `onboarded_on`, `last_synced_at`, `created_at`,
+      `updated_at`. **`status` IS on the form** — it is staff configuration with no verb ladder here
+      (the `PortalAccount` "this row IS the config" posture); pin it so no reviewer strips it.
+
+### 3.2 `ClientRateCard` [`TAR-`, `TenantNumbered`] + `ClientRateCardLine` — `models/ThirdPartyLogistics/ClientRateCards.py`
+*The tariff. Header + lines, superseded rather than edited — the `CarrierRateCard` field vocabulary
+one level up.*
+
+**`ClientRateCard`**
+- [ ] `client` — FK `"scm.LogisticsClient"`, `PROTECT`, `related_name="rate_cards"`
+- [ ] `name` `CharField(120)`; `version` `PositiveSmallIntegerField(default=1)`;
+      `status` `CharField(12, choices=RATE_CARD_STATUS_CHOICES, default="draft")`
+- [ ] `effective_from` `DateField()`; `effective_to` `DateField(null=True, blank=True)` — null =
+      open-ended (driver: *Extensiv "separate rate cards per client with effective date ranges",
+      Softeon "highly flexible rate card definition"*)
+- [ ] `currency` — FK `"accounting.Currency"`, `SET_NULL`, null/blank, `related_name="+"`
+- [ ] `notes` `TextField(blank=True)`
+- [ ] **Meta** — `ordering = ["-effective_from", "-version", "-id"]`;
+      `unique_together = (("tenant","number"), ("tenant","client","name","version"))`;
+      `indexes = [Index(["tenant","client","status"], name="scm_tar_tnt_cli_st_idx")]`
+- [ ] `__str__` → `f"{self.number} · {self.client.code} v{self.version}"`
+- [ ] **`clean()`** — `effective_to < effective_from` → refuse; cross-tenant client → refuse;
+      **overlap guard**: a second `status="active"` card for the same client whose effective range
+      overlaps this one → refuse, **naming the conflicting card's number**. A tariff that is ambiguous
+      on a given date is not a data-quality problem to reconcile later, it is a pricing bug.
+      (`effective_to=None` counts as +∞.)
+- [ ] Derived: `is_effective_on(day)`; `active_line_count`.
+- [ ] **Form excludes:** `tenant`, `number`, `created_at`, `updated_at`. `status` is on the form for
+      draft→active; the `activate` / `supersede` POST verbs (§6) are the audited path and both write
+      their own `write_audit_log`.
+
+**`ClientRateCardLine`** — **tenant-less child**, reached via `rate_card.client.tenant`
+(the verified `CarrierRateCard` / `FreightInvoiceLine` / `SalesOrderLine` convention; do not add a
+second tenant FK).
+- [ ] `rate_card` — FK `"scm.ClientRateCard"`, `CASCADE`, `related_name="lines"`
+- [ ] `charge_category` `CharField(16, choices=CHARGE_CATEGORY_CHOICES)`;
+      `charge_basis` `CharField(20, choices=CHARGE_BASIS_CHOICES)`; `description` `CharField(255)`
+- [ ] `rate` `Decimal(14,4)` default 0 `Min 0`;
+      `period` `CharField(6, choices=RATE_PERIOD_CHOICES, blank=True)`
+- [ ] `included_quantity` `Decimal(16,4)` default 0 `Min 0` (driver: *"first 50 pallet positions
+      free"* — Extensiv volume allowances); `minimum_charge` `Decimal(14,2)` default 0 `Min 0`
+      (driver: *"£5 minimum per receipt"*; the `CarrierRateCard.min_charge` precedent)
+- [ ] `tier_from` `Decimal(16,4)` default 0 `Min 0`; `tier_to` `Decimal(16,4)` null/blank `Min 0`
+      (driver: *Extensiv tiered pricing / volume discounts* — **a tier ladder is several lines, not a
+      second table**; a real ladder engine is deferred, same reasoning as `KpiTarget`'s refusal to
+      grow an expression language)
+- [ ] `applies_to_location` — FK `"scm.Location"`, `SET_NULL`, null/blank, `related_name="+"`;
+      `applies_to_item_category` — FK `"scm.ItemCategory"`, `SET_NULL`, null/blank,
+      `related_name="+"` (driver: *Softeon "national, regional and local rates"; hazmat/cold/oversize
+      product-group rates*)
+- [ ] `gl_account` — FK `"accounting.GLAccount"`, `SET_NULL`, null/blank, `related_name="+"` —
+      maps 1:1 onto the verified `InvoiceLine.gl_account`
+- [ ] `is_active` `BooleanField(default=True)`
+- [ ] **Meta** — `ordering = ["charge_category", "charge_basis", "tier_from", "id"]`
+- [ ] **`clean()`** — five guards:
+      (a) `tier_to is not None and tier_to <= tier_from` → refuse;
+      (b) `period` set on a basis **not** in `PERIODIC_BASES` → refuse ("a period does nothing on a
+          per-order charge") — the silently-ignored-value rule again;
+      (c) `period` blank on a basis **in** `PERIODIC_BASES` → refuse (a storage rate with no period is
+          un-priceable);
+      (d) `applies_to_location.owner_client` set and ≠ `rate_card.client` → refuse — **the
+          cross-client contamination guard** (the verified `PortalAccount.clean()` ownership pattern);
+          plus cross-tenant checks on both FKs;
+      (e) `charge_basis == "dedicated_space"` while the client's `space_model == "shared"` → refuse
+          ("a shared-space client has no commitment to bill").
+- [ ] Derived: `applies_to_quantity(qty)` → `True` when `tier_from <= qty` and
+      (`tier_to is None or qty < tier_to`).
+- [ ] **No standalone list page.** Lines are managed from the rate-card **detail** page — nested
+      create/edit/delete routes only (the `BOMLine` / `ReturnLine` / `InvoiceLine` precedent). The
+      parent detail's table IS the list, so no separate filter bar is owed.
+- [ ] **Form excludes:** `rate_card` (set from the URL pk in the view, never from POST — a form field
+      here is an IDOR).
+
+### 3.3 `ClientBillingRun` [`CBR-`, `TenantNumbered`] + `ClientBillingRunLine` — `models/ThirdPartyLogistics/ClientBillingRuns.py`
+*The reviewable invoice worksheet. Every quantity is DERIVED from rows 4.1–4.6 already own; approval
+drafts an `accounting.Invoice(status="draft")` and stops. **SCM posts NO JournalEntry (L29)** — the
+verified `ReturnAuthorization.credit_note` / `FreightInvoice.bill` pattern.*
+
+**`ClientBillingRun`**
+- [ ] `client` — FK `"scm.LogisticsClient"`, `PROTECT`, `related_name="billing_runs"`
+- [ ] `rate_card` — FK `"scm.ClientRateCard"`, `PROTECT`, `related_name="billing_runs"`
+- [ ] `period_start` / `period_end` `DateField()`
+- [ ] `status` — `CharField(12, choices=RUN_STATUS_CHOICES, default="draft", **editable=False**)`.
+      Advanced **only** by the verb ladder (`calculate` → `approve` → `draft_invoice` → `invoiced`,
+      plus `void`), never by a form — the verified `SalesOrder.status` / `Shipment.status` posture.
+- [ ] `subtotal` / `minimum_adjustment` / `total` — `Decimal(18,2)` default 0, **all
+      `editable=False`**, recomputed by `recalc_amounts()`
+- [ ] `calculated_at` / `approved_at` — `DateTimeField(null=True, blank=True, editable=False)`;
+      `approved_by` — FK `settings.AUTH_USER_MODEL`, `SET_NULL`, null/blank, **`editable=False`**,
+      `related_name="+"` (driver: *SphereWMS "every billing activity meticulously recorded",
+      CartonCloud "timestamps and user actions"*; the `FreightInvoice` stamp precedent)
+- [ ] `invoice` — FK `"accounting.Invoice"`, `SET_NULL`, null/blank, **`editable=False`**,
+      `related_name="scm_billing_runs"` — **the hand-off, and the only accounting write in 4.17**
+- [ ] `notes` `TextField(blank=True)`
+- [ ] **Meta** — `ordering = ["-period_end", "-id"]`;
+      `unique_together = (("tenant","number"), ("tenant","client","period_start","period_end"))`
+      (one run per client per period — a second would double-bill);
+      `indexes = [Index(["tenant","status"], name="scm_cbr_tnt_status_idx"),
+      Index(["tenant","client","period_end"], name="scm_cbr_tnt_cli_end_idx")]`
+- [ ] `__str__` → `f"{self.number} · {self.client.code} {self.period_start}–{self.period_end}"`
+- [ ] **`clean()`** — `period_end < period_start` → refuse; period longer than
+      `MAX_RUN_PERIOD_DAYS` → refuse (it bounds the derivation walk);
+      **`rate_card.client_id != self.client_id` → refuse ("that tariff belongs to another client")** —
+      the contamination guard, and the one mistake that would bill Acme at Contoso's rates;
+      the rate card must be effective for at least part of the period → refuse otherwise.
+- [ ] **`recalc_amounts(save=True)`** — Python sum over the lines
+      (`sum((l.amount for l in rows), ZERO)`, the verified `FreightInvoice.recalc_amounts` pattern —
+      **never an `F()` expression and never a DB division**), then:
+      `minimum_adjustment = q2(max(ZERO, client.minimum_monthly_charge - subtotal))` **applied only
+      when `client.billing_cycle == "monthly"` and the period spans ≥ 28 days**; otherwise `ZERO`,
+      and the detail page states why. (A monthly minimum applied to a weekly run over-bills 4×.)
+      `total = subtotal + minimum_adjustment`. Saves with `update_fields`.
+- [ ] **`calculate(user=None)`** — the heart of the sub-module. `@transaction.atomic`. Refuses unless
+      `status in EDITABLE_RUN_STATUSES`. **Deletes and regenerates only `is_manual=False` lines —
+      manual lines are never touched** (that is what the flag is for). Then `status="calculated"`,
+      `calculated_at=timezone.now()`, `recalc_amounts()`. Caps at `MAX_RUN_LINES`.
+      For each `is_active` rate-card line, the quantity resolver — **every path below is a verified
+      as-built column**:
+      | basis | derived from | client attribution path |
+      |---|---|---|
+      | `per_pallet_position` | `StockMove` signed balance, per `client.storage_billing_method` | `item__owner_client` |
+      | `per_receipt` | `GoodsReceiptNote` count, `receipt_date` in period, `.distinct()` | `Q(putaway_tasks__item__owner_client=c) \| Q(location__owner_client=c)` — **NOT via `po_line` (§0a)** |
+      | `per_order` | `SalesOrder` count, `order_date` in period, `.distinct()` | `lines__item__owner_client` |
+      | `per_line` | `SalesOrderLine` count, parent `order_date` in period | `item__owner_client` |
+      | `per_unit` | `Sum(PickTaskLine.quantity_picked)`, `pick_task__picked_at` in period | `item__owner_client` |
+      | `per_shipment` | `Shipment` count, `actual_pickup_at` (fallback `planned_pickup_date`) in period, `.distinct()` | `sales_order__lines__item__owner_client` |
+      | `flat_recurring` | count of `period` units (day/week/month) in the run period | n/a |
+      | `dedicated_space` | `committed_pallet_positions` if > 0 else `committed_sqft`; for `space_model="hybrid"`, `max(commitment, derived occupancy)` | the client row itself |
+      | everything in `MANUAL_ONLY_BASES` | **nothing** — `quantity=0`, `needs_manual_quantity=True`, description says which measurement is missing | n/a |
+      The five storage methods, all walking `StockMove` (`item__owner_client=client`, plus
+      `location=applies_to_location` and `item__category=applies_to_item_category` when the rate line
+      narrows them):
+      `calendar_month` → balance at `period_start` × 1 period · `snapshot` → balance at `period_end` ·
+      `average_daily` → opening balance + the period's moves ordered by `moved_at`, walked day by day
+      in Python, summed ÷ day count · `anniversary` → each `receipt` move's monthly anniversaries
+      falling inside the period × its quantity · `split_month` → receipts on days 1–15 bill a full
+      period, days 16–end bill half.
+      **`per_pallet_position` bills stock units 1:1 as pallet positions** until item dimensions
+      exist — the line description must say exactly that (the `YardVisit.carrier_name` free-text
+      stand-in posture). It is a stated approximation, not a hidden one.
+      Then per line: `billable = max(ZERO, quantity - included_quantity)`; skip when the rate line's
+      tier band excludes `quantity`; write the line only when `billable > 0` **or** the basis is
+      `flat_recurring` / `dedicated_space`; `source_reference` records the evidence
+      (`"StockMove ledger · 31 days · avg daily"`, `"GRN-00007, GRN-00011"`, `"SO-00003 (2 lines)"`)
+      — driver: *CartonCloud "full charge traceability linked to operational data", Infoplus Invoice
+      Worksheet Line Detail, Extensiv "invoices clients can audit"*.
+      **Zero matching rate lines is a valid outcome** — `status="calculated"` with no lines and the
+      detail page's empty state. Never raise, never 500.
+- [ ] **`approve(user)`** — `status="calculated"` → `approved`, stamps `approved_by`/`approved_at`.
+- [ ] **`draft_invoice(user=None)`** — requires `status == "approved"` and `invoice_id is None`.
+      Creates `accounting.Invoice(tenant=self.tenant, kind="invoice", status="draft",
+      party=self.client.party, issue_date=timezone.localdate(),
+      currency=self.rate_card.currency or self.client.currency,
+      payment_terms=self.client.payment_terms, notes=…)`, then **one `InvoiceLine` per run line plus
+      one for `minimum_adjustment` when > 0**, then `invoice.recalc_totals()`, then sets
+      `self.invoice` and `status="invoiced"`. **Posts NO `JournalEntry` and creates no second AR
+      ledger (L29).**
+      **Each `InvoiceLine` is written `quantity=Decimal("1")`, `unit_price=q2(run_line.amount)` —
+      see §0(b) for why, and do not "improve" it into `quantity=run_line.quantity`,
+      `unit_price=run_line.rate`.** The real quantity × rate goes in `description`;
+      `tax_rate_pct = client.default_tax_rate_pct`;
+      `gl_account = run_line.rate_card_line.gl_account or client.default_revenue_account`.
+- [ ] **`void(user)`** — from `draft` / `calculated` only. **An `invoiced` run cannot be voided from
+      SCM** — accounting owns the invoice once it exists, and voiding here would orphan it.
+- [ ] **Form excludes:** `tenant`, `number`, `status`, `subtotal`, `minimum_adjustment`, `total`,
+      `calculated_at`, `approved_at`, `approved_by`, `invoice`, `created_at`, `updated_at`.
+      The create form is `client` + `rate_card` + `period_start` + `period_end` + `notes` only;
+      the `rate_card` queryset is filtered to the chosen client's cards (and the model `clean()`
+      enforces it anyway, because a narrowed dropdown has never held against a crafted POST).
+
+**`ClientBillingRunLine`** — tenant-less child (via `run.tenant`).
+- [ ] `run` — FK `"scm.ClientBillingRun"`, `CASCADE`, `related_name="lines"`
+- [ ] `rate_card_line` — FK `"scm.ClientRateCardLine"`, `SET_NULL`, null/blank, `related_name="+"` —
+      **null means a manual line**
+- [ ] `charge_category` / `charge_basis` — **snapshotted** copies of the choice values, not read
+      through the FK: editing or superseding the tariff afterwards must not rewrite what was billed
+- [ ] `description` `CharField(255)`; `quantity` `Decimal(16,4)` default 0;
+      `rate` `Decimal(14,4)` default 0 (**snapshotted** for the same reason);
+      `amount` `Decimal(18,2)` default 0 **`editable=False`**
+- [ ] `source_reference` `CharField(120, blank=True)` — the audit trail to the operational document
+- [ ] `is_manual` `BooleanField(default=False)` (driver: *the VAS or one-off accessorial an operator
+      adds before approval* — CartonCloud, SphereWMS, Infoplus); `needs_manual_quantity`
+      `BooleanField(default=False, **editable=False**)` — set by `calculate()` for
+      `MANUAL_ONLY_BASES`, rendered as a `badge-amber` "needs a quantity" chip
+- [ ] **Meta** — `ordering = ["charge_category", "id"]`
+- [ ] **`save()` is the ONE writer of `amount`:**
+      `self.amount = q2(max((self.quantity or ZERO) * (self.rate or ZERO), minimum))` where
+      `minimum = self.rate_card_line.minimum_charge if self.rate_card_line_id else ZERO`. One writer
+      means a manual line and a derived line price identically, and the per-occurrence minimum cannot
+      be lost by a later edit.
+- [ ] **Form** (`ClientBillingRunLineForm`, manual charges only): `charge_category`, `charge_basis`,
+      `description`, `quantity`, `rate`, `source_reference`. **Excludes** `run` (URL pk),
+      `rate_card_line`, `amount`, `is_manual` (**forced `True` in the view**), `needs_manual_quantity`.
+      Editable only while `run.status in EDITABLE_RUN_STATUSES`.
+
+### 3.4 `ClientSLA` [`SLA-`, `TenantNumbered`] — `models/ThirdPartyLogistics/ClientSlas.py`
+*One row per (client, metric, scope). Targets are typed; **results are measured**, never typed — the
+verified `Carrier.recompute_scorecard()` "evidence, not opinion" pattern, including its refusal to
+zero a figure when there is no signal.*
+
+- [ ] `client` — FK `"scm.LogisticsClient"`, `CASCADE`, `related_name="slas"`
+- [ ] `metric` `CharField(24, choices=SLA_METRIC_CHOICES)`; `name` `CharField(120, blank=True)`
+      (blank → the metric label)
+- [ ] `target_value` `Decimal(10,2)` `Min 0`; `unit` `CharField(6, choices=SLA_UNIT_CHOICES,
+      default="pct")`; `direction` `CharField(16, choices=SLA_DIRECTION_CHOICES,
+      default="higher_is_better")`
+- [ ] `warning_threshold` `Decimal(10,2)` null/blank (driver: *at-risk before breached* — Red Stag
+      scorecards, Shipium)
+- [ ] `measurement_window` `CharField(12, choices=SLA_WINDOW_CHOICES, default="monthly")`
+- [ ] `scope_location` — FK `"scm.Location"`, `SET_NULL`, null/blank, `related_name="+"`
+- [ ] `service_credit_pct` / `service_credit_cap_pct` `Decimal(5,2)` default 0, `Min 0 / Max 100`
+      (driver: *graduated, capped service credits — 5 % of monthly fees for a minor miss up to ~25 %,
+      capped at 5–20 % of aggregate monthly fees* — Shipping Cost Optimization, JIT, SVDirect.
+      **The feature that ties SLA to billing.**)
+- [ ] `is_active` `BooleanField(default=True)`; `notes` `TextField(blank=True)`
+- [ ] **Evidence columns — every one `editable=False`, so no `ModelForm` can reach them (L22):**
+      `last_measured_value` `Decimal(14,4)` null/blank · `last_measured_at` `DateTimeField` null/blank ·
+      `measurement_window_start` / `measurement_window_end` `DateField` null/blank ·
+      `measurement_summary` `CharField(255, blank=True)` ·
+      `sample_size` `PositiveIntegerField(default=0)` · `breach_count` `PositiveIntegerField(default=0)` ·
+      `status` `CharField(10, choices=SLA_STATUS_CHOICES, default="no_data")`
+- [ ] **Meta** — `ordering = ["client__code", "metric", "id"]`;
+      `unique_together = (("tenant","number"), ("tenant","client","metric","scope_location"))`;
+      `indexes = [Index(["tenant","client","status"], name="scm_sla_tnt_cli_st_idx"),
+      Index(["tenant","status"], name="scm_sla_tnt_status_idx")]`.
+      **KNOWN LIMITATION, handled not ignored:** MySQL/MariaDB treats `NULL`s as distinct in a unique
+      index, so the tuple above does **not** stop two rows with `scope_location=NULL`. `clean()`
+      refuses that duplicate explicitly. (Same shape as 4.15's documented
+      `UniqueConstraint(condition=…)` gap — state it in the docstring so nobody "fixes" the index.)
+- [ ] `__str__` → `f"{self.number} · {self.client.code} {self.get_metric_display()}"`
+- [ ] **`clean()`** — six guards:
+      (a) cross-tenant `client` → refuse;
+      (b) `unit` ≠ `SLA_METRIC_META[metric]["unit"]` → refuse ("on-time shipment % is measured in
+          percent") — closed-registry consistency, the `KpiTarget` pattern;
+      (c) `direction` ≠ the registry's → refuse;
+      (d) the band must be on the right side of the target, or it can never fire:
+          `higher_is_better` → `warning_threshold < target_value`;
+          `lower_is_better` → `warning_threshold > target_value`. Otherwise refuse with a message that
+          names both numbers;
+      (e) `service_credit_cap_pct > 0 and service_credit_cap_pct < service_credit_pct` → refuse
+          ("the cap is below the per-breach credit, so the credit could never be paid in full") —
+          L39 again;
+      (f) `scope_location` cross-tenant, or `scope_location.owner_client` set and ≠ `client` → refuse
+          (contamination guard); plus the NULL-scope duplicate check from the Meta note.
+- [ ] **`recompute(as_of=None, save=True)`** — resolves the window (`monthly` = the last **full**
+      calendar month; `quarterly` = the last full quarter; `rolling_30` / `rolling_90` = `as_of − N`
+      days … `as_of`), then dispatches to one resolver per metric, each returning
+      `(value, sample_size, summary)` or `(None, 0, reason)`:
+      | metric | measured from (all verified) |
+      |---|---|
+      | `on_time_shipment_pct` | `Shipment.actual_pickup_at.date() <= planned_pickup_date` |
+      | `otif_pct` | `actual_delivery_at.date() <= planned_delivery_date` **and** `sales_order.status in ("fulfilled","invoiced","closed")` (verified `SalesOrders.py:33-43`) |
+      | `same_day_ship_pct` | `SalesOrder.order_date == Shipment.actual_pickup_at.date()` |
+      | `inventory_accuracy_pct` | `CycleCountTaskLine.counted_quantity == expected_quantity`, `cycle_count__counted_at` in window, `item__owner_client=client` |
+      | `dock_to_stock_hours` | mean hours `GoodsReceiptNote.receipt_date` (a **DateField** — midnight) → `PutawayTask.completed_at`, over `goods_receipt__isnull=False`, `item__owner_client=client`. **State the date/datetime asymmetry in `measurement_summary`** — the figure is hours from the start of the receipt day, and pretending otherwise is a fake precision |
+      | `order_cycle_time_hours` | mean hours `SalesOrder.order_date` (midnight) → `Shipment.actual_pickup_at` |
+      | `damage_rate_pct` / `shrinkage_pct` | negative `StockMove` with `move_type="adjustment"` (verified in `MOVE_TYPES`) over the client's items ÷ period receipts |
+      | `order_accuracy_pct` | orders in the window with no linked error-reason `ReturnAuthorization` ÷ all orders. **Verify `ReturnAuthorization`'s order FK and reason shape at build time; if the "picking error" half is not expressible, return `no_data` with the reason stated** — never approximate it into a number |
+      **Three rules this method must obey, and they are the whole point of it:**
+      1. **Never write 0 when there is no signal.** Set `status="no_data"`, leave
+         `last_measured_value` untouched, write the reason into `measurement_summary`.
+      2. **`no_data` is distinct from `meeting`.** Different colour, different meaning, never merged.
+      3. **`breach_count` increments only on a transition INTO `breached` for a window not already
+         counted** (guard on `measurement_window_end` changing). Re-running `recompute()` over the
+         same window must not double-count — a running breach total that inflates on every page
+         refresh is worse than no total.
+      Saves with `save(update_fields=[…])`; bounded by `MAX_MEASUREMENT_ROWS`.
+- [ ] **Derived, no column:** `suggested_service_credit(monthly_fees)` →
+      `min(fees × service_credit_pct, fees × service_credit_cap_pct) / 100` when
+      `status == "breached"`, else `ZERO`. Rendered on the billing-run detail as a **suggestion with
+      an explicit "not applied" label**. **Auto-drafting the credit note is DEFERRED** (§10) — the
+      `ReturnAuthorization.credit_note` precedent makes it a small follow-up, and half-shipping it
+      would mean a credit appearing on an invoice nobody approved.
+- [ ] **Form excludes:** `tenant`, `number`, all eight evidence columns (already unreachable via
+      `editable=False`), `created_at`, `updated_at`.
+
+---
+
+## 4. Backend (`apps/scm/{models,forms,views,urls}/ThirdPartyLogistics/`)
+
+One file per entity, four layers lining up one-to-one. **Absolute imports only**
+(`from apps.scm.models import …`); entity modules pull the toolkit from `_base.py` / `_common.py` via
+`import *`.
+
+- [ ] `apps/scm/models/ThirdPartyLogistics/__init__.py` (empty — still its own commit)
+- [ ] `apps/scm/models/ThirdPartyLogistics/_choices.py` — §2
+- [ ] `apps/scm/models/ThirdPartyLogistics/LogisticsClients.py` — `LogisticsClient` (+ the module
+      docstring carrying the backend-package / template-folder asymmetry note and the L20 no-secrets
+      rule)
+- [ ] `apps/scm/models/ThirdPartyLogistics/ClientRateCards.py` — `ClientRateCard`, `ClientRateCardLine`
+- [ ] `apps/scm/models/ThirdPartyLogistics/ClientBillingRuns.py` — `ClientBillingRun`,
+      `ClientBillingRunLine`
+- [ ] `apps/scm/models/ThirdPartyLogistics/ClientSlas.py` — `ClientSLA`
+- [ ] `apps/scm/forms/ThirdPartyLogistics/{__init__,LogisticsClients,ClientRateCards,ClientBillingRuns,ClientSlas}.py`
+      — `LogisticsClientForm`, `ClientRateCardForm`, `ClientRateCardLineForm`, `ClientBillingRunForm`,
+      `ClientBillingRunLineForm`, `ClientSLAForm`. All inherit `TenantModelForm`
+      (`apps/core/forms/_common.py`). **Every FK queryset is tenant-scoped in `__init__`**, and on
+      edit the currently-selected object is unioned back in so a narrowed queryset cannot silently
+      drop an existing FK.
+- [ ] `apps/scm/views/ThirdPartyLogistics/{__init__,LogisticsClients,ClientRateCards,ClientBillingRuns,ClientSlas,Reports}.py`
+      — §6
+- [ ] `apps/scm/urls/ThirdPartyLogistics/{__init__,LogisticsClients,ClientRateCards,ClientBillingRuns,ClientSlas,Reports}.py`
+      — §7
+
+### Re-export blocks — MANDATORY, one anchored `Edit` per file (forgetting one is a runtime ImportError)
+- [ ] `apps/scm/models/__init__.py` — append a `--- 4.17 Third-Party Logistics ---` block **after**
+      the 4.16 block: `_choices` **first and BY NAME** (§2), then `LogisticsClients`,
+      `ClientRateCards`, `ClientBillingRuns`, `ClientSlas`. Comment the ordering rationale for the
+      reader (every FK is a string, so the ORM does not care — but `LogisticsClient` is the root the
+      other three point at).
+- [ ] `apps/scm/forms/__init__.py` — `from .ThirdPartyLogistics.<Entity> import (…)` × 4
+- [ ] `apps/scm/views/__init__.py` — every **public** view function by name (they are referenced as
+      `views.<name>` from the URLconf, so a missing one is an `AttributeError` at **startup**).
+      Private `_`-prefixed helpers stay out.
+- [ ] `apps/scm/urls/__init__.py` — six `from .ThirdPartyLogistics.<X> import urlpatterns as _tpl_<x>`
+      imports + six entries in `urlpatterns`, with a **COLLISION CHECK comment block** in the house
+      style (§7). **Alias `_tpl_`** — verified free against all sixteen shipped aliases and in
+      particular NOT `_tms_` (4.6 Transportation). Rebinding an existing alias silently drops another
+      sub-module's routes with no import error.
+- [ ] `apps/scm/admin.py` — register `LogisticsClient`, `ClientRateCard` (+ `ClientRateCardLine`
+      inline), `ClientBillingRun` (+ `ClientBillingRunLine` inline), `ClientSLA`. **Every
+      `editable=False` column re-declared in `readonly_fields`** — the admin is otherwise exactly the
+      bypass those flags exist to prevent, one URL over (the rule stated at `admin.py:1155`). That is:
+      `number`, `onboarded_on`, `last_synced_at`; the run's `status`/`subtotal`/`minimum_adjustment`/
+      `total`/`calculated_at`/`approved_at`/`approved_by`/`invoice`; the run line's `amount`/
+      `needs_manual_quantity`; the SLA's eight evidence columns. **There is no credential field to
+      hide, by design** — note it so a reviewer does not go looking.
+
+---
+
+## 5. The two additive columns on 4.3 (the only cross-sub-module model edits)
+
+Additive, nullable, all-default, **no backfill** — the precedent is 4.4's four bin columns on
+`Location`, 4.13's `is_spare_part` and 4.15's `storage_condition`, both on this same `Items.py`.
+
+- [ ] `apps/scm/models/InventoryManagement/Items.py` — `owner_client = FK("scm.LogisticsClient",
+      SET_NULL, null=True, blank=True, related_name="owned_items")`. **This one column is what makes
+      bullet 2 work**: it is the only path from `StockMove` / `PickTaskLine` / `PutawayTask` /
+      `CycleCountTaskLine` to a client (`PickTask` has no order FK, so the item is the *only* route).
+- [ ] `apps/scm/models/InventoryManagement/Locations.py` — `owner_client = FK("scm.LogisticsClient",
+      SET_NULL, null=True, blank=True, related_name="dedicated_locations")` — the dedicated
+      zone/aisle; serves bullets 2 **and** 5 from one column.
+- [ ] `apps/scm/forms/InventoryManagement/Items.py` — add `owner_client` to `Meta.fields` (a column
+      no form can set is a column nobody will ever populate)
+- [ ] `apps/scm/forms/InventoryManagement/Locations.py` — same
+- [ ] `templates/scm/inventory/item/detail.html` — show the owning client (or an em-dash)
+- [ ] `templates/scm/inventory/location/detail.html` — same
+- [ ] **NOT this pass:** an `owner_client` filter on 4.3's item/location **list** pages. The
+      per-client inventory view is 4.17's own `client_inventory_report` (§6), which is where the
+      bullet lives. Deferred to §10 so it is a decision, not an omission.
+- [ ] **NO column on `StockMove`.** On-hand is always the ledger aggregate (L37, and the StockMove
+      docstring's own rule); an owner column there would be a second source of truth that could
+      disagree with the item's.
+
+---
+
+## 6. Views — `apps/scm/views/ThirdPartyLogistics/`
+
+All `@login_required`, all tenant-scoped (`filter(tenant=request.tenant)` — never `.all()`), all
+five CRUD verbs per model that has a list page, POST-only deletes with `{% csrf_token %}` + confirm.
+Every POST verb below is `@require_POST` (a GET is a 405, not a silent state change) and **writes its
+own `write_audit_log`** because it bypasses `crud_edit`.
+
+- [ ] `LogisticsClients.py` — `logisticsclient_list` (search `code` / `party__name` / `client_system`;
+      filters `status`, `billing_cycle`, `space_model`, `integration_mode`; context
+      `status_choices`, `billing_cycle_choices`, `space_model_choices`, `integration_mode_choices`),
+      `_create`, `_detail` (client card + tariff list + billing-run list + SLA chips + derived
+      on-hand/SKU/dedicated-location figures + the `customer`-role chip), `_edit`, `_delete`
+- [ ] `ClientRateCards.py` — `clientratecard_list` (search `number` / `name`; filters `client`,
+      `status`; context `clients`, `status_choices`), `_create`, `_detail` (**the lines table IS the
+      line list**), `_edit`, `_delete`; `clientratecard_activate` / `clientratecard_supersede`
+      (POST-only; `supersede` sets the old card `superseded` and stamps `effective_to`);
+      `clientratecardline_create` / `_edit` / `_delete` (nested — parent pk from the URL)
+- [ ] `ClientBillingRuns.py` — `clientbillingrun_list` (search `number`; filters `client`, `status`,
+      `period_from`, `period_to`; context `clients`, `status_choices`), `_create`, `_detail`
+      (lines grouped by `charge_category`, subtotal / minimum / total, the `source_reference` column,
+      the `needs_manual_quantity` chips, the **unbilled-activity panel** and the **suggested SLA
+      service credit** panel — both clearly labelled as *not applied*), `_edit`, `_delete`;
+      `clientbillingrun_calculate` / `_approve` / `_draft_invoice` / `_void` (POST-only, and
+      `_approve` + `_draft_invoice` are **`@tenant_admin_required`** — they move money);
+      `clientbillingrunline_create` / `_edit` / `_delete` (manual charges, `is_manual=True` forced in
+      the view, refused unless `run.status in EDITABLE_RUN_STATUSES`)
+- [ ] `ClientSlas.py` — `clientsla_list` (search `number` / `name`; filters `client`, `metric`,
+      `status`, `active`; context `clients`, `metric_choices`, `sla_status_choices`), `_create`,
+      `_detail` (target vs last measurement, the evidence panel, `measurement_summary`, breach count,
+      the suggested-credit calculation shown as arithmetic), `_edit`, `_delete`;
+      `clientsla_recompute` (POST-only, one row) and `clientsla_recompute_all` (POST-only, bounded to
+      the tenant's `is_active` rows)
+- [ ] `Reports.py` — **two COMPUTED pages, zero tables, zero writes:**
+      `client_inventory_report` — bullet 2. Per client: SKU count, signed on-hand and value from the
+      `StockMove` aggregate, dedicated location count, and a per-item breakdown for a selected
+      client. Filters: `client`, `category`, `location`. **Derived entirely; no new stock table and no
+      second on-hand column.**
+      `client_space_report` — bullet 5. Per client: `space_model`, `committed_sqft`,
+      `committed_pallet_positions`, dedicated locations and the **sum of their `Location.capacity`
+      labelled "in each bin's own units"**, plus contract dates and days-to-expiry. **No invented
+      conversion between capacity and pallet positions** (§3.1).
+
+---
+
+## 7. URLs — `apps/scm/urls/ThirdPartyLogistics/`
+
+`app_name` is set once in `urls/__init__.py`; each module exposes its own `urlpatterns`.
+**Django is first-match-wins, so literal routes come before every `<int:pk>` route** — otherwise
+`add/` is swallowed and 404s as "logistics client 'add' not found".
+
+- [ ] **COLLISION CHECK — six new first segments, each checked against the WHOLE concatenated
+      urlconf, not just this block:**
+      `logistics-clients/` · `client-rate-cards/` · `client-rate-card-lines/` ·
+      `client-billing-runs/` · `client-slas/` · `client-inventory/` · `client-space/`
+      — nothing anywhere in `scm` starts with `client`. **`logistics-clients/` vs 4.11's
+      `logistics-kpis/`**: Django matches whole path components and never splits one at a hyphen, so
+      these are two unrelated segments and neither can shadow the other — and neither may ever be
+      "tidied" to look like the other. Near neighbours checked rather than assumed: 4.16's `portal-*`,
+      4.10's `return-portal/`, 4.2's `contracts/`, 4.6's `carriers/`.
+- [ ] **4.17 introduces NO greedy `<str:…>` converter.** 4.10's `return-tracking/<str:token>/` and
+      4.16's `portal-documents/<str:token>/` remain the app's only two.
+- [ ] Route shapes (literal-first within each module):
+      `logistics-clients/` `add/` `<int:pk>/` `<int:pk>/edit/` `<int:pk>/delete/`
+      `client-rate-cards/` `add/` `<int:pk>/` `<int:pk>/edit/` `<int:pk>/delete/`
+      `<int:pk>/activate/` `<int:pk>/supersede/` `<int:pk>/lines/add/`
+      `client-rate-card-lines/<int:pk>/edit/` `…/delete/`
+      `client-billing-runs/` `add/` `<int:pk>/` `<int:pk>/edit/` `<int:pk>/delete/`
+      `<int:pk>/calculate/` `<int:pk>/approve/` `<int:pk>/draft-invoice/` `<int:pk>/void/`
+      `<int:pk>/lines/add/` · `client-billing-run-lines/<int:pk>/edit/` `…/delete/`
+      `client-slas/` `add/` **`recompute-all/`** `<int:pk>/` `<int:pk>/edit/` `<int:pk>/delete/`
+      `<int:pk>/recompute/` — **`recompute-all/` MUST precede `<int:pk>/`**
+      `client-inventory/` · `client-space/`
+- [ ] **View-name check (the `scm:` namespace is flat):** nothing named `client_*`,
+      `logisticsclient_*`, `clientratecard*`, `clientbillingrun*` or `clientsla_*` exists today.
+
+---
+
+## 8. Wire-up
+
+- [ ] `apps/core/navigation.py` — **ONE new `LIVE_LINKS["4.17"]` entry**, keys matching the NavERP.md
+      bullet text at `NavERP.md:845-850` **exactly**:
+      ```
+      "4.17": {
+          "Client Billing":                "scm:clientbillingrun_list",   # the invoice worksheet
+          "Client Inventory Segregation":  "scm:client_inventory_report", # COMPUTED over StockMove
+          "SLA Management":                "scm:clientsla_list",
+          "Client Integration":            "scm:logisticsclient_list",    # the client master carries the integration profile
+          "Warehouse Rental Management":   "scm:client_space_report",     # COMPUTED commitment vs space
+      }
+      ```
+      Add the house explanatory comment above it: two of five are computed pages with no table;
+      `ClientRateCard` deliberately carries **no bullet** (a master reached from the client detail,
+      the `ReturnPolicy` / `ReturnReason` precedent — NavERP.md gives 4.17 five bullets and the
+      sidebar mirrors it exactly); and **all five point at staff pages (L32)** because 4.17 has no
+      client-facing surface at all — that is 4.16's.
+- [ ] **NO `config/settings.py` change. NO `config/urls.py` change.** (Extend run — §1.)
+- [ ] `templates/scm/overview.html` — a new **Third-Party Logistics (3PL)** card linking the five
+      bullet pages plus `scm:clientratecard_list`, in the shipped card style with `lucide` icons.
+
+---
+
+## 9. Templates — `templates/scm/3pl/`
+
+One folder per entity, **bare page filenames** — never flat `<entity>_<page>.html`.
+Every list page: filter bar reflecting `request.GET` + Actions column (view / edit / delete-POST with
+`confirm()` + `{% csrf_token %}`) + pagination with `has_previous` / `has_next` guards (**L9**) +
+`{% empty %}` state. FK filter comparisons use `|stringformat:"d"`, **never `|slugify`**. Badge
+conditions use **exact** model choice values with an `{% else %}{{ obj.get_<field>_display }}`
+fallback. Colour-named badge classes only (§1).
+
+- [ ] `3pl/logisticsclient/list.html` · `detail.html` · `form.html`
+- [ ] `3pl/clientratecard/list.html` · `detail.html` (the lines table + add-line button) · `form.html`
+- [ ] `3pl/clientratecardline/form.html`
+- [ ] `3pl/clientbillingrun/list.html` · `detail.html` (lines grouped by category, totals block, the
+      verb ladder, the unbilled-activity and suggested-credit panels) · `form.html`
+- [ ] `3pl/clientbillingrunline/form.html`
+- [ ] `3pl/clientsla/list.html` · `detail.html` · `form.html`
+- [ ] `3pl/client_inventory_report.html` (standalone at the sub-module root — template rule 6)
+- [ ] `3pl/client_space_report.html` (same)
+- [ ] Detail pages get the mandatory Actions sidebar: Edit + Delete (conditional on status) + Back to
+      List.
+- [ ] **Wording discipline** — nothing in any template may imply a sync happens, a credit is applied,
+      a notification is sent, or a pallet position has been measured from real dimensions. Each is a
+      stated approximation or a stated non-claim, not a silent one.
+
+---
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations scm` → **exactly one file, `0029_*`**. **Read the generated
+      diff before migrating.** It must be `CreateModel` × 6 (`LogisticsClient`, `ClientRateCard`,
+      `ClientRateCardLine`, `ClientBillingRun`, `ClientBillingRunLine`, `ClientSLA`) + `AddField` × 2
+      (`item.owner_client`, `location.owner_client`) + `AddIndex` + `AlterUniqueTogether`, **and
+      nothing else**. Anything touching a 4.1–4.16 table beyond those two AddFields means something
+      is wrong — stop and find out what.
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_scm` **twice** — second run prints the skip message and creates nothing.
+      **Never `--flush`** (§0c).
+- [ ] `python manage.py check` — clean.
+- [ ] `temp/` smoke script as **`admin_acme` / `password`**:
+      every new `scm:*` url 200/302; content assertions (page titles present, a seeded `3PL-`,
+      `TAR-`, `CBR-` and `SLA-` number rendered on its list — a mismatched context var returns 200 and
+      renders blank, **L8**); no `{#` or `{% comment` leak; junk filter params; `?page=2`;
+      **cross-tenant IDOR → 404** on all five detail routes; GET on every POST verb → 405.
+- [ ] **The specific assertion for §0(b):** after `draft_invoice()`, assert
+      `run.invoice.total == run.total` to the cent. This is the trap that would otherwise ship
+      silently.
+- [ ] **The specific assertion for §0(a):** assert a seeded `per_receipt` run line's quantity is
+      non-zero, proving the `putaway_tasks` attribution path actually resolves.
+- [ ] Assert `recompute()` leaves at least one seeded SLA at `status="no_data"` with
+      `last_measured_value is None` — proving it refuses to fabricate a zero.
+- [ ] Sidebar shows **4.17 Live** with all five bullets resolving.
+
+### Seeder — `_seed_3pl_tenant(tenant)` in `apps/scm/management/commands/seed_scm.py`
+- [ ] Called **last** in `handle()`, after `_seed_portal_tenant`. Guard:
+      `if LogisticsClient.objects.filter(tenant=tenant).exists(): skip`.
+- [ ] **Three clients**, reusing existing customer `core.Party` rows from 4.5 (never inventing new
+      parties): one `shared` / `monthly` / `average_daily` with a `2500.00` monthly minimum; one
+      `hybrid` / `monthly` / `split_month` with 240 committed pallet positions and 5,000 sq ft,
+      `integration_mode="edi"`, `client_system="NetSuite"`; and **one deliberately EMPTY `prospect`
+      client** with no tariff, no runs, no SLAs and no items — a new client legitimately has nothing
+      on day one, so the empty state is the modal first session, and no smoke sweep in this repo has
+      ever rendered an `{% empty %}` branch because a seeded tenant has rows everywhere (the 4.16
+      precedent).
+- [ ] Flip a handful of **existing** 4.3 `Item` rows (2–3 per active client) and 2 `Location` rows to
+      `owner_client` — surgical updates on existing rows, never new items.
+- [ ] One `active` `ClientRateCard` per active client, `effective_from = today − 90d`, with lines
+      covering `storage/per_pallet_position/month`, `receiving/per_receipt`, `outbound/per_order`,
+      `outbound/per_unit`, `value_added/per_hour` (a **manual-quantity** line, so the amber chip is
+      visible in the demo) and, for the hybrid client, `storage/dedicated_space/month`.
+- [ ] One `ClientBillingRun` per active client for **last calendar month**, created then
+      `calculate()`d **through the real method** — so the derivation is exercised on every
+      `seed_scm` run and the demo cannot drift from the implementation (the 4.15
+      `detect_excursions()` precedent). Client 1's run is then `approve()`d and `draft_invoice()`d so
+      the accounting hand-off and its draft `accounting.Invoice` are visible; client 2's is left at
+      `calculated` so the review state is visible too.
+- [ ] Three `ClientSLA` per active client (`on_time_shipment_pct` 98, `inventory_accuracy_pct` 99.5,
+      `dock_to_stock_hours` 24), each `recompute()`d through the real method.
+- [ ] `_flush()` branch, **in this order** (PROTECT on `LogisticsClient` from both the rate card and
+      the run): `ClientBillingRunLine` → `ClientBillingRun` → `ClientRateCardLine` → `ClientRateCard`
+      → `ClientSLA` → `Item.objects.update(owner_client=None)` +
+      `Location.objects.update(owner_client=None)` → `LogisticsClient`.
+- [ ] Update the command `help` string and the closing SUCCESS message to name 4.17.
+
+---
+
+## 11. Close-out
+
+- [ ] **Phase 4 review wave** — the six reviewers in ONE parallel Workflow → write the returned
+      markdown to `.claude/tasks/review-scm-4.17.md` and commit it. Re-run any lane reporting
+      **NO RESULT**.
+- [ ] **Phase 5 `code-fixer`** — burns the findings down in ID order, one commit per file, marking
+      each `[x] fixed` / `[~] skipped — reason`. Confirm nothing is left `[ ] open` and
+      `manage.py check` is clean.
+- [ ] **Phase 6 test wave** — `subslug: '3pl'`; `test_3pl_{models,forms,views,security}.py`; every
+      test function `test_3pl_*` and every module-level helper `_3pl_*`. Final run **unfiltered**.
+      Priority cases: the `draft_invoice()` total equality (§0b), the `per_receipt` attribution path
+      (§0a), each of the five storage methods, the cross-client contamination guards, the
+      `no_data ≠ meeting` rule, the `breach_count` no-double-count rule, and cross-tenant IDOR.
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — the four models, six url groups, template folder,
+      seeder rows, the `LIVE_LINKS["4.17"]` entry, **and the three gotchas this plan exists to
+      record**: the `GoodsReceiptLine`-has-no-item path, the `InvoiceLine` 2dp re-pricing trap, and
+      the backend `ThirdPartyLogistics/` ↔ template `3pl/` asymmetry.
+- [ ] **`README.md`** — mark 4.17 complete and update the "SCM 4.16–4.19 planned" line at `:90` to
+      `4.18–4.19`.
+- [ ] `build_state.py phase <n> done` at **every** phase boundary.
+
+---
+
+## 12. Later passes / deferred (carried from research-scm-4.17.md, nothing dropped)
+
+**Deferred within 4.17:**
+- **`ClientServiceEvent` — a billable-activity log captured at the moment work happens** (Infoplus
+  billing-activity tables, CartonCloud "every pick and pallet move linked to billing", SphereWMS VAS
+  logging). v1 derives from the already-built operational tables and allows manual lines — honest, and
+  it avoids a duplicate activity ledger. **This is the single most valuable next addition.**
+- **Scheduled / automatic billing runs.** `next_billing_date` is recorded so a scheduler has something
+  to read; 4.17 ships none and reads it nowhere.
+- **Auto-drafting an `accounting.Invoice(kind="credit_note")` for an SLA service credit.** Percentages
+  and cap are captured; the `ReturnAuthorization.credit_note` precedent makes it a small follow-up.
+- **A breach-event log with corrective actions** — v1 keeps `breach_count` + last measurement; 4.9's
+  `CapaAction` already exists for the corrective workflow.
+- **True tiered / volume-discount ladders and formula-based rules** (Infoplus billing scripts, OneBill
+  rating engine) — deliberately replaced by a closed `charge_basis` registry plus `tier_from`/`tier_to`
+  bands. **User-scripted billing rules are out of scope permanently**, same reasoning as `KpiTarget`'s
+  refusal to grow an expression language (that is Module 10's 10.11).
+- **Weight- and volume-based charges from real measurements** — `per_sqft` / `per_cbm` / `per_kg` /
+  `per_carton` / `per_hour` / `pct_of_value` stay in `MANUAL_ONLY_BASES` until an item
+  dimension/weight pass and a `Location` area column land.
+- **`owner_client` filter + column on 4.3's item and location LIST pages** (§5).
+- **Client onboarding checklist / go-live tracker** (Deposco's two-hour claim) — `status` +
+  `onboarded_on` only in v1.
+- **Parcel carrier invoice import (UPS/FedEx) as a billing source** (Infoplus) — needs a parcel feed.
+
+**Parked to a sibling sub-module (not lost, not 4.17's):**
+- Client-facing login, portal pages, document/invoice retrieval → **4.16** (`PortalAccount` /
+  `PortalDocumentShare` / `PortalOrderInquiry`, already keyed on `customer → core.Party`). **4.17
+  builds no second portal and no second login binding.**
+- EDI 940/943/944/945/947 exchange, REST connectors, webhooks, marketplace connectors, **and any
+  credential storage** → **4.19**.
+- Accounting-package sync (QuickBooks / Xero / NetSuite / Sage) → accounting owns AR; nothing in
+  `scm` exports invoices.
+- Carrier rate cards, freight audit, carrier AP, POD, tracking → **4.6**. 4.17 only re-bills freight.
+- Labour cost per client, units-per-hour productivity, task assignment → **4.14**. 4.17 prices
+  `per_hour` VAS; it does not measure labour.
+- Cycle counting, putaway/pick strategy, yard and dock execution → **4.4**. 4.17 only reads those rows.
+- Cost-to-serve / margin per client, profitability trending, control-tower tiles → **4.11**. 4.17
+  supplies the revenue rows.
+- The client contract repository, renewal alerts, obligation register → **4.2 / 4.12**. *(Open item:
+  `SupplierContract.party` is a plain `core.Party` FK so a customer-side "client agreement" could live
+  there — but the model, its `related_name="scm_supplier_contracts"` and 4.12's repository page are all
+  supplier-framed. Generalising it is a cross-sub-module change, not 4.17's to make.)*
+- AR aging, cash application, dunning, revenue recognition, tax determination, journal posting →
+  **Module 2 accounting**. 4.17 stops at a draft `Invoice` (L29).
+- Kitting / assembly as production → **4.8**. Returns processed for a client → **4.10** (4.17 may
+  price it as a VAS charge).
+
+## Review notes
+(filled in at the end)
