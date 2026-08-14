@@ -591,11 +591,16 @@ def clientbillingrunline_delete(request, pk):
                                 "be deleted.")
         return redirect("scm:clientbillingrun_detail", pk=run.pk)
 
+    # The audit row is written INSIDE the atomic block, like its sibling `clientratecardline_delete`.
+    # Written before the `with`, a failure in `line.delete()` or `recalc_amounts()` would roll the
+    # delete back and leave an immutable AuditLog row claiming a billing charge was removed — a false
+    # entry in the money trail, which is worse than a missing one. It still precedes the delete
+    # itself so it can read the line's own fields without re-querying a row on its way out.
     description, amount = line.description, line.amount
-    write_audit_log(request.user, line, "delete", {
-        "run": run.number, "description": description, "amount": str(amount),
-    }, tenant=request.tenant)
     with transaction.atomic():
+        write_audit_log(request.user, line, "delete", {
+            "run": run.number, "description": description, "amount": str(amount),
+        }, tenant=request.tenant)
         line.delete()
         run.recalc_amounts()
     messages.success(request, f"Removed {description} ({amount}) from {run.number}.")
