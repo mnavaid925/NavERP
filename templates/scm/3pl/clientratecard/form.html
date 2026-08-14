@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics (3PL) Management — shared create/edit form for ClientRateCard.
+
+Context contract — apps/scm/views/ThirdPartyLogistics/ClientRateCards.py::clientratecard_create and
+::clientratecard_edit, both through the crud_* helpers. Everything this page may read:
+
+  form      ClientRateCardForm — a WHITELIST of exactly eight fields
+  is_edit   False on create, True on edit
+  obj       the ClientRateCard on the EDIT path ONLY, so every use of it below is guarded by is_edit
+            and never rendered bare. Only its own COLUMNS are read here — no related manager, no
+            count, no FK hop, because this is a form and the card's own page reports all of that
+
+FIELDS ARE RENDERED BY NAME so they can be grouped, which couples this page to the form's whitelist.
+Meta.fields is these eight names and nothing else, and ALL eight appear below:
+
+  client · name · version
+  status · effective_from · effective_to
+  currency
+  notes
+
+A field added to the model and to that whitelist but missing from a group here would never reach the
+POST — and on the edit path it would be silently blanked on every save.
+
+DELIBERATELY ABSENT, and must not be added: `tenant` (stamped by crud_create, and by the form's
+__init__ so the model's tenant-gated rules are not dead code on the create path) and `number`
+(auto-assigned TAR-##### on save — nobody types a document number). Everything else editable IS here.
+
+STATUS IS ON THIS FORM, deliberately, and it is a contrast with ClientBillingRun.status, which is
+editable=False and absent from every form in the sub-module. A run's status is workflow state moved
+only by its own verbs, each of which validates the transition it is making. A rate card's status is
+the draft→active edit path, and it exists here so a card can be corrected; the audited route to
+activate or supersede one is still the POST verb on its detail page, which re-runs the overlap guard
+and writes its own audit record. Do not "fix" either one to match the other.
+
+Every rule the notes below describe is enforced by ClientRateCard.clean() — the date ordering, the
+cross-tenant client refusal and the overlap guard that refuses a second active card covering the same
+days and NAMES the one it collides with — and never by this template, so the words somebody reads and
+the validation that refuses their save cannot drift apart.
+
+Cancel returns to the register. On the edit path the breadcrumb above links straight back to the card
+itself, so nothing is more than one click away.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Client Rate Card{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New Client Rate Card{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:clientratecard_list' %}">Client Rate Cards</a><span class="sep">›</span>{% if is_edit %}<a href="{% url 'scm:clientratecard_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>{% else %}<span>New</span>{% endif %}</div>
+    <p class="text-muted">A tariff is one dated, versioned card per client, holding the priced lines a billing run reads. This page defines the <span class="fw-600">card</span>; the priced lines are added on the card itself once it exists, because a line has to know which client it belongs to before its location and category dropdowns can be narrowed safely. The TAR- number is assigned on save.</p>
+  </div></div>
+
+  {% if is_edit %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Editing {{ obj.number }}</h2>
+        {% comment %}
+          The exact RATE_CARD_STATUS_CHOICES keys. theme.css ships COLOUR-named badges only —
+          badge-success / badge-warning / badge-danger render unstyled (L33) — and the ladder ends
+          in an {% else %} that still prints the model's own display value.
+        {% endcomment %}
+        {% if obj.status == "draft" %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "active" %}
+          <span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "superseded" %}
+          <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "expired" %}
+          <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% comment %}
+          NO DB WORK HERE. Not one line count, not one related manager, not one FK hop — a related
+          manager cannot state a tenant and so cannot open the index that leads on it, and this is a
+          form. The card's own page reports the lines, the runs and every derived figure properly.
+        {% endcomment %}
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Version</dt><dd class="mono">v{{ obj.version }}</dd></div>
+          <div class="detail-item"><dt>Effective from</dt><dd class="mono">{{ obj.effective_from|date:"M d, Y" }}</dd></div>
+          <div class="detail-item">
+            <dt>Effective to</dt>
+            <dd class="mono">{% if obj.effective_to %}{{ obj.effective_to|date:"M d, Y" }}{% else %}<span class="text-muted">Open-ended</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item"><dt>Priced lines</dt><dd><a href="{% url 'scm:clientratecard_detail' obj.pk %}">Lines and billing history on the card record</a></dd></div>
+        </dl>
+        <div class="form-help">Changing the <span class="fw-600">rates</span> is not what this page is for — the priced lines live on the card and are only editable while it is a draft. What an edit here reaches is the card's identity and its dates. Moving those on a card that has already been billed against is legal but rarely right: the run keeps its own snapshot of every rate it used, so the arithmetic already invoiced does not change, but the dates somebody reads next month will no longer describe the period that was actually priced. Raise a new version instead.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Whose tariff, and which version</h2>
+        <span class="badge badge-info">One client, one name, one version number</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.client %}
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.version %}
+        </div>
+        <div class="form-help">
+          The client list holds only the <span class="fw-600">logistics clients of this workspace</span>, and the card is refused outright if it is pointed anywhere else — a narrowed dropdown is a convenience and has never once held against a crafted POST, so the model checks it as well. The trio of <span class="fw-600">client, name and version</span> must be unique: that is what makes "Standard Storage &amp; Handling v2" a different document from v1 rather than an overwrite of it, and it is why a price change is a <em>new version</em> and not an edit.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">When it applies</h2>
+        <span class="badge badge-amber">Two active cards for one client may never overlap</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.effective_from %}
+          {% include "partials/form_field.html" with field=form.effective_to %}
+        </div>
+        <div class="form-help">
+          Leave the <span class="fw-600">end date blank</span> for an open-ended tariff — blank means "no end", which is the ordinary shape for the card a client is on today, and it is emphatically <em>not</em> read as "already finished". An end date before the start date is refused.
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">overlap guard</span> is the rule worth knowing before you meet it: a second <em>active</em> card for the same client whose dates overlap this one is refused, and the message names the card it collided with. A billing run that found two live tariffs covering the same day would have no defined answer about which rate applies, and quietly picking one is how a client ends up billed at prices nobody agreed. Supersede the old card first — its end date is stamped for you — or give this one a start date after the old one closes.
+        </div>
+        <div class="form-help">
+          <span class="fw-600">Status is here so a card can be corrected, not as the normal way to move one.</span> The audited route is the <em>Activate</em> and <em>Supersede</em> buttons on the card itself: both are POST-only, both re-run the overlap guard, and both write their own audit record. Rates stop being editable the moment a card leaves <em>Draft</em>, which is deliberate — a run that has already been calculated against these prices has to keep meaning what it said.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Money</h2>
+        <span class="badge badge-slate">The card sets the currency; the lines set the prices</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.currency %}
+        </div>
+        <div class="form-help">
+          Leave the currency blank to fall back to the client's own default. Whatever ends up on the card is what a drafted invoice is raised in, so a card that mixes currencies with its client is a question worth answering here rather than at the point somebody is trying to send a bill. Currencies are a <span class="fw-600">global</span> master shared by every workspace — there is no per-tenant currency table — so the list is short and the same one accounting uses.
+        </div>
+        <div class="form-help">
+          Nothing on this page posts to the ledger. A 3PL billing run stops at a <span class="fw-600">draft invoice</span> in accounting; the aging, the cash application, the tax determination and the journal entry are all Module 2's, and duplicating any of them here would create a second set of receivables that could disagree with the first.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Notes</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">Worth recording the contract clause or the negotiation these prices came from. A superseded card is kept forever precisely so a past run can name the tariff it used, and a sentence here is often the only thing that explains <em>why</em> the rate was what it was.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save changes{% else %}Create the rate card{% endif %}</button>
+      <a href="{% url 'scm:clientratecard_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+    {% if not is_edit %}
+      <div class="form-help" style="margin-top:.75rem;">Saving creates an empty card. Its <span class="fw-600">priced lines</span> are added next, on the card's own page — storage per pallet position per month, a handling charge per order or per line, a receipt fee, a flat monthly account charge. A card with no lines is not an error: a run against it calculates to zero and says so.</div>
+    {% endif %}
+  </form>
+{% endblock %}
