@@ -27,6 +27,12 @@ never held against a crafted POST (L39 §2).
 from apps.scm.forms._common import *  # noqa: F401,F403
 from apps.scm.forms._common import _active_currencies, _carrier_parties, _reject_foreign
 
+# `_keep_current` is 4.18's own, defined next door on the sub-module's first entity module — the
+# `AssetManagement.Assets` precedent for a helper two entity modules in ONE sub-package share. It is
+# imported rather than re-typed: a second copy of the "re-admit the stored choice" rule is how the
+# two copies start disagreeing about which of them is tenant-scoped.
+from apps.scm.forms.FinanceIntegration.DutyTariffs import _keep_current
+
 from apps.accounting.models import GLAccount, TaxCode
 
 from apps.scm.models import (
@@ -162,6 +168,27 @@ class LandedCostChargeForm(TenantModelForm):
         self.fields["tax_code"].queryset = (
             TaxCode.objects.filter(tenant=tenant, is_active=True).order_by("name")
             if tenant is not None else TaxCode.objects.none())
+
+        # Re-admit each narrowed dropdown's ALREADY-STORED row on the EDIT path. `party` is narrowed
+        # by ROLE and `gl_account` / `tax_code` by `is_active`, and all three columns are OPTIONAL
+        # (`null=True`) — so once the stored row stops qualifying (the carrier role is removed, the
+        # account or tax code is deactivated) its <option> silently disappears, the browser posts an
+        # empty value, and saving an unrelated edit NULLs the FK with NO validation error to warn
+        # anybody. On `gl_account` that is the expense account `draft_bill()` copies onto the vendor
+        # bill line, lost by somebody who came to fix a typo in the description.
+        #
+        # The base querysets are TENANT-SCOPED (not `.objects.all()`), so the union can only ever
+        # re-admit this workspace's own row, and they carry the same ordering as the narrowed ones so
+        # the dropdown does not re-sort itself on an edit.
+        _keep_current(self, "party",
+                      Party.objects.filter(tenant=tenant) if tenant is not None
+                      else Party.objects.none())
+        _keep_current(self, "gl_account",
+                      GLAccount.objects.filter(tenant=tenant).order_by("code") if tenant is not None
+                      else GLAccount.objects.none())
+        _keep_current(self, "tax_code",
+                      TaxCode.objects.filter(tenant=tenant).order_by("name") if tenant is not None
+                      else TaxCode.objects.none())
 
         # Blank MEANS "inherit the voucher's", so the empty option says so rather than showing the
         # anonymous "---------" a reader has to guess at. `required=False` is what lets it be blank.
