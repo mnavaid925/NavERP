@@ -223,10 +223,22 @@ those files alone (L45), and agree the migration number before generating one (L
   the `management/commands` tree) AND do the `config/settings.py` + `config/urls.py` wire-up — then build that
   module's first sub-module (`N.1`).
 
-The user prefers fanning work out across agents. For one sub-module a small **2–3 agent Workflow** works well:
-keep **backend + migrations + seed** as one solo agent (single DB writer), then **templates** as 1–2 agents.
-You may also build it inline if it's quick. Produce ALL of the following **for the one sub-module** (for an existing
-app, "create" means "append to the existing file"):
+**Run the build as a Workflow — do not build it inline.** The parallelism axis is **per entity, not per layer**:
+
+```
+Workflow({ scriptPath: '.claude/workflows/module-build.js',
+           args: { slug: '<slug>', submodule: '<N.M>', title: '<sub-module title>',
+                   newApp: <true only for a brand-new app>, migrationNumber: '<claimed above>' } })
+```
+
+It runs **Spec** (solo, read-only — freezes the contract, including **every view context key**) → **Scaffold**
+(new apps only) → **Build** (per entity, a backend agent and a template agent **concurrently**) → **Integrate**
+(solo single writer: re-exports, admin, seeder, `LIVE_LINKS`, migrate, seed ×2, `check`, commit) → **Smoke**
+(renders every new page and fixes contract drift). The build agents never touch a shared file; §2a–2d below are
+the spec the workflow's agents build to, and the reference for anything you fix by hand afterwards.
+
+Produce ALL of the following **for the one sub-module** (for an existing app, "create" means "append to the
+existing file"):
 
 ### 2a. Backend (`apps/<slug>/`) — **models / forms / views / urls are PACKAGES, never flat .py files**
 
