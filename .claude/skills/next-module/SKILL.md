@@ -413,6 +413,43 @@ unbuilt sub-module** (the lowest `N.M` without a `LIVE_LINKS["N.M"]` entry in th
 ONE. Keep going **sub-module by sub-module** within a module; only roll over to the next module (building its `N.1`)
 once every sub-module of the current one is wired (Step 1 rollover rule).
 
+---
+
+## Appendix — surviving the 5-hour window
+
+A build is checkpointed to `.claude/tasks/build-state.json` at every phase boundary (CLAUDE.md
+**Session Window & Resume**). What that buys you depends on how the next session starts.
+
+**Default — resume on next launch (works today, nothing to install).** Open Claude Code any time after the window
+resets. The `SessionStart` hook injects the resume block automatically, and the session continues from the first
+phase not marked `done`. You do not have to say anything: "next" or even an empty start is enough, because the
+instruction to resume is already in context. This is the path to rely on.
+
+**Check where a build stands at any time**, without starting a session:
+
+```bash
+venv\Scripts\python.exe .claude/hooks/build_state.py show
+```
+
+**Unattended — auto-launch at the reset time.** This needs the Claude Code **CLI**, which is *not* currently on
+this machine's PATH (the desktop app does not provide it). To enable it:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+Then authenticate once (`claude` → sign in), and register a Windows Scheduled Task that fires at the reset time
+and runs the build headlessly:
+
+```bash
+schtasks /Create /TN "NavERP resume build" /SC ONCE /ST 21:58 /TR "cmd /c cd /d C:\xampp\htdocs\NavERP && claude -p \"Resume the interrupted NavERP build from .claude/tasks/build-state.json\" --permission-mode acceptEdits" /F
+```
+
+Three things to know before enabling it: the machine must be awake and logged in at that time; the run **consumes
+your usage window** the moment it starts, unattended; and `--permission-mode acceptEdits` means it edits and
+commits without asking — acceptable here only because the sequence never pushes. Prefer the default path unless
+you specifically want the build running while you are away.
+
 ## Quality bar
 A delivered sub-module must: live in the **backend package layout** (§2a — a `<SubModule>/` folder with one
 `<Entity>.py` per model in each of `models/ forms/ views/ urls/`, **plus the re-export block added to every
