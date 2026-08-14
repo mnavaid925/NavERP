@@ -525,11 +525,14 @@ from .ThirdPartyLogistics.LogisticsClients import (  # noqa: F401
     logisticsclient_list, logisticsclient_create, logisticsclient_detail,
     logisticsclient_edit, logisticsclient_delete,
 )
-# TWO verbs beyond CRUD, and they are the whole reason pricing is auditable. `status` is NOT on
-# `ClientRateCardForm`, so `activate` and `supersede` are its only writers: activating stamps the
+# TWO verbs beyond CRUD, and they are the whole reason pricing is auditable. `status` IS on
+# `ClientRateCardForm` (deliberately — see the ClientRateCards forms module docstring), so `activate`
+# and `supersede` are the PREFERRED writers rather than the only ones: activating stamps the
 # effective window and closes the previous active card for that client, superseding retires one.
-# Both are @require_POST. Editing a card's LINES is refused once it leaves `draft`
-# (EDITABLE_RATE_CARD_STATUSES) — otherwise last quarter's invoice could be re-priced this quarter.
+# Both are @require_POST. The form path cannot be used to reverse a live tariff because
+# `clientratecard_edit` refuses any card outside `EDITABLE_RATE_CARD_STATUSES` ("draft",) and
+# `ClientRateCard.clean()` re-runs the overlap guard on every write path. Editing a card's LINES is
+# refused by the same rule — otherwise last quarter's invoice could be re-priced this quarter.
 from .ThirdPartyLogistics.ClientRateCards import (  # noqa: F401
     clientratecard_list, clientratecard_create, clientratecard_detail,
     clientratecard_edit, clientratecard_delete,
