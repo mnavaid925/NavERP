@@ -73,6 +73,15 @@ MAX_VARIANCE_PCT = Decimal("999999.99")
 #: the first four-digit or three-decimal rate. See the module docstring.
 MAX_BILL_TAX_RATE_PCT = Decimal("999.99")
 
+#: Column ceilings for the two DERIVED figures on ``LandedCostAllocation``. The rows go out through
+#: ``bulk_create()``, which skips ``full_clean()`` AND the field validators, so these constants are
+#: the ONLY guard between a derived Decimal and the database driver — an out-of-range one raises
+#: ``DataError`` mid-transaction, i.e. a 500 on the Allocate button with the whole allocation rolled
+#: back. ``unit_cost_uplift`` divides a charge by a move quantity that can legitimately be a fraction,
+#: and ``basis_value`` sums a receipt's value; neither is bounded by anything a form sees.
+MAX_UPLIFT = Decimal("9999999999.9999")         #: unit_cost_uplift — DecimalField(14, 4)
+MAX_BASIS_VALUE = Decimal("999999999999.9999")  #: basis_value      — DecimalField(16, 4)
+
 #: The pinned fallback chain, per requested allocation basis.
 #:
 #: A basis that measures to NOTHING must neither divide by zero nor silently write an all-zero
@@ -447,6 +456,9 @@ class LandedCostVoucher(TenantNumbered):
                         allocated = q2(amount * basis_value / total_basis)
                         running += allocated
                     quantity = move.quantity or ZERO
+                    # Both derived columns are CLAMPED to their own widths: `bulk_create()` below
+                    # skips `full_clean()`, so nothing else stands between these figures and the
+                    # driver. See MAX_UPLIFT / MAX_BASIS_VALUE.
                     rows.append(LandedCostAllocation(
                         tenant=self.tenant,
                         voucher=self,
@@ -454,10 +466,11 @@ class LandedCostVoucher(TenantNumbered):
                         stock_move=move,
                         item=move.item,
                         quantity=q4(quantity),
-                        basis_value=q4(basis_value),
+                        basis_value=min(MAX_BASIS_VALUE, q4(basis_value)),
                         basis_used=basis_used,
                         allocated_amount=allocated,
-                        unit_cost_uplift=q4(allocated / quantity) if quantity else ZERO,
+                        unit_cost_uplift=(min(MAX_UPLIFT, q4(allocated / quantity))
+                                          if quantity else ZERO),
                     ))
 
             LandedCostAllocation.objects.bulk_create(rows)
