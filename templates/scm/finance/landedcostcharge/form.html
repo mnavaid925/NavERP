@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — add or edit ONE cost charge on a landed cost voucher.
+
+Renders apps/scm/views/FinanceIntegration/LandedCostVouchers.py::landedcostcharge_create and
+::landedcostcharge_edit. Everything this page may read, and nothing else:
+
+  form     LandedCostChargeForm (bound on POST) — FOURTEEN fields: charge_type, description, party,
+           freight_invoice, estimated_amount, actual_amount, allocation_basis, gl_account, tax_code,
+           is_recoverable, capitalise_to_inventory, hs_code, country_of_origin, duty_rate_pct
+  is_edit  False on the create path, True on the edit path
+  voucher  THE PARENT LandedCostVoucher. The form has NO `voucher` field, so the header, the
+           breadcrumb and the Cancel target can only come from here
+  obj      the LandedCostCharge being edited — PRESENT ONLY when is_edit
+
+WHY `voucher` IS NOT ON THIS FORM. It comes from the ROUTE and never from the POST body:
+LandedCostCharge has no tenant column of its own, it is resolved through
+voucher__tenant=request.tenant, and that join IS the authorization check — so a parent pk in the
+body is exactly how a charge would be grafted onto another workspace's voucher.
+
+The voucher's status is the VIEW's refusal, not a field error: both views redirect to the voucher
+with a message once it has left draft. So this page is only ever reached on an editable voucher.
+
+Badges are the COLOUR-NAMED theme.css classes only (badge-green / red / amber / info / muted /
+slate). A semantic badge-success / badge-danger renders completely unstyled.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit charge{% else %}Add charge{% endif %} · {{ voucher.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit cost charge{% else %}Add cost charge{% endif %}
+      {% if voucher.status == 'draft' %}<span class="badge badge-muted">{{ voucher.get_status_display }}</span>
+      {% elif voucher.status == 'allocated' %}<span class="badge badge-info">{{ voucher.get_status_display }}</span>
+      {% elif voucher.status == 'accrued' %}<span class="badge badge-amber">{{ voucher.get_status_display }}</span>
+      {% elif voucher.status == 'reconciled' %}<span class="badge badge-green">{{ voucher.get_status_display }}</span>
+      {% elif voucher.status == 'cancelled' %}<span class="badge badge-slate">{{ voucher.get_status_display }}</span>
+      {% else %}<span class="badge badge-muted">{{ voucher.get_status_display }}</span>{% endif %}
+    </h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:landedcostvoucher_list' %}">Landed Cost Vouchers</a><span class="sep">›</span>
+      <a href="{% url 'scm:landedcostvoucher_detail' voucher.pk %}">{{ voucher.number }}</a><span class="sep">›</span>
+      <span>{% if is_edit %}{{ obj.get_charge_type_display }}{% else %}New charge{% endif %}</span>
+    </div>
+    <p class="text-muted">One cost line on this voucher — freight, insurance, customs duty, a broker fee. Saving re-totals the voucher in the same transaction; the amounts only reach the items when the voucher is <span class="fw-600">allocated</span>.</p>
+  </div></div>
+
+  {% comment %}
+    THE PARENT, restated. The form cannot show it — `voucher` is not a field — so this card is the
+    only thing on the page that says which voucher, which receipt and which payee is being changed.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ voucher.number }}{% if voucher.party %} · {{ voucher.party.name }}{% endif %}</h2>
+      <div class="badge-group">
+        {% if voucher.status == 'draft' %}<span class="badge badge-muted">{{ voucher.get_status_display }}</span>
+        {% elif voucher.status == 'allocated' %}<span class="badge badge-info">{{ voucher.get_status_display }}</span>
+        {% elif voucher.status == 'accrued' %}<span class="badge badge-amber">{{ voucher.get_status_display }}</span>
+        {% elif voucher.status == 'reconciled' %}<span class="badge badge-green">{{ voucher.get_status_display }}</span>
+        {% elif voucher.status == 'cancelled' %}<span class="badge badge-slate">{{ voucher.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ voucher.get_status_display }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Goods receipt</dt><dd class="mono">{% if voucher.goods_receipt %}<a href="{% url 'scm:goodsreceipt_detail' voucher.goods_receipt.pk %}">{{ voucher.goods_receipt.number }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Payee</dt><dd>{% if voucher.party %}{{ voucher.party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Cost date</dt><dd class="mono">{{ voucher.cost_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Default basis</dt><dd>{{ voucher.get_allocation_basis_display }}</dd></div>
+        <div class="detail-item"><dt>Estimated</dt><dd class="mono">{{ voucher.estimated_total|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Actual</dt><dd class="mono fw-600">{{ voucher.actual_total|floatformat:2 }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">Saving re-totals the voucher in the same transaction, so the figures above change the moment this charge lands.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What the charge is</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.charge_type %}
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.party %}
+          {% include "partials/form_field.html" with field=form.freight_invoice %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">Leave <span class="fw-600">Vendor</span> blank to bill this line to the voucher's own payee. A <span class="fw-600">different</span> vendor here still allocates into stock, but it is deliberately EXCLUDED from the drafted bill — one bill can only be raised to one party — and the voucher detail page reports it as excluded rather than silently dropping it.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">The money</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.estimated_amount %}
+          {% include "partials/form_field.html" with field=form.actual_amount %}
+          {% include "partials/form_field.html" with field=form.allocation_basis %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">The <span class="fw-600">actual</span> is what allocates once it is entered; until then the estimate does, so a receipt carries a usable landed cost before the invoice arrives. Changing either figure after allocation does not move stock by itself — re-allocate the voucher to apply it. A blank basis inherits the voucher's; weight and volume fall back to quantity when the received items carry no unit weight or volume.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Accounting treatment</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.gl_account %}
+          {% include "partials/form_field.html" with field=form.tax_code %}
+          {% include "partials/form_field.html" with field=form.is_recoverable %}
+          {% include "partials/form_field.html" with field=form.capitalise_to_inventory %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">A charge only lands on the items when it <span class="fw-600">capitalises</span> — recoverable import VAT/GST is reclaimed from the authority rather than carried in stock value, so it is excluded from allocation while still appearing on the drafted bill. SCM posts no journal entry of its own: <span class="fw-600">Draft bill</span> creates a DRAFT <span class="mono">accounting.Bill</span> and stops there.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Customs</h2>
+        <span class="badge badge-muted">Customs Duty charges only</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.hs_code %}
+          {% include "partials/form_field.html" with field=form.country_of_origin %}
+          {% include "partials/form_field.html" with field=form.duty_rate_pct %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">The rate is a <span class="fw-600">snapshot</span> off the duty tariff, not a pointer at it — re-rating a tariff next quarter must never restate a shipment that has already cleared. Leave these blank on any charge that is not a customs duty.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save charge{% else %}Add charge{% endif %}</button>
+      <a href="{% url 'scm:landedcostvoucher_detail' voucher.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
