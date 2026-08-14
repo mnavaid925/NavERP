@@ -61,6 +61,23 @@ class Location(TenantOwned):
         max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True,
         help_text="Temperature class of this zone or bin; blank = ambient / unclassified")
 
+    # --- 4.17 third-party-logistics attribute -------------------------------------------------
+    # Same precedent as the 4.4 and 4.15 blocks above, one sub-module on: a client's dedicated aisle
+    # IS a location, and splitting reserved space into its own master would fork the StockMove FK and
+    # the on-hand aggregate all over again. It is what makes the Warehouse Rental Management page
+    # possible at all — the bins actually reserved to a client, shown beside what they committed to.
+    # Additive, nullable and all-default; blank means shared/unreserved space.
+    #
+    # It is also read as a CONTAMINATION guard: a rate-card line that narrows to a location owned by
+    # a DIFFERENT client is refused rather than silently pricing someone else's aisle.
+    #
+    # SET_NULL rather than PROTECT: deleting a client must not be blocked by, or destroy, the bin —
+    # the space still exists and still holds stock, it simply stops being reserved.
+    owner_client = models.ForeignKey(
+        "scm.LogisticsClient", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="dedicated_locations",
+        help_text="The 3PL client this space is reserved to; blank = shared / our own space")
+
     class Meta:
         ordering = ["code"]
         unique_together = ("tenant", "code")
