@@ -316,6 +316,13 @@ strings below are written \' for exactly that reason.
 
     <div class="card-body text-muted">
       A breached service level implies a <span class="fw-600">service credit</span> under most 3PL contracts. This sub-module works out what that credit would be and stops there: the figure is shown on the SLA and beside the client's billing run as a <span class="fw-600">suggestion</span>, it reduces no run total, and no credit note is raised anywhere. Issuing one is a commercial decision with a signature on it, and the document belongs to Accounting.
+      {% comment %}
+        The view's `not_measured_note`, printed rather than re-worded. It is the caveat that explains
+        the "Not measured" cells above, and until now it lived only in a template comment where no
+        user could read it — the one place a caveat is no use. Printed ONCE under the table instead
+        of per row, because it explains the column and not any particular line.
+      {% endcomment %}
+      <p style="margin:.6rem 0 0;">{{ not_measured_note }}</p>
     </div>
   </div>
 {% endblock %}
