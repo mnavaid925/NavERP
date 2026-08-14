@@ -415,3 +415,25 @@ from .ThirdPartyLogistics.ClientBillingRuns import (  # noqa: F401
 from .ThirdPartyLogistics.ClientSlas import (  # noqa: F401
     ClientSLAForm,
 )
+
+# --- 4.18 Finance & Accounting Integration -----------------------------------------------------
+# THREE forms, and `LandedCostAllocation` deliberately has none: it is a derived ledger written only
+# by `LandedCostVoucher.allocate()`, so a ModelForm over it would be a hand-editable copy of a
+# computed number — the exact shape of the money bug this sub-module is built to avoid.
+#
+# What is ABSENT from these forms is the load-bearing part. `LandedCostVoucherForm` carries no
+# `status` (the allocate → accrue → draft-bill ladder owns it), no `bill` (set by `draft_bill()`),
+# and none of the five derived totals (`recalc_totals()` owns them) — a typed total would be a
+# second source of truth for money. `LandedCostChargeForm` carries no `voucher`: the parent comes
+# from the ROUTE, because a parent pk in a POST body is how a charge is grafted onto another
+# workspace's voucher.
+from .FinanceIntegration.LandedCostVouchers import (  # noqa: F401
+    LandedCostVoucherForm,
+    LandedCostChargeForm,
+)
+# `TenantUniqueMixin` here and NOT on the voucher form, and the asymmetry is intentional: a tariff's
+# (hs_code, country_of_origin, effective_from) is user-entered and duplicable, whereas the voucher's
+# only unique_together is on the auto-assigned `number`.
+from .FinanceIntegration.DutyTariffs import (  # noqa: F401
+    DutyTariffForm,
+)
