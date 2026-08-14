@@ -147,7 +147,8 @@ from apps.scm.forms import PortalInquiryCustomerForm
 # precedent). q2 CLAMPS as well as quantizes, so an absurd line total degrades to a capped figure on
 # the page instead of a DataError-shaped 500 out of the arithmetic.
 from apps.scm.models._base import q2
-from apps.scm.models import (INQUIRY_TYPE_CHOICES, Item, ItemCategory, Location, PortalActivity,
+from apps.scm.models import (CUSTOMER_VISIBLE_INVOICE_KIND, CUSTOMER_VISIBLE_INVOICE_STATUSES,
+                             INQUIRY_TYPE_CHOICES, Item, ItemCategory, Location, PortalActivity,
                              PortalDocumentShare, PortalOrderInquiry, ReorderRule, SalesOrder,
                              SalesOrderLine, SHARE_DOC_TYPE_CHOICES, Shipment, StockMove,
                              STOCK_BAND_CSS, STOCK_BAND_LABELS, stock_band)
@@ -184,9 +185,12 @@ OPEN_ORDER_STATUSES = ("submitted", "on_hold", "allocated", "partially_fulfilled
 #: page it links to.
 MOVING_SHIPMENT_STATUSES = ("booked", "in_transit", "exception")
 
-#: Invoices a customer may see. ``draft`` is ours until we send it and ``void`` is a document we
-#: withdrew; publishing either would show a customer money we are not asking them for.
-CUSTOMER_VISIBLE_INVOICE_STATUSES = ("sent", "partial", "paid")
+#: ``CUSTOMER_VISIBLE_INVOICE_KIND`` / ``CUSTOMER_VISIBLE_INVOICE_STATUSES`` are imported above from
+#: ``models/CustomerPortal/_choices.py`` rather than defined here, which is where they used to live.
+#: Local to this module, THIS page obeyed the rule and the document-share path did not: the share
+#: form offered any invoice belonging to the customer, so every seeded share pointed at a **draft
+#: credit note** and the anonymous bearer token served it. A rule only one of its three readers can
+#: see is not a rule.
 
 #: Session key marking that this portal session's ``login`` activity row has been written.
 #:
@@ -807,6 +811,17 @@ def _target_still_owned(share):
     if getattr(target, "classification", "") == "confidential":
         return False
 
+    # An invoice must still be one the customer may SEE, checked here and not only at share time.
+    # A share is created once and read for as long as it lives, so a document that was legitimately
+    # shareable can stop being so — an invoice voided after the fact is the obvious case, and the
+    # link would otherwise keep serving a document we withdrew. Same reasoning as re-checking
+    # `tenant.is_active` and `portal_account.is_active`: state is evaluated when the bytes are
+    # served, never when the row was written.
+    if pointer == "invoice":
+        if (getattr(target, "kind", "") != CUSTOMER_VISIBLE_INVOICE_KIND
+                or getattr(target, "status", "") not in CUSTOMER_VISIBLE_INVOICE_STATUSES):
+            return False
+
     customer_id = share.portal_account.customer_id
     owners = [share._resolve(target, path)
               for path in PortalDocumentShare.OWNER_PATHS.get(pointer, ())]
@@ -875,12 +890,21 @@ def portal_document_download(request, token):
     if not token:
         raise Http404("No such document.")
 
-    share = get_object_or_404(
-        PortalDocumentShare.objects.select_related(
-            "tenant", "portal_account", "portal_account__customer", "document", "invoice",
-            "shipment", "trade_document", "trade_document__document", "contract",
-            "quality_inspection"),
-        public_token=token, revoked_at__isnull=True)
+    # `.first()` + an explicit raise, NOT `get_object_or_404`. Both produce a 404, but
+    # `get_object_or_404` raises with Django's own generated message ("No PortalDocumentShare
+    # matches the given query."), and under `DEBUG=True` the technical 404 page ECHOES it — so a
+    # wrong or revoked token rendered a visibly different page from an expired one, classifying the
+    # two for anybody probing a dev or staging box. Production (`DEBUG=False`) responses were always
+    # byte-identical, so this was never a live oracle; it is fixed because the module claims
+    # indistinguishability unconditionally, and a claim that holds only in one configuration is one
+    # somebody will eventually rely on in the other.
+    share = (PortalDocumentShare.objects.select_related(
+        "tenant", "portal_account", "portal_account__customer", "document", "invoice",
+        "shipment", "trade_document", "trade_document__document", "contract",
+        "quality_inspection")
+        .filter(public_token=token, revoked_at__isnull=True).first())
+    if share is None:
+        raise Http404("No such document.")
 
     # Every refusal below raises the SAME bare 404 on purpose — a message that distinguished
     # "expired" from "revoked" from "wrong workspace" would hand an enumerator a classifier.
