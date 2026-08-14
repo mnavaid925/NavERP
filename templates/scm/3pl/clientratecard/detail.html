@@ -342,9 +342,18 @@ linked to its own record, which carries the name.
       </table>
     </div>
     <div class="card-body text-muted">
-      {% if not can_add_line %}
+      {% comment %}
+        TWO different blockers, and they need different words. `can_edit` is the STATUS rule;
+        `can_add_line` is that rule AND the line ceiling. Gating the lock message on `can_add_line`
+        made a DRAFT card at the cap print "This card is draft, and lines can only be added while a
+        card is still a draft" — a sentence that contradicts itself and names the wrong obstacle.
+      {% endcomment %}
+      {% if not can_edit %}
         <span class="badge badge-slate">Lines locked</span>
         This card is <span class="fw-600">{{ obj.get_status_display|lower }}</span>, and lines can only be added or changed while a card is still a draft. That is not caution for its own sake: a run that has already been calculated against these rates has to keep meaning what it said, and moving a rate under it would leave two documents disagreeing about one month. Raise a new version instead.
+      {% elif not can_add_line %}
+        <span class="badge badge-amber">Line limit reached</span>
+        This card already carries <span class="fw-600">{{ line_count }}</span> lines, the most a single tariff may hold. It is still a draft, so the lines it has can be edited and removed — only adding another is refused. Remove a line you no longer price, or raise a new version and split the tariff.
       {% else %}
         Lines are read <span class="fw-600">only when they are active</span> — deactivating one takes it out of the next calculation without deleting the record of what was once agreed. <span class="fw-600">Included quantity</span> is the free allowance subtracted before billing, and the <span class="fw-600">tier band</span> is a plain from/to range on the measured quantity rather than an expression language: this module deliberately does not grow one, and a genuinely bespoke formula belongs in a contract clause and a manual line, not in a rate engine nobody can audit.
       {% endif %}
