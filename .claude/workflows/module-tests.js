@@ -1,9 +1,7 @@
 export const meta = {
   name: 'module-tests',
   description: 'Write a NavERP sub-module pytest suite with parallel test-writer agents over disjoint files, then prove the whole app suite green',
-  whenToUse:
-    'Step 6 of the CLAUDE.md Module Creation Sequence — after code-fixer has burned down the review findings. ' +
-    'Replaces the single serial test-writer agent.',
+  whenToUse: 'Step 6 of the CLAUDE.md Module Creation Sequence — after code-fixer has burned down the review findings. Replaces the single serial test-writer agent.',
   phases: [
     { title: 'Contract', detail: 'single writer: tests package + conftest, and the pinned model/url/fixture contract' },
     { title: 'Write', detail: 'four test-writer agents in parallel, one owned file each' },
