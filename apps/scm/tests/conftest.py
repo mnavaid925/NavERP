@@ -3039,3 +3039,361 @@ def labor_plan_line_b(db, labor_plan_b):
     return LaborPlanLine.objects.create(
         plan=labor_plan_b, period_start=labor_plan_b.period_start, activity="pick",
         required_headcount=Decimal("2.00"), planned_headcount=Decimal("1.00"))
+
+
+# =================================================================================================
+# SCM 4.17 Third-Party Logistics (3PL) Management — the ``tpl_`` fixtures
+# =================================================================================================
+# NAMING, and why it is not the obvious one: the sub-module's test prefix is ``3pl``
+# (``test_3pl_*`` functions, ``_3pl_*`` module-level helpers — both legal, because an identifier may
+# start with an underscore and only its FIRST character may not be a digit). ``3pl_client_a`` is
+# therefore NOT a legal Python identifier, so every FIXTURE below carries the ``tpl_`` prefix
+# (Third-Party Logistics). The two conventions differ on purpose; do not "fix" either into the other.
+#
+# TIME BASIS (L16): every date below is derived from ``timezone.localdate()`` — the SAME basis
+# ``LogisticsClient.save()`` stamps ``onboarded_on`` from, ``ClientRateCard.is_effective_on()``
+# compares against, ``ClientSLA.resolve_window()`` resolves a monthly window with and
+# ``ClientBillingRun.draft_invoice()`` dates an invoice by. Never ``datetime.date.today()``.
+#
+# WHAT IS DELIBERATELY *NOT* HERE: nothing below is breached, approved, invoiced or calculated. Each
+# of those is one line in the test that wants it (``run.calculate()``, ``run.approve(user)``,
+# ``ClientSLA.objects.filter(pk=…).update(status="breached")`` — ``status`` is ``editable=False`` on
+# both models, so a fixture that pre-set it would be asserting the fixture rather than the ladder).
+
+
+def _tpl_last_full_month(today):
+    """``(start, end)`` of the LAST FULL calendar month — the window every 4.17 fixture bills over.
+
+    The same window ``ClientSLA.resolve_window()`` computes for ``measurement_window="monthly"``, so
+    a billing run and an SLA measurement line up on one period without either hard-coding a date. A
+    full calendar month is always at least 28 days, which is exactly
+    ``ClientBillingRun.MINIMUM_CHARGE_MIN_DAYS`` — so the monthly-minimum branch is reachable in
+    every month of the year, February included.
+    """
+    end = datetime.date(today.year, today.month, 1) - datetime.timedelta(days=1)
+    return datetime.date(end.year, end.month, 1), end
+
+
+@pytest.fixture
+def tpl_period(db):
+    """``(period_start, period_end)`` of the last full calendar month — what ``tpl_billing_run_a``
+    covers. Request it wherever an assertion needs the same two dates the fixtures used."""
+    from django.utils import timezone
+    return _tpl_last_full_month(timezone.localdate())
+
+
+@pytest.fixture
+def tpl_customer_a2(db, tenant_a):
+    """A SECOND tenant_a customer party.
+
+    ``LogisticsClient`` carries ``unique_together ("tenant", "party")`` — one 3PL agreement per
+    company — so a second client in the same workspace needs a second party, not a second row
+    against ``customer_a``.
+    """
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Acme Second Depositor",
+                                 kind="organization")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="customer", status="active",
+                             start_date=datetime.date(2026, 1, 1))
+    return party
+
+
+@pytest.fixture
+def tpl_revenue_account_a(db, tenant_a):
+    """An INCOME account — what a drafted 3PL invoice line lands on.
+
+    ``account_type="income"`` deliberately: the Chart of Accounts vocabulary is
+    asset/liability/equity/income/expense and there is no ``revenue`` value in it (the seeder
+    documents the same trap at ``seed_scm.py:5041-5044``).
+    """
+    from apps.accounting.models import GLAccount
+    return GLAccount.objects.create(tenant=tenant_a, code="4100", name="3PL Service Revenue",
+                                    account_type="income")
+
+
+@pytest.fixture
+def tpl_client_a(db, tenant_a, customer_a, usd, payment_terms_a, tpl_revenue_account_a):
+    """tenant_a's DEDICATED-space depositor — the root every other 4.17 fixture hangs off.
+
+    ``active`` on create, so ``LogisticsClient.save()`` stamps ``onboarded_on`` with
+    ``timezone.localdate()``. Dedicated + a real commitment, because ``clean()`` REFUSES a dedicated
+    client with no committed area or pallet positions (and refuses a shared one that carries them),
+    so this row is the one that satisfies the dedicated-space rate basis.
+
+    ``billing_cycle="monthly"`` and ``minimum_monthly_charge=500`` together make the monthly-minimum
+    top-up reachable: ``recalc_amounts()`` applies the floor only to a monthly client on a period of
+    at least 28 days, which ``tpl_period`` always is.
+    """
+    from django.utils import timezone
+    from apps.scm.models import LogisticsClient
+    today = timezone.localdate()
+    return LogisticsClient.objects.create(
+        tenant=tenant_a, party=customer_a, code="ACME", status="active",
+        billing_cycle="monthly", billing_day=1,
+        storage_billing_method="calendar_month",
+        minimum_monthly_charge=Decimal("500.00"), default_tax_rate_pct=Decimal("5.00"),
+        currency=usd, payment_terms=payment_terms_a,
+        default_revenue_account=tpl_revenue_account_a,
+        space_model="dedicated",
+        committed_sqft=Decimal("4000.00"), committed_pallet_positions=250,
+        contract_start=today - datetime.timedelta(days=400),
+        contract_end=today + datetime.timedelta(days=330),
+        notice_days=60,
+        integration_mode="api", client_system="NetSuite",
+        notes="Dedicated space, calendar-month storage, monthly minimum.")
+
+
+@pytest.fixture
+def tpl_client_shared_a(db, tenant_a, tpl_customer_a2, usd):
+    """tenant_a's SECOND client — SHARED space, no commitment, average-daily storage.
+
+    The mirror of ``tpl_client_a`` and the counterparty in every "same workspace is not the same
+    client" test: a rate line or an SLA scoped to a location dedicated to THIS client must be
+    refused on ``tpl_client_a``'s tariff. Carries no committed space on purpose — ``clean()`` refuses
+    a shared client that does.
+    """
+    from django.utils import timezone
+    from apps.scm.models import LogisticsClient
+    today = timezone.localdate()
+    return LogisticsClient.objects.create(
+        tenant=tenant_a, party=tpl_customer_a2, code="SHARED", status="active",
+        billing_cycle="weekly", billing_day=15,
+        storage_billing_method="average_daily",
+        default_tax_rate_pct=Decimal("0.00"),
+        currency=usd, space_model="shared",
+        contract_start=today - datetime.timedelta(days=180), notice_days=30,
+        integration_mode="edi", client_system="SAP ECC",
+        edi_partner_id="1234567890123", edi_qualifier="ZZ")
+
+
+@pytest.fixture
+def tpl_client_b(db, tenant_b, customer_b):
+    """tenant_b's depositor — the cross-tenant target. Its pk on any tenant_a route must 404."""
+    from apps.scm.models import LogisticsClient
+    return LogisticsClient.objects.create(
+        tenant=tenant_b, party=customer_b, code="GLOBEX", status="active",
+        billing_cycle="monthly", billing_day=1, storage_billing_method="snapshot",
+        space_model="shared", integration_mode="none")
+
+
+@pytest.fixture
+def tpl_owned_item_a(db, tenant_a, category_a, uom_each_a, tpl_client_a):
+    """A tenant_a item whose goods belong to ``tpl_client_a``.
+
+    ``item.owner_client`` is THE client-attribution path for the whole sub-module — there is
+    deliberately no owner column on ``StockMove`` (L37), so every derived figure (on-hand quantity,
+    on-hand value, the segregation report, every storage charge) reads through this FK.
+    ``average_cost`` is ``editable=False`` but assignable at ``create()``; it is pinned at 10.0000 so
+    a valuation assertion is exact arithmetic rather than whatever a receipt happened to average to.
+    """
+    from apps.scm.models import Item
+    return Item.objects.create(
+        tenant=tenant_a, sku="3PL-SKU-1", name="Client Widget", category=category_a,
+        uom=uom_each_a, item_type="stock", standard_cost=Decimal("9.0000"),
+        average_cost=Decimal("10.0000"), owner_client=tpl_client_a)
+
+
+@pytest.fixture
+def tpl_dedicated_location_a(db, tenant_a, tpl_client_a):
+    """A bin RESERVED to ``tpl_client_a`` — what the Warehouse Rental page counts and sums.
+
+    ``capacity`` is recorded so the report's capacity column is not uniformly blank; 4.3's own help
+    text says that figure is "in the bin's own units", which is exactly why the page prints it beside
+    the committed square feet and converts neither into the other.
+    """
+    from apps.scm.models import Location
+    return Location.objects.create(
+        tenant=tenant_a, code="3PL-ACME-A1", name="ACME dedicated aisle A1",
+        location_type="bin", capacity=Decimal("120.00"), owner_client=tpl_client_a)
+
+
+@pytest.fixture
+def tpl_other_client_location_a(db, tenant_a, tpl_client_shared_a):
+    """A tenant_a bin dedicated to the OTHER client — the contamination guard's counterparty.
+
+    Same workspace, different owner: a ``ClientRateCardLine.applies_to_location`` or a
+    ``ClientSLA.scope_location`` pointing here from ``tpl_client_a``'s row must be REFUSED, because
+    pricing (or measuring) one client against another client's aisle is the mistake whose output
+    looks entirely plausible.
+    """
+    from apps.scm.models import Location
+    return Location.objects.create(
+        tenant=tenant_a, code="3PL-SHARED-B1", name="SHARED dedicated aisle B1",
+        location_type="bin", capacity=Decimal("80.00"), owner_client=tpl_client_shared_a)
+
+
+@pytest.fixture
+def tpl_stock_move_a(db, tenant_a, tpl_owned_item_a, tpl_dedicated_location_a):
+    """ONE inbound receipt of the client's goods, dated inside ``tpl_period``.
+
+    100 units at 10.0000, so ``on_hand_quantity() == 100`` and ``on_hand_value() == 1000.00``
+    exactly. Written with ``StockMove.objects.create`` rather than through ``seed_stock`` precisely
+    because ``moved_at`` has to land inside the billed period — ``_post_stock_move`` would stamp
+    ``timezone.now()``, which is in the CURRENT month and outside every window here.
+    """
+    from django.utils import timezone
+    from apps.scm.models import StockMove
+    start, _end = _tpl_last_full_month(timezone.localdate())
+    moment = timezone.make_aware(
+        datetime.datetime.combine(start + datetime.timedelta(days=4), datetime.time(12, 0)))
+    return StockMove.objects.create(
+        tenant=tenant_a, item=tpl_owned_item_a, location=tpl_dedicated_location_a,
+        quantity=Decimal("100.0000"), unit_cost=Decimal("10.0000"), move_type="receipt",
+        reference="OPENING", moved_at=moment)
+
+
+@pytest.fixture
+def tpl_active_card_a(db, tenant_a, tpl_client_a, usd, tpl_revenue_account_a):
+    """``tpl_client_a``'s LIVE tariff, with two lines — the card every billing run prices from.
+
+    Effective ``today-120 .. today``, which always covers the last full calendar month, so
+    ``ClientBillingRun.clean()``'s "the tariff does not overlap this period" refusal never fires on
+    ``tpl_billing_run_a``. The end date is BOUNDED on purpose: it is what lets ``tpl_rate_card_a``
+    (draft, starting tomorrow) be activated without tripping the overlapping-active-card guard.
+
+    The two lines are chosen so ``calculate()`` is deterministic in every month of the year:
+
+    * ``flat_recurring`` / ``month`` at 250.00 is an ALWAYS-BILLED basis, so it is written even in a
+      period where nothing moved; over one whole calendar month the resolver returns exactly 1.0000
+      months, i.e. 250.00.
+    * ``per_receipt`` at 12.00 measures goods receipts. With no ``GoodsReceiptNote`` in the period it
+      resolves to 0 and the line is SKIPPED, which is the correct answer and not an error.
+
+    So a bare ``tpl_billing_run_a.calculate()`` writes ONE line, ``subtotal == 250.00``, and the
+    client's 500.00 monthly minimum then tops the run up: ``minimum_adjustment == 250.00`` and
+    ``total == 500.00``.
+    """
+    from django.utils import timezone
+    from apps.scm.models import ClientRateCard, ClientRateCardLine
+    today = timezone.localdate()
+    card = ClientRateCard.objects.create(
+        tenant=tenant_a, client=tpl_client_a, name="Live tariff", version=1, status="active",
+        effective_from=today - datetime.timedelta(days=120), effective_to=today, currency=usd)
+    ClientRateCardLine.objects.create(
+        rate_card=card, charge_category="recurring", charge_basis="flat_recurring",
+        description="Account management retainer", rate=Decimal("250.0000"), period="month",
+        gl_account=tpl_revenue_account_a)
+    ClientRateCardLine.objects.create(
+        rate_card=card, charge_category="receiving", charge_basis="per_receipt",
+        description="Inbound receipt handling", rate=Decimal("12.0000"), period="",
+        gl_account=tpl_revenue_account_a)
+    return card
+
+
+@pytest.fixture
+def tpl_rate_card_a(db, tenant_a, tpl_client_a, usd):
+    """``tpl_client_a``'s DRAFT tariff — the editable one, with NO lines.
+
+    ``draft`` is the only status in ``EDITABLE_RATE_CARD_STATUSES``, so this is the card the header
+    edit and all three line-write views accept. Its range starts TOMORROW and is open-ended, which is
+    deliberate: ``tpl_active_card_a`` ends today, so activating this one is allowed and a test that
+    wants the overlap refusal has to move a date itself (set ``effective_from`` to today or earlier,
+    or clear the active card's ``effective_to``).
+    """
+    from django.utils import timezone
+    from apps.scm.models import ClientRateCard
+    today = timezone.localdate()
+    return ClientRateCard.objects.create(
+        tenant=tenant_a, client=tpl_client_a, name="Next version", version=1, status="draft",
+        effective_from=today + datetime.timedelta(days=1), effective_to=None, currency=usd,
+        notes="Next year's proposal — never priced anything, so its lines are editable.")
+
+
+@pytest.fixture
+def tpl_rate_card_line_a(db, tpl_rate_card_a, tpl_revenue_account_a):
+    """One priced charge on the DRAFT card — the row the line edit/delete routes resolve.
+
+    ``per_receipt`` is an event basis, so ``period`` MUST be blank (``ClientRateCardLine.clean()``
+    refuses a period on a per-event basis and refuses a missing one on a periodic basis). The line
+    carries **no tenant column** — it is reached only through ``rate_card__tenant``.
+    """
+    from apps.scm.models import ClientRateCardLine
+    return ClientRateCardLine.objects.create(
+        rate_card=tpl_rate_card_a, charge_category="receiving", charge_basis="per_receipt",
+        description="Inbound receipt handling", rate=Decimal("12.0000"), period="",
+        gl_account=tpl_revenue_account_a)
+
+
+@pytest.fixture
+def tpl_rate_card_b(db, tenant_b, tpl_client_b):
+    """tenant_b's live tariff — the pk a crafted tenant_a POST tries to bill against."""
+    from django.utils import timezone
+    from apps.scm.models import ClientRateCard
+    today = timezone.localdate()
+    return ClientRateCard.objects.create(
+        tenant=tenant_b, client=tpl_client_b, name="Globex tariff", version=1, status="active",
+        effective_from=today - datetime.timedelta(days=120), effective_to=today)
+
+
+@pytest.fixture
+def tpl_billing_run_a(db, tenant_a, tpl_client_a, tpl_active_card_a, tpl_period):
+    """A DRAFT run over the last full calendar month. Nothing calculated, nothing approved.
+
+    ``status`` is ``editable=False`` and moves only along the verb ladder
+    (``calculate → approve → draft_invoice``, ``void`` from the first two), so a test drives it with
+    the model's own methods rather than by writing the column.
+    """
+    from apps.scm.models import ClientBillingRun
+    start, end = tpl_period
+    return ClientBillingRun.objects.create(
+        tenant=tenant_a, client=tpl_client_a, rate_card=tpl_active_card_a,
+        period_start=start, period_end=end, notes="Draft run over the last full month.")
+
+
+@pytest.fixture
+def tpl_billing_run_line_a(db, tpl_billing_run_a):
+    """A MANUAL charge on the run — 2 x 25.00, so ``amount`` is 50.00.
+
+    ``rate_card_line`` is NULL, and that NULL is what MAKES the line manual: ``calculate()`` deletes
+    and re-derives every ``is_manual=False`` line and never touches this one. ``amount`` is written
+    by ``ClientBillingRunLine.save()`` and by nothing else — do not pass it.
+    """
+    from apps.scm.models import ClientBillingRunLine
+    return ClientBillingRunLine.objects.create(
+        run=tpl_billing_run_a, charge_category="value_added", charge_basis="per_hour",
+        description="Kitting and rework labour", quantity=Decimal("2.0000"),
+        rate=Decimal("25.0000"), source_reference="photo log", is_manual=True)
+
+
+@pytest.fixture
+def tpl_billing_run_b(db, tenant_b, tpl_client_b, tpl_rate_card_b, tpl_period):
+    """tenant_b's run — the cross-tenant target for every run route and verb."""
+    from apps.scm.models import ClientBillingRun
+    start, end = tpl_period
+    return ClientBillingRun.objects.create(
+        tenant=tenant_b, client=tpl_client_b, rate_card=tpl_rate_card_b,
+        period_start=start, period_end=end)
+
+
+@pytest.fixture
+def tpl_sla_a(db, tenant_a, tpl_client_a):
+    """An ACTIVE, never-measured service promise on ``tpl_client_a``.
+
+    ``on_time_shipment_pct`` fixes its own unit (``pct``) and direction (``higher_is_better``) in
+    ``SLA_METRIC_META`` and ``ClientSLA.clean()`` REFUSES a row that disagrees, so those two values
+    are not free choices. ``warning_threshold`` sits BELOW the target because that is the failing
+    side for a higher-is-better metric — a band on the other side could never fire.
+
+    Ships at ``status="no_data"`` with ``last_measured_value=None``: never measured is a first-class
+    answer and must render as "Not measured", never as 0. The credit percentages are non-zero (5%,
+    capped at 10%) so a test only has to flip the status to reach the suggested-credit branch:
+    ``ClientSLA.objects.filter(pk=sla.pk).update(status="breached")`` — the column is
+    ``editable=False`` and ``recompute()`` is its only legitimate writer.
+    """
+    from apps.scm.models import ClientSLA
+    return ClientSLA.objects.create(
+        tenant=tenant_a, client=tpl_client_a, metric="on_time_shipment_pct",
+        name="On-time shipment", target_value=Decimal("98.00"), unit="pct",
+        direction="higher_is_better", warning_threshold=Decimal("95.00"),
+        measurement_window="monthly", service_credit_pct=Decimal("5.00"),
+        service_credit_cap_pct=Decimal("10.00"), is_active=True)
+
+
+@pytest.fixture
+def tpl_sla_b(db, tenant_b, tpl_client_b):
+    """tenant_b's promise — the cross-tenant target for the SLA routes and both recompute verbs."""
+    from apps.scm.models import ClientSLA
+    return ClientSLA.objects.create(
+        tenant=tenant_b, client=tpl_client_b, metric="damage_rate_pct",
+        target_value=Decimal("0.50"), unit="pct", direction="lower_is_better",
+        measurement_window="monthly", is_active=True)
