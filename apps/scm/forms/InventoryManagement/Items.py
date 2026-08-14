@@ -35,6 +35,13 @@ class ItemForm(TenantUniqueMixin, TenantModelForm):
         # own empty state tells the admin to "set the class on your items" and links back to this
         # page. Off the whitelist that instruction is unfollowable and four of the report's five
         # sections stay permanently empty.
+        # `owner_client` is 4.17's client-attribution column and it sits on this whitelist for the
+        # same reason `is_spare_part` and `storage_condition` do: it is the SOLE selector for the
+        # Client Inventory Segregation report (`scm:client_inventory_report`) and for every client
+        # stock figure in 4.17, whose empty state tells the admin to "assign an owner to your items"
+        # and links back to this page. Off the whitelist that instruction is unfollowable, every
+        # client's on-hand is permanently zero, and every billing run that measures stock bills
+        # nothing — the column could only ever be set by `seed_scm` and the Django admin.
         fields = ["sku", "name", "category", "uom", "item_type", "tracking", "costing_method",
                   "standard_cost", "reorder_point", "is_spare_part", "storage_condition",
-                  "description", "is_active"]
+                  "owner_client", "description", "is_active"]
