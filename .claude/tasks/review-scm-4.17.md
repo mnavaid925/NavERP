@@ -35,14 +35,14 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L18
 - **Problem:** The `parent_client` <select> queryset is built from `_tenant_qs(LogisticsClient, tenant)` with no `select_related("party")`, and `_keep_current` (line 66) rebuilds from `model._default_manager`, which would drop one anyway — so rendering the client form calls `LogisticsClient.__str__` (`f"{self.code} · {self.party}"`) once per option and fires one query per client in the workspace (1 + N on every create AND edit render of a mainline CRUD page). The three sibling 4.17 forms all guard exactly this (`ClientRateCards.py:133-134`, `ClientSlas.py:114`, `ClientBillingRuns.py:62`); this field is the one that was missed.
 - **Fix:** Chain the join onto the result so it survives both `_keep_current` branches: `self.fields["parent_client"].queryset = _keep_current(parents, getattr(instance, "parent_client_id", None)).select_related("party")`. Optionally also give `_keep_current` (line 51-67) a `select_related` passthrough so the next caller cannot repeat this. Hand the test-writer a `django_assert_max_num_queries` check on GET `scm:logisticsclient_create` with ~10 seeded clients.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(scm): join party onto the 3PL parent_client dropdown so the client form stops firing one query per option
 
 ### I2 — `apps/scm/views/ThirdPartyLogistics/ClientBillingRuns.py:202`
 
 - **Found by:** code-reviewer
 - **Problem:** `clientbillingrun_delete` is `@login_required` only and its sole status guard is `status == "invoiced"`, so any ordinary tenant member can hard-delete an **approved** run — destroying the `approved_by`/`approved_at` signature that `clientbillingrun_approve` requires `@tenant_admin_required` to create, plus every derived charge line — even though `ClientBillingRun.void()` explicitly refuses an approved run and `apps/scm/views/__init__.py:534` states "an approved run is not deleted".
 - **Fix:** Refuse the delete outside the working states: replace the `if obj.status == "invoiced"` branch with `if obj.status not in ClientBillingRun.VOIDABLE_STATUSES:` and flash a message steering to Void (approved) / Accounting (invoiced); then change `"can_delete": obj.status != "invoiced"` at ClientBillingRuns.py:258 to `obj.status in ClientBillingRun.VOIDABLE_STATUSES` so the detail page stops offering a button its own prose at templates/scm/3pl/clientbillingrun/detail.html:469 already claims "disappears at the same moment" as Void. If deleting an approved run must stay possible, gate that case with `@tenant_admin_required` instead — but do not leave it open to a member.
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(scm): refuse deleting an approved, invoiced or void billing run (+ fix(scm): stop the billing-run list offering Delete on approved and void runs)
 
 ### I3 — `apps/scm/views/ThirdPartyLogistics/ClientRateCards.py:206`
 
@@ -50,7 +50,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L18
 - **Problem:** The rate-card detail page's billing-run panel fetches runs with `select_related("client")` only, but `templates/scm/3pl/clientratecard/detail.html:399` renders `{% if run.invoice %}` inside the `{% for run in billing_runs %}` loop — `invoice` is an unjoined nullable FK, so every run that HAS been invoiced fires its own SELECT (1 + up to 25 queries per page at MAX_PANEL_ROWS=25, and it is the fully-billed cards — the busiest ones — that pay the whole 25).
 - **Fix:** Add `invoice` to the join at line 206: `billing_runs = list(obj.billing_runs.select_related("client", "invoice").order_by("-period_end", "-id")[:MAX_PANEL_ROWS])`. (The template only needs the boolean, so `{% if run.invoice_id %}` at detail.html:399 would also be zero-query — but joining in the view is the safer fix because it also covers anything else the panel is later asked to print.) Worth a `django_assert_max_num_queries` test on `scm:clientratecard_detail` seeded with ~5 invoiced runs against one card.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(scm): join invoice into the rate-card billing-run panel so the Drafted chip stops firing a query per invoiced run
 
 ### I4 — `templates/scm/overview.html:370`
 
@@ -58,7 +58,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L43
 - **Problem:** The SCM module landing page has one card per built sub-module (Procurement 4.1 through Customer Portal 4.16, 15 cards) but no card for 4.17, so every 3PL page — the client register, rate cards, billing runs, SLAs and both computed reports — is reachable only from the sidebar and not from the module's own entry point.
 - **Fix:** Insert a new `<div class="card">` block immediately after the Customer Portal card's closing `</div>` (line 369) and before `{% endblock %}` (line 370), copying the Customer Portal card's exact markup: `<div class="card-header"><h2 class="card-title">Third-Party Logistics</h2></div><div class="card-body"><div class="page-actions">` containing six `<a class="btn btn-outline">` links — `{% url 'scm:logisticsclient_list' %}` (icon building-2, "Logistics Clients"), `{% url 'scm:clientratecard_list' %}` (scroll-text, "Rate Cards"), `{% url 'scm:clientbillingrun_list' %}` (receipt, "Billing Runs"), `{% url 'scm:clientsla_list' %}` (gauge, "SLAs"), `{% url 'scm:client_inventory_report' %}` (boxes, "Client Inventory"), `{% url 'scm:client_space_report' %}` (warehouse, "Warehouse Rental") — the same six links and icons already used in the header of templates/scm/3pl/logisticsclient/list.html lines 62-66. Template-only change; scm:overview needs no new context. Use a targeted Edit, never a rewrite (L43).
-- **Status:** [ ] open
+- **Status:** [x] fixed — feat(scm): add the 4.17 Third-Party Logistics card to the module overview
 
 ## Minor
 
