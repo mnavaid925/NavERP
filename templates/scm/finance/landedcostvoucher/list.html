@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — the LANDED COST VOUCHER register (LC-).
+
+Renders apps/scm/views/FinanceIntegration/LandedCostVouchers.py::landedcostvoucher_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py:106) — page_obj.window drives the
+                               shared pagination partial, which is the ONLY guarded prev/next in the
+                               house. An unguarded previous_page_number raises EmptyPage and 500s the
+                               moment the register outgrows one page (L9).
+  status_choices               LandedCostVoucher.STATUS_CHOICES — draft / allocated / accrued /
+                               reconciled / cancelled
+  basis_choices                LandedCostVoucher.ALLOCATION_BASIS_CHOICES — value / quantity / weight
+                               / volume / equal. FIVE bases; there is deliberately no "manual" one.
+  charge_type_choices          LandedCostCharge.CHARGE_TYPE_CHOICES — printed as the charge vocabulary
+                               in the footer. It is NOT a filter: the view narrows on status, basis
+                               and party only, so a charge-type select here would be a control that
+                               narrows nothing, which is worse than no control at all.
+  parties                      Party queryset for the ?party= dropdown
+  stats                        dict, and these EIGHT keys are the whole contract:
+                               total / draft / allocated / accrued / reconciled / cancelled /
+                               actual_total / variance_total
+
+Filter params: q / status / basis / party.
+  * `party` is a pk and compares with |stringformat:"d" — NEVER |slugify. The view passes it through
+    as_db_int, so ?party=abc, ?party=2 with junk after it, and a 21-digit value SKIP the filter
+    rather than raising out of .filter() (L11).
+  * `status` and `basis` compare against request.GET as plain strings.
+
+--------------------------------------------------------------------------------------------------
+WHAT A ROW COSTS TO RENDER
+--------------------------------------------------------------------------------------------------
+Every column on a row is a stored column or a select_related join
+(goods_receipt / party / shipment / currency / bill). No row calls recalc_totals(), no row counts its
+charges and no row touches the stock ledger: estimated_total, actual_total, variance_amount,
+variance_pct and allocated_total are all written by recalc_totals() and allocate(), so reading them
+here is free. The charge lines, the allocation rows and the receipt moves they were spread over all
+live on the voucher's own page, where one voucher is worth the queries.
+
+`obj.is_editable` is a property over two already-loaded values — status, and whether bill_id is set —
+so the buttons a row shows and the answer the route gives can never disagree.
+
+--------------------------------------------------------------------------------------------------
+MONEY, AND WHERE THIS MODULE STOPS
+--------------------------------------------------------------------------------------------------
+Supply Chain posts NO JournalEntry. Draft Bill creates a DRAFT accounting.Bill and stops there;
+Accounting posts the entry, approves it, pays it and ages it. The Bill column links out to Module 2
+rather than restating a balance, and nothing on this page may be read as evidence that money moved.
+
+--------------------------------------------------------------------------------------------------
+COLOUR AND THE ACTION GATES
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges only: badge-green / red / amber / info / muted / slate. A
+semantic badge-success / badge-danger / badge-warning renders completely UNSTYLED, and that exact
+mistake has shipped four times (L33). The status chip below is written by hand — draft=muted,
+allocated=info, accrued=amber, reconciled=green, cancelled=slate — and always ends in an else branch
+falling back to get_status_display, so a sixth status added later renders readably rather than blank.
+stat-icon ships blue / green / orange / purple / slate and no red.
+
+Edit and Delete are both offered only while obj.is_editable, which is exactly what
+landedcostvoucher_edit and landedcostvoucher_delete refuse on: a voucher stops being editable the
+moment it is allocated (its cost is inside the items average_cost by then) or the moment a bill
+exists against it. Delete is @require_POST, so it is a real form with a csrf token and never a link.
+The confirm string carries the system-generated LC- number and nothing user-typed: an apostrophe in a
+vendor name is escaped to &#39;, which HTML decodes back to a bare quote before JavaScript sees it,
+breaking the dialog open and silently removing the guard (L42). Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}Landed Cost Vouchers{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Landed Cost Vouchers</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Landed Cost Vouchers</span></div>
+      <p class="text-muted">Freight, duty, brokerage, insurance and handling do not stop being part of what a thing cost just because they arrive on a different invoice from the goods. A voucher gathers those charges against <span class="fw-600">one goods receipt</span>, spreads them across the stock that receipt actually put on the shelf, and rolls the result into each item&#39;s average cost. Estimated and actual sit side by side the whole way through, so the gap between what was quoted and what was billed is a number you can see rather than one you find at year end.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline"><i data-lucide="landmark"></i> Duty Tariffs</a>
+      <a href="{% url 'scm:landed_cost_variance' %}" class="btn btn-outline"><i data-lucide="chart-column"></i> Variance report</a>
+      <a href="{% url 'scm:landedcostvoucher_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Voucher</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, never over the filtered page: "4 allocated, nothing billed" is a
+    fact somebody has to act on this week, and a tile that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one vendor. The filtered figure is the badge in the card
+    header below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Vouchers on file · {{ stats.draft }} still draft, {{ stats.cancelled }} cancelled</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="file-pen-line"></i></div>
+      <div class="stat-value">{{ stats.draft }}</div>
+      <div class="stat-label">Draft — charges are being gathered, nothing has touched item costs yet</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="split"></i></div>
+      <div class="stat-value">{{ stats.allocated }}</div>
+      <div class="stat-label">Allocated onto stock · {{ stats.accrued }} of them also accrued</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ stats.reconciled }}</div>
+      <div class="stat-label">Handed to Accounts Payable as a draft vendor bill</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{{ stats.actual_total|floatformat:2 }}</div>
+      <div class="stat-label">Actual landed cost captured — what carriers, brokers and customs have billed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{{ stats.variance_total|floatformat:2 }}</div>
+      <div class="stat-label">Actual less estimated across every voucher — positive means the freight quote was optimistic</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Landed cost vouchers</h2>
+      <div class="badge-group">
+        {% if stats.draft %}<span class="badge badge-muted">{{ stats.draft }} draft</span>{% endif %}
+        {% if stats.allocated %}<span class="badge badge-info">{{ stats.allocated }} ready to bill</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search LC- number, receipt number, payee or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="basis" aria-label="Allocation basis" class="form-select">
+            <option value="">Any basis</option>
+            {% for val, label in basis_choices %}
+              <option value="{{ val }}" {% if request.GET.basis == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% comment %}
+          A pk dropdown — |stringformat:"d" and NEVER |slugify, which lowercases and slugifies an
+          integer into something that can never equal a pk string on some values. The value goes
+          through as_db_int in the view, so junk SKIPS the filter instead of raising (L11).
+        {% endcomment %}
+        <div class="form-group">
+          <select name="party" aria-label="Payee" class="form-select">
+            <option value="">All payees</option>
+            {% for p in parties %}
+              <option value="{{ p.pk }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The payee is the vendor the <span class="fw-600">voucher</span> will be billed to — usually the forwarder or the broker. Individual charge lines can name a different vendor, and those are excluded from the drafted bill rather than silently rolled into it; the voucher&#39;s own page shows which, and how much.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Voucher</th>
+            <th>Receipt</th>
+            <th>Payee</th>
+            <th>Cost date</th>
+            <th>Status</th>
+            <th class="text-right">Estimated</th>
+            <th class="text-right">Actual</th>
+            <th class="text-right">Variance</th>
+            <th>Bill</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:landedcostvoucher_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="form-help">{{ obj.get_allocation_basis_display }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  goods_receipt is REQUIRED on the model, so this is never a None guard — a voucher
+                  without a receipt cannot exist, because the receipt is the thing that says which
+                  stock the cost is spread over.
+                {% endcomment %}
+                <a href="{% url 'scm:goodsreceipt_detail' obj.goods_receipt.pk %}" class="mono">{{ obj.goods_receipt.number }}</a>
+                {% if obj.shipment %}<div class="form-help mono">{{ obj.shipment.number }}</div>{% endif %}
+              </td>
+              <td>{{ obj.party.name }}</td>
+              <td class="nowrap mono">{{ obj.cost_date|date:"M d, Y" }}</td>
+              <td class="nowrap">
+                {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'allocated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'accrued' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'reconciled' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'cancelled' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="text-right mono">
+                {{ obj.estimated_total|floatformat:2 }}
+                {% if obj.currency %}<span class="text-muted">{{ obj.currency.code }}</span>{% endif %}
+              </td>
+              <td class="text-right mono fw-600">{{ obj.actual_total|floatformat:2 }}</td>
+              <td class="text-right mono">
+                {% comment %}
+                  variance_amount is a stored Decimal and never None, so it prints unguarded. variance_pct
+                  IS nullable — it is None when there was no estimate to compare against, which is a
+                  different fact from zero variance — so it is guarded with "is not None" rather than a
+                  truthiness test, which would hide a genuine 0.00%.
+                {% endcomment %}
+                {% if obj.variance_amount > 0 %}<span class="text-warn">{{ obj.variance_amount|floatformat:2 }}</span>
+                {% else %}{{ obj.variance_amount|floatformat:2 }}{% endif %}
+                {% if obj.variance_pct is not None %}<div class="form-help">{{ obj.variance_pct|floatformat:2 }}%</div>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  A None bill is the ORDINARY case for every voucher before the hand-off, so it prints
+                  an em dash and never a blank cell. The link goes to Accounting: this module drafts
+                  the bill and never owns it afterwards.
+                {% endcomment %}
+                {% if obj.bill %}
+                  <a href="{% url 'accounting:bill_detail' obj.bill.pk %}" class="mono">{{ obj.bill.number }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:landedcostvoucher_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'scm:landedcostvoucher_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:landedcostvoucher_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every charge line on it goes too. A voucher can only be deleted while it is draft and unbilled — once it has been allocated, cancelling it is what backs the cost out of the items\' average cost.');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="layers"></i>
+                  <h3>No landed cost vouchers yet</h3>
+                  <p>A voucher starts from a <span class="fw-600">received goods receipt</span>: pick the receipt, name the vendor that will be billed, give the cost date, and save. Nothing is spread at that moment — you add the freight, duty, brokerage and handling charges to the voucher afterwards and then press <span class="fw-600">Allocate</span>, which divides them across the stock that receipt actually posted to the ledger and rolls the result into each item&#39;s average cost. If you were expecting rows here, try clearing the filters.</p>
+                  <a href="{% url 'scm:landedcostvoucher_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Start a voucher</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered <span class="fw-600">newest cost date first</span>. Estimated, actual and variance are stored figures the last recalculation left behind — they are not recomputed as you read this page, so a voucher whose charges have changed since shows the last saved number until something recalculates it. <span class="fw-600">Edit and Delete disappear the moment a voucher is allocated</span>, because by then its cost is inside the average cost of real items and a silent edit would leave the two disagreeing with no record of why; cancel the voucher instead, which reverses the roll properly and keeps every line as evidence.
+      <div class="form-help" style="margin-top:0.75rem;">
+        Charges are typed as: {% for val, label in charge_type_choices %}{{ label }}{% if not forloop.last %} · {% endif %}{% endfor %}. Only charges marked <em>capitalise to inventory</em> and not marked <em>recoverable</em> are spread onto stock — a recoverable import VAT is reclaimed from the tax authority rather than paid for by the goods, so adding it to their cost would overstate inventory.
+      </div>
+    </div>
+  </div>
+{% endblock %}
