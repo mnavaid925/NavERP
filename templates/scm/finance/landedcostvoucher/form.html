@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — create/edit for LandedCostVoucher. ONE template, both
+paths.
+
+  CREATE — apps/scm/views/FinanceIntegration/LandedCostVouchers.py::landedcostvoucher_create
+    form      LandedCostVoucherForm
+    is_edit   False
+  EDIT — ::landedcostvoucher_edit (crud_edit, refused unless obj.is_editable)
+    form      the same LandedCostVoucherForm
+    obj       the LandedCostVoucher — PRESENT ONLY ON THIS PATH
+    is_edit   True
+
+`obj` is guarded behind is_edit everywhere below, including in the title, the breadcrumb and the
+Cancel link. On the create path it does not exist, and an unguarded obj.pk inside a url tag is not a
+blank — it is a NoReverseMatch and a 500 on the page people create their first voucher through.
+
+--------------------------------------------------------------------------------------------------
+EIGHT FIELDS, AND WHY THE REST ARE UNREACHABLE RATHER THAN MERELY ABSENT
+--------------------------------------------------------------------------------------------------
+The form carries exactly goods_receipt / party / shipment / trade_document / currency / cost_date /
+allocation_basis / notes, in that order. Everything else on the model — status, estimated_total,
+actual_total, variance_amount, variance_pct, allocated_total, accrued_at, bill and the LC- number —
+is editable=False, so a ModelForm cannot reach it and a crafted POST naming one has nowhere to land
+(L22). That is the mechanism, not a policy:
+
+  * `status` moves ONLY along the verb ladder on the voucher's own page, each verb validating the
+    transition it makes and writing its own audit entry. A status field here would let somebody type
+    an allocated voucher into existence without any cost ever reaching an item.
+  * `estimated_total` / `actual_total` / `variance_amount` / `variance_pct` / `allocated_total` are
+    written only by recalc_totals() and allocate(), summing the charge and allocation rows in Python.
+    A typed total is a total nobody can take apart, which is the exact failure this sub-module exists
+    to prevent.
+  * `bill` is set by Draft Bill and by nothing else. Pointing a voucher at an arbitrary vendor bill
+    would be an IDOR wearing a dropdown.
+
+Nothing on this page costs anything. Saving creates (or re-scopes) an EMPTY voucher; the charges are
+added on the voucher itself and the cost reaches stock only when Allocate is pressed. That separation
+is deliberate — a voucher you can correct before allocating is cheaper than an item valuation you
+have to unwind afterwards.
+
+--------------------------------------------------------------------------------------------------
+WHAT THE FORM REFUSES, AND WHERE
+--------------------------------------------------------------------------------------------------
+Every rule described in the help text below is enforced by LandedCostVoucher.clean() and by the form's
+own clean(), never here: a cancelled goods receipt, a missing cost date, and any goods_receipt /
+shipment / trade_document / party belonging to a DIFFERENT workspace. The dropdowns are narrowed as
+well, because a narrowed dropdown is a courtesy — it has never held against a crafted POST, which is
+why the model checks the same thing again on save.
+
+Currency is deliberately NOT narrowed by workspace: accounting.Currency is a GLOBAL master with no
+tenant column at all, so it is scoped to the active currencies instead. That asymmetry is real and is
+not a bug to be tidied.
+
+Every field is rendered through partials/form_field.html, which pairs the label's for= with the
+widget's own id via field.id_for_label, prints the field's help_text and prints its errors. Non-field
+errors are printed at the top of each card. Hand-written input tags are never used: the date widget
+carries its own type and format, and a hand-rolled one renders an EMPTY box for a stored value.
+
+theme.css ships COLOUR-named badges only — badge-green / red / amber / info / muted / slate. A
+semantic badge-success / badge-danger renders completely unstyled (L33), so the read-only status chip
+below is written out by hand with an else branch falling back to get_status_display.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Landed Cost Voucher{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New landed cost voucher{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:landedcostvoucher_list' %}">Landed Cost Vouchers</a><span class="sep">›</span>
+        {% if is_edit %}
+          <a href="{% url 'scm:landedcostvoucher_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>
+        {% else %}
+          <span>New</span>
+        {% endif %}
+      </div>
+      {% if is_edit %}
+        <p class="text-muted">Only the <span class="fw-600">scope</span> of the voucher is editable — which receipt the cost belongs to, who is being paid, and how the charges spread. Every figure on the record is written by the charge lines and by Allocate, so there is no field here that could restate one. Changing the basis does <span class="fw-600">not</span> re-spread anything by itself: press Allocate afterwards, or the allocation rows still describe the old basis.</p>
+      {% else %}
+        <p class="text-muted">A voucher gathers the freight, duty, brokerage, insurance and handling that belong to <span class="fw-600">one goods receipt</span>. This page creates it empty — no charge is added and nothing is spread on save, and the LC- number is assigned then. You add the charges on the voucher itself, and the cost reaches item valuations only when you press <span class="fw-600">Allocate</span>.</p>
+      {% endif %}
+    </div>
+    <div class="page-actions">
+      {% if is_edit %}
+        <a href="{% url 'scm:landedcostvoucher_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to the voucher</a>
+      {% else %}
+        <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if is_edit %}
+    {% comment %}
+      The figures the form cannot touch, restated read-only so it is obvious which numbers are not on
+      this page and why re-scoping a voucher does not move them. accrued_at is legitimately None on a
+      draft and variance_pct is legitimately None when there was no estimate to divide by — the first
+      prints a sentence, the second is guarded with "is not None" so a genuine 0.00% is not hidden by
+      a truthiness test.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What the charges and Allocate wrote</h2>
+        <div class="badge-group">
+          <span class="badge badge-slate">Read-only</span>
+          {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'allocated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'accrued' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'reconciled' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'cancelled' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Estimated total</dt><dd class="mono">{{ obj.estimated_total|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Actual total</dt><dd class="mono">{{ obj.actual_total|floatformat:2 }}</dd></div>
+          <div class="detail-item">
+            <dt>Variance</dt>
+            <dd class="mono fw-600">
+              {{ obj.variance_amount|floatformat:2 }}
+              {% if obj.variance_pct is not None %}<span class="text-muted">({{ obj.variance_pct|floatformat:2 }}%)</span>{% endif %}
+            </dd>
+          </div>
+          <div class="detail-item"><dt>Allocated onto stock</dt><dd class="mono">{{ obj.allocated_total|floatformat:2 }}</dd></div>
+          <div class="detail-item">
+            <dt>Accrued</dt>
+            <dd class="mono">{% if obj.accrued_at %}{{ obj.accrued_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not accrued</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Vendor bill</dt>
+            <dd>
+              {% if obj.bill %}
+                <a href="{% url 'accounting:bill_detail' obj.bill.pk %}" class="mono">{{ obj.bill.number }}</a>
+              {% else %}
+                <span class="text-muted">Not drafted</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+        <div class="form-help">These figures are stored columns written by the charge lines and by Allocate, and no form in this module can reach any of them. They are shown here so it is plain that saving this page <span class="fw-600">does not re-spread the voucher</span> — after changing the receipt or the basis, press Allocate on the voucher itself.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Which receipt, and who gets paid</h2>
+        <span class="badge badge-info">Nothing is spread on save</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.goods_receipt %}
+          {% include "partials/form_field.html" with field=form.party %}
+        </div>
+        <div class="form-help">
+          <span class="fw-600">Only received goods receipts are offered.</span> A receipt that has not been received has posted nothing to the stock ledger yet, so there is no stock for the cost to land on — a voucher built against one would have to refuse to allocate, which is a worse answer than not letting it be created. A cancelled receipt is refused outright.
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">payee</span> is the vendor this voucher will be billed to, usually the freight forwarder or the customs broker. It is required, because a vendor bill without a vendor cannot exist in Accounts Payable. Individual charge lines may name a different vendor — those are still spread onto stock but are <span class="fw-600">left off the drafted bill</span> and counted back to you, because one bill goes to one vendor.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The trade context</h2>
+        <span class="badge badge-slate">Optional — every field here can be left blank</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.shipment %}
+          {% include "partials/form_field.html" with field=form.trade_document %}
+          {% include "partials/form_field.html" with field=form.currency %}
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">shipment</span> is how several receipts that travelled together are tied back to one voyage or container, without inventing a voyage table nobody would maintain. The <span class="fw-600">trade document</span> is where the declared customs value and the Incoterm come from — they are read off it rather than retyped here, so correcting the paperwork corrects the voucher instead of leaving two versions of the same fact.
+        </div>
+        <div class="form-help">
+          Currency is a <span class="fw-600">shared master across the whole system</span>, not a per-workspace list, so the choices here are every active currency rather than only ones this workspace has used before. Leaving it blank means the voucher carries no explicit currency and the drafted bill inherits whatever Accounts Payable defaults to.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Cost date, and how the charges spread</h2>
+        <span class="badge badge-slate">The basis can be overridden per charge line</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.cost_date %}
+          {% include "partials/form_field.html" with field=form.allocation_basis %}
+        </div>
+        <div class="form-help">
+          <span class="fw-600">By value</span> is the usual answer and the default: an expensive item absorbs more of the freight than a cheap one of the same size, which is what most tax authorities expect to see. <span class="fw-600">By quantity</span> suits a container of identical cartons; <span class="fw-600">by weight</span> suits sea and road freight; <span class="fw-600">by volume</span> suits air freight and anything cubed out; <span class="fw-600">equal</span> is the flat split for a fee that has nothing to do with what was in the box, like a single customs entry filing.
+        </div>
+        <div class="form-help">
+          A basis nothing can measure <span class="fw-600">falls back rather than failing</span>: if the items carry no weights, a by-weight charge spreads by quantity, and if the quantities are all zero it splits equally. The basis actually used is stamped on every allocation row, so a fallback is visible on the voucher afterwards rather than being a silent substitution. Weight and volume come from the item master — items with neither contribute nothing to those two bases, which is exactly why the fallback exists.
+        </div>
+        <div class="form-help">
+          The <span class="fw-600">cost date</span> is when the charges are recognised, and it is what the variance report and the budget report group on. It is not the receipt date and does not have to match it — freight is routinely invoiced weeks after the goods land.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes</h2>
+        <span class="badge badge-slate">Carried onto the drafted bill</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">Anything a colleague or an auditor needs to know about <em>this</em> shipment&#39;s costs — a demurrage dispute, a duty ruling, a quote that was honoured or was not. Rates that apply to every shipment belong on a duty tariff or a carrier rate card, where they are read by everything rather than only by this one voucher.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save the voucher{% else %}Create the voucher{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'scm:landedcostvoucher_detail' obj.pk %}{% else %}{% url 'scm:landedcostvoucher_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-body text-muted">
+      {% if is_edit %}
+        Editing is available only while the voucher is <span class="fw-600">draft and unbilled</span>. Once it has been allocated its cost is inside the average cost of real items, and a silent edit would leave the item master and the voucher disagreeing with no record of why — cancel the voucher instead, which reverses the roll properly. Once a bill exists, the document to correct is that bill in Accounts Payable.
+      {% else %}
+        After saving, add the charges on the voucher: freight, customs duty, brokerage, insurance, handling, drayage, port fees, fuel surcharge, inspection, storage, or anything else. Put in an <span class="fw-600">estimate</span> as soon as you have a quote and the <span class="fw-600">actual</span> when the invoice arrives — the gap between the two is the number this whole page exists to make visible, and it is worth far more while you can still argue it with the carrier than at year end. Then press <span class="fw-600">Allocate</span>, which spreads every capitalising charge across the stock movements this receipt posted and rolls each item&#39;s average cost once. A charge marked <span class="fw-600">recoverable</span> is left out of that roll: reclaimable import VAT is money coming back from the tax authority, not part of what the goods cost.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
