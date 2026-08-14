@@ -116,10 +116,19 @@ class ClientSLAForm(TenantUniqueMixin, TenantModelForm):
         # Locations dedicated to ANOTHER client are excluded: measuring this client's promise against
         # somebody else's bin would score them on stock that is not theirs. `owner_client__isnull=True`
         # keeps every shared location available, which is the normal case.
-        self._scope("scope_location",
-                    Location.objects.filter(Q(owner_client__isnull=True)
-                                            | Q(owner_client_id=self._client_id()))
-                    .order_by("code", "id"))
+        #
+        # The narrowing is SKIPPED when no client is known yet — the blank create form. Django turns
+        # `owner_client_id=None` into `IS NULL`, so keeping the leg there would collapse the whole
+        # queryset to unowned bins and make it impossible to scope a new SLA to one of the chosen
+        # client's OWN dedicated locations in a single pass; the option would only appear after
+        # saving and re-opening. `ClientSLA.clean()` is the real boundary either way, and it refuses
+        # a foreign bin by name and with the reason, which beats "Select a valid choice".
+        client_id = self._client_id()
+        locations = Location.objects.order_by("code", "id")
+        if client_id is not None:
+            locations = locations.filter(Q(owner_client__isnull=True)
+                                         | Q(owner_client_id=client_id))
+        self._scope("scope_location", locations)
 
         # --- union the current selection back in, on EDIT ------------------------------------------
         # A narrowed queryset that no longer contains the stored value drops it out of the <select>
@@ -143,8 +152,8 @@ class ClientSLAForm(TenantUniqueMixin, TenantModelForm):
 
         Read from the BOUND data first, then from the instance, so a create-page POST that names a
         client narrows the location list the same way an edit does. ``None`` on a blank create form,
-        which makes the ``owner_client_id=None`` leg match only unowned locations — the correct
-        conservative default when we do not yet know whose promise this is.
+        where the caller drops the owner narrowing entirely rather than guessing: with no client
+        there is no such thing as "another client's bin" to exclude yet.
         """
         if self.is_bound:
             chosen = (self.data.get("client") or "").strip()
