@@ -1,0 +1,686 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — one logistics client, read as a COMMERCIAL RELATIONSHIP.
+
+Renders apps/scm/views/ThirdPartyLogistics/LogisticsClients.py::logisticsclient_detail (a
+hand-rolled render, not crud_detail). Everything this page may read, and NOTHING else:
+
+  obj                       the LogisticsClient, with party / parent_client / currency /
+                            payment_terms / default_revenue_account / contract_document /
+                            account_manager joined
+  rate_cards                LIST of ClientRateCard, newest effective_from first, capped at
+                            panel_limit
+  rate_card_count           int — the client's WHOLE set, not the window
+  active_rate_card          ClientRateCard or None
+  billing_runs              LIST of ClientBillingRun, newest period_end first, capped
+  billing_run_count         int
+  slas                      LIST of ClientSLA, active first
+  sla_count                 int
+  open_breach_count         int
+  child_clients             LIST of LogisticsClient
+  on_hand_quantity          Decimal   — derived over the append-only StockMove ledger
+  on_hand_value             Decimal   — quantity × the item's average cost, in Python, q2()-ed
+  sku_count                 int
+  dedicated_location_count  int
+  has_customer_role         bool — the party carries a "customer" PartyRole. FALSE IS A CHIP, NEVER
+                            AN ERROR: the model deliberately does not refuse a party without the
+                            role, because a missing role is a data gap in the party record rather
+                            than a reason to block a commercial configuration
+  panel_limit               int — the row cap the panels were sliced at
+  can_delete                bool — False when rate_card_count or billing_run_count is non-zero,
+                            mirroring EXACTLY what logisticsclient_delete refuses
+
+THE FOUR DERIVED FIGURES ARE CONTEXT KEYS, NOT METHOD CALLS. on_hand_quantity(), on_hand_value(),
+sku_count() and dedicated_location_count() are model METHODS and each is at least one aggregate
+query; the view runs each one ONCE and passes the answer, so this page reads the bare name and
+never obj.on_hand_quantity. Calling the method here would still render, correctly, which is exactly
+why it is worth stating.
+
+Nullable FKs — parent_client, currency, payment_terms, default_revenue_account, contract_document,
+account_manager — are EVERY ONE guarded with an "if fk" wrapper. A None FK inside a filter ARGUMENT raises
+and 500s even where a bare lookup would quietly print nothing (L10), so the guard goes around the
+whole expression rather than around the value.
+
+theme.css ships COLOUR-named badges only: badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-warning / badge-danger DO NOT EXIST and render
+completely unstyled (L33). Every badge below is one of those six literals.
+
+The delete confirm carries the system-generated 3PL- number and the two counts only. `code` and the
+party name are user-typed and an apostrophe in either escapes to &#39;, which HTML decodes back to a
+bare quote before JavaScript parses the attribute — the dialog then breaks open and the guard
+vanishes (L42). Apostrophes written into the string are escaped \' for the same reason.
+
+Two standing statements this page MUST carry, because a screen that omits either is promising
+something the code does not do:
+  * next_billing_date is stored and READ BY NOTHING. 4.17 ships no scheduler; billing runs are
+    created by a person.
+  * last_synced_at is WRITTEN BY NOTHING. It exists so 4.19 can write a real one, and until then a
+    blank is the honest state rather than a broken integration.
+{% endcomment %}
+{% block title %}{{ obj.code }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }} · {{ obj.party }}
+        {% if obj.status == "active" %}
+          <span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "onboarding" %}
+          <span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "prospect" %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "suspended" %}
+          <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "terminated" %}
+          <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% endif %}
+        {% if open_breach_count %}
+          <span class="badge badge-red">{{ open_breach_count }} SLA breach{{ open_breach_count|pluralize:"es" }}</span>
+        {% endif %}
+        {% if not active_rate_card %}
+          <span class="badge badge-amber">No active tariff</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:logisticsclient_list' %}">Logistics Clients</a><span class="sep">›</span><span>{{ obj.code }}</span></div>
+      <p class="text-muted">A depositor: the company whose stock we hold and whose work we bill for. This row is <span class="fw-600">commercial configuration only</span> — the name, tax id and addresses live on the party record and are not copied here, because two places holding a company's identity is two places that can disagree about it. What this row decides is how the client is billed, what space they committed to, and how their systems reach ours.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:logisticsclient_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The four stock figures are the CONTEXT keys — each computed once by the view. They are derived
+    over the append-only ledger through the owner stamped on the client's items, so they are right
+    at the instant this page rendered and are stored nowhere.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ on_hand_quantity|floatformat:"-4" }}</div>
+      <div class="stat-label">Units on hand — the signed balance of this client's own items over the stock ledger, never a stored figure</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ on_hand_value|floatformat:2 }}</div>
+      <div class="stat-label">Value at our average cost. It is what the goods are worth in our books — not what the client paid and not what they will sell for</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="tags"></i></div>
+      <div class="stat-value">{{ sku_count }}</div>
+      <div class="stat-label">SKUs stamped with this owner. An item with no owner belongs to nobody in this report and is billed to nobody</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="warehouse"></i></div>
+      <div class="stat-value">{{ dedicated_location_count }}</div>
+      <div class="stat-label">Bins dedicated to this client — locations carrying this owner, whoever's stock happens to sit in them today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{{ open_breach_count }}</div>
+      <div class="stat-label">Active service levels currently measured as breached — out of {{ sla_count }} configured</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ===================================================================== 1. who this client is
+    Identity stays on the party (the carrier / supplier-profile posture): one row per client party
+    carrying commercial configuration and nothing that duplicates the company record.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The company</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.number }}</span>
+        {% if has_customer_role %}
+          <span class="badge badge-green">Tagged as a customer</span>
+        {% else %}
+          <span class="badge badge-amber">No customer role on the party</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Client code</dt><dd class="fw-600 mono">{{ obj.code }}</dd></div>
+        <div class="detail-item">
+          <dt>Company</dt>
+          <dd><a href="{% url 'core:party_detail' obj.party.pk %}" class="fw-600">{{ obj.party }}</a></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Parent client</dt>
+          <dd>
+            {% if obj.parent_client %}
+              <a href="{% url 'scm:logisticsclient_detail' obj.parent_client.pk %}" class="mono">{{ obj.parent_client.code }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Status</dt>
+          <dd>
+            {% if obj.status == "active" %}
+              <span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "onboarding" %}
+              <span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "prospect" %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "suspended" %}
+              <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "terminated" %}
+              <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>First went live</dt>
+          {% comment %}
+            Stamped ONCE, the first time the client is active, and never restamped — so suspending
+            and resuming cannot rewrite when this relationship actually began. Blank is a real state
+            (a client that has never been switched on), not a missing date.
+          {% endcomment %}
+          <dd class="mono">{% if obj.onboarded_on %}{{ obj.onboarded_on|date:"M d, Y" }}{% else %}<span class="text-muted">Never yet active</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Account manager</dt>
+          <dd>
+            {% if obj.account_manager %}
+              {{ obj.account_manager.get_full_name|default:obj.account_manager.username }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+
+      {% if not has_customer_role %}
+        <p class="text-muted" style="margin:.9rem 0 0;">
+          <span class="badge badge-amber">Worth fixing, not blocking</span>
+          This party is not tagged as a <span class="fw-600">customer</span>. Nothing here is broken and no save was refused: a role is a fact about the party record, and refusing a commercial configuration over a missing tag would be this screen enforcing somebody else's data quality. It does matter downstream, though — an invoice drafted from a billing run is raised against this party, and the receivables side is where the customer role earns its keep. Add the role on <a href="{% url 'core:party_detail' obj.party.pk %}">the company record</a>.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 2. how they pay
+    Every figure in this card is configuration that a billing run READS. None of it is a balance and
+    none of it is money already owed — the only accounting write in the whole of 4.17 is a DRAFT
+    invoice, raised by hand from an approved run.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Billing configuration</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_billing_cycle_display }}</span>
+        <span class="badge badge-info">{{ obj.get_storage_billing_method_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Billing cycle</dt><dd>{{ obj.get_billing_cycle_display }}</dd></div>
+        <div class="detail-item"><dt>Billing day</dt><dd class="mono">{{ obj.billing_day }}<div class="form-help">Capped at 28 rather than 31, so the day exists in February too — a client billed on the 31st would silently skip the short months.</div></dd></div>
+        <div class="detail-item">
+          <dt>Next billing date</dt>
+          <dd class="mono">
+            {% if obj.next_billing_date %}{{ obj.next_billing_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}
+            <div class="form-help">Stored intent. <span class="fw-600">Nothing reads this date</span> — 4.17 ships no scheduler and raises no run on its own. Billing runs are created by a person, for a period they choose.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Storage billing method</dt>
+          <dd>{{ obj.get_storage_billing_method_display }}
+            <div class="form-help">Decides which day's ledger balance a storage charge is priced from — and the five methods genuinely produce different numbers on the same stock.</div>
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Monthly minimum</dt><dd class="mono">{{ obj.minimum_monthly_charge|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Default tax rate</dt><dd class="mono">{{ obj.default_tax_rate_pct|floatformat:2 }}%<div class="form-help">A rate, not a tax code. It is carried onto each drafted invoice line at the same width the invoice line itself stores, so nothing is re-rounded on the way across.</div></dd></div>
+        <div class="detail-item">
+          <dt>Currency</dt>
+          <dd>{% if obj.currency %}<span class="mono">{{ obj.currency }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Payment terms</dt>
+          <dd>{% if obj.payment_terms %}{{ obj.payment_terms }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Default revenue account</dt>
+          <dd>{% if obj.default_revenue_account %}<span class="mono">{{ obj.default_revenue_account }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+            <div class="form-help">The fallback for a drafted invoice line whose rate-card line names no account of its own.</div>
+          </dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        The monthly minimum is applied by a billing run <span class="fw-600">only</span> when the cycle is monthly and the run's period actually spans a month — a two-week run does not get a full month's floor topped up onto it, which would bill the same minimum twice in one month. Each run states in words whether the minimum was applied and why.
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="fw-600">Supply chain posts no journal entry.</span> An approved run can draft an invoice in Accounting and stops there, as a draft — ageing, cash application, dunning and tax determination are the receivables module's, and a second ledger on this side would be a second set of books.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ======================================================================= 3. space and contract
+    committed_sqft / committed_pallet_positions are the CONTRACT, and dedicated_location_count is
+    what is physically set aside. They are different questions and this card keeps them apart —
+    there is deliberately no conversion between a bin's capacity and a pallet position, because a
+    bin's capacity is stored in the bin's own units and nothing in this system knows what those are.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Space and contract</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_space_model_display }}</span>
+        {% if obj.contract_end %}<span class="badge badge-info">Ends {{ obj.contract_end|date:"M d, Y" }}</span>{% else %}<span class="badge badge-muted">Open-ended</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Space model</dt><dd>{{ obj.get_space_model_display }}</dd></div>
+        <div class="detail-item"><dt>Committed sq ft</dt><dd class="mono">{{ obj.committed_sqft|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Committed pallet positions</dt><dd class="mono">{{ obj.committed_pallet_positions }}</dd></div>
+        <div class="detail-item"><dt>Dedicated bins</dt><dd class="mono">{{ dedicated_location_count }}</dd></div>
+        <div class="detail-item">
+          <dt>Contract start</dt>
+          <dd class="mono">{% if obj.contract_start %}{{ obj.contract_start|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Contract end</dt>
+          <dd class="mono">{% if obj.contract_end %}{{ obj.contract_end|date:"M d, Y" }}{% else %}<span class="text-muted">Open-ended</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Notice period</dt><dd class="mono">{{ obj.notice_days }} day{{ obj.notice_days|pluralize }}</dd></div>
+        <div class="detail-item">
+          <dt>Contract document</dt>
+          <dd>
+            {% if obj.contract_document %}
+              <a href="{% url 'core:document_detail' obj.contract_document.pk %}">{{ obj.contract_document }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        {% if obj.space_model == "shared" %}
+          <span class="fw-600">Shared space.</span> This client has no reserved footprint and both commitments are held at zero on purpose — a commitment typed against a shared model is refused rather than saved, because it would look like a floor somebody could bill against when there is nothing reserved to bill for.
+        {% elif obj.space_model == "dedicated" %}
+          <span class="fw-600">Dedicated space.</span> The commitment above is what the client pays for whether or not they fill it, so at least one of the two figures has to be non-zero — a dedicated model with nothing committed is refused at save.
+        {% elif obj.space_model == "hybrid" %}
+          <span class="fw-600">Hybrid.</span> A committed floor plus overflow into shared space. A dedicated-space charge bills the greater of the commitment and what was actually occupied, so the floor is a minimum rather than a cap.
+        {% else %}
+          <span class="fw-600">{{ obj.get_space_model_display }}.</span>
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="fw-600">There is no occupied-square-footage figure here, and that is deliberate.</span> Items in this system carry no weight and no dimensions, and a bin's capacity is recorded in that bin's own units — so any square footage or cubic volume "occupied" would be a conversion factor somebody invented. The <a href="{% url 'scm:client_space_report' %}">warehouse rental page</a> puts the committed figures <em>beside</em> the summed capacity of the dedicated bins, labelled for what it is, and converts neither into the other.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 4. integration
+    Non-secret partner identifiers ONLY. No API key, no endpoint URL, no EDI password, no token is
+    stored anywhere in 4.17 (L20) — credentials, transport and webhooks are 4.19's. last_synced_at
+    is written by nothing at all, and the card says so rather than letting a permanent blank read as
+    a broken feed.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Integration</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_integration_mode_display }}</span>
+        <span class="badge badge-amber">Identifiers only — nothing is transmitted</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Mode</dt><dd>{{ obj.get_integration_mode_display }}</dd></div>
+        <div class="detail-item"><dt>Client system</dt><dd>{% if obj.client_system %}{{ obj.client_system }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>EDI partner id</dt><dd class="mono">{% if obj.edi_partner_id %}{{ obj.edi_partner_id }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>EDI qualifier</dt><dd class="mono">{% if obj.edi_qualifier %}{{ obj.edi_qualifier }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item">
+          <dt>Last synced</dt>
+          <dd class="mono">
+            {% if obj.last_synced_at %}{{ obj.last_synced_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}
+            <div class="form-help"><span class="fw-600">Nothing in this sub-module writes this stamp.</span> The column exists so that when a real integration is built it has somewhere truthful to record itself — a permanent blank here is not a feed that stopped.</div>
+          </dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        Everything above is a <span class="fw-600">partner identifier</span> — the kind of value that appears in the header of a document both sides already exchange. <span class="fw-600">No credential of any kind is stored on this record</span>: no API key, no endpoint, no password, no token. That is not a gap to fill in later on this screen — a secret needs somewhere it can be encrypted, rotated and audited, and this row is none of those. The mode is here so staff know how this client's orders arrive today, which is a question people ask long before any of it is automated.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================= 5. rate cards
+    `rate_cards` is already a LIST, sliced by the view at panel_limit — never re-queried here as
+    obj.rate_cards.all. Line counts are NOT read per row: ClientRateCard.active_line_count is a
+    property and a query each, which is the 4.13 asset_list finding; the rate-card list page
+    annotates that figure and is the right place to read it.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Rate cards</h2>
+      <div class="badge-group">
+        {% if active_rate_card %}
+          <span class="badge badge-green">Active: {{ active_rate_card.number }}</span>
+        {% else %}
+          <span class="badge badge-amber">No active tariff</span>
+        {% endif %}
+        <span class="badge badge-slate">{{ rate_card_count }} on file</span>
+        <a href="{% url 'scm:clientratecard_create' %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> New rate card</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Card</th><th>Name</th><th class="nowrap">Version</th><th class="nowrap">Effective</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for rc in rate_cards %}
+            <tr>
+              <td><a href="{% url 'scm:clientratecard_detail' rc.pk %}" class="fw-600 mono">{{ rc.number }}</a></td>
+              <td>{{ rc.name }}</td>
+              <td class="nowrap mono">v{{ rc.version }}</td>
+              <td class="nowrap">
+                {{ rc.effective_from|date:"M d, Y" }}
+                <div class="form-help">{% if rc.effective_to %}to {{ rc.effective_to|date:"M d, Y" }}{% else %}open-ended{% endif %}</div>
+              </td>
+              <td>
+                {% if rc.status == "active" %}
+                  <span class="badge badge-green">{{ rc.get_status_display }}</span>
+                {% elif rc.status == "draft" %}
+                  <span class="badge badge-muted">{{ rc.get_status_display }}</span>
+                {% elif rc.status == "superseded" %}
+                  <span class="badge badge-slate">{{ rc.get_status_display }}</span>
+                {% elif rc.status == "expired" %}
+                  <span class="badge badge-amber">{{ rc.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ rc.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientratecard_detail' rc.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="scroll-text"></i>
+                  <h3>No tariff for this client</h3>
+                  <p>Nothing can be billed until a rate card exists and is active for the period. A billing run with no matching rate lines is a valid, honest outcome — it calculates to zero lines rather than failing — but it is also a run that will invoice this client for nothing at all.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if rate_card_count > panel_limit %}
+        Showing the newest {{ panel_limit }} of <span class="fw-600">{{ rate_card_count }}</span> — a database slice, so it bounds what is fetched rather than what is drawn.
+      {% endif %}
+      Exactly one card may be <span class="fw-600">active</span> over any given date range for a client: a second overlapping active card is refused at save, naming the card it collides with. Without that rule two tariffs could both claim the same week and whichever the query happened to read first would decide what the client was charged.
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 6. billing history
+    `billing_runs` is a LIST sliced at panel_limit. run.invoice and run.rate_card are NOT read here:
+    the view joins neither on this panel, so each would be one query per row for a fact the run's
+    own status already carries.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Billing runs</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ billing_run_count }} on file</span>
+        <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> All runs</a>
+        <a href="{% url 'scm:clientbillingrun_create' %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> New run</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Run</th><th class="nowrap">Period</th><th>Status</th><th class="text-right">Total</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for run in billing_runs %}
+            <tr>
+              <td><a href="{% url 'scm:clientbillingrun_detail' run.pk %}" class="fw-600 mono">{{ run.number }}</a></td>
+              <td class="nowrap">{{ run.period_start|date:"M d, Y" }} – {{ run.period_end|date:"M d, Y" }}</td>
+              <td>
+                {% if run.status == "invoiced" %}
+                  <span class="badge badge-green">{{ run.get_status_display }}</span>
+                {% elif run.status == "approved" %}
+                  <span class="badge badge-amber">{{ run.get_status_display }}</span>
+                {% elif run.status == "calculated" %}
+                  <span class="badge badge-info">{{ run.get_status_display }}</span>
+                {% elif run.status == "draft" %}
+                  <span class="badge badge-muted">{{ run.get_status_display }}</span>
+                {% elif run.status == "void" %}
+                  <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ run.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right mono">{{ run.total|floatformat:2 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientbillingrun_detail' run.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <i data-lucide="receipt"></i>
+                  <h3>Nothing billed yet</h3>
+                  <p>No period has been run for this client. Runs are created by a person for a period they choose — there is no scheduler in this sub-module, so a stored next-billing date will never raise one on its own.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if billing_run_count > panel_limit %}
+        Showing the newest {{ panel_limit }} of <span class="fw-600">{{ billing_run_count }}</span> — a database slice.
+      {% endif %}
+      A run walks the stock ledger, the receipts, the orders, the picks and the shipments for the period and prices each one against the active tariff. It never divides in the database and never guesses a measurement it cannot take: a charge priced per square foot, per kilo or per hour is written with <span class="fw-600">no quantity and a note saying which measurement is missing</span>, because a made-up conversion factor on an invoice is worse than a line somebody has to finish by hand.
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 7. service levels
+    `slas` is a LIST, active first. last_measured_value of None renders "Not measured" — NEVER 0 and
+    never a blank cell: "no data" and "meeting the target" are different answers with different
+    colours, and merging them would report an all-clear nobody measured.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Service levels</h2>
+      <div class="badge-group">
+        {% if open_breach_count %}
+          <span class="badge badge-red">{{ open_breach_count }} breached</span>
+        {% else %}
+          <span class="badge badge-green">None breached</span>
+        {% endif %}
+        <span class="badge badge-slate">{{ sla_count }} configured</span>
+        <a href="{% url 'scm:clientsla_create' %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> New SLA</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>SLA</th><th>Metric</th><th class="text-right">Target</th><th class="text-right">Measured</th><th>State</th><th class="nowrap">Breaches</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for sla in slas %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:clientsla_detail' sla.pk %}" class="fw-600 mono">{{ sla.number }}</a>
+                {% if not sla.is_active %}<div><span class="badge badge-muted">Inactive</span></div>{% endif %}
+              </td>
+              <td>
+                {% if sla.name %}{{ sla.name }}{% else %}{{ sla.get_metric_display }}{% endif %}
+                <div class="form-help">{{ sla.get_measurement_window_display }}</div>
+              </td>
+              <td class="text-right mono">{{ sla.target_value|floatformat:2 }} {{ sla.get_unit_display }}</td>
+              <td class="text-right mono">
+                {% if sla.last_measured_value is not None %}
+                  {{ sla.last_measured_value|floatformat:2 }}
+                  {% if sla.last_measured_at %}<div class="form-help">{{ sla.last_measured_at|date:"M d, Y" }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">Not measured</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if sla.status == "meeting" %}
+                  <span class="badge badge-green">{{ sla.get_status_display }}</span>
+                {% elif sla.status == "at_risk" %}
+                  <span class="badge badge-amber">{{ sla.get_status_display }}</span>
+                {% elif sla.status == "breached" %}
+                  <span class="badge badge-red">{{ sla.get_status_display }}</span>
+                {% elif sla.status == "no_data" %}
+                  <span class="badge badge-muted">{{ sla.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ sla.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">{{ sla.breach_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientsla_detail' sla.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>No service levels agreed</h3>
+                  <p>Nothing is being measured for this client. Each metric is derived from rows this system already holds — shipments against their planned dates, cycle counts against expected quantities, receipts against putaway completion — so an SLA here reports what actually happened rather than what somebody typed in.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      <span class="fw-600">“Not measured” is not “meeting the target”.</span> A metric with no signal in its window is left as no-data with the reason recorded, and its last measured value is left untouched rather than written down to zero — a zero would read as catastrophic performance where the truth is that nothing happened to measure. A service credit is computed as a <span class="fw-600">suggestion</span> and applied to nothing: no credit note is drafted anywhere in this sub-module.
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 8. child clients
+    Divisions, brands or subsidiaries under one commercial relationship. Each child is its own
+    client row with its own tariff and its own runs — the parent link is reporting structure, not a
+    billing roll-up, and nothing here sums a child's figures into the parent's.
+  {% endcomment %}
+  {% if child_clients %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Child clients</h2>
+        <span class="badge badge-slate">{{ child_clients|length }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Client</th><th>Company</th><th>Status</th><th>Billing</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for child in child_clients %}
+              <tr>
+                <td>
+                  <a href="{% url 'scm:logisticsclient_detail' child.pk %}" class="fw-600 mono">{{ child.code }}</a>
+                  <div class="form-help mono">{{ child.number }}</div>
+                </td>
+                <td>{{ child.party }}</td>
+                <td>
+                  {% if child.status == "active" %}
+                    <span class="badge badge-green">{{ child.get_status_display }}</span>
+                  {% elif child.status == "onboarding" %}
+                    <span class="badge badge-info">{{ child.get_status_display }}</span>
+                  {% elif child.status == "prospect" %}
+                    <span class="badge badge-muted">{{ child.get_status_display }}</span>
+                  {% elif child.status == "suspended" %}
+                    <span class="badge badge-amber">{{ child.get_status_display }}</span>
+                  {% elif child.status == "terminated" %}
+                    <span class="badge badge-slate">{{ child.get_status_display }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ child.get_status_display }}</span>
+                  {% endif %}
+                </td>
+                <td class="nowrap"><span class="badge badge-slate">{{ child.get_billing_cycle_display }}</span></td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'scm:logisticsclient_detail' child.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Each child bills on its own tariff and its own runs — nothing on this page rolls a child's stock, charges or service levels up into the parent. The hierarchy is how the relationship is <em>organised</em>, and a client cannot be its own parent nor sit in a loop: both are refused at save, because either one would make the chain above this row impossible to walk.
+      </div>
+    </div>
+  {% endif %}
+
+  {% if obj.notes %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes</h2>
+        <span class="badge badge-slate">Internal</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="white-space:pre-line; margin:0;">{{ obj.notes }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ================================================================================ 9. actions
+    can_delete is the EXACT condition logisticsclient_delete enforces — no rate card and no billing
+    run references this client — read from the same statement of the rule, so a button and its route
+    cannot disagree. Delete is @require_POST, so a GET on that URL is a 405 and this is a real form.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:logisticsclient_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if can_delete %}
+          <form method="post" action="{% url 'scm:logisticsclient_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This client has no rate card and no billing run, so the delete will go through — and it takes {{ sla_count }} service level(s) with it. Any item or bin stamped with this owner is simply unstamped, which quietly makes that stock belong to nobody. Setting the status to Terminated closes the relationship and keeps every row.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.9rem;">
+        Every field on this client is editable, always. There is no status ladder and no frozen state, because the row is <span class="fw-600">configuration rather than a document</span> — a billing run snapshots the category, basis and rate it charged onto its own lines, so editing the client or its tariff afterwards cannot rewrite what was already billed.
+      </p>
+      <p class="text-muted" style="margin:0;">
+        {% if not can_delete %}
+          <span class="badge badge-slate">Delete refused</span>
+          {{ rate_card_count }} rate card{{ rate_card_count|pluralize }} and {{ billing_run_count }} billing run{{ billing_run_count|pluralize }} reference this client, and the database protects both. That is the right answer: a billed period is a commercial record of what we charged, and it has to keep the client it was raised against. <span class="fw-600">Set the status to Suspended or Terminated instead</span> — that closes the relationship while leaving every tariff, every billed period and every measured service level readable.
+        {% else %}
+          <span class="badge badge-red">Deleting is destructive in a way the button cannot show</span>
+          No rate card and no billing run references this client, so a delete would go through — and it would take the service levels with it, along with the only link tying this client's items and bins to an owner. <span class="fw-600">Terminated does the same job</span> to the relationship and keeps the record.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% endblock %}
