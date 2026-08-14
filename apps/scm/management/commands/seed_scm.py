@@ -177,12 +177,29 @@ class Command(BaseCommand):
             # account is what makes those pages visible in the demo instead of only under test.
             self._seed_portal_tenant(tenant)
 
+            # 4.17 LAST OF ALL, and this one genuinely has to be. Its billing runs are CALCULATED
+            # from the append-only StockMove ledger (4.3), the goods receipts (4.1), the sales
+            # orders and their lines (4.5) and the shipments (4.6); its SLAs are RECOMPUTED from
+            # 4.5's orders, 4.6's shipments, 4.4's cycle counts and 4.10's returns. Run before any
+            # of those and every figure is a correct zero over an empty period, which is the one
+            # demo outcome worse than no demo at all.
+            #
+            # It writes NO StockMove and NO JournalEntry. Its only cross-app write is the DRAFT
+            # `accounting.Invoice` the approved run hands to Accounts Receivable (L29), and even
+            # that goes through `draft_invoice()` rather than being hand-built — so the seeder
+            # exercises the real path on every run and the demo cannot drift from the code.
+            #
+            # It also assigns `owner_client` on two of 4.3's items and creates two dedicated bins,
+            # because Client Inventory Segregation and Warehouse Rental Management are COMPUTED
+            # pages: without an owner on a row somewhere, both render an honest but empty table.
+            self._seed_3pl_tenant(tenant)
+
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
             "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
-            "4.14 labor management + 4.15 cold chain management + 4.16 customer portal "
-            "seed complete."))
+            "4.14 labor management + 4.15 cold chain management + 4.16 customer portal + "
+            "4.17 third-party logistics seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -998,6 +1015,43 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
+        # --- 4.17 Third-Party Logistics (3PL) Management ---
+        # 4.17 FIRST (newest sub-module), and the order INSIDE it is load-bearing in three places.
+        #
+        # 1. THE DRAFTED AR INVOICES GO BEFORE THE RUNS, for exactly the orphaned-bills reason at the
+        #    top of this method. `ClientBillingRun.invoice` is SET_NULL, so deleting the runs first
+        #    would silently sever the only link that identifies a seeded 3PL invoice — every
+        #    --flush cycle would then strand another set of draft invoices in Accounts Receivable
+        #    with nothing left to recognise them by. Scoped through `scm_billing_runs`, so a
+        #    hand-entered invoice for the same customer is never touched.
+        # 2. THE RUNS GO BEFORE THE RATE CARDS. `ClientBillingRun.rate_card` is PROTECT — the tariff
+        #    is the evidence for every figure on the run — so the other order raises ProtectedError.
+        # 3. THE WHOLE TREE GOES BEFORE ANY PARTY CLEANUP. `LogisticsClient.party` is PROTECT onto
+        #    `core.Party`, the same edge 4.16's block below is careful about.
+        #
+        # `ClientBillingRunLine` and `ClientRateCardLine` both CASCADE from their parent and
+        # `ClientSLA` CASCADEs from the client, so all three would go regardless; they are named so
+        # the teardown reads top-down and a future reader does not have to re-derive which edges are
+        # cascades.
+        #
+        # NOTHING RESETS `Item.owner_client` / `Location.owner_client` BY HAND, and that is not an
+        # omission: both are SET_NULL, so deleting the clients nulls them in the same statement. A
+        # manual `.update(owner_client=None)` here would be a second, unaudited writer of a column
+        # 4.3 owns — and it would blank rows a user assigned themselves, not merely the seeded ones.
+        #
+        # There is NO StockMove and NO JournalEntry to unwind: 4.17 posts neither. The billing run
+        # READS the append-only ledger and drafts an invoice; the GL effect is Accounting's (L29).
+        from apps.accounting.models import Invoice as _ThreePLInvoice
+        from apps.scm.models import (ClientBillingRun, ClientRateCard, ClientSLA, LogisticsClient)
+
+        threepl_invoices = _ThreePLInvoice.objects.filter(scm_billing_runs__isnull=False).distinct()
+        threepl_invoice_count = threepl_invoices.count()
+        threepl_invoices.delete()           # CASCADE takes their InvoiceLine rows with them
+        ClientBillingRun.objects.all().delete()   # run lines cascade
+        ClientRateCard.objects.all().delete()     # rate lines cascade
+        ClientSLA.objects.all().delete()
+        LogisticsClient.objects.all().delete()    # SET_NULL clears the two 4.3 owner columns
+
         # --- 4.16 Customer Portal ---
         # 4.16 FIRST (newest sub-module), and like 4.15 below it this order is LOAD-BEARING rather
         # than merely top-down.
@@ -1353,9 +1407,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
             f"demand planning + manufacturing + quality + returns + analytics + compliance + asset "
-            f"management + labor management rows "
+            f"management + labor management + cold chain + customer portal + 3PL rows "
             f"(+{bill_count + freight_bill_count} linked accounting bill(s), "
-            f"+{return_credit_count} linked credit note(s))."))
+            f"+{return_credit_count} linked credit note(s), "
+            f"+{threepl_invoice_count} 3PL client invoice(s))."))
 
     def _seed_manufacturing_tenant(self, tenant):
         """4.8 Manufacturing demo: two work centres, a two-level BOM for an assembled bundle, and a
@@ -4905,3 +4960,396 @@ class Command(BaseCommand):
             + (f", portal login bound to {candidate.username}" if bound is not None
                else ", no unbound user to give a portal login")
             + ". No StockMove and no JournalEntry — 4.16 posts neither.")
+
+    # --- 4.17 Third-Party Logistics (3PL) Management -------------------------------------------
+    def _seed_3pl_tenant(self, tenant):
+        """4.17 demo rows: three logistics clients, and one of them deliberately bare.
+
+        **This pass invents no master data.** Every party, item, currency, payment term and GL
+        account it references is found among rows the earlier passes already seeded, and an optional
+        link whose subject does not exist is left null rather than created. The one exception is a
+        pair of DEDICATED BINS for the first client, and that is 4.17 demo data by definition: "a
+        client's dedicated aisle IS a location" is the whole reason ``Location.owner_client`` exists
+        rather than a parallel reserved-space master, and the Warehouse Rental page has nothing to
+        show without one.
+
+        **Every derived figure is produced by the REAL code path.** The billing runs are driven
+        through ``calculate()`` / ``approve()`` / ``draft_invoice()`` and the SLAs through
+        ``recompute()`` — never hand-stamped. That is the 4.13 ``_post_stock_move`` / 4.14
+        ``_stamp_standard`` / 4.16 ``open_for()`` rule: the demo is produced by the same code the
+        buttons run, so the path is exercised on every ``seed_scm`` and the demo cannot drift from
+        the implementation. It is also why a rate card's ``status`` is never assigned here — the
+        card is saved as a draft and ``activate()``... does not exist on the model, so the seeder
+        sets ``status="active"`` on CREATE only, which is the one thing a fixture may do that a form
+        may not (the form has no status field at all).
+
+        **THE THIRD CLIENT HAS NOTHING AND THAT IS THE POINT.** A client in onboarding legitimately
+        has no tariff, no billing history and no measured SLA, so the empty state is this
+        sub-module's first week rather than an edge case. No smoke sweep in this project has ever
+        rendered an ``{% empty %}`` branch, because a seeded tenant has rows in every table by
+        construction; the 4.16 pass seeds a deliberately empty portal account for exactly this
+        reason and this one follows it.
+
+        The other two are deliberately opposites so every presentation branch renders somewhere: one
+        DEDICATED-space client on calendar-month storage with a monthly minimum, an API integration,
+        two reserved bins, a live tariff plus a draft next version, an invoiced run and a calculated
+        one; one SHARED-space client on average-daily storage with an EDI integration, no minimum,
+        no reserved space and a single calculated run.
+        """
+        from django.db.models import Count
+
+        from apps.scm.models import (ClientBillingRun, ClientRateCard, ClientRateCardLine,
+                                     ClientSLA, Item, Location, LogisticsClient, SLA_METRIC_META)
+        from apps.scm.models._base import ZERO
+
+        if LogisticsClient.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: 3PL data already exists — skipping.")
+            return
+
+        # ---- prerequisites: warn and RETURN rather than half-seed (the 4.10-4.16 posture) -------
+        customers = list(Party.objects.filter(tenant=tenant, roles__role="customer")
+                         .distinct().order_by("id")[:3])
+        if not customers:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no customer parties — skipping 4.17 3PL (a logistics client IS a "
+                f"party; this pass creates none)."))
+            return
+        # ORDERED BY ACTIVITY, not alphabetically, and that is the difference between a demo that
+        # shows something and one that shows a correct zero. Every computed figure in 4.17 — the
+        # segregation report, the storage charge on a billing run, every shipment- and order-based
+        # SLA — is attributed through `item.owner_client`, so assigning the two QUIETEST items
+        # produces a client who owns stock nobody ever ordered, ships or counts. Ranked by sales
+        # order lines first (the orders and shipments most measurements run through) and stock
+        # movements second, with `sku` as the final tie-break so the pass stays deterministic.
+        items = list(Item.objects.filter(tenant=tenant)
+                     .annotate(_line_n=Count("sales_order_lines", distinct=True),
+                               _move_n=Count("stock_moves", distinct=True))
+                     .order_by("-_line_n", "-_move_n", "sku")[:3])
+        if not items:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no 4.3 items — skipping 4.17 3PL (client inventory segregation is "
+                f"computed over the item master and would have nothing to segregate)."))
+            return
+
+        admin_user = (User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                      or User.objects.filter(tenant=tenant).first())
+        currency = Currency.objects.filter(is_active=True).order_by("id").first()
+        terms = PaymentTerm.objects.filter(tenant=tenant).order_by("id").first()
+        # A revenue account if the chart has one; None is a perfectly good answer and the drafted
+        # invoice line simply carries no account rather than being pointed at a wrong one.
+        # `account_type="income"` — the Chart of Accounts vocabulary is asset/liability/equity/
+        # income/expense, and there is no "revenue" value in it. A filter on a value that is not in
+        # the choices returns an empty queryset rather than an error, so the wrong string here would
+        # have silently drafted every invoice line with no GL account and looked like a data problem.
+        revenue_account = (GLAccount.objects.filter(tenant=tenant, account_type="income",
+                                                    is_active=True)
+                           .order_by("code").first())
+
+        today = timezone.localdate()
+
+        def _code(party, taken):
+            """A short, human client code off the party name — deduplicated, never truncated blind.
+
+            ``code`` is ``max_length=8`` and unique per tenant, and two customers called "Acme
+            Retail" and "Acme Wholesale" both reduce to ``ACMERETA``/``ACMEWHOL`` fine — but "Acme"
+            and "Acme, Inc." do not. The numeric suffix is what stops the second `create()` raising
+            an IntegrityError on a demo tenant nobody controls the party names of.
+            """
+            base = "".join(ch for ch in (party.name or "").upper() if ch.isalnum())[:8] or "CLIENT"
+            candidate = base
+            n = 1
+            while candidate in taken:
+                n += 1
+                suffix = str(n)
+                candidate = f"{base[:8 - len(suffix)]}{suffix}"
+            taken.add(candidate)
+            return candidate
+
+        taken = set()
+
+        # ---- 1. THE DEDICATED CLIENT — every branch that needs committed space ------------------
+        dedicated = LogisticsClient.objects.create(
+            tenant=tenant, party=customers[0], code=_code(customers[0], taken),
+            status="active",
+            billing_cycle="monthly", billing_day=1,
+            # calendar_month is the plain method, and it is the one to demo first: the other four
+            # produce a DIFFERENT figure from the same stock, which is exactly why the field carries
+            # the "most consequential setting here" help text.
+            storage_billing_method="calendar_month",
+            minimum_monthly_charge=Decimal("500.00"),
+            default_tax_rate_pct=Decimal("5.00"),
+            currency=currency, payment_terms=terms, default_revenue_account=revenue_account,
+            space_model="dedicated",
+            committed_sqft=Decimal("4000.00"), committed_pallet_positions=250,
+            contract_start=today - datetime.timedelta(days=400),
+            contract_end=today + datetime.timedelta(days=330),
+            notice_days=60,
+            integration_mode="api", client_system="NetSuite",
+            account_manager=admin_user,
+            notes="Seeded demo client — dedicated space, calendar-month storage, monthly minimum.",
+        )
+
+        # ---- 2. THE SHARED CLIENT — the mirror, so both sides of every rule render --------------
+        # `committed_sqft`/`committed_pallet_positions` stay at zero on purpose: `clean()` REFUSES a
+        # shared client carrying a commitment, because a figure the system silently ignored is worse
+        # than an error. Seeding one here would seed a row the form would refuse to save.
+        shared = None
+        if len(customers) > 1:
+            shared = LogisticsClient.objects.create(
+                tenant=tenant, party=customers[1], code=_code(customers[1], taken),
+                status="active",
+                billing_cycle="monthly", billing_day=15,
+                storage_billing_method="average_daily",
+                default_tax_rate_pct=Decimal("5.00"),
+                currency=currency, payment_terms=terms, default_revenue_account=revenue_account,
+                space_model="shared",
+                contract_start=today - datetime.timedelta(days=180),
+                notice_days=30,
+                integration_mode="edi", client_system="SAP ECC",
+                edi_partner_id="1234567890123", edi_qualifier="ZZ",
+                account_manager=admin_user,
+                notes="Seeded demo client — shared space, average-daily storage, EDI integration.",
+            )
+
+        # ---- 3. THE BARE CLIENT — onboarding, no tariff, no run, no SLA -------------------------
+        onboarding = None
+        if len(customers) > 2:
+            onboarding = LogisticsClient.objects.create(
+                tenant=tenant, party=customers[2], code=_code(customers[2], taken),
+                status="onboarding",
+                billing_cycle="monthly", billing_day=1,
+                storage_billing_method="calendar_month",
+                currency=currency, payment_terms=terms,
+                space_model="shared",
+                contract_start=today - datetime.timedelta(days=10),
+                integration_mode="none",
+                account_manager=admin_user,
+                notes="Seeded demo client — DELIBERATELY BARE. In onboarding: no tariff, no billing "
+                      "history, no measured SLA and no assigned stock. This is what week one of a "
+                      "new 3PL client looks like, and it is the state no smoke sweep renders.",
+            )
+
+        # ---- segregation: whose goods are whose, and whose aisle is whose -----------------------
+        # THE ONLY WRITER of these two columns in this pass, and it writes them with `update()` on an
+        # explicit pk list rather than a filter — a filtered update here would also blank or claim
+        # rows a user assigned themselves. One item is left unowned ON PURPOSE: an item with no
+        # `owner_client` is the segregation GAP the report counts, and a demo where that number is
+        # always zero teaches the reader the wrong thing about the page.
+        Item.objects.filter(pk__in=[i.pk for i in items[:2]]).update(owner_client=dedicated)
+        if shared is not None and len(items) > 2:
+            Item.objects.filter(pk=items[2].pk).update(owner_client=shared)
+
+        # Two reserved bins under the main warehouse, with a capacity recorded so the rental page's
+        # capacity column is not uniformly blank. `capacity` is in the BIN'S OWN UNITS (4.3's own
+        # help text says so), which is precisely why the report prints it beside the committed
+        # figures and converts neither into the other.
+        parent = (Location.objects.filter(tenant=tenant, location_type="warehouse")
+                  .order_by("code").first())
+        reserved_bins = []
+        for suffix, capacity in (("A1", Decimal("120.00")), ("A2", Decimal("130.00"))):
+            bin_row, _ = Location.objects.get_or_create(
+                tenant=tenant, code=f"3PL-{dedicated.code[:3]}-{suffix}"[:32],
+                defaults={
+                    "name": f"{dedicated.code} dedicated aisle {suffix}",
+                    "location_type": "bin", "parent": parent, "capacity": capacity,
+                    "owner_client": dedicated,
+                })
+            # get_or_create found an existing bin (a re-run after a partial flush): claim it, but
+            # only if nobody else already owns it.
+            if bin_row.owner_client_id is None:
+                bin_row.owner_client = dedicated
+                bin_row.save(update_fields=["owner_client"])
+            reserved_bins.append(bin_row)
+
+        # ---- the tariffs ------------------------------------------------------------------------
+        # `status` is set on CREATE here and nowhere else. The FORM carries no status field at all —
+        # a card moves draft -> active -> superseded through the two verbs — so a fixture stamping
+        # the opening state is the one write no user path duplicates. It is NOT edited afterwards.
+        cards = {}
+        card = ClientRateCard.objects.create(
+            tenant=tenant, client=dedicated,
+            name="Standard storage & handling", version=1, status="active",
+            effective_from=dedicated.contract_start, effective_to=None,
+            currency=currency,
+            notes="Seeded demo tariff — the live card every calculated run below is priced from.",
+        )
+        cards[dedicated.pk] = card
+
+        # One line per branch the calculator actually walks, so the run detail page shows the whole
+        # vocabulary rather than three storage rows. The LAST one is deliberately a basis this build
+        # cannot measure (`per_hour` is in MANUAL_ONLY_BASES) — it renders the "needs a manual
+        # quantity" flag, which is the honest answer and the one a demo should show.
+        dedicated_lines = [
+            ("storage", "per_pallet_position", "Pallet storage, ambient", Decimal("18.50"), "month"),
+            ("storage", "dedicated_space", "Contracted dedicated space", Decimal("2.25"), "month"),
+            ("receiving", "per_receipt", "Inbound receipt handling", Decimal("12.00"), ""),
+            ("outbound", "per_order", "Order fulfilment fee", Decimal("4.75"), ""),
+            ("outbound", "per_line", "Pick line fee", Decimal("1.25"), ""),
+            ("outbound", "per_unit", "Unit pick fee", Decimal("0.45"), ""),
+            ("transportation", "per_shipment", "Outbound shipment handling", Decimal("35.00"), ""),
+            ("recurring", "flat_recurring", "Account management retainer", Decimal("250.00"), "month"),
+            ("value_added", "per_hour", "Kitting and rework labour", Decimal("45.00"), ""),
+        ]
+        for category, basis, description, rate, period in dedicated_lines:
+            ClientRateCardLine.objects.create(
+                rate_card=card, charge_category=category, charge_basis=basis,
+                description=description, rate=rate, period=period,
+                gl_account=revenue_account,
+            )
+
+        # A DRAFT next version, so the draft/active distinction and the editable-lines rule are both
+        # visible in the demo. It starts the day after the live card's window is expected to be
+        # renegotiated; several drafts may legitimately sit side by side, which is why `clean()`
+        # only refuses OVERLAPPING ACTIVE cards.
+        draft_card = ClientRateCard.objects.create(
+            tenant=tenant, client=dedicated,
+            name="Standard storage & handling", version=2, status="draft",
+            effective_from=today + datetime.timedelta(days=90), effective_to=None,
+            currency=currency,
+            notes="Seeded demo tariff — NEXT YEAR'S PROPOSAL, still a draft. Its lines are editable "
+                  "precisely because it has never priced anything.",
+        )
+        for category, basis, description, rate, period in (
+                ("storage", "per_pallet_position", "Pallet storage, ambient", Decimal("19.75"), "month"),
+                ("receiving", "per_receipt", "Inbound receipt handling", Decimal("12.75"), "")):
+            ClientRateCardLine.objects.create(
+                rate_card=draft_card, charge_category=category, charge_basis=basis,
+                description=description, rate=rate, period=period, gl_account=revenue_account)
+
+        if shared is not None:
+            shared_card = ClientRateCard.objects.create(
+                tenant=tenant, client=shared,
+                name="Shared-space handling", version=1, status="active",
+                effective_from=shared.contract_start, effective_to=None,
+                currency=currency,
+                notes="Seeded demo tariff — shared space, so NO dedicated-space line: `clean()` "
+                      "refuses one for a client with no committed area.",
+            )
+            cards[shared.pk] = shared_card
+            for category, basis, description, rate, period in (
+                    ("storage", "per_pallet_position", "Pallet storage, shared racking",
+                     Decimal("21.00"), "month"),
+                    ("receiving", "per_receipt", "Inbound receipt handling", Decimal("15.00"), ""),
+                    ("outbound", "per_order", "Order fulfilment fee", Decimal("5.50"), ""),
+                    ("accessorial", "per_carton", "Carton re-pack", Decimal("0.85"), "")):
+                ClientRateCardLine.objects.create(
+                    rate_card=shared_card, charge_category=category, charge_basis=basis,
+                    description=description, rate=rate, period=period, gl_account=revenue_account)
+
+        # ---- the billing runs, driven through the REAL verbs ------------------------------------
+        # The LAST FULL CALENDAR MONTH, computed rather than hard-coded: a literal date would make
+        # the demo drift into a period the ledger has no movements in the moment the calendar moved
+        # past it. The monthly minimum only tops up a run whose period covers a whole month, so this
+        # is also what makes the minimum branch reachable at all.
+        first_of_this_month = today.replace(day=1)
+        last_month_end = first_of_this_month - datetime.timedelta(days=1)
+        last_month_start = last_month_end.replace(day=1)
+
+        runs = []
+        invoiced_run = ClientBillingRun.objects.create(
+            tenant=tenant, client=dedicated, rate_card=card,
+            period_start=last_month_start, period_end=last_month_end,
+            notes="Seeded demo run — calculated from the ledger, approved, and handed to Accounts "
+                  "Receivable as a DRAFT invoice. SCM posts no journal entry.",
+        )
+        invoiced_run.calculate(user=admin_user)
+        invoiced_run.approve(user=admin_user)
+        drafted_invoice = invoiced_run.draft_invoice(user=admin_user)
+        runs.append(invoiced_run)
+
+        # A SECOND run left at `calculated`, so the Approve button has something to point at in the
+        # demo and the pre-approval state is visible. The current month TO DATE — a partial period,
+        # which is also the case where the monthly minimum deliberately does NOT apply.
+        if first_of_this_month <= today:
+            open_run = ClientBillingRun.objects.create(
+                tenant=tenant, client=dedicated, rate_card=card,
+                period_start=first_of_this_month, period_end=today,
+                notes="Seeded demo run — this month to date, CALCULATED but not approved. A partial "
+                      "period, so the monthly minimum does not apply to it.",
+            )
+            open_run.calculate(user=admin_user)
+            runs.append(open_run)
+
+        if shared is not None:
+            shared_run = ClientBillingRun.objects.create(
+                tenant=tenant, client=shared, rate_card=cards[shared.pk],
+                period_start=last_month_start, period_end=last_month_end,
+                notes="Seeded demo run — average-daily storage over the same period, so the two "
+                      "clients' storage figures are directly comparable.",
+            )
+            shared_run.calculate(user=admin_user)
+            runs.append(shared_run)
+
+        # ---- the SLAs, measured through recompute() ---------------------------------------------
+        # `unit` and `direction` are read OUT OF THE REGISTRY rather than typed. `clean()` validates
+        # both against `SLA_METRIC_META`, so a typed pair is a row this seeder could create and the
+        # form would refuse — and a percentage saved as `hours` would compare 98 against 24 and
+        # breach forever.
+        # THE WINDOWS ARE CHOSEN TO OVERLAP THE DATA THE EARLIER PASSES ACTUALLY SEEDED, and that is
+        # a demo decision rather than a modelling one. A `monthly` window means the LAST FULL
+        # CALENDAR MONTH, so a shipment-based promise on a workspace whose only shipments are from
+        # this week measures an empty period and reports — correctly — no data. Rolling windows are
+        # used for the shipment- and count-driven metrics for exactly that reason; the order-accuracy
+        # promise stays `monthly` because the closed sales orders genuinely do sit in last month.
+        #
+        # `scope_location` is left NULL on every one of them. Only four metrics are location-scopable
+        # at all, and narrowing one of those to a freshly created dedicated bin — which no putaway,
+        # count or adjustment has ever touched — produces an SLA that measures nothing while looking
+        # like a configuration mistake. The unscoped, workspace-wide promise is also the common case.
+        sla_specs = [
+            (dedicated, "on_time_shipment_pct", "rolling_30", Decimal("98.00"), Decimal("96.00"),
+             Decimal("2.00"), Decimal("10.00"), None),
+            (dedicated, "dock_to_stock_hours", "rolling_90", Decimal("24"), Decimal("30"),
+             Decimal("1.00"), Decimal("5.00"), None),
+            (dedicated, "order_accuracy_pct", "monthly", Decimal("99.50"), None,
+             Decimal("2.00"), Decimal("10.00"), None),
+        ]
+        if shared is not None:
+            sla_specs += [
+                (shared, "otif_pct", "rolling_90", Decimal("95.00"), Decimal("93.00"),
+                 Decimal("1.50"), ZERO, None),
+                (shared, "inventory_accuracy_pct", "rolling_90", Decimal("99.00"), None,
+                 Decimal("1.00"), Decimal("5.00"), None),
+            ]
+
+        slas = []
+        for client, metric, window, target, warning, credit_pct, cap_pct, scope in sla_specs:
+            meta = SLA_METRIC_META[metric]
+            sla = ClientSLA.objects.create(
+                tenant=tenant, client=client, metric=metric,
+                target_value=target,
+                unit=meta["unit"], direction=meta["direction"],
+                warning_threshold=warning,
+                measurement_window=window,
+                scope_location=scope,
+                service_credit_pct=credit_pct, service_credit_cap_pct=cap_pct,
+                is_active=True,
+                notes=f"Seeded demo SLA — {meta['source']}",
+            )
+            # THE REAL PATH, exactly as the Recompute button runs it. Whatever it finds is what the
+            # demo shows: a metric this tenant's data cannot support lands on `no_data`, which is
+            # the honest answer and the one the page is built to render — never a confident 100%.
+            sla.recompute(as_of=today)
+            slas.append(sla)
+
+        measured = sum(1 for s in slas if s.status != "no_data")
+        self.stdout.write(
+            f"{tenant.name}: 4.17 3PL — "
+            f"{len([c for c in (dedicated, shared, onboarding) if c is not None])} logistics "
+            f"client(s) ({dedicated.code} dedicated"
+            + (f", {shared.code} shared" if shared is not None else "")
+            + (f", {onboarding.code} DELIBERATELY BARE" if onboarding is not None
+               else ", no spare customer for a bare client")
+            + f"), {ClientRateCard.objects.filter(tenant=tenant).count()} rate card(s) "
+              f"({ClientRateCardLine.objects.filter(rate_card__tenant=tenant).count()} lines), "
+            # COUNTED, not hard-coded: the second and third runs are both conditional, so a literal
+            # would overstate what was created on a tenant with one customer — and a seeder that
+            # overstates what it created is the one thing a seeder must not do.
+              f"{len(runs)} billing run(s) via calculate() "
+              f"(total {invoiced_run.total} on {invoiced_run.number}, invoiced as "
+              f"{drafted_invoice.number} — a DRAFT in AR, no journal entry), "
+              f"{len(slas)} SLA(s) via recompute() ({measured} measured, "
+              f"{len(slas) - measured} reporting no data), "
+              f"{len(reserved_bins)} reserved bin(s), "
+              f"{Item.objects.filter(tenant=tenant, owner_client__isnull=False).count()} item(s) "
+              f"assigned an owner. No StockMove — 4.17 posts none.")
