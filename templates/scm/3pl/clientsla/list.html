@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — the SERVICE LEVEL register (SLA-).
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientSlas.py::clientsla_list, which returns crud_list(...).
+Everything this page may read, and NOTHING else:
+
+  object_list / page_obj / q  from crud_list (apps/core/crud.py) — page_obj.window drives the shared
+                              pagination partial
+  clients                     LogisticsClient queryset, for the ?client= dropdown
+  metric_choices              SLA_METRIC_CHOICES (nine metrics)
+  sla_status_choices          SLA_STATUS_CHOICES (meeting / at_risk / breached / no_data). THIS EXACT
+                              NAME — deliberately not `status_choices`, because a rate card and a
+                              billing run each have a status vocabulary of their own and a shared
+                              name across three pages is how the wrong list ends up in the wrong
+                              <select>
+  stats                       dict with EXACTLY: total / meeting / at_risk / breached / no_data
+
+Filter params: q / client / metric / status / active.
+  client  is an INT pk — compared with |stringformat:"d", NEVER |slugify (which would agree only by
+          accident, and only for values that happen to slugify to themselves). The view guards the
+          raw param through as_db_int, so a junk ?client=abc skips the filter instead of raising.
+  metric  and status are STRING vocabularies — plain equality against request.GET.<param>.
+  active  is the literal string "True" / "False", which crud_list maps onto the real boolean; a junk
+          value is caught inside crud_list and skipped.
+
+--------------------------------------------------------------------------------------------------
+"NOT MEASURED" IS NOT A ZERO, AND IT IS NOT "MEETING"
+--------------------------------------------------------------------------------------------------
+last_measured_value is nullable and None is a REAL state — a metric whose window contained no signal
+at all. It renders the words "Not measured". It must never render as 0 (which reads as catastrophic
+performance where the truth is that nothing happened) and never as a blank cell (which reads as a
+broken page). `{% templatetag openblock %} if ... is not None {% templatetag closeblock %}` is the
+only correct test here: a legitimately measured 0 is falsy, so a bare truthiness check would hide
+the one figure most worth seeing.
+
+For the same reason no_data carries its own colour and is never merged into meeting. They are
+different answers to different questions.
+
+--------------------------------------------------------------------------------------------------
+WHAT A ROW MAY NOT READ
+--------------------------------------------------------------------------------------------------
+obj.client.code is joined by the view and is the only thing read off the client here — the party
+name is NOT, because it is a second join this list does not need. ClientSLA.recompute() and
+suggested_service_credit() are METHODS, each one a bounded sweep over shipments, cycle counts,
+receipts or the stock ledger; calling either per row would be one measurement pass per row on a
+page load (the 4.13 asset_list finding). Measuring happens behind the two POST verbs and nowhere
+else, and the credit arithmetic belongs on the detail page where there is one row to do it for.
+
+--------------------------------------------------------------------------------------------------
+Colour
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges ONLY — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-warning and badge-danger DO NOT EXIST and render as
+completely unstyled text (L33, shipped four times). Every badge below is one of those six literals.
+
+The state chip is SLA_STATUS_CSS spelled out as an if/elif chain on the exact choice values —
+meeting=badge-green, at_risk=badge-amber, breached=badge-red, no_data=badge-muted — always ending in
+an else branch that still prints get_status_display, so a value added to the vocabulary later
+renders as a readable label rather than as a blank cell.
+
+stat-icon ships blue / green / orange / purple / slate only. There is no red, so both attention
+states (at risk, breached) take orange and are told apart by their labels.
+
+Recompute-all and Delete are @require_POST at the view, so both are real <form method="post"> with a
+csrf token and neither can be a link. Only the system-generated SLA- number is interpolated into a
+confirm string: `name` and the client code are user-typed, and an apostrophe in either escapes to
+&#39;, which HTML decodes back to a bare quote before JavaScript ever parses the attribute — the
+dialog then breaks open and the guard is silently gone (L42). The apostrophes that ARE in the
+strings below are written \' for exactly that reason.
+{% endcomment %}
+{% block title %}Client SLAs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Client SLAs</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Client SLAs</span></div>
+      <p class="text-muted">The service levels we have agreed with each depositor, and what we are <span class="fw-600">actually measured at</span> against them. Every figure on this page is derived from rows this system already holds — shipments against their planned dates, cycle counts against expected quantities, receipts against putaway completion — so an SLA here reports what happened rather than what somebody typed in afterwards.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Clients</a>
+      <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Billing Runs</a>
+      {% comment %}
+        Recompute-all is @require_POST — a GET on that route is a 405 — so it is a real form and can
+        never be a link. It is bounded to this workspace's ACTIVE rows and reports back how many were
+        measured and how many came back with no signal, because "it ran" and "it found something" are
+        different outcomes and only one of them is worth acting on.
+      {% endcomment %}
+      <form method="post" action="{% url 'scm:clientsla_recompute_all' %}" style="display:inline;">
+        {% csrf_token %}
+        <button class="btn btn-outline" type="submit" onclick="return confirm('Re-measure every active service level in this workspace? Each one is re-derived from the rows already on file for its own window — nothing is invented and nothing is written to the stock ledger. Metrics with no signal in their window come back as No data with the reason recorded, which is not the same answer as meeting the target.');"><i data-lucide="refresh-cw"></i> Re-measure all</button>
+      </form>
+      <a href="{% url 'scm:clientsla_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add SLA</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The tiles are counted over the WHOLE workspace, not over the filtered page — "3 breached" is a
+    fact somebody has to act on, and a number that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one client. stat-icon has no red, so both attention states
+    take orange and are separated by their wording.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Service levels on file across every client</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+      <div class="stat-value">{{ stats.meeting }}</div>
+      <div class="stat-label">Measured at or better than target in their last window</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.at_risk }}</div>
+      <div class="stat-label">Inside the warning band — still meeting the target, close enough to it to be worth a look</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ stats.breached }}</div>
+      <div class="stat-label">Past the target. A breach is what implies a service credit — suggested on the detail page, applied by nothing</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="help-circle"></i></div>
+      <div class="stat-value">{{ stats.no_data }}</div>
+      <div class="stat-label">No signal in the window. <span class="fw-600">Not the same as meeting the target</span> — nothing happened to measure, and the reason is recorded on each row</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Service levels</h2>
+      <div class="badge-group">
+        {% if stats.breached %}<span class="badge badge-red">{{ stats.breached }} breached</span>{% endif %}
+        {% if stats.at_risk %}<span class="badge badge-amber">{{ stats.at_risk }} at risk</span>{% endif %}
+        {% if stats.no_data %}<span class="badge badge-muted">{{ stats.no_data }} never measured</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SLA- number, name, client code or company…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The ONE pk filter on this page. `c.pk|stringformat:"d"` renders the primary key as a
+            decimal integer and compares it to the raw querystring value as a string — which is what
+            request.GET always hands back. |slugify is NOT interchangeable here: it lowercases and
+            strips, so it would agree with a pk only by coincidence and would quietly stop agreeing
+            the moment the value was not a bare integer.
+          {% endcomment %}
+          <select name="client" aria-label="Client" class="form-select">
+            <option value="">Any client</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if request.GET.client == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="metric" aria-label="Metric" class="form-select">
+            <option value="">Any metric</option>
+            {% for value, label in metric_choices %}
+              <option value="{{ value }}" {% if request.GET.metric == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            sla_status_choices, not status_choices — the name is the guard against this <select>
+            quietly being fed a rate-card or billing-run vocabulary by a later edit.
+          {% endcomment %}
+          <select name="status" aria-label="State" class="form-select">
+            <option value="">Any state</option>
+            {% for value, label in sla_status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The literal strings "True" / "False" — crud_list maps them onto the real booleans, and
+            anything else is caught there and skipped rather than filtering to nothing.
+          {% endcomment %}
+          <select name="active" aria-label="Active" class="form-select">
+            <option value="">Active and inactive</option>
+            <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:clientsla_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">A row is a promise; the measured column is the evidence.</span> Nothing here is measured on a schedule — this sub-module ships no timer — so a value is as fresh as the last time somebody re-measured it, and the date it was taken is printed next to it. Re-measuring is safe to repeat: a window that has already been counted as a breach is not counted again, so running it twice cannot inflate the breach count.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>SLA</th>
+            <th>Client</th>
+            <th>Metric</th>
+            <th class="text-right">Target</th>
+            <th class="text-right">Measured</th>
+            <th>State</th>
+            <th class="text-right nowrap">Breaches</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:clientsla_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                {% if not obj.is_active %}
+                  {% comment %}
+                    Inactive means "not measured and not counted" — the row is kept because the
+                    agreement and its history are worth keeping, and deleting it would take the
+                    measurement evidence with it.
+                  {% endcomment %}
+                  <div><span class="badge badge-muted">Inactive</span></div>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  The client CODE only. obj.client is joined by the view; obj.client.party is a
+                  second join this table does not need and would be one query a row.
+                {% endcomment %}
+                <a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="mono">{{ obj.client.code }}</a>
+              </td>
+              <td>
+                {% if obj.name %}{{ obj.name }}{% else %}{{ obj.get_metric_display }}{% endif %}
+                <div class="form-help">{{ obj.get_measurement_window_display }}</div>
+              </td>
+              <td class="text-right nowrap mono">{{ obj.target_value|floatformat:2 }} {{ obj.get_unit_display }}</td>
+              <td class="text-right nowrap mono">
+                {% comment %}
+                  `is not None` and not a truthiness test: a genuinely measured 0.00 — a damage rate
+                  of zero, a shrinkage of zero — is falsy, and a bare check would print "Not
+                  measured" over the single best result on the page. Null is the real "no signal"
+                  state and gets the words, never a zero and never an empty cell.
+                {% endcomment %}
+                {% if obj.last_measured_value is not None %}
+                  {{ obj.last_measured_value|floatformat:2 }} {{ obj.get_unit_display }}
+                  {% if obj.last_measured_at %}<div class="form-help">{{ obj.last_measured_at|date:"M d, Y" }}</div>{% endif %}
+                {% else %}
+                  <span class="text-muted">Not measured</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  SLA_STATUS_CSS on the exact choice keys, ending in a fallback that still prints a
+                  readable label if the vocabulary ever grows.
+                {% endcomment %}
+                {% if obj.status == "meeting" %}
+                  <span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "at_risk" %}
+                  <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "breached" %}
+                  <span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "no_data" %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right nowrap mono">{{ obj.breach_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientsla_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete are both unconditional, and that is the route's own rule rather
+                    than an omission: an SLA has no status ladder and no frozen state — the eight
+                    evidence columns are editable=False, so no form can reach them and there is
+                    nothing an edit could rewrite about a measurement. clientsla_delete carries no
+                    gate either; it is @require_POST and nothing PROTECTs an SLA row, so it goes
+                    through and the confirm below is where the cost is stated.
+
+                    Only the SLA- number is interpolated. The apostrophe in "level\'s" is written \'
+                    because &#39; is decoded back to a bare quote before JavaScript sees the
+                    attribute, which breaks the dialog open and silently removes the guard (L42).
+                  {% endcomment %}
+                  <a href="{% url 'scm:clientsla_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:clientsla_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This removes the agreement AND the service level\'s measurement evidence — the last measured value, the window it was taken over, the sample size and the running breach count all go with it, and none of it can be reconstructed. If the intent is only to stop measuring, clear the Active switch instead: an inactive SLA is skipped by re-measuring and keeps every figure it has already recorded.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="gauge"></i>
+                  <h3>No service levels agreed</h3>
+                  <p>Nothing is being measured for any client yet. An SLA here is not a form somebody fills in each month — it names a metric, a target and a window, and every measurement is then derived from rows this system already holds. Pick the metrics you are genuinely contracted on, set the target and the warning band, then re-measure. If you were expecting rows, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The shared partial, which is the L9 fix in one place: previous_page_number and next_page_number
+      are each called ONLY inside their own has_previous / has_next guard, so page one and the last
+      page cannot raise EmptyPage once this list outgrows a single page. It also carries every
+      current GET param except `page`, so paging never quietly drops the filters.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      A breached service level implies a <span class="fw-600">service credit</span> under most 3PL contracts. This sub-module works out what that credit would be and stops there: the figure is shown on the SLA and beside the client's billing run as a <span class="fw-600">suggestion</span>, it reduces no run total, and no credit note is raised anywhere. Issuing one is a commercial decision with a signature on it, and the document belongs to Accounting.
+    </div>
+  </div>
+{% endblock %}
