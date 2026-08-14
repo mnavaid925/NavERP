@@ -392,4 +392,31 @@
       </div>
     </div>
   </div>
+
+  {% comment %}
+    --- 4.18 Finance & Accounting Integration ---
+    The two registers plus the four computed report pages. Only two of the six are tables of our
+    own: landed cost vouchers and the duty tariff master. Payables, receivables and budget variance
+    READ pointers into apps/accounting that six shipped models already carry, and landed-cost
+    variance reads the allocation ledger — none of the four writes anything anywhere.
+
+    The landed-cost variance page carries no sidebar bullet (NavERP.md gives 4.18 five bullets and
+    the sidebar offers exactly those five), so for that page this card and the voucher list header
+    are the only entry points. Charge LINES and allocation rows are deliberately absent: both are
+    reached through the voucher detail page and neither has a standalone list, so a link here would
+    need a voucher pk this page does not have.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Finance &amp; Accounting Integration</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline"><i data-lucide="package-plus"></i> Landed Cost Vouchers</a>
+        <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline"><i data-lucide="landmark"></i> Duty Tariffs</a>
+        <a href="{% url 'scm:finance_payables' %}" class="btn btn-outline"><i data-lucide="arrow-up-right"></i> Payables</a>
+        <a href="{% url 'scm:finance_receivables' %}" class="btn btn-outline"><i data-lucide="arrow-down-left"></i> Receivables</a>
+        <a href="{% url 'scm:finance_budget_variance' %}" class="btn btn-outline"><i data-lucide="wallet"></i> Budget Variance</a>
+        <a href="{% url 'scm:landed_cost_variance' %}" class="btn btn-outline"><i data-lucide="chart-column"></i> Landed Cost Variance</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
