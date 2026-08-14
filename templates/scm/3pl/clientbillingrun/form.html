@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — create/edit for ClientBillingRun. ONE template, both paths.
+
+  CREATE — apps/scm/views/ThirdPartyLogistics/ClientBillingRuns.py::clientbillingrun_create
+    form      ClientBillingRunForm
+    is_edit   False
+  EDIT — ::clientbillingrun_edit (crud_edit, refused unless status is draft or calculated)
+    form      the same ClientBillingRunForm
+    obj       the ClientBillingRun — PRESENT ONLY ON THIS PATH
+    is_edit   True
+
+`obj` is guarded behind is_edit everywhere below, including in the breadcrumb and the Cancel link. On
+the create path it does not exist, and an unguarded {{ obj.pk }} inside {% templatetag openblock %} url {% templatetag closeblock %} is not a blank —
+it is a NoReverseMatch and a 500 on the page people reach the module through.
+
+--------------------------------------------------------------------------------------------------
+FIVE FIELDS, AND WHY THE REST ARE UNREACHABLE RATHER THAN MERELY ABSENT
+--------------------------------------------------------------------------------------------------
+The form carries exactly client / rate_card / period_start / period_end / notes. Everything else on
+the model — status, subtotal, minimum_adjustment, total, calculated_at, approved_at, approved_by and
+invoice — is editable=False, so a ModelForm cannot reach it and a crafted POST naming one has nowhere
+to land (L22). That is the mechanism, not a policy:
+
+  * `status` moves ONLY along the verb ladder on the run's own page, each verb validating the
+    transition it makes and writing its own audit entry. A status field here would let someone type
+    an approved run into existence with nobody's name on the approval.
+  * `subtotal` / `minimum_adjustment` / `total` are written only by recalc_amounts(), summing the
+    lines in Python. A typed total is a total nobody can take apart, which is the exact failure this
+    whole sub-module exists to avoid.
+  * `invoice` is set by Draft Invoice and by nothing else. Pointing a run at an arbitrary invoice
+    would be an IDOR wearing a dropdown.
+
+Nothing on this page prices anything. Saving creates (or re-dates) an EMPTY run; the figures appear
+when you press Calculate on the run itself. That separation is deliberate — a period you can correct
+before pricing is cheaper than an invoice you have to credit afterwards.
+
+--------------------------------------------------------------------------------------------------
+WHAT THE FORM REFUSES, AND WHERE
+--------------------------------------------------------------------------------------------------
+Every rule described in the help text below is enforced by ClientBillingRun.clean() and never here: an
+end before the start, a period longer than the year cap, a rate card belonging to a DIFFERENT client,
+and a rate card not in force for any part of the period. The client-match rule is the one that
+matters most — billing one client at another client's rates is the single mistake in this sub-module
+that produces a plausible-looking invoice which is entirely wrong — and the model enforces it even
+though the dropdown is narrowed, because a narrowed dropdown has never held against a crafted POST.
+
+Every field is rendered through partials/form_field.html, which pairs <label for=…> with the widget's
+own id via field.id_for_label, prints the field's help_text and prints its errors. Non-field errors
+are printed at the top of the card. Hand-written <input> tags are never used: the date widgets carry
+their own type and format, and a hand-rolled one renders an EMPTY box for a stored value.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Billing Run{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit {{ obj.number }}{% else %}New billing run{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:clientbillingrun_list' %}">Client Billing Runs</a><span class="sep">›</span>
+        {% if is_edit %}
+          <a href="{% url 'scm:clientbillingrun_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Edit</span>
+        {% else %}
+          <span>New</span>
+        {% endif %}
+      </div>
+      {% if is_edit %}
+        <p class="text-muted">Only the <span class="fw-600">scope</span> of the run is editable — who is being billed, under which tariff, and for which dates. Every figure on the record is written by Calculate and by the verb ladder, so there is no field here that could restate one. Changing the client, the rate card or the dates does <span class="fw-600">not</span> re-price anything by itself: press Calculate afterwards, or the lines still describe the old period.</p>
+      {% else %}
+        <p class="text-muted">A billing run prices <span class="fw-600">one client, one period, one tariff</span>. This page creates it empty — nothing is calculated on save, and the CBR- number is assigned then. Pricing happens when you press <span class="fw-600">Calculate</span> on the run, which reads the stock ledger, the receipts, the orders and the shipments that already happened rather than asking anybody to type a quantity.</p>
+      {% endif %}
+    </div>
+    <div class="page-actions">
+      {% if is_edit %}
+        <a href="{% url 'scm:clientbillingrun_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to the run</a>
+      {% else %}
+        <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if is_edit %}
+    {% comment %}
+      The figures the form cannot touch, restated read-only so it is obvious which numbers are not on
+      this page and why re-dating a run does not move them. calculated_at is legitimately None on a
+      draft, and prints a sentence rather than a blank.
+    {% endcomment %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What Calculate wrote</h2>
+        <div class="badge-group">
+          <span class="badge badge-slate">Read-only</span>
+          {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'calculated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'approved' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'invoiced' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+          {% elif obj.status == 'void' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+          <div class="detail-item"><dt>Subtotal</dt><dd class="mono">{{ obj.subtotal|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Minimum adjustment</dt><dd class="mono">{{ obj.minimum_adjustment|floatformat:2 }}</dd></div>
+          <div class="detail-item"><dt>Total</dt><dd class="mono fw-600">{{ obj.total|floatformat:2 }}</dd></div>
+          <div class="detail-item">
+            <dt>Calculated</dt>
+            <dd class="mono">{% if obj.calculated_at %}{{ obj.calculated_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not calculated yet</span>{% endif %}</dd>
+          </div>
+        </dl>
+        <div class="form-help">These four figures are stored columns written by Calculate, and no form in this module can reach any of them. They are shown here so it is plain that saving this page <span class="fw-600">does not re-price the run</span> — after changing the dates or the tariff, press Calculate on the run itself.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Who, under which tariff, for which period</h2>
+        <span class="badge badge-info">Nothing is priced on save</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.client %}
+          {% include "partials/form_field.html" with field=form.rate_card %}
+          {% include "partials/form_field.html" with field=form.period_start %}
+          {% include "partials/form_field.html" with field=form.period_end %}
+        </div>
+        <div class="form-help">
+          <span class="fw-600">The rate card must belong to the client you picked.</span> The dropdown is narrowed to that client, and the model refuses the mismatch again on save — billing one client at another client's rates is the one mistake here that produces an invoice which looks perfectly reasonable and is completely wrong, so it is caught in two places rather than one.
+        </div>
+        <div class="form-help">
+          The card also has to be <span class="fw-600">in force for at least part of the period</span>. A tariff that expired before the month started prices nothing, and a run built on one would calculate to an empty invoice with no explanation on it. An end date before the start is refused, as is a period longer than the year cap — that figure is fed to date arithmetic all over the calculator, where an out-of-range value is a crash rather than a message.
+        </div>
+        <div class="form-help">
+          One client can have only <span class="fw-600">one run per period</span>. If the same client and the same two dates already exist, the save is refused rather than quietly producing a second run that would bill the month twice.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes</h2>
+        <span class="badge badge-slate">Carried onto the drafted invoice</span>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help">Anything a client or a colleague needs to know about <em>this</em> period — a goodwill agreement, a disputed receipt, a hand-over from another system. The tariff itself belongs on the rate card, where it applies to every run rather than only this one.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save the run{% else %}Create the run{% endif %}</button>
+      <a href="{% if is_edit %}{% url 'scm:clientbillingrun_detail' obj.pk %}{% else %}{% url 'scm:clientbillingrun_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-body text-muted">
+      {% if is_edit %}
+        Editing is available only while the run is <span class="fw-600">draft or calculated</span>. Once it is approved the figures are frozen as what the client will be asked to pay, and once it is invoiced the document to correct is the invoice in Accounts Receivable rather than this run.
+      {% else %}
+        After saving, press <span class="fw-600">Calculate</span> on the run. Every rate-card line is matched against what actually happened for this client between the dates, and each charge that results names the evidence it was priced from. Some bases — per sq ft, per CBM, per kg, per hour, per carton, % of value — are priced but <span class="fw-600">not yet measurable</span>: items carry no weight or dimensions and locations carry no area, so those lines arrive with a quantity of zero and say which measurement is missing. Type the quantity in rather than accepting a guessed conversion factor, because a factor nobody agreed is an invoice nobody can defend.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
