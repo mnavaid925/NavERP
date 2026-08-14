@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — Budgeting. STANDALONE at the sub-module root
+(templates/scm/finance/), the client_space_report / carbon_footprint precedent — it is not any one
+entity's list / detail / form page.
+
+FOLDER NOTE (do not "fix" this): backend package apps/scm/views/FinanceIntegration/, template folder
+templates/scm/finance/. The asymmetry IS the house rule — all seventeen shipped sub-module folders use
+short slugs. templates/scm/financeintegration/ would be the mistake.
+
+THERE IS NO SCM BUDGET TABLE AND THERE MUST NEVER BE ONE (L29, second source of truth). The budget is
+accounting.Budget / accounting.BudgetLine, and BudgetLine.org_unit -> core.OrgUnit IS the supply-chain
+department dimension. Adding an scm-side budget here would give the business two numbers claiming to be
+the same budget. What this page adds is the COMPARISON, computed live:
+
+  budgeted   accounting.BudgetLine.amount, grouped by org_unit
+  committed  scm.PurchaseRequisitionLine.line_total + scm.PurchaseOrderLine.line_total — ordered, not yet spent
+  incurred   scm.FreightInvoice.billed_amount + scm.LandedCostVoucher.actual_total — actually spent
+  remaining  what is left once both are taken off the budget
+
+Renders apps/scm/views/FinanceIntegration/Reports.py::finance_budget_variance. Everything this page may
+read, and nothing else — the view pins the same list in its own docstring:
+
+  rows            LIST of dicts: org_unit (a core.OrgUnit or None), org_unit_name (str — "Unassigned"
+                  when None, NEVER blank), budgeted, committed, incurred, remaining (all Decimal),
+                  variance_pct (Decimal or None), over_budget (bool)
+  totals          dict: budgeted, committed, incurred, remaining
+  budgets         Budget queryset for the ?budget= dropdown — a pk, so |stringformat:"d"
+  fiscal_periods  FiscalPeriod queryset for ?fiscal_period= — a pk, so |stringformat:"d"
+  selected_budget selected_period   the chosen Budget / FiscalPeriod, or None
+  row_cap truncated   int / bool
+
+THERE IS NO ?q ON THIS PAGE and no `q` context key. The only two filters are pk dropdowns, both
+compared with |stringformat:"d" and NEVER |slugify. Both go through as_db_int in the view, so
+?budget=abc, ?budget=² and a 21-digit value skip the filter instead of raising (L11).
+
+`org_unit` IS None ON THE UNASSIGNED ROW — that row is real and must be read, not hidden. It is the
+supply-chain spend that no budget line has been pointed at yet, which is usually the number somebody
+needs to see. `org_unit_name` is already "Unassigned" in that case, so the NAME never needs a
+|default; the OBJECT still gets an {% if %} guard everywhere it is dereferenced, because a None FK
+inside a filter argument raises where a bare lookup would not (L10).
+
+`variance_pct` is Decimal|None and None MUST NOT RENDER AS 0. None means there is no budget to measure
+against (a zero budget cannot have a percentage taken of it), which is a completely different statement
+from "exactly on budget". Every test is `is not None` — never truthiness, never |default, which would
+swallow a genuine 0.00 as well.
+
+`over_budget` is the view's own verdict and the badge follows it directly rather than re-deriving the
+comparison in the template — a template that recomputed `remaining < 0` could disagree with the view
+about a row, and then the page would contradict itself.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Budget Variance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Budget Variance</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">&rsaquo;</span>
+        <span>Finance &amp; Accounting Integration</span><span class="sep">&rsaquo;</span>
+        <span>Budgeting</span>
+      </div>
+      <p class="text-muted">
+        The accounting budget for each department beside what supply chain has
+        <span class="fw-600">committed</span> to spend and what it has already
+        <span class="fw-600">incurred</span>. Committed money is ordered but not yet spent &mdash; it is the
+        part a budget report built from invoices alone never sees, and the part that turns an overspend into
+        something you can still act on.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:finance_payables' %}" class="btn btn-outline"><i data-lucide="arrow-up-right"></i> Payables</a>
+      <a href="{% url 'accounting:budget_list' %}" class="btn btn-primary"><i data-lucide="book-open"></i> Budgets</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        Nothing. The budget itself belongs to accounting; supply chain neither owns a budget table nor posts a
+        journal entry. Everything below is recomputed on each request, so a row is never stale and never
+        needs re-running.
+      </p>
+      <div class="badge-group">
+        <span class="badge badge-info">Budget read from accounting</span>
+        <span class="badge badge-amber">Committed read from requisitions and purchase orders</span>
+        <span class="badge badge-slate">Incurred read from freight and landed cost</span>
+        <span class="badge badge-muted">No table of its own, no journal entry, no column written</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="target"></i></div>
+      <div class="stat-value">{{ totals.budgeted|floatformat:2 }}</div>
+      <div class="stat-label">Budgeted</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clipboard-list"></i></div>
+      <div class="stat-value">{{ totals.committed|floatformat:2 }}</div>
+      <div class="stat-label">Committed &mdash; ordered, not yet spent</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{{ totals.incurred|floatformat:2 }}</div>
+      <div class="stat-label">Incurred &mdash; actually spent</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="piggy-bank"></i></div>
+      <div class="stat-value">{{ totals.remaining|floatformat:2 }}</div>
+      <div class="stat-label">Remaining</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Filters</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="bv-budget">Budget</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="budget" id="bv-budget" class="form-select">
+            <option value="">Every budget</option>
+            {% for b in budgets %}
+              <option value="{{ b.pk }}" {% if request.GET.budget == b.pk|stringformat:"d" %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bv-period">Fiscal period</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="fiscal_period" id="bv-period" class="form-select">
+            <option value="">Every period</option>
+            {% for p in fiscal_periods %}
+              <option value="{{ p.pk }}" {% if request.GET.fiscal_period == p.pk|stringformat:"d" %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:finance_budget_variance' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      {% if selected_budget or selected_period %}
+        <div class="form-help">
+          Showing
+          {% if selected_budget %}<span class="fw-600">{{ selected_budget }}</span>{% else %}every budget{% endif %}
+          {% if selected_period %}for <span class="fw-600">{{ selected_period }}</span>{% else %}across every fiscal period{% endif %}.
+        </div>
+      {% else %}
+        <div class="form-help">
+          Showing every budget across every fiscal period. Committed and incurred spend is not split by period
+          the way the budget is, so narrowing to one period changes what is being compared &mdash; pick a budget
+          and a period together when you want a like-for-like figure.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Budget against commitment and spend</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ rows|length }} department{{ rows|length|pluralize }}</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} &mdash; narrow the filters to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Department</th>
+            <th class="text-right">Budgeted</th>
+            <th class="text-right">Committed</th>
+            <th class="text-right">Incurred</th>
+            <th class="text-right">Remaining</th>
+            <th class="text-right">Variance</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% comment %}
+                  org_unit_name is already "Unassigned" when the object is None, so it never needs a
+                  |default. The OBJECT is still guarded before every dereference (L10).
+                {% endcomment %}
+                <span class="fw-600">{{ row.org_unit_name }}</span>
+                {% if row.org_unit %}
+                  <div class="form-help">{{ row.org_unit.get_kind_display }}</div>
+                {% else %}
+                  <div class="form-help">Supply-chain spend that no budget line points at yet.</div>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.budgeted|floatformat:2 }}</td>
+              <td class="text-right">{{ row.committed|floatformat:2 }}</td>
+              <td class="text-right">{{ row.incurred|floatformat:2 }}</td>
+              <td class="text-right">{{ row.remaining|floatformat:2 }}</td>
+              <td class="text-right">
+                {% comment %}
+                  `is not None`, never truthiness: 0.00 means dead on budget, None means there is no
+                  budget to take a percentage of. Rendering None as 0% would report a department with no
+                  budget at all as perfectly on plan.
+                {% endcomment %}
+                {% if row.variance_pct is not None %}
+                  {{ row.variance_pct|floatformat:2 }}%
+                {% else %}
+                  <span class="text-muted">No budget set</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %} The view's verdict, followed directly — never re-derived here. {% endcomment %}
+                {% if row.over_budget %}
+                  <span class="badge badge-red"><i data-lucide="alert-triangle"></i> Over budget</span>
+                {% else %}
+                  <span class="badge badge-green">Within budget</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="target"></i>
+                  <h3>No budget selected</h3>
+                  <p>There is nothing to compare against. Supply chain does not hold its own budget &mdash; this page reads accounting&rsquo;s budget lines and groups them by the department on each line. Create a budget with lines that carry an org unit, and the departments will appear here beside what has been requisitioned, ordered and spent against them. If a budget already exists, check that its lines have a department set: lines with none land on the Unassigned row rather than a department of their own.</p>
+                  <a href="{% url 'accounting:budget_list' %}" class="btn btn-primary"><i data-lucide="book-open"></i> Budgets</a>
+                  <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Purchase orders</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td class="fw-600">Total over the departments listed</td>
+              <td class="text-right fw-600">{{ totals.budgeted|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.committed|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.incurred|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.remaining|floatformat:2 }}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      Committed money has been ordered but not yet invoiced, so a department can sit inside its budget on spend
+      alone and still be over once its open orders are counted &mdash; which is the whole reason the two columns
+      are kept apart rather than added together.
+      {% if truncated %}
+        The totals above the table cover the whole filtered set; the footer covers only the {{ row_cap }} rows printed.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
