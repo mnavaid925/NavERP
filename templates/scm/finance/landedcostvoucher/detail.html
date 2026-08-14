@@ -454,14 +454,14 @@ bare quote before JavaScript sees it, breaking the dialog open and removing the 
                   </div>
                 </td>
                 <td>{% if row.charge %}{{ row.charge.get_charge_type_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-                <td class="nowrap">
-                  {% if row.basis_used == 'value' %}By Value
-                  {% elif row.basis_used == 'quantity' %}By Quantity
-                  {% elif row.basis_used == 'weight' %}By Weight
-                  {% elif row.basis_used == 'volume' %}By Volume
-                  {% elif row.basis_used == 'equal' %}Equal
-                  {% else %}{{ row.basis_used }}{% endif %}
-                </td>
+                {% comment %}
+                basis_used is a real choices FIELD (choices=LandedCostVoucher.ALLOCATION_BASIS_CHOICES),
+                so Django resolves its label — a hand-written chain here would duplicate those five
+                labels and print the RAW value for a sixth basis added later. Unlike
+                charge.effective_basis above, which is a property with no display method and where the
+                hand chain is correct and has to stay.
+                {% endcomment %}
+                <td class="nowrap">{{ row.get_basis_used_display }}</td>
                 <td class="text-right mono">{{ row.quantity|floatformat:4 }}</td>
                 <td class="text-right mono">{{ row.basis_value|floatformat:4 }}</td>
                 <td class="text-right mono fw-600">{{ row.allocated_amount|floatformat:2 }}</td>
