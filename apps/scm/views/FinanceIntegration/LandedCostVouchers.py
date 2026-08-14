@@ -191,7 +191,17 @@ def landedcostvoucher_detail(request, pk):
         "can_add_charge": obj.is_editable,
         "can_allocate": obj.status in ("draft", "allocated", "accrued") and obj.bill_id is None,
         "can_accrue": obj.status == "allocated",
-        "can_draft_bill": obj.status in ("allocated", "accrued") and obj.bill_id is None,
+        # Mirrors the relaxed `draft_bill()` guard: a DRAFT voucher on which nothing capitalises can
+        # be billed without being allocated first, because `allocate()` refuses exactly that voucher
+        # and the pair would otherwise be a dead end for a purely-recoverable (import VAT) or
+        # purely-expensed voucher. It still needs something to bill to this payee — `billable` is
+        # empty when every charge names a different vendor, which `draft_bill()` also refuses.
+        # Computed off the already-fetched `charges` list, so the extra rung costs no query.
+        "can_draft_bill": obj.bill_id is None and (
+            obj.status in ("allocated", "accrued")
+            or (obj.status == "draft" and bool(billable)
+                and not any(charge.capitalises and charge.allocatable_amount > ZERO
+                            for charge in charges))),
         "can_cancel": obj.status != "cancelled" and obj.bill_id is None,
     })
 
