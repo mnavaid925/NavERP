@@ -565,3 +565,34 @@ from .ThirdPartyLogistics.ClientSlas import (  # noqa: F401
 from .ThirdPartyLogistics.Reports import (  # noqa: F401
     client_inventory_report, client_space_report,
 )
+
+# --- 4.18 Finance & Accounting Integration -----------------------------------------------------
+# FOUR verbs on the voucher, and the ladder is the whole sub-module: `allocate` spreads the charges
+# across the receipt's posted stock moves and rolls the weighted average through
+# `Item.apply_landed_cost()`; `accrue` stamps the period so an unbilled cost is not invisible at
+# close; `draft_bill` hands off to `accounting` as a DRAFT and posts NO JournalEntry itself (L29);
+# `cancel` is how a wrong voucher is retracted, reversing every allocation it made. All four are
+# @require_POST and @tenant_admin_required. Re-allocating is idempotent by construction — it backs
+# out its prior rows before rolling the new ones on.
+from .FinanceIntegration.LandedCostVouchers import (  # noqa: F401
+    landedcostvoucher_list, landedcostvoucher_create, landedcostvoucher_detail,
+    landedcostvoucher_edit, landedcostvoucher_delete,
+    landedcostvoucher_allocate, landedcostvoucher_accrue,
+    landedcostvoucher_draft_bill, landedcostvoucher_cancel,
+    landedcostcharge_create, landedcostcharge_edit, landedcostcharge_delete,
+)
+# Plain CRUD. The tariff is a dated master: `rate_for()` picks the row in force on a date, and the
+# charge line SNAPSHOTS the rate it found — editing a tariff never restates a cleared shipment.
+from .FinanceIntegration.DutyTariffs import (  # noqa: F401
+    dutytariff_list, dutytariff_create, dutytariff_detail, dutytariff_edit, dutytariff_delete,
+)
+# FOUR COMPUTED PAGES over tables that already exist — 4.18 declares no payables table, no
+# receivables table and no budget table. Payables unions 4.1's `GoodsReceiptNote.bill`, 4.6's
+# `FreightInvoice.bill` and 4.18's own `LandedCostVoucher.bill`; receivables unions 4.5's
+# `SalesOrder.invoice`, 4.17's `ClientBillingRun.invoice` and 4.10's
+# `ReturnAuthorization.credit_note`; budget variance reads `accounting.BudgetLine.org_unit` against
+# PR/PO commitments and freight + landed actuals. All four write NOTHING — no row, no journal
+# entry, no column — in scm or in accounting.
+from .FinanceIntegration.Reports import (  # noqa: F401
+    finance_payables, finance_receivables, finance_budget_variance, landed_cost_variance,
+)
