@@ -203,7 +203,10 @@ def clientratecard_detail(request, pk):
 
     lines = list(obj.lines.select_related(
         "applies_to_location", "applies_to_item_category", "gl_account"))
-    billing_runs = list(obj.billing_runs.select_related("client")
+    # `invoice` is joined, not just `client`: the panel prints a Drafted / Not yet drafted chip off
+    # `run.invoice`, a nullable FK, so without it every run that HAS been invoiced costs its own
+    # SELECT — and it is the fully-billed cards, the busiest ones, that pay all MAX_PANEL_ROWS of it.
+    billing_runs = list(obj.billing_runs.select_related("client", "invoice")
                         .order_by("-period_end", "-id")[:MAX_PANEL_ROWS])
     billing_run_count = obj.billing_runs.count()
 
