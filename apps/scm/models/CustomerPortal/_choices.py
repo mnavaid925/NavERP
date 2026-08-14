@@ -49,6 +49,7 @@ already shipped four times). Verified against ``theme.css`` before this file was
 """
 
 __all__ = [
+    "CUSTOMER_VISIBLE_INVOICE_KIND", "CUSTOMER_VISIBLE_INVOICE_STATUSES",
     "STOCK_DISPLAY_CHOICES", "THRESHOLD_STOCK_DISPLAYS",
     "STOCK_BAND_LABELS", "STOCK_BAND_CSS", "stock_band",
     "CATALOG_SCOPE_CHOICES",
@@ -81,6 +82,21 @@ __all__ = [
 #:
 #: ``max_length=20`` against a 17-char longest value (``availability_text``) — headroom, because a
 #: longer value added later is a column widen, not "a one-line choices change".
+#: Which ``accounting.Invoice`` rows a customer may ever be shown, in EITHER surface.
+#:
+#: ``draft`` is ours until we send it and ``void`` is a document we withdrew — publishing either
+#: shows a customer money we are not asking them for. ``credit_note`` is excluded for a sharper
+#: reason: a draft credit note is an internal decision to refund that nobody has committed to, and
+#: putting one in front of the customer is a promise made by accident.
+#:
+#: **This lives here, not in a view, because THREE places need the same answer** — the profile page
+#: that lists invoices, the share FORM that decides which invoices may be attached, and the download
+#: view that re-checks it for an anonymous bearer. It was defined in ``views/CustomerPortal/
+#: Portal.py`` alone, so the page obeyed it and the share path did not: every seeded invoice share
+#: pointed at a DRAFT CREDIT NOTE and the token served it. One vocabulary, three readers, no drift.
+CUSTOMER_VISIBLE_INVOICE_KIND = "invoice"
+CUSTOMER_VISIBLE_INVOICE_STATUSES = ("sent", "partial", "paid")
+
 STOCK_DISPLAY_CHOICES = [
     ("hidden", "Hidden — show nothing"),
     ("availability_text", "Availability text (in stock / low / out of stock)"),
