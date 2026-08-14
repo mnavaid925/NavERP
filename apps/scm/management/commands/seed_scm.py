@@ -4616,8 +4616,11 @@ class Command(BaseCommand):
         pricing, no invoices and no balance.
         """
         from apps.accounting.models import Invoice
+        from apps.core.models import Document
         from apps.crm.models import CustomerPortalAccess
-        from apps.scm.models import (Item, ItemCategory, PortalAccount, PortalActivity,
+        from apps.scm.models import (CUSTOMER_VISIBLE_INVOICE_KIND,
+                                     CUSTOMER_VISIBLE_INVOICE_STATUSES,
+                                     Item, ItemCategory, PortalAccount, PortalActivity,
                                      PortalDocumentShare, PortalOrderInquiry, ReturnAuthorization,
                                      SalesOrder, Shipment)
 
@@ -4780,7 +4783,16 @@ class Command(BaseCommand):
 
         # ---- document shares: live-with-expiry, live-forever, and revoked -----------------------
         shares = []
-        invoice = Invoice.objects.filter(tenant=tenant, party=rich_customer).order_by("id").first()
+        # CUSTOMER-VISIBLE invoices only. Filtering on party alone picked a DRAFT CREDIT NOTE in both
+        # demo tenants, and the seeder then published it to the portal and to an anonymous bearer
+        # token — the seeder walking into the same gap the form had. Now it asks the same question
+        # the form and the download view ask, from the same constants, so demo data cannot show a
+        # customer a document the product would refuse to show them.
+        invoice = (Invoice.objects
+                   .filter(tenant=tenant, party=rich_customer,
+                           kind=CUSTOMER_VISIBLE_INVOICE_KIND,
+                           status__in=CUSTOMER_VISIBLE_INVOICE_STATUSES)
+                   .order_by("id").first())
         if invoice is not None:
             shares.append(PortalDocumentShare.objects.create(
                 tenant=tenant, portal_account=rich, doc_type="invoice", title="Invoice — latest",
@@ -4795,11 +4807,48 @@ class Command(BaseCommand):
                 tenant=tenant, portal_account=rich, doc_type="pod",
                 title=f"Proof of delivery — {delivered.number}", shipment=delivered,
                 shared_by=admin))
-        if invoice is not None:
+        # A core.Document share — and this one is NOT optional garnish.
+        #
+        # Both other pointers are conditional on upstream data this seeder does not own, and in the
+        # shipped demo BOTH are absent: the only customer-visible invoices belong to the customer
+        # deliberately chosen as the EMPTY account, and no seeded shipment carries a POD. So the
+        # register rendered zero rows — the sub-module's headline feature, demonstrated by nothing.
+        #
+        # It also exercises the one path the other two CANNOT. An invoice, a contract and a CoA are
+        # RENDERED pages: `file_field` resolves to None and the download view returns its explanatory
+        # text/plain branch without ever streaming. `core.Document` is the only pointer with a real
+        # `FileField`, so this is the only share that reaches `FileResponse`, `record_download()` and
+        # the `download_document` activity row at all.
+        #
+        # `classification` is honoured here exactly as the form and the model honour it: a
+        # confidential attachment is never picked, because seeding one would create demo data the
+        # product itself refuses to serve.
+        handbook = (Document.objects
+                    .filter(tenant=tenant)
+                    .exclude(classification="confidential")
+                    .exclude(file="")
+                    .order_by("id").first())
+        if handbook is not None:
+            shares.append(PortalDocumentShare.objects.create(
+                tenant=tenant, portal_account=rich, doc_type="other",
+                title=f"{handbook.name}", document=handbook, shared_by=admin,
+                expires_at=now + datetime.timedelta(days=60)))
+
+        # The REVOKED example, so the revoked chip and the dead-link 404 are both demonstrable.
+        # Built on whichever pointer this tenant actually has, newest-first by preference, rather
+        # than hard-wired to the invoice — which is how the revoked demo row disappeared entirely
+        # once invoices were correctly filtered.
+        dead_target = None
+        if handbook is not None:
+            dead_target = {"doc_type": "other", "document": handbook,
+                           "title": f"{handbook.name} — superseded copy"}
+        elif invoice is not None:
+            dead_target = {"doc_type": "invoice", "invoice": invoice,
+                           "title": "Invoice — superseded copy"}
+        if dead_target is not None:
             dead = PortalDocumentShare.objects.create(
-                tenant=tenant, portal_account=rich, doc_type="invoice",
-                title="Invoice — superseded copy", invoice=invoice, shared_by=admin,
-                expires_at=now + datetime.timedelta(days=7))
+                tenant=tenant, portal_account=rich, shared_by=admin,
+                expires_at=now + datetime.timedelta(days=7), **dead_target)
             dead.revoke(admin)          # through the verb, so the conditional UPDATE is exercised
             shares.append(dead)
 
@@ -4816,7 +4865,11 @@ class Command(BaseCommand):
             ("raise_inquiry", {"object_label": wismo.number}),
             ("view_order", {"sales_order": first_order, "object_label": first_order.number}),
             ("login", {}),
-            ("update_profile", {}),
+            # NO ("update_profile", …) row. `portal_profile` is READ-ONLY by design and deliberately
+            # writes no activity, because there is nothing to update — the page says so itself. A
+            # seeded row for it is a fabricated action in the one table whose value is being
+            # believable, and the demo trail is exactly where somebody would go to learn what the
+            # log means. The action stays in the vocabulary for the day the page becomes editable.
         ]
         if shares:
             activity_targets.append(
