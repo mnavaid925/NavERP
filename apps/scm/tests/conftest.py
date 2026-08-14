@@ -3397,3 +3397,371 @@ def tpl_sla_b(db, tenant_b, tpl_client_b):
         tenant=tenant_b, client=tpl_client_b, metric="damage_rate_pct",
         target_value=Decimal("0.50"), unit="pct", direction="lower_is_better",
         measurement_window="monthly", is_active=True)
+
+
+# =================================================================================================
+# SCM 4.18 Finance & Accounting Integration — the ``finance_`` fixtures
+# =================================================================================================
+# NAMING: every fixture below carries the ``finance_`` prefix; the four test modules are
+# ``test_finance_{models,forms,views,security}.py``, every test function is ``test_finance_*`` and
+# every module-level helper ``_finance_*``. Nothing here shadows an existing name (the hygiene guard
+# in ``test_suite_hygiene.py`` parses this file and fails on any module-level name defined twice).
+#
+# TIME BASIS (L16): every date below is derived from ``timezone.localdate()`` — the SAME basis
+# ``DutyTariff.is_current``, ``DutyTariff.rate_for``, ``dutytariff_list``'s ``today`` statistic and
+# ``LandedCostVoucher.draft_bill()``'s ``bill_date`` all read. Never ``datetime.date.today()``.
+#
+# THE ONE THING THAT MAKES 4.18 DIFFERENT FROM ITS SIBLINGS: the allocation base is the STOCK
+# LEDGER, not the receipt's own lines. ``LandedCostVoucher.receipt_moves()`` filters
+# ``StockMove(tenant=…, reference=<GRN number>, move_type="receipt", quantity > 0)``, because
+# ``GoodsReceiptLine.po_line`` carries free text and no ``item`` FK (documented L28 stand-in). So a
+# GRN fixture that a voucher can actually allocate over has TWO halves — ``status="received"`` AND
+# real posted moves stamped with its number — and a fixture that omits the second half is exactly
+# the "This receipt has not been posted to the stock ledger" refusal, which ``finance_receipt_
+# unposted_a`` exists to reach on purpose.
+#
+# WHAT IS DELIBERATELY *NOT* PRE-SET: no voucher below is accrued, billed or cancelled, and no
+# ``status`` is ever written by hand — the column is ``editable=False`` and the verb ladder
+# (``allocate() → accrue() → draft_bill()``, plus ``cancel()``) is its only writer, so a fixture
+# that pre-set it would be asserting the fixture rather than the ladder. ``finance_allocated_
+# voucher_a`` is the single exception and it gets there by CALLING ``allocate()``.
+
+
+@pytest.fixture
+def finance_tax_code_a(db, tenant_a):
+    """tenant_a's recoverable import-VAT rate — ``accounting.TaxCode``, NEVER a second scm table.
+
+    4.18 re-declares no sales-tax rate: ``DutyTariff`` exists only because ``TaxCode`` structurally
+    cannot be a CUSTOMS master (no ``hs_code``, no origin pair, no customs member in its
+    ``TAX_TYPE_CHOICES``). Both ``DutyTariff.tax_code`` and ``LandedCostCharge.tax_code`` FK this row.
+    """
+    from apps.accounting.models import TaxCode
+    return TaxCode.objects.create(tenant=tenant_a, name="Import VAT", tax_type="vat",
+                                  rate_pct=Decimal("20.000"), is_active=True)
+
+
+@pytest.fixture
+def finance_wide_tax_code_a(db, tenant_a):
+    """A tenant_a rate WIDER than ``accounting.BillLine.tax_rate_pct`` can hold.
+
+    ``TaxCode.rate_pct`` is ``DECIMAL(6, 3)`` and ``BillLine.tax_rate_pct`` is ``DECIMAL(5, 2)``, so
+    a straight copy overflows to ``DataError`` inside ``draft_bill()``. This row (999.999) is the
+    input that proves the quantize-AND-clamp to ``MAX_BILL_TAX_RATE_PCT`` (999.99) actually fires.
+    """
+    from apps.accounting.models import TaxCode
+    return TaxCode.objects.create(tenant=tenant_a, name="Wide Rate", tax_type="vat",
+                                  rate_pct=Decimal("999.999"), is_active=True)
+
+
+@pytest.fixture
+def finance_tax_code_b(db, tenant_b):
+    """tenant_b's tax code — the foreign pk every ``_reject_foreign`` assertion posts."""
+    from apps.accounting.models import TaxCode
+    return TaxCode.objects.create(tenant=tenant_b, name="Globex VAT", tax_type="vat",
+                                  rate_pct=Decimal("10.000"), is_active=True)
+
+
+@pytest.fixture
+def finance_duty_tariff_a(db, tenant_a):
+    """An IN-FORCE, ORIGIN-SPECIFIC duty rate: 8471.30 from Germany, 2.500 %, started 30 days ago.
+
+    Open-ended (``effective_to=None`` is +infinity), so ``is_current`` is True today and stays true.
+    Paired with ``finance_duty_tariff_any_a`` below, which is the any-origin catch-all for the SAME
+    classification — ``rate_for()`` must prefer THIS one, and that preference is the whole reason
+    both may legally coexist on one day.
+    """
+    from django.utils import timezone
+    from apps.scm.models import DutyTariff
+    return DutyTariff.objects.create(
+        tenant=tenant_a, hs_code="8471.30", country_of_origin="Germany",
+        description="Automatic data-processing machines", duty_rate_pct=Decimal("2.500"),
+        effective_from=timezone.localdate() - datetime.timedelta(days=30), is_active=True)
+
+
+@pytest.fixture
+def finance_duty_tariff_any_a(db, tenant_a):
+    """The ANY-ORIGIN fallback for 8471.30 — blank ``country_of_origin`` MEANS "any", not "unknown".
+
+    Started earlier than its origin-specific sibling and priced higher, so a test can tell which of
+    the two ``rate_for()`` returned from the rate alone.
+    """
+    from django.utils import timezone
+    from apps.scm.models import DutyTariff
+    return DutyTariff.objects.create(
+        tenant=tenant_a, hs_code="8471.30", country_of_origin="",
+        description="Any-origin fallback", duty_rate_pct=Decimal("5.000"),
+        effective_from=timezone.localdate() - datetime.timedelta(days=60), is_active=True)
+
+
+@pytest.fixture
+def finance_duty_tariff_b(db, tenant_b):
+    """tenant_b's tariff — the cross-tenant target for every DutyTariff route."""
+    from django.utils import timezone
+    from apps.scm.models import DutyTariff
+    return DutyTariff.objects.create(
+        tenant=tenant_b, hs_code="8528.52", country_of_origin="Canada",
+        duty_rate_pct=Decimal("1.250"),
+        effective_from=timezone.localdate() - datetime.timedelta(days=10), is_active=True)
+
+
+@pytest.fixture
+def finance_weighted_item_a(db, tenant_a, uom_each_a):
+    """A tenant_a item that HAS been weighed and measured.
+
+    ``item_a`` and the two 4.8 components carry no ``weight_kg``/``volume_cbm``, which is the normal
+    workspace state and exactly why ``_BASIS_FALLBACKS`` exists — a weight-basis charge over those
+    moves falls back to quantity. Post a move for THIS item
+    (``seed_stock(tenant_a, finance_weighted_item_a, location_a, "5", "20.0000",
+    reference=grn.number)``) to reach the branch where weight is genuinely used.
+    """
+    from apps.scm.models import Item
+    return Item.objects.create(
+        tenant=tenant_a, sku="HEAVY-1", name="Heavy Widget", uom=uom_each_a,
+        standard_cost=Decimal("20.0000"), weight_kg=Decimal("12.5000"),
+        volume_cbm=Decimal("0.7500"))
+
+
+@pytest.fixture
+def finance_receipt_a(db, tenant_a, purchase_order_a, item_a, location_a):
+    """A RECEIVED GRN with ONE posted receipt move — the allocation base a voucher hangs off.
+
+    Both halves are load-bearing. ``status="received"`` because ``LandedCostVoucherForm`` narrows its
+    ``goods_receipt`` dropdown to received receipts (a draft one has posted nothing, so a voucher
+    against it would be a dead end). And ONE ``StockMove`` stamped ``reference=<this GRN's number>``
+    at the PO's agreed 15.0000, because that move IS what ``receipt_moves()`` finds — 10 units,
+    150.0000 of receipt value.
+
+    Posted through ``seed_stock`` (i.e. through the module's own ``_post_stock_move`` service) rather
+    than ``StockMove.objects.create`` so ``Item.average_cost`` rolls forward exactly as production
+    would — every ``apply_landed_cost`` assertion measures a real average, not a hand-written one.
+    """
+    from django.utils import timezone
+    from apps.scm.models import GoodsReceiptLine, GoodsReceiptNote
+    from apps.scm.tests._helpers import seed_stock
+    po_line = purchase_order_a.lines.first()
+    grn = GoodsReceiptNote.objects.create(
+        tenant=tenant_a, purchase_order=purchase_order_a, location=location_a,
+        receipt_date=timezone.localdate(), status="received")
+    GoodsReceiptLine.objects.create(goods_receipt=grn, po_line=po_line,
+                                    quantity_received=Decimal("10"))
+    seed_stock(tenant_a, item_a, location_a, "10", "15.0000", reference=grn.number)
+    return grn
+
+
+@pytest.fixture
+def finance_receipt_multi_a(db, tenant_a, purchase_order_a, location_a, item_a,
+                            component_bolt_a, component_plate_a):
+    """A RECEIVED GRN with THREE posted moves, one per item — the rounding-remainder shape.
+
+    Three moves of 1 unit each, so an ``equal``-basis 100.00 charge splits 33.33 / 33.33 / 33.34 and
+    the LAST row is provably the one that absorbs the remainder (``allocate()`` is written that way
+    so the rows sum to the charge EXACTLY; a naive split would allocate 99.99 and quietly disagree
+    with the vendor bill). Three DISTINCT items, so ``_allocation_groups`` also yields three groups.
+
+    None of the three items carries a ``weight_kg`` or ``volume_cbm`` — deliberately, so a
+    weight/volume-basis charge over this receipt exercises the pinned fallback chain to ``quantity``.
+    """
+    from django.utils import timezone
+    from apps.scm.models import GoodsReceiptLine, GoodsReceiptNote
+    from apps.scm.tests._helpers import seed_stock
+    po_line = purchase_order_a.lines.first()
+    grn = GoodsReceiptNote.objects.create(
+        tenant=tenant_a, purchase_order=purchase_order_a, location=location_a,
+        receipt_date=timezone.localdate(), status="received")
+    GoodsReceiptLine.objects.create(goods_receipt=grn, po_line=po_line,
+                                    quantity_received=Decimal("3"))
+    for item in (item_a, component_bolt_a, component_plate_a):
+        seed_stock(tenant_a, item, location_a, "1", "10.0000", reference=grn.number)
+    return grn
+
+
+@pytest.fixture
+def finance_receipt_unposted_a(db, tenant_a, purchase_order_a, location_a):
+    """A RECEIVED GRN that posted NOTHING to the stock ledger — the refusal case, on purpose.
+
+    A voucher on this receipt is creatable (the form offers received receipts) and then REFUSES to
+    allocate with "This receipt has not been posted to the stock ledger — receive it first, or its
+    lines' SKUs matched no item." That sentence names both real causes and is the one an absent-
+    prerequisite test asserts instead of letting the verb fall through (L35).
+    """
+    from django.utils import timezone
+    from apps.scm.models import GoodsReceiptLine, GoodsReceiptNote
+    po_line = purchase_order_a.lines.first()
+    grn = GoodsReceiptNote.objects.create(
+        tenant=tenant_a, purchase_order=purchase_order_a, location=location_a,
+        receipt_date=timezone.localdate(), status="received")
+    GoodsReceiptLine.objects.create(goods_receipt=grn, po_line=po_line,
+                                    quantity_received=Decimal("10"))
+    return grn
+
+
+@pytest.fixture
+def finance_receipt_b(db, tenant_b, purchase_order_b, item_b, location_b):
+    """tenant_b's received-and-posted GRN — what a crafted cross-tenant voucher POST would name."""
+    from django.utils import timezone
+    from apps.scm.models import GoodsReceiptLine, GoodsReceiptNote
+    from apps.scm.tests._helpers import seed_stock
+    po_line = purchase_order_b.lines.first()
+    grn = GoodsReceiptNote.objects.create(
+        tenant=tenant_b, purchase_order=purchase_order_b, location=location_b,
+        receipt_date=timezone.localdate(), status="received")
+    GoodsReceiptLine.objects.create(goods_receipt=grn, po_line=po_line,
+                                    quantity_received=Decimal("5"))
+    seed_stock(tenant_b, item_b, location_b, "5", "20.0000", reference=grn.number)
+    return grn
+
+
+@pytest.fixture
+def finance_voucher_a(db, tenant_a, finance_receipt_a, supplier_a, shipment_a, usd):
+    """A DRAFT landed cost voucher on ``finance_receipt_a``, payable to ``supplier_a``. NO charges.
+
+    ``draft`` + no bill means ``is_editable`` is True, so this is the fixture the edit / delete /
+    add-charge routes act on. ``allocation_basis="value"`` is the model default, restated so a test
+    reading the basis is reading a decision rather than a default nobody chose.
+
+    ``shipment`` is set because the landed-cost variance report's ``?group=shipment`` needs a voucher
+    that HAS one — a voucher without one groups under the literal label "No shipment".
+    """
+    from django.utils import timezone
+    from apps.scm.models import LandedCostVoucher
+    return LandedCostVoucher.objects.create(
+        tenant=tenant_a, goods_receipt=finance_receipt_a, party=supplier_a,
+        shipment=shipment_a, currency=usd, cost_date=timezone.localdate(),
+        allocation_basis="value", notes="Ocean freight and customs on the January container.")
+
+
+@pytest.fixture
+def finance_charge_a(db, finance_voucher_a, gl_expense):
+    """ONE capitalising FREIGHT charge on ``finance_voucher_a``: estimated 100.00, no actual yet.
+
+    ``allocatable_amount`` is therefore the ESTIMATE (100.00) — allocating an estimate is how a
+    receipt gets a usable landed cost before the freight invoice arrives, and re-allocating once an
+    actual lands replaces it. ``capitalises`` is True (capitalise_to_inventory and not recoverable),
+    which is what makes the voucher allocatable at all.
+
+    ``recalc_totals()`` is called because it is the ONE writer of the voucher's five money columns;
+    a fixture that created the charge without it would leave ``estimated_total`` at 0.00.
+    """
+    from apps.scm.models import LandedCostCharge
+    charge = LandedCostCharge.objects.create(
+        voucher=finance_voucher_a, charge_type="freight", description="Ocean freight",
+        estimated_amount=Decimal("100.00"), actual_amount=Decimal("0"),
+        gl_account=gl_expense, capitalise_to_inventory=True, is_recoverable=False)
+    finance_voucher_a.recalc_totals()
+    return charge
+
+
+@pytest.fixture
+def finance_allocated_voucher_a(db, finance_voucher_a, finance_charge_a):
+    """``finance_voucher_a`` put through the REAL ``allocate()`` verb — status ``allocated``.
+
+    Reached by CALLING the method, never by writing ``status`` (the column is ``editable=False`` and
+    ``allocate()`` is its only legitimate writer). After this: one ``LandedCostAllocation`` row over
+    the receipt's single 10-unit move, ``allocated_total`` 100.00, ``unit_cost_uplift`` 10.0000, and
+    ``item_a.average_cost`` rolled forward by ``apply_landed_cost``. This is the state ``accrue()``
+    and ``cancel()`` act from, and the state ``draft_bill()`` requires for a capitalising voucher.
+    """
+    finance_voucher_a.allocate()
+    finance_voucher_a.refresh_from_db()
+    return finance_voucher_a
+
+
+@pytest.fixture
+def finance_voucher_multi_a(db, tenant_a, finance_receipt_multi_a, supplier_a, usd, gl_expense):
+    """A DRAFT voucher over the THREE-move receipt, carrying one EQUAL-basis 100.00 charge.
+
+    Not yet allocated — the split is the assertion, so the test drives ``allocate()`` itself. The
+    charge overrides the voucher's basis (``allocation_basis="equal"`` on the CHARGE, ``"value"`` on
+    the voucher) so ``effective_basis`` is exercised in the direction that actually differs.
+    """
+    from django.utils import timezone
+    from apps.scm.models import LandedCostCharge, LandedCostVoucher
+    voucher = LandedCostVoucher.objects.create(
+        tenant=tenant_a, goods_receipt=finance_receipt_multi_a, party=supplier_a,
+        currency=usd, cost_date=timezone.localdate(), allocation_basis="value")
+    LandedCostCharge.objects.create(
+        voucher=voucher, charge_type="brokerage", description="Customs brokerage",
+        estimated_amount=Decimal("0"), actual_amount=Decimal("100.00"),
+        allocation_basis="equal", gl_account=gl_expense)
+    voucher.recalc_totals()
+    return voucher
+
+
+@pytest.fixture
+def finance_recoverable_voucher_a(db, tenant_a, finance_receipt_a, supplier_a, usd,
+                                  finance_tax_code_a, gl_expense):
+    """A DRAFT voucher whose ONLY charge is RECOVERABLE import VAT — nothing capitalises.
+
+    The deliberate dead-end-that-is-not: ``allocate()`` refuses it ("No charge on this voucher
+    capitalises into inventory"), so ``draft_bill()`` relaxes its allocation precondition for exactly
+    this shape and bills it straight from ``draft``. A voucher that could neither be allocated nor
+    billed would be trapped forever, and the vendor still has to be paid.
+    """
+    from django.utils import timezone
+    from apps.scm.models import LandedCostCharge, LandedCostVoucher
+    voucher = LandedCostVoucher.objects.create(
+        tenant=tenant_a, goods_receipt=finance_receipt_a, party=supplier_a,
+        currency=usd, cost_date=timezone.localdate())
+    LandedCostCharge.objects.create(
+        voucher=voucher, charge_type="duty", description="Recoverable import VAT",
+        estimated_amount=Decimal("50.00"), actual_amount=Decimal("0"),
+        tax_code=finance_tax_code_a, gl_account=gl_expense, is_recoverable=True)
+    voucher.recalc_totals()
+    return voucher
+
+
+@pytest.fixture
+def finance_voucher_b(db, tenant_b, finance_receipt_b, supplier_b, usd):
+    """tenant_b's DRAFT voucher — the cross-tenant target for every voucher route and all four verbs."""
+    from django.utils import timezone
+    from apps.scm.models import LandedCostVoucher
+    return LandedCostVoucher.objects.create(
+        tenant=tenant_b, goods_receipt=finance_receipt_b, party=supplier_b,
+        currency=usd, cost_date=timezone.localdate())
+
+
+@pytest.fixture
+def finance_charge_b(db, finance_voucher_b, gl_expense_b):
+    """tenant_b's cost charge — the cross-tenant target for the charge edit/delete routes.
+
+    ``LandedCostCharge`` carries NO tenant column of its own (the ``BillLine`` /
+    ``GoodsReceiptLine`` / ``ClientBillingRunLine`` convention), so every view resolves it through
+    ``voucher__tenant=request.tenant``. A bare pk lookup there would be a silent cross-tenant write
+    that nothing on the response would look wrong about, which is why this fixture exists.
+    """
+    from apps.scm.models import LandedCostCharge
+    charge = LandedCostCharge.objects.create(
+        voucher=finance_voucher_b, charge_type="handling", description="Globex handling",
+        estimated_amount=Decimal("40.00"), gl_account=gl_expense_b)
+    finance_voucher_b.recalc_totals()
+    return charge
+
+
+@pytest.fixture
+def finance_fiscal_period_a(db, tenant_a):
+    """An OPEN tenant_a fiscal period — the ``?fiscal_period=`` selector on the budget report."""
+    from django.utils import timezone
+    from apps.accounting.models import FiscalPeriod
+    today = timezone.localdate()
+    return FiscalPeriod.objects.create(
+        tenant=tenant_a, name="Current Period", period_type="month",
+        start_date=datetime.date(today.year, today.month, 1),
+        end_date=today + datetime.timedelta(days=30), status="open")
+
+
+@pytest.fixture
+def finance_budget_a(db, tenant_a, finance_fiscal_period_a, gl_expense, org_unit_a):
+    """An APPROVED budget with ONE line carrying an ``org_unit`` — the variance report's named row.
+
+    ``accounting.BudgetLine.org_unit`` IS the supply-chain department dimension; 4.18 declares no
+    budget table of its own and this report only reads. A line WITHOUT an org unit falls into the
+    ``Unassigned`` row (which always renders a name, never a blank), so a fixture with one is what
+    makes a named row assertable at all.
+    """
+    from apps.accounting.models import Budget, BudgetLine
+    budget = Budget.objects.create(
+        tenant=tenant_a, name="FY Supply Chain", fiscal_period=finance_fiscal_period_a,
+        version="original", status="approved")
+    BudgetLine.objects.create(tenant=tenant_a, budget=budget, gl_account=gl_expense,
+                              org_unit=org_unit_a, amount=Decimal("10000.00"))
+    return budget
