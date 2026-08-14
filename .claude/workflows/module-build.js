@@ -1,9 +1,7 @@
 export const meta = {
   name: 'module-build',
   description: 'Build one NavERP sub-module with a frozen contract, per-entity backend and template agents running concurrently, then a single-writer integrate + smoke gate',
-  whenToUse:
-    'Phase 3 of the CLAUDE.md Module Creation Sequence — after the todo agent has written the build plan. ' +
-    'Replaces building the sub-module inline or with an ad-hoc 2-agent split.',
+  whenToUse: 'Phase 3 of the CLAUDE.md Module Creation Sequence — after the todo agent has written the build plan. Replaces building the sub-module inline or with an ad-hoc 2-agent split.',
   phases: [
     { title: 'Spec', detail: 'read-only: freeze the contract — every model field, url name and view context key' },
     { title: 'Scaffold', detail: 'brand-new app only: package skeleton + _base/_common (skipped when the app exists)' },
