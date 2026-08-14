@@ -138,8 +138,12 @@ class LogisticsClientForm(TenantUniqueMixin, TenantModelForm):
             parents = _tenant_qs(LogisticsClient, tenant)
             if instance.pk is not None:
                 parents = parents.exclude(pk=instance.pk)
+            # `.select_related("party")` is chained onto the RESULT, not onto `parents`, because
+            # `_keep_current` rebuilds off `model._default_manager` and would drop a join applied
+            # earlier. `LogisticsClient.__str__` is f"{code} · {party}", so without it rendering this
+            # <select> costs one query per option on both the create and the edit page.
             self.fields["parent_client"].queryset = _keep_current(
-                parents, getattr(instance, "parent_client_id", None))
+                parents, getattr(instance, "parent_client_id", None)).select_related("party")
 
         for name, model in (("payment_terms", PaymentTerm),
                             ("default_revenue_account", GLAccount),
