@@ -103,6 +103,14 @@ from .ThirdPartyLogistics.ClientBillingRuns import urlpatterns as _tpl_billingru
 from .ThirdPartyLogistics.ClientSlas import urlpatterns as _tpl_slas
 from .ThirdPartyLogistics.Reports import urlpatterns as _tpl_reports
 
+# 4.18 Finance & Accounting Integration. Alias `_fin_`, verified free against all seventeen shipped
+# aliases (`_procurement_ _srm_ _inv_ _wms_ _oms_ _tms_ _dp_ _mf_ _qm_ _rma_ _sca_ _cc_ _am_ _lm_
+# _ccm_ _cp_ _tpl_`). Rebinding a live alias would silently drop another sub-module's routes with no
+# import error at all — the name would simply resolve to the wrong list.
+from .FinanceIntegration.LandedCostVouchers import urlpatterns as _fin_vouchers
+from .FinanceIntegration.DutyTariffs import urlpatterns as _fin_tariffs
+from .FinanceIntegration.Reports import urlpatterns as _fin_reports
+
 
 app_name = "scm"
 
@@ -410,4 +418,42 @@ urlpatterns = [
     *_tpl_billingruns,                   # ThirdPartyLogistics/ClientBillingRuns (+ 4 verbs + lines)
     *_tpl_slas,                          # ThirdPartyLogistics/ClientSlas (+ recompute, recompute-all)
     *_tpl_reports,                       # ThirdPartyLogistics/Reports (segregation + rental space)
+
+    # --- 4.18 Finance & Accounting Integration ---------------------------------------------------
+    # SEVEN first segments, every one free — checked against this WHOLE concatenated list rather
+    # than merely against the 4.18 block: `landed-cost-vouchers`, `landed-cost-charges`,
+    # `landed-cost-variance`, `duty-tariffs`, `finance-payables`, `finance-receivables` and
+    # `finance-budget-variance`. NOTHING anywhere in `apps/scm/urls/` previously began with
+    # `landed`, `duty` or `finance`.
+    #
+    # Django matches WHOLE path components and never splits one at a hyphen, so the three
+    # `landed-cost-*` segments are three UNRELATED components, not a shared `landed-cost/` parent
+    # with three children; neither can shadow another. **None of them may ever be "tidied" into a
+    # `landed-cost/<something>/` parent** — that single edit is what would turn three independent
+    # segments into one greedy component whose ordering then depends on concatenation order across
+    # entity modules, and it would break every `{% url %}` already written against them.
+    #
+    # Near neighbours that are NOT collisions, checked rather than assumed:
+    #   freight-invoices/ — 4.6's. A landed-cost charge FKs a FreightInvoice; it takes no route
+    #                     under that prefix, and the freight audit page stays 4.6's.
+    #   goods-receipts/ — 4.1's. The voucher POINTS at a GRN and adds no route beneath it.
+    #   trade-documents/ / trade-licenses/ — 4.12's customs filings. `duty-tariffs/` is the RATE
+    #                     master, a different whole component and a different thing.
+    #   client-billing-runs/ — 4.17's. `finance-receivables/` READS its `invoice` pointer and takes
+    #                     no route under it.
+    #   items/ — 4.3's master. 4.18 adds TWO COLUMNS to it (weight_kg, volume_cbm) and takes no
+    #                     route under that prefix.
+    #
+    # 4.18 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` and
+    # 4.16's `portal-documents/<str:token>/` remain the app's only two. Within each module below,
+    # literal routes (`add/`) precede every `<int:pk>/` one. Every verb sits on its own route and is
+    # POST-only at the view, so a GET to one is a 405 rather than a silent state change.
+    #
+    # VIEW-NAME check (the `scm:` namespace is flat): `finance_payables`, `finance_receivables`,
+    # `finance_budget_variance` and `landed_cost_variance` collide with nothing — the shipped report
+    # names are `valuation_report`, `reorder_alerts`, `cold_storage_report`, `labor_board`,
+    # `sparepart_list`, `logistics_kpis`, `client_inventory_report` and `client_space_report`.
+    *_fin_vouchers,                      # FinanceIntegration/LandedCostVouchers (+ 4 verbs + charges)
+    *_fin_tariffs,                       # FinanceIntegration/DutyTariffs (the HS x origin rate master)
+    *_fin_reports,                       # FinanceIntegration/Reports (AP + AR + budget + LC variance)
 ]
