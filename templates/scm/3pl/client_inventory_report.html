@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — Client Inventory Segregation. STANDALONE at the sub-module root
+(templates/scm/3pl/), because it is not any one entity's list / detail / form page — the
+cold_storage_report / labor_board / sparepart_list precedent.
+
+Renders apps/scm/views/ThirdPartyLogistics/Reports.py::client_inventory_report. Everything this page
+may read, and nothing else — the view pins the same list in its own docstring:
+
+  rows                    LIST of dicts: client (a LogisticsClient, .party joined), sku_count (int),
+                          on_hand_quantity (Decimal), on_hand_value (Decimal),
+                          dedicated_locations (int)
+  totals                  dict with the SAME four keys, summed over the listed rows
+  clients categories locations       the three dropdown querysets
+  selected_client         a LogisticsClient or None
+  item_rows               LIST of dicts: item (a real Item, .category/.uom joined),
+                          quantity (Decimal), value (Decimal). EMPTY LIST when no client is
+                          selected — never absent.
+  item_rows_truncated     bool
+  unassigned_sku_count    int — the segregation GAP
+  truncated ledger_truncated         bools
+  row_cap ledger_cap                 ints
+  location_note reads_only_note      standing prose, printed VERBATIM
+
+ROW SHAPE. `rows` entries are DICTS whose `client` key holds a real model instance, so `row.client.code`
+is correct and `row.code` would render as a silent blank (L41). `item_rows` entries are the same shape
+with `item`. The three dropdown context names (clients / categories / locations) are querysets of real
+model instances.
+
+TWO THINGS THE VIEW DOES NOT PASS, resolved by reading it:
+  * there is no resolved `category` or `location` value in the context — both pks are parsed straight
+    into the query — so those two <select>s bind to request.GET.category / request.GET.location and
+    compare with |stringformat:"d" (NEVER |slugify).
+  * `selected_client` IS passed, so the client <select> could bind to it; it binds to
+    request.GET.client|stringformat-compared anyway, so a ?client= that matched nothing (another
+    workspace's pk) leaves the control blank rather than silently showing the first row selected.
+
+THE LOCATION FILTER CHANGES WHAT A COLUMN MEANS, not merely which rows are listed — it narrows the
+quantity and value figures but NOT the assigned-SKU count, because a SKU assignment is a property of
+the item master rather than of where the goods sit. `location_note` says exactly that and MUST be
+rendered; dropping it would leave two columns on one row answering different questions with nothing
+to say so.
+
+unassigned_sku_count IS THE MOST USEFUL NUMBER ON THE PAGE and is deliberately never hidden: an item
+with no owner_client is stock nobody has claimed. Zero is the healthy answer.
+
+THIS PAGE WRITES NOTHING. There is no POST target on it, no form except the GET filter bar and no
+verb button anywhere — no stock movement, no journal entry, no item column. Ownership is set on the
+item master (4.3), which is where the empty state below links to.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Client Inventory Segregation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Client Inventory Segregation</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:logisticsclient_list' %}">Third-Party Logistics</a><span class="sep">›</span>
+        <span>Client Inventory Segregation</span>
+      </div>
+      <p class="text-muted">
+        Whose stock is whose, and what it is worth — <span class="fw-600">derived</span>, never stored.
+        Ownership comes from the item master and the quantities are summed live from the append-only stock
+        ledger, so there is no second client-stock figure on this page to drift from the first.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Clients</a>
+      <a href="{% url 'scm:client_space_report' %}" class="btn btn-outline"><i data-lucide="warehouse"></i> Warehouse Rental</a>
+      <a href="{% url 'scm:item_list' %}" class="btn btn-primary"><i data-lucide="package"></i> Item Master</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The design decision in visible copy rather than a code comment. A reader who assumes this page keeps
+    its own client-stock figure will eventually try to reconcile it with the ledger by hand.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">{{ reads_only_note }}</p>
+      <div class="badge-group">
+        <span class="badge badge-info">Ownership read from the item master</span>
+        <span class="badge badge-slate">Quantities summed live from the stock ledger</span>
+        <span class="badge badge-muted">No stock movement, no journal entry, no column written</span>
+      </div>
+      <div class="form-help">
+        There is deliberately <span class="fw-600">no owner on a stock movement</span>. An owner recorded on an
+        append-only ledger would be a second source of truth for the same fact, and the two would disagree the
+        first time an item changed hands. Every figure here reads the item's owner and nothing else — which is
+        also why re-assigning an item re-attributes its whole history in one edit.
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="building-2"></i></div>
+      <div class="stat-value">{{ rows|length }}</div>
+      <div class="stat-label">Client{{ rows|length|pluralize }} listed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ totals.sku_count }}</div>
+      <div class="stat-label">SKUs assigned an owner</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="coins"></i></div>
+      <div class="stat-value">{{ totals.on_hand_value|floatformat:2 }}</div>
+      <div class="stat-label">Value of client-owned stock</div>
+    </div>
+    {% comment %}
+      THE SEGREGATION GAP, and it gets a tile of its own because it is the one number on this page that
+      asks somebody to do something. Amber when there is anything to chase, slate when there is not —
+      never green, because "no unassigned items" is the ordinary state rather than an achievement.
+    {% endcomment %}
+    <div class="stat-card">
+      <div class="stat-icon {% if unassigned_sku_count %}orange{% else %}slate{% endif %}"><i data-lucide="help-circle"></i></div>
+      <div class="stat-value">{{ unassigned_sku_count }}</div>
+      <div class="stat-label">Item{{ unassigned_sku_count|pluralize }} with no owner</div>
+      {% if unassigned_sku_count %}
+        <div><span class="badge badge-amber">Stock nobody has claimed — <a href="{% url 'scm:item_list' %}">assign an owner</a></span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Filters</h2>
+    </div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="ci-client">Client</label>
+          {% comment %} pk dropdown — |stringformat:"d", NEVER |slugify. {% endcomment %}
+          <select name="client" id="ci-client" class="form-select">
+            <option value="">Every client</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if request.GET.client == c.pk|stringformat:"d" %}selected{% endif %}>
+                {{ c.code }} — {{ c.party.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ci-category">Item category</label>
+          <select name="category" id="ci-category" class="form-select">
+            <option value="">Every category</option>
+            {% for cat in categories %}
+              <option value="{{ cat.pk }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ci-location">Location</label>
+          <select name="location" id="ci-location" class="form-select">
+            <option value="">Everywhere</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>
+                {{ loc.code }} — {{ loc.name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:client_inventory_report' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      {% comment %}
+        PRINTED VERBATIM AND NOT OPTIONAL. This is the one filter on the page that changes what a column
+        MEANS rather than which rows are listed, and the two columns would otherwise sit side by side
+        answering different questions with nothing to say so.
+      {% endcomment %}
+      <div class="form-help">{{ location_note }}</div>
+      <div class="form-help">
+        Picking a single client also opens the per-SKU breakdown below. The category filter narrows both the
+        assigned-SKU counts and the ledger figures, because a category is a property of the item.
+      </div>
+    </div>
+  </div>
+
+  {% comment %} ===================== 1. the per-client position ===================== {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Stock by client</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ rows|length }} client{{ rows|length|pluralize }}</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} — narrow the filters to see the rest</span>
+        {% endif %}
+        {% if ledger_truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Ledger capped at {{ ledger_cap }} positions — quantities below are a partial sum</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body form-help">
+      The SKU count is item masters <span class="fw-600">assigned</span> to the client, not items currently
+      holding stock: a client with forty SKUs and an empty warehouse still has forty SKUs. A position whose
+      movements net to zero or below is dropped rather than printed as a 0 row — stock that has fully shipped
+      out is history, not a holding.
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Status</th>
+            <th class="text-right">SKUs assigned</th>
+            <th class="text-right">On hand</th>
+            <th class="text-right">Value</th>
+            <th class="text-right">Dedicated bins</th>
+            <th>Breakdown</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:logisticsclient_detail' row.client.pk %}" class="fw-600">{{ row.client.code }}</a>
+                <div class="form-help">{{ row.client.party.name }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  CLIENT_STATUS_CSS spelled out on the exact choice keys — `LogisticsClient` carries no
+                  `status_css` property (only the rate card and the SLA do), and a missing attribute in a
+                  class= would render the badge with no colour class at all rather than raising. The chain
+                  ends in a fallback that still prints a readable label if the vocabulary grows.
+                {% endcomment %}
+                {% if row.client.status == "active" %}
+                  <span class="badge badge-green">{{ row.client.get_status_display }}</span>
+                {% elif row.client.status == "onboarding" %}
+                  <span class="badge badge-info">{{ row.client.get_status_display }}</span>
+                {% elif row.client.status == "prospect" %}
+                  <span class="badge badge-muted">{{ row.client.get_status_display }}</span>
+                {% elif row.client.status == "suspended" %}
+                  <span class="badge badge-amber">{{ row.client.get_status_display }}</span>
+                {% elif row.client.status == "terminated" %}
+                  <span class="badge badge-slate">{{ row.client.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ row.client.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.sku_count }}</td>
+              <td class="text-right">{{ row.on_hand_quantity|floatformat:2 }}</td>
+              <td class="text-right">{{ row.on_hand_value|floatformat:2 }}</td>
+              <td class="text-right">{{ row.dedicated_locations }}</td>
+              <td>
+                <a href="{% url 'scm:client_inventory_report' %}?client={{ row.client.pk }}&amp;category={{ request.GET.category|urlencode }}&amp;location={{ request.GET.location|urlencode }}"
+                   class="btn btn-sm btn-outline"><i data-lucide="list"></i> Per SKU</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="boxes"></i>
+                  <h3>No client stock to show</h3>
+                  <p>Either no logistics clients are on file yet, or none of them has been assigned any items. Segregation here is not a separate stock table — it is the owner recorded on each item, read against the same ledger everything else uses. Add a client, then set the owner on the items you hold for them from the item master. If you were expecting rows, try clearing the filters.</p>
+                  <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-primary"><i data-lucide="building-2"></i> Logistics clients</a>
+                  <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="package"></i> Item master</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td colspan="2" class="fw-600">Total over the clients listed</td>
+              <td class="text-right fw-600">{{ totals.sku_count }}</td>
+              <td class="text-right fw-600">{{ totals.on_hand_quantity|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.on_hand_value|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.dedicated_locations }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+  {% comment %}
+    ===================== 2. the per-SKU breakdown for ONE client =====================
+    `item_rows` is an EMPTY LIST rather than absent when no client is selected, so this section is
+    gated on `selected_client` — gating on `item_rows` instead would hide the "pick a client" prompt
+    from a selected client who genuinely holds nothing, which is a real and useful answer.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">
+        {% if selected_client %}Per-SKU position — {{ selected_client.code }}{% else %}Per-SKU position{% endif %}
+      </h2>
+      {% if selected_client %}
+        <div class="badge-group">
+          <span class="badge badge-info">{{ item_rows|length }} SKU{{ item_rows|length|pluralize }} holding stock</span>
+          {% if item_rows_truncated %}
+            <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }}</span>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+    {% if selected_client %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Item</th>
+              <th>Category</th>
+              <th class="text-right">On hand</th>
+              <th>UoM</th>
+              <th class="text-right">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in item_rows %}
+              <tr>
+                <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a></td>
+                <td>{{ row.item.name }}</td>
+                <td>{% if row.item.category %}{{ row.item.category.name }}{% else %}<span class="text-muted">Uncategorised</span>{% endif %}</td>
+                <td class="text-right">{{ row.quantity|floatformat:2 }}</td>
+                <td>{% if row.item.uom %}{{ row.item.uom.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="text-right">{{ row.value|floatformat:2 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6">
+                  <div class="empty-state">
+                    <i data-lucide="package-open"></i>
+                    <h3>{{ selected_client.code }} is holding no stock</h3>
+                    <p>This client has no item whose movements net above zero in the current filter. That is a real answer, not a gap: a client can be assigned SKUs and be sitting at nil stock between deliveries. Widen the location filter, or check the assigned-SKU count above.</p>
+                    <a href="{% url 'scm:logisticsclient_detail' selected_client.pk %}" class="btn btn-outline"><i data-lucide="building-2"></i> Open {{ selected_client.code }}</a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="list-filter"></i>
+          <h3>Pick a client to see it SKU by SKU</h3>
+          <p>The table above summarises every client at once. Choose one in the filter bar — or use the “Per SKU” button on its row — and this section lists each item held for them with its quantity and value.</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
