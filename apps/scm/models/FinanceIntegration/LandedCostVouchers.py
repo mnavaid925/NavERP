@@ -515,7 +515,21 @@ class LandedCostVoucher(TenantNumbered):
         """
         if self.bill_id is not None:
             return self.bill
-        if self.status not in ("allocated", "accrued"):
+        if self.status == "cancelled":
+            raise ValidationError(
+                "A cancelled voucher has had its costs reversed, so there is nothing here to bill. "
+                "Raise a new voucher if the vendor still has to be paid.")
+        # THE ALLOCATION PRECONDITION APPLIES TO EXACTLY THE VOUCHERS ALLOCATION APPLIES TO.
+        # `allocate()` REFUSES a voucher on which nothing capitalises ("No charge on this voucher
+        # capitalises into inventory"), so demanding `allocated`/`accrued` unconditionally trapped a
+        # purely-recoverable (import VAT) or purely-expensed voucher in `draft` FOREVER — it could
+        # never be allocated and could therefore never be handed to Accounts Payable, even though the
+        # vendor genuinely has to be paid for those charges. A voucher carrying real capitalising
+        # charges still has to be allocated first, because that is the case where the bill and what
+        # inventory is carrying could actually disagree.
+        if self.status not in ("allocated", "accrued") and any(
+                charge.capitalises and charge.allocatable_amount > ZERO
+                for charge in self.charges.all()):
             raise ValidationError(
                 "Allocate the landed costs before drafting a vendor bill — a bill drafted from "
                 "un-allocated charges would not match what inventory is carrying.")
