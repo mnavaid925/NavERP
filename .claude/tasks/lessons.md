@@ -1051,3 +1051,37 @@ See [[commit-workflow]], L5 (fan out aggressively — this is the same preferenc
 phase for the first time), L12 (wire-up is a post-workflow single-writer step), L18 (the closing review is
 mandatory — this changes how it runs, never whether), and L21 (verify a workflow's output before trusting
 it: a lane that returns nothing is marked `NO RESULT`, not read as clean).
+
+### L48 addendum — prose *about* fanning out is not fanning out
+
+Same session, immediately after. I parallelised the review and test phases into real Workflow scripts and left
+**Phase 3 — the single biggest slot at 85 minutes** — as a paragraph of advice: *"backend + migrations + seeder
+stay one solo agent, templates go to 1–3 parallel agents."* The user had to come back and say "Phase 3 should
+use the multi agent with workflow."
+
+Why I skipped it: that paragraph already **contained the word parallel**, so it pattern-matched as done. It
+wasn't. A sentence recommending a fan-out gets re-interpreted from scratch every run — and under time pressure
+"you may also build it inline if it's quick" is the branch that gets taken. A script is the only form of a
+parallel plan that actually executes.
+
+The second thing I got wrong was the **axis**. My prose split the work **by layer** (all backend, then all
+templates), which serialises them: templates cannot start until backend finishes. The right axis is **per
+entity** — entity A's backend and entity A's templates run *concurrently*, joined only by a frozen contract.
+Layer-splitting looks parallel on paper and is sequential in wall-clock; that is the whole 20 minutes.
+
+What makes the per-entity axis safe is that the Spec phase pins **every view context key** before anyone writes
+code, so two agents who never see each other's output still agree on the interface. That is L7 promoted from a
+warning into a machine-checked phase: it is no longer "remember to pin the context vars", it is a required field
+in the contract schema, and the Smoke phase arbitrates against it.
+
+**Rules:**
+1. **If a plan says "run these in parallel", it must be a script.** Prose describing a fan-out is a suggestion;
+   `.claude/workflows/*.js` is the fan-out. Check every remaining "prefer a parallel agent Workflow" sentence in
+   the docs for this same gap.
+2. **Split along the axis where the work is independent, not where the code is organised.** Layers are how the
+   repo is filed; entities are how the work actually divides. Ask "what can start before what finishes?" —
+   layer-splitting always answers "nothing".
+3. **When two concurrent agents share an interface, freeze it in a schema-required field first.** Not in the
+   prompt prose — in the contract the workflow validates, so an agent cannot return without having pinned it.
+4. Parallelising the phases someone *names* and stopping there is the shallow fix. Ask which slot is biggest and
+   whether it is genuinely serial — Phase 3 was 2× the review and test phases combined.
