@@ -47,29 +47,124 @@ Here is the text extracted from the image:
 
 ---
 
-### **Module Creation Sequence (MANDATORY)**
+### **Module Creation Sequence (MANDATORY — parallel)**
 
-Whenever you create a **new module or sub-module** (especially via `/next-module`), follow this exact sequence. It **starts with research and planning** (`research` → `todo`) so the build is driven by what the best products in the domain actually do, *then* writes the code, *then* runs the review agents. Each step ends with `git add` + `git commit` (one file per commit, PowerShell-safe). **Never run `git push` at any step** — the user pushes manually.
+Whenever you create a **new module or sub-module** (especially via `/next-module`), follow this exact sequence. It
+**starts with research and planning** (`research` → `todo`) so the build is driven by what the best products in the
+domain actually do, *then* writes the code, *then* **reviews it with six agents in parallel**, *then* has one
+`code-fixer` agent burn the findings down. Every step ends with `git add` + `git commit` (**one file per commit**,
+PowerShell-safe). **Never run `git push` at any step** — the user pushes manually.
 
-1. **Run the `research` agent** — research the ~6–10 leading commercial software products in the ONE target sub-module's (`N.M`) specific domain (not the parent module's generic domain), read their feature sets, and write a deduplicated, prioritized feature catalog to `.claude/tasks/research-<slug>-<N.M>.md` (features mapped to that sub-module's NavERP.md feature bullets and the as-built core spine, with a recommended 1–4-model build scope). Then `git add` + `git commit` that file. Do NOT `git push`.
-2. **Run the `todo` agent** — feed it the `research` output; it turns the specialized features into a checkable build plan in `.claude/tasks/todo.md` (the models + their fields/choices **driven by the researched features**, plus backend/wire-up/templates/verify/close-out items). Then `git add` + `git commit` that file. Do NOT `git push`.
-3. **Write the module code** — implement the module per the `todo` plan, then `git add` + `git commit`. Do NOT `git push`.
-4. **Run the `code-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-5. **Run the `explorer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-6. **Run the `frontend-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-7. **Run the `performance-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-8. **Run the `qa-smoke-tester` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-9. **Run the `security-reviewer` agent** — apply its findings, then `git add` + `git commit`. Do NOT `git push`.
-10. **Run the `test-writer` agent** — apply its output, then `git add` + `git commit`. Do NOT `git push`.
-11. **Create the module's Claude Code skill** — author `.claude/skills/<module-slug>/SKILL.md` documenting the new module, then `git add` + `git commit`. Do NOT `git push`. (See **Per-Module Skill (MANDATORY)** below.)
+> **The review and test phases are parallel Workflows, NOT one-agent-at-a-time chains.** Running
+> `code-reviewer` → `explorer` → `frontend-reviewer` → … serially, applying findings in the main session between
+> each, is what made a sub-module take two sessions. That chain is **replaced** by Phase 4 + Phase 5 below. Do not
+> reintroduce it.
+
+**Budget — one sub-module must land inside a 4-hour session.** Check the clock at each phase boundary. If a phase
+overruns its slot, cut scope *inside that phase* (fewer models, defer Minor findings to a follow-up) rather than
+letting the overrun eat the next phase.
+
+| # | Phase | How it runs | Slot |
+|---|-------|-------------|------|
+| 0 | Claim the tree | inline, ~2 min | 0:00 |
+| 1 | `research` agent | 1 agent | 0:05–0:30 |
+| 2 | `todo` agent | 1 agent | 0:30–0:45 |
+| 3 | Build the code | Workflow — 1 solo backend writer ‖ 1–3 template agents | 0:45–2:10 |
+| 4 | **Review wave** | **Workflow — 6 reviewers in PARALLEL** → one findings `.md` | 2:10–2:40 |
+| 5 | `code-fixer` agent | 1 agent — fixes and commits one by one | 2:40–3:25 |
+| 6 | **Test wave** | **Workflow — contract → 4 parallel test-writers → 1 green run** | 3:25–3:50 |
+| 7 | Skill + README | inline | 3:50–4:00 |
+
+---
+
+**Phase 0 — Claim the tree (do not skip; it costs 2 minutes and saves an hour).**
+* `git rev-parse HEAD` → **save this sha as `BASE`**. Phase 4 reviews `BASE...HEAD`; without it the reviewers have
+  no changeset to read (the build commits as it goes, so the working tree is clean by then).
+* `git status` — a dirty tree at session start is **not yours** (L45). Leave those files alone; never commit them.
+* If another session is building in this same checkout, agree the migration number before generating one (L43).
+
+**Phase 1 — `research` agent.** Research the ~6–10 leading commercial products in the ONE target sub-module's
+(`N.M`) specific domain (not the parent module's generic domain) and write a deduplicated, prioritized feature
+catalog to `.claude/tasks/research-<slug>-<N.M>.md`, mapped to that sub-module's NavERP.md feature bullets and the
+as-built core spine, with a recommended 1–4-model build scope. Commit that file.
+
+**Phase 2 — `todo` agent.** Feed it the Phase 1 output; it turns the researched features into a checkable build
+plan in `.claude/tasks/todo.md` (models + their fields/choices **driven by the researched features**, plus
+backend/wire-up/template/verify/close-out items). Commit that file.
+
+**Phase 3 — Build the code.** Fan out per `/next-module` §2: **backend + migrations + seeder stay one solo agent**
+(single DB writer), templates go to 1–3 parallel agents over disjoint files. Pin **every** context key the
+templates consume in the shared spec — the list var, the detail/edit object var, every `*_choices`, every FK
+queryset — or parallel agents each invent a different name (L7). Then, **as a post-build single-writer step**:
+assert the expected file count per unit before trusting the output (a workflow can be cut off mid-phase, L21), do
+the `settings.py` / `urls.py` / `navigation.py` wire-up **after** the app files exist (the check-after-edit hook
+blocks otherwise, L12), then `makemigrations` → `migrate` → `seed_<slug>` twice → `manage.py check`. Commit one
+file per commit.
+
+**Phase 4 — Review wave (6 agents in ONE parallel Workflow).**
+
+```
+Workflow({ scriptPath: '.claude/workflows/module-review.js',
+           args: { slug: 'scm', submodule: '4.17', title: 'Returns Management',
+                   base: '<BASE from Phase 0>', date: '<today>' } })
+```
+
+`code-reviewer · explorer · frontend-reviewer · performance-reviewer · qa-smoke-tester · security-reviewer` all
+run **at once**, each in its own lane, each returning structured findings. The script dedupes them, sorts
+Critical → Important → Minor, and assigns IDs (`C1`, `I3`, `M7`).
+
+* Write the returned `markdown` to **`.claude/tasks/review-<slug>-<N.M>.md`** and commit that file. This file is
+  the **single hand-off artifact** between the reviewers and the fixer — the main session does not carry findings
+  in its head.
+* The reviewers are **read-only**: they never edit code and never commit. `qa-smoke-tester` is the only lane that
+  touches the DB (migrate + seed + its throwaway `temp/` script) and its normal "fix what you find" behaviour is
+  overridden to "report it instead".
+* If the per-agent table in the file shows a lane with **NO RESULT**, re-run *only that lane* (a single `Agent`
+  call) and append its findings — a missing lane is missing coverage, not a clean bill of health.
+* Do **not** also run these six agents individually. One wave per changeset.
+
+**Phase 5 — `code-fixer` agent.** Hand it the findings file; it fixes every finding in ID order
+(all Critical, then Important, then Minor), verifies each, and makes **one commit per file** as it goes, marking
+each finding `[x] fixed` / `[~] skipped — reason` in the file. **The main session does not apply findings itself** —
+that is what kept blowing out the context window and the clock. When it reports back, check that no finding is
+left `[ ] open` and that `manage.py check` is clean.
+
+**Phase 6 — Test wave (parallel Workflow).**
+
+```
+Workflow({ scriptPath: '.claude/workflows/module-tests.js',
+           args: { slug: 'scm', submodule: '4.17', subslug: 'returns',
+                   title: 'Returns Management' } })
+```
+
+One solo agent first pins the contract (exact model/form/url/context names) and owns the shared
+`tests/__init__.py` + `conftest.py`; then **four `test-writer` agents run in parallel** over disjoint files —
+`test_<subslug>_{models,forms,views,security}.py`; then one agent runs the **full unfiltered** app suite and fixes
+it green. Tests run on SQLite in-memory, so the parallel pytest processes cannot collide. Every test function is
+named `test_<subslug>_*` and every module-level helper `_<subslug>_*`, because a duplicate name shadows a sibling
+lane's and breaks tests **outside** the file that caused it (L47) — which is also why the final run is never `-k`
+filtered. Commit each test file on its own.
+
+**Phase 7 — Skill + README.** Update (or, on a brand-new app, author) `.claude/skills/<module-slug>/SKILL.md` with
+the new sub-module's models/routes/templates/seeder rows, and mark the sub-module complete in `README.md`. Commit
+each file on its own. (See **Per-Module Skill (MANDATORY)** below.)
+
+---
 
 **Rules for this sequence:**
 
-* Run the agents **in this order, one at a time** — do not skip a step and do not reorder. **`research` runs first, then `todo`, then "Write the module code", then the review agents** as listed.
-* The `research` step produces `.claude/tasks/research-<slug>-<N.M>.md` (e.g. `research-scm-4.2.md`); the `todo` step produces `.claude/tasks/todo.md` from it — commit each as its own file.
-* After each agent step, commit the resulting changes before moving to the next agent (still one file per commit).
+* Phases run **in order** — do not skip one and do not reorder. Within Phases 4 and 6, the agents run **in
+  parallel**; everywhere else, one thing at a time.
+* Phase 1 produces `.claude/tasks/research-<slug>-<N.M>.md`, Phase 2 produces `.claude/tasks/todo.md`, Phase 4
+  produces `.claude/tasks/review-<slug>-<N.M>.md`. Each is committed as its own file.
+* **All review findings live in the `.md` file, never only in the transcript.** If a Workflow returns findings and
+  you do not write them to `.claude/tasks/`, the phase is not done.
+* Single-writer work stays solo: migrations, the seeder, `navigation.py`, `settings.py`, `urls.py`, package
+  `__init__.py` re-export blocks, and app-level `conftest.py`. Parallelize only disjoint file sets.
+* Never **full-rewrite** a shared file from an agent — surgical `Edit` only. Another session may be building a
+  different sub-module in this same checkout (L43).
 * `git push` is **never** part of this sequence — stop at `git commit` every time.
-* If an agent reports no changes are needed, note that and proceed to the next step (no empty commit required).
+* If an agent or lane reports no changes are needed, note that and move on (no empty commit required).
 
 ---
 
