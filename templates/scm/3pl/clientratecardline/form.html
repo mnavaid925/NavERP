@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — add or edit ONE rate line on a client tariff.
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientRateCards.py::clientratecardline_create and
+::clientratecardline_edit. Everything this page may read, and nothing else:
+
+  form       ClientRateCardLineForm (bound on POST) — thirteen fields: charge_category,
+             charge_basis, description, rate, period, included_quantity, minimum_charge,
+             tier_from, tier_to, applies_to_location, applies_to_item_category, gl_account,
+             is_active
+  is_edit    False on the create path, True on the edit path
+  rate_card  THE PARENT ClientRateCard. The form has no `rate_card` field, so the header, the
+             breadcrumb and the Cancel target can only come from here
+  obj        the ClientRateCardLine being edited — PRESENT ONLY when is_edit
+
+WHY THE PARENT IS NOT A FIELD. `rate_card` comes from the ROUTE pk and never from the POST body.
+ClientRateCardLine carries NO tenant column — it is a pure child resolved through
+rate_card__tenant=request.tenant, and that join IS the authorization check — so a parent pk in the
+body is precisely how a crafted request would graft a priced line onto another workspace's tariff,
+with no column left to catch it.
+
+The parent's status is the VIEW's refusal, not a field error: both views redirect to the card with a
+message once it has left draft, because an illegal move must answer with a redirect and a field
+error cannot. So this page is only ever reached on an editable tariff.
+
+The tier band and the period rule are model clean() guards, restated below as help rather than
+duplicated as JS: `period` is REQUIRED on a periodic basis and REFUSED on any other, and `tier_to`
+must sit above `tier_from`. Saying so here means the refusal is predictable rather than surprising.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit rate line{% else %}Add rate line{% endif %} · {{ rate_card.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit rate line{% else %}Add rate line{% endif %}
+      <span class="badge {{ rate_card.status_css }}">{{ rate_card.get_status_display }}</span>
+    </h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:clientratecard_list' %}">Client Rate Cards</a><span class="sep">›</span>
+      <a href="{% url 'scm:clientratecard_detail' rate_card.pk %}">{{ rate_card.number }}</a><span class="sep">›</span>
+      <span>{% if is_edit %}{{ obj.description }}{% else %}New rate line{% endif %}</span>
+    </div>
+    <p class="text-muted">One priced charge on this client's tariff. The <span class="fw-600">basis</span> decides what the billing engine measures and the <span class="fw-600">rate</span> decides what that measurement costs; everything else on this form narrows when the line applies.</p>
+  </div></div>
+
+  {% comment %}
+    THE PARENT, restated. The form cannot show it — `rate_card` is not a field — so this card is the
+    only thing on the page that says which tariff is being changed, and getting that wrong is the
+    whole failure mode the route-supplied parent exists to prevent. Every value is a plain column on
+    the already-select_related card or its client, so none of it is an extra query.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ rate_card.number }} · {{ rate_card.name }}</h2>
+      <div class="badge-group">
+        <span class="badge {{ rate_card.status_css }}">{{ rate_card.get_status_display }}</span>
+        <span class="badge badge-slate">v{{ rate_card.version }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Client</dt><dd>{{ rate_card.client.code }} <span class="text-muted">{{ rate_card.client.party }}</span></dd></div>
+        <div class="detail-item"><dt>Space model</dt><dd>{{ rate_card.client.get_space_model_display }}</dd></div>
+        <div class="detail-item"><dt>Effective from</dt><dd class="mono">{{ rate_card.effective_from|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Effective to</dt><dd class="mono">{% if rate_card.effective_to %}{{ rate_card.effective_to|date:"M d, Y" }}{% else %}<span class="badge badge-info">Open-ended</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Currency</dt><dd>{% if rate_card.currency %}{{ rate_card.currency }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">What is charged</h2></div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.charge_category %}
+          {% include "partials/form_field.html" with field=form.charge_basis %}
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">The description is printed <span class="fw-600">verbatim</span> onto the drafted invoice line, so it is what the client reads on the bill. Some bases are priceable but not yet measurable — the billing run still writes those lines, flagged <span class="badge badge-amber">needs a quantity</span>, rather than guessing a conversion factor.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">How it is priced</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.rate %}
+          {% include "partials/form_field.html" with field=form.period %}
+          {% include "partials/form_field.html" with field=form.included_quantity %}
+          {% include "partials/form_field.html" with field=form.minimum_charge %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;"><span class="fw-600">Period</span> is required on a recurring basis (per pallet position, per sq ft, per CBM, flat recurring, dedicated space) and refused on every other — a per-order charge has no "per month" to apply. Included quantity is deducted before the rate is applied; the minimum charge floors the resulting line.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">When it applies</h2></div>
+      <div class="card-body">
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.tier_from %}
+          {% include "partials/form_field.html" with field=form.tier_to %}
+          {% include "partials/form_field.html" with field=form.applies_to_location %}
+          {% include "partials/form_field.html" with field=form.applies_to_item_category %}
+          {% include "partials/form_field.html" with field=form.gl_account %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">The band is <span class="mono">tier_from ≤ quantity &lt; tier_to</span>; leaving <span class="fw-600">tier to</span> empty means the band runs open-ended upwards. Narrowing to a location or an item category restricts what the engine measures for this line — a location owned by a <em>different</em> client is refused, because that is how one client's stock ends up on another's bill. The GL account carries straight onto the drafted invoice line.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save rate line{% else %}Add rate line{% endif %}</button>
+      <a href="{% url 'scm:clientratecard_detail' rate_card.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
