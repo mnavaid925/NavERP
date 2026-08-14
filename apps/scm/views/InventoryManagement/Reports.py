@@ -6,32 +6,47 @@ FIFO/LIFO/WAC valuation report, reorder alerts, the stock ledger, and on-hand by
 from decimal import Decimal
 
 from apps.scm.views._common import *  # noqa: F401,F403
-from apps.scm.models import Item, Location, ReorderRule, StockMove
+from apps.scm.models import Item, LandedCostAllocation, Location, ReorderRule, StockMove
 
 ZERO = Decimal("0")
 
 
 # ============================================================================ valuation
-def _item_valuation(item, moves):
+def _item_valuation(item, moves, uplift_map=None):
     """Return (on_hand, value) for one item under its costing_method, from its ``moves`` (chronological).
 
     - weighted_avg: on_hand × cached average_cost.
     - fifo/lifo: walk the inbound cost layers, consume by total outbound, value the remaining layers
       (fifo consumes oldest first → oldest layers gone; lifo consumes newest first).
+
+    ``uplift_map`` is 4.18's landed cost: ``{stock_move_id: per-unit uplift}``, summed from
+    ``LandedCostAllocation``. It defaults to ``None`` so the two-positional-argument callers that
+    predate 4.18 — including the regression lock in ``tests/test_views.py`` — keep working unchanged.
     """
     on_hand = sum((m.quantity for m in moves), ZERO)
     if on_hand <= ZERO:
         return on_hand, ZERO
     if item.costing_method == "weighted_avg":
+        # DELIBERATELY IGNORES `uplift_map`. For a weighted-average item the uplift is ALREADY
+        # inside `average_cost` — `LandedCostVoucher.allocate()` rolls it in through
+        # `Item.apply_landed_cost()` at allocation time. Adding it again here would double-count the
+        # landed cost on every WAC item in the workspace. The fifo/lifo branch below needs it for
+        # the opposite reason: those methods never read `average_cost` at all, so the uplift can
+        # only reach them through the layers.
         return on_hand, (on_hand * (item.average_cost or ZERO)).quantize(Decimal("0.01"))
 
+    uplift = uplift_map or {}
     # Transfers are EXCLUDED from the layer walk. A transfer is an internal relocation posted as a
     # −/+ pair at the item's average cost: it nets to zero for item-level quantity, but if included
     # it would consume a real FIFO layer on the way out and create a fake average-cost layer on the
     # way in — drifting a FIFO/LIFO item toward weighted-average with every transfer (code review).
     # on_hand above still counts them, so the quantity stays correct; only the costing ignores them.
     costed = [m for m in moves if m.move_type != "transfer"]
-    layers = [[m.quantity, m.unit_cost or ZERO] for m in costed if m.quantity > ZERO]  # (qty, cost)
+    # Each inbound layer carries its own landed-cost uplift, keyed on the move that received it —
+    # which is what makes a FIFO item's remaining layers reflect the freight and duty that actually
+    # landed on THOSE units rather than an average smeared across every receipt.
+    layers = [[m.quantity, (m.unit_cost or ZERO) + uplift.get(m.id, ZERO)]
+              for m in costed if m.quantity > ZERO]  # (qty, cost)
     outbound = sum((-m.quantity for m in costed if m.quantity < ZERO), ZERO)
     order = layers if item.costing_method == "fifo" else list(reversed(layers))
     remaining = outbound
@@ -52,9 +67,19 @@ def valuation_report(request):
              .prefetch_related(models.Prefetch(
                  "stock_moves",
                  queryset=StockMove.objects.order_by("moved_at", "id"))))
+    # 4.18's landed cost, in ONE grouped query for the whole page rather than one per item — a
+    # per-item lookup here would be an N+1 across the entire item master. A move can carry uplift
+    # from several charges (freight AND duty AND insurance), so the per-unit figures are SUMMED.
+    uplift_map = {
+        row["stock_move_id"]: row["u"]
+        for row in (LandedCostAllocation.objects
+                    .filter(tenant=request.tenant, stock_move__isnull=False)
+                    .values("stock_move_id")
+                    .annotate(u=models.Sum("unit_cost_uplift")))
+    }
     rows, grand_total = [], ZERO
     for item in items:
-        on_hand, value = _item_valuation(item, list(item.stock_moves.all()))
+        on_hand, value = _item_valuation(item, list(item.stock_moves.all()), uplift_map)
         if on_hand or value:
             rows.append({"item": item, "on_hand": on_hand, "value": value,
                          "method": item.get_costing_method_display()})
