@@ -9,9 +9,11 @@ select_related=("tax_code",), extra_context={...}).
 Everything this page may read, and NOTHING else:
 
   obj         the DutyTariff, with tax_code joined (crud_detail, apps/core/crud.py:159)
-  is_current  bool — is_active AND today inside [effective_from, effective_to]. The view computes it
-              from the model's own property, so this page and the register cannot disagree about
-              whether a row is live
+              obj.is_current — bool, is_active AND today inside [effective_from, effective_to] — is
+              read straight off it. It is a pure PROPERTY over three columns the row already carries,
+              so it costs no query and this page cannot disagree with the register about whether a
+              row is live. The view used to pre-read the same row just to pass the flag down as its
+              own context key; that second SELECT is gone and there is no bare `is_current` here.
   today       a date — the day every window on this page is measured against, printed rather than
               implied so the verdict below can be checked rather than trusted
 
@@ -65,7 +67,7 @@ reason. Nothing on this page is |safe.
       <h1 class="page-title">{{ obj.hs_code }}
         {% if not obj.is_active %}
           <span class="badge badge-slate">Inactive</span>
-        {% elif is_current %}
+        {% elif obj.is_current %}
           <span class="badge badge-green">In effect today</span>
         {% else %}
           <span class="badge badge-muted">Not in effect today</span>
@@ -88,11 +90,11 @@ reason. Nothing on this page is |safe.
       <div class="stat-label">Customs duty on the declared value. A duty is a <span class="fw-600">cost of the goods</span> — it capitalises into what they are worth on the shelf</div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon {% if is_current %}green{% else %}slate{% endif %}"><i data-lucide="calendar-check"></i></div>
-      <div class="stat-value">{% if is_current %}Yes{% else %}No{% endif %}</div>
+      <div class="stat-icon {% if obj.is_current %}green{% else %}slate{% endif %}"><i data-lucide="calendar-check"></i></div>
+      <div class="stat-value">{% if obj.is_current %}Yes{% else %}No{% endif %}</div>
       <div class="stat-label">
         In effect on <span class="mono">{{ today|date:"M d, Y" }}</span>.
-        {% if is_current %}
+        {% if obj.is_current %}
           A landed cost dated today would default its duty from this row.
         {% else %}
           Nothing will default a duty from this row today — see the window below for why.
@@ -205,7 +207,7 @@ reason. Nothing on this page is |safe.
         {% else %}
           <span class="badge badge-slate">Switched off</span>
         {% endif %}
-        {% if is_current %}
+        {% if obj.is_current %}
           <span class="badge badge-green">Inside its window</span>
         {% else %}
           <span class="badge badge-muted">Not in effect today</span>
@@ -256,7 +258,7 @@ reason. Nothing on this page is |safe.
         {% if not obj.is_active %}
           <span class="badge badge-slate">Switched off</span>
           This rate is skipped entirely, regardless of its dates. Nothing will default a duty from it, and nothing it has already been copied onto is affected — a duty charge holds the percentage it was costed at.
-        {% elif is_current %}
+        {% elif obj.is_current %}
           <span class="badge badge-green">In effect</span>
           Today falls inside this row's window and the row is switched on, so a duty charge raised today for this HS code{% if obj.country_of_origin %} on goods from {{ obj.country_of_origin }}{% endif %} would default to <span class="fw-600">{{ obj.duty_rate_pct|floatformat:3 }}%</span>.
         {% elif obj.effective_from > today %}
