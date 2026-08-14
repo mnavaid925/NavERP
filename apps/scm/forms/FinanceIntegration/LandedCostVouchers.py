@@ -25,13 +25,8 @@ that form is therefore narrowed BY HAND, and re-checked in ``clean()`` — a nar
 never held against a crafted POST (L39 §2).
 """
 from apps.scm.forms._common import *  # noqa: F401,F403
-from apps.scm.forms._common import _active_currencies, _carrier_parties, _reject_foreign
-
-# `_keep_current` is 4.18's own, defined next door on the sub-module's first entity module — the
-# `AssetManagement.Assets` precedent for a helper two entity modules in ONE sub-package share. It is
-# imported rather than re-typed: a second copy of the "re-admit the stored choice" rule is how the
-# two copies start disagreeing about which of them is tenant-scoped.
-from apps.scm.forms.FinanceIntegration.DutyTariffs import _keep_current
+from apps.scm.forms._common import (_active_currencies, _carrier_parties, _keep_current,
+                                    _reject_foreign)
 
 from apps.accounting.models import GLAccount, TaxCode
 
