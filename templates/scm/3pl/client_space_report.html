@@ -225,7 +225,13 @@ stat-card icon colours are blue / green / orange / purple / slate only.
                 {% endcomment %}
                 {% if row.days_to_expiry is not None %}
                   {% if row.days_to_expiry < 0 %}
-                    <div><span class="badge badge-red">Ended {{ row.days_to_expiry|floatformat:0|cut:"-" }} day{{ row.days_to_expiry|pluralize }} ago</span></div>
+                    {% comment %}
+                      pluralize runs on the ABSOLUTISED value, not the raw one: -1 != 1, so
+                      pluralizing the negative renders "Ended 1 days ago" on a contract that ended
+                      yesterday. floatformat:0 has to stay ahead of cut, because cut calls .replace()
+                      and would raise on a bare int.
+                    {% endcomment %}
+                    <div><span class="badge badge-red">Ended {{ row.days_to_expiry|floatformat:0|cut:"-" }} day{{ row.days_to_expiry|floatformat:0|cut:"-"|pluralize }} ago</span></div>
                   {% elif row.days_to_expiry <= 90 %}
                     <div><span class="badge badge-amber">{{ row.days_to_expiry }} day{{ row.days_to_expiry|pluralize }} to expiry</span></div>
                   {% else %}
