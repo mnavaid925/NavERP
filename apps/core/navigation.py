@@ -1094,6 +1094,29 @@ LIVE_LINKS = {
         "Support Ticketing":  "scm:portalorderinquiry_list",    # bullet (the triage queue over crm.Case)
         "Catalog Browsing":   "scm:portal_catalog_preview",     # bullet (staff as-seen-by-customer-X, render-as)
     },
+    # 4.17 Third-Party Logistics (3PL) Management. Five bullets in NavERP.md, five keys here, and
+    # every one of them lands on a page that exists.
+    #
+    # **NO sidebar key for `ClientRateCard`.** The rate card is the pricing a billing run is
+    # calculated against, reached from the client detail page, from the billing-run list and from
+    # the client list — the same WorkCenter / ReorderRule / ReturnReason / KpiTarget / MeterReading /
+    # PortalActivity rule every sub-module before this one follows: a master reached from the page
+    # that uses it takes no bullet of its own. Adding a sixth key here would put a link in the
+    # sidebar that NavERP.md does not name.
+    #
+    # "Client Integration" points at the CLIENT LIST rather than at a sync console, because there is
+    # no sync console to point at and inventing a dead link is worse than pointing at the real thing
+    # (L32). `integration_mode`, `client_system`, `edi_partner_id`, `edi_qualifier` and
+    # `last_synced_at` are a field block ON `LogisticsClient` — the client list filters by
+    # integration mode and the detail page shows the block, so this bullet is where a user actually
+    # configures and inspects the connection today.
+    "4.17": {
+        "Client Billing":               "scm:clientbillingrun_list",     # bullet (ledger-derived run -> DRAFT accounting.Invoice)
+        "Client Inventory Segregation": "scm:client_inventory_report",   # bullet (COMPUTED over Item.owner_client + StockMove - no table)
+        "SLA Management":               "scm:clientsla_list",            # bullet (recompute derives the achievement, never typed)
+        "Client Integration":           "scm:logisticsclient_list",      # bullet (the EDI/API field block lives on the client master)
+        "Warehouse Rental Management":  "scm:client_space_report",       # bullet (COMPUTED - committed space beside reserved bins)
+    },
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
