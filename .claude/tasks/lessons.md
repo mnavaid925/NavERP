@@ -1009,3 +1009,45 @@ what you broke.
 
 See L41 §2 (the collision itself), L44 (checks that pass for the wrong reason), and
 `apps/scm/tests/test_suite_hygiene.py`, which is the working example of a rule with teeth.
+
+---
+
+## L48 — The review phase was serial *and* ran in the main context; both halves cost a session
+
+**Context:** the user reported that one sub-module took **two 5-hour sessions** and asked for it to fit in
+four hours. The Module Creation Sequence was eleven steps, of which six were "run review agent X, apply its
+findings, commit" — one at a time.
+
+Two independent costs, and I had been treating them as one:
+
+1. **Serial wall-clock.** Six reviewers that share no state and write nothing ran back to back. They are a
+   textbook fan-out: read-only, disjoint lanes, no ordering constraint between them. Six × ~6 min ≈ 35 min
+   became one ~12-minute wave. Nothing about the review *needed* to be sequential — it was sequential
+   because the doc listed it as numbered steps and I read the numbering as ordering.
+2. **Context burn, which was the bigger half.** The *applying* was done in the main session: each agent's
+   findings, each file read to fix them, each diff, all accumulating in one window. By the test phase the
+   main context was mostly review transcript, so every subsequent turn was slower and closer to a compaction
+   that would drop the build details. Moving the fixes into a `code-fixer` subagent with a **findings file
+   as the hand-off** means the main session carries a path and a count, not six reports.
+
+**The general rule this is an instance of:** an agent phase has two axes — *can these run at once?* and
+*whose context holds the result?* Parallelising while still funnelling every output through the main window
+only fixes half of it. The artifact on disk is what decouples the two: `.claude/tasks/review-<slug>-<N.M>.md`
+is both the reviewers' output and the fixer's input, and neither has to pass through me.
+
+**Rules:**
+1. **Read-only agents with disjoint lanes always fan out.** Serial ordering must be justified by a real
+   dependency (a single DB writer, a file two agents would both edit), not by the order of a numbered list.
+2. **The main session orchestrates; it does not apply.** If a phase produces findings, a subagent applies
+   them. Main reads the summary.
+3. **Hand off through a committed file, not the transcript.** A finding that exists only in context is lost
+   at compaction and invisible to the next session.
+4. **Give the sequence a clock.** Phases now carry time slots totalling 4:00; an overrunning phase cuts its
+   own scope rather than eating the next one's.
+5. One writer stays solo per resource: migrations/seeder (the DB), `navigation.py`/`settings.py`/`urls.py`
+   and every package `__init__.py` (shared files), `tests/conftest.py` (shared fixtures).
+
+See [[commit-workflow]], L5 (fan out aggressively — this is the same preference, applied to the *review*
+phase for the first time), L12 (wire-up is a post-workflow single-writer step), L18 (the closing review is
+mandatory — this changes how it runs, never whether), and L21 (verify a workflow's output before trusting
+it: a lane that returns nothing is marked `NO RESULT`, not read as clean).
