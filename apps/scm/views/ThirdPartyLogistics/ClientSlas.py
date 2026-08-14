@@ -68,15 +68,13 @@ MAX_SWEEP_ROWS = 200
 #: front of a client that nobody has signed off.
 _BILLED_RUN_STATUSES = ("approved", "invoiced")
 
-#: Printed beside the credit panel on the detail page, and it is the whole point of that panel's
-#: framing. Said once here so the page cannot phrase it more strongly than the code does.
-CREDIT_NOTE = (
-    "This is a SUGGESTION and nothing has been applied. NavERP does not raise a credit note from an "
-    "SLA breach: the figure is the agreed percentage of the last billed period's fees, and whether to "
-    "grant it — and against which invoice — is a decision taken in Accounting."
-)
+#: Printed under the list table wherever a measured value is absent. There is deliberately NO
+#: matching `CREDIT_NOTE`: the detail page's credit panel writes the same caveat four different ways
+#: — one per branch of "not breaching / breached with no billed period / breached" plus the closing
+#: "applied to nothing" paragraph — and a single constant cannot be branch-aware. A second, weaker
+#: copy passed into the context and never printed was two sources of the same prose free to drift,
+#: which is exactly what happened here.
 
-#: Printed on the list and detail pages wherever a measured value is absent.
 NOT_MEASURED_NOTE = (
     "A promise that has never been measured shows as No Data, not as zero. The two are different "
     "statements: zero on a damage-rate target would read as flawless, and zero on an on-time target "
@@ -340,9 +338,10 @@ def clientsla_detail(request, pk):
       "capped at 0%".
     * ``can_recompute`` (bool) — ``False`` on an inactive SLA, mirroring exactly what
       :func:`clientsla_recompute` refuses. Gate the button on it.
-    * ``credit_note`` / ``not_measured_note`` (strs) — both are prose the page must print. The credit
-      panel is labelled **SUGGESTED — NOT APPLIED**, and nothing on this page may imply a credit note
-      was raised.
+    No prose constant is passed. The credit panel is labelled **SUGGESTED — NOT APPLIED** and the
+    unmeasured branch explains that no-data is not a zero, but both are written in the TEMPLATE and
+    per branch, because the wording differs by state in a way one constant cannot carry. Nothing on
+    this page may imply a credit note was raised.
 
     QUERIES: one for the SLA (both FKs joined) and one for the last billed run. Nothing per-row.
     """
@@ -377,8 +376,6 @@ def clientsla_detail(request, pk):
         "credit_pct": obj.service_credit_pct,
         "credit_cap_pct": obj.service_credit_cap_pct,
         "can_recompute": obj.is_active,
-        "credit_note": CREDIT_NOTE,
-        "not_measured_note": NOT_MEASURED_NOTE,
     })
 
 
