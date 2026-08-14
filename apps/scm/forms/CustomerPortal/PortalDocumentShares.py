@@ -66,6 +66,8 @@ SHARE_POINTER_SELECT_RELATED = {
 
 from apps.core.models import Document
 from apps.scm.models import (
+    CUSTOMER_VISIBLE_INVOICE_KIND,
+    CUSTOMER_VISIBLE_INVOICE_STATUSES,
     SHARE_DOC_TYPE_CHOICES,
     SHARE_DOC_TYPE_FIELDS,
     PortalAccount,
@@ -233,6 +235,16 @@ class PortalDocumentShareForm(TenantUniqueMixin, TenantModelForm):
             related = SHARE_POINTER_SELECT_RELATED.get(pointer)
             if related:
                 queryset = queryset.select_related(related)
+
+            # An invoice is narrowed by WHAT IT IS as well as by whose it is. Ownership was the only
+            # test here, so the dropdown offered drafts and voids and credit notes — and the seeder
+            # walked straight into it, attaching a draft CREDIT NOTE to every demo share. A draft is
+            # ours until we send it, a void is one we withdrew, and a draft credit note is an
+            # internal decision to refund that nobody has committed to: putting one in front of a
+            # customer is a promise made by accident.
+            if pointer == "invoice":
+                queryset = queryset.filter(kind=CUSTOMER_VISIBLE_INVOICE_KIND,
+                                           status__in=CUSTOMER_VISIBLE_INVOICE_STATUSES)
 
             owner = Q()
             for path in PortalDocumentShare.OWNER_PATHS.get(pointer, ()):
