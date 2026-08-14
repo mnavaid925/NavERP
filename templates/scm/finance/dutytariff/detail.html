@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — ONE duty tariff line, read as A RATE WITH A WINDOW.
+
+Renders apps/scm/views/FinanceIntegration/DutyTariffs.py::dutytariff_detail, which returns
+crud_detail(model=DutyTariff, template="scm/finance/dutytariff/detail.html",
+select_related=("tax_code",), extra_context={...}).
+
+Everything this page may read, and NOTHING else:
+
+  obj         the DutyTariff, with tax_code joined (crud_detail, apps/core/crud.py:159)
+  is_current  bool — is_active AND today inside [effective_from, effective_to]. The view computes it
+              from the model's own property, so this page and the register cannot disagree about
+              whether a row is live
+  today       a date — the day every window on this page is measured against, printed rather than
+              implied so the verdict below can be checked rather than trusted
+
+There is no `can_edit` and no `can_delete` in the contract, and that is the ROUTE's rule rather than a
+gap: a tariff is a master row with no status ladder and no frozen state, and dutytariff_delete carries
+no gate beyond @login_required @require_POST. Both buttons are therefore unconditional and mirror
+exactly what dutytariff_edit and dutytariff_delete will actually do — which is the point of the
+mirror. Inventing a gate here would hide a button the view would have honoured.
+
+--------------------------------------------------------------------------------------------------
+THE THREE THINGS THIS PAGE MUST NOT BLUR
+--------------------------------------------------------------------------------------------------
+1. ACTIVE IS NOT IN EFFECT. is_active is a switch somebody sets; the window is arithmetic on two
+   dates. A row can be switched on and still not apply — because its start date has not arrived, or
+   because its end date has passed — and the two states are shown separately here for that reason.
+2. A BLANK COUNTRY OF ORIGIN IS A REAL VALUE, not missing data. It is the GENERAL rate that applies
+   to any origin, and an origin-specific row beats it for goods from that country. It is rendered in
+   words, never as an em dash.
+3. DUTY IS NOT VAT. The duty percentage is a cost of the goods and capitalises into their value. The
+   linked accounting.TaxCode is the RECOVERABLE import-tax counterpart and does not — which is why
+   they are two columns and not one rate. Sales, VAT and GST stay in Accounting's tax codes; this
+   register never re-declares them.
+
+--------------------------------------------------------------------------------------------------
+Guards
+--------------------------------------------------------------------------------------------------
+tax_code is nullable and is wrapped in an explicit {% templatetag openblock %} if
+{% templatetag closeblock %} rather than a |default — a None FK inside a filter ARGUMENT raises and
+500s even where a bare lookup would quietly print nothing (L10), so the guard goes around the whole
+expression and not around the value. effective_to is nullable for the same treatment, and None there
+means OPEN-ENDED rather than missing.
+
+theme.css ships COLOUR-named badges only: badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-warning / badge-danger DO NOT EXIST and render
+completely unstyled (L33, shipped four times). Every badge below is one of those six literals.
+stat-icon ships blue / green / orange / purple / slate only. DutyTariff has no choices field — the
+state chain is a boolean and two dates, so there is no get_<field>_display to fall back to; every
+chain still ends in an else branch.
+
+Delete is @require_POST — a GET on that route is a 405 — so it is a real form and can never be a
+link. Only the system-generated DTY- number is interpolated into the confirm string: hs_code, the
+description and the country are user-typed, and an apostrophe in any of them escapes to &#39;, which
+HTML decodes back to a bare quote before JavaScript parses the attribute, breaking the dialog open
+and silently removing the guard (L42). Apostrophes written into that string are \' for the same
+reason. Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}{{ obj.hs_code }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.hs_code }}
+        {% if not obj.is_active %}
+          <span class="badge badge-slate">Inactive</span>
+        {% elif is_current %}
+          <span class="badge badge-green">In effect today</span>
+        {% else %}
+          <span class="badge badge-muted">Not in effect today</span>
+        {% endif %}
+        {% if not obj.country_of_origin %}<span class="badge badge-info">General rate — any origin</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:dutytariff_list' %}">Duty Tariffs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One customs rate, for one <span class="fw-600">HS/HTS code</span>, one <span class="fw-600">origin</span> and one <span class="fw-600">date window</span>. It is read once — when a duty charge is added to a landed cost voucher — and the percentage is then copied onto that charge. Changing anything on this page therefore affects the <span class="fw-600">next</span> landed cost, never one already worked out.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:dutytariff_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="badge-percent"></i></div>
+      <div class="stat-value">{{ obj.duty_rate_pct|floatformat:3 }}%</div>
+      <div class="stat-label">Customs duty on the declared value. A duty is a <span class="fw-600">cost of the goods</span> — it capitalises into what they are worth on the shelf</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon {% if is_current %}green{% else %}slate{% endif %}"><i data-lucide="calendar-check"></i></div>
+      <div class="stat-value">{% if is_current %}Yes{% else %}No{% endif %}</div>
+      <div class="stat-label">
+        In effect on <span class="mono">{{ today|date:"M d, Y" }}</span>.
+        {% if is_current %}
+          A landed cost dated today would default its duty from this row.
+        {% else %}
+          Nothing will default a duty from this row today — see the window below for why.
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="globe"></i></div>
+      <div class="stat-value">{% if obj.country_of_origin %}{{ obj.country_of_origin }}{% else %}Any{% endif %}</div>
+      <div class="stat-label">
+        {% if obj.country_of_origin %}
+          Goods made here only. An origin-specific rate beats the general one for that country
+        {% else %}
+          The <span class="fw-600">general</span> rate — used wherever no origin-specific row covers the country the goods came from
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 1. what the rate covers
+    The identity of the row: which goods, from where, and how much. Everything in this card is
+    editable and everything in it is part of the unique key — (tenant, hs_code, country_of_origin,
+    effective_from) — which is why the form refuses a duplicate rather than letting the database
+    raise an uncaught IntegrityError on save.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this rate covers</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.number }}</span>
+        <span class="badge badge-info">{{ obj.duty_rate_pct|floatformat:3 }}% duty</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item">
+          <dt>HS / HTS code</dt>
+          <dd class="fw-600 mono">{{ obj.hs_code }}
+            <div class="form-help">Stored upper-cased and trimmed, so the same code typed two ways cannot become two rows that disagree.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Country of origin</dt>
+          <dd>
+            {% if obj.country_of_origin %}
+              <span class="fw-600">{{ obj.country_of_origin }}</span>
+              <div class="form-help">This rate applies to goods of that origin only. Where a general (blank-origin) row also exists for this HS code, the origin-specific one wins.</div>
+            {% else %}
+              <span class="badge badge-info">Any origin</span>
+              <div class="form-help">The general rate. It is used for every origin that has no row of its own — which is the right shape for a normal MFN rate sitting under a handful of trade-agreement or anti-dumping exceptions.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Description</dt>
+          <dd>{% if obj.description %}{{ obj.description }}{% else %}<span class="text-muted">—</span><div class="form-help">Optional. It is a label for the people reading the rate book, not part of the lookup.</div>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Duty rate</dt>
+          <dd class="fw-600 mono">{{ obj.duty_rate_pct|floatformat:3 }}%
+            <div class="form-help">Three decimal places, because tariff schedules genuinely carry them. This percentage is <span class="fw-600">copied</span> onto a duty charge when one is raised, never referenced from it.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Recoverable import tax</dt>
+          <dd>
+            {% comment %}
+              A nullable FK, guarded explicitly (L10). Duty and import VAT behave differently in the
+              accounts — the duty capitalises into the value of the goods, the recoverable tax is
+              reclaimed and must not — so they are two separate pointers rather than one blended rate.
+            {% endcomment %}
+            {% if obj.tax_code %}
+              <a href="{% url 'accounting:tax_code_detail' obj.tax_code.pk %}" class="fw-600">{{ obj.tax_code.name }}</a>
+              <div class="form-help mono">{{ obj.tax_code.get_tax_type_display }} · {{ obj.tax_code.rate_pct|floatformat:3 }}%</div>
+              <div class="form-help">Accounting's tax code, pointed at rather than copied. Import VAT/GST is usually reclaimable, so it does <span class="fw-600">not</span> capitalise into the cost of the goods the way the duty above does.</div>
+            {% else %}
+              <span class="text-muted">—</span>
+              <div class="form-help">No recoverable counterpart recorded. That is a real answer for a jurisdiction that charges duty without a reclaimable import tax — and the wrong answer if the import VAT is simply being handled somewhere nobody can see.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        <span class="fw-600">Why this is not an accounting tax code.</span> Accounting's tax codes cover sales tax, VAT, GST and use tax — their vocabulary has no customs member, they carry no HS code and no origin, and they are not effective-dated against a transaction date. A duty needs all three. So the customs rate lives here and the sales-tax rate stays there; this register does not re-declare a sales tax, and the pointer above is how the two meet.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 2. when it applies
+    ACTIVE AND IN EFFECT ARE DIFFERENT QUESTIONS and this card is where they are told apart. The
+    switch is a decision somebody made; the window is arithmetic against `today`, which is printed so
+    the verdict can be checked rather than taken on trust.
+
+    effective_from is never nullable, deliberately: a rate with no start date cannot be looked up by
+    transaction date, and a NULL inside a unique key does not enforce on MySQL or MariaDB — two rows
+    with a null start would both slip past the index.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">When it applies</h2>
+      <div class="badge-group">
+        {% if obj.is_active %}
+          <span class="badge badge-green">Switched on</span>
+        {% else %}
+          <span class="badge badge-slate">Switched off</span>
+        {% endif %}
+        {% if is_current %}
+          <span class="badge badge-green">Inside its window</span>
+        {% else %}
+          <span class="badge badge-muted">Not in effect today</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Effective from</dt>
+          <dd class="fw-600 mono">{{ obj.effective_from|date:"M d, Y" }}
+            <div class="form-help">Required, always. A rate with no start date could not be found by transaction date, and a null inside the unique key would not be enforced by the database on MySQL or MariaDB.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Effective to</dt>
+          <dd class="mono">
+            {% if obj.effective_to %}
+              {{ obj.effective_to|date:"M d, Y" }}
+              <div class="form-help">The last day this rate applies. Closing a window is the gentle way to supersede a rate — the row stays as the evidence for what earlier shipments were costed at.</div>
+            {% else %}
+              <span class="text-muted">Open-ended</span>
+              <div class="form-help">No end date, so it runs until one is set or the row is switched off. Open-ended is not the same as missing — it is the normal state for a rate still in force.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Active switch</dt>
+          <dd>
+            {% if obj.is_active %}
+              <span class="badge badge-green">Active</span>
+              <div class="form-help">Available to be looked up, provided today also falls inside the window above.</div>
+            {% else %}
+              <span class="badge badge-slate">Inactive</span>
+              <div class="form-help">Never looked up, whatever the dates say. This is the switch to reach for instead of deleting — the row and its history survive.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Measured against</dt>
+          <dd class="mono">{{ today|date:"M d, Y" }}
+            <div class="form-help">Today's date, printed rather than implied — the verdict on this card is arithmetic against it and can be checked.</div>
+          </dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        {% if not obj.is_active %}
+          <span class="badge badge-slate">Switched off</span>
+          This rate is skipped entirely, regardless of its dates. Nothing will default a duty from it, and nothing it has already been copied onto is affected — a duty charge holds the percentage it was costed at.
+        {% elif is_current %}
+          <span class="badge badge-green">In effect</span>
+          Today falls inside this row's window and the row is switched on, so a duty charge raised today for this HS code{% if obj.country_of_origin %} on goods from {{ obj.country_of_origin }}{% endif %} would default to <span class="fw-600">{{ obj.duty_rate_pct|floatformat:3 }}%</span>.
+        {% elif obj.effective_from > today %}
+          <span class="badge badge-info">Not started yet</span>
+          This rate begins on {{ obj.effective_from|date:"M d, Y" }}. It is switched on and correct — it simply has not opened yet, which is exactly how a scheduled tariff change is supposed to sit in the book before it takes effect.
+        {% elif obj.effective_to and obj.effective_to < today %}
+          <span class="badge badge-muted">Window closed</span>
+          This rate ended on {{ obj.effective_to|date:"M d, Y" }} and no longer applies. It is kept because it is the evidence for what shipments cleared under it were costed at — deleting it would take that answer with it.
+        {% else %}
+          <span class="badge badge-muted">Not in effect</span>
+          Today falls outside this row's window.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="fw-600">Rates supersede rather than overwrite.</span> The right way to change a duty is to close this window and add a new row starting the day after — not to edit the percentage in place. Editing rewrites what the book says was true last month, and the whole reason a tariff is effective-dated is so a landed cost worked out in January can still be explained in June.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================ 3. actions
+    Delete is @require_POST, so it is a real form and a GET on that route is a 405. Neither button
+    carries a condition, because neither route carries one — see the header comment. The cost of
+    deleting is stated in the confirm rather than enforced by a hidden button.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:dutytariff_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'scm:dutytariff_delete' obj.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit" onclick="return confirm('Delete {{ obj.number }}? The rate goes with it. Landed costs already worked out are untouched — a duty charge keeps the percentage it was costed at, so nothing about history is rewritten — but after this, nothing will default a duty for this HS code and origin. If the rate has been superseded rather than entered in error, close its window or clear the Active switch instead: a superseded row is the evidence for what a past shipment\'s duty was based on, and once it is gone that answer cannot be reconstructed.');"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.9rem;">
+        Editing this row changes what the <span class="fw-600">next</span> duty charge defaults to and nothing else. A landed cost voucher that has already been allocated holds its own copy of the percentage, so no figure anywhere is restated by a save on this page — and nothing here posts a journal entry. Supply chain drafts documents for Accounting; Accounting posts them.
+      </p>
+      <p class="text-muted" style="margin:0;">
+        <span class="badge badge-amber">Nothing in the database stops this delete</span>
+        A duty charge <span class="fw-600">snapshots</span> the rate rather than pointing at the tariff, so there is no PROTECT to trip and the delete will simply go through however many landed costs were priced from it. That design is deliberate — it is what keeps a rate change from silently restating last quarter — and it is also why the only thing standing between this row and permanent loss is the confirmation above.
+      </p>
+    </div>
+  </div>
+{% endblock %}
