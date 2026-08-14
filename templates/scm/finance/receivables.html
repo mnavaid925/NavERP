@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — Accounts Receivable. STANDALONE at the sub-module root
+(templates/scm/finance/), the client_space_report / carbon_footprint precedent — it is not any one
+entity's list / detail / form page.
+
+FOLDER NOTE (do not "fix" this): backend package apps/scm/views/FinanceIntegration/, template folder
+templates/scm/finance/. The asymmetry IS the house rule — all seventeen shipped sub-module folders use
+short slugs. templates/scm/financeintegration/ would be the mistake.
+
+THERE IS NO AR TABLE AND THERE MUST NEVER BE ONE (L29, second source of truth). Every figure is READ
+from tables that already shipped:
+  4.5  scm.SalesOrder.invoice           — the customer order that earned the revenue
+  4.17 scm.ClientBillingRun.invoice     — the 3PL storage / handling billing run
+  4.10 scm.ReturnAuthorization.credit_note — a return, which lands as a CREDIT NOTE not an invoice
+The accounting.Invoice each of them points at is owned by apps/accounting. This page writes NOTHING:
+no POST target, no verb button, no form except the GET filter bar.
+
+Renders apps/scm/views/FinanceIntegration/Reports.py::finance_receivables. Everything this page may
+read, and nothing else — the view pins the same list in its own docstring:
+
+  rows        LIST of dicts: source, source_label, document, number, url (a STRING that is ALREADY
+              REVERSED IN THE VIEW), party, invoice, invoice_number (str or ""), invoice_status (the
+              RAW value or ""), invoice_status_label, total (Decimal), balance (Decimal or None)
+  totals      dict: count, total, balance, uninvoiced
+  source_choices  [("sales_order","Sales Orders"),("billing_run","3PL Billing Runs"),("return","Return Credit Notes")]
+  status_choices  accounting Invoice.STATUS_CHOICES — draft / sent / partial / paid / void
+  row_cap truncated   int / bool
+
+`q` IS NOT A CONTEXT KEY HERE. crud_list emits one; this is a hand-rolled report view and the frozen
+contract does not list it, so the search box echoes request.GET.q. Binding to {{ q }} would render an
+empty box after every search and look like the filter had been ignored.
+
+`row.url` IS A PLAIN STRING AND IS RENDERED AS ONE — never fed to the url tag. Three sources resolve to
+three different route names, so reversing here would need a route name held in a variable, which is
+exactly how a union report page turns into a NoReverseMatch 500. The view reverses; the template prints.
+
+`balance` is Decimal|None and None MUST NOT RENDER AS 0. None means no invoice exists yet, so there is
+no balance to speak of; 0.00 means an invoice exists and has been paid in full. Reporting an unbilled
+order as "paid" is the worst thing this page could say by accident, so every test is `is not None` —
+never truthiness, never |default, which would swallow a genuine 0 as well.
+
+A RETURN ROW IS A CREDIT NOTE, NOT AN INVOICE. accounting.Invoice.KIND_CHOICES is invoice/credit_note
+and 4.10 points at the credit-note kind, so those rows REDUCE what is owed. The column heading and the
+per-row note say so rather than leaving a reader to assume every line adds up in the same direction.
+
+Invoice columns are TEXT, not links. `invoice` is only tested for truthiness; the number prints as a
+string. Reversing accounting:invoice_detail off it would 500 the page the moment that key is anything
+other than a live Invoice instance, and this template cannot verify that. The empty state links to the
+AR invoice list instead — a literal reverse, which cannot fail.
+
+Status badges branch on the RAW value in `invoice_status`; the label is already resolved into
+`invoice_status_label`. "partial" is deliberately NOT enumerated and falls to the else fallback.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Accounts Receivable{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Accounts Receivable</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">&rsaquo;</span>
+        <span>Finance &amp; Accounting Integration</span><span class="sep">&rsaquo;</span>
+        <span>Accounts Receivable</span>
+      </div>
+      <p class="text-muted">
+        Everything supply chain is owed, gathered from the documents that earn it &mdash; sales orders, 3PL
+        billing runs and return credit notes &mdash; beside the customer invoice each one handed to accounting.
+        <span class="fw-600">This page holds no receivables of its own</span>; it reads the three source tables
+        and the invoices they point at.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:finance_payables' %}" class="btn btn-outline"><i data-lucide="arrow-up-right"></i> Payables</a>
+      <a href="{% url 'scm:salesorder_list' %}" class="btn btn-primary"><i data-lucide="shopping-cart"></i> Sales Orders</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        Nothing. Supply chain never posts a journal entry &mdash; it hands accounting a document and stops
+        there. A row with no invoice is not an error; it is revenue that has been earned but not yet billed,
+        which is precisely what the <span class="fw-600">Not yet invoiced</span> figure counts.
+      </p>
+      <div class="badge-group">
+        <span class="badge badge-info">Sales orders read from order management</span>
+        <span class="badge badge-slate">Billing runs read from third-party logistics</span>
+        <span class="badge badge-amber">Returns read as credit notes, which reduce what is owed</span>
+        <span class="badge badge-muted">No table of its own, no journal entry, no column written</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ totals.count }}</div>
+      <div class="stat-label">Document{{ totals.count|pluralize }} listed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="sigma"></i></div>
+      <div class="stat-value">{{ totals.total|floatformat:2 }}</div>
+      <div class="stat-label">Total receivable value</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="wallet"></i></div>
+      <div class="stat-value">{{ totals.balance|floatformat:2 }}</div>
+      <div class="stat-label">Outstanding balance</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ totals.uninvoiced|floatformat:2 }}</div>
+      <div class="stat-label">Not yet invoiced</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Filters</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="ar-q">Search</label>
+          {% comment %} Echoed from request.GET.q — `q` is not a context key on this hand-rolled view. {% endcomment %}
+          <input type="text" name="q" id="ar-q" value="{{ request.GET.q }}" class="form-input"
+                 placeholder="Search document number or party name&hellip;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ar-source">Source</label>
+          {% comment %}
+            A STRING value, compared against request.GET.source directly — no |stringformat and never
+            |slugify. Junk in this param narrows nothing and still returns 200 (L11).
+          {% endcomment %}
+          <select name="source" id="ar-source" class="form-select">
+            <option value="">Every source</option>
+            {% for value, label in source_choices %}
+              <option value="{{ value }}" {% if request.GET.source == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ar-status">Invoice status</label>
+          <select name="status" id="ar-status" class="form-select">
+            <option value="">Every invoice status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:finance_receivables' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        Filtering by invoice status narrows to documents that already have an invoice, so it always hides the
+        uninvoiced rows &mdash; usually the ones worth chasing. Clear it to see them again.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Receivable documents</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ rows|length }} row{{ rows|length|pluralize }}</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} &mdash; narrow the filters to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Document</th>
+            <th>Party</th>
+            <th>Customer invoice</th>
+            <th class="text-right">Total</th>
+            <th class="text-right">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% comment %} Branching on the RAW value; the label is already resolved by the view. {% endcomment %}
+                {% if row.source == "sales_order" %}
+                  <span class="badge badge-info">{{ row.source_label }}</span>
+                {% elif row.source == "billing_run" %}
+                  <span class="badge badge-slate">{{ row.source_label }}</span>
+                {% elif row.source == "return" %}
+                  <span class="badge badge-amber">{{ row.source_label }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ row.source_label }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  row.url is pre-reversed by the view and printed as a plain href. Never run the url tag
+                  on a variable route name — three sources, three route names, one NoReverseMatch.
+                {% endcomment %}
+                <a href="{{ row.url }}" class="fw-600">{{ row.number }}</a>
+                {% if row.document %}<div class="form-help">{{ row.document }}</div>{% endif %}
+                {% if row.source == "return" %}
+                  <div class="form-help">Settles as a credit note &mdash; it reduces what this party owes.</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.party %}{{ row.party }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              </td>
+              <td>
+                {% if row.invoice %}
+                  <div class="fw-600">{{ row.invoice_number }}</div>
+                  {% comment %}
+                    Chain on the RAW invoice_status. "partial" is intentionally not enumerated and lands
+                    in the else branch, which prints the resolved label rather than guessing a colour the
+                    contract never froze.
+                  {% endcomment %}
+                  {% if row.invoice_status == "draft" %}
+                    <span class="badge badge-muted">{{ row.invoice_status_label }}</span>
+                  {% elif row.invoice_status == "sent" %}
+                    <span class="badge badge-info">{{ row.invoice_status_label }}</span>
+                  {% elif row.invoice_status == "paid" %}
+                    <span class="badge badge-green">{{ row.invoice_status_label }}</span>
+                  {% elif row.invoice_status == "void" %}
+                    <span class="badge badge-slate">{{ row.invoice_status_label }}</span>
+                  {% else %}
+                    <span class="badge badge-slate">{{ row.invoice_status_label }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-muted">Not invoiced</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.total|floatformat:2 }}</td>
+              <td class="text-right">
+                {% comment %}
+                  `is not None`, never truthiness: 0.00 means invoiced and settled in full, None means no
+                  invoice exists so there is no balance yet. Rendering None as 0 would report an unbilled
+                  order as paid.
+                {% endcomment %}
+                {% if row.balance is not None %}
+                  {{ row.balance|floatformat:2 }}
+                {% else %}
+                  <span class="text-muted">Not invoiced</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="file-minus"></i>
+                  <h3>No customer invoices raised yet</h3>
+                  <p>Nothing matches the current filters. This page has no receivables table of its own &mdash; a row appears here only once a sales order, a 3PL billing run or a return authorisation exists. Confirm a sales order, close a billing run, or approve a return for credit, and the document shows up here whether or not it has reached accounting. If you were expecting rows, try clearing the invoice-status filter first.</p>
+                  <a href="{% url 'scm:salesorder_list' %}" class="btn btn-primary"><i data-lucide="shopping-cart"></i> Sales orders</a>
+                  <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Billing runs</a>
+                  <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="rotate-ccw"></i> Returns</a>
+                  <a href="{% url 'accounting:invoice_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> AR invoices</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td colspan="4" class="fw-600">Total over the documents listed</td>
+              <td class="text-right fw-600">{{ totals.total|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.balance|floatformat:2 }}</td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      The figures above the table cover the whole filtered set; the footer covers only the rows printed.
+      {% if truncated %}
+        They differ on this view because the list is capped at {{ row_cap }} rows.
+      {% endif %}
+      A balance reading &ldquo;Not invoiced&rdquo; is revenue earned but never billed &mdash; a different thing from an
+      invoice settled down to zero.
+    </div>
+  </div>
+{% endblock %}
