@@ -1436,6 +1436,77 @@ detector write every excursion** — a hand-written one would be a lie in the ta
    EU Annex 11 system. Do not add conformance language.
 6. `LotSerial.status` (quarantine) is **4.9's column to write**; 4.15 only reads it.
 
+---
+
+## 4.16 Customer Portal  (`apps/scm/*/CustomerPortal/`, templates `templates/scm/portal/`)
+
+**The self-service layer, and mostly an exercise in NOT re-declaring things.** Two of its five NavERP bullets are
+COMPUTED PAGES with no table. 4.16 owns no order (4.5), no shipment or POD (4.6), no item or catalogue (4.3), no
+invoice (`accounting`) and no helpdesk (CRM).
+
+### Models — 4, all new, nothing re-declared
+| Model | Prefix | Notes |
+|---|---|---|
+| `PortalAccount` | `PAC-` | One row per customer `core.Party`. **NOT a login** — users bind via the shipped `crm.CustomerPortalAccess`. Entitlement booleans, `stock_display` (hidden/availability_text/band/exact_quantity), `catalog_scope` + `catalog_categories` M2M, `price_basis`, `default_ship_to`, notification prefs (**stored only, 4.16 dispatches nothing**). `unique_together` on `(tenant, customer)`. |
+| `PortalOrderInquiry` | `PIQ-` | **WRAPS `crm.Case`** — thread/SLA/CSAT/ownership all reused. Adds supply-chain context + `outcome`. `case`, `outcome`, `resolved_at`, `return_authorization`, `source`, `raised_by` are `editable=False`. |
+| `PortalDocumentShare` | `PDS-` | Six typed pointers, **exactly one** set. Expiring, revocable, download-audited `public_token`. |
+| `PortalActivity` | — | Append-only customer **read** log. `TenantOwned`, every field `editable=False`, **list+detail only**. |
+
+### The rules that bit during the build — read before changing anything
+1. **`PortalAccount` create/edit are `@tenant_admin_required`** (like `_delete`, and like CRM's
+   `customerportalaccess_create`). This row publishes AR balance, credit limit, invoice history and per-warehouse
+   stock to an outsider — that is an IAM decision, not ordinary CRUD.
+2. **`expires_at` and `revoked_at` are HALVES OF ONE CONTROL.** `portaldocumentshare_edit` is admin-gated to match
+   `_revoke`; `expires_at` is **required on create**, optional on edit, so a member cannot mint a permanent link
+   only an admin can kill.
+3. **`CUSTOMER_VISIBLE_INVOICE_KIND` / `_STATUSES` live in `models/CustomerPortal/_choices.py`**, read by the
+   profile page, the share form AND the download view. They were local to `Portal.py`, so only the page obeyed
+   them and every seeded share pointed at a **draft credit note** the token happily served.
+4. **`core.Document.classification == "confidential"` is refused** in the form queryset, `clean()` and
+   `_target_still_owned`. Nothing in `apps/scm` read that column before.
+5. **Same tenant ≠ same customer.** `PortalOrderInquiry.clean()` checks the counterparty on `sales_order` /
+   `shipment` / `invoice`, not just the tenant. (Repo-wide: ~40 scm models tenant-check their FKs; 3 check a
+   counterparty, all here.)
+6. **`clean()` re-homes errors keyed on `editable=False` columns to `NON_FIELD_ERRORS`** — `add_error` on a field
+   the form does not declare raises `ValueError`, i.e. a **500**. That is why `PortalInquiryCustomerForm` also
+   drops `invoice_dispute` from its choices: it has no `invoice` picker by design.
+7. **`portal_document_download` is the app's 2nd unauthenticated route.** Tenant off the **object**
+   (`request.tenant` is `None` for an anonymous visitor), `tenant.is_active` + `portal_account.is_active` +
+   `can_view_documents` re-checked, revoke/expiry enforced **inside the lookup**, ownership re-proved, streamed
+   via `FileResponse` (never a `MEDIA_URL` redirect — `config/urls.py` serves it directly under `DEBUG`).
+   `@require_GET`. Evidence is recorded **only for a real navigation** (`Sec-Fetch-Dest`), so a forced `<img>`
+   load cannot forge a download row. **Needs per-IP rate limiting before it faces the internet.**
+8. **`can_request_returns` is enforced in 4.10's `portal_return_create`**, not just hidden. A customer with **no**
+   `PortalAccount` is still allowed there — that route predates 4.16 and must not regress.
+9. **`ModelChoiceField.queryset` is also the VALIDATOR** — never slice it (`to_python` calls `.get()`, and Django
+   refuses to filter a sliced query). That is why the inquiry pickers are uncapped.
+10. `select_related` must follow the hop the target's `__str__` actually walks — `SalesOrderLine` → `item`,
+    `SalesOrder` → `customer`, `Shipment` → nothing, `QualityInspection` → `item`. A **wrong** one raises
+    `FieldError` when the widget iterates; a merely **useless** one is silent and costs a query per `<option>`.
+
+### Routes (31) · alias `_cp_`
+`portalaccount_*`, `portalorderinquiry_*` (+ `_resolve` / `_reopen` / `_raise_return`), `portaldocumentshare_*`
+(+ `_revoke`), `portalactivity_list|_detail`, `portal_order_tracking`, `portal_catalog_preview`, and the gated
+`portal_home` / `portal_order_list` / `portal_order_detail` / `portal_documents` / `portal_catalog` /
+`portal_profile` / `portal_inquiry_create` / `portal_document_download`.
+**4.10 already owns `return_portal` and `portal_return_create`** — the `scm:` namespace is flat.
+
+### Templates — `templates/scm/portal/`
+Entity folders `portalaccount/ portalorderinquiry/ portaldocumentshare/ portalactivity/`; staff standalone
+`order_tracking.html`, `catalog_preview.html`; the nine gated pages are `customer_*.html` so the split is obvious.
+**`public_token` is rendered nowhere** except inside a download `href` on `customer_documents.html`.
+
+### Seeder — `_seed_portal_tenant`
+Three accounts: fully-enabled, restricted, and **`PAC-00003` deliberately EMPTY** (zero orders/documents/inquiries,
+never logged in). That is not filler — a new portal customer's empty state is the **modal first session**, and no
+smoke sweep in this repo had ever rendered an `{% empty %}` branch. Inquiries go through `open_for()`, the revoked
+share through `revoke()`, activity through `record()`, so every run exercises the shipped path.
+
+### Shared resolver
+`_portal_account(request)` in `apps/scm/views/_helpers.py` → `(portal, refusal)`, exactly one non-None. Refuses at
+each of three steps; **never falls through to an unscoped queryset**. 4.10's `_customer_portal_access` was promoted
+into the same file.
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
@@ -1529,5 +1600,13 @@ Integration **`scm:labor_payroll_export`** (a read-only CSV hand-off that writes
 NavERP.md bullets, five keys. Note `scm:labor_scorecard` is `@tenant_admin_required` while the
 payroll export is NOT: the export is a sidebar destination and `resolve_nav` has no per-link
 permission concept, so it stays reachable and narrows its rows to the acting worker instead (L32).
+
+**4.16** — `Order Tracking` → `scm:portal_order_tracking` (COMPUTED join of 4.5 + 4.6, no table),
+`Account Management` → `scm:portalaccount_list`, `Document Retrieval` → `scm:portaldocumentshare_list`,
+`Support Ticketing` → `scm:portalorderinquiry_list`, `Catalog Browsing` → `scm:portal_catalog_preview` (staff
+render-as preview). **All five are STAFF pages (L32)** — the sidebar IS the staff application, and a staff user has
+no `crm.CustomerPortalAccess`, so a bullet pointing at a gated customer page would refuse the person clicking it.
+The gated surface is reached by CUSTOMERS at `/scm/portal/`. **No key for `PortalActivity`** — five NavERP.md
+bullets, five keys; the log is a panel on the account detail page.
 
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
