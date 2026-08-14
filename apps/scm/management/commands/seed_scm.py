@@ -61,8 +61,9 @@ class Command(BaseCommand):
     help = ("Seed SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
             "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
-            "4.14 labor management demo data — idempotent (skips a tenant that already has the rows "
-            "each pass creates).")
+            "4.14 labor management + 4.15 cold chain + 4.16 customer portal + 4.17 third-party "
+            "logistics + 4.18 finance & accounting integration demo data — idempotent (skips a "
+            "tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -194,12 +195,28 @@ class Command(BaseCommand):
             # pages: without an owner on a row somewhere, both render an honest but empty table.
             self._seed_3pl_tenant(tenant)
 
+            # 4.18 AFTER 4.17, and now IT is the pass that genuinely has to run last. A landed cost
+            # voucher READS 4.1's received goods receipts and the `receipt` StockMoves those
+            # bookings posted (4.3), 4.6's shipments and freight invoices, 4.12's customs
+            # declarations, and accounting's GL accounts / tax codes / currencies. Every one of those
+            # is an input, and running this pass before any of them produces a correct zero — the one
+            # demo outcome worse than no demo at all.
+            #
+            # It is also the only pass that WRITES to 4.3's weighted-average cache, and it does so
+            # through `Item.apply_landed_cost()` inside `allocate()` rather than by hand. It writes
+            # no JournalEntry: `draft_bill()` hands a DRAFT `accounting.Bill` to AP and stops (L29).
+            #
+            # It additionally sets `weight_kg` / `volume_cbm` on three of 4.3's items, because
+            # allocate-by-weight and allocate-by-volume FALL BACK to quantity without them — the demo
+            # would show a plausible figure computed from the wrong basis.
+            self._seed_finance_tenant(tenant)
+
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
             "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
             "4.14 labor management + 4.15 cold chain management + 4.16 customer portal + "
-            "4.17 third-party logistics seed complete."))
+            "4.17 third-party logistics + 4.18 finance & accounting integration seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -1015,8 +1032,60 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
+        # --- 4.18 Finance & Accounting Integration ---
+        # 4.18 FIRST (newest sub-module), and here the order is load-bearing FOUR times over —
+        # every one of this sub-module's inward edges is a PROTECT, because every one of them points
+        # at the evidence for a number carried in inventory value.
+        #
+        # 1. THE DRAFTED AP BILLS GO BEFORE THE VOUCHERS, for exactly the orphaned-bills reason at
+        #    the top of this method. `LandedCostVoucher.bill` is SET_NULL, so deleting the vouchers
+        #    first would silently sever the only link that identifies a seeded landed-cost bill —
+        #    every --flush cycle would then strand another set of draft bills in Accounts Payable
+        #    with nothing left to recognise them by. Scoped through `scm_landed_cost_vouchers`, so a
+        #    hand-entered bill for the same vendor is never touched, and so this is a strictly
+        #    DIFFERENT set from the `scm_goods_receipts` bills deleted at the top (a landed-cost bill
+        #    has no receipt link at all).
+        # 2. THE ALLOCATIONS GO BEFORE 4.3's `StockMove` AND `Item`. Both `LandedCostAllocation`
+        #    .stock_move and .item are PROTECT — an allocated uplift whose move had vanished would be
+        #    a cost with no evidence — so the other order raises ProtectedError against the
+        #    `StockMove.objects.all().delete()` and the `Item` cleanup much further down.
+        # 3. THE VOUCHERS GO BEFORE 4.1's `GoodsReceiptNote`. `LandedCostVoucher.goods_receipt` is
+        #    PROTECT for the same reason: the receipt is the evidence for every allocated figure.
+        # 4. THE WHOLE TREE GOES BEFORE ANY PARTY CLEANUP. `LandedCostVoucher.party` is PROTECT onto
+        #    `core.Party`, the same edge the 4.17 and 4.16 blocks below are careful about.
+        #
+        # `LandedCostCharge` CASCADEs from its voucher and `LandedCostAllocation` CASCADEs from both
+        # the voucher and the charge, so both would go regardless; they are named so the teardown
+        # reads top-down and a future reader does not have to re-derive which edges are cascades.
+        # The allocations are deleted FIRST all the same, because their PROTECTs point OUTWARD at
+        # 4.3 and the cascade order between siblings is not something to depend on.
+        #
+        # THE WEIGHTED-AVERAGE CACHE IS DELIBERATELY NOT UNWOUND HERE, and that is a decision rather
+        # than an omission. `_unallocate()` is `allocate()`'s partner and reverses the roll for a
+        # LIVE voucher; a --flush deletes 4.3's items and their whole StockMove ledger further down
+        # anyway, so there is no `average_cost` left to correct — and calling the reversal here would
+        # be a second, unaudited writer of a column 4.3 owns, on rows that are about to be deleted.
+        #
+        # `Item.weight_kg` / `Item.volume_cbm` are likewise NOT reset: they are 4.3 columns this pass
+        # only fills when they are NULL, exactly like `Item.owner_client` in the 4.17 block below, and
+        # a blanket `.update()` here would blank values a user typed rather than merely the seeded
+        # ones. There is NO JournalEntry to unwind — 4.18 posts none (L29).
+        from apps.accounting.models import Bill as _LandedCostBill
+        from apps.scm.models import (DutyTariff, LandedCostAllocation, LandedCostCharge,
+                                     LandedCostVoucher)
+
+        landed_bills = _LandedCostBill.objects.filter(
+            scm_landed_cost_vouchers__isnull=False).distinct()
+        landed_bill_count = landed_bills.count()
+        landed_bills.delete()               # CASCADE takes their BillLine rows with them
+        LandedCostAllocation.objects.all().delete()   # PROTECTs onto 4.3 StockMove + Item
+        LandedCostCharge.objects.all().delete()       # would cascade from the voucher regardless
+        LandedCostVoucher.objects.all().delete()      # PROTECTs onto 4.1 GRN + core.Party
+        DutyTariff.objects.all().delete()             # nothing points at it but the snapshots, which
+                                                      # are plain columns on the charge, not FKs
+
         # --- 4.17 Third-Party Logistics (3PL) Management ---
-        # 4.17 FIRST (newest sub-module), and the order INSIDE it is load-bearing in three places.
+        # 4.17 next (previous sub-module), and the order INSIDE it is load-bearing in three places.
         #
         # 1. THE DRAFTED AR INVOICES GO BEFORE THE RUNS, for exactly the orphaned-bills reason at the
         #    top of this method. `ClientBillingRun.invoice` is SET_NULL, so deleting the runs first
@@ -1407,8 +1476,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING(
             f"Flushed all SCM procurement + SRM + inventory + warehouse + order + transportation + "
             f"demand planning + manufacturing + quality + returns + analytics + compliance + asset "
-            f"management + labor management + cold chain + customer portal + 3PL rows "
-            f"(+{bill_count + freight_bill_count} linked accounting bill(s), "
+            f"management + labor management + cold chain + customer portal + 3PL + finance rows "
+            f"(+{bill_count + freight_bill_count + landed_bill_count} linked accounting bill(s), "
             f"+{return_credit_count} linked credit note(s), "
             f"+{threepl_invoice_count} 3PL client invoice(s))."))
 
@@ -5355,3 +5424,279 @@ class Command(BaseCommand):
               f"{len(reserved_bins)} reserved bin(s), "
               f"{Item.objects.filter(tenant=tenant, owner_client__isnull=False).count()} item(s) "
               f"assigned an owner. No StockMove — 4.17 posts none.")
+
+    # ------------------------------------------------------ 4.18 Finance & Accounting Integration
+    def _seed_finance_tenant(self, tenant):
+        """4.18 demo rows: item shipping attributes, two duty tariffs, two landed cost vouchers.
+
+        **This pass invents no master data.** Every party, item, GL account, tax code, currency,
+        shipment, freight invoice and customs document it references is found among rows the earlier
+        passes already seeded; an optional link whose subject does not exist is left null rather than
+        created. The two ``DutyTariff`` rows are the sole exception and they ARE 4.18's own master —
+        ``accounting.TaxCode`` structurally cannot hold a customs rate (no customs member in its
+        ``TAX_TYPE_CHOICES``, no ``hs_code``, no origin pair), which is the entire reason the table
+        exists.
+
+        **Every derived figure is produced by the REAL code path.** The allocation runs through
+        ``LandedCostVoucher.allocate()`` and the AP hand-off through ``draft_bill()`` — never
+        hand-written rows. That is the 4.13 ``_post_stock_move`` / 4.17 ``calculate()`` rule: the
+        demo is produced by the same code the buttons run, so ``_unallocate()``, the rounding
+        remainder that makes the allocation rows tie EXACTLY to the charge, the basis fallback chain
+        and the ``BillLine`` precision rules are all exercised on every ``seed_scm``, and the demo
+        cannot drift from the implementation. Not one ``LandedCostAllocation`` is written by hand.
+
+        **SCM POSTS NO JournalEntry.** ``draft_bill()`` creates a DRAFT ``accounting.Bill`` and
+        stops; Accounting posts the entry (L29). Nothing below reaches the ledger.
+
+        **THE SECOND VOUCHER IS LEFT IN DRAFT AND THAT IS THE POINT.** A cost sheet whose invoices
+        have not arrived yet is the ordinary first state of this feature, not an edge case — it is
+        what makes the estimate-only path, the un-allocated empty state and the "Allocate" button
+        visible in the demo instead of only under test.
+        """
+        from apps.accounting.models import TaxCode
+        from apps.scm.models import (DutyTariff, FreightInvoice, GoodsReceiptNote, Item,
+                                     LandedCostCharge, LandedCostVoucher, Shipment, StockMove,
+                                     TradeDocument)
+        from apps.scm.models._base import ZERO
+        from apps.scm.views._helpers import _post_grn_receipt
+
+        if LandedCostVoucher.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: landed cost data already exists — skipping.")
+            return
+
+        today = timezone.localdate()
+        admin = self._admin(tenant)
+        currency = Currency.objects.filter(code="USD").first()
+        account = self._expense_account(tenant)
+        # The RECOVERABLE counterpart of a duty line. `vat` first, `gst` second — the two spellings of
+        # the same reclaimable import tax; sales tax is neither, so it is deliberately not accepted
+        # here. None is a legitimate answer and every use below is behind a null check.
+        import_tax = (TaxCode.objects.filter(tenant=tenant, tax_type="vat", is_active=True).first()
+                      or TaxCode.objects.filter(tenant=tenant, tax_type="gst", is_active=True).first())
+
+        # ---- 1. the two allocation bases the 4.3 item master could not answer --------------------
+        # WITHOUT THESE, allocate-by-weight and allocate-by-volume both silently FALL BACK to
+        # quantity and the demo shows a plausible number computed from the wrong basis — the hardest
+        # kind of wrong to notice. Set only where the column is still NULL, so a figure a user typed
+        # is never overwritten and a second `seed_scm` is a no-op even if the early return above were
+        # ever removed. (kg, m³) per unit, realistic for the three IT goods 4.3 seeds.
+        dimensions = {
+            "WS-16":  (Decimal("2.4000"), Decimal("0.0280")),   # a 16-inch laptop, boxed
+            "MON-27": (Decimal("5.8000"), Decimal("0.0620")),   # a 27-inch monitor, boxed
+            "DOCK-C": (Decimal("0.3500"), Decimal("0.0015")),   # a USB-C dock
+        }
+        dimensioned = 0
+        for sku, (weight, volume) in dimensions.items():
+            item = Item.objects.filter(tenant=tenant, sku=sku).first()
+            if item is None:
+                continue
+            fields = []
+            if item.weight_kg is None:
+                item.weight_kg = weight
+                fields.append("weight_kg")
+            if item.volume_cbm is None:
+                item.volume_cbm = volume
+                fields.append("volume_cbm")
+            if fields:
+                item.save(update_fields=fields + ["updated_at"])
+                dimensioned += 1
+
+        # ---- 2. the duty tariff master ----------------------------------------------------------
+        # TWO rows, and the pair is the demo: one ANY-ORIGIN fallback (blank `country_of_origin`) and
+        # one ORIGIN-SPECIFIC row, which is exactly the resolution order `rate_for()` implements — a
+        # named origin beats the blank fallback, and the blank one is used only when nothing matches.
+        # Both are effective-dated from the past with an open end, so both are in force today and the
+        # list page's `current` badge renders on each.
+        #
+        # `get_or_create` on the NATURAL KEY (tenant, hs_code, country_of_origin, effective_from),
+        # not on `number`: `number` is auto-assigned by `TenantNumbered.save()`, so keying on it would
+        # create a second row every run. The HS codes are stored already upper-cased, so the
+        # normalisation in `clean()` (which `get_or_create` does not run) is a no-op here.
+        tariff_specs = [
+            ("8471.30", "", "Portable automatic data-processing machines, under 10 kg",
+             Decimal("3.900"), today - datetime.timedelta(days=400)),
+            ("8528.52", "China", "Monitors capable of direct connection to an ADP machine",
+             Decimal("7.500"), today - datetime.timedelta(days=180)),
+        ]
+        tariffs = []
+        for hs_code, origin, description, rate, effective_from in tariff_specs:
+            tariff, _created = DutyTariff.objects.get_or_create(
+                tenant=tenant, hs_code=hs_code, country_of_origin=origin,
+                effective_from=effective_from,
+                defaults={
+                    "description": description,
+                    "duty_rate_pct": rate,
+                    "effective_to": None,          # open-ended until it is superseded
+                    "is_active": True,
+                    "tax_code": import_tax,        # may be None; the column is nullable
+                },
+            )
+            tariffs.append(tariff)
+
+        # ---- 3. the allocation base: a RECEIVED receipt with posted stock moves ------------------
+        # `receipt_moves()` is the whole allocation base, and it matches on `reference=grn.number`
+        # AND `move_type="receipt"` AND `quantity > 0`. A receipt with none of those posted cannot be
+        # allocated at all — `allocate()` refuses it by design.
+        grn = (GoodsReceiptNote.objects.filter(tenant=tenant, status="received")
+               .select_related("purchase_order").order_by("id").first())
+        if grn is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no received goods receipt — skipping 4.18 landed cost (a voucher "
+                f"costs out a receipt; this pass creates none)."))
+            return
+
+        receipt_moves = StockMove.objects.filter(
+            tenant=tenant, reference=grn.number, move_type="receipt", quantity__gt=ZERO)
+        if not receipt_moves.exists():
+            # CLOSING 4.1'S DOCUMENTED GAP, not fabricating a receipt. `_seed_tenant` books this GRN
+            # `received` WITHOUT posting stock and says why in a comment at its own call site: that
+            # 4.1 pass runs BEFORE `_seed_inventory_tenant`, so when it runs there is no item master
+            # and no stock location to post against. This pass runs LAST, after 4.3 has created both
+            # — and the PO lines' `sku_hint`s are WS-16 / DOCK-C / MON-27, the exact SKUs 4.3 seeds,
+            # so the resolver now matches what it could not match then.
+            #
+            # THROUGH THE REAL HELPER, which is the same function `goodsreceipt_receive` calls when a
+            # user books a receipt in the UI — so the weighted-average roll and the inbound cost
+            # layers follow the app's own path rather than a seeder's copy of it. Guarded by the
+            # `exists()` above so a second run posts nothing; the guard and the flush filter describe
+            # the SAME set of rows (the 4.13 maintenance-move rule).
+            with transaction.atomic():
+                posted, unmatched, blocked = _post_grn_receipt(grn, admin)
+            if blocked:
+                self.stdout.write(self.style.WARNING(
+                    f"{tenant.name}: {blocked} — skipping 4.18 landed cost."))
+                return
+            if not posted:
+                self.stdout.write(self.style.WARNING(
+                    f"{tenant.name}: {grn.number}'s lines matched no item "
+                    f"({len(unmatched)} unmatched) — skipping 4.18 landed cost, since there are no "
+                    f"received units to land costs on."))
+                return
+
+        # ---- 4. the optional context links: found, never created --------------------------------
+        # A forwarder/broker is procured from exactly as a carrier is, so the payee comes from the
+        # SAME supplier/vendor/partner set `LandedCostVoucherForm` offers (`_carrier_parties`). The
+        # PO's own vendor is preferred where there is one: the demo then reads as "the goods and the
+        # freight came from the same counterparty", and it guarantees a payee even on a tenant whose
+        # party book was seeded differently.
+        payee = None
+        if grn.purchase_order_id and grn.purchase_order.vendor_id:
+            payee = grn.purchase_order.vendor
+        if payee is None:
+            payee = (Party.objects
+                     .filter(tenant=tenant, roles__role__in=("supplier", "vendor", "partner"))
+                     .distinct().order_by("name", "id").first())
+        if payee is None:
+            self.stdout.write(self.style.WARNING(
+                f"{tenant.name}: no supplier/vendor/partner party — skipping 4.18 landed cost (the "
+                f"drafted bill's party is PROTECT and required; this pass creates no party)."))
+            return
+
+        # All three are OPTIONAL on the model and every one of them is left NULL rather than created
+        # when the earlier pass did not seed it. The customs declaration is preferred over any other
+        # trade document because it is the one that carries the declared value and the origin the
+        # duty charge below is snapshotted against.
+        shipment = Shipment.objects.filter(tenant=tenant).order_by("id").first()
+        trade_doc = (TradeDocument.objects.filter(tenant=tenant, doc_type="customs_declaration")
+                     .order_by("id").first()
+                     or TradeDocument.objects.filter(tenant=tenant).order_by("id").first())
+        freight_invoice = FreightInvoice.objects.filter(tenant=tenant).order_by("id").first()
+        origin = (trade_doc.country_of_origin if trade_doc is not None else "") or ""
+
+        # ---- 5. voucher one: three charges, allocated and billed --------------------------------
+        # `allocation_basis="value"` on the header, and the charges then OVERRIDE it — which is the
+        # point of having both. Freight goes by WEIGHT and insurance by VOLUME (the two bases §1
+        # above populated), while the duty inherits nothing and takes the header's value basis. One
+        # voucher therefore demonstrates three different bases and the header/line override at once.
+        voucher = LandedCostVoucher(
+            tenant=tenant, goods_receipt=grn, party=payee, shipment=shipment,
+            trade_document=trade_doc, currency=currency,
+            cost_date=today - datetime.timedelta(days=3), allocation_basis="value",
+            notes="Ocean freight, marine insurance and customs duty on the inbound consignment.",
+        )
+        voucher.save()
+
+        LandedCostCharge.objects.create(
+            voucher=voucher, charge_type="freight",
+            description="Ocean freight, port-to-door",
+            freight_invoice=freight_invoice,      # may be None — the column is nullable
+            estimated_amount=Decimal("1450.00"), actual_amount=Decimal("1587.40"),
+            allocation_basis="weight",            # OVERRIDES the header's value basis
+            gl_account=account, capitalise_to_inventory=True,
+        )
+        LandedCostCharge.objects.create(
+            voucher=voucher, charge_type="insurance",
+            description="Marine cargo insurance, all-risk",
+            estimated_amount=Decimal("310.00"), actual_amount=Decimal("298.75"),
+            allocation_basis="volume",            # OVERRIDES the header's value basis
+            gl_account=account, capitalise_to_inventory=True,
+        )
+        # THE DUTY CHARGE SNAPSHOTS ITS RATE THROUGH `rate_for()` — the real lookup, run exactly as
+        # the form's default would run it, rather than a hard-coded percentage. `duty_rate_pct` is
+        # then a frozen number on the charge: re-rating the tariff next quarter must never restate
+        # what this shipment cleared customs at. `rate_for` returns None for an unresolvable code and
+        # the charge is still valid with a zero rate, so no branch here can fail the pass.
+        duty_tariff = DutyTariff.rate_for(tenant, "8471.30", origin, voucher.cost_date)
+        LandedCostCharge.objects.create(
+            voucher=voucher, charge_type="duty",
+            description="Import duty on declared value",
+            estimated_amount=Decimal("640.00"), actual_amount=Decimal("672.15"),
+            allocation_basis="quantity",          # OVERRIDES the header's value basis
+            gl_account=account,
+            tax_code=(duty_tariff.tax_code if duty_tariff is not None else import_tax),
+            hs_code=(duty_tariff.hs_code if duty_tariff is not None else "8471.30"),
+            country_of_origin=origin,
+            duty_rate_pct=(duty_tariff.duty_rate_pct if duty_tariff is not None else ZERO),
+            capitalise_to_inventory=True,
+        )
+        voucher.recalc_totals()
+
+        # THE REAL PATH, exactly as the two buttons run it. `allocate()` writes every
+        # `LandedCostAllocation` row, ties them to the charge to the cent through its
+        # last-row-absorbs-the-remainder rule, and rolls the weighted average via
+        # `Item.apply_landed_cost()`; `draft_bill()` hands a DRAFT `accounting.Bill` to AP and stops.
+        # Neither is hand-simulated, so every `seed_scm` re-exercises both.
+        allocation = voucher.allocate()
+        drafted_bill = voucher.draft_bill()
+
+        # ---- 6. voucher two: estimate only, deliberately left in DRAFT --------------------------
+        # ONE charge with an estimate and NO actual, so `allocatable_amount` demonstrates the
+        # "allocate the estimate until the invoice arrives" branch, and the voucher stays `draft` so
+        # the list page shows both ends of the ladder and the detail page renders its un-allocated
+        # empty state. Deliberately NOT allocated — see the docstring.
+        pending = LandedCostVoucher(
+            tenant=tenant, goods_receipt=grn, party=payee, shipment=shipment, currency=currency,
+            cost_date=today, allocation_basis="quantity",
+            notes="Brokerage and terminal handling quoted; awaiting the broker's invoice.",
+        )
+        pending.save()
+        LandedCostCharge.objects.create(
+            voucher=pending, charge_type="brokerage",
+            description="Customs clearance and terminal handling (quoted)",
+            estimated_amount=Decimal("385.00"), actual_amount=ZERO,
+            gl_account=account, capitalise_to_inventory=True,
+        )
+        # RECOVERABLE import VAT on the same voucher: it appears on the drafted bill but NEVER
+        # capitalises into stock, because it is reclaimed from the authority rather than borne. This
+        # is the one charge in the demo that proves `capitalises` is not just `capitalise_to_inventory`.
+        LandedCostCharge.objects.create(
+            voucher=pending, charge_type="other",
+            description="Import VAT (recoverable)",
+            estimated_amount=Decimal("512.00"), actual_amount=ZERO,
+            gl_account=account, tax_code=import_tax,
+            is_recoverable=True, capitalise_to_inventory=True,
+        )
+        pending.recalc_totals()
+
+        self.stdout.write(
+            f"{tenant.name}: 4.18 finance — {len(tariffs)} duty tariff(s) "
+            f"({', '.join(t.hs_code + (f'/{t.country_of_origin}' if t.country_of_origin else '/any') for t in tariffs)}), "
+            f"{dimensioned} item(s) given a unit weight/volume, "
+            f"2 landed cost voucher(s): {voucher.number} allocated via allocate() "
+            f"({allocation['rows']} allocation row(s) over {allocation['charges']} charge(s), "
+            f"{voucher.allocated_total} onto {grn.number}"
+            + (f", basis fallback {'; '.join(allocation['fallbacks'])}" if allocation["fallbacks"]
+               else "")
+            + f") and billed as {drafted_bill.number} — a DRAFT in AP, no journal entry; "
+            f"{pending.number} DELIBERATELY LEFT IN DRAFT (estimate only, one recoverable charge "
+            f"that never capitalises).")
