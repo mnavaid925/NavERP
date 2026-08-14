@@ -391,10 +391,12 @@ from .CustomerPortal.PortalDocumentShares import (  # noqa: F401
 # SIX forms for FOUR models: the two line models each get their own, and the two computed report
 # pages get none at all because they write nothing.
 #
-# What is NOT on these forms is the load-bearing part. `ClientRateCard.status` is absent — a card
-# moves draft -> active -> superseded through the `activate` / `supersede` verbs, which is what makes
-# a calculated run's pricing immutable; a status field on the form would let a user reverse that with
-# a dropdown. `ClientBillingRun.status` and every computed total are absent for the same reason: the
+# What is NOT on these forms is the load-bearing part — and `ClientRateCard.status` is NOT one of
+# them. It IS on the header form deliberately (see the ClientRateCards module docstring, ruling 1):
+# `activate` / `supersede` are the PREFERRED path, not the only one, and promoting a card through the
+# form is safe because `clientratecard_edit` refuses any card outside EDITABLE_RATE_CARD_STATUSES
+# ("draft",) and `ClientRateCard.clean()` re-runs the overlap guard on every write path.
+# `ClientBillingRun.status` and every computed total ARE absent, and for the opposite reason: the
 # run's numbers are written by `calculate()` off the ledger, and a typed total would be a second
 # source of truth for money. `ClientSLA`'s achieved figure, breach flag and credit amount are absent
 # because `recompute()` derives them from 4.5/4.6/4.10 rows — a hand-typed achievement is exactly the
