@@ -695,10 +695,15 @@ class ClientBillingRun(TenantNumbered):
         where the GL effect lives. See the module docstring for why every line is written
         ``quantity=1`` with the real quantity × rate in the description.
         """
-        if self.status != "approved":
-            raise ValidationError("Approve the billing run before drafting an invoice.")
+        # The already-invoiced check comes FIRST on purpose. A run that has been invoiced is no
+        # longer ``approved`` (``draft_invoice`` moves it to ``invoiced``), so ordering the status
+        # guard ahead of it made this branch unreachable and answered the commonest mistake —
+        # pressing Draft Invoice twice — with "approve the run first" about a run that is already
+        # invoiced. Same refusal either way; only the sentence the user reads was wrong.
         if self.invoice_id is not None:
             raise ValidationError(f"This run is already invoiced as {self.invoice.number}.")
+        if self.status != "approved":
+            raise ValidationError("Approve the billing run before drafting an invoice.")
 
         from apps.accounting.models import Invoice, InvoiceLine
 
