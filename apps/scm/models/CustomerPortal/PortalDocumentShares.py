@@ -73,6 +73,8 @@ import datetime
 
 from apps.scm.models._base import *  # noqa: F401,F403
 from apps.scm.models.CustomerPortal._choices import (
+    CUSTOMER_VISIBLE_INVOICE_KIND,
+    CUSTOMER_VISIBLE_INVOICE_STATUSES,
     MAX_SHARE_EXPIRY_DAYS,
     SHARE_DOC_TYPE_CHOICES,
     SHARE_DOC_TYPE_CSS,
@@ -409,6 +411,21 @@ class PortalDocumentShare(TenantNumbered):
                     errors[pointer] = (
                         "That document is classified confidential and cannot be published to a "
                         "customer portal. Re-classify it, or share a customer-facing copy.")
+
+                # An invoice must also be one the customer may SEE. Ownership is not the whole test:
+                # a draft is ours until we send it, a void is one we withdrew, and a draft credit
+                # note is an internal decision to refund that nobody has committed to. The rule
+                # already existed for the profile page and was invisible here, which is how every
+                # seeded share came to point at a draft credit note.
+                if pointer == "invoice" and target is not None:
+                    if (getattr(target, "kind", "") != CUSTOMER_VISIBLE_INVOICE_KIND
+                            or getattr(target, "status", "")
+                            not in CUSTOMER_VISIBLE_INVOICE_STATUSES):
+                        errors["invoice"] = (
+                            f"{target.number} is not a document this customer may see — only a "
+                            "sent, part-paid or paid invoice can be shared. A draft is ours until "
+                            "we send it, a void one we withdrew, and a credit note is not an "
+                            "invoice.")
 
         if errors:
             raise ValidationError(errors)
