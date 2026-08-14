@@ -34,6 +34,15 @@ from apps.scm.models import (
     KpiTarget,
     SupplyChainAlert,
 )
+# 4.17 Third-Party Logistics (3PL) Management
+from apps.scm.models import (
+    ClientBillingRun,
+    ClientBillingRunLine,
+    ClientRateCard,
+    ClientRateCardLine,
+    ClientSLA,
+    LogisticsClient,
+)
 # 4.16 Customer Portal
 from apps.scm.models import (
     PortalAccount,
@@ -1245,3 +1254,113 @@ class PortalActivityAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# =================================================================================================
+# 4.17 Third-Party Logistics (3PL) Management
+# =================================================================================================
+class ClientRateCardLineInline(admin.TabularInline):
+    model = ClientRateCardLine
+    extra = 0
+
+
+@admin.register(LogisticsClient)
+class LogisticsClientAdmin(admin.ModelAdmin):
+    """The depositor master — who the client is and how we agreed to bill them.
+
+    ``onboarded_on`` and ``last_synced_at`` are ``editable=False`` on the model (the first is stamped
+    the moment status reaches ``active``, the second by an integration), so they are listed read-only
+    here rather than being quietly droppable from the change form.
+    """
+
+    list_display = ("code", "party", "tenant", "status", "billing_cycle", "storage_billing_method",
+                    "space_model", "contract_end", "is_active_client")
+    list_filter = ("tenant", "status", "billing_cycle", "storage_billing_method", "space_model",
+                   "integration_mode")
+    search_fields = ("code", "number", "party__name", "client_system", "edi_partner_id")
+    readonly_fields = ("number", "onboarded_on", "last_synced_at", "created_at", "updated_at")
+
+    @admin.display(boolean=True, description="Active")
+    def is_active_client(self, obj):
+        return obj.status == "active"
+
+
+@admin.register(ClientRateCard)
+class ClientRateCardAdmin(admin.ModelAdmin):
+    """Versioned pricing. ``status`` is read-only ON PURPOSE, mirroring the form.
+
+    A card moves ``draft`` -> ``active`` -> ``superseded`` through the ``activate`` / ``supersede``
+    views, which also stamp the effective window and close the previous active card for the client.
+    An editable status dropdown here would be a second, unaudited way to re-price a period a billing
+    run has already been calculated and approved against — the exact drift the version ladder exists
+    to prevent.
+    """
+
+    list_display = ("number", "client", "name", "version", "status", "effective_from",
+                    "effective_to", "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "name", "client__code", "client__party__name")
+    inlines = [ClientRateCardLineInline]
+    readonly_fields = ("number", "status", "created_at", "updated_at")
+
+
+class ClientBillingRunLineInline(admin.TabularInline):
+    """Read-only. These lines are the invoice's EVIDENCE, not an input.
+
+    ``calculate()`` derives every one of them from the ``StockMove`` ledger and the active rate card,
+    snapshotting the category, basis, description and rate onto the row. ``amount`` is
+    ``editable=False`` (quantity x rate) and ``needs_manual_quantity`` is the calculator's own flag
+    for a basis this build cannot measure. A hand-edited line would be a typed number sitting beside
+    derived ones with nothing on the page to tell them apart.
+    """
+
+    model = ClientBillingRunLine
+    extra = 0
+    can_delete = False
+    fields = ("charge_category", "charge_basis", "description", "quantity", "rate", "amount",
+              "source_reference", "is_manual", "needs_manual_quantity")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ClientBillingRun)
+class ClientBillingRunAdmin(admin.ModelAdmin):
+    """The period's billing. Every money figure is read-only — it is DERIVED, never typed.
+
+    ``subtotal`` / ``minimum_adjustment`` / ``total`` are written by ``calculate()`` off the ledger,
+    ``status`` by the four verbs, and ``invoice`` by the hand-off that DRAFTS an
+    ``accounting.Invoice`` (the run never posts a journal entry itself, L29). All are
+    ``editable=False`` on the model; the tuple below is what stops the admin being the one place
+    that ignores it.
+    """
+
+    list_display = ("number", "client", "period_start", "period_end", "status", "total", "invoice",
+                    "tenant")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "client__code", "client__party__name")
+    date_hierarchy = "period_end"
+    inlines = [ClientBillingRunLineInline]
+    readonly_fields = ("number", "status", "subtotal", "minimum_adjustment", "total",
+                       "calculated_at", "approved_at", "approved_by", "invoice",
+                       "created_at", "updated_at")
+
+
+@admin.register(ClientSLA)
+class ClientSLAAdmin(admin.ModelAdmin):
+    """The commitment is editable; the MEASUREMENT is not.
+
+    Target, threshold, window, scope and credit percentages are what the contract says, so they stay
+    on the form. Everything from ``last_measured_value`` down is written only by ``recompute()``,
+    which derives it from 4.5 orders / 4.6 shipments / 4.10 returns — a hand-typed achievement
+    figure is precisely the number a customer would dispute, and ``status`` follows from it.
+    """
+
+    list_display = ("number", "client", "metric", "target_value", "unit", "direction",
+                    "last_measured_value", "status", "is_active", "tenant")
+    list_filter = ("tenant", "metric", "status", "measurement_window", "is_active")
+    search_fields = ("number", "name", "client__code", "client__party__name")
+    readonly_fields = ("number", "last_measured_value", "last_measured_at",
+                       "measurement_window_start", "measurement_window_end", "measurement_summary",
+                       "sample_size", "breach_count", "status", "created_at", "updated_at")
