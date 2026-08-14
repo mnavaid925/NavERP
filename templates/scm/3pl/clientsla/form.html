@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — shared create/edit form for ClientSLA [SLA-].
+
+Rendered by apps/scm/views/ThirdPartyLogistics/ClientSlas.py::clientsla_create (via crud_create) and
+::clientsla_edit (via crud_edit). The pinned contract gives this page exactly three keys and nothing
+here reads anything else:
+
+  form     — ClientSLAForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the ClientSLA on the EDIT path ONLY (crud_edit puts it in the context; crud_create does
+             not), so every use of it below sits inside {% templatetag openblock %} if is_edit
+             {% templatetag closeblock %} and is never bare
+
+`metric_meta_json` IS NOT PASSED and must not be reached for. The registry defaults are rendered
+below as a STATIC table — plain help text, no script, no data attributes, nothing that has to be
+kept in sync at runtime. The authority is the model's clean(), which refuses a unit or a direction
+that disagrees with the registry; the table is here so the refusal is predictable rather than a
+surprise on save.
+
+Fields are rendered BY NAME through partials/form_field.html, which pairs <label for=...> with the
+widget's own id_for_label and prints that field's help_text and its errors. That couples this page
+to ClientSLAForm's whitelist on purpose: Meta.fields is an EXPLICIT list of 13 names, and all 13
+appear below —
+
+  client · metric · name
+  target_value · unit · direction · warning_threshold · measurement_window
+  scope_location
+  service_credit_pct · service_credit_cap_pct
+  is_active · notes
+
+A field added to the model and to that whitelist but NOT to a group here would never reach the POST
+— and on the edit path it would be silently blanked on every save. That failure is invisible from
+this screen, which is why the list above is spelled out.
+
+DELIBERATELY ABSENT, and none of it an oversight:
+  tenant / number / created_at / updated_at — stamped, auto-assigned, automatic.
+  THE EIGHT EVIDENCE COLUMNS — last_measured_value, last_measured_at, measurement_window_start,
+  measurement_window_end, measurement_summary, sample_size, breach_count and status. Every one is
+  editable=False, so a ModelForm cannot reach them even if somebody added the name (L22). They are
+  written by re-measuring and by nothing else, which is the whole point: if a service level could be
+  typed into compliance it would stop being evidence and become an opinion. On the edit path they
+  are shown READ-ONLY at the foot of this page, never as inputs.
+
+Refusals and where they land:
+  form.non_field_errors — the (tenant, client, metric, scope_location) duplicate, AND the explicit
+                   refusal of a SECOND unscoped SLA for the same metric. Django reports a
+                   unique_together break as a NON-FIELD error, and the unscoped duplicate is caught
+                   in clean() because a database unique index treats NULLs as distinct on MySQL and
+                   MariaDB and would let that pair through. Both are invisible unless
+                   form.non_field_errors is rendered, so the first card renders it.
+  unit / direction — a value that disagrees with the closed registry for the chosen metric.
+  warning_threshold — a band on the wrong side of the target, which could never fire. The message
+                   names both numbers.
+  service_credit_cap_pct — a cap below the credit rate, which would make the rate unreachable.
+  scope_location — another workspace's location, or a location owned by a different client.
+  client         — another workspace's client (a narrowed <select> has never held against a crafted
+                   POST, so ownership is enforced where the row is saved).
+
+theme.css ships COLOUR-named badges only (badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate); badge-success / badge-warning / badge-danger do not exist and render
+unstyled (L33). Every badge below is one of those six. Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Client SLA{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Client SLA</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:clientsla_list' %}">Client SLAs</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Everything on this form is the <span class="fw-600">agreement</span> — what was promised, and how it is to be judged. None of it is the measurement: the measured value, its window, its sample size and the breach count are written only by re-measuring, and no form in this system can reach them. Changing a target here does not rewrite what was already measured; it changes what the next measurement is compared against.
+      {% else %}
+        An SLA names a <span class="fw-600">metric</span>, a <span class="fw-600">target</span> and a <span class="fw-600">window</span>, and then measures itself. Nothing about it is typed in month by month: each metric is derived from rows this system already holds — shipments against their planned dates, cycle-count lines against expected quantities, receipts against putaway completion — so the figure that comes back is what happened rather than what somebody reported. The SLA- number is assigned on save, so there is no number field.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Whose service level, and which metric</h2>
+        <span class="badge badge-info">One per client, metric and scope</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          A client may hold <span class="fw-600">one unscoped SLA per metric</span>, plus one more per location it wants measured separately. A second unscoped row for the same metric is refused — two rows measuring the same thing over the same scope would report two answers to one question, and which one a page happened to show would come down to row order. That duplicate is caught explicitly rather than left to the database: a unique index treats two NULL scopes as different values on MySQL and MariaDB, so the index alone would let the pair straight through.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.client %}
+          {% include "partials/form_field.html" with field=form.metric %}
+          {% include "partials/form_field.html" with field=form.name %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">The metric list is closed and stays closed.</span> Each entry has a resolver behind it that knows exactly which rows to count, so a metric can only appear here if this system can genuinely measure it. There is no free-text metric and no formula field: an open list with an expression attached would be a small programming language nobody wants to own, and the number it produced would be impossible to audit.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The name is optional</span> and is only a label — leave it blank and the metric's own name is used. Give it one when the contract calls the same measurement something else, so the people in the service review recognise the row they are arguing about.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The target and how it is judged</h2>
+        <span class="badge badge-amber">Unit and direction are pinned by the metric</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The unit and the direction are <span class="fw-600">not display preferences</span> — they decide what the measured number means and which side of the target counts as failure. Each metric pins both, and a value that disagrees is refused at save rather than accepted: a dock-to-stock target stored as a percentage would compare hours against a percentage and report confident nonsense, and a lower-is-better metric saved as higher-is-better would call every good month a breach.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.target_value %}
+          {% include "partials/form_field.html" with field=form.unit %}
+          {% include "partials/form_field.html" with field=form.direction %}
+          {% include "partials/form_field.html" with field=form.warning_threshold %}
+          {% include "partials/form_field.html" with field=form.measurement_window %}
+        </div>
+
+        {% comment %}
+          THE REGISTRY, AS STATIC HELP TEXT. metric_meta_json is deliberately not passed and there is
+          no script on this page — this table is plain HTML that mirrors the closed registry so the
+          unit, the direction and a sensible starting target are visible while the choice is being
+          made. The model's clean() is the authority; this is the courtesy. The SLA's own detail page
+          prints the registry's statement of exactly which rows each figure is measured from.
+        {% endcomment %}
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Metric</th><th class="nowrap">Unit</th><th class="nowrap">Direction</th><th class="text-right nowrap">Typical target</th><th>Derived from</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="fw-600">On-Time Shipment %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-green">Higher is better</span></td>
+                <td class="text-right mono">98.00</td>
+                <td class="text-muted">Shipments whose actual pickup landed on or before the planned pickup date</td>
+              </tr>
+              <tr>
+                <td class="fw-600">OTIF %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-green">Higher is better</span></td>
+                <td class="text-right mono">95.00</td>
+                <td class="text-muted">Delivered on or before the planned delivery date, on an order that actually completed — on time <em>and</em> in full, which is why it sits below the on-time figure</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Same-Day Ship %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-green">Higher is better</span></td>
+                <td class="text-right mono">95.00</td>
+                <td class="text-muted">Orders picked up the same day they were placed</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Order Accuracy %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-green">Higher is better</span></td>
+                <td class="text-right mono">99.50</td>
+                <td class="text-muted">Orders in the window with no error-reason return raised against them. Where that link cannot be expressed from the rows on file, the metric reports <span class="fw-600">No data</span> with the reason recorded — it never approximates the half it cannot see</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Inventory Accuracy %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-green">Higher is better</span></td>
+                <td class="text-right mono">99.00</td>
+                <td class="text-muted">Cycle-count lines on this client's items where the counted quantity matched what was expected</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Dock-to-Stock Hours</td>
+                <td class="nowrap">Hours</td>
+                <td class="nowrap"><span class="badge badge-info">Lower is better</span></td>
+                <td class="text-right mono">24</td>
+                <td class="text-muted">Mean hours from the receipt to the putaway being completed. The receipt carries a date and the putaway a timestamp, so the clock starts at midnight — the measurement summary says so on every reading rather than letting a rounded figure look exact</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Order Cycle Time Hours</td>
+                <td class="nowrap">Hours</td>
+                <td class="nowrap"><span class="badge badge-info">Lower is better</span></td>
+                <td class="text-right mono">24</td>
+                <td class="text-muted">Mean hours from the order to its pickup, with the same midnight caveat on the order date</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Damage Rate %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-info">Lower is better</span></td>
+                <td class="text-right mono">0.50</td>
+                <td class="text-muted">Negative stock adjustments against this client's items, over the period's receipts</td>
+              </tr>
+              <tr>
+                <td class="fw-600">Shrinkage %</td>
+                <td class="nowrap">%</td>
+                <td class="nowrap"><span class="badge badge-info">Lower is better</span></td>
+                <td class="text-right mono">0.65</td>
+                <td class="text-muted">The same adjustment ledger read as loss rather than as damage</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">The typical target is a starting point, not a floor.</span> It is roughly what the industry commits to for that metric — useful when a contract is silent, and the wrong number to use when the contract is not. What this client actually agreed to is the only figure that belongs in the target field.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The warning band has to sit on the meeting side of the target.</span> For a higher-is-better metric it must be <em>below</em> the target; for a lower-is-better metric, <em>above</em> it. A band on the far side could never fire — the SLA would already be breached by the time the value reached it — so it is refused at save with both numbers named rather than accepted as a warning that never arrives. Leaving it blank is a real answer: the SLA then goes straight from meeting to breached with no early warning in between.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Monthly and quarterly windows measure the last COMPLETE period.</span> A part-finished month would report a figure that changed every day somebody looked at it, and a service review cannot be held over a number that moves. The rolling windows count back from the day the measurement is taken, which makes them the right choice for watching a problem rather than for reporting a period.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Scope</h2>
+        <span class="badge badge-slate">Everything, or one location</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Leave the location blank and the SLA is measured across every location for this client. Name one and it is measured over that location alone — which is what a contract does when one site is committed to a tighter standard than the rest. A location owned by a <span class="fw-600">different</span> client is refused: measuring one depositor's service level over another depositor's dedicated bins would mix two clients' performance into one number.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.scope_location %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Service credit</h2>
+        <span class="badge badge-red">Suggested — applied by nothing</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Most 3PL contracts give a share of the period's fees back when a service level is breached. These two percentages record that arrangement so the figure can be worked out — and <span class="fw-600">working it out is where this stops</span>. No billing run total is reduced by it, no credit note is drafted from it, and supply chain writes nothing to the ledger at all. The number is shown on the SLA and beside the client's billing run, labelled as a suggestion in both places, so a service review starts from a figure both sides can check. Issuing a credit is a decision with a signature on it, and the credit note is Accounting's document.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.service_credit_pct %}
+          {% include "partials/form_field.html" with field=form.service_credit_cap_pct %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">A cap below the credit rate is refused</span>, because it would make the rate unreachable — the contract would say one thing and the arithmetic another, and the arithmetic would silently win. A cap of zero means no ceiling at all. Only a <span class="fw-600">breach</span> produces a suggestion; at-risk is still inside the agreement and earns nothing.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Measuring and notes</h2>
+        <span class="badge badge-slate">Internal — never customer-facing</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The active switch decides whether this service level is <span class="fw-600">measured</span> and whether it counts towards the client's open breaches. Switching it off is the move to reach for instead of deleting: an inactive SLA keeps every measurement it has already recorded, and deleting takes that evidence with it permanently — it was derived rather than copied from anywhere, so a re-created row starts again from no data.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Notes are stored and rendered as <span class="fw-600">plain text</span> — markup typed into them is shown as the characters that were typed and is never interpreted, which is what stops a note written on this screen from becoming a script running in somebody else's browser. Use them for what the contract actually says: which clause this level came from, what was traded for it, and who signed it off.
+        </div>
+      </div>
+    </div>
+
+    {% if is_edit %}
+      {% comment %}
+        The evidence, READ-ONLY. All eight columns are editable=False, so none of them is reachable
+        by this form even if a name were added to the whitelist — they are shown here so that
+        whoever is changing a target can see what the current target is being judged against, and
+        nowhere on this page can any of it be typed.
+
+        last_measured_value is guarded with `is not None` and not a truthiness test: a genuinely
+        measured 0.00 — a damage rate of zero — is falsy, and a bare check would print "Not measured"
+        over the best result the client has had.
+      {% endcomment %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">What it is measured at today</h2>
+          <div class="badge-group">
+            <span class="badge badge-slate">Read-only — written by re-measuring</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item">
+              <dt>Measured value</dt>
+              <dd class="fw-600 mono">
+                {% if obj.last_measured_value is not None %}
+                  {{ obj.last_measured_value|floatformat:2 }} {{ obj.get_unit_display }}
+                {% else %}
+                  <span class="text-muted">Not measured</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>State</dt>
+              <dd>
+                {% if obj.status == "meeting" %}
+                  <span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "at_risk" %}
+                  <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "breached" %}
+                  <span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "no_data" %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Taken at</dt>
+              <dd class="mono">{% if obj.last_measured_at %}{{ obj.last_measured_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item"><dt>Sample size</dt><dd class="mono">{{ obj.sample_size }}</dd></div>
+            <div class="detail-item"><dt>Breaches recorded</dt><dd class="mono">{{ obj.breach_count }}</dd></div>
+            <div class="detail-item">
+              <dt>Window measured</dt>
+              <dd class="mono">
+                {% if obj.measurement_window_start %}{{ obj.measurement_window_start|date:"M d, Y" }}{% else %}—{% endif %}
+                –
+                {% if obj.measurement_window_end %}{{ obj.measurement_window_end|date:"M d, Y" }}{% else %}—{% endif %}
+              </dd>
+            </div>
+          </dl>
+          {% if obj.measurement_summary %}
+            <p class="form-help" style="margin:.9rem 0 0;"><span class="fw-600">How it was worked out:</span> {{ obj.measurement_summary }}</p>
+          {% endif %}
+          <p class="form-help" style="margin:.6rem 0 0;">
+            Nothing above is a field, on this form or on any other. Changing the target below does not restate what was already measured — it changes what the <span class="fw-600">next</span> measurement is compared against, and the state only moves once this SLA is re-measured from its detail page.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:clientsla_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to the list. A changed target, band or window takes effect the next time this service level is measured — the figure on the page is still the one from the last measurement, which is honest rather than stale: it says what was true over the window it names. Re-measure from the SLA's own page to judge it against the new agreement.
+      {% else %}
+        Saving returns to the list, where the new service level appears with its SLA- number and a state of <span class="fw-600">No data</span> — because nothing has been measured yet. That is the correct starting point and not a failure: open the SLA and re-measure to take the first reading. Expect No data to persist for any metric whose window genuinely held nothing to count; it will never be quietly reported as a pass.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
