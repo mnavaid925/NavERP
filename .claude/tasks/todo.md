@@ -24368,3 +24368,680 @@ fallback. Colour-named badge classes only (§1).
 
 ## Review notes
 (filled in at the end)
+
+---
+# Sub-module 4.18 — Finance & Accounting Integration (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.18.md  (2026-08-15)
+
+## 0. Read this first — the three things that will break this build
+
+**(a) The research file's allocation target does not exist. It is corrected here, and the correction
+changes the whole `LandedCostAllocation` shape.** `research-scm-4.18.md:390` proposes
+`LandedCostAllocation.goods_receipt_line → scm.GoodsReceiptLine` **plus** `item → scm.Item`, i.e. that
+a GRN line can name the item it received. **It cannot.** Verified on disk:
+
+```
+apps/scm/models/ProcurementManagement/GoodsReceiptNotes.py:170   po_line = FK("scm.PurchaseOrderLine", PROTECT)
+apps/scm/models/ProcurementManagement/PurchaseOrders.py:176      item_description = CharField(255)
+apps/scm/models/ProcurementManagement/PurchaseOrders.py:177      sku_hint         = CharField(64, blank)
+```
+
+`PurchaseOrderLine` carries **free text and no `item` FK** — 4.1 shipped before the 4.3 item catalog
+(the documented L28 stand-in; `PutawayTasks.py:8-11` says so in as many words). So
+`goods_receipt_line → po_line → item` **does not exist and must not be written.**
+
+The thing that *does* resolve an item, and *is* the cost layer the valuation report walks, is the
+inbound `StockMove` that `_post_grn_receipt` already writes (`apps/scm/views/_helpers.py:299-332`):
+
+```python
+item = _resolve_grn_item(grn.tenant, line.po_line)     # SKU-hint match; may be None
+_post_stock_move(grn.tenant, item=item, location=location, quantity=qty,
+                 move_type="receipt", unit_cost=line.po_line.unit_price or ZERO,
+                 reference=grn.number, reason="Goods receipt", moved_at=moved_at)
+```
+
+**One `receipt` move per received GRN line, stamped `reference=<GRN number>`, carrying a real `item`
+FK and the PO's agreed `unit_cost`.** Therefore:
+- [ ] `LandedCostAllocation` FKs **`stock_move` (PROTECT, REQUIRED)** and **`item` (PROTECT)**, and
+      carries **NO `goods_receipt_line` FK**. Allocating per move IS allocating per receipt line —
+      with the item resolved, which the GRN line itself cannot do. Do not "restore" the po_line path.
+- [ ] The voucher's allocation base is
+      `StockMove.objects.filter(tenant=…, reference=self.goods_receipt.number, move_type="receipt", quantity__gt=ZERO)`.
+      `quantity__gt=ZERO` excludes the compensating negatives a cancelled receipt posts
+      (`_reverse_grn_receipt`, `_helpers.py:335`). The `(tenant, reference)` index at
+      `StockMoves.py:60` is exactly the index this query needs — it already exists.
+- [ ] `allocate()` **refuses** when that queryset is empty, with the honest message: *"This receipt has
+      not been posted to the stock ledger — receive it first, or its lines' SKUs matched no item."*
+      Never allocate onto nothing and report success.
+
+**(b) `allocate()` must REVERSE its previous roll before applying a new one, or re-running it
+compounds the weighted average.** `Item.apply_landed_cost()` mutates the cached `average_cost` in
+place. Delete-and-rewrite of the allocation ROWS is not enough — the cache would keep every prior
+uplift. So a single private `_unallocate()` is the only path that removes allocations:
+
+```
+_unallocate():  for each item in this voucher's existing allocations:
+                    item.apply_landed_cost(-Σ allocated_amount for that item)
+                then delete this voucher's LandedCostAllocation rows.
+allocate():     _unallocate() first, inside the SAME transaction.atomic(), then re-split.
+cancel():       _unallocate(), then status = "cancelled".
+```
+- [ ] Both callers go through `_unallocate()`. A second delete path is how the cache and the rows
+      start disagreeing.
+
+**(c) `accounting.BillLine.tax_rate_pct` is `Decimal(5, 2)`; `accounting.TaxCode.rate_pct` is
+`Decimal(6, 3)`.** Verified `Bills.py:83` and `Tax/TaxCodes.py`. Copying a `TaxCode` rate straight
+across can overflow (`999.999` → `1000.00` → `DataError`) or silently truncate. And `BillLine.save()`
+recomputes `line_total = quantity × unit_price` (`Bills.py:91-93`), so a 2dp `unit_price` is
+authoritative — the 4.17 §0b trap in its AP form.
+- [ ] The hand-off writes **`quantity=Decimal("1")`, `unit_price=q2(charge.allocatable_amount)`** and
+      **`tax_rate_pct=min(Decimal("999.99"), (charge.tax_code.rate_pct or ZERO).quantize(Decimal("0.01")))`**.
+      Asserted in the smoke sweep (§9).
+
+**(d) Shared working tree.** Another session may be building a different sub-module in this checkout.
+- [ ] **Never `Write` a shared file — anchored `Edit` only** (L43). Shared files this pass touches:
+      `apps/scm/models/__init__.py`, `apps/scm/forms/__init__.py`, `apps/scm/views/__init__.py`,
+      `apps/scm/urls/__init__.py`, `apps/scm/admin.py`,
+      `apps/scm/management/commands/seed_scm.py` (**five anchored edits**: the new
+      `_seed_finance_tenant`, its call site in `handle()`, its branch in `_flush()`, the `help`
+      string, the closing SUCCESS message), `apps/core/navigation.py`,
+      `apps/scm/models/InventoryManagement/Items.py` (§6), `apps/scm/forms/InventoryManagement/Items.py`
+      (§6), `apps/scm/views/InventoryManagement/Reports.py` (§6), `README.md`,
+      `.claude/skills/scm/SKILL.md`.
+- [ ] **Migration number is CLAIMED: `0031`.** Current leaf on disk is
+      `0030_item_scm_item_tnt_owner_idx_and_more.py`. If a sibling session lands `0031` first,
+      **delete this one and re-run `makemigrations scm`** — never `--merge`, never renumber theirs.
+- [ ] **Never run `seed_scm --flush`.** Shared MySQL `nav_erp`. Plain `python manage.py seed_scm`.
+- [ ] One file per commit, PowerShell-safe (`;` not `&&`). **Never `git push`.**
+
+---
+
+## 1. What this pass is — an EXTEND run, and mostly a REPORT run
+
+- [ ] `apps/scm` already ships **4.1–4.17**. This adds 4.18 alongside them.
+- [ ] **No `config/settings.py` change and no `config/urls.py` change.** `apps.scm` is already in
+      `INSTALLED_APPS` and already `include()`d at `scm/`.
+- [ ] **Three of the five NavERP.md bullets are ALREADY COVERED by shipped code and get read-only
+      register/report VIEWS — no new tables.** Accounts Payable = 4.1 `GoodsReceiptNote.bill` +
+      4.6 `FreightInvoice.bill`; Accounts Receivable = 4.5 `SalesOrder.invoice` +
+      4.17 `ClientBillingRun.invoice` + 4.10 `ReturnAuthorization.credit_note`; Budgeting =
+      `accounting.Budget`/`BudgetLine` + `PurchaseRequisition.budget_check()`. **Do not add an AP,
+      AR or Budget table** — that is L29's second source of truth.
+- [ ] **Backend sub-package: `FinanceIntegration/`** in all four layers (PascalCase of the NavERP.md
+      title), following the shipped `CustomerPortal/` → `ThirdPartyLogistics/`.
+- [ ] **Template sub-module folder: `templates/scm/finance/`** — the short-slug convention all
+      seventeen shipped scm template folders use (`3pl/`, `portal/`, `coldchain/`, `srm/`,
+      `demandplanning/`, …). The backend-package / template-folder asymmetry **is the house rule, not
+      a defect** — carry the one-line note into the model package docstring and SKILL.md so no review
+      agent "fixes" `templates/scm/finance/` into `templates/scm/financeintegration/`.
+- [ ] **No `models/FinanceIntegration/_choices.py`.** `ALLOCATION_BASIS_CHOICES` is shared only
+      between the voucher and its charge, which live in the SAME file. 4.17 needed a `_choices.py`
+      because five entity files shared a vocabulary; 4.18 does not.
+- [ ] Reference implementations to copy verbatim where possible:
+      `apps/scm/models/TransportationManagement/FreightInvoices.py` (the `accounting.Bill` hand-off,
+      `recalc_amounts` Python-sum, the `editable=False` derived block, the parent+child pair in one
+      file), `apps/scm/views/TransportationManagement/FreightInvoices.py:180-212`
+      (`freightinvoice_handoff` — the idempotency guard and the audit-log call),
+      `apps/scm/models/InventoryManagement/Items.py:179` (`apply_receipt`, which
+      `apply_landed_cost` mirrors), `apps/scm/urls/ThirdPartyLogistics/ClientBillingRuns.py` (the
+      COLLISION CHECK docstring + verb-route ordering), `templates/scm/3pl/clientbillingrun/*.html`.
+- [ ] Views use `apps/core/crud.py` through `apps/scm/views/_common.py`'s star import (`crud_list`,
+      `crud_create`, `crud_edit`, `crud_detail`, `crud_delete`, `paginate`, `as_db_int`,
+      `write_audit_log`, `tenant_admin_required`). **Hand-rolled save paths and every verb action
+      call `write_audit_log` themselves** — only the `crud_*` helpers do it automatically.
+
+---
+
+## 2. Models (3 + 1, from research §"Recommended build scope")
+
+All four are tenant-scoped. Money is `Decimal(14, 2)` / `(16, 2)`, quantity and unit cost
+`Decimal(_, 4)`, exactly as the rest of `scm`. **Every computed figure is summed in Python via `q2`/
+`q4` from `models/_base.py`, never with an `F()` expression** (the SQLite integer-division trap
+`FreightInvoices.py:76` names).
+
+### 2.1 `LandedCostVoucher` [**LC-**] — `models/FinanceIntegration/LandedCostVouchers.py`
+*Realizes: charge-category taxonomy · estimated→actual variance · accrual-then-reconcile workflow ·
+voyage/trade-operation grouping · multi-currency · the AP hand-off (research bullet 3 + bullet 1).*
+
+- [ ] `class LandedCostVoucher(TenantNumbered)`, `NUMBER_PREFIX = "LC"`.
+- [ ] **CHOICES (freeze these verbatim):**
+      `STATUS_CHOICES = [("draft","Draft"), ("allocated","Allocated"), ("accrued","Accrued"), ("reconciled","Reconciled"), ("cancelled","Cancelled")]`
+      `EDITABLE_STATUSES = ("draft",)`
+      `ALLOCATION_BASIS_CHOICES = [("value","By Value"), ("quantity","By Quantity"), ("weight","By Weight"), ("volume","By Volume"), ("equal","Equal")]`
+      — **five bases, no `manual`.** Manual per-row entry needs an editable allocation grid, and
+      `LandedCostAllocation` is `editable=False` by construction. Deferred (§12), listed with its
+      reason so nobody adds a sixth choice that `allocate()` silently skips.
+- [ ] **Verified FKs (all by string; every target grep-confirmed on disk this session):**
+      `goods_receipt → "scm.GoodsReceiptNote"` **PROTECT, required**, `related_name="landed_cost_vouchers"` (`GoodsReceiptNotes.py:15`)
+      `party → "core.Party"` **PROTECT, required**, `related_name="scm_landed_cost_vouchers"` — the payee. Required because `accounting.Bill.party` is PROTECT and non-null (`Bills.py:21`), and a voucher with no payee could never hand off.
+      `shipment → "scm.Shipment"` SET_NULL null/blank, `related_name="landed_cost_vouchers"` (`Shipments.py:18`) — the D365-voyage / Oracle-trade-operation stand-in, an FK not a new entity
+      `trade_document → "scm.TradeDocument"` SET_NULL null/blank, `related_name="landed_cost_vouchers"` (`TradeDocuments.py:70`) — `declared_value` (`:190`) + `incoterm` (`:201`) source; **do NOT add a second incoterm field**
+      `currency → "accounting.Currency"` SET_NULL null/blank, `related_name="scm_landed_cost_vouchers"` — **GLOBAL, no tenant column**; the form scopes it with `_active_currencies()` (`forms/_common.py:40`), never by tenant
+      `bill → "accounting.Bill"` SET_NULL null/blank **`editable=False`**, `related_name="scm_landed_cost_vouchers"` — the AP hand-off, copying `FreightInvoices.py:63`
+- [ ] **Editable fields:** `cost_date` (DateField, required), `allocation_basis`
+      (CharField 10, choices, default `"value"` — the voucher-level default a charge may override),
+      `notes` (TextField blank).
+- [ ] **Derived / workflow, ALL `editable=False` and excluded from the form (L22):**
+      `status` (CharField 12, default `"draft"`), `estimated_total` (16,2 default 0),
+      `actual_total` (16,2 default 0), `variance_amount` (16,2 default 0),
+      `variance_pct` (8,2 null/blank), `allocated_total` (16,2 default 0),
+      `accrued_at` (DateTimeField null/blank).
+- [ ] **Form excludes:** `tenant`, `number`, `status`, `bill`, `estimated_total`, `actual_total`,
+      `variance_amount`, `variance_pct`, `allocated_total`, `accrued_at`, `created_at`, `updated_at`.
+- [ ] `Meta`: `ordering = ["-cost_date", "-id"]`, `unique_together = ("tenant", "number")`, indexes
+      `(tenant, status)` `scm_lcv_tnt_status_idx`, `(tenant, cost_date)` `scm_lcv_tnt_date_idx`,
+      `(tenant, goods_receipt)` `scm_lcv_tnt_grn_idx`.
+- [ ] `TENANT_SCOPED_FKS = ("goods_receipt", "shipment", "trade_document")` for `_reject_foreign`
+      (`forms/_common.py:136`) — plus `party`, the soft `core.Party` pointer that list omits.
+- [ ] **Methods:**
+      `is_editable` property → `status in EDITABLE_STATUSES and self.bill_id is None`
+      `receipt_moves()` → the §0a queryset (the allocation base)
+      `recalc_totals(save=True)` → Python sums over `self.charges`: `estimated_total`, `actual_total`,
+        `variance_amount = actual − estimated`, `variance_pct = variance/estimated×100` (None when
+        `estimated <= 0`), `allocated_total` = Σ `self.allocations.allocated_amount`
+      `_unallocate()` → §0b, private, the ONLY remover of allocation rows
+      `allocate()` → §3, inside `transaction.atomic()`
+      `accrue()` → `allocated → accrued`, stamps `accrued_at`. **Posts no `JournalEntry`** (L29).
+      `draft_bill()` → §4, idempotent
+      `cancel()` → `_unallocate()` then `status = "cancelled"`; refused once `bill_id` is set
+      `clean()` → `cost_date` required; refuse a `goods_receipt` whose `status == "cancelled"`
+
+### 2.2 `LandedCostCharge` — SAME file, child of the voucher (tenant-less, reached via `voucher.tenant`)
+*Realizes: the charge-name taxonomy · per-charge basis override (the thing NetSuite explicitly cannot
+do) · estimated vs actual · recoverable-vs-capitalised tax · a different vendor per charge · duty by
+HS code (research bullets 3 + 5).*
+
+- [ ] `class LandedCostCharge(models.Model)` — no tenant FK (child table, the
+      `FreightInvoiceLine` / `BillLine` / `GoodsReceiptLine` precedent).
+- [ ] **CHOICES (freeze verbatim — eleven, the sibling vocabulary to
+      `FreightInvoiceLine.CHARGE_TYPE_CHOICES` at `FreightInvoices.py:140`):**
+      `CHARGE_TYPE_CHOICES = [("freight","Freight"), ("duty","Customs Duty"), ("brokerage","Customs & Brokerage"), ("insurance","Insurance"), ("handling","Handling"), ("drayage","Drayage / Inland"), ("port_fees","Port & Terminal Fees"), ("fuel_surcharge","Fuel Surcharge"), ("inspection","Inspection / Fumigation"), ("storage","Storage / Demurrage"), ("other","Other")]`
+- [ ] **Fields:**
+      `voucher → "scm.LandedCostVoucher"` CASCADE `related_name="charges"`
+      `charge_type` (CharField 16, choices, default `"freight"`)
+      `description` (CharField 255, blank)
+      `party → "core.Party"` SET_NULL null/blank `related_name="scm_landed_cost_charges"` — the
+        component's real vendor when it differs from the voucher's payee (duty paid direct to
+        customs). **A charge naming a different party is EXCLUDED from `draft_bill()`** (§4)
+      `freight_invoice → "scm.FreightInvoice"` SET_NULL null/blank `related_name="landed_cost_charges"`
+        — link 4.6's audited carrier bill as the actual; reuse, don't re-key
+      `estimated_amount` (14,2 default 0, `MinValueValidator(ZERO)`)
+      `actual_amount` (14,2 default 0, `MinValueValidator(ZERO)`)
+      `allocation_basis` (CharField 10, choices=`ALLOCATION_BASIS_CHOICES`, **blank=True** — blank
+        inherits the voucher's; this single field is VISCO's "freight by weight, insurance by value"
+        in one document)
+      `gl_account → "accounting.GLAccount"` SET_NULL null/blank `related_name="scm_landed_cost_charges"`
+        — copied onto the drafted `BillLine.gl_account` (`Bills.py:85`)
+      `tax_code → "accounting.TaxCode"` SET_NULL null/blank `related_name="scm_landed_cost_charges"`
+        — **extends accounting's tax master; never re-declare a rate table**
+      `is_recoverable` (Boolean default `False`) — recoverable VAT must NOT capitalise into inventory
+      `capitalise_to_inventory` (Boolean default `True`) — a pure period expense still belongs on the
+        voucher for the AP hand-off but must not touch stock value
+      **duty snapshot slice** (only meaningful when `charge_type="duty"`; snapshot columns matching
+      4.12's frozen-declaration precedent, `TradeDocuments.py:26-33` — **these do NOT go on `Item`**):
+      `hs_code` (CharField 20, blank), `country_of_origin` (CharField 64, blank),
+      `duty_rate_pct` (6,3 default 0, `MinValueValidator(ZERO)`, `MaxValueValidator(100)`)
+- [ ] **Form excludes:** `voucher` (taken from the URL, never a field).
+- [ ] `Meta`: `ordering = ["id"]`.
+- [ ] **Properties / methods:**
+      `variance_amount` → `actual_amount − estimated_amount`
+      `allocatable_amount` → `actual_amount if actual_amount > ZERO else estimated_amount` — **this is
+        the accrue-then-reconcile workflow in one property**: allocate the estimate now, set the
+        actual when the broker's invoice lands, re-run `allocate()`
+      `effective_basis` → `self.allocation_basis or self.voucher.allocation_basis`
+      `capitalises` → `capitalise_to_inventory and not is_recoverable` — the single flag pair that
+        stops the module overstating stock value
+      `clean()` → error on `duty_rate_pct > 0` when `charge_type != "duty"` (a rate typed on the
+        freight line that silently does nothing is worse than a field error)
+
+### 2.3 `LandedCostAllocation` — SAME file. **The additive valuation layer.**
+*Realizes: allocation down to the receipt line, retrievable per shipment · the uplift becoming
+inventory value. Odoo's "extra valuation layer linked to the original" — the ONLY shape compatible
+with NavERP's append-only `StockMove` (`StockMoves.py:5`: no form, no admin write, no delete view).*
+
+- [ ] `class LandedCostAllocation(TenantOwned)` — it carries its own `tenant` because the valuation
+      report and the variance report query it **directly** (`filter(tenant=request.tenant)`), not
+      through the voucher.
+- [ ] **Fields:**
+      `voucher → "scm.LandedCostVoucher"` CASCADE `related_name="allocations"`
+      `charge → "scm.LandedCostCharge"` CASCADE `related_name="allocations"`
+      `stock_move → "scm.StockMove"` **PROTECT, required** `related_name="landed_cost_allocations"` —
+        the exact inbound cost layer this uplifts (§0a)
+      `item → "scm.Item"` PROTECT `related_name="landed_cost_allocations"` — denormalised from the
+        move for the report grouping and the index
+      **all `editable=False`, written only by `allocate()`, never hand-typed:**
+      `quantity` (14,4 default 0 — the move quantity at allocation time),
+      `basis_value` (16,4 default 0 — the weight/volume/value/qty number the split actually used,
+        stored so the arithmetic is auditable),
+      `basis_used` (CharField 10, choices=`ALLOCATION_BASIS_CHOICES`, default `"value"` — **the basis
+        after any fallback** (§3), so a silent fallback becomes a visible fact),
+      `allocated_amount` (14,2 default 0),
+      `unit_cost_uplift` (14,4 default 0 = `allocated_amount ÷ quantity`)
+- [ ] `Meta`: `ordering = ["id"]`, indexes `(tenant, item)` `scm_lca_tnt_item_idx`,
+      `(tenant, stock_move)` `scm_lca_tnt_move_idx`, `(tenant, voucher)` `scm_lca_tnt_vch_idx`.
+- [ ] **NO form, NO create/edit/delete view, NO standalone list page, NO url.** It renders inside
+      `finance/landedcostvoucher/detail.html` and in `landed_cost_variance.html`. The CRUD-Completeness
+      rule attaches to models that HAVE a list page; this one deliberately has none — exactly the
+      `StockMove` posture. Admin registration is read-only (§7).
+
+### 2.4 `DutyTariff` [**DTY-**] — `models/FinanceIntegration/DutyTariffs.py`
+*Realizes: HS/HTS code × country of origin × effective-dated duty rate (Avalara / Descartes / VISCO).
+The tenant-scoped master `accounting.TaxCode` structurally cannot be: verified `TAX_TYPE_CHOICES` is
+`sales`/`vat`/`gst`/`use` with no customs member, no HS code and no origin-country pair.*
+
+- [ ] `class DutyTariff(TenantNumbered)`, `NUMBER_PREFIX = "DTY"` — numbered like every other scm
+      master (`TAR` on `ClientRateCard`, `LST` on `LaborStandard`).
+- [ ] **Fields:** `hs_code` (CharField 20, required), `country_of_origin` (CharField 64, **blank =
+      applies to any origin**), `description` (CharField 255, blank),
+      `duty_rate_pct` (6,3 default 0, `MinValueValidator(ZERO)`, `MaxValueValidator(100)`),
+      `effective_from` (DateField, **required** — a nullable column in a unique key does not enforce
+      in MySQL), `effective_to` (DateField null/blank), `is_active` (Boolean default True),
+      `tax_code → "accounting.TaxCode"` SET_NULL null/blank `related_name="scm_duty_tariffs"` (the
+      recoverable import-VAT counterpart).
+- [ ] `Meta`: `ordering = ["hs_code", "-effective_from"]`,
+      `unique_together = (("tenant", "number"), ("tenant", "hs_code", "country_of_origin", "effective_from"))`,
+      index `(tenant, hs_code)` `scm_dty_tnt_hs_idx`.
+- [ ] **Form excludes:** `tenant`, `number`. Form uses `TenantUniqueMixin` — without it a duplicate
+      natural key passes `is_valid()` and 500s on `.save()`.
+- [ ] `clean()` → `effective_to` must not precede `effective_from`; `hs_code` upper-cased/stripped.
+- [ ] `@classmethod rate_for(cls, tenant, hs_code, country_of_origin, on_date)` → the active row whose
+      window contains `on_date`, preferring an exact `country_of_origin` match over the blank-any row,
+      newest `effective_from` first; returns `None` when nothing matches. **Read once, to DEFAULT the
+      duty charge line's `duty_rate_pct`** (VISCO's "apply the correct rate by transaction date") —
+      the value stays SNAPSHOTTED on the charge so a later rate change never rewrites history.
+
+---
+
+## 3. `allocate()` — the arithmetic, frozen
+
+- [ ] `@tenant_admin_required` at the view (L27 — it changes money). Whole body inside
+      `transaction.atomic()`.
+- [ ] Guards, in order: refuse when `status == "cancelled"` or `bill_id` is set; refuse when
+      `receipt_moves()` is empty (§0a message); refuse when no charge `capitalises`.
+- [ ] `self._unallocate()` **first** (§0b).
+- [ ] For each charge where `charge.capitalises` and `charge.allocatable_amount > ZERO`:
+      1. `basis = charge.effective_basis`
+      2. per move, `basis_value` =
+         `value` → `move.quantity × (move.unit_cost or ZERO)` ·
+         `quantity` → `move.quantity` ·
+         `weight` → `move.quantity × (move.item.weight_kg or ZERO)` ·
+         `volume` → `move.quantity × (move.item.volume_cbm or ZERO)` ·
+         `equal` → `Decimal("1")` per move
+      3. **Fallback chain, pinned:** if `Σ basis_value <= 0`, fall back `weight|volume → quantity →
+         equal`. Record the basis actually used in `basis_used` on every row written. A receipt whose
+         items carry no weight must not divide by zero and must not silently look like a weight split.
+      4. `allocated_amount = q2(charge.allocatable_amount × basis_value / Σ basis_value)`;
+         **the LAST row absorbs the rounding remainder** so
+         `Σ allocated_amount == charge.allocatable_amount` exactly — a cent lost here is a cent of
+         inventory value that never reconciles.
+      5. `unit_cost_uplift = q4(allocated_amount / quantity)` (0 when quantity is 0).
+- [ ] Roll the cache **once per item**, not once per row: `item.apply_landed_cost(Σ allocated_amount
+      for that item)` (§6).
+- [ ] `recalc_totals()`, then `status = "allocated"`, then `write_audit_log(..., "update",
+      {"action": "allocate", "rows": n, "amount": str(total)})`.
+- [ ] Success message names the row count, the total and any basis fallback that fired.
+
+---
+
+## 4. `draft_bill()` — the AP hand-off (copy `freightinvoice_handoff` verbatim in shape)
+
+- [ ] `@tenant_admin_required` + `@require_POST`. **Idempotent:** returns early with an info message
+      when `bill_id` is already set (the `FreightInvoice.handoff` precedent, whose regression test is
+      `tests/test_views.py:5132`).
+- [ ] Refuse unless `status in ("allocated", "accrued")` — a draft voucher has no agreed numbers.
+- [ ] Bills **only** the charges where `charge.party_id is None or charge.party_id == voucher.party_id`.
+      A charge naming a different vendor (duty paid direct to customs) is EXCLUDED and the count is
+      reported in the success message. **Multi-vendor auto-split into several bills is deferred**
+      (§12) — one voucher, one payee, one bill is the `FreightInvoice` precedent.
+- [ ] `Bill(tenant=…, party=voucher.party, bill_date=timezone.localdate(), status="draft",
+      currency=voucher.currency, notes=f"Landed cost — {voucher.number} ({grn.number})")`, then one
+      `BillLine` per billable charge with the §0c precision rule, then `bill.recalc_totals()`.
+- [ ] `voucher.bill = bill`; `status = "reconciled"`; `save(update_fields=[...])`;
+      `write_audit_log(..., {"action": "draft_bill", "bill": bill.number})`.
+- [ ] **SCM posts NO `JournalEntry`.** Six existing docstrings say so verbatim; 4.18 is the
+      sub-module most tempted to break it. It drafts the Bill; accounting posts the entry (L29).
+      Repeat that sentence in the module docstring.
+
+---
+
+## 5. Backend files (`apps/scm/{models,forms,views,urls}/FinanceIntegration/`)
+
+- [ ] `models/FinanceIntegration/__init__.py` (empty, own commit)
+- [ ] `models/FinanceIntegration/LandedCostVouchers.py` — `LandedCostVoucher` + `LandedCostCharge` +
+      `LandedCostAllocation` (one entity file owns the primary model and its children)
+- [ ] `models/FinanceIntegration/DutyTariffs.py` — `DutyTariff`
+- [ ] `forms/FinanceIntegration/__init__.py` (empty)
+- [ ] `forms/FinanceIntegration/LandedCostVouchers.py` — `LandedCostVoucherForm` (scope
+      `goods_receipt` to `status="received"` GRNs of the tenant; `_active_currencies(self)`;
+      `party` via **`_carrier_parties(tenant)`** — reuse, don't add a sixth near-identical role
+      helper: a forwarder/broker is procured from exactly like a carrier; `_reject_foreign` on
+      `TENANT_SCOPED_FKS + ("party",)`) and `LandedCostChargeForm` (hand-scope `gl_account`,
+      `tax_code`, `freight_invoice` to the tenant — a child form gets no automatic scoping)
+- [ ] `forms/FinanceIntegration/DutyTariffs.py` — `DutyTariffForm(TenantUniqueMixin, TenantModelForm)`
+- [ ] `views/FinanceIntegration/__init__.py` (empty)
+- [ ] `views/FinanceIntegration/LandedCostVouchers.py` — `landedcostvoucher_list` /
+      `_create` / `_detail` / `_edit` / `_delete` + verbs `_allocate` / `_accrue` / `_draft_bill` /
+      `_cancel`, and `landedcostcharge_create` / `_edit` / `_delete`
+- [ ] `views/FinanceIntegration/DutyTariffs.py` — `dutytariff_list` / `_create` / `_detail` /
+      `_edit` / `_delete`
+- [ ] `views/FinanceIntegration/Reports.py` — `finance_payables`, `finance_receivables`,
+      `finance_budget_variance`, `landed_cost_variance`
+- [ ] `urls/FinanceIntegration/__init__.py` (empty) + `LandedCostVouchers.py` + `DutyTariffs.py` +
+      `Reports.py`
+- [ ] **Re-export blocks — anchored `Edit`, one commit each (forgetting one is an ImportError at
+      runtime):** `models/__init__.py`, `forms/__init__.py`, `views/__init__.py`,
+      `urls/__init__.py` (alias **`_fin_`** — verified free against all seventeen shipped aliases
+      `_procurement_ _srm_ _inv_ _wms_ _oms_ _tms_ _dp_ _mf_ _qm_ _rma_ _sca_ _cc_ _am_ _lm_ _ccm_
+      _cp_ _tpl_`; rebinding a live alias silently drops another sub-module's routes with no import
+      error at all).
+- [ ] Absolute imports only (`from apps.scm.models import …`); entity modules pull the toolkit from
+      `models/_base.py` / `forms/_common.py` / `views/_common.py` via `import *`.
+
+### View context keys — pin these; a name left unpinned renders blank at HTTP 200 (L8)
+- [ ] `landedcostvoucher_list` → `vouchers` (page object), `status_choices`, `basis_choices`,
+      `charge_type_choices`, `parties`, `stats` (`{draft, allocated, accrued, reconciled,
+      actual_total, variance_total}`).
+      Filters (**all applied before pagination**): `q` (number / GRN number / party name / notes,
+      `Q()` OR), `status`, `basis` (→ `allocation_basis`), `party` (pk, through `as_db_int`).
+- [ ] `landedcostvoucher_detail` → `voucher`, `charges`, `allocations`, `receipt_moves`,
+      `billable_charges`, `excluded_charges`, `can_allocate`, `can_accrue`, `can_draft_bill`.
+- [ ] `landedcostvoucher_create` / `_edit` → `form`, `voucher` (None on create — the edit-mode object
+      var **must** be named the same on both paths or the form template's title/action goes blank).
+- [ ] `landedcostcharge_create` / `_edit` → `form`, `voucher`, `charge`.
+- [ ] `dutytariff_list` → `tariffs`, `countries` (distinct non-blank `country_of_origin` values),
+      `stats`. Filters: `q` (hs_code / description / country), `status` (`active`/`inactive` →
+      `is_active=True/False`), `country`.
+- [ ] `dutytariff_detail` → `tariff`. `dutytariff_create`/`_edit` → `form`, `tariff`.
+- [ ] `finance_payables` → `rows` (each `{source, document, number, url, party, bill, bill_status,
+      amount, variance, match_status}`), `totals`, `source_choices`. Filters: `q`, `source`
+      (`grn`/`freight`/`landed`), `status` (the `Bill.STATUS_CHOICES` value).
+- [ ] `finance_receivables` → `rows` (`{source, document, number, url, party, invoice,
+      invoice_status, total, balance}`), `totals`, `source_choices`. Filters: `q`, `source`
+      (`sales_order`/`billing_run`/`return`), `status`.
+- [ ] `finance_budget_variance` → `rows` (per `core.OrgUnit`: `{org_unit, budgeted, committed,
+      incurred, remaining, over_budget}`), `totals`, `budgets`, `fiscal_periods`. Filters: `budget`
+      (pk), `fiscal_period` (pk). Budgeted from `accounting.BudgetLine`; committed from
+      `PurchaseRequisitionLine` / `PurchaseOrderLine`; incurred from `FreightInvoice.billed_amount` +
+      `LandedCostVoucher.actual_total`. **No new table** — `BudgetLine.org_unit` IS the supply-chain
+      department dimension.
+- [ ] `landed_cost_variance` → `rows` (per charge type AND per item: `{key, estimated, actual,
+      variance, allocated, uplift_per_unit}`), `totals`, `charge_type_choices`, `group` (`charge_type`
+      | `item` | `shipment`). Filters: `group`, `charge_type`, date range on `cost_date`.
+
+### URL routes — literal before `<int:pk>`, first-match-wins
+```
+landed-cost-vouchers/                        landedcostvoucher_list
+landed-cost-vouchers/add/                    landedcostvoucher_create
+landed-cost-vouchers/<int:pk>/               landedcostvoucher_detail
+landed-cost-vouchers/<int:pk>/edit/          landedcostvoucher_edit
+landed-cost-vouchers/<int:pk>/delete/        landedcostvoucher_delete
+landed-cost-vouchers/<int:pk>/allocate/      landedcostvoucher_allocate      (POST, tenant-admin)
+landed-cost-vouchers/<int:pk>/accrue/        landedcostvoucher_accrue        (POST, tenant-admin)
+landed-cost-vouchers/<int:pk>/draft-bill/    landedcostvoucher_draft_bill    (POST, tenant-admin)
+landed-cost-vouchers/<int:pk>/cancel/        landedcostvoucher_cancel        (POST, tenant-admin)
+landed-cost-vouchers/<int:pk>/charges/add/   landedcostcharge_create
+landed-cost-charges/<int:pk>/edit/           landedcostcharge_edit
+landed-cost-charges/<int:pk>/delete/         landedcostcharge_delete         (POST)
+duty-tariffs/                                dutytariff_list
+duty-tariffs/add/                            dutytariff_create
+duty-tariffs/<int:pk>/                       dutytariff_detail
+duty-tariffs/<int:pk>/edit/                  dutytariff_edit
+duty-tariffs/<int:pk>/delete/                dutytariff_delete               (POST)
+finance-payables/                            finance_payables
+finance-receivables/                         finance_receivables
+finance-budget-variance/                     finance_budget_variance
+landed-cost-variance/                        landed_cost_variance
+```
+- [ ] **COLLISION CHECK docstring in each url module**, written against the WHOLE concatenated
+      urlconf rather than its own block. Seven new first segments — `landed-cost-vouchers`,
+      `landed-cost-charges`, `landed-cost-variance`, `duty-tariffs`, `finance-payables`,
+      `finance-receivables`, `finance-budget-variance` — and **nothing anywhere in `apps/scm` starts
+      with `landed`, `duty` or `finance`** (verified this session by grep over `apps/scm/urls/`).
+      Django matches WHOLE path components and never splits one at a hyphen, so `landed-cost-variance`
+      is a distinct component from `landed-cost-vouchers` and neither can shadow the other — and
+      **neither may ever be "tidied" into a shared `landed-cost/<something>/` parent**, which is
+      precisely the edit that turns three independent segments into one greedy component.
+      4.18 introduces **NO** greedy `<str:…>` converter; 4.10's `return-tracking/<str:token>/` and
+      4.16's `portal-documents/<str:token>/` remain the app's only two.
+- [ ] **VIEW-NAME check (the `scm:` namespace is flat):** `finance_payables`,
+      `finance_receivables`, `finance_budget_variance`, `landed_cost_variance` collide with nothing —
+      the shipped report names are `valuation_report`, `reorder_alerts`, `cold_storage_report`,
+      `labor_board`, `sparepart_list`, `logistics_kpis`, `client_inventory_report`,
+      `client_space_report`.
+
+---
+
+## 6. Extensions to already-built models (surgical, additive, all-default — the `is_spare_part` precedent)
+
+Not new models, but the pass does not work without them. **All four files are shared with 4.3 —
+anchored `Edit` only, never `Write`.**
+
+- [ ] **`apps/scm/models/InventoryManagement/Items.py`** — add two nullable columns to `Item`, with a
+      comment block in the exact style of `is_spare_part` (`:107`) / `storage_condition` (`:120`) /
+      `owner_client` (`:138`):
+      `weight_kg = DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(ZERO)], help_text="Unit weight; the basis for allocate-by-weight landed cost")`
+      `volume_cbm = DecimalField(max_digits=12, decimal_places=4, null=True, blank=True, validators=[MinValueValidator(ZERO)], help_text="Unit volume in m³; the basis for allocate-by-volume landed cost")`
+      Additive and nullable, so no existing row changes meaning and nothing needs backfilling.
+      **Do NOT add `hs_code` to `Item`** — 4.12 ruled on that explicitly (`TradeDocuments.py:30`:
+      "a mutable master plus a filed document would be two sources of truth… the 'helpful' default
+      that syncs them is the bug"). 4dp not 2dp (`Shipment.weight_kg` is a shipment total; an item's
+      unit weight can legitimately be `0.0125` kg).
+- [ ] **`apps/scm/models/InventoryManagement/Items.py`** — new METHOD, no new column:
+      ```python
+      def apply_landed_cost(self, total_amount):
+          """Move the cached weighted-average by a landed-cost amount spread over the CURRENT
+          on-hand. Mirrors apply_receipt(): quantity is never touched, only the cache. A NEGATIVE
+          amount reverses a prior roll — that is how LandedCostVoucher._unallocate() stays idempotent.
+          A zero on-hand is a no-op: there is no stock left to carry the cost, so it is a period
+          expense, not inventory value."""
+      ```
+      Clamp with `max(ZERO, …)` so an over-large reversal can never leave a negative average;
+      `.quantize(Decimal("0.0001"))`; `save(update_fields=["average_cost", "updated_at"])`.
+- [ ] **`apps/scm/forms/InventoryManagement/Items.py`** — add `"weight_kg", "volume_cbm"` to
+      `ItemForm.Meta.fields` (currently `:45-47`), after `"reorder_point"`. Without this no tenant
+      user could ever populate them and allocate-by-weight/volume would be admin-and-seeder-only —
+      a live feature reachable only by staff (the exact reasoning the `is_spare_part` comment records).
+- [ ] **`apps/scm/views/InventoryManagement/Reports.py`** — **the single edit that makes landed cost
+      real rather than decorative.** `_item_valuation(item, moves)` → `_item_valuation(item, moves,
+      uplift_map=None)`:
+      - **weighted_avg branch: UNCHANGED.** Add the comment *"the uplift is already inside
+        `average_cost` via `Item.apply_landed_cost()` — adding `uplift_map` here would double-count"*,
+        or the next reader adds it and inflates every WAC item.
+      - fifo/lifo branch: `layers = [[m.quantity, (m.unit_cost or ZERO) + uplift.get(m.id, ZERO)] for m in costed if m.quantity > ZERO]`.
+      - **The transfer-exclusion rule at `:28-33` must survive verbatim.**
+      - `valuation_report` builds the map in **ONE grouped query** (no N+1):
+        `LandedCostAllocation.objects.filter(tenant=request.tenant, stock_move__isnull=False).values("stock_move_id").annotate(u=Sum("unit_cost_uplift"))`
+      - The `uplift_map=None` default keeps the existing two-positional-arg callers green — in
+        particular the regression lock at `apps/scm/tests/test_views.py:13241-13273`. **Re-grep for
+        callers before editing** (today: `Reports.py:57` and that one test).
+- [ ] **`apps/scm/models/InventoryManagement/StockMoves.py` — NOT TOUCHED.** `StockMove` rows are
+      never edited (`:5`). The uplift is an additive `LandedCostAllocation` row that the valuation
+      READER adds. Any diff to this file in review is a defect.
+
+---
+
+## 7. Admin + migration
+
+- [ ] `apps/scm/admin.py` (anchored `Edit`): register `LandedCostVoucher` (`list_display` number /
+      goods_receipt / party / cost_date / status / actual_total / variance_amount; `list_filter`
+      tenant, status; `search_fields` number, party__name; a `LandedCostCharge` **inline**) and
+      `DutyTariff` (hs_code / country_of_origin / duty_rate_pct / effective_from / is_active).
+      Register `LandedCostAllocation` **read-only** — `has_add_permission` /
+      `has_change_permission` / `has_delete_permission` all return `False`, mirroring
+      `StockMoveAdmin` (`admin.py:214-228`), because it is a derived ledger.
+- [ ] `python manage.py makemigrations scm` → **must produce exactly `0031_…`**. One migration covers
+      all four new tables plus the two `Item` columns. If it numbers anything else, a sibling session
+      landed first — delete and regenerate (§0d).
+
+---
+
+## 8. Wire-up + templates
+
+- [ ] **`apps/core/navigation.py`** — ONE new `LIVE_LINKS["4.18"]` block, five keys matching the
+      NavERP.md bullet text at `NavERP.md:852-857` **character for character**:
+      ```python
+      "4.18": {
+          "Accounts Payable":         "scm:finance_payables",          # bullet (READ-ONLY register over 4.1 GRN.bill + 4.6 FreightInvoice.bill + 4.18 LandedCostVoucher.bill — no AP table)
+          "Accounts Receivable":      "scm:finance_receivables",       # bullet (READ-ONLY register over 4.5 SalesOrder.invoice + 4.17 ClientBillingRun.invoice + 4.10 RMA.credit_note — no AR table)
+          "Landed Cost Calculation":  "scm:landedcostvoucher_list",    # bullet (the one genuinely new capability)
+          "Budgeting":                "scm:finance_budget_variance",   # bullet (COMPUTED over accounting.BudgetLine.org_unit vs PR/PO commitments vs freight+landed actuals — no Budget table, L29)
+          "Tax Management":           "scm:dutytariff_list",           # bullet (HS × origin duty master; sales/VAT/GST stays accounting.TaxCode, FK'd from the charge line)
+      },
+      ```
+      Every target is a STAFF-facing management page (L32). **No sidebar key for `LandedCostCharge`
+      or `LandedCostAllocation`** — both are reached from the voucher detail page, the
+      `ClientRateCard` / `ReorderRule` / `ReturnReason` / `MeterReading` rule.
+- [ ] `templates/scm/finance/landedcostvoucher/list.html`
+- [ ] `templates/scm/finance/landedcostvoucher/detail.html` (charges table with per-charge variance,
+      allocations table grouped by item, the four verb buttons each a POST form + `{% csrf_token %}`
+      + `onclick="return confirm(...)"`, an Actions sidebar with Edit/Delete gated on
+      `voucher.is_editable`, Back to List)
+- [ ] `templates/scm/finance/landedcostvoucher/form.html`
+- [ ] `templates/scm/finance/landedcostcharge/form.html` (child — create + edit share it; no list, no
+      detail; edit/delete are reached from the voucher detail page)
+- [ ] `templates/scm/finance/dutytariff/list.html` · `detail.html` · `form.html`
+- [ ] `templates/scm/finance/payables.html` · `receivables.html` · `budget_variance.html` ·
+      `landed_cost_variance.html` (standalone report pages at the sub-module root — no entity folder)
+- [ ] **Every list page:** a filter bar whose controls reflect `request.GET` (string compare for
+      choices; **`|stringformat:"d"` for pk compare, never `|slugify`**), an Actions column
+      (view / edit / delete-POST + confirm + csrf), pagination with `has_previous` / `has_next`
+      guards (L9), and an empty state. The report pages get the same filter bar + empty state.
+- [ ] **Badges use the colour-named theme.css classes only** — `badge-green` / `badge-red` /
+      `badge-amber` / `badge-info` / `badge-muted` / `badge-slate`. Semantic `-success` / `-danger`
+      names **do not exist** (L33). Voucher status → draft `badge-muted`, allocated `badge-info`,
+      accrued `badge-amber`, reconciled `badge-green`, cancelled `badge-slate`; always an
+      `{% else %}{{ voucher.get_status_display }}` fallback.
+- [ ] `templates/scm/overview.html` — add the 4.18 tile row (anchored `Edit`).
+
+---
+
+## 9. Seeder — extend `apps/scm/management/commands/seed_scm.py` (five anchored edits)
+
+- [ ] `_seed_finance_tenant(tenant)` — **LAST of all, after `_seed_3pl_tenant`**, and it genuinely has
+      to be: it reads 4.1's received GRNs, the `receipt` StockMoves those bookings posted, 4.3's
+      items, 4.6's shipments and freight invoices, 4.12's trade documents, and accounting's GL
+      accounts / tax codes / currencies. Run it earlier and every figure is a correct zero.
+- [ ] **Invents no master data.** Every party, item, GL account, tax code and currency is found among
+      rows the earlier passes already seeded; an optional link whose subject does not exist is left
+      null rather than created. If no `status="received"` GRN with posted receipt moves exists, the
+      pass **skips the vouchers and says so** rather than fabricating a receipt.
+- [ ] Rows: set `weight_kg` / `volume_cbm` on **three existing items** (so allocate-by-weight and
+      allocate-by-volume demo the real path, not the fallback); **two `DutyTariff` rows** (one with a
+      blank `country_of_origin` = any-origin, one country-specific, both effective-dated); **two
+      `LandedCostVoucher`s** on existing received GRNs — the first with three charges (freight by
+      weight, insurance by value, customs duty by quantity, the duty one snapshotting a `DutyTariff`
+      rate through `rate_for()`), the second with an estimate-only charge left at `draft`.
+- [ ] **The demo goes through the REAL code path** — call `voucher.allocate()` and, on the first
+      voucher, `draft_bill()`, so the seeder exercises `_unallocate()`, the rounding remainder and the
+      §0c precision rule on every run and the demo cannot drift from the code (the 4.13/4.17
+      `_post_stock_move` / `draft_invoice()` precedent). Never hand-write an allocation row.
+- [ ] **Idempotent:** early return on `LandedCostVoucher.objects.filter(tenant=tenant).exists()`;
+      `get_or_create` on `DutyTariff` keyed by `(tenant, hs_code, country_of_origin, effective_from)`;
+      `Item.weight_kg` set only when currently `None`. **`seed_scm` twice must be a no-op the second
+      time — and in particular must not roll the weighted average a second time.**
+- [ ] `_flush()` branch, in this order (PROTECT on `StockMove`/`Item` from the allocation, on
+      `GoodsReceiptNote`/`Party` from the voucher): `LandedCostAllocation` → `LandedCostCharge` →
+      `LandedCostVoucher` → `DutyTariff`. Leave the drafted `accounting.Bill` rows alone unless they
+      are linked to a voucher (the existing orphaned-bills reasoning at `seed_scm.py:1094-1101`).
+- [ ] Update the command `help` string and the closing SUCCESS message to name 4.18.
+
+---
+
+## 10. Verify
+
+- [ ] `python manage.py makemigrations scm` → `0031_…` only · `python manage.py migrate`
+- [ ] `python manage.py seed_scm` **twice** — second run idempotent, and `Item.average_cost` for a
+      landed-cost item is **identical** after both runs (the §0b regression, in one assertion)
+- [ ] `python manage.py check` clean
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`** (throwaway script, deleted after):
+      - every new `scm:*` url 200/302 — the 21 routes in §5
+      - content assertions, not just status (L8): page titles present, a seeded `LC-…` and `DTY-…`
+        visible, the voucher detail shows charge rows AND allocation rows, `finance_payables` shows a
+        drafted bill number, `finance_budget_variance` shows an `OrgUnit` row,
+        `landed_cost_variance` shows a charge-type row
+      - **no `{#` / `{% comment` leaks** in any rendered body
+      - junk-param list (`?status=zzz&party=abc&basis=%E2%81%B7`) → 200, not a 500 (the `as_db_int`
+        rule, L11) · `?page=2` → 200
+      - **cross-tenant IDOR → 404** on `landedcostvoucher_detail`, `_edit`, `_delete`,
+        `landedcostcharge_edit`, `dutytariff_detail`
+      - **`allocate()` run twice → `allocated_total` unchanged and `Item.average_cost` unchanged**
+      - **`draft_bill()` run twice → exactly one `accounting.Bill`**, and
+        `bill.total == Σ billable charge.allocatable_amount` (+ tax) to the cent (§0c)
+      - a non-tenant-admin POST to `allocate` / `accrue` / `draft-bill` / `cancel` → denied
+      - `valuation_report` still 200 and a FIFO item's value now includes the uplift
+- [ ] Sidebar shows **4.18 Live** with all five bullets linked.
+
+---
+
+## 11. Close-out
+
+- [ ] **Phase 4 review wave** — the six reviewers in ONE parallel Workflow → write the returned
+      markdown to `.claude/tasks/review-scm-4.18.md` and commit it. Re-run any lane reporting
+      **NO RESULT**.
+- [ ] **Phase 5 `code-fixer`** — burns the findings down in ID order, one commit per file, marking
+      each `[x] fixed` / `[~] skipped — reason`. Confirm nothing is left `[ ] open` and
+      `manage.py check` is clean.
+- [ ] **Phase 6 test wave** — `subslug: 'finance'`;
+      `test_finance_{models,forms,views,security}.py`; every test function `test_finance_*` and every
+      module-level helper `_finance_*`. Final run **unfiltered** (the shared `conftest.py` is why).
+      Priority cases: `allocate()` idempotency incl. the WAC cache (§0b), the rounding remainder tying
+      exactly, each of the five bases plus the fallback chain, the `is_recoverable` /
+      `capitalise_to_inventory` exclusion from allocation but INCLUSION in the bill, the §0c bill
+      precision, `_item_valuation`'s fifo uplift **and** the weighted_avg no-double-count, the
+      different-party charge exclusion, and cross-tenant IDOR.
+- [ ] **Update `.claude/skills/scm/SKILL.md`** — the four models, three url groups + four report
+      routes, the `templates/scm/finance/` folder, the seeder rows, the `LIVE_LINKS["4.18"]` entry,
+      **and the four gotchas this plan exists to record**: `GoodsReceiptLine` cannot reach an `Item`
+      (§0a), `allocate()` must reverse before re-rolling (§0b), the `BillLine` 2dp / `TaxCode` 3dp
+      precision trap (§0c), and the weighted_avg-vs-fifo double-count rule in `_item_valuation` (§6).
+- [ ] **`README.md`** — mark 4.18 complete; update the "SCM 4.18–4.19 planned" line to `4.19`.
+- [ ] `build_state.py phase <n> done` at **every** phase boundary.
+
+---
+
+## 12. Later passes / deferred (carried from research-scm-4.18.md, nothing dropped)
+
+**Deferred within 4.18:**
+- **`LandedCostRule` — auto-cost rules that pre-populate charges** (D365 `Landed cost > Costing setup
+  > Auto costs` per voyage/container/folio/PO/item; VISCO freight benchmarks + historical fee data).
+  A 5th table; over-scope for one pass. **The single most valuable next addition.**
+- **`manual` allocation basis** — needs an editable allocation grid, which is a formset over rows that
+  are `editable=False` by construction. Ships as five computed bases; the sixth arrives with the grid.
+- **Multi-vendor auto-split** — one `draft_bill()` producing several `accounting.Bill`s, one per
+  distinct charge party (SAP's three-vendors-on-one-PO). v1 bills one payee and EXCLUDES the rest with
+  a visible count (§4).
+- **Voyage / container / folio as first-class entities** — D365's three-level grouping. NavERP models
+  it as the `shipment` FK; promote only if a bullet demands it.
+- **Landed-cost simulation / what-if before PO commitment** (VISCO estimate-at-PO, Zonos/Avalara
+  real-time quote) — needs the rule engine above first.
+- **Live global tariff/duty content** (Descartes CustomsInfo, Avalara AvaTax Cross-Border) and **AI
+  HS/HTS classification** — integration/later; `DutyTariff` is the table they would populate.
+- **A "landed cost" column on the 4.3 valuation report** — v1 folds the uplift into `value` (the point
+  of the exercise) and shows the breakdown on `landed_cost_variance.html`, keeping the shared 4.3 edit
+  to its minimum surgical shape.
+- **`weight_kg` / `volume_cbm` filters + columns on 4.3's item list page.**
+- **Costing-method eligibility guard.** Odoo hard-restricts landed cost to AVCO/FIFO; NavERP's
+  `Item.COSTING_CHOICES` is `weighted_avg`/`fifo`/`lifo` — all three perpetual — so the guard would be
+  vacuous today. The real behavioural split is already pinned in §6 (WAC reads the rolled cache,
+  FIFO/LIFO read the per-move uplift). Revisit only if a standard-costing method is ever added.
+
+**Parked to a sibling sub-module (not lost, not 4.18's):**
+- **Gross-margin analysis, cost-breakdown dashboards, freight-cost-per-unit trending** → **4.11**
+  (built; `_r_freight_cost_per_unit` at `analytics.py:2130`). 4.18 supplies the *true* unit cost;
+  4.11 is where the charts live.
+- **Freight recovery / accessorial rebill to a 3PL client** → **4.17** (`ClientRateCard` charge types).
+- **Customs filing, licences, trade documents, FTA rules-of-origin, duty drawback, FTZ, denied-party
+  screening** → **4.12** (built). 4.18 reads `TradeDocument.declared_value` / `incoterm`; it files
+  nothing.
+- **Carrier rate cards and the freight audit itself** → **4.6** (built). 4.18 links the audited
+  `FreightInvoice` as a landed-cost *actual*; it does not re-audit.
+- **EDI, e-invoicing/PEPPOL, ERP connectors, tariff-content feeds, OCR/AI invoice capture** → **4.19**.
+- **Payment execution, AP/AR aging, dunning, cash application, bank reconciliation, journal posting,
+  tax returns, encumbrance accounting, standard-cost variance (PPV) and periodic revaluation runs** →
+  **`apps/accounting` (Module 2)**. Already built. 4.18 stops at a draft `Bill` (L29).
+  `PurchaseRequisition.budget_check()`'s docstring (`:97`) records the deliberate decision NOT to
+  store an encumbrance; reversing it is an accounting-module decision, not 4.18's.
+- **Item master enrichment beyond `weight_kg` / `volume_cbm`** (pricing tiers, price lists,
+  dimensions) → **Module 5**.
+
+## Review notes
+(filled in at the end)
