@@ -133,6 +133,45 @@ def _scope_to_parent(form, field_name, queryset):
         form.fields[field_name].queryset = queryset
 
 
+def _keep_current(form, name, base_queryset):
+    """Union a field's CURRENTLY-STORED choice back into its narrowed dropdown.
+
+    Every narrowing a form applies on top of tenant scoping — ``is_active=True``, a ``PartyRole``,
+    "dedicated to this client" — can legitimately exclude the value a row ALREADY holds, because the
+    master can be deactivated or the role removed after the row was saved. The stored option then
+    vanishes from the ``<select>``, the browser posts an empty value, and saving an unrelated change
+    silently NULLs the FK for somebody who only came to fix a typo. On a required field it refuses
+    the save instead, with an error naming a field the user never touched. A no-op whenever the
+    stored value still qualifies (the common case); it exists for the one that no longer does.
+
+    ``base_queryset`` is the UN-narrowed one, so any ``select_related`` the dropdown's ``__str__``
+    needs survives the rebuild — rebuilding off the bare default manager drops it and reintroduces
+    one query per option. Pass a TENANT-SCOPED base: the union re-admits ``Q(pk=current)``
+    unconditionally, so an unscoped base would re-admit a foreign row if one ever reached the column.
+
+    Written as one ``filter(Q | Q)`` over a ``pk__in`` subquery rather than ``queryset | other``:
+    role-narrowed party querysets all end in ``.distinct()`` and Django raises
+    ``TypeError: Cannot combine a unique query with a non-unique query`` the moment such a queryset
+    is OR-ed with a plain one — a live 500 on the EDIT path only.
+
+    Lives HERE, not in one sub-module's entity file, because more than one sub-module needs it
+    (Backend Package Structure rule 5) — 4.17 Third-Party Logistics and 4.18 Finance Integration were
+    the two that made it shared, the same argument that moved ``_reject_foreign`` here for 4.13/4.14.
+    Three older private copies of this rule still exist under different signatures
+    (``AssetManagement/Assets.py``, ``ThirdPartyLogistics/LogisticsClients.py`` and
+    ``ThirdPartyLogistics/ClientRateCards.py``); consolidating them onto this one is an app-wide pass,
+    not one sub-module's to fork.
+    """
+    if name not in form.fields:
+        return
+    current = getattr(form.instance, f"{name}_id", None)
+    if current is None:
+        return
+    narrowed = form.fields[name].queryset
+    form.fields[name].queryset = base_queryset.filter(
+        Q(pk__in=narrowed.values("pk")) | Q(pk=current)).distinct()
+
+
 def _reject_foreign(form, cleaned, names):
     """Field-error any chosen FK whose row belongs to another workspace.
 
