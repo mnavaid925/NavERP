@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — shared create/edit form for DutyTariff [DTY-].
+
+Rendered by apps/scm/views/FinanceIntegration/DutyTariffs.py::dutytariff_create (via crud_create,
+apps/core/crud.py:131) and ::dutytariff_edit (via crud_edit, :149). The pinned contract gives this
+page exactly three keys and nothing here reads anything else:
+
+  form     — DutyTariffForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the DutyTariff on the EDIT path ONLY. crud_create does NOT put it in the context, so
+             every use of it below sits inside {% templatetag openblock %} if is_edit
+             {% templatetag closeblock %} and is never bare — the title, the breadcrumb, the Cancel
+             link and the read-only strip at the foot are all guarded for that reason.
+
+`today` and `is_current` are NOT passed to this template (they belong to the list and the detail
+page) and must not be reached for. A variable the view does not pass renders as an empty string with
+no error anywhere, which is this codebase's most repeated frontend bug — so the window explanation
+below is written as static help text rather than as a live verdict.
+
+Fields are rendered BY NAME through partials/form_field.html, which pairs <label for=...> with the
+widget's own id_for_label and prints that field's help_text and its errors. That couples this page to
+DutyTariffForm's whitelist on purpose: Meta.fields is an EXPLICIT list of eight names, in this order,
+and all eight appear below in that same order —
+
+  hs_code · country_of_origin · description
+  duty_rate_pct
+  effective_from · effective_to
+  tax_code · is_active
+
+A field added to the model and to that whitelist but NOT to a group here would never reach the POST —
+and on the edit path it would be silently blanked on every save. That failure is invisible from this
+screen, which is why the list above is spelled out.
+
+The form sets its own help_text on country_of_origin ("Leave blank to apply to any country of
+origin.") and on effective_from ("Required — a rate with no start date cannot be looked up by
+transaction date."), and partials/form_field.html renders it. Nothing below duplicates those two
+sentences as prose.
+
+DELIBERATELY ABSENT, and none of it an oversight:
+  tenant       — stamped by crud_create, and by TenantUniqueMixin when it checks the unique key.
+  number       — the DTY- reference, assigned on save, editable=False.
+  created_at / updated_at — automatic.
+
+--------------------------------------------------------------------------------------------------
+WHERE THE DUPLICATE LANDS, AND WHY form.non_field_errors IS RENDERED
+--------------------------------------------------------------------------------------------------
+DutyTariff carries unique_together (tenant, hs_code, country_of_origin, effective_from), and
+re-entering an HS code / origin / start date that already exists is the ordinary mistake on this
+page. Django reports a unique_together break as a NON-FIELD error — and it SKIPS the check entirely
+whenever any member of the key is excluded from the form, which `tenant` always is. DutyTariffForm
+therefore inherits TenantUniqueMixin (first in the MRO, deliberately) to run that check with the
+tenant filled in. Without it the duplicate passes is_valid() and raises an uncaught IntegrityError —
+a 500 — from inside .save(). With it, the refusal arrives as a non-field error, which is INVISIBLE
+unless it is rendered. The first card renders it.
+
+Other refusals and where they land:
+  effective_to — an end date that precedes the start date.
+  tax_code     — another workspace's tax code (a narrowed <select> has never held against a crafted
+                 POST, so ownership is enforced where the row is saved, not where it is offered).
+
+theme.css ships COLOUR-named badges only (badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate); badge-success / badge-warning / badge-danger do not exist and render
+unstyled (L33, shipped four times). Every badge below is one of those six. Nothing here is |safe.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Duty Tariff{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Duty Tariff</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:dutytariff_list' %}">Duty Tariffs</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Everything on this form is the <span class="fw-600">rate as it stands today</span>. It is not the history: a duty charge on a landed cost voucher holds its own copy of the percentage it was costed at, so saving here changes what the <span class="fw-600">next</span> landed cost defaults to and restates nothing that has already been worked out. If the rate has genuinely changed, the better move is to close this row's window and add a new one starting the day after — that way the book can still explain a cost worked out last quarter.
+      {% else %}
+        A tariff line answers one question: for these <span class="fw-600">goods</span>, from this <span class="fw-600">origin</span>, on this <span class="fw-600">date</span>, what does customs charge? All three parts are needed, which is exactly why a duty cannot be stored as an accounting tax code — a sales-tax code has nowhere to put an HS code or a country, and is not effective-dated against a transaction date. The DTY- number is assigned on save, so there is no number field.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Which goods, and from where</h2>
+        <span class="badge badge-info">One rate per code, origin and start date</span>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          The unique_together refusal arrives here as a NON-FIELD error and nowhere else. Rendering
+          this loop is the whole difference between a clear "that rate already exists" and a form
+          that silently appears to do nothing.
+        {% endcomment %}
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          A workspace may hold <span class="fw-600">one rate per HS code, origin and start date</span>. That triple is the key, and a second row repeating it is refused rather than saved — two rates covering the same goods from the same place on the same day would give two answers to one question, and which one a landed cost happened to pick up would come down to row order.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.hs_code %}
+          {% include "partials/form_field.html" with field=form.country_of_origin %}
+          {% include "partials/form_field.html" with field=form.description %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">A blank country of origin is the general rate, not a gap.</span> It applies wherever no origin-specific row covers the country the goods came from — which is the right shape for a normal MFN rate sitting underneath a handful of trade-agreement, quota or anti-dumping exceptions. Add the general row first, then the exceptions on top of it.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          The HS code is stored <span class="fw-600">upper-cased and trimmed</span>, so the same code typed two ways cannot become two rows that disagree. The description is only a label for the people reading the rate book — it is not part of the lookup, and nothing is matched on it.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The duty rate</h2>
+        <span class="badge badge-amber">Copied onto a charge, never referenced from one</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The percentage customs charges on the declared value. It is read <span class="fw-600">once</span> — when a duty charge is added to a landed cost voucher — and the number is then written onto that charge. Nothing points back at this row afterwards, which is deliberate: it is what stops a rate change from quietly restating a landed cost that was worked out and signed off months ago.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.duty_rate_pct %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Three decimal places, because tariff schedules genuinely carry them, and bounded to 0–100. A duty is a <span class="fw-600">cost of the goods</span>: it capitalises into what they are worth in stock. That is the opposite of the recoverable import tax below, and the reason the two are separate fields rather than one blended figure.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">When it applies</h2>
+        <span class="badge badge-slate">Start required · end optional</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          A rate without dates cannot be looked up by transaction date, and a rate book without dates cannot explain a cost worked out last quarter. The start date is therefore always required and is part of the unique key; the end date is optional and <span class="fw-600">leaving it blank means open-ended</span> — still in force, not missing.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.effective_from %}
+          {% include "partials/form_field.html" with field=form.effective_to %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">An end date before the start date is refused at save</span> — the window could never contain a day, so the rate would exist and apply to nothing, which is worse than not existing at all.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Supersede, do not overwrite.</span> When a rate changes, close this window on the last day it applied and add a new row starting the day after. Editing the percentage in place rewrites what the book says was true before the change, and effective dating exists precisely so that does not happen. A future start date is perfectly normal — a scheduled tariff change belongs in the book <em>before</em> it takes effect.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recoverable import tax, and whether this row is used</h2>
+        <span class="badge badge-info">Duty and VAT are not the same money</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Import VAT or GST is usually <span class="fw-600">reclaimable</span>, and duty is not. Because they behave differently in the accounts, they are held separately: the duty percentage above capitalises into the cost of the goods, while the tax code named here is Accounting's own — pointed at, never copied — and does not. Sales, VAT and GST stay in Accounting's tax codes; this register does not re-declare them.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.tax_code %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Only this workspace's <span class="fw-600">active</span> tax codes are offered, and one belonging to another workspace is refused at save even if the POST names it — a narrowed dropdown has never been a permission check. Leaving it blank is a real answer for a jurisdiction that charges duty with no reclaimable counterpart.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The active switch is the thing to reach for instead of deleting.</span> An inactive tariff is never looked up, whatever its dates say, and it keeps everything it has recorded. Deleting is permanent and takes with it the evidence for what a past shipment's duty was based on — and nothing in the database will stop it, because a duty charge snapshots the rate rather than pointing at this row.
+        </div>
+      </div>
+    </div>
+
+    {% if is_edit %}
+      {% comment %}
+        The read-only strip. `obj` exists on the edit path only (crud_edit:149), which is why this
+        whole block is inside {% templatetag openblock %} if is_edit {% templatetag closeblock %}.
+        Nothing here is a field on this form or on any other: the DTY- number is editable=False and
+        the two timestamps are automatic.
+      {% endcomment %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Reference</h2>
+          <div class="badge-group">
+            <span class="badge badge-slate">Read-only — assigned on save</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+            <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+            <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+          </dl>
+          <p class="form-help" style="margin:.9rem 0 0;">
+            The DTY- number is assigned once and never changes, so a landed cost review can name the row it priced from. It is not a field on this form and cannot be typed.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      {% comment %}
+        Cancel goes where Save goes, so the two buttons never land in different places: creating
+        returns to the register (crud_create's success_url is scm:dutytariff_list), editing returns to
+        the record you were editing (crud_edit's success_url is reverse("scm:dutytariff_detail")).
+        `obj` is only available on the edit branch, which is where it is used.
+      {% endcomment %}
+      {% if is_edit %}
+        <a href="{% url 'scm:dutytariff_detail' obj.pk %}" class="btn btn-outline">Cancel</a>
+      {% else %}
+        <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline">Cancel</a>
+      {% endif %}
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to this tariff's own page. The change takes effect on the <span class="fw-600">next</span> duty charge raised against this HS code and origin — every landed cost already worked out keeps the percentage it was costed at, which is honest rather than stale: it says what was charged at the time. Nothing on this form posts a journal entry; supply chain drafts documents for Accounting and Accounting posts them.
+      {% else %}
+        Saving returns to the register, where the new line appears with its DTY- number. It will only be picked up by a landed cost once <span class="fw-600">today falls inside its window</span> and the active switch is on — so a row entered with a future start date correctly sits in the book doing nothing until that date arrives. That is not a failure to save; it is what effective dating is for.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
