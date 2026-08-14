@@ -1,0 +1,638 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — one LANDED COST VOUCHER: the charges, the stock they were
+spread over, and the arithmetic that put them there.
+
+Renders apps/scm/views/FinanceIntegration/LandedCostVouchers.py::landedcostvoucher_detail — a
+hand-rolled render rather than crud_detail, because the page carries five panels crud_detail knows
+nothing about. Everything this page may read, and nothing else:
+
+  obj                the LandedCostVoucher
+  grn                obj.goods_receipt, passed explicitly so the panel does not re-walk the FK
+  charges            LIST of LandedCostCharge (select_related party / freight_invoice / gl_account /
+                     tax_code). Each row reads get_charge_type_display, estimated_amount,
+                     actual_amount, variance_amount, allocatable_amount, effective_basis, capitalises
+                     and is_recoverable — the last four are PROPERTIES over already-loaded columns,
+                     not queries
+  charge_count       int
+  allocations        the allocation rows FLAT — used for the empty state and the footer count, so the
+                     page can tell "nothing allocated" apart from "no groups"
+  allocation_groups  LIST of dicts, and these SIX keys are the contract: item / quantity /
+                     allocated_amount / unit_cost_uplift / basis_used / rows
+  allocation_count   int
+  receipt_moves      LIST of StockMove — the allocation base, select_related item / location
+  receipt_move_count int
+  billable_charges / billable_total       what Draft Bill would put on the vendor bill
+  excluded_charges / excluded_total       charges naming a DIFFERENT vendor, which it would not
+  bill               the linked accounting.Bill, or None
+  can_edit / can_delete / can_add_charge / can_allocate / can_accrue / can_draft_bill / can_cancel
+                     bools, each mirroring exactly what its route refuses on
+
+--------------------------------------------------------------------------------------------------
+THE THREE PANELS THAT SAY WHAT THEY ARE NOT
+--------------------------------------------------------------------------------------------------
+1. THE ALLOCATION BASE. The rows a cost is spread over are the inbound RECEIPT STOCK MOVES stamped
+   with this receipt&#39;s number — not the receipt&#39;s own lines. A receipt line points at a purchase
+   order line, and a purchase order line carries a free-typed description and no item, because 4.1
+   shipped before the 4.3 item catalog existed. The stock move is the only row in the system that
+   resolves a real Item, so it is what the arithmetic uses. When that panel is empty, Allocate
+   refuses and says so rather than silently spreading nothing.
+2. WHAT WOULD BE BILLED. A charge naming a vendor other than the voucher&#39;s payee is EXCLUDED from
+   the drafted bill and counted out loud. Splitting one voucher into several vendor bills is
+   deliberately not built, and a page that quietly rolled a broker&#39;s fee into the forwarder&#39;s bill
+   would be worse than one that says it did not.
+3. DRAFT, NOT POSTED. Draft Bill creates a DRAFT accounting.Bill and stops. Supply Chain posts NO
+   JournalEntry: approval, the accrual entry, payment and aging are all Module 2&#39;s, and no wording
+   on this page may imply otherwise.
+
+--------------------------------------------------------------------------------------------------
+THE LADDER, AND WHO MAY CLIMB IT
+--------------------------------------------------------------------------------------------------
+draft -> allocated -> accrued -> reconciled, with cancelled as the way back out. Allocate, Accrue,
+Draft Bill and Cancel are all @tenant_admin_required as well as @require_POST, because every one of
+them moves money: Allocate rewrites the average cost of real items, Cancel reverses that roll. So all
+four are wrapped in the house admin gate — showing a member a button they will only be 403ed on is
+the 4.11 finding. The decorator is the access control; the gate here is the honesty. Every verb is
+POST-only, so each is a real form with a csrf token and not one of them can be a link.
+
+Nullable FKs — shipment, trade_document, currency, bill, and a charge&#39;s party / freight_invoice /
+gl_account / tax_code — are each guarded with an explicit if rather than a |default filter: a None
+inside a FILTER ARGUMENT raises where a bare lookup would quietly render nothing (L10). variance_pct
+and a group&#39;s uplift are guarded with "is not None", because zero is a real answer that a truthiness
+test would hide.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33). The status chip is written by hand — draft=muted,
+allocated=info, accrued=amber, reconciled=green, cancelled=slate — and always ends in a fallback
+branch printing get_status_display. Nothing here is |safe, and no confirm string interpolates a
+user-typed value: an apostrophe in a vendor name is escaped to &#39;, which HTML decodes back to a
+bare quote before JavaScript sees it, breaking the dialog open and removing the guard (L42).
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.party.name }}
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'allocated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'accrued' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'reconciled' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'cancelled' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        {% if excluded_charges %}<span class="badge badge-amber">{{ excluded_charges|length }} charge{{ excluded_charges|length|pluralize }} on another vendor</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:landedcostvoucher_list' %}">Landed Cost Vouchers</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One goods receipt, the charges that came with it, and the stock they landed on. Every allocation row below names <span class="fw-600">the exact stock movement it was spread onto</span> and the basis it was spread by, because an inventory cost nobody can take apart is one nobody will defend at audit.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}
+        <a href="{% url 'scm:landedcostvoucher_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{{ obj.actual_total|floatformat:2 }}</div>
+      <div class="stat-label">Actual landed cost — what the carriers, brokers and customs have billed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ obj.estimated_total|floatformat:2 }}</div>
+      <div class="stat-label">Estimated at the time · {{ charge_count }} charge line{{ charge_count|pluralize }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{{ obj.variance_amount|floatformat:2 }}</div>
+      <div class="stat-label">
+        Actual less estimated
+        {% if obj.variance_pct is not None %}· {{ obj.variance_pct|floatformat:2 }}%{% else %}· no estimate to compare against{% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="split"></i></div>
+      <div class="stat-value">{{ obj.allocated_total|floatformat:2 }}</div>
+      <div class="stat-label">Spread onto stock across {{ allocation_count }} allocation row{{ allocation_count|pluralize }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ receipt_move_count }}</div>
+      <div class="stat-label">Inbound stock movement{{ receipt_move_count|pluralize }} this cost can be spread over</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The voucher</h2>
+      <div class="badge-group">
+        {% if bill %}<span class="badge badge-green">Handed to Accounts Payable</span>{% endif %}
+        {% if obj.status == 'cancelled' %}<span class="badge badge-slate">Cancelled — kept as evidence</span>{% endif %}
+        {% if obj.accrued_at %}<span class="badge badge-amber">Accrued</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item">
+          <dt>Goods receipt</dt>
+          <dd>
+            <a href="{% url 'scm:goodsreceipt_detail' grn.pk %}" class="mono">{{ grn.number }}</a>
+            <span class="badge badge-slate">{{ grn.get_status_display }}</span>
+            <div class="form-help mono">Received {{ grn.receipt_date|date:"M d, Y" }}</div>
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Payee</dt><dd class="fw-600">{{ obj.party.name }}</dd></div>
+        <div class="detail-item"><dt>Cost date</dt><dd class="mono">{{ obj.cost_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item">
+          <dt>Allocation basis</dt>
+          <dd>
+            {{ obj.get_allocation_basis_display }}
+            <div class="form-help">A charge line may override this; a blank basis on a line inherits it.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Shipment</dt>
+          <dd>
+            {% if obj.shipment %}
+              <a href="{% url 'scm:shipment_detail' obj.shipment.pk %}" class="mono">{{ obj.shipment.number }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Trade document</dt>
+          <dd>
+            {% if obj.trade_document %}
+              <a href="{% url 'scm:tradedocument_detail' obj.trade_document.pk %}" class="mono">{{ obj.trade_document.number }}</a>
+              <div class="form-help">
+                Declared {{ obj.trade_document.declared_value|floatformat:2 }}{% if obj.trade_document.incoterm %} · {{ obj.trade_document.incoterm }}{% endif %}
+              </div>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Currency</dt>
+          <dd>{% if obj.currency %}<span class="mono">{{ obj.currency.code }}</span> <span class="text-muted">{{ obj.currency.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Accrued</dt>
+          <dd class="mono">{% if obj.accrued_at %}{{ obj.accrued_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not accrued</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Vendor bill</dt>
+          <dd>
+            {% if bill %}
+              <a href="{% url 'accounting:bill_detail' bill.pk %}" class="mono">{{ bill.number }}</a>
+              <span class="badge badge-slate">{{ bill.get_status_display }}</span>
+            {% else %}
+              <span class="text-muted">Not drafted</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+      {% if obj.notes %}<div class="form-help" style="margin-top:1rem; white-space:pre-line;">{{ obj.notes }}</div>{% endif %}
+      <div class="form-help" style="margin-top:1rem;">
+        The <span class="fw-600">incoterm and declared value come from the trade document</span> rather than being retyped here, so a correction on the customs paperwork does not leave two versions of the same fact in the system. Supply Chain drafts the vendor bill; <span class="fw-600">Accounts Payable approves it, posts it and pays it</span> — nothing on this voucher is a ledger posting.
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    ------------------------------------------------------------------------------------ CHARGES
+    Estimated and actual sit in adjacent columns on purpose: the whole point of the sub-module is that
+    the gap is visible while it can still be argued with the carrier, rather than discovered in a
+    year-end margin review. allocatable_amount is the figure Allocate actually spreads — actual when
+    there is one, otherwise the estimate — so it is shown as its own column rather than left implied.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Charges</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ charge_count }} line{{ charge_count|pluralize }}</span>
+        {% if can_add_charge %}
+          <a href="{% url 'scm:landedcostcharge_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a charge</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Charge</th>
+            <th>Description</th>
+            <th>Vendor</th>
+            <th>Basis</th>
+            <th class="text-right">Estimated</th>
+            <th class="text-right">Actual</th>
+            <th class="text-right">Variance</th>
+            <th class="text-right">Allocatable</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for charge in charges %}
+            <tr>
+              <td class="nowrap">
+                {{ charge.get_charge_type_display }}
+                <div class="badge-group" style="margin-top:0.25rem;">
+                  {% if charge.capitalises %}
+                    <span class="badge badge-green">Capitalised</span>
+                  {% else %}
+                    <span class="badge badge-muted">Not capitalised</span>
+                  {% endif %}
+                  {% if charge.is_recoverable %}<span class="badge badge-info">Recoverable</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if charge.description %}{{ charge.description }}{% else %}<span class="text-muted">—</span>{% endif %}
+                {% if charge.freight_invoice %}
+                  <div class="form-help">Freight invoice <a href="{% url 'scm:freightinvoice_detail' charge.freight_invoice.pk %}" class="mono">{{ charge.freight_invoice.number }}</a></div>
+                {% endif %}
+                {% if charge.gl_account %}<div class="form-help mono">{{ charge.gl_account.code }} · {{ charge.gl_account.name }}</div>{% endif %}
+                {% if charge.tax_code %}<div class="form-help">{{ charge.tax_code.name }} · {{ charge.tax_code.rate_pct|floatformat:3 }}%</div>{% endif %}
+                {% if charge.hs_code or charge.country_of_origin or charge.duty_rate_pct %}
+                  <div class="form-help mono">
+                    {% if charge.hs_code %}HS {{ charge.hs_code }}{% endif %}
+                    {% if charge.country_of_origin %} · {{ charge.country_of_origin }}{% endif %}
+                    {% if charge.duty_rate_pct %} · {{ charge.duty_rate_pct|floatformat:3 }}% duty{% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  A blank vendor means "the voucher payee" and is the ordinary case, so it says that in
+                  words rather than printing a dash that reads like missing data.
+                {% endcomment %}
+                {% if charge.party %}
+                  {{ charge.party.name }}
+                  {% if charge.party_id != obj.party_id %}<div class="form-help"><span class="badge badge-amber">Not the voucher payee</span></div>{% endif %}
+                {% else %}
+                  <span class="text-muted">The voucher payee</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  effective_basis is a PROPERTY returning the raw choice value — the line's own basis, or
+                  the voucher's when the line leaves it blank — so it has no get_*_display. The five
+                  frozen ALLOCATION_BASIS_CHOICES keys are written out by hand with an else branch that
+                  prints whatever raw value arrives, so a sixth basis added later reads as itself rather
+                  than as a blank cell.
+                {% endcomment %}
+                {% if charge.effective_basis == 'value' %}By Value
+                {% elif charge.effective_basis == 'quantity' %}By Quantity
+                {% elif charge.effective_basis == 'weight' %}By Weight
+                {% elif charge.effective_basis == 'volume' %}By Volume
+                {% elif charge.effective_basis == 'equal' %}Equal
+                {% else %}{{ charge.effective_basis }}{% endif %}
+                {% if not charge.allocation_basis %}<div class="form-help">inherited</div>{% endif %}
+              </td>
+              <td class="text-right mono">{{ charge.estimated_amount|floatformat:2 }}</td>
+              <td class="text-right mono">{{ charge.actual_amount|floatformat:2 }}</td>
+              <td class="text-right mono">
+                {% if charge.variance_amount > 0 %}<span class="text-warn">{{ charge.variance_amount|floatformat:2 }}</span>
+                {% else %}{{ charge.variance_amount|floatformat:2 }}{% endif %}
+              </td>
+              <td class="text-right mono fw-600">{{ charge.allocatable_amount|floatformat:2 }}</td>
+              <td>
+                <div class="table-actions">
+                  {% if can_edit %}
+                    <a href="{% url 'scm:landedcostcharge_edit' charge.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:landedcostcharge_delete' charge.pk %}" onsubmit="return confirm('Delete this charge line? The voucher totals are recalculated straight away. Anything already allocated from it stays on the items until the voucher is re-allocated or cancelled.');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="file-text"></i>
+                  <h3>No charges on this voucher</h3>
+                  <p>A voucher with no charges allocates nothing. Add the freight, the customs duty, the brokerage, the insurance and the handling as they come in — an estimate first if that is all you have, and the actual figure when the invoice arrives. Only lines marked <span class="fw-600">capitalise to inventory</span> and not marked <span class="fw-600">recoverable</span> are spread onto stock: a reclaimable import VAT is money back from the tax authority, not part of what the goods cost.</p>
+                  {% if can_add_charge %}
+                    <a href="{% url 'scm:landedcostcharge_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add a charge</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if charges %}
+          <tbody>
+            <tr>
+              <td colspan="4" class="text-right text-muted">Voucher totals</td>
+              <td class="text-right mono">{{ obj.estimated_total|floatformat:2 }}</td>
+              <td class="text-right mono">{{ obj.actual_total|floatformat:2 }}</td>
+              <td class="text-right mono fw-600">{{ obj.variance_amount|floatformat:2 }}</td>
+              <td class="text-right mono fw-600">{{ obj.allocated_total|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        {% endif %}
+      </table>
+    </div>
+
+    <div class="card-body text-muted">
+      <span class="fw-600">Allocatable</span> is the figure Allocate actually spreads: the actual amount once there is one, and the estimate until then. That is why an estimated voucher can be allocated at all — waiting for every carrier invoice before valuing stock is how receipts end up costed at the purchase price alone for a whole quarter. Re-allocating after the actuals land backs the old figures out first and puts the new ones on, so the two are never added together.
+    </div>
+  </div>
+
+  {% comment %}
+    ------------------------------------------------------------------- WHAT WOULD BE BILLED
+    v1 drafts ONE vendor bill, to the voucher's payee. A charge naming a different vendor is excluded
+    and counted out loud rather than quietly folded in — auto-splitting a voucher across several
+    vendor bills is deliberately deferred, and a page that hid the exclusion would make the deferral
+    look like a bug in the arithmetic instead of a missing feature.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What Draft Bill would send to Accounts Payable</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">DRAFT ONLY — no journal entry</span>
+        <span class="badge badge-slate">{{ billable_total|floatformat:2 }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Billed to</dt><dd class="fw-600">{{ obj.party.name }}</dd></div>
+        <div class="detail-item"><dt>Lines on the bill</dt><dd class="mono">{{ billable_charges|length }}</dd></div>
+        <div class="detail-item"><dt>Bill value</dt><dd class="mono fw-600">{{ billable_total|floatformat:2 }}</dd></div>
+        <div class="detail-item">
+          <dt>Excluded</dt>
+          <dd>
+            {% if excluded_charges %}
+              <span class="badge badge-amber">{{ excluded_charges|length }} line{{ excluded_charges|length|pluralize }} · {{ excluded_total|floatformat:2 }}</span>
+            {% else %}
+              <span class="text-muted">Nothing excluded</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      {% if excluded_charges %}
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Charge</th><th>Vendor named on the line</th><th class="text-right">Allocatable</th></tr></thead>
+            <tbody>
+              {% for charge in excluded_charges %}
+                <tr>
+                  <td>{{ charge.get_charge_type_display }}{% if charge.description %} <span class="text-muted">{{ charge.description }}</span>{% endif %}</td>
+                  <td>{% if charge.party %}{{ charge.party.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td class="text-right mono">{{ charge.allocatable_amount|floatformat:2 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin-top:0.75rem;">
+          These lines are <span class="fw-600">still allocated onto stock</span> — the goods cost what they cost regardless of who invoiced for it — but they are <span class="fw-600">not on the drafted bill</span>, because a bill goes to one vendor. Raise the second vendor&#39;s bill in Accounts Payable directly, or move those charges onto their own voucher.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ------------------------------------------------------------------------------- ALLOCATIONS
+    One tbody per item — valid HTML, and it keeps each item's header, its movement rows and its
+    per-unit uplift in one block that cannot drift apart. The group dict carries the item-level
+    figures; `rows` carries that item's individual allocation rows, exactly as 4.17's line_groups
+    carried `lines`. The FLAT `allocations` list is what decides whether the empty state shows, so the
+    page can distinguish "nothing has been allocated" from "the grouping produced nothing".
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Allocated onto stock</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ allocation_count }} row{{ allocation_count|pluralize }}</span>
+        {% if obj.allocated_total %}<span class="badge badge-info">{{ obj.allocated_total|floatformat:2 }} spread</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item / movement</th>
+            <th>Charge</th>
+            <th>Basis used</th>
+            <th class="text-right">Quantity</th>
+            <th class="text-right">Basis value</th>
+            <th class="text-right">Allocated</th>
+            <th class="text-right">Uplift per unit</th>
+          </tr>
+        </thead>
+        {% for group in allocation_groups %}
+          <tbody>
+            <tr>
+              <td colspan="7">
+                {% if group.item %}
+                  <a href="{% url 'scm:item_detail' group.item.pk %}" class="fw-600 mono">{{ group.item.sku }}</a>
+                  <span class="text-muted">{{ group.item.name }}</span>
+                {% else %}
+                  <span class="text-muted">Item no longer on file</span>
+                {% endif %}
+                <span class="badge badge-slate">{{ group.allocated_amount|floatformat:2 }} onto {{ group.quantity|floatformat:4 }} units</span>
+                {% if group.unit_cost_uplift is not None %}<span class="badge badge-info">+{{ group.unit_cost_uplift|floatformat:4 }} per unit</span>{% endif %}
+              </td>
+            </tr>
+            {% for row in group.rows %}
+              <tr>
+                <td>
+                  <span class="mono">{{ row.stock_move.reference }}</span>
+                  <div class="form-help mono">
+                    {{ row.stock_move.moved_at|date:"M d, Y H:i" }}
+                    {% if row.stock_move.location %} · {{ row.stock_move.location.code }}{% endif %}
+                  </div>
+                </td>
+                <td>{% if row.charge %}{{ row.charge.get_charge_type_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="nowrap">
+                  {% if row.basis_used == 'value' %}By Value
+                  {% elif row.basis_used == 'quantity' %}By Quantity
+                  {% elif row.basis_used == 'weight' %}By Weight
+                  {% elif row.basis_used == 'volume' %}By Volume
+                  {% elif row.basis_used == 'equal' %}Equal
+                  {% else %}{{ row.basis_used }}{% endif %}
+                </td>
+                <td class="text-right mono">{{ row.quantity|floatformat:4 }}</td>
+                <td class="text-right mono">{{ row.basis_value|floatformat:4 }}</td>
+                <td class="text-right mono fw-600">{{ row.allocated_amount|floatformat:2 }}</td>
+                <td class="text-right mono">{{ row.unit_cost_uplift|floatformat:4 }}</td>
+              </tr>
+            {% endfor %}
+            <tr>
+              <td colspan="5" class="text-right text-muted">
+                {% if group.item %}{{ group.item.sku }}{% else %}Item{% endif %} subtotal
+                <div class="form-help">Rolled into this item&#39;s cached average cost in one movement, not once per row</div>
+              </td>
+              <td class="text-right mono fw-600">{{ group.allocated_amount|floatformat:2 }}</td>
+              <td class="text-right mono">{% if group.unit_cost_uplift is not None %}{{ group.unit_cost_uplift|floatformat:4 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          </tbody>
+        {% endfor %}
+
+        {% if not allocations %}
+          <tbody>
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="split"></i>
+                  <h3>Nothing allocated yet</h3>
+                  <p>
+                    {% if can_allocate %}
+                      Press <span class="fw-600">Allocate</span> below and every capitalising charge is spread across the inbound stock movements this receipt posted, on the basis each charge asks for. Each item&#39;s average cost is rolled once, by the total that landed on it — not once per row — and the last row of every charge absorbs the rounding remainder, so the amounts spread add up to the charge exactly.
+                    {% else %}
+                      This voucher cannot be allocated in its current state. A cancelled voucher and one that has already been billed are both closed to further allocation: the cost on the items is the cost that was agreed, and a page that re-spread it afterwards would leave the ledger and the item master disagreeing.
+                    {% endif %}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        {% endif %}
+      </table>
+    </div>
+
+    <div class="card-body text-muted">
+      Only the cached <span class="fw-600">average cost</span> moves — no quantity is ever written, and no stock movement is created, amended or reversed by allocating. The stock ledger is append-only and stays exactly as the receipt left it. If a basis cannot be measured on every row — no weights on the items, say — the arithmetic falls back to quantity and then to an equal split, and the basis it actually used is stamped on every row above rather than left to be inferred.
+    </div>
+  </div>
+
+  {% comment %}
+    ------------------------------------------------------------------------- THE ALLOCATION BASE
+    Shown even when it is empty, and especially then: an empty base is the single commonest reason
+    Allocate refuses, and a page that only reported the refusal as a flash message would leave nobody
+    any way to see why. These are the inbound receipt moves stamped with this receipt's number —
+    the compensating negatives a reversed receipt posts are excluded by the view, so a receipt that
+    was received and then reversed correctly shows nothing here.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The stock this cost is spread over</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ receipt_move_count }} movement{{ receipt_move_count|pluralize }}</span>
+        <span class="badge badge-info">From the stock ledger, not the receipt lines</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Location</th>
+            <th>Reference</th>
+            <th>Moved</th>
+            <th class="text-right">Quantity</th>
+            <th class="text-right">Unit cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for move in receipt_moves %}
+            <tr>
+              <td>
+                {% if move.item %}
+                  <a href="{% url 'scm:item_detail' move.item.pk %}" class="mono">{{ move.item.sku }}</a>
+                  <span class="text-muted">{{ move.item.name }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if move.location %}
+                  <a href="{% url 'scm:location_detail' move.location.pk %}" class="mono">{{ move.location.code }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ move.reference }}</td>
+              <td class="nowrap mono">{{ move.moved_at|date:"M d, Y H:i" }}</td>
+              <td class="text-right mono">{{ move.quantity|floatformat:4 }}</td>
+              <td class="text-right mono">{{ move.unit_cost|floatformat:4 }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="package-x"></i>
+                  <h3>This receipt has not reached the stock ledger</h3>
+                  <p>Allocate will refuse until it has. Either the receipt has not been <span class="fw-600">received</span> yet — receiving it is what posts the inbound movements — or it was received and its lines matched no item in the catalog, which happens on receipts raised against purchase order lines that were typed as free text before the item master existed. Nothing is spread onto stock that the ledger does not know about, because there would be nothing to spread it onto.</p>
+                  <a href="{% url 'scm:goodsreceipt_detail' grn.pk %}" class="btn btn-outline"><i data-lucide="arrow-right"></i> Open {{ grn.number }}</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Actions</h2>
+      <span class="badge badge-slate">Every one is POST-only</span>
+    </div>
+    <div class="card-body">
+      <div class="form-actions" style="flex-wrap:wrap;">
+        {% comment %}
+          Allocate, Accrue, Draft Bill and Cancel are @tenant_admin_required as well as @require_POST,
+          because all four move money: Allocate rewrites the average cost of real items, Cancel
+          reverses that roll, Draft Bill puts a document in front of Accounts Payable. A member shown
+          any of them would only be 403ed on it — the 4.11 finding — so all four live behind the house
+          admin gate. The decorator is the access control; this gate is the honesty.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_allocate %}
+            <form method="post" action="{% url 'scm:landedcostvoucher_allocate' obj.pk %}" onsubmit="return confirm('Allocate this voucher? Any earlier allocation from it is backed out of the item costs first, then every capitalising charge is spread over this receipt\'s stock movements and each item\'s average cost is rolled once. No stock movement is created or changed.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="split"></i> Allocate</button>
+            </form>
+          {% endif %}
+          {% if can_accrue %}
+            <form method="post" action="{% url 'scm:landedcostvoucher_accrue' obj.pk %}" onsubmit="return confirm('Mark this voucher accrued? It records that the cost is recognised and awaiting the vendor invoice. No journal entry is posted here — Accounting owns the ledger.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="clock"></i> Accrue</button>
+            </form>
+          {% endif %}
+          {% if can_draft_bill %}
+            <form method="post" action="{% url 'scm:landedcostvoucher_draft_bill' obj.pk %}" onsubmit="return confirm('Draft a vendor bill from this voucher? Supply Chain drafts it — Accounts Payable approves it, posts it and pays it. Charges naming a different vendor are left off and reported back to you.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="receipt"></i> Draft the bill</button>
+            </form>
+          {% endif %}
+          {% if can_cancel %}
+            <form method="post" action="{% url 'scm:landedcostvoucher_cancel' obj.pk %}" onsubmit="return confirm('Cancel this voucher? Anything it allocated is backed out of the items average cost and the allocation rows are removed. The voucher and its charges survive as evidence. A voucher that already has a bill cannot be cancelled from here.');">
+              {% csrf_token %}
+              <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel the voucher</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if can_add_charge %}
+          <a href="{% url 'scm:landedcostcharge_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a charge</a>
+        {% endif %}
+        {% if can_edit %}
+          <a href="{% url 'scm:landedcostvoucher_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'scm:landedcostvoucher_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every charge line on it goes too. Deleting is only possible while the voucher is draft and unbilled — cancelling is what backs an allocated cost out of the items average cost.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <div class="form-help" style="margin-top:1rem;">
+        The ladder runs <span class="fw-600">draft → allocated → accrued → reconciled</span>. Allocate may be pressed again as often as the charges change — it always backs the previous roll out before putting the new one on, so pressing it twice does not cost the goods twice. <span class="fw-600">Cancel is the way back out, and only before a bill exists</span>: once Accounts Payable is holding a draft bill for these charges, the document to correct is that bill and not this voucher. Edit and Delete disappear as soon as the voucher is allocated, for the same reason — the cost is inside real item valuations by then.
+      </div>
+    </div>
+  </div>
+{% endblock %}
