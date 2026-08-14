@@ -141,9 +141,11 @@ One solo agent first pins the contract (exact model/form/url/context names) and 
 `tests/__init__.py` + `conftest.py`; then **four `test-writer` agents run in parallel** over disjoint files —
 `test_<subslug>_{models,forms,views,security}.py`; then one agent runs the **full unfiltered** app suite and fixes
 it green. Tests run on SQLite in-memory, so the parallel pytest processes cannot collide. Every test function is
-named `test_<subslug>_*` and every module-level helper `_<subslug>_*`, because a duplicate name shadows a sibling
-lane's and breaks tests **outside** the file that caused it (L47) — which is also why the final run is never `-k`
-filtered. Commit each test file on its own.
+named `test_<subslug>_*` and every module-level helper `_<subslug>_*` — not because lanes can shadow each other
+(separate test modules have separate namespaces) but so the *next* sub-module appending nearby cannot shadow
+them. The collision that genuinely crosses files is a `conftest.py` fixture, which is why `conftest.py` is owned
+by the solo contract step; and it is why the final run is never `-k` filtered — a filter excludes exactly the
+tests a shared-file change can break (L47). Commit each test file on its own.
 
 **Phase 7 — Skill + README.** Update (or, on a brand-new app, author) `.claude/skills/<module-slug>/SKILL.md` with
 the new sub-module's models/routes/templates/seeder rows, and mark the sub-module complete in `README.md`. Commit
