@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics (3PL) Management — one client tariff: its dates, its priced lines,
+and every billing run that has been costed against it.
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientRateCards.py::clientratecard_detail. Everything
+this page may read, and nothing else:
+
+  obj                 the ClientRateCard, with client and currency joined
+  lines               a LIST of ClientRateCardLine in the model's own Meta order (category, basis,
+                      tier_from, id), with applies_to_location / applies_to_item_category /
+                      gl_account joined
+  line_count          int — every line on the card
+  active_line_count   int — the is_active subset, which is what a billing run actually reads
+  manual_only_bases   the MANUAL_ONLY_BASES tuple, so a line priced on a measurement this system
+                      cannot take yet can be chipped here rather than silently mis-billing later
+  billing_runs        a LIST of ClientBillingRun using this card, capped at `panel_limit`
+  billing_run_count   int — the WHOLE set, not the panel
+  panel_limit         int
+  is_effective_today  bool
+  can_edit            bool — status in EDITABLE_RATE_CARD_STATUSES, which is ("draft",)
+  can_add_line        bool — the same rule
+  can_activate        bool — status == "draft"
+  can_supersede       bool — status == "active"
+  can_delete          bool — False once billing_run_count is non-zero, which is EXACTLY what
+                      clientratecard_delete refuses on (ClientBillingRun.rate_card is PROTECT)
+
+THIS PAGE IS THE LINE LIST. ClientRateCardLine has no standalone list page and no filter bar is owed
+here — the table below IS the register for that model, which is why the add / edit / delete controls
+for lines live in it.
+
+LINE EDIT AND DELETE ARE GATED ON `can_edit`, the same flag as Add line. The contract pins one
+editability rule for the whole card (EDITABLE_RATE_CARD_STATUSES) and both `can_edit` and
+`can_add_line` are that rule; an active card whose rates could still be moved would let last week's
+billing run and this week's disagree about what the client was quoted. If the route turns out to
+allow a line edit on an active card, the flag is the thing to widen — not this template.
+
+NO BADGE CLASS IS INVENTED. theme.css ships COLOUR-named badges only, so badge-success /
+badge-warning / badge-danger render as unstyled text (L33). Every badge below is a literal ladder on
+the exact CHOICES keys — RATE_CARD_STATUS_CHOICES, CHARGE_CATEGORY_CHOICES, RUN_STATUS_CHOICES —
+and every ladder ends in an {% else %} that still prints the model's own get_*_display, so a choice
+added later shows up plainly instead of disappearing.
+
+NULLABLE FKs ARE GUARDED, NOT |default-ed. obj.currency, line.applies_to_location,
+line.applies_to_item_category, line.gl_account and run.invoice are all legitimately None, and a None
+handed to a template FILTER raises where a bare lookup would only print nothing (L10) — so each one
+is tested with {% if %} first.
+
+obj.client.party IS DELIBERATELY NOT READ. The view joins client and currency; reaching through to
+the party would be a lazy fetch this page does not need, so the client is shown by its code and
+linked to its own record, which carries the name.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.name }}
+        {% if obj.status == "draft" %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "active" %}
+          <span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "superseded" %}
+          <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "expired" %}
+          <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% endif %}
+        {% if is_effective_today %}
+          <span class="badge badge-info">In force today</span>
+        {% else %}
+          <span class="badge badge-muted">Not in force today</span>
+        {% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:clientratecard_list' %}">Client Rate Cards</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">Version <span class="fw-600">{{ obj.version }}</span> of the tariff for <a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="fw-600 mono">{{ obj.client.code }}</a>. Every line below is a priced rule a billing run looks for; a run that finds no matching line for an activity simply does not bill it, which is why the run page lists unbilled activity separately rather than guessing a price.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_add_line %}
+        <a href="{% url 'scm:clientratecardline_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add line</a>
+      {% endif %}
+      {% if can_edit %}
+        <a href="{% url 'scm:clientratecard_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% comment %}
+        Activate and Supersede are @require_POST — a GET is a 405 — so both are real forms and can
+        never be links.
+      {% endcomment %}
+      {% if can_activate %}
+        <form method="post" action="{% url 'scm:clientratecard_activate' obj.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Activate {{ obj.number }}? From then on billing runs price against these {{ active_line_count }} active line(s), and the card\'s rates stop being editable. Any other active card for this client that overlaps these dates will refuse the change and name itself.');"><i data-lucide="badge-check"></i> Activate</button>
+        </form>
+      {% endif %}
+      {% if can_supersede %}
+        <form method="post" action="{% url 'scm:clientratecard_supersede' obj.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button class="btn btn-outline" type="submit" onclick="return confirm('Supersede {{ obj.number }}? It stops being the live tariff and its end date is stamped today. Past billing runs keep pointing at it, so nothing already invoiced changes.');"><i data-lucide="archive"></i> Supersede</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list"></i></div>
+      <div class="stat-value">{{ active_line_count }}</div>
+      <div class="stat-label">Active priced line{{ active_line_count|pluralize }} · {{ line_count }} on the card in total. Only the active ones are read by a run</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="calendar-days"></i></div>
+      <div class="stat-value">{{ obj.effective_from|date:"M d, Y" }}</div>
+      <div class="stat-label">
+        {% if obj.effective_to %}
+          Runs to {{ obj.effective_to|date:"M d, Y" }}
+        {% else %}
+          Open-ended — no end date, which is +infinity and not "already finished"
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ billing_run_count }}</div>
+      <div class="stat-label">Billing run{{ billing_run_count|pluralize }} priced against this card</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="hash"></i></div>
+      <div class="stat-value">v{{ obj.version }}</div>
+      <div class="stat-label">A rate change is a new version, never an overwrite — the old one has to stay readable</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ======================================================================== 1. the card itself
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The tariff</h2>
+      {% if is_effective_today %}
+        <span class="badge badge-info">Effective today</span>
+      {% else %}
+        <span class="badge badge-muted">Outside its dates today</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Client</dt><dd><a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="mono fw-600">{{ obj.client.code }}</a></dd></div>
+        <div class="detail-item"><dt>Version</dt><dd class="mono">v{{ obj.version }}</dd></div>
+        <div class="detail-item">
+          <dt>Status</dt>
+          <dd>
+            {% if obj.status == "draft" %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "active" %}
+              <span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "superseded" %}
+              <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "expired" %}
+              <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Effective from</dt><dd class="mono">{{ obj.effective_from|date:"M d, Y" }}</dd></div>
+        <div class="detail-item">
+          {% comment %}
+            NULL end date means open-ended. It is NOT "expired" and it is NOT a blank cell to be
+            filled with a |default dash — the distinction is the whole point of the column.
+          {% endcomment %}
+          <dt>Effective to</dt>
+          <dd class="mono">{% if obj.effective_to %}{{ obj.effective_to|date:"M d, Y" }}{% else %}<span class="text-muted">Open-ended</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Currency</dt>
+          <dd class="mono">{% if obj.currency %}{{ obj.currency }}{% else %}<span class="text-muted">Falls back to the client default</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}
+        <p class="text-muted" style="white-space:pre-line; margin-top:.75rem;"><span class="fw-600">Notes.</span> {{ obj.notes }}</p>
+      {% endif %}
+      <p class="text-muted" style="margin-top:.75rem;">
+        Two <span class="fw-600">active</span> cards for one client may never overlap in time. The card refuses the save and names the one it collides with, because a run that found two live tariffs covering the same day would have no defined answer about which rate applies — and picking one silently is how a client gets billed at somebody else's prices. The way to change prices is a <span class="fw-600">new version</span>: draft it, activate it, and supersede this one.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 2. the priced lines
+    This table IS the ClientRateCardLine register — the model has no list page of its own, which is
+    why the whole add/edit/delete surface for it sits here.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Priced lines</h2>
+      <div class="badge-group">
+        <span class="badge badge-green">{{ active_line_count }} active</span>
+        <span class="badge badge-slate">{{ line_count }} on the card</span>
+        {% if can_add_line %}
+          <a href="{% url 'scm:clientratecardline_create' obj.pk %}" class="btn btn-outline btn-sm"><i data-lucide="plus"></i> Add line</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Basis</th>
+            <th>Description</th>
+            <th>Rate</th>
+            <th>Per</th>
+            <th>Included</th>
+            <th>Minimum</th>
+            <th>Tier band</th>
+            <th>Applies to</th>
+            <th>GL account</th>
+            <th>Active</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td class="nowrap">
+                {% comment %}
+                  CHARGE_CATEGORY_CHOICES, exact keys. The label always comes from the model's own
+                  get_charge_category_display so the ladder decides the colour and never the words.
+                {% endcomment %}
+                {% if line.charge_category == "storage" %}
+                  <span class="badge badge-info">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "receiving" %}
+                  <span class="badge badge-green">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "outbound" %}
+                  <span class="badge badge-amber">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "value_added" %}
+                  <span class="badge badge-slate">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "accessorial" %}
+                  <span class="badge badge-muted">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "transportation" %}
+                  <span class="badge badge-info">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "recurring" %}
+                  <span class="badge badge-slate">{{ line.get_charge_category_display }}</span>
+                {% elif line.charge_category == "minimum" %}
+                  <span class="badge badge-red">{{ line.get_charge_category_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ line.get_charge_category_display }}</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {{ line.get_charge_basis_display }}
+                {% comment %}
+                  MANUAL_ONLY_BASES are priceable but not MEASURABLE yet — items carry no weight and
+                  no dimensions, locations carry no area, and per-client labour is 4.14's. A run
+                  writes these lines with a quantity of zero and flags them for a human, so the chip
+                  says so here rather than letting somebody discover it on an invoice.
+                {% endcomment %}
+                {% if line.charge_basis in manual_only_bases %}
+                  <div class="form-help"><span class="badge badge-amber">Needs a manual quantity</span></div>
+                {% endif %}
+              </td>
+              <td>{{ line.description }}</td>
+              <td class="mono nowrap text-right">{{ line.rate|floatformat:4 }}</td>
+              <td class="nowrap">
+                {% comment %}
+                  `period` is blank on every non-periodic basis and set on every periodic one — the
+                  model refuses both mismatches — so a blank here is a fact and not missing data.
+                {% endcomment %}
+                {% if line.period %}
+                  <span class="badge badge-muted">{{ line.get_period_display }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="mono nowrap text-right">{{ line.included_quantity|floatformat:4 }}</td>
+              <td class="mono nowrap text-right">{{ line.minimum_charge|floatformat:2 }}</td>
+              <td class="mono nowrap">
+                {{ line.tier_from|floatformat:4 }}
+                {% comment %}
+                  tier_to NULL is the top band — open above — and is not a band of zero width.
+                {% endcomment %}
+                {% if line.tier_to is not None %}
+                  → {{ line.tier_to|floatformat:4 }}
+                {% else %}
+                  <span class="text-muted">and up</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if line.applies_to_location %}
+                  <div><span class="badge badge-info">Location</span> {{ line.applies_to_location }}</div>
+                {% endif %}
+                {% if line.applies_to_item_category %}
+                  <div><span class="badge badge-info">Category</span> {{ line.applies_to_item_category }}</div>
+                {% endif %}
+                {% if not line.applies_to_location and not line.applies_to_item_category %}
+                  <span class="text-muted">Everything the client stores</span>
+                {% endif %}
+              </td>
+              <td class="mono nowrap">
+                {% if line.gl_account %}{{ line.gl_account }}{% else %}<span class="text-muted">Client default</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% if line.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% if can_edit %}
+                    <a href="{% url 'scm:clientratecardline_edit' line.pk %}" class="btn-icon" title="Edit line"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:clientratecardline_delete' line.pk %}" style="display:inline;">
+                      {% csrf_token %}
+                      <button class="btn-icon" type="submit" title="Delete line" onclick="return confirm('Delete this {{ line.get_charge_basis_display|lower }} line? It stops being priced on the next run. Runs that already used it keep their own snapshot of the category, basis and rate, so nothing already billed changes.');"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">Locked</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="12">
+                <div class="empty-state">
+                  <i data-lucide="list"></i>
+                  <h3>This card prices nothing yet</h3>
+                  <p>A rate card with no lines is not an error and a billing run against it will not fail — it will simply calculate to zero and say so, which is exactly what "we agreed the tariff but never filled it in" looks like. Add the lines the contract actually contains: storage per pallet position per month, a handling charge per order or per line, a receipt fee, a flat monthly account charge. Each line names one <span class="fw-600">category</span> and one <span class="fw-600">basis</span>, and the basis is what tells the run where to go counting.</p>
+                  {% if can_add_line %}
+                    <a href="{% url 'scm:clientratecardline_create' obj.pk %}" class="btn btn-primary"><i data-lucide="plus"></i> Add the first line</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if not can_add_line %}
+        <span class="badge badge-slate">Lines locked</span>
+        This card is <span class="fw-600">{{ obj.get_status_display|lower }}</span>, and lines can only be added or changed while a card is still a draft. That is not caution for its own sake: a run that has already been calculated against these rates has to keep meaning what it said, and moving a rate under it would leave two documents disagreeing about one month. Raise a new version instead.
+      {% else %}
+        Lines are read <span class="fw-600">only when they are active</span> — deactivating one takes it out of the next calculation without deleting the record of what was once agreed. <span class="fw-600">Included quantity</span> is the free allowance subtracted before billing, and the <span class="fw-600">tier band</span> is a plain from/to range on the measured quantity rather than an expression language: this module deliberately does not grow one, and a genuinely bespoke formula belongs in a contract clause and a manual line, not in a rate engine nobody can audit.
+      {% endif %}
+      <div style="margin-top:.5rem;">
+        The <span class="fw-600">per pallet position</span> basis bills stock units one-for-one as pallet positions until items carry dimensions — the run says so on the line it writes. That is a stated approximation and never a hidden one; the bases listed as needing a manual quantity are simply not measurable from the data this system holds today, so they are written with a zero quantity and flagged for a person rather than being guessed at with an invented conversion factor.
+      </div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 3. what has been billed on it
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Billing runs priced against this card</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ billing_run_count }} run{{ billing_run_count|pluralize }}</span>
+        <a href="{% url 'scm:clientbillingrun_list' %}?client={{ obj.client.pk }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Open the run register</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Run</th><th>Period</th><th>Status</th><th>Total</th><th>Invoice</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for run in billing_runs %}
+            <tr>
+              <td><a href="{% url 'scm:clientbillingrun_detail' run.pk %}" class="fw-600 mono">{{ run.number }}</a></td>
+              <td class="nowrap mono">{{ run.period_start|date:"M d, Y" }} → {{ run.period_end|date:"M d, Y" }}</td>
+              <td class="nowrap">
+                {% if run.status == "draft" %}
+                  <span class="badge badge-muted">{{ run.get_status_display }}</span>
+                {% elif run.status == "calculated" %}
+                  <span class="badge badge-info">{{ run.get_status_display }}</span>
+                {% elif run.status == "approved" %}
+                  <span class="badge badge-amber">{{ run.get_status_display }}</span>
+                {% elif run.status == "invoiced" %}
+                  <span class="badge badge-green">{{ run.get_status_display }}</span>
+                {% elif run.status == "void" %}
+                  <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ run.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="mono nowrap text-right">{{ run.total|floatformat:2 }}</td>
+              <td class="nowrap">
+                {% comment %}
+                  run.invoice is legitimately None right up until the run is drafted into accounting
+                  — that is the ordinary state and not a gap, so it is tested rather than |default-ed.
+                {% endcomment %}
+                {% if run.invoice %}
+                  <span class="badge badge-green">Drafted</span>
+                {% else %}
+                  <span class="text-muted">Not yet drafted</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientbillingrun_detail' run.pk %}" class="btn-icon" title="View run"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="receipt"></i>
+                  <h3>Nothing has been billed on this card</h3>
+                  <p>No billing run has priced a period against this tariff yet, which is why it can still be deleted outright. Once a run has used it the card becomes evidence and the delete is refused — superseding it is the move that keeps the record.</p>
+                  <a href="{% url 'scm:clientbillingrun_create' %}" class="btn btn-outline"><i data-lucide="plus"></i> Start a billing run</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      {% if billing_run_count > panel_limit %}
+        Showing the newest {{ panel_limit }} of <span class="fw-600">{{ billing_run_count }}</span> — the cap is applied by the query, so it bounds what is fetched rather than what is drawn. Open the run register filtered to this client for the rest.
+      {% else %}
+        {{ billing_run_count }} run{{ billing_run_count|pluralize }} on file against this tariff.
+      {% endif %}
+      A run <span class="fw-600">snapshots</span> each line's category, basis and rate onto its own rows as it calculates. That is what lets a superseded card stay honest: the run keeps the numbers it actually used, and this card keeps the record of what was agreed at the time.
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================ 4. the actions
+    can_delete is the SAME condition clientratecard_delete enforces — no billing run may reference
+    the card — so the button and the route cannot disagree. Offering a one-click failure is worse
+    than not offering the button.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        {% if can_edit %}
+          <a href="{% url 'scm:clientratecard_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_add_line %}
+          <a href="{% url 'scm:clientratecardline_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add line</a>
+        {% endif %}
+        {% if can_activate %}
+          <form method="post" action="{% url 'scm:clientratecard_activate' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit" onclick="return confirm('Activate {{ obj.number }}? Billing runs will price against its {{ active_line_count }} active line(s) and the card\'s rates stop being editable.');"><i data-lucide="badge-check"></i> Activate</button>
+          </form>
+        {% endif %}
+        {% if can_supersede %}
+          <form method="post" action="{% url 'scm:clientratecard_supersede' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit" onclick="return confirm('Supersede {{ obj.number }}? Its end date is stamped today and it stops being the live tariff. Nothing already invoiced changes.');"><i data-lucide="archive"></i> Supersede</button>
+          </form>
+        {% endif %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'scm:clientratecard_delete' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit" onclick="return confirm('Delete {{ obj.number }}? The card\'s {{ line_count }} priced line(s) are removed with it and cannot be reconstructed. Superseding keeps the record.');"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:clientratecard_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if not can_delete %}
+          <span class="badge badge-slate">Delete refused</span>
+          {{ billing_run_count }} billing run{{ billing_run_count|pluralize }} reference{{ billing_run_count|pluralize:"s," }} this card, and each one is the record of a period that was actually priced. The card has to outlive them. <span class="fw-600">Supersede</span> it instead: a superseded tariff keeps its dates and its lines, stops being billed against, and every past run goes on pointing at the prices that were really in force.
+        {% else %}
+          No run has been priced against this card, so deleting it removes only the card and its lines. Once a run exists the delete is refused outright — superseding is the reversible move and is almost always the right one.
+        {% endif %}
+      </p>
+      {% if not can_activate and not can_supersede %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          Neither verb is available at <span class="fw-600">{{ obj.get_status_display|lower }}</span>. <em>Activate</em> is offered on a draft only, and <em>Supersede</em> on the live card only — a superseded or expired tariff is a closed record and there is nothing left to move it to. To price this client differently, draft a new version.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
