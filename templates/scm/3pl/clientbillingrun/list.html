@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — the CLIENT BILLING RUN register (CBR-).
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientBillingRuns.py::clientbillingrun_list, which returns
+crud_list(...). Everything this page may read, and nothing else:
+
+  object_list / page_obj / q    from crud_list (apps/core/crud.py) — page_obj.window drives the shared
+                                pagination partial, which is the ONLY guarded prev/next in the house
+                                (an unguarded previous_page_number raises EmptyPage and 500s the
+                                moment the list outgrows one page — L9)
+  clients                       LogisticsClient queryset for the ?client= dropdown
+  status_choices                RUN_STATUS_CHOICES — draft / calculated / approved / invoiced / void
+  stats                         dict, and these SEVEN keys are the whole contract:
+                                total / draft / calculated / approved / invoiced / void /
+                                approved_value (Decimal — the summed total of approved AND invoiced
+                                runs, i.e. everything already committed to the client)
+
+Filter params: q / client / status / period_from / period_to.
+  * `client` is a pk and compares with |stringformat:"d" — NEVER |slugify, which lowercases and
+    slugifies an integer into something that can never equal a pk string on some values.
+  * `status` compares against request.GET.status as a plain string.
+  * `period_from` / `period_to` are free-typed dates that the view parses DEFENSIVELY — an
+    unparseable value SKIPS its filter rather than raising — so they echo back verbatim through
+    request.GET and the box keeps whatever was typed.
+
+--------------------------------------------------------------------------------------------------
+WHAT THIS PAGE DELIBERATELY DOES NOT DO
+--------------------------------------------------------------------------------------------------
+No row calls a method. subtotal / minimum_adjustment / total are stored columns written by
+recalc_amounts(), so `obj.total` is free; the run's LINE COUNT is not on this page at all, because it
+would be one query per row for a figure nobody triages by (the measured 4.13 asset_list finding).
+The run's own page carries the lines.
+
+Neither `obj.status` nor `obj.total` is ever printed as evidence that money moved. A run is an
+internal working document until Draft Invoice hands one draft accounting.Invoice to Module 2 — SCM
+posts no JournalEntry (L29) — so the Invoice column links out rather than restating a balance.
+
+--------------------------------------------------------------------------------------------------
+COLOUR AND THE ACTION GATES
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges only: badge-green / red / amber / info / muted / slate. A
+semantic badge-success / badge-danger / badge-warning renders completely UNSTYLED, and that exact
+mistake has shipped four times (L33). The status chip below is written against the RUN_STATUS_CSS
+vocabulary by hand — draft=muted, calculated=info, approved=amber, invoiced=green, void=slate — and
+always ends in an {% templatetag openblock %} else {% templatetag closeblock %} that falls back to
+get_status_display, so a value added to RUN_STATUS_CHOICES later renders readably instead of blank.
+stat-icon ships blue / green / orange / purple / slate and no red.
+
+Edit is offered only while status is draft or calculated (EDITABLE_RUN_STATUSES), which is exactly
+what clientbillingrun_edit refuses on. Delete is offered until the run is invoiced, which is exactly
+what clientbillingrun_delete refuses on. Both gates read obj.status — a column, not a query — so the
+button a row shows and the answer the route gives can never disagree.
+
+Delete is @require_POST, so it is a real <form method="post"> with a csrf token and never a link. The
+confirm string carries the system-generated CBR- number and nothing user-typed: an apostrophe in a
+client name is escaped to &#39;, which HTML decodes back to a bare quote before JavaScript sees it —
+the dialog then breaks open and the guard is silently gone (L42). Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}Client Billing Runs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Client Billing Runs</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Client Billing Runs</span></div>
+      <p class="text-muted">One row per client per billing period: what the tariff says the warehouse did for them, priced from the evidence already in the ledger rather than typed by anybody. A run is a <span class="fw-600">working document</span> until it is invoiced — it can be recalculated as many times as you like while it is draft or calculated, and every recalculation rebuilds only the machine-derived lines and leaves manual charges alone. The last step hands <span class="fw-600">one draft invoice</span> to Accounts Receivable, which owns the money from there.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Clients</a>
+      <a href="{% url 'scm:clientratecard_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Rate Cards</a>
+      <a href="{% url 'scm:clientbillingrun_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Billing Run</a>
+    </div>
+  </div>
+
+  {% comment %}
+    Counted over the WHOLE workspace, never over the filtered page: "3 awaiting approval" is a fact
+    somebody has to act on this week, and a tile that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one client. The filtered figure is the badge in the card
+    header below, and it says "matching".
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Billing runs on file · {{ stats.draft }} still draft, {{ stats.void }} voided</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clipboard-check"></i></div>
+      <div class="stat-value">{{ stats.calculated }}</div>
+      <div class="stat-label">Calculated and waiting for someone to approve them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="stamp"></i></div>
+      <div class="stat-value">{{ stats.approved }}</div>
+      <div class="stat-label">Approved — priced and agreed, no invoice drafted yet</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ stats.invoiced }}</div>
+      <div class="stat-label">Handed to Accounts Receivable as a draft invoice</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{{ stats.approved_value|floatformat:2 }}</div>
+      <div class="stat-label">Value approved or invoiced — what the tariff has committed to clients, not what has been collected</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Billing runs</h2>
+      <div class="badge-group">
+        {% if stats.calculated %}<span class="badge badge-amber">{{ stats.calculated }} awaiting approval</span>{% endif %}
+        {% if stats.approved %}<span class="badge badge-info">{{ stats.approved }} ready to invoice</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search CBR- number, client code or client name…">
+        </div>
+        {% comment %}
+          A pk dropdown — |stringformat:"d" and NEVER |slugify. The value goes through as_db_int in
+          the view, so ?client=abc, ?client=² and a 21-digit value SKIP the filter instead of raising
+          out of .filter() (L11).
+        {% endcomment %}
+        <div class="form-group">
+          <select name="client" aria-label="Client" class="form-select">
+            <option value="">All clients</option>
+            {% for c in clients %}
+              <option value="{{ c.pk }}" {% if request.GET.client == c.pk|stringformat:"d" %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-period-from">Period ends on or after</label>
+          <input type="date" id="filter-period-from" name="period_from" value="{{ request.GET.period_from }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="filter-period-to">Period starts on or before</label>
+          <input type="date" id="filter-period-to" name="period_to" value="{{ request.GET.period_to }}" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">The two date boxes bracket runs by <span class="fw-600">overlap</span> rather than by equality — <em>ends on or after</em> keeps anything still running into your window, and <em>starts on or before</em> keeps anything that had already begun. A date that cannot be read is <span class="fw-600">skipped rather than refused</span>: the filter simply does not narrow, and the box keeps what you typed so you can see why.</div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Client</th>
+            <th>Period</th>
+            <th>Rate card</th>
+            <th>Status</th>
+            <th class="text-right">Total</th>
+            <th>Invoice</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:clientbillingrun_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a></td>
+              <td class="mono">{{ obj.client.code }}</td>
+              <td class="nowrap">
+                {{ obj.period_start|date:"M d, Y" }}
+                <span class="text-muted">to</span>
+                {{ obj.period_end|date:"M d, Y" }}
+              </td>
+              <td class="mono">{{ obj.rate_card.number }}</td>
+              <td class="nowrap">
+                {% comment %}
+                  RUN_STATUS_CSS, written out. Colour-named classes only, and an {% templatetag openblock %} else {% templatetag closeblock %}
+                  fallback so a sixth status added later still renders its own label (L33).
+                {% endcomment %}
+                {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'calculated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'approved' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'invoiced' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'void' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="text-right mono fw-600">{{ obj.total|floatformat:2 }}</td>
+              <td>
+                {% comment %}
+                  A None invoice is the ORDINARY case for every run before the hand-off, so it prints
+                  an em dash and never a blank cell. The link goes to Accounting: this module drafts
+                  the invoice and never owns it afterwards.
+                {% endcomment %}
+                {% if obj.invoice %}
+                  <a href="{% url 'accounting:invoice_detail' obj.invoice.pk %}" class="mono">{{ obj.invoice.number }}</a>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:clientbillingrun_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'draft' or obj.status == 'calculated' %}
+                    <a href="{% url 'scm:clientbillingrun_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% if obj.status != 'invoiced' %}
+                    <form method="post" action="{% url 'scm:clientbillingrun_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every charge line on it goes too, including any manual charges that were typed by hand and cannot be recalculated back. Voiding the run keeps the whole record.');">
+                      {% csrf_token %}
+                      <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="calculator"></i>
+                  <h3>No billing runs yet</h3>
+                  <p>A billing run prices one client for one period against one rate card. Start it with <span class="fw-600">New Billing Run</span>: pick the client, pick the tariff that was in force, give the period, and save. Nothing is priced at that moment — you press <span class="fw-600">Calculate</span> on the run afterwards, and the figures come from the stock ledger, the receipts, the orders and the shipments that already happened, so there is no month-end spreadsheet to reconcile. If you were expecting rows here, try clearing the filters.</p>
+                  <a href="{% url 'scm:clientbillingrun_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Start a billing run</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered <span class="fw-600">newest period first</span>. The total on a row is the stored figure the last calculation left behind, minimum adjustment included — it is not recomputed as you read this page, so a run whose underlying stock or orders have changed since shows the old number until somebody recalculates it. That is deliberate: an approved figure that quietly re-priced itself between the approval and the invoice would be the one number in this module nobody could trust. <span class="fw-600">Delete disappears once a run is invoiced</span>, because a draft invoice already exists in Accounts Receivable pointing back at it; void the run while it is still draft or calculated instead, which keeps every line as evidence.
+    </div>
+  </div>
+{% endblock %}
