@@ -252,8 +252,14 @@ def _allocation_groups(allocations):
         quantity = group["quantity"]
         group["quantity"] = q4(quantity)
         group["allocated_amount"] = q2(group["allocated_amount"])
+        # `None`, NOT `ZERO`, when there is no quantity to divide by: "this group was not allocated
+        # per unit" and "this group picked up nothing per unit" are different facts, and the detail
+        # page tests `{% if group.unit_cost_uplift is not None %}` on both the badge and the column.
+        # With `ZERO` its `{% else %}—{% endif %}` branch was dead code and a zero-quantity group
+        # rendered the misleading badge "+0.0000 per unit". Matches the identical `uplift_per_unit`
+        # treatment in `views/FinanceIntegration/Reports.py`.
         group["unit_cost_uplift"] = (q4(group["allocated_amount"] / quantity)
-                                     if quantity else ZERO)
+                                     if quantity else None)
         ordered.append(group)
     # By SKU, so the panel reads in the same order as the item list and the receipt.
     ordered.sort(key=lambda group: (group["item"].sku if group["item"] else "", group["item"].pk
