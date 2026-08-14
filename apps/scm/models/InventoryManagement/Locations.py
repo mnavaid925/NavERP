@@ -81,7 +81,12 @@ class Location(TenantOwned):
     class Meta:
         ordering = ["code"]
         unique_together = ("tenant", "code")
-        indexes = [models.Index(fields=["tenant", "location_type"], name="scm_loc_tnt_type_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "location_type"], name="scm_loc_tnt_type_idx"),
+            # Mirrors the Item index above — client_space_report filters dedicated bins by
+            # owner_client the same way, so both sides of 4.17's segregation pair are covered.
+            models.Index(fields=["tenant", "owner_client"], name="scm_loc_tnt_owner_idx"),
+        ]
 
     @property
     def is_leaf(self):
