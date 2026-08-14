@@ -145,8 +145,15 @@ class LandedCostChargeForm(TenantModelForm):
             self.instance.voucher = voucher
 
         self.fields["party"].queryset = _carrier_parties(tenant)
+        # `carrier__party`, NOT `carrier`: `FreightInvoice.__str__` renders `self.carrier.name`, and
+        # `Carrier.name` is a PROPERTY that reads `self.party.name`
+        # (models/TransportationManagement/Carriers.py:103-106). Joining only as far as the carrier
+        # leaves the party a lazy fetch, so rendering this <select> costs one query PER OPTION. The
+        # app-wide reference pattern for this dropdown is the two-hop join —
+        # views/TransportationManagement/FreightInvoices.py and ContractCompliance/TradeDocuments.py
+        # both already use `select_related("carrier__party")` for exactly this reason.
         self.fields["freight_invoice"].queryset = (
-            FreightInvoice.objects.filter(tenant=tenant).select_related("carrier")
+            FreightInvoice.objects.filter(tenant=tenant).select_related("carrier__party")
             .order_by("-invoice_date", "-id")
             if tenant is not None else FreightInvoice.objects.none())
         self.fields["gl_account"].queryset = (
