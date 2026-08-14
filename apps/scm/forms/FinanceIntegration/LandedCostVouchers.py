@@ -36,6 +36,7 @@ from apps.scm.forms.FinanceIntegration.DutyTariffs import _keep_current
 from apps.accounting.models import GLAccount, TaxCode
 
 from apps.scm.models import (
+    DutyTariff,
     FreightInvoice,
     GoodsReceiptNote,
     LandedCostCharge,
@@ -216,4 +217,29 @@ class LandedCostChargeForm(TenantModelForm):
         # All four are tenant-scoped targets; the narrowed dropdowns above are UX, this is the check
         # a crafted POST has to get past.
         _reject_foreign(self, cleaned, ("party", "freight_invoice", "gl_account", "tax_code"))
+
+        # DEFAULT the rate from the workspace's own duty schedule when the typist did not state one.
+        # This is the request-path caller of `DutyTariff.rate_for()` — without it the Tax Management
+        # master feeds nothing at runtime and the help_text above ("Snapshotted from the duty
+        # tariff") is a promise nothing keeps, leaving every rate to be retyped by hand.
+        #
+        # GUARDED ON `charge_type == "duty"` AND NOTHING ELSE. `LandedCostCharge.clean()` REJECTS a
+        # non-zero rate on any other charge type, so defaulting a freight or handling charge that
+        # happens to carry an HS code would turn a valid line into a validation error the typist
+        # cannot see the cause of.
+        #
+        # A left-alone box and a typed 0 are the SAME input here — the widget pre-fills the model
+        # default 0 — so "no rate stated" is the falsy test rather than `is None`. A rate the typist
+        # actually typed is never overwritten, and neither is an already-snapshotted one on an edit:
+        # the lookup runs only when the box carries nothing.
+        if (cleaned.get("charge_type") == "duty"
+                and not cleaned.get("duty_rate_pct")
+                and cleaned.get("hs_code")):
+            tariff = DutyTariff.rate_for(
+                self.tenant, cleaned["hs_code"], cleaned.get("country_of_origin", ""),
+                self.voucher.cost_date if self.voucher is not None else None)
+            # `None` means no schedule covers this code on that date — the field keeps whatever it
+            # had, because "type it yourself" is the documented answer, not "fail the page".
+            if tariff is not None:
+                cleaned["duty_rate_pct"] = tariff.duty_rate_pct
         return cleaned
