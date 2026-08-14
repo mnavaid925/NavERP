@@ -196,13 +196,29 @@ def clientbillingrun_edit(request, pk):
 @login_required
 @require_POST
 def clientbillingrun_delete(request, pk):
-    """POST-only. An INVOICED run is never deleted — its invoice would lose its explanation."""
+    """POST-only. Only a run still in a WORKING state (draft / calculated) is deleted.
+
+    The guard is ``VOIDABLE_STATUSES`` rather than a bare ``!= "invoiced"`` because delete and void
+    close the same door, and the detail page's own prose promises exactly that ("Delete disappears at
+    the same moment, for the same reason"). Refusing the other three statuses is what makes the
+    approval a signature: ``approve`` is ``@tenant_admin_required``, so leaving an approved run
+    deletable by any member let a member erase an admin's approval — plus every derived charge line —
+    through a route the ladder itself refuses (``void()`` will not touch an approved run either).
+    """
     obj = get_object_or_404(ClientBillingRun.objects.select_related("client", "invoice"),
                             pk=pk, tenant=request.tenant)
-    if obj.status == "invoiced":
-        number = obj.invoice.number if obj.invoice_id else "an invoice"
-        messages.error(request, f"This run has been invoiced as {number} and can't be deleted. "
-                                "Void the invoice in Accounting instead.")
+    if obj.status not in ClientBillingRun.VOIDABLE_STATUSES:
+        if obj.status == "invoiced":
+            number = obj.invoice.number if obj.invoice_id else "an invoice"
+            messages.error(request, f"This run has been invoiced as {number} and can't be deleted. "
+                                    "Void the invoice in Accounting instead.")
+        elif obj.status == "approved":
+            messages.error(request, "This run has been approved and can't be deleted — the approval "
+                                    "is a signed record of what the client was to be billed. Draft "
+                                    "the invoice and correct it in Accounting instead.")
+        else:
+            messages.error(request, f"A {obj.get_status_display().lower()} run is kept as the record "
+                                    "that this period was cancelled, and can't be deleted.")
         return redirect("scm:clientbillingrun_detail", pk=pk)
     return crud_delete(request, model=ClientBillingRun, pk=pk,
                        success_url="scm:clientbillingrun_list")
@@ -255,7 +271,9 @@ def clientbillingrun_detail(request, pk):
         "can_approve": obj.status == "calculated",
         "can_draft_invoice": obj.status == "approved" and obj.invoice_id is None,
         "can_void": obj.status in ClientBillingRun.VOIDABLE_STATUSES,
-        "can_delete": obj.status != "invoiced",
+        # Deliberately the SAME set as `can_void`: delete and void close together, which is what the
+        # footer prose on this page says and what `clientbillingrun_delete` now refuses on.
+        "can_delete": obj.status in ClientBillingRun.VOIDABLE_STATUSES,
     })
 
 
