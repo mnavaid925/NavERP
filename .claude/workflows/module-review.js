@@ -1,9 +1,7 @@
 export const meta = {
   name: 'module-review',
   description: 'Run the six NavERP review agents in parallel over one just-built sub-module and return one consolidated findings markdown',
-  whenToUse:
-    'Step 4 of the CLAUDE.md Module Creation Sequence — right after the sub-module code is built, verified and committed. ' +
-    'Replaces running code-reviewer / explorer / frontend-reviewer / performance-reviewer / qa-smoke-tester / security-reviewer one at a time.',
+  whenToUse: 'Step 4 of the CLAUDE.md Module Creation Sequence — right after the sub-module code is built, verified and committed. Replaces running code-reviewer / explorer / frontend-reviewer / performance-reviewer / qa-smoke-tester / security-reviewer one at a time.',
   phases: [
     { title: 'Review', detail: 'six specialist reviewers in parallel, read-only, structured findings' },
   ],
