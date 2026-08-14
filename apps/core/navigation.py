@@ -1117,6 +1117,23 @@ LIVE_LINKS = {
         "Client Integration":           "scm:logisticsclient_list",      # bullet (the EDI/API field block lives on the client master)
         "Warehouse Rental Management":  "scm:client_space_report",       # bullet (COMPUTED - committed space beside reserved bins)
     },
+    # 4.18 Finance & Accounting Integration. THREE of these five bullets are READ-ONLY COMPUTED
+    # pages, and that is the sub-module's central ruling rather than a shortcut: what we owe and what
+    # we are owed already exist as POINTERS into `apps/accounting` from six shipped models, so an AP
+    # table, an AR table or a budget table here would be a second copy of the same money that drifts
+    # the first time Accounting voids something (L29). Every target below is a real STAFF-facing page
+    # that renders today; none is a placeholder (L32).
+    "4.18": {
+        "Accounts Payable":         "scm:finance_payables",          # bullet (READ-ONLY register over 4.1 GRN.bill + 4.6 FreightInvoice.bill + 4.18 LandedCostVoucher.bill - no AP table)
+        "Accounts Receivable":      "scm:finance_receivables",       # bullet (READ-ONLY register over 4.5 SalesOrder.invoice + 4.17 ClientBillingRun.invoice + 4.10 RMA.credit_note - no AR table)
+        "Landed Cost Calculation":  "scm:landedcostvoucher_list",    # bullet (the one genuinely new capability - voucher + charges + derived allocations)
+        "Budgeting":                "scm:finance_budget_variance",   # bullet (COMPUTED over accounting.BudgetLine.org_unit vs PR/PO commitments vs freight+landed actuals - no Budget table)
+        "Tax Management":           "scm:dutytariff_list",           # bullet (HS x origin duty master; sales/VAT/GST stays accounting.TaxCode, FK'd from the charge line)
+    },
+    # NO sidebar key for `LandedCostCharge` or `LandedCostAllocation`, and none for the landed-cost
+    # variance report: the charges are reached from the voucher detail page and the allocations are a
+    # derived ledger shown there too — the `ClientRateCardLine` / `ReorderRule` / `ReturnReason` /
+    # `MeterReading` rule. A sidebar entry per child row would list plumbing, not features.
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
