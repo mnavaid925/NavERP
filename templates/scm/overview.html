@@ -368,4 +368,28 @@
       </div>
     </div>
   </div>
+
+  {% comment %}
+    --- 4.17 Third-Party Logistics (3PL) ---
+    The four registers 4.17's LIVE_LINKS entry points at, plus its two computed reports. Without this
+    card every 3PL page was reachable only from the sidebar, which is not this module's own entry
+    point — the same six links and icons the logistics-client list header already carries.
+
+    Rate-card LINES and billing-run LINES are deliberately absent: both are nested children reached
+    through their parent's detail page and neither has a standalone list, so a link here would need a
+    parent pk this page does not have.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Third-Party Logistics</h2></div>
+    <div class="card-body">
+      <div class="page-actions">
+        <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Logistics Clients</a>
+        <a href="{% url 'scm:clientratecard_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Rate Cards</a>
+        <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Billing Runs</a>
+        <a href="{% url 'scm:clientsla_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> SLAs</a>
+        <a href="{% url 'scm:client_inventory_report' %}" class="btn btn-outline"><i data-lucide="boxes"></i> Client Inventory</a>
+        <a href="{% url 'scm:client_space_report' %}" class="btn btn-outline"><i data-lucide="warehouse"></i> Warehouse Rental</a>
+      </div>
+    </div>
+  </div>
 {% endblock %}
