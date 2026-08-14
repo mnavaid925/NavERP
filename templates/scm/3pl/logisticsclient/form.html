@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — shared create/edit form for LogisticsClient [3PL-].
+
+Rendered by apps/scm/views/ThirdPartyLogistics/LogisticsClients.py::logisticsclient_create (via
+crud_create) and ::logisticsclient_edit (via crud_edit). The pinned contract gives this page exactly
+three keys and nothing here reads anything else:
+
+  form     — LogisticsClientForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the LogisticsClient on the EDIT path ONLY (crud_edit puts it in the context;
+             crud_create does not), so every use of it below sits inside {% if is_edit %} and is
+             never bare
+
+Fields are rendered BY NAME through partials/form_field.html, which pairs <label for=...> with the
+widget's own id_for_label and prints that field's help_text and its errors. That couples this page
+to LogisticsClientForm's whitelist on purpose: Meta.fields is an EXPLICIT list of 26 names, and all
+26 appear below —
+
+  party · code · parent_client · status
+  billing_cycle · billing_day · next_billing_date · storage_billing_method ·
+  minimum_monthly_charge · default_tax_rate_pct · currency · payment_terms ·
+  default_revenue_account
+  space_model · committed_sqft · committed_pallet_positions · contract_start · contract_end ·
+  notice_days · contract_document
+  integration_mode · client_system · edi_partner_id · edi_qualifier
+  account_manager · notes
+
+A field added to the model and to that whitelist but NOT to a group here would never reach the POST
+— and on the edit path it would be silently blanked on every save. That failure is invisible from
+this screen, which is why the list above is spelled out.
+
+Five columns are deliberately absent and none of them is an oversight:
+  tenant         — stamped by crud_create, and again in the form's __init__ (TenantUniqueMixin) so
+                   the (tenant, code) and (tenant, party) uniqueness checks have a tenant to
+                   validate against on the CREATE path instead of dying as an IntegrityError after
+                   is_valid() has already said yes.
+  number         — auto-assigned on save (3PL-#####).
+  onboarded_on   — editable=False. Evidence of when this client first went live, stamped once and
+                   never restamped, so suspending and resuming cannot rewrite it. Shown read-only
+                   below on the edit path, never as an input.
+  last_synced_at — editable=False, and written by NOTHING in 4.17.
+  created_at / updated_at — automatic.
+
+`status` IS on this form deliberately. This row is staff configuration with no verb ladder — there
+is no draft to publish and no approval step — so the status is set directly, exactly like a portal
+account's active switch. Do not strip it onto buttons.
+
+Refusals and where they land:
+  form.non_field_errors — the (tenant, code) and (tenant, party) duplicates. Django reports a
+                   unique_together break as a NON-FIELD error, so the first card renders
+                   form.non_field_errors or the message is invisible.
+  parent_client  — itself, a cycle, or another workspace's client.
+  space_model    — a dedicated/hybrid model with both commitments at zero, or a shared model
+                   carrying a commitment.
+  contract_end   — earlier than contract_start.
+  party          — another workspace's party (a narrowed <select> has never held against a crafted
+                   POST, so the ownership rule is enforced where the row is saved).
+
+A party WITHOUT a "customer" role is NOT refused — it is surfaced as help text here and as a chip on
+the detail page. A missing role is a data gap in the party record, not a reason to block a
+commercial configuration.
+
+theme.css ships COLOUR-named badges only (badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate); badge-success / badge-warning / badge-danger do not exist and render
+unstyled (L33). Every badge below is one of those six. Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Logistics Client{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Logistics Client</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:logisticsclient_list' %}">Logistics Clients</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.code }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Every field here is editable and there is no draft to publish: this row <span class="fw-600">is</span> the configuration, and a save takes effect the next time anything reads it. What a save does <span class="fw-600">not</span> touch is anything already billed — a billing run snapshots the charge category, the basis and the rate onto its own lines when it calculates, so changing a client or a tariff afterwards cannot rewrite a period that has already been invoiced.
+      {% else %}
+        This makes an existing company a <span class="fw-600">depositor</span> — a client whose stock we hold and whose work we bill for. It does not create a company: the name, tax id and addresses stay on the party record, and this row adds only the commercial configuration on top. Expect the new client to hold <span class="fw-600">no stock at all</span> until its items and its dedicated bins are stamped with it as owner; that stamp is what attributes inventory, and nothing here does it for you. The 3PL- number is assigned on save, so there is no number field.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Which company, and where it sits</h2>
+        <span class="badge badge-info">One client per company</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Identity is <span class="fw-600">not</span> duplicated onto this row. The company already exists as a party, and that is where its name, tax id and addresses live — two records holding a company's identity is two records that can disagree about it. Exactly one client per company is enforced by the database, and so is one code per workspace: a second client for a party that already has one would give the same company two tariffs and two sets of billing configuration, and which one applied would come down to row order. Both duplicates are refused at the top of this card rather than crashing on save.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.party %}
+          {% include "partials/form_field.html" with field=form.code %}
+          {% include "partials/form_field.html" with field=form.parent_client %}
+          {% include "partials/form_field.html" with field=form.status %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">The code is what people will actually type and read.</span> It is short, it is yours, and it is the label on every rate card, billing run and service level that follows — the 3PL- number is the system's handle, the code is the human one.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">A parent client is reporting structure, not billing.</span> Divisions and brands under one commercial relationship each keep their own tariff and their own runs, and nothing rolls a child's charges up into the parent. A client cannot be its own parent and cannot sit in a loop — both are refused, because either would make the chain above the row impossible to walk.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Status is set here, directly.</span> There is no verb ladder on a client and no approval step, so the status you choose is the status it has. <span class="fw-600">Suspended</span> and <span class="fw-600">Terminated</span> are the moves to reach for instead of deleting: both keep every rate card, every billed period and every measured service level, and deleting is refused outright once any of those exist. The date this client first went live is stamped once, the first time the status is Active, and is never restamped — pausing and resuming must not rewrite when the relationship began.
+        </div>
+        {% if is_edit %}
+          <div class="form-help" style="margin-top:.75rem;">
+            First went live: <span class="fw-600">{% if obj.onboarded_on %}{{ obj.onboarded_on|date:"d M Y" }}{% else %}never yet active{% endif %}</span>. That is evidence rather than a setting, which is why it is not a field on this form.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">How they are billed</h2>
+        <span class="badge badge-amber">No scheduler — runs are raised by a person</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Everything in this card is read by a <span class="fw-600">billing run</span> when somebody calculates one. None of it is a balance and none of it is money owed: the only accounting write anywhere in this sub-module is a <span class="fw-600">draft</span> invoice, raised by hand from an approved run. Supply chain posts no journal entry — ageing, cash application, dunning and tax determination all belong to the receivables module, and a second ledger on this side would be a second set of books.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.billing_cycle %}
+          {% include "partials/form_field.html" with field=form.billing_day %}
+          {% include "partials/form_field.html" with field=form.next_billing_date %}
+          {% include "partials/form_field.html" with field=form.storage_billing_method %}
+          {% include "partials/form_field.html" with field=form.minimum_monthly_charge %}
+          {% include "partials/form_field.html" with field=form.default_tax_rate_pct %}
+          {% include "partials/form_field.html" with field=form.currency %}
+          {% include "partials/form_field.html" with field=form.payment_terms %}
+          {% include "partials/form_field.html" with field=form.default_revenue_account %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">The billing day stops at 28, not 31.</span> A client billed on the 31st would silently skip February and every other short month, and a day that quietly does nothing four times a year is worse than a narrower range somebody has to accept.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The next billing date is stored and read by nothing.</span> This sub-module ships no scheduler and raises no run on its own — a run is created by a person, for a period they choose. The date is captured so that on the day a scheduler exists it reads a column carrying real intent instead of inventing a cycle for everybody; do not read a date here as a promise that anything will happen on it.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The storage billing method genuinely changes the number.</span> The same stock over the same month bills differently under a calendar-month snapshot, an anniversary cycle, a split-month rule and an average-daily walk — this is the single setting on the form most likely to be argued about in a contract, and it belongs on the client rather than buried in a tariff line.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The monthly minimum is a floor, not a fee.</span> A run tops the charges up to it only when the cycle is monthly and the period actually spans a month, so a two-week run does not get a full month's floor added on top of a run that already carried it. Each run states in words whether the minimum was applied and why it was not.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The tax rate here is a percentage, not a tax code.</span> It is carried onto each drafted invoice line at exactly the width the invoice line itself stores, so nothing is re-rounded on the way across. Real tax determination — jurisdictions, exemptions, reverse charge — is the tax module's, and this figure is what gets a draft invoice into a shape somebody there can finish.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Space and contract</h2>
+        <span class="badge badge-slate">Commitment — not occupancy</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          These two numbers are what the client <span class="fw-600">committed to</span>, which is a different question from what they are currently occupying. A dedicated-space charge bills the commitment whether or not it is filled — for a hybrid client, the greater of the commitment and what was actually occupied. Nothing here measures occupancy in square feet: items in this system carry no weight and no dimensions, and a bin's capacity is recorded in that bin's own units, so a converted square footage would be a factor somebody invented rather than a measurement anybody took.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.space_model %}
+          {% include "partials/form_field.html" with field=form.committed_sqft %}
+          {% include "partials/form_field.html" with field=form.committed_pallet_positions %}
+          {% include "partials/form_field.html" with field=form.contract_start %}
+          {% include "partials/form_field.html" with field=form.contract_end %}
+          {% include "partials/form_field.html" with field=form.notice_days %}
+          {% include "partials/form_field.html" with field=form.contract_document %}
+        </div>
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table class="table">
+            <thead><tr><th>Space model</th><th>What it means</th><th>Commitment required?</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="fw-600">Shared</td>
+                <td>No reserved footprint — this client's stock sits wherever there is room, and storage is billed on what is actually held</td>
+                <td><span class="badge badge-muted">Must be zero</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Dedicated</td>
+                <td>A reserved footprint the client pays for whether or not they fill it</td>
+                <td><span class="badge badge-green">At least one figure</span></td>
+              </tr>
+              <tr>
+                <td class="fw-600">Hybrid</td>
+                <td>A committed floor plus overflow into shared space — the floor is a minimum, never a cap</td>
+                <td><span class="badge badge-green">At least one figure</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">A commitment typed against a shared model is refused, not ignored</span> — and so is a dedicated or hybrid model with nothing committed. Both would look perfectly fine on every screen: the first as a floor somebody could bill against when nothing is actually reserved, the second as a dedicated client whose dedicated charge computes to zero. A value the system silently dropped is worse than an error, because whoever typed it leaves believing it applied.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Leaving the contract end blank means open-ended</span>, which is a real answer rather than a missing one. An end date earlier than the start is refused. The notice period and the contract document are recorded here so the commercial terms sit next to the configuration they justify — nothing in this sub-module acts on either, and no renewal or expiry reminder is sent by anything.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Integration</h2>
+        <span class="badge badge-amber">Identifiers only — no credential is stored</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">Nothing on this form is a secret, and nothing here moves any data.</span> There is no API key field, no endpoint, no password and no token — deliberately, and not as a gap to fill in later on this screen: a credential needs somewhere it can be encrypted, rotated and audited, and this row is none of those. Everything below is a <span class="fw-600">partner identifier</span>, the kind of value that already appears in the header of a document both sides exchange. Credential storage, EDI transport and webhooks belong to the integration sub-module.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.integration_mode %}
+          {% include "partials/form_field.html" with field=form.client_system %}
+          {% include "partials/form_field.html" with field=form.edi_partner_id %}
+          {% include "partials/form_field.html" with field=form.edi_qualifier %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Setting the mode to <span class="fw-600">API</span> or <span class="fw-600">EDI</span> connects nothing — it records how this client's orders reach us today, which is a question staff answer on the phone long before any of it is automated. The last-synced stamp on the client record is written by nothing in this sub-module for the same reason: a permanent blank there is the honest state, not a feed that stopped.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Ownership and notes</h2>
+        <span class="badge badge-slate">Internal — never customer-facing</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The account manager is who to ask about this relationship. The notes are staff-only: why the storage method was agreed, what the minimum was traded against, who signed off the committed space. No customer-facing page in this sub-module reads either field — and this sub-module has no customer-facing page at all, because the client-facing portal is the customer portal's, not a second one built here.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.account_manager %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          Notes are stored and rendered as <span class="fw-600">plain text</span> — markup typed into them is shown as the characters that were typed and is never interpreted, which is what stops a note written on this screen from becoming a script running in somebody else's browser.
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to the list. Every change above is live the next time anything reads this client — there is nothing further to publish and no approval step, which is the point of keeping this row configuration rather than a document. Nothing already billed is affected: a run keeps the category, basis and rate it snapshotted when it calculated.
+      {% else %}
+        Saving returns to the list, where the new client appears with its 3PL- number. Three things are worth doing straight after, in this order: give the client a <span class="fw-600">rate card</span> and activate it, or a billing run will calculate to no lines at all; stamp their <span class="fw-600">items</span> and any <span class="fw-600">dedicated bins</span> with this client as owner, which is the only thing that attributes stock to them; and agree the <span class="fw-600">service levels</span> you intend to be measured against, since each one is derived from rows this system already holds rather than from anything typed in later.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
