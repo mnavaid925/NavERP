@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — add or edit ONE charge line on a client billing run.
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientBillingRuns.py::clientbillingrunline_create and
+::clientbillingrunline_edit. Everything this page may read, and nothing else:
+
+  form     ClientBillingRunLineForm (bound on POST) — SIX fields: charge_category, charge_basis,
+           description, quantity, rate, source_reference
+  is_edit  False on the create path, True on the edit path
+  run      THE PARENT ClientBillingRun. The form has no `run` field, so the header, the breadcrumb
+           and the Cancel target can only come from here
+  obj      the ClientBillingRunLine being edited — PRESENT ONLY when is_edit
+
+WHY FOUR COLUMNS ARE NOT ON THIS FORM. `run` comes from the ROUTE and never from the POST body —
+ClientBillingRunLine has NO tenant column, it is resolved through run__tenant=request.tenant, and
+that join IS the authorization check, so a parent pk in the body is exactly how a charge would be
+grafted onto another workspace's run. `rate_card_line` is absent because a NULL there is what MAKES
+a line manual. `amount` is editable=False and computed in save() as quantity × rate, floored at the
+tariff line's minimum. `is_manual` is FORCED True by the create view — a user-settable flag would
+let somebody mark a DERIVED line manual and freeze a wrong figure past every recalculation.
+
+The run's status is the VIEW's refusal, not a field error: both views redirect to the run with a
+message once it has left draft or calculated. So this page is only ever reached on an editable run.
+
+A DERIVED line is editable here too, and deliberately — filling in the quantity on a line the engine
+flagged `needs a quantity` is the whole reason those lines are written at all. But recalculating the
+run REGENERATES every derived line, so a figure typed into one does not survive; the banner below
+says so on exactly the lines where it is true.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit charge{% else %}Add charge{% endif %} · {{ run.number }}{% endblock %}
+
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit charge{% else %}Add manual charge{% endif %}
+      {% if run.status == 'draft' %}<span class="badge badge-muted">{{ run.get_status_display }}</span>
+      {% elif run.status == 'calculated' %}<span class="badge badge-info">{{ run.get_status_display }}</span>
+      {% elif run.status == 'approved' %}<span class="badge badge-amber">{{ run.get_status_display }}</span>
+      {% elif run.status == 'invoiced' %}<span class="badge badge-green">{{ run.get_status_display }}</span>
+      {% else %}<span class="badge badge-slate">{{ run.get_status_display }}</span>{% endif %}
+    </h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:clientbillingrun_list' %}">Client Billing Runs</a><span class="sep">›</span>
+      <a href="{% url 'scm:clientbillingrun_detail' run.pk %}">{{ run.number }}</a><span class="sep">›</span>
+      <span>{% if is_edit %}{{ obj.description }}{% else %}New charge{% endif %}</span>
+    </div>
+    <p class="text-muted">One charge on this run. Everything the tariff can measure is written by <span class="fw-600">Calculate</span>; this page is for the charges it cannot — a one-off accessorial, a negotiated adjustment, or the quantity for a line the engine flagged as unmeasurable.</p>
+  </div></div>
+
+  {% comment %}
+    THE PARENT, restated. The form cannot show it — `run` is not a field — so this card is the only
+    thing on the page that says which run, which client and which period is being changed. Every
+    value is a plain column on the already-select_related run, its client or its rate card.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">{{ run.number }} · {{ run.client.code }}</h2>
+      <div class="badge-group">
+        {% if run.status == 'draft' %}<span class="badge badge-muted">{{ run.get_status_display }}</span>
+      {% elif run.status == 'calculated' %}<span class="badge badge-info">{{ run.get_status_display }}</span>
+      {% elif run.status == 'approved' %}<span class="badge badge-amber">{{ run.get_status_display }}</span>
+      {% elif run.status == 'invoiced' %}<span class="badge badge-green">{{ run.get_status_display }}</span>
+      {% else %}<span class="badge badge-slate">{{ run.get_status_display }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Client</dt><dd>{{ run.client.code }} <span class="text-muted">{{ run.client.party }}</span></dd></div>
+        <div class="detail-item"><dt>Period</dt><dd class="mono">{{ run.period_start|date:"M d, Y" }} → {{ run.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Tariff</dt><dd><a href="{% url 'scm:clientratecard_detail' run.rate_card.pk %}" class="mono">{{ run.rate_card.number }}</a></dd></div>
+        <div class="detail-item"><dt>Subtotal</dt><dd class="mono">{{ run.subtotal|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Minimum adjustment</dt><dd class="mono">{{ run.minimum_adjustment|floatformat:2 }}</dd></div>
+        <div class="detail-item"><dt>Run total</dt><dd class="mono fw-600">{{ run.total|floatformat:2 }}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:.75rem;">Saving re-totals the run in the same transaction, so the figures above change the moment this charge lands.</p>
+    </div>
+  </div>
+
+  {% if is_edit and not obj.is_manual %}
+    <div class="card">
+      <div class="card-body">
+        <p class="form-help" style="margin:0;"><span class="badge badge-amber">Derived charge</span> This line was written by <span class="fw-600">Calculate</span> from the tariff{% if obj.source_reference %} (<span class="mono">{{ obj.source_reference }}</span>){% endif %}. Editing it is legitimate — supplying the quantity on a line the engine could not measure is what these lines exist for — but recalculating the run <span class="fw-600">regenerates every derived line</span>, and this figure will be replaced. A charge that must survive a recalculation belongs on a manual line instead.</p>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">The charge</h2>
+        {% if not is_edit %}<span class="badge badge-muted">Manual · survives recalculation</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.charge_category %}
+          {% include "partials/form_field.html" with field=form.charge_basis %}
+          {% include "partials/form_field.html" with field=form.description %}
+          {% include "partials/form_field.html" with field=form.quantity %}
+          {% include "partials/form_field.html" with field=form.rate %}
+          {% include "partials/form_field.html" with field=form.source_reference %}
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">The category and basis are a <span class="fw-600">snapshot</span> on the line, not a pointer at the tariff — re-pricing the tariff next quarter must not restate a run that has already been billed. The amount is computed on save as <span class="mono">quantity × rate</span> and is never typed; a negative quantity is refused, because a credit belongs in Accounting as a credit note rather than here as a negative charge.</div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> {% if is_edit %}Save charge{% else %}Add charge{% endif %}</button>
+      <a href="{% url 'scm:clientbillingrun_detail' run.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
