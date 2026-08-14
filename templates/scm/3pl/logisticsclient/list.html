@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — the CLIENT REGISTER (3PL-).
+
+Renders apps/scm/views/ThirdPartyLogistics/LogisticsClients.py::logisticsclient_list, which returns
+crud_list(...). Everything this page may read, and NOTHING else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py) — page_obj.window drives the
+                               shared pagination partial
+  status_choices               CLIENT_STATUS_CHOICES   (prospect / onboarding / active / suspended /
+                               terminated)
+  billing_cycle_choices        BILLING_CYCLE_CHOICES   (weekly / biweekly / monthly / quarterly)
+  space_model_choices          SPACE_MODEL_CHOICES     (shared / dedicated / hybrid)
+  integration_mode_choices     INTEGRATION_MODE_CHOICES(none / manual / csv / api / edi / marketplace)
+  stats                        dict with EXACTLY: total / active / onboarding / prospect /
+                               suspended / breaching
+
+Filter params: q / status / billing_cycle / space_model / integration_mode. All four vocabulary
+params are STRINGS and compare against request.GET.<param> directly. There is deliberately no
+int-FK filter on this list, so no |stringformat:"d" comparison appears here — and no |slugify
+anywhere, ever, for a pk.
+
+--------------------------------------------------------------------------------------------------
+WHAT A ROW MAY NOT READ
+--------------------------------------------------------------------------------------------------
+LogisticsClient exposes on_hand_quantity(), on_hand_value(), sku_count(),
+dedicated_location_count() and open_sla_breaches() as DERIVED METHODS — none of them is a column.
+Every one is at least one aggregate query over the append-only StockMove ledger, per row; 15 rows a
+page is 15+ extra queries for this screen, which is the 4.13 asset_list finding word for word. They
+are correct and they belong on the DETAIL page, where there is one row and one query each.
+
+So the stock figures are simply not on this list. That is a deliberate omission, not a gap: this
+screen answers "who are our depositors and how is each one configured", and the inventory question
+has its own computed page (Client Inventory Segregation) which derives all of it in one pass.
+
+--------------------------------------------------------------------------------------------------
+Colour
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges ONLY — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-warning and badge-danger DO NOT EXIST and render as
+completely unstyled text (L33, shipped four times). Every badge below is one of the six literals.
+
+The status colours are the CLIENT_STATUS_CSS map spelled out as an if/elif chain on the exact
+choice values, and the chain always ends in an else branch that prints get_status_display — so a
+value added to the vocabulary later renders as a readable label rather than as a blank cell.
+
+Delete is @require_POST at the view, so it is a real <form method="post"> with a csrf token, and
+ONLY the system-generated 3PL- number goes into the confirm string. `code` and the party name are
+user-typed: an apostrophe in either escapes to &#39;, which HTML decodes back to a bare quote before
+JavaScript ever parses the attribute — the dialog then breaks open and the guard is silently gone
+(L42). The apostrophes that ARE in the string below are escaped as \' for the same reason.
+{% endcomment %}
+{% block title %}Logistics Clients{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Logistics Clients</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Logistics Clients</span></div>
+      <p class="text-muted">One row per <span class="fw-600">depositor</span> — the company whose stock we hold and whose work we bill for. Identity is not duplicated here: the name, tax id and addresses stay on the party record, and this row carries only the commercial configuration that makes them a 3PL client — how they are billed, what space they committed to, and how their systems reach ours. Stock is attributed to a client through the <span class="fw-600">owner</span> stamped on their items and their dedicated bins, never through a second stock column.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:clientratecard_list' %}" class="btn btn-outline"><i data-lucide="scroll-text"></i> Rate Cards</a>
+      <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Billing Runs</a>
+      <a href="{% url 'scm:clientsla_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> SLAs</a>
+      <a href="{% url 'scm:client_inventory_report' %}" class="btn btn-outline"><i data-lucide="boxes"></i> Client Inventory</a>
+      <a href="{% url 'scm:client_space_report' %}" class="btn btn-outline"><i data-lucide="warehouse"></i> Warehouse Rental</a>
+      <a href="{% url 'scm:logisticsclient_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Client</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The tiles are counted over the WHOLE workspace, not over the filtered page — "2 with a breached
+    SLA" is a fact somebody has to act on, and a number that re-scoped itself as you browsed would
+    report all-clear the moment you filtered to one client. stat-icon ships blue / green / orange /
+    purple / slate only; there is no red, so both attention states take orange.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="building-2"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Clients on file — every depositor this workspace has ever configured</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Active — trading, storing and billable today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="user-plus"></i></div>
+      <div class="stat-value">{{ stats.onboarding }}</div>
+      <div class="stat-label">Onboarding — signed, not yet switched on. The onboarding date is stamped once, the first time a client goes active</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="search"></i></div>
+      <div class="stat-value">{{ stats.prospect }}</div>
+      <div class="stat-label">Prospect — configured for pricing conversations only, and holding no stock</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="pause-circle"></i></div>
+      <div class="stat-value">{{ stats.suspended }}</div>
+      <div class="stat-label">Suspended — the move to reach for instead of deleting a client that has rate cards and billing history</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.breaching }}</div>
+      <div class="stat-label">Carrying at least one breached service level — measured, not assumed, and never the same thing as “no data”</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Clients</h2>
+      <div class="badge-group">
+        {% if stats.breaching %}<span class="badge badge-red">{{ stats.breaching }} breaching an SLA</span>{% endif %}
+        {% if stats.suspended %}<span class="badge badge-amber">{{ stats.suspended }} suspended</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search code, client name, system or 3PL- number…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Four string vocabularies, four identical comparisons. `value` is the raw choice key, so
+            the test is a plain string equality against request.GET.<param> — never |slugify, which
+            would agree only by accident, and never |stringformat:"d", which is for pk filters and
+            there is no pk filter on this list.
+          {% endcomment %}
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="billing_cycle" aria-label="Billing cycle" class="form-select">
+            <option value="">Any billing cycle</option>
+            {% for value, label in billing_cycle_choices %}
+              <option value="{{ value }}" {% if request.GET.billing_cycle == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="space_model" aria-label="Space model" class="form-select">
+            <option value="">Any space model</option>
+            {% for value, label in space_model_choices %}
+              <option value="{{ value }}" {% if request.GET.space_model == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="integration_mode" aria-label="Integration" class="form-select">
+            <option value="">Any integration</option>
+            {% for value, label in integration_mode_choices %}
+              <option value="{{ value }}" {% if request.GET.integration_mode == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:logisticsclient_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">Status is configuration here, not a workflow.</span> There is no verb ladder on a client — you set the status you mean and it takes effect on the next page load. What it changes is what everything downstream reads: a <span class="fw-600">suspended</span> client keeps every rate card, every billing run and every measured service level, which is precisely why suspending is the move to reach for rather than deleting. The stock figures are on the <a href="{% url 'scm:client_inventory_report' %}">Client Inventory</a> page rather than in this table — each one is an aggregate over the stock ledger, and per row they would be one query each.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Company</th>
+            <th>Status</th>
+            <th>Billing</th>
+            <th>Space</th>
+            <th>Integration</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:logisticsclient_detail' obj.pk %}" class="fw-600 mono">{{ obj.code }}</a>
+                <div class="form-help mono">{{ obj.number }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  obj.party is joined by the view. Party.__str__ is the company name, so this prints
+                  the name without a second lookup and without assuming a field the model may not
+                  carry. Nothing on this page is ever |safe — the name is user-typed.
+                {% endcomment %}
+                {{ obj.party }}
+              </td>
+              <td>
+                {% comment %}
+                  CLIENT_STATUS_CSS, spelled out on the exact choice keys, ending in a fallback that
+                  still prints a readable label if the vocabulary ever grows.
+                {% endcomment %}
+                {% if obj.status == "active" %}
+                  <span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "onboarding" %}
+                  <span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "prospect" %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "suspended" %}
+                  <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "terminated" %}
+                  <span class="badge badge-slate">{{ obj.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                <span class="badge badge-slate">{{ obj.get_billing_cycle_display }}</span>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  A taxonomy, not a severity — _choices.py ships no SPACE_MODEL_CSS, so this page
+                  must not invent a per-value colour there is nothing to keep it in step with.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_space_model_display }}</span>
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  The mode is a non-secret partner identifier and nothing more. 4.17 stores no API
+                  key, no endpoint, no EDI password and no token of any kind (L20), and it moves no
+                  data on any of these channels — credentials and transport are 4.19's.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_integration_mode_display }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:logisticsclient_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit is unconditional and that is the rule rather than an oversight: this row IS
+                    the configuration, there is no frozen state and no lifecycle for an edit to
+                    rewrite, so every field is editable on every save.
+
+                    Delete is @require_POST and refuses once a rate card or a billing run references
+                    the client (both PROTECT). The list carries no per-row flag for that — the view
+                    pre-counts both and answers with a sentence naming the numbers and steering to
+                    Suspended, which is more use than a hidden button. Only the 3PL- number is
+                    interpolated into the confirm string, and the apostrophes in it are written \'
+                    because &#39; is decoded back to a quote before JavaScript sees the attribute
+                    and would silently disable the guard (L42).
+                  {% endcomment %}
+                  <a href="{% url 'scm:logisticsclient_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:logisticsclient_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Deleting a client is refused outright while any rate card or billing run still references it, and where it does go through it takes that client\'s service levels with it. Set the status to Suspended or Terminated instead — that keeps every tariff, every billed period and every measured service level readable.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="building-2"></i>
+                  <h3>No logistics clients</h3>
+                  <p>No depositor is configured in this workspace yet. A client is not a new company record — it points at an existing party and adds the commercial configuration that makes them a 3PL client: how they are billed, what space they committed to, and how their systems reach ours. Add one, give it a rate card, then stamp its items and its dedicated bins with it so stock can be attributed. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The shared partial, which is the L9 fix in one place: previous_page_number and
+      next_page_number are each called ONLY inside their own has_previous / has_next guard, so page
+      one and the last page cannot raise EmptyPage once the list outgrows a single page. It also
+      carries every current GET param except `page`, so paging never quietly drops the filters.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Nothing on this screen writes to the stock ledger and nothing here holds a stock balance. A client owns stock because their <span class="fw-600">items</span> and their <span class="fw-600">dedicated bins</span> carry an owner — one nullable column on each, added additively with no backfill — and every quantity this sub-module reports is derived back through that link over the append-only ledger. There is deliberately no owner column on a stock movement itself: an append-only ledger with its own owner field would be a second source of truth, and the day it disagreed with the item there would be no way to tell which one was right.
+    </div>
+  </div>
+{% endblock %}
