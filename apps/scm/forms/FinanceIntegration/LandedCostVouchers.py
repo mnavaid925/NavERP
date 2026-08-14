@@ -206,6 +206,21 @@ class LandedCostChargeForm(TenantModelForm):
         self.fields["duty_rate_pct"].help_text = (
             "Snapshotted from the duty tariff — a later rate change never rewrites this shipment. "
             "Only valid on a Customs Duty charge.")
+        # The model column is `DecimalField(..., default=0)` with no `blank=True`, so `formfield()`
+        # hands back `required=True` and the box is mandatory on EVERY charge type — clearing the
+        # pre-filled 0 while entering a Freight or Handling charge blocked the save with "This field
+        # is required", on a field this form's own help text and fieldset legend both label
+        # customs-only. `clean_duty_rate_pct` below is the other half and is NOT optional: the column
+        # is NOT NULL, so `required=False` alone would hand it `None`.
+        self.fields["duty_rate_pct"].required = False
+
+    def clean_duty_rate_pct(self):
+        """A cleared box means "no duty", not "invalid" — coerce the blank to the model's default.
+
+        Paired with the ``required = False`` above. Without this the empty value reaches a NOT NULL
+        column as ``None`` and the usability fix becomes an IntegrityError.
+        """
+        return self.cleaned_data.get("duty_rate_pct") or Decimal("0")
 
     def clean(self):
         cleaned = super().clean()
