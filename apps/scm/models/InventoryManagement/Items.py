@@ -139,6 +139,34 @@ class Item(TenantOwned):
         "scm.LogisticsClient", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="owned_items",
         help_text="The 3PL client whose goods these are; blank = our own stock")
+    # 4.18 Finance & Accounting Integration. Two columns on the EXISTING item master, exactly as
+    # `is_spare_part`, `storage_condition` and `owner_client` above: a unit weight and a unit volume
+    # are physical attributes of a product, not a reason for a parallel "shipping dimensions" master
+    # that would have to be reconciled with this one the first time either was edited. They exist
+    # because `LandedCostVoucher.allocate()` spreads freight by WEIGHT and insurance by VOLUME, and
+    # without them both bases silently fall back to quantity — a correct number computed from the
+    # wrong basis, which is the hardest kind of wrong to notice.
+    #
+    # NULLABLE rather than default-zero, and the distinction is load-bearing: a zero weight is a
+    # legitimate answer ("weightless", e.g. a licence) that would allocate nothing, whereas NULL
+    # means "not known", which is what the fallback chain tests for.
+    #
+    # 4 decimal places, not 2: `Shipment.weight_kg` is a shipment TOTAL where 2dp is ample, but a
+    # unit weight is legitimately 0.0125 kg, and rounding that to 0.01 would skew a
+    # ten-thousand-piece allocation by a fifth.
+    #
+    # There is deliberately NO `hs_code` here — 4.12 ruled on that explicitly (`TradeDocuments.py`):
+    # a mutable master plus a filed customs document would be two sources of truth, and the
+    # "helpful" default that syncs them is the bug. The HS code lives on the charge line that
+    # actually cleared customs.
+    weight_kg = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        validators=[MinValueValidator(ZERO)],
+        help_text="Unit weight; the basis for allocate-by-weight landed cost")
+    volume_cbm = models.DecimalField(
+        max_digits=12, decimal_places=4, null=True, blank=True,
+        validators=[MinValueValidator(ZERO)],
+        help_text="Unit volume in m³; the basis for allocate-by-volume landed cost")
 
     class Meta:
         ordering = ["sku"]
@@ -193,6 +221,34 @@ class Item(TenantOwned):
             self.average_cost = ((prior_val + quantity * (unit_cost or ZERO)) / new_qty).quantize(
                 Decimal("0.0001"))
             self.save(update_fields=["average_cost", "updated_at"])
+
+    def apply_landed_cost(self, total_amount):
+        """Move the cached weighted-average by a landed-cost amount spread over the CURRENT on-hand.
+
+        Mirrors :meth:`apply_receipt`: quantity is never touched, only the cache — the on-hand
+        figure always comes from the append-only StockMove ledger.
+
+        A **NEGATIVE** amount reverses a prior roll, and that is not a convenience: it is how
+        ``LandedCostVoucher._unallocate()`` stays idempotent. Re-allocating a voucher first backs
+        out everything it previously added and then rolls the new figures on, so allocating twice
+        leaves ``average_cost`` exactly where allocating once did.
+
+        A **zero on-hand is a no-op**, deliberately. There is no stock left to carry the cost, so it
+        is a period expense rather than inventory value; loading it onto an empty item would make
+        the next receipt inherit a cost that belongs to goods already sold.
+
+        The result is clamped at zero: an over-large reversal (possible when stock was consumed
+        between the two allocations) must never leave a negative unit cost behind.
+        """
+        total_amount = total_amount or ZERO
+        if total_amount == ZERO:
+            return
+        on_hand = self.on_hand()
+        if on_hand <= ZERO:
+            return
+        moved = (self.average_cost or ZERO) + (total_amount / on_hand)
+        self.average_cost = max(ZERO, moved).quantize(Decimal("0.0001"))
+        self.save(update_fields=["average_cost", "updated_at"])
 
     def __str__(self):
         return f"{self.sku} · {self.name}"
