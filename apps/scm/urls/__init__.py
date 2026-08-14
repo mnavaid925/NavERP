@@ -93,6 +93,16 @@ from .CustomerPortal.PortalActivities import urlpatterns as _cp_activity
 from .CustomerPortal.Reports import urlpatterns as _cp_reports
 from .CustomerPortal.Portal import urlpatterns as _cp_portal
 
+# 4.17 Third-Party Logistics. Alias `_3pl_` — a LEADING DIGIT is not a legal Python identifier, so
+# the alias is `_3pl_…` only in spirit; the real prefix is `_tpl_`, verified free against all
+# sixteen shipped aliases and in particular NOT `_cp_` (4.16 CustomerPortal). Rebinding a live alias
+# would silently drop another sub-module's routes with no import error at all.
+from .ThirdPartyLogistics.LogisticsClients import urlpatterns as _tpl_clients
+from .ThirdPartyLogistics.ClientRateCards import urlpatterns as _tpl_ratecards
+from .ThirdPartyLogistics.ClientBillingRuns import urlpatterns as _tpl_billingruns
+from .ThirdPartyLogistics.ClientSlas import urlpatterns as _tpl_slas
+from .ThirdPartyLogistics.Reports import urlpatterns as _tpl_reports
+
 
 app_name = "scm"
 
@@ -365,4 +375,39 @@ urlpatterns = [
     *_cp_activity,                       # CustomerPortal/PortalActivities (append-only, list+detail)
     *_cp_reports,                        # CustomerPortal/Reports (order tracking + catalog preview)
     *_cp_portal,                         # CustomerPortal/Portal (gated customer surface + token download)
+
+    # --- 4.17 Third-Party Logistics (3PL) Management --------------------------------------------
+    # EIGHT first segments, every one free — checked against this WHOLE concatenated list rather
+    # than merely against the 4.17 block: `logistics-clients`, `client-rate-cards`,
+    # `client-rate-card-lines`, `client-billing-runs`, `client-billing-run-lines`, `client-slas`,
+    # `client-inventory` and `client-space`. Django matches WHOLE path components and never splits
+    # one at a hyphen, so these are eight unrelated components; none shadows another, and **none may
+    # ever be "tidied" into a shared `clients/<something>/` parent**, which is precisely the edit
+    # that would turn eight independent segments into one greedy component.
+    #
+    # Near neighbours that are NOT collisions, checked rather than assumed:
+    #   items/ · locations/ · stock-moves/ — 4.3's masters. 4.17 adds a COLUMN to two of them and
+    #                     takes no route under either; `client-inventory/` is its own component.
+    #   logistics-kpis/ — 4.11's computed page. A different whole component from
+    #                     `logistics-clients/`; two live, unrelated pages.
+    #   portal-… (eight of them) — 4.16's. Nothing there begins with `client`.
+    #   contracts/ — 4.2's supplier contracts. The 3PL client agreement is a FIELD BLOCK on
+    #                     `LogisticsClient`, not a second contract table, so it takes no route.
+    #
+    # 4.17 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` and
+    # 4.16's `portal-documents/<str:token>/` remain the app's only two. Within each module below,
+    # literal routes (`add/`, `recompute-all/`) precede every `<int:pk>/` one, which is why
+    # `client-slas/recompute-all/` cannot be swallowed by `client-slas/<int:pk>/`. Every verb sits
+    # on its own route and is POST-only at the view, so a GET to one is a 405 rather than a silent
+    # state change.
+    #
+    # VIEW-NAME check (the `scm:` namespace is flat): compared against every `name=` in
+    # `apps/scm/urls/**`. `client_inventory_report` / `client_space_report` collide with nothing —
+    # the shipped report names are `cold_storage_report`, `valuation_report`, `labor_board`,
+    # `sparepart_list` and 4.11's `logistics_kpis`.
+    *_tpl_clients,                       # ThirdPartyLogistics/LogisticsClients (the client master)
+    *_tpl_ratecards,                     # ThirdPartyLogistics/ClientRateCards (+ activate/supersede + lines)
+    *_tpl_billingruns,                   # ThirdPartyLogistics/ClientBillingRuns (+ 4 verbs + lines)
+    *_tpl_slas,                          # ThirdPartyLogistics/ClientSlas (+ recompute, recompute-all)
+    *_tpl_reports,                       # ThirdPartyLogistics/Reports (segregation + rental space)
 ]
