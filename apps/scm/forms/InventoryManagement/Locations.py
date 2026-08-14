@@ -13,7 +13,13 @@ class LocationForm(TenantUniqueMixin, TenantModelForm):
         # the admin here to "set the class on your locations". Off the whitelist there is nowhere in
         # the UI to follow that link to — the mismatch and unmonitored-zone sections could only ever
         # be populated by `seed_scm` and the Django admin.
-        fields = ["code", "name", "location_type", "storage_condition", "parent", "is_active"]
+        # `owner_client` is 4.17's reserved-space column, here for the same reason
+        # `storage_condition` is: it is the SOLE selector for the Warehouse Rental Management page
+        # (`scm:client_space_report`), which shows the bins actually reserved to a client beside what
+        # that client committed to. Off the whitelist the reserved-bin column is permanently zero and
+        # the page's own "assign this space to a client" instruction has nowhere in the UI to lead.
+        fields = ["code", "name", "location_type", "storage_condition", "owner_client", "parent",
+                  "is_active"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
