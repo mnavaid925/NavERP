@@ -47,8 +47,11 @@ that. The empty state links to the AP bill list instead, which is a literal reve
 Bill status badge chain branches on the RAW value in `bill_status`; the label is already resolved into
 `bill_status_label`. "partial" is deliberately NOT enumerated — it falls to the {% else %} fallback.
 Match status branches on scm.GoodsReceiptNote.MATCH_STATUS_CHOICES (not_matched / matched /
-price_variance / quantity_variance / over_received, read off GoodsReceiptNotes.py:27-33); freight and
-landed rows carry no match of their own and print a dash.
+price_variance / quantity_variance / over_received, read off GoodsReceiptNotes.py:27-33). FREIGHT rows
+carry a real match of their own — FreightInvoice.MATCH_STATUS_CHOICES adds duplicate / disputed, both
+of which land in the slate fallback. LANDED rows carry NO match: the view puts the voucher's own
+lifecycle status in that key, so the cell is guarded on row.source and prints a dash instead of
+badging Draft / Allocated / Reconciled under a column headed Match.
 
 theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
 badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
@@ -216,11 +219,20 @@ stat-card icon colours are blue / green / orange / purple / slate only.
               </td>
               <td>
                 {% comment %}
-                  scm.GoodsReceiptNote.MATCH_STATUS_CHOICES, read off disk. Freight and landed rows carry
-                  no three-way match of their own, so they arrive with a blank match_status and print a
-                  dash rather than a misleading "Not Matched".
+                  scm.GoodsReceiptNote.MATCH_STATUS_CHOICES, read off disk. FREIGHT rows do carry a real
+                  match of their own — FreightInvoice.MATCH_STATUS_CHOICES adds duplicate / disputed,
+                  which land correctly in the slate {% templatetag openblock %} elif row.match_status
+                  {% templatetag closeblock %} fallback below.
+
+                  LANDED rows do not. The view hands them the VOUCHER'S OWN LIFECYCLE STATUS in this key
+                  (Reports.py: "the voucher's own lifecycle status is its reconciliation state"), so
+                  printing it here would badge Draft / Allocated / Reconciled under a column headed
+                  Match and assert a three-way match that never happened. They print a dash; the
+                  voucher's real status is one click away on the row's own link.
                 {% endcomment %}
-                {% if row.match_status == "matched" %}
+                {% if row.source == "landed" %}
+                  <span class="text-muted">&mdash;</span>
+                {% elif row.match_status == "matched" %}
                   <span class="badge badge-green">{{ row.match_status_label }}</span>
                 {% elif row.match_status == "not_matched" %}
                   <span class="badge badge-muted">{{ row.match_status_label }}</span>
