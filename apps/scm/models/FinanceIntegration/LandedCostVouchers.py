@@ -488,7 +488,14 @@ class LandedCostVoucher(TenantNumbered):
                     item.apply_landed_cost(amount)
 
             self.status = "allocated"
-            self.save(update_fields=["status", "updated_at"])
+            # THE STAMP GOES BACK WITH THE RUNG. Re-allocating an ACCRUED voucher steps it down to
+            # `allocated`, and an `accrued_at` left behind is not merely cosmetic: the detail page
+            # renders the "Allocated" status chip and the `{% if obj.accrued_at %}` "Accrued" badge
+            # at the same time, and the Accrued row keeps showing a timestamp for a voucher that is
+            # no longer accrued. Set unconditionally rather than behind an `is not None` test — the
+            # assignment IS the test, and `accrue()` re-stamps it on the way back up.
+            self.accrued_at = None
+            self.save(update_fields=["status", "accrued_at", "updated_at"])
             self.recalc_totals()
 
         return {
