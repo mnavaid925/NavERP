@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — Landed Cost Variance. STANDALONE at the sub-module root
+(templates/scm/finance/), the client_space_report / carbon_footprint precedent — it is not any one
+entity's list / detail / form page.
+
+FOLDER NOTE (do not "fix" this): backend package apps/scm/views/FinanceIntegration/, template folder
+templates/scm/finance/. The asymmetry IS the house rule — all seventeen shipped sub-module folders use
+short slugs. templates/scm/financeintegration/ would be the mistake.
+
+WHAT THIS PAGE ANSWERS: landed cost is estimated when a shipment is booked and known only when the
+invoices arrive. This page puts the two side by side over scm.LandedCostCharge, adds what allocate()
+actually pushed into inventory from scm.LandedCostAllocation, and regroups the lot three ways.
+
+Renders apps/scm/views/FinanceIntegration/Reports.py::landed_cost_variance. Everything this page may
+read, and nothing else — the view pins the same list in its own docstring:
+
+  rows        LIST of dicts: key (the RAW grouping value), label (the display string), estimated,
+              actual, variance, allocated (all Decimal), variance_pct (Decimal or None), quantity
+              (Decimal), uplift_per_unit (Decimal or None)
+  totals      dict: estimated, actual, variance, allocated
+  group       the CURRENT raw value — "charge_type" | "item" | "shipment"
+  group_choices        [("charge_type","By Charge Type"),("item","By Item"),("shipment","By Shipment")]
+  charge_type_choices  scm.LandedCostCharge.CHARGE_TYPE_CHOICES — eleven values
+  date_from date_to    date or None, echoed back into the two date inputs
+  row_cap truncated    int / bool
+
+THE GROUP SELECT REFLECTS `group`, NOT request.GET.group. The view normalises any junk value back to
+"charge_type", so binding the widget to the raw query string would show a selection the page is not
+actually using — ?group=nonsense would leave every option unselected while the table below showed
+charge types. `group` is the value the view really used, so that is what the widget reads.
+
+`row.key` IS ONLY MEANINGFUL AS A CHARGE TYPE WHEN group == "charge_type". Under the other two
+groupings it is a primary key. Nothing here branches on it, and nothing reverses a URL from it: the
+view resolves the display string into `label` and the template prints that. Reversing a route from a
+key whose meaning changes with the grouping is exactly how a regrouping report turns into a
+NoReverseMatch 500.
+
+TWO NULLS THAT MUST NEVER RENDER AS 0:
+
+  * variance_pct is None when nothing was estimated for the group. "No estimate was made" is a
+    different statement from "the estimate was exactly right", and only one of them means somebody
+    should start estimating. Every test is `is not None`, never truthiness and never |default — which
+    would swallow a genuine 0.00 too.
+  * uplift_per_unit is None when the group carries no quantity (a recoverable charge that never
+    capitalised, or a voucher that has not been allocated). Rendered as 0.0000 it would read as "this
+    cost added nothing to unit cost", which is a claim about inventory value the page has no basis to
+    make.
+
+ALLOCATED IS EXPECTED TO BE LESS THAN ACTUAL, and that is not a defect. allocate() only distributes
+charges where `capitalises` is true — capitalise_to_inventory and not is_recoverable — so recoverable
+import VAT and any charge flagged as expense stay out of inventory by design. The note under the table
+says so, because a reader who spots the gap without an explanation files a bug.
+
+NO QUANTITY TOTAL IS PRINTED, deliberately, and `totals` carries no quantity key. Under "By Charge
+Type" every charge type allocates over the same receipt lines, so a quantity column summed down the
+page would count the same stock several times over and produce a number that means nothing.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Landed Cost Variance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Landed Cost Variance</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">&rsaquo;</span>
+        <span>Finance &amp; Accounting Integration</span><span class="sep">&rsaquo;</span>
+        <span>Landed Cost Variance</span>
+      </div>
+      <p class="text-muted">
+        What each landed cost was <span class="fw-600">estimated</span> at when the shipment was booked, what it
+        <span class="fw-600">actually</span> came to when the invoices arrived, and how much of that reached
+        inventory. Regroup by charge type to find which cost is consistently mis-estimated, or by item to see
+        which products carry the uplift.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Duty Tariffs</a>
+      <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-primary"><i data-lucide="receipt"></i> Landed Cost Vouchers</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        Nothing. Cost reaches inventory only when a voucher is allocated, which happens on the voucher itself
+        &mdash; this page just reports the result. Supply chain posts no journal entry either; a voucher drafts
+        an <span class="fw-600">accounting.Bill</span> and accounting posts the entry.
+      </p>
+      <div class="badge-group">
+        <span class="badge badge-info">Estimates and actuals read from voucher charges</span>
+        <span class="badge badge-slate">Allocated read from the allocation rows</span>
+        <span class="badge badge-muted">No table of its own, no allocation triggered, no column written</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="pencil-ruler"></i></div>
+      <div class="stat-value">{{ totals.estimated|floatformat:2 }}</div>
+      <div class="stat-label">Estimated</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="receipt"></i></div>
+      <div class="stat-value">{{ totals.actual|floatformat:2 }}</div>
+      <div class="stat-label">Actual</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{{ totals.variance|floatformat:2 }}</div>
+      <div class="stat-label">Variance &mdash; actual less estimated</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ totals.allocated|floatformat:2 }}</div>
+      <div class="stat-label">Capitalised into inventory</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Filters</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label" for="lcv-group">Group by</label>
+          {% comment %}
+            Compared against `group` — the value the VIEW settled on — not request.GET.group. Junk in
+            the query string falls back to "charge_type" in the view, and the widget must agree with
+            the table rather than with the URL.
+          {% endcomment %}
+          <select name="group" id="lcv-group" class="form-select">
+            {% for value, label in group_choices %}
+              <option value="{{ value }}" {% if group == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lcv-type">Charge type</label>
+          {% comment %}
+            A STRING value, compared against request.GET.charge_type directly — no |stringformat and
+            never |slugify. It narrows the underlying charges, so it stays useful under all three
+            groupings, not just "By Charge Type". Junk narrows nothing and still returns 200 (L11).
+          {% endcomment %}
+          <select name="charge_type" id="lcv-type" class="form-select">
+            <option value="">Every charge type</option>
+            {% for value, label in charge_type_choices %}
+              <option value="{{ value }}" {% if request.GET.charge_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lcv-from">Cost date from</label>
+          {% comment %} date_from is date|None; |date on None renders an empty string, which is the empty input. {% endcomment %}
+          <input type="date" name="date_from" id="lcv-from" value="{{ date_from|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lcv-to">Cost date to</label>
+          <input type="date" name="date_to" id="lcv-to" value="{{ date_to|date:'Y-m-d' }}" class="form-input">
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:landed_cost_variance' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        The two dates read the voucher&rsquo;s cost date, not the invoice date &mdash; a charge invoiced late still
+        belongs to the receipt it landed with. An unreadable date is ignored rather than emptying the page.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">
+        Estimated against actual
+        {% comment %}
+          The heading names the grouping actually in force, resolved from group_choices against `group`
+          rather than printed from the query string.
+        {% endcomment %}
+        {% for value, label in group_choices %}{% if group == value %}&mdash; {{ label }}{% endif %}{% endfor %}
+      </h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ rows|length }} group{{ rows|length|pluralize }}</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} &mdash; narrow the filters to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Group</th>
+            <th class="text-right">Quantity</th>
+            <th class="text-right">Estimated</th>
+            <th class="text-right">Actual</th>
+            <th class="text-right">Variance</th>
+            <th class="text-right">Variance %</th>
+            <th class="text-right">Allocated</th>
+            <th class="text-right">Uplift / unit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% comment %}
+                  `label` is already the display string for whichever grouping is in force — a charge
+                  type label, an item, or a shipment. `key` is a raw value whose meaning changes with
+                  the grouping, so nothing branches on it and nothing reverses a URL from it.
+                {% endcomment %}
+                <span class="fw-600">{{ row.label }}</span>
+              </td>
+              <td class="text-right">{{ row.quantity|floatformat:4 }}</td>
+              <td class="text-right">{{ row.estimated|floatformat:2 }}</td>
+              <td class="text-right">{{ row.actual|floatformat:2 }}</td>
+              <td class="text-right">{{ row.variance|floatformat:2 }}</td>
+              <td class="text-right">
+                {% comment %}
+                  `is not None`, never truthiness: 0.00 means the estimate was exactly right, None means
+                  nothing was estimated at all. Rendering None as 0% would report perfect estimating on a
+                  cost nobody estimated.
+                {% endcomment %}
+                {% if row.variance_pct is not None %}
+                  {{ row.variance_pct|floatformat:2 }}%
+                {% else %}
+                  <span class="text-muted">Not estimated</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.allocated|floatformat:2 }}</td>
+              <td class="text-right">
+                {% comment %}
+                  None when the group carries no quantity — nothing capitalised, or the voucher has not
+                  been allocated yet. Printing 0.0000 there would assert that this cost added nothing to
+                  unit cost, which is a claim about inventory value the page cannot support.
+                {% endcomment %}
+                {% if row.uplift_per_unit is not None %}
+                  {{ row.uplift_per_unit|floatformat:4 }}
+                {% else %}
+                  <span class="text-muted">Not allocated</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="trending-up"></i>
+                  <h3>No landed cost allocated yet</h3>
+                  <p>Nothing matches the current filters. A group appears here only once a landed cost voucher carries charges &mdash; and the allocated column fills in only after that voucher has been allocated across its receipt&rsquo;s stock moves. Create a voucher against a received goods receipt, add its freight, duty and brokerage charges, then allocate it. If you were expecting rows, widen the cost-date range first: the dates read the voucher&rsquo;s cost date, not the invoice date.</p>
+                  <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-primary"><i data-lucide="receipt"></i> Landed cost vouchers</a>
+                  <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Duty tariffs</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td class="fw-600">Total over the groups listed</td>
+              {% comment %}
+                No quantity total, on purpose. Under "By Charge Type" every charge type allocates over
+                the same receipt lines, so summing the column would count the same stock repeatedly.
+              {% endcomment %}
+              <td></td>
+              <td class="text-right fw-600">{{ totals.estimated|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.actual|floatformat:2 }}</td>
+              <td class="text-right fw-600">{{ totals.variance|floatformat:2 }}</td>
+              <td></td>
+              <td class="text-right fw-600">{{ totals.allocated|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      <span class="fw-600">Allocated is normally lower than actual, and that is correct.</span> Only charges that
+      capitalise reach inventory &mdash; a recoverable charge such as import VAT, or one marked not to capitalise,
+      is a real cost that deliberately stays out of stock value. The gap between the two columns is the expensed
+      portion, not a missing allocation.
+      {% if truncated %}
+        The figures above the table cover the whole filtered set; the footer covers only the {{ row_cap }} rows printed.
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
