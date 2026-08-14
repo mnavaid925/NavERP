@@ -1,0 +1,477 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — one service level, read as A PROMISE AND ITS EVIDENCE.
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientSlas.py::clientsla_detail (a hand-rolled render,
+not crud_detail). Everything this page may read, and NOTHING else:
+
+  obj              the ClientSLA, with client__party and scope_location joined
+  metric_meta      dict with EXACTLY: label / unit / direction / default_target / source.
+                   `source` is the plain-English statement of which as-built rows this figure is
+                   measured from, and it MUST be rendered — a percentage whose provenance is not on
+                   the page is a number nobody can defend in a service review
+  status_css       a COLOUR-named badge class chosen by the view from SLA_STATUS_CSS
+  is_measured      bool — obj.last_measured_value is not None
+  variance         Decimal or None — signed, measured minus target
+  is_breaching     bool
+  window_label     str — the human window, e.g. "1–31 July 2026 (last full calendar month)"
+  suggested_credit Decimal
+  credit_basis     Decimal — the monthly fee figure the percentage was applied to
+  credit_basis_run ClientBillingRun or None. NONE MEANS THERE IS NO BILLED MONTH to base a credit
+                   on, and the page has to say so rather than showing a credit computed from zero
+                   as though it were a real number
+  credit_pct       Decimal
+  credit_cap_pct   Decimal
+  can_recompute    bool
+
+--------------------------------------------------------------------------------------------------
+THE THREE THINGS THIS PAGE MUST NOT BLUR
+--------------------------------------------------------------------------------------------------
+1. NO DATA IS NOT MEETING. A metric whose window held no signal is left at no-data with the reason
+   written into measurement_summary, and its last measured value is left UNTOUCHED rather than
+   written down to zero. A zero would read as catastrophic performance where the truth is that
+   nothing happened to measure. The two states have different colours and different words here, and
+   nothing merges them.
+2. AT RISK IS NOT BREACHED. The warning band sits on the meeting side of the target — above it for a
+   higher-is-better metric, below it for a lower-is-better one — so at-risk means still inside the
+   agreement. Only a breach implies a credit.
+3. SUGGESTED IS NOT APPLIED. The credit panel is arithmetic and nothing else: it reduces no billing
+   run, it drafts no credit note, and no wording on this page may imply either happened. Issuing a
+   credit is a commercial decision with a signature on it and the document is Accounting's.
+
+--------------------------------------------------------------------------------------------------
+Guards
+--------------------------------------------------------------------------------------------------
+scope_location is nullable and is wrapped in an explicit {% templatetag openblock %} if
+{% templatetag closeblock %} rather than a |default — a None FK inside a filter ARGUMENT raises and
+500s even where a bare lookup would quietly print nothing (L10), so the guard goes around the whole
+expression and not around the value. The same applies to credit_basis_run, and to every nullable
+evidence column below.
+
+`is not None` — never a truthiness test — is the only correct check for variance and for
+last_measured_value: a legitimately measured 0.00, or a variance of exactly 0.00 on a metric sitting
+precisely on its target, is falsy, and a bare check would hide the two figures the reader came for.
+
+theme.css ships COLOUR-named badges only: badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-warning / badge-danger DO NOT EXIST and render
+completely unstyled (L33). `status_css` is one of those six, chosen by the view; every badge written
+by hand below is one of the six literals.
+
+Recompute and Delete are @require_POST — a GET on either is a 405 — so both are real forms and
+neither can be a link. Only the system-generated SLA- number is interpolated into a confirm string:
+`name`, the client code and the location code are user-typed, and an apostrophe in any of them
+escapes to &#39;, which HTML decodes back to a bare quote before JavaScript parses the attribute,
+breaking the dialog open and silently removing the guard (L42). Apostrophes written into those
+strings are escaped \' for the same reason.
+
+There is no can_edit and no can_delete in the contract, and that is the route's own rule rather than
+a gap: an SLA has no status ladder and no frozen state. Its eight evidence columns are editable=False
+so no form can reach them, and nothing PROTECTs an SLA row, so both buttons are unconditional and
+mirror exactly what clientsla_edit and clientsla_delete will do.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {% if obj.name %}{{ obj.name }}{% else %}{{ obj.get_metric_display }}{% endif %}
+        <span class="badge {{ status_css }}">{{ obj.get_status_display }}</span>
+        {% if not obj.is_active %}<span class="badge badge-muted">Inactive — not measured</span>{% endif %}
+        {% if obj.breach_count %}<span class="badge badge-slate">{{ obj.breach_count }} breach{{ obj.breach_count|pluralize:"es" }} recorded</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:clientsla_list' %}">Client SLAs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One agreed service level for <a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="mono">{{ obj.client.code }}</a>, and the evidence behind it. The measured figure below is <span class="fw-600">derived</span> from rows this system already holds — nothing on this page is typed in, and the eight evidence columns are not editable by any form.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_recompute %}
+        {% comment %}
+          @require_POST at the view, so this is a real form. Re-measuring is safe to repeat: the
+          breach counter only increments on a transition INTO breached for a window it has not
+          already counted, so running this twice over the same window cannot inflate it.
+        {% endcomment %}
+        <form method="post" action="{% url 'scm:clientsla_recompute' obj.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit" onclick="return confirm('Re-measure {{ obj.number }}? It is re-derived from the rows already on file for its window — nothing is invented and nothing is written to the stock ledger. If the window holds no signal the result is No data with the reason recorded, and the last measured value is left untouched rather than written down to zero.');"><i data-lucide="refresh-cw"></i> Re-measure</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'scm:clientsla_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'scm:clientsla_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The measured tile is the whole point of the page, so it says "Not measured" in words when there
+    is no signal — never 0, never blank. stat-icon has no red; a breach takes orange and is told
+    apart by its label.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon {% if is_breaching %}orange{% elif is_measured %}green{% else %}slate{% endif %}"><i data-lucide="activity"></i></div>
+      <div class="stat-value">
+        {% if is_measured %}{{ obj.last_measured_value|floatformat:2 }}{% else %}—{% endif %}
+      </div>
+      <div class="stat-label">
+        {% if is_measured %}
+          Measured, in {{ obj.get_unit_display }}{% if obj.last_measured_at %}, taken {{ obj.last_measured_at|date:"M d, Y H:i" }}{% endif %}
+        {% else %}
+          <span class="fw-600">Not measured.</span> No signal in the window — which is not the same answer as meeting the target
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="target"></i></div>
+      <div class="stat-value">{{ obj.target_value|floatformat:2 }}</div>
+      <div class="stat-label">Target, in {{ obj.get_unit_display }} — {{ obj.get_direction_display|lower }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="move-vertical"></i></div>
+      <div class="stat-value">
+        {% comment %}
+          `is not None` — a variance of exactly 0.00, a metric sitting precisely on its target, is
+          falsy and would otherwise print as "—" on the one row where the number matters most.
+        {% endcomment %}
+        {% if variance is not None %}{{ variance|floatformat:2 }}{% else %}—{% endif %}
+      </div>
+      <div class="stat-label">Measured minus target, signed. Whether a gap is good or bad depends on the direction, which is why the raw difference is shown rather than a verdict</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="list-checks"></i></div>
+      <div class="stat-value">{{ obj.sample_size }}</div>
+      <div class="stat-label">Rows the last measurement was taken over. A percentage from a handful of rows is arithmetic, not a trend</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="siren"></i></div>
+      <div class="stat-value">{{ obj.breach_count }}</div>
+      <div class="stat-label">Windows that have transitioned into breach. Counted once per window, so re-measuring cannot inflate it</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 1. what is actually measured
+    metric_meta is the closed registry entry for this metric. `source` states which as-built rows
+    the figure comes from and is rendered verbatim — a service level whose provenance is not on the
+    page is a number nobody can defend in front of the client it is about.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this metric measures</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ metric_meta.label }}</span>
+        <span class="badge badge-slate">Registry default {{ metric_meta.default_target }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        <span class="fw-600">Where the number comes from:</span> {{ metric_meta.source }}
+      </p>
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Metric</dt><dd class="fw-600">{{ obj.get_metric_display }}</dd></div>
+        <div class="detail-item">
+          <dt>Unit</dt>
+          <dd>{{ obj.get_unit_display }}
+            <div class="form-help">Pinned by the registry as <span class="mono">{{ metric_meta.unit }}</span>. A unit that disagrees with it is refused at save — a dock-to-stock target stored as a percentage would compare hours against a percentage and silently report nonsense.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Direction</dt>
+          <dd>{{ obj.get_direction_display }}
+            <div class="form-help">Pinned by the registry as <span class="mono">{{ metric_meta.direction }}</span>. It decides which side of the target is a breach, so it is not a display preference.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Registry default target</dt>
+          <dd class="mono">{{ metric_meta.default_target }}
+            <div class="form-help">A starting point drawn from what the industry typically commits to — not a floor, and not what this client agreed to. The agreed figure is the one below.</div>
+          </dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        The metric list is a <span class="fw-600">closed registry</span> and stays closed. Each entry names a unit, a direction and the rows it is measured from, and the measurement code has one resolver per entry — so a metric can only exist here if something in this system can actually count it. An open list of metrics with a formula field attached would be a small expression language nobody wants to own, and the number it produced would be unauditable.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 2. the agreement
+    Configuration — what was agreed, as opposed to what happened. Every field here is editable;
+    nothing in this card is evidence.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The agreement</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_measurement_window_display }}</span>
+        {% if obj.is_active %}
+          <span class="badge badge-green">Active — measured</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive — skipped by re-measuring</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item">
+          <dt>Client</dt>
+          <dd>
+            <a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="fw-600 mono">{{ obj.client.code }}</a>
+            <div class="form-help">{{ obj.client.party }}</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Name</dt>
+          <dd>{% if obj.name %}{{ obj.name }}{% else %}<span class="text-muted">{{ obj.get_metric_display }}</span><div class="form-help">No name given, so the metric label stands in.</div>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Target</dt><dd class="fw-600 mono">{{ obj.target_value|floatformat:2 }} {{ obj.get_unit_display }}</dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+        <div class="detail-item">
+          <dt>Warning band</dt>
+          <dd class="mono">
+            {% if obj.warning_threshold is not None %}
+              {{ obj.warning_threshold|floatformat:2 }} {{ obj.get_unit_display }}
+              <div class="form-help">Crossing this puts the SLA <span class="fw-600">at risk</span> — still inside the agreement, close enough to the edge to be worth a look. The band has to sit on the meeting side of the target or it could never fire, and a band on the wrong side is refused at save with both numbers named.</div>
+            {% else %}
+              <span class="text-muted">None set</span>
+              <div class="form-help">Without a band this SLA goes straight from meeting to breached, with no early warning in between.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Measurement window</dt>
+          <dd>{{ obj.get_measurement_window_display }}
+            <div class="form-help">Monthly and quarterly windows use the last <span class="fw-600">complete</span> period — a part-finished month would report a figure that changes every day it is looked at. The rolling windows count back from the day the measurement is taken.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Scope</dt>
+          <dd>
+            {% if obj.scope_location %}
+              <a href="{% url 'scm:location_detail' obj.scope_location.pk %}" class="mono">{{ obj.scope_location.code }}</a>
+              <div class="form-help">{{ obj.scope_location.name }} — this SLA is measured over that location only.</div>
+            {% else %}
+              <span class="text-muted">Every location</span>
+              <div class="form-help">Workspace-wide for this client. A client may hold one unscoped SLA per metric plus one per location; a second unscoped row for the same metric is refused explicitly, because the database index cannot catch it on every engine.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if not obj.is_active %}
+        <p class="text-muted" style="margin:.9rem 0 0;">
+          <span class="badge badge-muted">Inactive</span>
+          This service level is skipped when service levels are re-measured, and it is not counted among the client's open breaches. Everything it has already recorded is kept — which is the whole reason to switch a row off rather than delete it.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 3. the evidence
+    Eight columns, every one editable=False, so no ModelForm can reach them and nothing on any screen
+    can type a service level into compliance. They are written only by re-measuring.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The measurement</h2>
+      <div class="badge-group">
+        <span class="badge {{ status_css }}">{{ obj.get_status_display }}</span>
+        {% if is_measured %}
+          <span class="badge badge-slate">{{ obj.sample_size }} row{{ obj.sample_size|pluralize }} counted</span>
+        {% else %}
+          <span class="badge badge-muted">Never measured</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Measured value</dt>
+          <dd class="fw-600 mono">
+            {% if is_measured %}
+              {{ obj.last_measured_value|floatformat:2 }} {{ obj.get_unit_display }}
+            {% else %}
+              <span class="text-muted">Not measured</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Variance</dt>
+          <dd class="mono">
+            {% if variance is not None %}
+              {{ variance|floatformat:2 }} {{ obj.get_unit_display }}
+              <div class="form-help">Measured minus target, signed and unjudged — for a lower-is-better metric a negative variance is the good outcome, and printing a verdict here would get it backwards on half the registry.</div>
+            {% else %}
+              <span class="text-muted">—</span>
+              <div class="form-help">There is nothing to compare against the target until this SLA has been measured at least once.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Taken at</dt>
+          <dd class="mono">{% if obj.last_measured_at %}{{ obj.last_measured_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Window measured</dt>
+          <dd>
+            {{ window_label }}
+            <div class="form-help mono">
+              {% if obj.measurement_window_start %}{{ obj.measurement_window_start|date:"M d, Y" }}{% else %}—{% endif %}
+              –
+              {% if obj.measurement_window_end %}{{ obj.measurement_window_end|date:"M d, Y" }}{% else %}—{% endif %}
+            </div>
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Sample size</dt><dd class="mono">{{ obj.sample_size }}</dd></div>
+        <div class="detail-item"><dt>Breaches recorded</dt><dd class="mono">{{ obj.breach_count }}</dd></div>
+      </dl>
+
+      {% if obj.measurement_summary %}
+        <p class="text-muted" style="margin:.9rem 0 0;">
+          <span class="fw-600">How it was worked out:</span> {{ obj.measurement_summary }}
+        </p>
+      {% endif %}
+
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        {% if not is_measured %}
+          <span class="badge badge-muted">No data</span>
+          Nothing has been measured for this service level yet — either it has never been re-measured, or its window held no rows to count. <span class="fw-600">That is not a pass.</span> A metric with no signal is left at no-data with the reason recorded and its last value untouched, rather than written down to zero: a zero would read as the worst possible performance where the truth is that nothing happened.
+        {% elif is_breaching %}
+          <span class="badge badge-red">Breached</span>
+          The measured figure is past the target on the wrong side. This is the state — and the only state — that implies a service credit under most 3PL contracts; the suggested figure is below, and it is applied to nothing.
+        {% elif obj.status == "at_risk" %}
+          <span class="badge badge-amber">At risk</span>
+          Still inside the agreement, and inside the warning band. At-risk is <span class="fw-600">not</span> a breach: it earns no credit and counts against nothing. It exists so the conversation happens before the month closes rather than after the client notices.
+        {% else %}
+          <span class="badge badge-green">Meeting</span>
+          The measured figure is on the right side of the target for its window, over {{ obj.sample_size }} row{{ obj.sample_size|pluralize }}.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        Every figure in this card is written by re-measuring and by nothing else — all eight columns are read-only to every form in the system, so no screen anywhere can type a service level into compliance. Re-measuring is also safe to repeat: the breach counter increments only when a window <span class="fw-600">transitions into</span> breach and only once for that window, so running it twice over the same period cannot inflate the count.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ==================================================== 4. SUGGESTED SERVICE CREDIT — NOT APPLIED
+    Arithmetic and nothing else. This panel reduces no billing run, drafts no credit note and touches
+    Accounting in no way. The heading, the badge and the closing sentence all say so, because a money
+    figure on a client page is assumed to be live unless it is repeatedly told not to be.
+
+    credit_basis_run is nullable: None means there is no billed month to base a percentage on, and
+    the panel says that instead of presenting a credit computed from zero as if it were real.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Service credit implied by this SLA</h2>
+      <div class="badge-group">
+        <span class="badge badge-red">SUGGESTED — NOT APPLIED</span>
+        <span class="badge badge-slate">{{ suggested_credit|floatformat:2 }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Credit rate</dt>
+          <dd class="mono">{{ credit_pct|floatformat:2 }}%
+            <div class="form-help">The share of the period's fees this breach would give back under the contract.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Cap</dt>
+          <dd class="mono">
+            {% if credit_cap_pct %}{{ credit_cap_pct|floatformat:2 }}%{% else %}<span class="text-muted">None</span>{% endif %}
+            <div class="form-help">A ceiling on the same fees. A cap below the credit rate would make the rate unreachable and is refused at save.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Applied to</dt>
+          <dd class="mono">{{ credit_basis|floatformat:2 }}
+            <div class="form-help">The fee figure the percentage was worked out against — not a balance and not money owed.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Suggested credit</dt>
+          <dd class="fw-600 mono">{{ suggested_credit|floatformat:2 }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Taken from</dt>
+          <dd>
+            {% if credit_basis_run %}
+              <a href="{% url 'scm:clientbillingrun_detail' credit_basis_run.pk %}" class="mono">{{ credit_basis_run.number }}</a>
+              <div class="form-help">{{ credit_basis_run.period_start|date:"M d, Y" }} – {{ credit_basis_run.period_end|date:"M d, Y" }}</div>
+            {% else %}
+              <span class="text-muted">No billed period</span>
+              <div class="form-help">There is no billing run for this client to base a percentage on, so the figures above have nothing real behind them. A credit is a share of fees — with no billed month there are no fees to share.</div>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        {% if not is_breaching %}
+          <span class="badge badge-slate">Nothing suggested</span>
+          Only a <span class="fw-600">breach</span> earns a credit. This SLA is not breaching, so the suggestion is legitimately zero — shown rather than hidden, because a panel that vanished would leave the reader unsure whether it was calculated at all.
+        {% elif not credit_basis_run %}
+          <span class="badge badge-amber">Breached, but nothing to credit against</span>
+          The service level is breached and the contract implies a credit — but no billed period exists for this client, so there are no fees for a percentage to apply to. Bill a period and the figure above becomes a real one.
+        {% else %}
+          <span class="badge badge-red">Breached</span>
+          Under this agreement the breach implies a credit of <span class="fw-600">{{ suggested_credit|floatformat:2 }}</span> against {{ credit_basis|floatformat:2 }} of fees from {{ credit_basis_run.number }}.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="fw-600">This figure has been applied to nothing.</span> No billing run total is reduced by it, no credit note is drafted from it, and nothing in supply chain writes to the ledger at all. Issuing a credit is a commercial decision with a signature on it, and a credit note is Accounting's document — this page does the arithmetic so the conversation starts from a number both sides can check, and stops exactly there.
+      </p>
+    </div>
+  </div>
+
+  {% if obj.notes %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes</h2>
+        <span class="badge badge-slate">Internal</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="white-space:pre-line; margin:0;">{{ obj.notes }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ================================================================================ 5. actions
+    Every verb here is @require_POST, so each is a real form and a GET on any of their routes is a
+    405. Edit and Delete carry no condition because the route carries none — see the header comment.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:clientsla_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if can_recompute %}
+          <form method="post" action="{% url 'scm:clientsla_recompute' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit" onclick="return confirm('Re-measure {{ obj.number }}? The figure is re-derived from rows already on file for its window. Nothing is written to the stock ledger, and a window with no signal comes back as No data with the reason recorded rather than as a zero.');"><i data-lucide="refresh-cw"></i> Re-measure</button>
+          </form>
+        {% endif %}
+        <form method="post" action="{% url 'scm:clientsla_delete' obj.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit" onclick="return confirm('Delete {{ obj.number }}? The agreement goes, and so does every measurement behind it — the last measured value, the window it covered, the sample size and the {{ obj.breach_count }} recorded breach(es). None of it can be reconstructed, because it was derived rather than stored anywhere else. To stop measuring without losing the history, clear the Active switch instead.');"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+        <a href="{% url 'scm:clientsla_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <p class="text-muted" style="margin-top:.9rem;">
+        {% if can_recompute %}
+          Re-measuring reads shipments, orders, cycle counts, receipts and the stock ledger for this SLA's window and writes back one measured value, its sample size and a sentence saying how it was worked out. It is bounded, it is repeatable, and it changes nothing outside this row.
+        {% else %}
+          Re-measuring is not offered for this row — an inactive service level is deliberately skipped, so that switching one off genuinely stops it being measured rather than just hiding it. Everything it has already recorded stays exactly as it is.
+        {% endif %}
+      </p>
+      <p class="text-muted" style="margin:0;">
+        <span class="badge badge-amber">Deleting loses evidence, not just a setting</span>
+        Nothing in the database protects this row, so the delete will go through. What it takes with it is the measurement history — and that history is derived, not copied from anywhere, so re-creating the SLA afterwards starts it again from no data. <span class="fw-600">Clearing the Active switch does the same job</span> to the measuring and keeps every figure.
+      </p>
+    </div>
+  </div>
+{% endblock %}
