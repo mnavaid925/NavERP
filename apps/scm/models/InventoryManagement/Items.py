@@ -120,6 +120,25 @@ class Item(TenantOwned):
     storage_condition = models.CharField(
         max_length=14, choices=STORAGE_CONDITION_CHOICES, blank=True,
         help_text="Temperature class this item must be kept at; blank = not temperature-controlled")
+    # 4.17 Third-Party Logistics. One column on the EXISTING item master, exactly as `is_spare_part`
+    # and `storage_condition` above: whose goods these are is an attribute of the item, not a reason
+    # for a parallel "client stock" master that would fork the UoM, the costing method, the reorder
+    # point and — fatally — the derived on-hand. Together with the same column on Location it turns
+    # Client Inventory Segregation from a table into a QUERY. Additive, nullable and all-default, so
+    # no existing row changes meaning and nothing needs backfilling: blank means our own stock.
+    #
+    # This is THE client attribution path for the whole module. There is deliberately NO owner column
+    # on StockMove: an owner on an append-only ledger would be a second source of truth for the same
+    # fact, and the two would disagree the first time an item was re-assigned (L37). Every 4.17
+    # figure about client stock reads `item__owner_client` and nothing else.
+    #
+    # SET_NULL rather than PROTECT: deleting a client must not be blocked by, or destroy, the item
+    # master — the goods on the floor still exist, they simply stop naming an owner and show up as
+    # unassigned on the client inventory report.
+    owner_client = models.ForeignKey(
+        "scm.LogisticsClient", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="owned_items",
+        help_text="The 3PL client whose goods these are; blank = our own stock")
 
     class Meta:
         ordering = ["sku"]
