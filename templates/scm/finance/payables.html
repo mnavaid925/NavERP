@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — Accounts Payable. STANDALONE at the sub-module root
+(templates/scm/finance/), because it is not any one entity's list / detail / form page — the
+client_space_report / cold_storage_report / carbon_footprint precedent.
+
+FOLDER NOTE (do not "fix" this): the backend package is apps/scm/views/FinanceIntegration/ while the
+template folder is templates/scm/finance/. The asymmetry IS the house rule — all seventeen shipped
+sub-module folders use short slugs (3pl/ portal/ coldchain/ srm/ …). templates/scm/financeintegration/
+would be the mistake.
+
+THERE IS NO AP TABLE AND THERE MUST NEVER BE ONE (L29, second source of truth). Every figure on this
+page is READ from tables that already shipped:
+  4.1  scm.GoodsReceiptNote.bill    — what was received and whether the vendor bill matched it
+  4.6  scm.FreightInvoice.bill      — carrier freight, already audited
+  4.18 scm.LandedCostVoucher.bill   — the landed cost hand-off drafted by draft_bill()
+The accounting.Bill each of them points at is owned by apps/accounting. This page writes NOTHING: no
+POST target, no verb button, no form except the GET filter bar below.
+
+Renders apps/scm/views/FinanceIntegration/Reports.py::finance_payables. Everything this page may read,
+and nothing else — the view pins the same list in its own docstring:
+
+  rows        LIST of dicts: source, source_label, document, number, url (a STRING that is ALREADY
+              REVERSED IN THE VIEW), party, bill, bill_number (str or ""), bill_status (the RAW value
+              or ""), bill_status_label, amount (Decimal), variance (Decimal or None), match_status,
+              match_status_label
+  totals      dict: count, amount, billed, unbilled
+  source_choices  [("grn","Goods Receipts"),("freight","Freight Invoices"),("landed","Landed Cost Vouchers")]
+  status_choices  accounting Bill.STATUS_CHOICES — draft / pending_approval / approved / partial / paid / void
+  row_cap truncated   int / bool
+
+`row.url` IS A PLAIN STRING AND IS RENDERED AS ONE. It is never fed to {% url %} — the three sources
+resolve to three different route names, so reversing here would need a name held in a variable, which
+is exactly how a union report page turns into a NoReverseMatch 500. The view reverses; the template
+prints.
+
+`variance` is Decimal|None and None MUST NOT RENDER AS 0. None means this row was never three-way
+matched at all — a document nobody has checked. Zero means it was matched and agreed to the penny.
+Those are opposite facts, so every test is `is not None`, never truthiness and never |default (which
+would swallow a genuine 0 too).
+
+The bill columns are TEXT, not links. `row.bill` is only ever tested for truthiness here; the bill
+number prints as a string. Calling {% url 'accounting:bill_detail' row.bill.pk %} would 500 the whole
+page the moment that key is anything other than a live Bill instance, and this template cannot verify
+that. The empty state links to the AP bill list instead, which is a literal reverse and cannot fail.
+
+Bill status badge chain branches on the RAW value in `bill_status`; the label is already resolved into
+`bill_status_label`. "partial" is deliberately NOT enumerated — it falls to the {% else %} fallback.
+Match status branches on scm.GoodsReceiptNote.MATCH_STATUS_CHOICES (not_matched / matched /
+price_variance / quantity_variance / over_received, read off GoodsReceiptNotes.py:27-33); freight and
+landed rows carry no match of their own and print a dash.
+
+theme.css ships badge-green / badge-red / badge-amber / badge-info / badge-muted / badge-slate ONLY —
+badge-success / badge-warning / badge-danger do not exist and render completely unstyled (L33).
+stat-card icon colours are blue / green / orange / purple / slate only.
+{% endcomment %}
+{% block title %}Accounts Payable{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Accounts Payable</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">&rsaquo;</span>
+        <span>Finance &amp; Accounting Integration</span><span class="sep">&rsaquo;</span>
+        <span>Accounts Payable</span>
+      </div>
+      <p class="text-muted">
+        Everything supply chain owes, gathered from the documents that create the obligation &mdash; goods
+        receipts, freight invoices and landed cost vouchers &mdash; beside the vendor bill each one handed to
+        accounting. <span class="fw-600">This page holds no payables of its own</span>; it reads the three
+        source tables and the bills they point at.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:finance_receivables' %}" class="btn btn-outline"><i data-lucide="arrow-down-left"></i> Receivables</a>
+      <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-primary"><i data-lucide="receipt"></i> Landed Cost Vouchers</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What this page writes</h2></div>
+    <div class="card-body">
+      <p class="text-muted">
+        Nothing. Supply chain never posts a journal entry &mdash; it drafts an
+        <span class="fw-600">accounting.Bill</span> and stops there, and accounting posts the entry. A row with
+        no bill is not an error; it is a document that has not been handed over yet.
+      </p>
+      <div class="badge-group">
+        <span class="badge badge-info">Goods receipts read from procurement</span>
+        <span class="badge badge-slate">Freight read from transportation</span>
+        <span class="badge badge-muted">Landed cost read from this sub-module</span>
+        <span class="badge badge-muted">No table of its own, no journal entry, no column written</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+      <div class="stat-value">{{ totals.count }}</div>
+      <div class="stat-label">Document{{ totals.count|pluralize }} listed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="sigma"></i></div>
+      <div class="stat-value">{{ totals.amount|floatformat:2 }}</div>
+      <div class="stat-label">Total payable value</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ totals.billed|floatformat:2 }}</div>
+      <div class="stat-label">Handed to accounting</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="hourglass"></i></div>
+      <div class="stat-value">{{ totals.unbilled|floatformat:2 }}</div>
+      <div class="stat-label">Not yet billed</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Filters</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <label class="form-label" for="ap-q">Search</label>
+          {% comment %}
+            Echoed from request.GET.q, NOT from a `q` context var. crud_list emits `q`, but this page is
+            a hand-rolled report view and the frozen contract does not list `q` among its context keys —
+            so binding to {{ q }} here would silently render an empty box on every search.
+          {% endcomment %}
+          <input type="text" name="q" id="ap-q" value="{{ request.GET.q }}" class="form-input"
+                 placeholder="Search document number or party name&hellip;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ap-source">Source</label>
+          {% comment %}
+            A STRING value, compared against request.GET.source directly — no |stringformat and never
+            |slugify. Junk in this param narrows nothing and still returns 200 (L11).
+          {% endcomment %}
+          <select name="source" id="ap-source" class="form-select">
+            <option value="">Every source</option>
+            {% for value, label in source_choices %}
+              <option value="{{ value }}" {% if request.GET.source == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ap-status">Bill status</label>
+          <select name="status" id="ap-status" class="form-select">
+            <option value="">Every bill status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Apply</button>
+          <a href="{% url 'scm:finance_payables' %}" class="btn btn-outline">Reset</a>
+        </div>
+      </form>
+      <div class="form-help">
+        Filtering by bill status narrows to documents that already have a bill, so it will always hide the
+        unbilled rows &mdash; which are usually the ones worth looking at. Clear it to see them again.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Payable documents</h2>
+      <div class="badge-group">
+        <span class="badge badge-info">{{ rows|length }} row{{ rows|length|pluralize }}</span>
+        {% if truncated %}
+          <span class="badge badge-amber"><i data-lucide="alert-triangle"></i> Showing the first {{ row_cap }} &mdash; narrow the filters to see the rest</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Document</th>
+            <th>Party</th>
+            <th>Match</th>
+            <th>Vendor bill</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>
+                {% comment %} Branching on the RAW value; the label is already resolved by the view. {% endcomment %}
+                {% if row.source == "grn" %}
+                  <span class="badge badge-info">{{ row.source_label }}</span>
+                {% elif row.source == "freight" %}
+                  <span class="badge badge-slate">{{ row.source_label }}</span>
+                {% elif row.source == "landed" %}
+                  <span class="badge badge-amber">{{ row.source_label }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ row.source_label }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  row.url is pre-reversed by the view and printed as a plain href. Never run the url tag
+                  on a variable route name — three sources, three route names, one NoReverseMatch.
+                {% endcomment %}
+                <a href="{{ row.url }}" class="fw-600">{{ row.number }}</a>
+                {% if row.document %}<div class="form-help">{{ row.document }}</div>{% endif %}
+              </td>
+              <td>
+                {% if row.party %}{{ row.party }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  scm.GoodsReceiptNote.MATCH_STATUS_CHOICES, read off disk. Freight and landed rows carry
+                  no three-way match of their own, so they arrive with a blank match_status and print a
+                  dash rather than a misleading "Not Matched".
+                {% endcomment %}
+                {% if row.match_status == "matched" %}
+                  <span class="badge badge-green">{{ row.match_status_label }}</span>
+                {% elif row.match_status == "not_matched" %}
+                  <span class="badge badge-muted">{{ row.match_status_label }}</span>
+                {% elif row.match_status == "price_variance" %}
+                  <span class="badge badge-amber">{{ row.match_status_label }}</span>
+                {% elif row.match_status == "quantity_variance" %}
+                  <span class="badge badge-amber">{{ row.match_status_label }}</span>
+                {% elif row.match_status == "over_received" %}
+                  <span class="badge badge-red">{{ row.match_status_label }}</span>
+                {% elif row.match_status %}
+                  <span class="badge badge-slate">{{ row.match_status_label }}</span>
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.bill %}
+                  <div class="fw-600">{{ row.bill_number }}</div>
+                  {% comment %}
+                    Chain on the RAW bill_status. "partial" is intentionally not enumerated and lands in
+                    the else branch, which prints the resolved label rather than guessing a colour the
+                    contract never froze.
+                  {% endcomment %}
+                  {% if row.bill_status == "draft" %}
+                    <span class="badge badge-muted">{{ row.bill_status_label }}</span>
+                  {% elif row.bill_status == "pending_approval" %}
+                    <span class="badge badge-info">{{ row.bill_status_label }}</span>
+                  {% elif row.bill_status == "approved" %}
+                    <span class="badge badge-amber">{{ row.bill_status_label }}</span>
+                  {% elif row.bill_status == "paid" %}
+                    <span class="badge badge-green">{{ row.bill_status_label }}</span>
+                  {% elif row.bill_status == "void" %}
+                    <span class="badge badge-slate">{{ row.bill_status_label }}</span>
+                  {% else %}
+                    <span class="badge badge-slate">{{ row.bill_status_label }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge badge-muted">Not billed</span>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ row.amount|floatformat:2 }}</td>
+              <td class="text-right">
+                {% comment %}
+                  `is not None`, never truthiness: 0.00 means matched and agreed exactly, None means
+                  never matched at all. Rendering None as 0 would report a clean match on a document
+                  nobody has checked.
+                {% endcomment %}
+                {% if row.variance is not None %}
+                  {{ row.variance|floatformat:2 }}
+                {% else %}
+                  <span class="text-muted">Not matched</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="file-minus"></i>
+                  <h3>No vendor bills drafted yet</h3>
+                  <p>Nothing matches the current filters. This page has no payables table of its own &mdash; a row appears here only once a goods receipt, a freight invoice or a landed cost voucher exists. Receive a purchase order, audit a carrier invoice, or allocate and bill a landed cost voucher, and the document will show up here whether or not it has reached accounting yet. If you were expecting rows, try clearing the bill-status filter first.</p>
+                  <a href="{% url 'scm:goodsreceipt_list' %}" class="btn btn-primary"><i data-lucide="package-check"></i> Goods receipts</a>
+                  <a href="{% url 'scm:freightinvoice_list' %}" class="btn btn-outline"><i data-lucide="truck"></i> Freight invoices</a>
+                  <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline"><i data-lucide="receipt"></i> Landed cost vouchers</a>
+                  <a href="{% url 'accounting:bill_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> AP bills</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+          <tfoot>
+            <tr>
+              <td colspan="5" class="fw-600">Total over the documents listed</td>
+              <td class="text-right fw-600">{{ totals.amount|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </div>
+    <div class="card-body form-help">
+      The totals above the table cover the whole filtered set; the footer total covers only the rows printed.
+      {% if truncated %}
+        They differ on this view because the list is capped at {{ row_cap }} rows.
+      {% endif %}
+      A variance reading &ldquo;Not matched&rdquo; is a document that has never been checked against its bill, which is
+      a different thing from one that matched to the penny.
+    </div>
+  </div>
+{% endblock %}
