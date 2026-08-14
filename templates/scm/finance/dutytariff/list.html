@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.18 Finance & Accounting Integration — the DUTY TARIFF register (DTY-).
+
+Renders apps/scm/views/FinanceIntegration/DutyTariffs.py::dutytariff_list, which returns crud_list(...)
+after mapping ?status=active|inactive onto is_active ON THE QUERYSET (crud_list's (param, lookup,
+is_int) tuples cannot express that mapping, so the view does it before calling in).
+
+Everything this page may read, and NOTHING else:
+
+  object_list / page_obj / q  from crud_list (apps/core/crud.py:106). page_obj.window drives the
+                              shared pagination partial.
+  status_choices              the LITERAL [("active","Active"),("inactive","Inactive")]. It is NOT a
+                              model constant — DutyTariff has no status column at all, only the
+                              is_active boolean, and the pair exists purely to render this dropdown.
+  countries                   a FLAT LIST OF STRINGS — this workspace's distinct non-blank
+                              country_of_origin values. country_of_origin is free text with no
+                              choices constant, so the dropdown is built from what the workspace
+                              actually holds. A tariff with a BLANK origin (the "applies to any
+                              origin" row) is excluded from that list by the view and is reachable
+                              only by clearing this filter.
+  stats                       dict with EXACTLY: total / active / inactive / current
+  today                       a date, so a row can be labelled expired or not-yet-started
+
+Filter params: q / status / country.
+  status  and country are both STRING comparisons — plain equality against request.GET.<param>.
+          |stringformat:"d" would be WRONG on either: country_of_origin is a CharField, and `status`
+          is a synthetic active/inactive vocabulary that never touches a pk. |slugify would be wrong
+          on both for the usual reason — it lowercases and strips, so it agrees only by accident.
+  There is no pk filter on this page, so there is no |stringformat:"d" anywhere in this file, and
+  that absence is deliberate rather than an omission.
+
+--------------------------------------------------------------------------------------------------
+WHY THIS REGISTER EXISTS AT ALL
+--------------------------------------------------------------------------------------------------
+accounting.TaxCode structurally cannot hold a customs rate: its TAX_TYPE_CHOICES are sales / VAT /
+GST / use, it has no HS code and no country-of-origin pair, and it is not effective-dated against a
+transaction date. So a duty rate lives here. Sales, VAT and GST stay in accounting.TaxCode and are
+pointed at from this page rather than re-declared on it — the tax_code column below is the
+RECOVERABLE import-tax counterpart to a duty, not a second rate table.
+
+A rate here is read ONCE, to DEFAULT the duty charge line on a landed cost voucher. The value is then
+SNAPSHOTTED on that charge, so editing or deleting a tariff never rewrites a landed cost that has
+already been worked out. That is why the delete below carries no status gate: nothing PROTECTs a
+tariff row, because nothing points at it.
+
+--------------------------------------------------------------------------------------------------
+Colour
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges ONLY — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-warning and badge-danger DO NOT EXIST and render as
+completely unstyled text (L33, shipped four times). Every badge in this file is one of those six
+literals. stat-icon ships blue / green / orange / purple / slate only.
+
+DutyTariff has no choices field, so there is no get_<field>_display fallback to end the state chain
+with — is_active is a boolean and the window is arithmetic on two dates. The chain still ends in an
+{% templatetag openblock %} else {% templatetag closeblock %} branch, and obj.is_current is the
+model's own verdict rather than a rule re-derived here, so this list and the detail page cannot
+disagree about whether a row is in effect.
+
+Delete is @require_POST at the view, so it is a real <form method="post"> and can never be a link.
+ONLY the system-generated DTY- number is interpolated into the confirm string: hs_code, the
+description and the country are all user-typed, and an apostrophe in any of them escapes to &#39;,
+which HTML decodes back to a bare quote before JavaScript ever parses the attribute — the dialog then
+breaks open and the guard is silently gone (L42). The apostrophes written into that string are \' for
+exactly that reason.
+{% endcomment %}
+{% block title %}Duty Tariffs{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Duty Tariffs</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Duty Tariffs</span></div>
+      <p class="text-muted">The customs rate book: an <span class="fw-600">HS/HTS code</span>, a <span class="fw-600">country of origin</span> and a <span class="fw-600">date window</span>, and the duty percentage that applies to the three of them together. Duty is not a sales tax and cannot be stored as one — it turns on where the goods were made and on when they cleared, neither of which a sales-tax code has anywhere to put. Sales, VAT and GST stay in Accounting's tax codes; this register only covers what customs charges.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:landedcostvoucher_list' %}" class="btn btn-outline"><i data-lucide="receipt-text"></i> Landed Cost</a>
+      <a href="{% url 'scm:dutytariff_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Tariff</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The tiles are counted over the WHOLE workspace, not over the filtered page — "4 in effect today"
+    is a fact somebody prices against, and a number that re-scoped itself as you browsed would report
+    an empty rate book the moment you filtered to one country. The "matching" chip on the card header
+    IS the filtered count, and says so.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="landmark"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Tariff lines on file, across every HS code and origin</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="badge-percent"></i></div>
+      <div class="stat-value">{{ stats.current }}</div>
+      <div class="stat-label">In effect today — active <span class="fw-600">and</span> inside their date window. These are the only rows a landed cost can default a duty from</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="toggle-right"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Switched on. A row can be active and still not apply, because its window has not opened yet or has already closed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="circle-slash"></i></div>
+      <div class="stat-value">{{ stats.inactive }}</div>
+      <div class="stat-label">Switched off. Kept rather than deleted — a superseded rate is the evidence for what a past shipment was costed at</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Rate book</h2>
+      <div class="badge-group">
+        {% if stats.current %}<span class="badge badge-green">{{ stats.current }} in effect</span>{% endif %}
+        {% if stats.inactive %}<span class="badge badge-slate">{{ stats.inactive }} switched off</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search DTY- number, HS code, description or country of origin…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            status_choices is the literal active/inactive pair the view passes — DutyTariff has no
+            status column, so there is no model constant behind this dropdown and there must not be
+            one. The view maps the chosen value onto is_active BEFORE crud_list; any other value is
+            ignored, so a hand-typed ?status=deleted narrows nothing and returns 200 rather than 500.
+          {% endcomment %}
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Active and inactive</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `countries` is a flat list of STRINGS, not (value, label) pairs, so the loop variable is
+            the value and the label at once. country_of_origin is a CharField — the comparison is
+            plain string equality, and |stringformat:"d" here would be a category error, not a
+            stylistic choice.
+          {% endcomment %}
+          <select name="country" aria-label="Country of origin" class="form-select">
+            <option value="">Any country of origin</option>
+            {% for c in countries %}
+              <option value="{{ c }}" {% if request.GET.country == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:dutytariff_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">A blank country of origin means the row applies to any origin.</span> That is the general rate, and a row naming a specific country beats it for goods from that country — origin-specific first, general second, newest start date first within each. Rows with a blank origin do not appear in the country dropdown above and are only visible with that filter cleared. Today is <span class="mono">{{ today|date:"M d, Y" }}</span>, which is the date every window on this page is measured against.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>HS code</th>
+            <th>Origin</th>
+            <th class="text-right nowrap">Duty rate</th>
+            <th class="nowrap">Effective</th>
+            <th>State</th>
+            <th>Recoverable import tax</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:dutytariff_detail' obj.pk %}" class="fw-600 mono">{{ obj.hs_code }}</a>
+                <div class="form-help mono">{{ obj.number }}</div>
+                {% if obj.description %}<div class="text-muted">{{ obj.description }}</div>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  Blank is a REAL and deliberate value here — it is the general rate that applies to
+                  any origin — so it is spelled out in words rather than rendered as an em dash, which
+                  would read as missing data.
+                {% endcomment %}
+                {% if obj.country_of_origin %}
+                  {{ obj.country_of_origin }}
+                {% else %}
+                  <span class="badge badge-info">Any origin</span>
+                {% endif %}
+              </td>
+              <td class="text-right nowrap mono">{{ obj.duty_rate_pct|floatformat:3 }}%</td>
+              <td class="nowrap">
+                {{ obj.effective_from|date:"M d, Y" }}
+                {% comment %}
+                  effective_to is nullable and None means OPEN-ENDED — still running, not missing —
+                  so it gets its own words. The guard is an explicit {% templatetag openblock %} if
+                  {% templatetag closeblock %} around the whole expression rather than a |default,
+                  because a None inside a filter ARGUMENT raises where a bare lookup would quietly
+                  print nothing (L10).
+                {% endcomment %}
+                {% if obj.effective_to %}
+                  <div class="form-help">to {{ obj.effective_to|date:"M d, Y" }}</div>
+                {% else %}
+                  <div class="form-help">open-ended</div>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  obj.is_current is the MODEL's verdict (is_active, and today inside the window), so
+                  the list and the detail page cannot answer this question differently. The sub-line
+                  below only explains WHY a row is not in effect and is derived from the same two
+                  dates and the same `today`, so it can never contradict the badge.
+
+                  There is no get_<field>_display fallback available on this chain: DutyTariff has no
+                  choices field at all — is_active is a boolean and the window is two dates — so the
+                  chain ends in a plain else branch instead.
+                {% endcomment %}
+                {% if not obj.is_active %}
+                  <span class="badge badge-slate">Inactive</span>
+                  <div class="form-help">Switched off, so it is never picked up — whatever its dates say.</div>
+                {% elif obj.is_current %}
+                  <span class="badge badge-green">In effect</span>
+                {% else %}
+                  <span class="badge badge-muted">Not in effect</span>
+                  <div class="form-help">
+                    {% if obj.effective_from > today %}
+                      Starts {{ obj.effective_from|date:"M d, Y" }}
+                    {% elif obj.effective_to and obj.effective_to < today %}
+                      Ended {{ obj.effective_to|date:"M d, Y" }}
+                    {% else %}
+                      Outside its date window today
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  A nullable FK, guarded explicitly (L10). Import VAT/GST is usually RECOVERABLE while
+                  the duty itself is not, which is why the two are separate columns and not one rate:
+                  a duty capitalises into the cost of the goods and a recoverable tax does not.
+                {% endcomment %}
+                {% if obj.tax_code %}
+                  <a href="{% url 'accounting:tax_code_detail' obj.tax_code.pk %}">{{ obj.tax_code.name }}</a>
+                  <div class="form-help mono">{{ obj.tax_code.rate_pct|floatformat:3 }}%</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:dutytariff_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit and Delete are UNCONDITIONAL, and that mirrors the routes exactly rather than
+                    being an omission: a tariff is a master row with no status ladder and no frozen
+                    state, dutytariff_delete carries no gate beyond @login_required @require_POST, and
+                    nothing PROTECTs the row because a landed cost charge SNAPSHOTS the rate instead
+                    of pointing at the tariff. The cost of deleting is therefore stated in the confirm
+                    rather than enforced by a hidden button.
+
+                    Only the system-generated DTY- number is interpolated. The apostrophes in the
+                    string are written \' because &#39; is decoded back to a bare quote before
+                    JavaScript sees the attribute, which breaks the dialog open and silently removes
+                    the guard (L42).
+                  {% endcomment %}
+                  <a href="{% url 'scm:dutytariff_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:dutytariff_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? The rate goes with it. Landed costs already worked out are unaffected — a duty charge line keeps the percentage it was costed at, so history is never rewritten by a change here — but nothing will default a duty for this HS code and origin afterwards. If the rate has simply been superseded, clear the Active switch or close the row\'s window instead: a superseded rate is the evidence for what a past shipment\'s duty was based on.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="landmark"></i>
+                  <h3>No duty tariffs</h3>
+                  <p>The rate book is empty, so a duty charge on a landed cost voucher has nothing to default from and has to be typed in each time. Add a line for each HS/HTS code you import under: give it a start date, leave the country of origin blank for the general rate, and add origin-specific rows on top of it where a trade agreement or an anti-dumping order changes the figure. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The shared partial, which is the L9 fix in one place: previous_page_number and next_page_number
+      are each called ONLY inside their own has_previous / has_next guard, so page one and the last
+      page cannot raise EmptyPage once this register outgrows a single page. It also carries every
+      current GET param except `page`, so paging never quietly drops the filters.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">HS code, then newest start date first</span> — the order a rate is looked up in. A tariff is read once, when a duty charge is added to a landed cost voucher, and the percentage is then <span class="fw-600">copied onto that charge</span>. Nothing on this page recalculates a landed cost that has already been allocated, and nothing here posts to the ledger: supply chain drafts documents for Accounting and Accounting posts the journal.
+    </div>
+  </div>
+{% endblock %}
