@@ -560,3 +560,29 @@ from .ThirdPartyLogistics.ClientBillingRuns import (  # noqa: F401
 from .ThirdPartyLogistics.ClientSlas import (  # noqa: F401
     ClientSLA,
 )
+
+# --- 4.18 Finance & Accounting Integration -----------------------------------------------------
+# FOUR names from TWO modules, and the third module in the sub-package (`Reports.py`) contributes
+# NOTHING on purpose — Accounts Payable, Accounts Receivable and Budgeting are READ-ONLY COMPUTED
+# reports over `accounting.Bill` / `accounting.Invoice` / `accounting.BudgetLine` pointers that
+# already ship (L29). An `ScmPayable` / `ScmReceivable` / `ScmBudget` table here would be a second
+# copy of what we owe and what we are owed, and it would drift from `apps/accounting` the first
+# time AP voided something. If you are here to add one, read `models/FinanceIntegration/Reports.py`
+# first: it exists to record that ruling in the place the next hand will look.
+#
+# The voucher is the envelope, the charge is one cost line on it, and the allocation is the DERIVED
+# ledger row that spreads a charge across the receipt's stock moves. Only the voucher and the
+# tariff are user-created; `LandedCostAllocation` is written exclusively by
+# `LandedCostVoucher.allocate()` and re-written wholesale on every re-allocation, which is why it
+# is registered read-only in the admin alongside `StockMove`.
+from .FinanceIntegration.LandedCostVouchers import (  # noqa: F401
+    LandedCostVoucher,
+    LandedCostCharge,
+    LandedCostAllocation,
+)
+# `DutyTariff` is the ONE master 4.18 could not reuse: `accounting.TaxCode` has no customs member in
+# its TAX_TYPE_CHOICES, no `hs_code` and no origin-country pair. Sales/VAT/GST stays
+# `accounting.TaxCode` and is FK'd from the charge line — never re-declared here.
+from .FinanceIntegration.DutyTariffs import (  # noqa: F401
+    DutyTariff,
+)
