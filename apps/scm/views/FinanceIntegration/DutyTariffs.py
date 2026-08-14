@@ -198,32 +198,24 @@ def dutytariff_detail(request, pk):
 
     Context keys, exhaustively (the template is written by a separate agent):
 
-    * ``obj`` — the :class:`~apps.scm.models.DutyTariff`, with ``tax_code`` joined. Safe to ask for
-      ``obj.is_current`` too; it queries nothing.
-    * ``is_current`` (bool) — ``is_active`` **and** today inside ``[effective_from, effective_to]``.
-      ``False`` on an inactive row even when the dates fit, matching the property exactly.
+    * ``obj`` — the :class:`~apps.scm.models.DutyTariff`, with ``tax_code`` joined. **The page asks
+      it for ``obj.is_current`` directly** — ``is_current`` is a pure property over three columns
+      the row already carries, so it queries nothing.
     * ``today`` (date) — print it beside the window so "not in effect" is checkable rather than
       asserted.
 
     A blank ``country_of_origin`` means **applies to any origin** and must render as *Any*, never as
     an empty field; ``effective_to = None`` means **open-ended**, never "expired".
 
-    Two queries, and the second one is deliberate: ``crud_detail`` fetches the object itself, and its
-    ``extra_context`` is evaluated by the CALLER, so the frozen ``is_current`` flag needs the row in
-    hand first. ``.only()`` keeps that pre-read to the three columns the property actually touches —
-    the alternative was hand-rolling a render and dropping the shared helper the contract names.
+    ONE query. There was a second one — a ``.only()`` pre-read of the same row, purely so the view
+    could hand the template an ``is_current`` flag before ``crud_detail`` fetched the object — and it
+    bought nothing: ``extra_context`` is evaluated by the caller, but the OBJECT is in the template's
+    hand by then and answers the same question for free.
     """
-    flags = get_object_or_404(
-        DutyTariff.objects.filter(tenant=request.tenant)
-                          .only("is_active", "effective_from", "effective_to"),
-        pk=pk)
     return crud_detail(request, model=DutyTariff, pk=pk,
                        template="scm/finance/dutytariff/detail.html",
                        select_related=("tax_code",),
-                       extra_context={
-                           "is_current": flags.is_current,
-                           "today": timezone.localdate(),
-                       })
+                       extra_context={"today": timezone.localdate()})
 
 
 @login_required
