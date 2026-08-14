@@ -223,3 +223,10 @@ temp/
 # NavERP — uploaded media & collected static
 media/
 staticfiles/
+
+# NavERP — per-checkout session/build state written by .claude/hooks/build_state.py.
+# Deliberately NOT committed: it is machine state, it changes on every phase boundary, and
+# concurrent sessions in this same tree would conflict on it every single run. The SessionStart
+# hook recreates it automatically, so nothing depends on it being in the repo.
+.claude/tasks/build-state.json
+.claude/tasks/build-state.json.tmp
