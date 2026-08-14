@@ -22985,9 +22985,71 @@ Carried over from `research-scm-4.16.md` so nothing is lost, plus what this plan
 
 ## 11. Review notes
 
-(the build review is filled in at the end of the pass — the method finding below was written
-mid-pass, jointly with the concurrent 4.15 Cold Chain session, and is deliberately not scoped to
-4.16)
+### Build review — 4.16 Customer Portal (COMPLETE)
+
+Built, migrated (`0027` + `0028`), seeded, verified and closed out through the full Module Creation
+Sequence. Sidebar shows 4.16 Live with all five NavERP.md bullets linked. **117 tests in
+`apps/scm/tests/test_portal.py`; the whole `apps/scm` suite green.**
+
+**Shipped:** 4 models + a shared vocabulary, 4 forms, 6 view modules (~4,900 lines), 6 url modules
+(31 routes), 20 templates, the `_portal_account` resolver promoted into `views/_helpers.py`, and a
+seeder that publishes three accounts — one of them **deliberately empty**.
+
+**All seven review agents ran. Every finding was applied and proved by executing the failing path.**
+
+| Agent | Found |
+|---|---|
+| `code-reviewer` | 3 Critical, 2 Important, 2 Minor |
+| `explorer` | 1 High, 2 Medium |
+| `frontend-reviewer` | 0 Critical, 2 Important, 4 Minor |
+| `performance-reviewer` | 1 Critical, 4 Important, 5 Minor |
+| `security-reviewer` | 2 High, 2 Medium, 2 Low |
+| `qa-smoke-tester` | 1 severe, 3 informational |
+| `test-writer` | 0 product bugs (all 12 already fixed) |
+
+#### The defects worth remembering
+
+1. **No document share could ever be created.** `_scope_pointers()` read the account off
+   `self.instance`, which the create view supplies blank — so all six pointer dropdowns were
+   `.none()` on GET *and* POST. Invisible because the seeder uses `objects.create()`, which never
+   touches a form.
+2. **`invoice_dispute` was a 500 on a customer-facing page.** `clean()` keyed its error on
+   `invoice`, a field that form deliberately lacks, and `add_error` raises `ValueError` on an
+   undeclared field. Fixed the instance *and* added a re-home backstop for the whole class.
+3. **The admin rendered the bearer token in plaintext.** `readonly_fields` does not mean hidden —
+   Django adds those names to `get_fields()` and prints their values.
+4. **`can_request_returns` was decoration.** The entitlement hid a button on four pages and was
+   enforced nowhere; the seeded *restricted* account has it off, so the demo exercised the hole
+   every run. The fix only ever SUBTRACTS — a customer with no `PortalAccount` is still allowed,
+   because that route predates 4.16.
+5. **Any tenant member could publish the balance sheet.** `portalaccount_create`/`_edit` sat at
+   plain `@login_required` while `_delete` was admin-gated — the cheap half of the decision guarded
+   and the expensive half open.
+6. **A `confidential` `core.Document` could be shared.** Nothing in `apps/scm` read that column.
+7. **A DRAFT CREDIT NOTE was published to the portal and served by the anonymous token**, in both
+   demo tenants. `CUSTOMER_VISIBLE_INVOICE_STATUSES` existed — in one view — so the profile page
+   obeyed it and the share form and download view never saw it.
+8. **Same tenant ≠ same customer.** `clean()` checked tenancy and parentage but not the
+   counterparty, so one customer's portal could render another's order number.
+
+#### The through-line
+
+**Not one of these was found by running the happy path.** Five were execution-only —
+`select_related("sales_order")` on a model with no such column, three `OWNER_PATHS` lookups that
+raise `FieldError` because `core.Document` uses a GenericForeignKey, a `NON_FIELD_ERRORS` import
+missing on a branch that only runs when validation fails. `manage.py check` passed for every one.
+
+Three more were **internal contradictions**: the module stated a rule in one place and violated it
+in another (`expires_at` vs `revoked_at`; `CUSTOMER_VISIBLE_INVOICE_STATUSES`; the counterparty
+rule that `PortalDocumentShare` enforced and `PortalOrderInquiry` did not). Those are worth
+hunting deliberately — grep your own docstrings for rules and check every reader obeys them.
+
+See the METHOD section below, written jointly with the concurrent 4.15 session and deliberately
+NOT scoped to 4.16.
+
+---
+
+### METHOD (shared recipe — the section below is not 4.16-specific)
 
 ---
 
