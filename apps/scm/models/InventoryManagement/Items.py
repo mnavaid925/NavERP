@@ -146,6 +146,10 @@ class Item(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "is_active"], name="scm_item_tnt_active_idx"),
             models.Index(fields=["tenant", "category"], name="scm_item_tnt_cat_idx"),
+            # 4.17 made owner_client a hot filter dimension: client_inventory_report counts
+            # owner_client IS NULL across the tenant's items (the segregation gap), which without
+            # this index is a full tenant scan on the lowest-selectivity value there is.
+            models.Index(fields=["tenant", "owner_client"], name="scm_item_tnt_owner_idx"),
         ]
 
     @property
