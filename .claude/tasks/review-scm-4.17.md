@@ -67,21 +67,21 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Found by:** code-reviewer
 - **Problem:** The 4.17 re-export comment asserts "`ClientRateCard.status` is absent — a card moves draft -> active -> superseded through the `activate` / `supersede` verbs", but `ClientRateCardForm.Meta.fields` at apps/scm/forms/ThirdPartyLogistics/ClientRateCards.py:119 DOES include `status`, and templates/scm/3pl/clientratecard/form.html:123 renders it; the comment is the stated rationale for the whole audit story, so a future engineer will either trust a false invariant or "fix" the form to match it.
 - **Fix:** Correct the comment to say `status` IS on the header form (deliberately — `clientratecard_edit` refuses any card outside `EDITABLE_RATE_CARD_STATUSES` and `ClientRateCard.clean()` re-runs the overlap guard on that write path), and that only `ClientBillingRun.status` and `ClientSLA.status` are absent. The identical false claim appears at apps/scm/views/__init__.py:528 and apps/scm/management/commands/seed_scm.py:4984 and :5165 — fix all four in the same pass.
-- **Status:** [ ] open
+- **Status:** [x] fixed — docs(scm): corrected in all three files (forms/__init__.py, views/__init__.py, seed_scm.py) — ClientRateCard.status IS on the header form deliberately
 
 ### M2 — `apps/scm/forms/ThirdPartyLogistics/ClientSlas.py:119`
 
 - **Found by:** code-reviewer
 - **Problem:** On the unbound CREATE form `_client_id()` returns `self.instance.client_id` (None), so the `scope_location` queryset collapses to `Q(owner_client__isnull=True) | Q(owner_client_id=None)` — i.e. unowned bins only — which makes it impossible to create an SLA scoped to one of the chosen client's OWN dedicated locations in a single pass, even though `ClientSLA.clean()` explicitly permits `owner_client_id == client_id`. The option only appears after the row is saved and re-opened for edit.
 - **Fix:** On the unbound create path, offer every tenant location that is either unowned or dedicated to ANY client (`Q(owner_client__isnull=True) | Q(owner_client__isnull=False)` is just "all", so simply skip the owner narrowing when `_client_id()` is None) and let `ClientSLA.clean()`'s cross-client guard reject a bin belonging to a different client — the error message it already renders names the location and the reason.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(scm): let a new SLA be scoped to the client's own dedicated bin in one pass
 
 ### M3 — `apps/scm/models/InventoryManagement/Items.py:148`
 
 - **Found by:** performance-reviewer
 - **Problem:** 4.17 makes `Item.owner_client` a hot tenant-scoped filter dimension — `client_inventory_report` runs `Item.objects.filter(tenant=..., owner_client_id__in=[...])` and `filter(tenant=..., owner_client__isnull=True).count()` (Reports.py:194, 247) and `LogisticsClient.sku_count()` reads it per client — but the model's `Meta.indexes` was not extended, so the low-selectivity `owner_client IS NULL` count falls back to scanning the tenant's items. This is the same shape the app-wide reference pattern already covers on this exact model with `(tenant, is_active)` and `(tenant, category)`.
 - **Fix:** Add `models.Index(fields=["tenant", "owner_client"], name="scm_item_tnt_owner_idx")` to `Item.Meta.indexes` and generate the follow-up migration (0030 — 0029 is already claimed by this build). This is an app-wide-pattern pass, not a 4.17 fork; do the identical `(tenant, owner_client)` index on `Location.Meta.indexes` (apps/scm/models/InventoryManagement/Locations.py:84) in the same migration, since `client_space_report` filters it the same way.
-- **Status:** [ ] open
+- **Status:** [~] skipped — real, but needs a schema migration (0030) this session was told not to claim; a concurrent session may hold the next number. See Notes.
 
 ### M4 — `apps/scm/views/ThirdPartyLogistics/ClientBillingRuns.py:577`
 
@@ -100,65 +100,93 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 ```
 
 Grep for the same shape across the family (two lessons share L28 — this is the pattern-clone one): `rg -n "write_audit_log\(.*\"delete\"" -A 4 apps/scm/views | rg -B2 "with transaction.atomic"` and, more directly, `rg -n "write_audit_log" -A 3 apps/*/views | rg "^.*-\s*with transaction.atomic"` — any hand-rolled delete where the audit line precedes the `with` needs the same swap.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(scm): write the billing-run line delete audit row inside the transaction
 
 ### M5 — `apps/scm/views/ThirdPartyLogistics/ClientSlas.py:231`
 
 - **Found by:** explorer
 - **Problem:** `clientsla_list` passes `not_measured_note` and its own docstring (line 192) states the page MUST print it, but templates/scm/3pl/clientsla/list.html never references the key — the contracted caveat explaining why a figure is missing is silently dropped and the context entry is dead.
 - **Fix:** Either render it in templates/scm/3pl/clientsla/list.html — a `<div class="form-help">{{ not_measured_note }}</div>` in the card body beside the "Not measured" cell (line 252) or inside the empty-state block (line 298) — or delete the `"not_measured_note": NOT_MEASURED_NOTE,` entry from extra_context and drop the corresponding sentence from the view docstring at line 192. Do not leave the docstring claiming a key the page ignores.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(scm): print the SLA not-measured caveat on the list page
 
 ### M6 — `apps/scm/views/ThirdPartyLogistics/ClientSlas.py:380`
 
 - **Found by:** code-reviewer
 - **Problem:** `credit_note` and `not_measured_note` are passed into the SLA detail context (and `not_measured_note` into the list context at line 231) and the view docstrings say both "are prose the page must print", but neither templates/scm/3pl/clientsla/detail.html nor list.html renders either variable — each page hand-wrote its own equivalent wording, so the `CREDIT_NOTE`/`NOT_MEASURED_NOTE` constants and the on-screen text are now two copies free to drift.
 - **Fix:** Render `{{ credit_note }}` inside the "Service credit implied by this SLA" card body (templates/scm/3pl/clientsla/detail.html, near line 405) and `{{ not_measured_note }}` beside the not-measured state on both the detail (near line 116) and the list; alternatively delete the two constants and their context keys and strike the "must print" claims from the docstrings. Do not leave the two out of sync.
-- **Status:** [ ] open
+- **Status:** [x] fixed — refactor(scm): drop the dead credit_note and not_measured_note keys from the SLA detail context (list page now prints not_measured_note; see M5)
 
 ### M7 — `apps/scm/views/ThirdPartyLogistics/ClientSlas.py:380`
 
 - **Found by:** explorer
 - **Problem:** `clientsla_detail` passes `credit_note` and `not_measured_note` (lines 380-381) as prose the page is contracted to print, but templates/scm/3pl/clientsla/detail.html references neither key, so both are dead context.
 - **Fix:** In templates/scm/3pl/clientsla/detail.html add `{{ credit_note }}` to the card body of the "Service credit implied by this SLA" panel (below line 421) and `{{ not_measured_note }}` to the measurement panel's unmeasured branch; alternatively remove both keys from the render dict at lines 380-381 and their mentions from the view docstring. The template already states the equivalent meaning in its own words, so removing the keys is the smaller change — pick one and keep docstring and code in step.
-- **Status:** [ ] open
+- **Status:** [x] fixed — resolved together with M6: both detail keys removed and the docstring claim struck
 
 ### M8 — `templates/scm/3pl/client_space_report.html:228`
 
 - **Found by:** frontend-reviewer
 - **Problem:** `{{ row.days_to_expiry|pluralize }}` is applied to the raw NEGATIVE integer, so a contract that ended exactly one day ago renders "Ended 1 days ago" — Django's pluralize returns the plural suffix for any value != 1, and -1 != 1.
 - **Fix:** Reuse the already-absolutised value for the pluralize call: change `day{{ row.days_to_expiry|pluralize }}` to `day{{ row.days_to_expiry|floatformat:0|cut:"-"|pluralize }}` (the `floatformat:0` must stay ahead of `cut`, since `cut` calls `.replace()` and would raise on a bare int).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(scm): pluralize the absolutised day count on the warehouse rental report
 
 ### M9 — `templates/scm/3pl/clientratecard/detail.html:319`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The per-line Delete button is `class="btn-icon"` without the `danger` modifier, so the destructive red hover state defined by `.btn-icon.danger:hover` in theme.css never applies and the control reads as a neutral action.
 - **Fix:** Change `<button class="btn-icon" type="submit" title="Delete line"` to `<button class="btn-icon danger" type="submit" title="Delete line"`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(scm): give the rate-card line Delete button the danger modifier
 
 ### M10 — `templates/scm/3pl/clientratecard/detail.html:345`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The "Lines locked" footer is gated on `{% if not can_add_line %}`, but the view sets `can_add_line = obj.is_editable and len(lines) < MAX_RATE_CARD_LINES` — so a DRAFT card that has hit the 200-line cap prints the self-contradictory sentence "This card is draft, and lines can only be added or changed while a card is still a draft" and never explains that the real blocker is the cap.
 - **Fix:** Gate the lock message on the status rule it actually describes and give the cap its own branch: change `{% if not can_add_line %}` to `{% if not can_edit %}` and add `{% elif not can_add_line %}` before the existing `{% else %}`, with copy naming the ceiling, e.g. `<span class="badge badge-amber">Line limit reached</span> This card already carries {{ line_count }} lines, the most a single tariff may hold. Remove a line, or raise a new version.`
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(scm): split the rate-card lines footer into a status-lock branch and a line-cap branch
 
 ### M11 — `templates/scm/3pl/clientratecard/list.html:195`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The row Delete button is `class="btn-icon"` without the `danger` modifier, so it loses the red destructive hover affordance (`.btn-icon.danger:hover`) that every other delete button in the app has — it hovers brand-blue like a View or Edit action.
 - **Fix:** Change `<button class="btn-icon" type="submit" title="Delete"` to `<button class="btn-icon danger" type="submit" title="Delete"`, matching `templates/scm/3pl/logisticsclient/list.html:254` and `clientbillingrun/list.html:218` (72 of the 74 delete icon buttons in templates/scm use `btn-icon danger`; the only bare ones are non-destructive verbs like Acknowledge/Release).
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(scm): give the rate-card row Delete button the danger modifier
 
 ### M12 — `templates/scm/3pl/clientsla/form.html:330`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The read-only evidence card says "Changing the target below does not restate what was already measured", but this card is rendered AFTER the "The target and how it is judged" card (lines 105-210) — the target fields are above it, so the direction word points the reader the wrong way.
 - **Fix:** Change "Changing the target below" to "Changing the target above" in the sentence at line 330.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(scm): point the SLA evidence-card caveat at the target fields above it
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
+
+- **code-fixer (fix wave, 2026-08-14):** **M3 is deferred, not dismissed — it needs an app-wide index
+  pass in its own change.** The finding is real: `Item.Meta.indexes` and `Location.Meta.indexes` carry
+  no `(tenant, owner_client)` entry, so `client_inventory_report`'s
+  `filter(tenant=..., owner_client__isnull=True).count()` and `client_space_report`'s owner filter
+  scan the tenant's rows. It is NOT applied here because it is the only finding in the file that
+  changes the schema, and migration `0030` was not this session's to claim (0029 is committed; a
+  concurrent session may be holding the next number). **Recommended follow-up, as one change:** add
+  `models.Index(fields=["tenant", "owner_client"], name="scm_item_tnt_owner_idx")` to
+  `apps/scm/models/InventoryManagement/Items.py` and
+  `models.Index(fields=["tenant", "owner_client"], name="scm_loc_tnt_owner_idx")` to
+  `apps/scm/models/InventoryManagement/Locations.py`, then generate ONE migration covering both after
+  agreeing the number. Per L18 this is a reference-pattern pass across the two shared masters, not a
+  4.17 fork — do not add it to one model only.
+
+- **code-fixer (fix wave, 2026-08-14):** **M4's clone family was checked and 4.17 was the only
+  instance.** The finding asked for a grep across the app for `write_audit_log(..., "delete")`
+  preceding rather than inside a `with transaction.atomic()`. Thirteen scm view modules write a
+  delete audit row; only four of them wrap the delete in an explicit transaction
+  (`CustomerPortal/PortalOrderInquiries.py`, `OrderManagement/SalesOrderAllocations.py`,
+  `ThirdPartyLogistics/ClientBillingRuns.py`, `ThirdPartyLogistics/ClientRateCards.py`), and of those
+  only `ClientBillingRuns.py` had the audit call outside the block. No app-wide pass is needed.
+
+- **code-fixer (fix wave, 2026-08-14):** **I2's fix extended to one file the finding did not name.**
+  `templates/scm/3pl/clientbillingrun/list.html` gated its row Delete on `obj.status != 'invoiced'`,
+  the same rule the view was refusing on, so tightening only the view and the detail page would have
+  left the list offering a button that now bounces. The row gate and the file's header docstring were
+  brought into line in a separate commit.
 
 - **code-reviewer:** VERIFIED CLEAN (no action needed): every new model carries a tenant FK except the two deliberately tenant-less child tables (`ClientRateCardLine`, `ClientBillingRunLine`), both of which are reached only through `rate_card__tenant=request.tenant` / `run__tenant=request.tenant`; every queryset, aggregate, resolver and report in the diff is tenant-scoped (I traced all nine SLA resolvers, all eight billing-quantity resolvers and both report views); migration 0029 matches the models field-for-field including the three `unique_together` tuples and five indexes, and it is purely additive (no `RemoveField`/`DeleteModel`); every `{% url %}` name in `templates/scm/3pl/**` resolves against a real `path(name=...)` (including the cross-app `accounting:invoice_detail`, `core:party_detail`, `core:document_detail`); all four list pages use the L9-safe `partials/pagination.html`; all pk filters use `|stringformat:\"d\"` and none uses `|slugify`; all GET int params go through `as_db_int`/`crud_list`'s `is_int` leg and the two date params through a `try/except ValueError` parse; every re-export block (`models`/`forms`/`views`/`urls` `__init__.py`) names every new symbol; the seeder is guarded by a per-tenant `LogisticsClient.exists()` check and its `--flush` block deletes the drafted AR invoices before the runs and the runs before the PROTECTed rate cards. I also compiled every template under `templates/scm/3pl/` with `get_template()` — zero syntax failures.\n\nPRE-EXISTING / OUT OF SCOPE: `apps/scm/models/_base.py:44` `q2()` clamps to `Decimal(\"9999999999.99\")` (a `DecimalField(14,2)` ceiling) while 4.17's `subtotal`/`minimum_adjustment`/`total`/`amount` are `(18,2)` — a run total above ~10 billion would be silently clamped rather than stored. App-wide helper behaviour, not introduced here, and unreachable in practice given `MAX_RUN_LINES=500`.\n\nSCOPE: the range also contains three `.claude/workflows/*.js` one-line fixes (`meta.whenToUse` must be a string literal) that are unrelated to 4.17 — harness repairs needed to run the wave itself, so noted rather than flagged.\n\nPHASE STATE: no tests and no `SKILL.md`/`README.md` update in this range, which is expected — Phases 6 and 7 come after this review wave.\n\nSUGGESTED TESTS (route to test-writer):\n- `apps/scm/tests/test_3pl_security.py` — POST `scm:clientbillingrun_delete` as a non-admin member against a run in `approved` status and assert the run still exists (this is finding 1's regression test); plus cross-tenant IDOR 404s on `clientratecardline_edit`/`clientbillingrunline_edit`, which are resolved only through the parent's tenant.\n- `apps/scm/tests/test_3pl_models.py` — `ClientBillingRun.calculate()` twice in a row leaves manual lines untouched and regenerates derived ones; `ClientSLA.recompute()` run twice over the same window increments `breach_count` exactly once; `recompute()` on an empty window writes `status=\"no_data\"` and leaves `last_measured_value` NULL (never 0).\n- `apps/scm/tests/test_3pl_forms.py` — `ClientRateCardForm` refuses a second `active` card whose effective range overlaps an existing one and names it; `ClientSLAForm` refuses a `pct` metric saved with `unit=\"hours\"`; `ClientBillingRunForm` refuses a rate card belonging to another client.\n\nROUTING:\n- security-reviewer: the approve/delete privilege asymmetry in finding 1 (`approve` is `@tenant_admin_required`, deleting the approval is not).\n- frontend-reviewer: finding 3 (two drifting copies of the credit / not-measured prose) and finding 4's create-form dropdown gap are as much UX as correctness.\n- performance-reviewer: nothing outstanding — the list views annotate instead of calling the per-row derived methods, and every detail panel is a DB-side slice with the reasoning written next to it.
 - **security-reviewer:** Verified clean, no action needed (recorded so the fixer does not re-derive them):
