@@ -386,3 +386,30 @@ from .CustomerPortal.PortalOrderInquiries import (  # noqa: F401
 from .CustomerPortal.PortalDocumentShares import (  # noqa: F401
     PortalDocumentShareForm,
 )
+
+# --- 4.17 Third-Party Logistics (3PL) Management --------------------------------------------------
+# SIX forms for FOUR models: the two line models each get their own, and the two computed report
+# pages get none at all because they write nothing.
+#
+# What is NOT on these forms is the load-bearing part. `ClientRateCard.status` is absent — a card
+# moves draft -> active -> superseded through the `activate` / `supersede` verbs, which is what makes
+# a calculated run's pricing immutable; a status field on the form would let a user reverse that with
+# a dropdown. `ClientBillingRun.status` and every computed total are absent for the same reason: the
+# run's numbers are written by `calculate()` off the ledger, and a typed total would be a second
+# source of truth for money. `ClientSLA`'s achieved figure, breach flag and credit amount are absent
+# because `recompute()` derives them from 4.5/4.6/4.10 rows — a hand-typed achievement is exactly the
+# number a customer would dispute.
+from .ThirdPartyLogistics.LogisticsClients import (  # noqa: F401
+    LogisticsClientForm,
+)
+from .ThirdPartyLogistics.ClientRateCards import (  # noqa: F401
+    ClientRateCardForm,
+    ClientRateCardLineForm,
+)
+from .ThirdPartyLogistics.ClientBillingRuns import (  # noqa: F401
+    ClientBillingRunForm,
+    ClientBillingRunLineForm,
+)
+from .ThirdPartyLogistics.ClientSlas import (  # noqa: F401
+    ClientSLAForm,
+)
