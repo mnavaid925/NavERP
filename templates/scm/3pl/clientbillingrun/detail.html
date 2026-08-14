@@ -1,0 +1,473 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.17 Third-Party Logistics — one CLIENT BILLING RUN: the priced period, and the evidence behind
+every line of it.
+
+Renders apps/scm/views/ThirdPartyLogistics/ClientBillingRuns.py::clientbillingrun_detail. Everything
+this page may read, and nothing else:
+
+  obj                   the ClientBillingRun (select_related: client__party, rate_card, invoice,
+                        approved_by — anything else on it is a query per read, so this page touches
+                        only those four joins and the model's own columns)
+  line_groups           LIST of dicts, and these FIVE keys are the contract: category (the raw choice
+                        value) / category_label / category_css (a COLOUR-named badge class from
+                        CHARGE_CATEGORY_CSS) / lines (LIST of ClientBillingRunLine) / subtotal
+  lines                 the same rows FLAT — used for the empty state and the line-count footer, so
+                        the page can tell "no lines" apart from "no groups"
+  line_count            int
+  manual_line_count     int — lines a human typed, which Calculate never touches
+  needs_quantity_count  int — lines priced on a basis nothing can measure yet
+  subtotal / minimum_adjustment / total        Decimals
+  minimum_applied       bool
+  minimum_reason        str — WHY the monthly minimum was or was not applied, printed verbatim
+  unbilled              LIST of dicts: label / count / note — activity in the period that no rate-card
+                        line prices. Labelled NOT BILLED, everywhere it appears
+  sla_credits           LIST of dicts: sla (ClientSLA) / status (raw) / status_css / suggested_credit
+                        / basis (the fee figure the percentage was applied to)
+  sla_credit_total      Decimal
+  invoice               accounting.Invoice or None
+  can_edit / can_add_line / can_calculate / can_approve / can_draft_invoice / can_void / can_delete
+                        bools, each mirroring exactly what its route refuses on
+
+--------------------------------------------------------------------------------------------------
+THE THREE PANELS THAT SAY WHAT THEY ARE NOT
+--------------------------------------------------------------------------------------------------
+1. NEEDS A QUANTITY. Some charge bases are priceable but not yet MEASURABLE — per sq ft, per CBM, per
+   kg, per hour, per carton, % of value. An Item carries no weight and no dimensions, a Location has
+   no area column, and per-client labour belongs to 4.14. Calculate writes those lines with a
+   quantity of ZERO and says which measurement is missing, rather than guessing a conversion factor.
+   A guessed factor would be an invoice nobody could defend.
+2. NOT BILLED. Receipts, orders and shipments that happened in this period and which the rate card
+   prices nowhere. This is the commonest way a 3PL loses money, and it is invisible unless a page
+   says it out loud, so it is shown beside the total rather than hidden behind a report.
+3. SUGGESTED — NOT APPLIED. A breached SLA implies a service credit under most contracts. This module
+   works out what that credit would be and stops there: nothing here raises a credit note, nothing
+   here reduces the total, and no wording on this page may imply either happened. Module 2 issues
+   credit notes.
+
+--------------------------------------------------------------------------------------------------
+MONEY, AND WHERE THIS MODULE STOPS
+--------------------------------------------------------------------------------------------------
+Draft Invoice hands ONE draft accounting.Invoice to Accounts Receivable and sets `invoice`. It posts
+NO JournalEntry and creates no second AR ledger (L29) — aging, cash application, dunning and tax
+determination are all Module 2's. Approve and Draft Invoice are @tenant_admin_required as well as
+@require_POST, so BOTH buttons are wrapped in the house admin gate: showing a member a button they
+will only be 403ed on is the 4.11 finding, and the decorator is the access control while the gate
+here is the honesty.
+
+Every verb is POST-only — a GET on any of them is a 405 — so every one is a real <form method="post">
+with a csrf token, and not one of them can be a link.
+
+theme.css ships COLOUR-named badges only; badge-success / badge-warning / badge-danger do not exist
+and render completely unstyled (L33). Each charge-category chip below uses the group's own
+`category_css`; the run's status chip is written against RUN_STATUS_CSS by hand (draft=muted,
+calculated=info, approved=amber, invoiced=green, void=slate) and always ends in a fallback branch
+printing get_status_display, so a status added later renders readably rather than blank.
+
+approved_by is nullable and is guarded with an explicit {% templatetag openblock %} if {% templatetag closeblock %} rather than a |default
+filter: a None inside a FILTER ARGUMENT raises where a bare lookup would quietly render nothing (L10).
+Nothing on this page is |safe, and no confirm string interpolates a user-typed value — an apostrophe
+in a client name is escaped to &#39;, which HTML decodes back to a bare quote before JavaScript sees
+it, breaking the dialog open and silently removing the guard (L42).
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.client.code }}
+        {% if obj.status == 'draft' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'calculated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'approved' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'invoiced' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'void' %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ obj.get_status_display }}</span>{% endif %}
+        {% if needs_quantity_count %}<span class="badge badge-amber">{{ needs_quantity_count }} line{{ needs_quantity_count|pluralize }} needs a quantity</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:clientbillingrun_list' %}">Client Billing Runs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One client, one period, one tariff. Every machine-derived line below names the <span class="fw-600">evidence it was priced from</span> — the stock ledger, the receipts, the orders, the shipments — because a warehousing invoice a client cannot take apart is one they will dispute rather than pay. Recalculating rebuilds those lines from scratch and <span class="fw-600">leaves manual charges untouched</span>.</p>
+    </div>
+    <div class="page-actions">
+      {% if can_edit %}
+        <a href="{% url 'scm:clientbillingrun_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="banknote"></i></div>
+      <div class="stat-value">{{ total|floatformat:2 }}</div>
+      <div class="stat-label">Run total — charges plus any monthly minimum top-up</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="list"></i></div>
+      <div class="stat-value">{{ subtotal|floatformat:2 }}</div>
+      <div class="stat-label">Charge lines subtotal · {{ line_count }} line{{ line_count|pluralize }}, {{ manual_line_count }} of them typed by hand</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="arrow-up-narrow-wide"></i></div>
+      <div class="stat-value">{{ minimum_adjustment|floatformat:2 }}</div>
+      <div class="stat-label">
+        {% if minimum_applied %}
+          Monthly minimum top-up applied
+        {% else %}
+          No minimum top-up on this run
+        {% endif %}
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ruler"></i></div>
+      <div class="stat-value">{{ needs_quantity_count }}</div>
+      <div class="stat-label">Line{{ needs_quantity_count|pluralize }} priced on something nothing measures yet — a quantity has to be typed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="badge-percent"></i></div>
+      <div class="stat-value">{{ sla_credit_total|floatformat:2 }}</div>
+      <div class="stat-label">Service credit SUGGESTED by breached SLAs — not applied to this run and not raised anywhere</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The run</h2>
+      <div class="badge-group">
+        {% if invoice %}<span class="badge badge-green">Handed to Accounts Receivable</span>{% endif %}
+        {% if obj.status == 'void' %}<span class="badge badge-slate">Voided — kept as evidence</span>{% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item">
+          <dt>Client</dt>
+          <dd><a href="{% url 'scm:logisticsclient_detail' obj.client.pk %}" class="mono">{{ obj.client.code }}</a> <span class="text-muted">{{ obj.client.party }}</span></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Rate card</dt>
+          <dd><a href="{% url 'scm:clientratecard_detail' obj.rate_card.pk %}" class="mono">{{ obj.rate_card.number }}</a></dd>
+        </div>
+        <div class="detail-item"><dt>Period start</dt><dd class="mono">{{ obj.period_start|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Period end</dt><dd class="mono">{{ obj.period_end|date:"M d, Y" }}</dd></div>
+        <div class="detail-item">
+          <dt>Calculated</dt>
+          {% comment %}
+            None here means "never priced" — a real state a draft run sits in — so it prints a
+            sentence and not a blank cell.
+          {% endcomment %}
+          <dd class="mono">{% if obj.calculated_at %}{{ obj.calculated_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Not calculated yet</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Approved by</dt>
+          <dd>
+            {% if obj.approved_by %}
+              {{ obj.approved_by.get_full_name|default:obj.approved_by.username }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Approved at</dt>
+          <dd class="mono">{% if obj.approved_at %}{{ obj.approved_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Invoice</dt>
+          <dd>
+            {% if invoice %}
+              <a href="{% url 'accounting:invoice_detail' invoice.pk %}" class="mono">{{ invoice.number }}</a>
+              <span class="badge badge-slate">{{ invoice.get_status_display }}</span>
+            {% else %}
+              <span class="text-muted">Not drafted</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+      {% if obj.notes %}<div class="form-help" style="margin-top:1rem; white-space:pre-line;">{{ obj.notes }}</div>{% endif %}
+      <div class="form-help" style="margin-top:1rem;">
+        The tariff on a run is <span class="fw-600">frozen at the moment it was chosen</span> and every line snapshots the category, basis and rate it was priced at, so re-versioning the rate card next quarter cannot silently restate what this period was billed at. Supply Chain drafts the invoice; <span class="fw-600">Accounts Receivable issues it, applies the cash and chases it</span> — nothing on this run is a ledger posting.
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Charge lines</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ line_count }} line{{ line_count|pluralize }}</span>
+        {% if manual_line_count %}<span class="badge badge-info">{{ manual_line_count }} manual</span>{% endif %}
+        {% if needs_quantity_count %}<span class="badge badge-amber">{{ needs_quantity_count }} needs a quantity</span>{% endif %}
+        {% if can_add_line %}
+          <a href="{% url 'scm:clientbillingrunline_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a manual charge</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Basis</th>
+            <th>Description</th>
+            <th>Priced from</th>
+            <th class="text-right">Quantity</th>
+            <th class="text-right">Rate</th>
+            <th class="text-right">Amount</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        {% comment %}
+          One <tbody> per charge category — valid HTML, and it keeps each group's header, its rows and
+          its subtotal in one block that cannot drift apart. `category` is the raw choice value and is
+          used only as the anchor id; the visible label and the badge class both come from the group,
+          because this page invents no colour of its own.
+        {% endcomment %}
+        {% for group in line_groups %}
+          <tbody id="charge-{{ group.category }}">
+            <tr>
+              <td colspan="7">
+                <span class="badge {{ group.category_css }}">{{ group.category_label }}</span>
+                <span class="text-muted">{{ group.lines|length }} line{{ group.lines|length|pluralize }}</span>
+              </td>
+            </tr>
+            {% for line in group.lines %}
+              <tr{% if line.needs_manual_quantity %} class="row-warn"{% endif %}>
+                <td class="nowrap">
+                  {{ line.get_charge_basis_display }}
+                  {% if line.is_manual %}<div class="form-help"><span class="badge badge-info">Manual</span></div>{% endif %}
+                </td>
+                <td>{{ line.description }}</td>
+                <td>
+                  {% comment %}
+                    The evidence string. Blank is legitimate on a manual charge — a human typed the
+                    line and there is no ledger row behind it — so it prints an em dash rather than
+                    implying the calculator produced something it did not.
+                  {% endcomment %}
+                  {% if line.source_reference %}
+                    <span class="form-help mono">{{ line.source_reference }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                  {% if line.needs_manual_quantity %}
+                    <div class="form-help"><span class="badge badge-amber">Needs a quantity</span></div>
+                  {% endif %}
+                </td>
+                <td class="text-right mono">{{ line.quantity|floatformat:4 }}</td>
+                <td class="text-right mono">{{ line.rate|floatformat:4 }}</td>
+                <td class="text-right mono fw-600">{{ line.amount|floatformat:2 }}</td>
+                <td>
+                  <div class="table-actions">
+                    {% if can_edit %}
+                      <a href="{% url 'scm:clientbillingrunline_edit' line.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                      <form method="post" action="{% url 'scm:clientbillingrunline_delete' line.pk %}" onsubmit="return confirm('Delete this charge line? The run total is recalculated straight away. A machine-derived line comes back on the next Calculate; a manual one does not.');">
+                        {% csrf_token %}
+                        <button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+            <tr>
+              <td colspan="5" class="text-right text-muted">{{ group.category_label }} subtotal</td>
+              <td class="text-right mono fw-600">{{ group.subtotal|floatformat:2 }}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        {% endfor %}
+
+        {% if not lines %}
+          <tbody>
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="list"></i>
+                  <h3>No charge lines on this run</h3>
+                  <p>
+                    {% if can_calculate %}
+                      Nothing has been priced yet. Press <span class="fw-600">Calculate</span> below and every rate-card line is matched against what actually happened in the period. If it comes back still empty, that is a real answer and not a failure: the tariff simply prices nothing this client did between those dates — check the <span class="fw-600">not billed</span> panel underneath, which is where that activity shows up.
+                    {% else %}
+                      This run was calculated and produced no charges. That is a legitimate outcome rather than an error: the rate card prices nothing that happened in the period. The <span class="fw-600">not billed</span> panel below lists the activity that went unpriced, which is usually where the missing tariff line is hiding.
+                    {% endif %}
+                  </p>
+                  {% if can_add_line %}
+                    <a href="{% url 'scm:clientbillingrunline_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a manual charge</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        {% endif %}
+
+        <tbody>
+          <tr>
+            <td colspan="5" class="text-right text-muted">Subtotal</td>
+            <td class="text-right mono">{{ subtotal|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td colspan="5" class="text-right text-muted">
+              Monthly minimum adjustment
+              <div class="form-help">{{ minimum_reason }}</div>
+            </td>
+            <td class="text-right mono">{{ minimum_adjustment|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td colspan="5" class="text-right fw-600">Run total</td>
+            <td class="text-right mono fw-600">{{ total|floatformat:2 }}</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-body text-muted">
+      A line is written only where there is something to charge for: a quantity inside the rate line's tier band, above whatever allowance the tariff includes. Flat recurring and dedicated-space lines are the exception and are always written, because a commitment is owed whether or not it was used — that is what a commitment is. <span class="fw-600">Per-pallet-position storage bills stock units one for one as pallet positions</span> until items carry dimensions, and each such line says so in its own description; a stated approximation is honest, a hidden one is not.
+    </div>
+  </div>
+
+  {% comment %}
+    ------------------------------------------------------------------ NOT BILLED
+    The single most valuable panel on the page, and the reason it sits beside the total rather than in
+    a report: unpriced activity is how a 3PL quietly loses margin, and nobody goes looking for a
+    report about a problem they do not know they have. Every row is labelled "not billed" in its own
+    right, so a screenshot of one line still says what it is.
+  {% endcomment %}
+  {% if unbilled %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Activity in this period the tariff prices nowhere</h2>
+        <span class="badge badge-amber">NOT BILLED</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Activity</th><th class="text-right">Count</th><th>Why it is not on the invoice</th></tr></thead>
+          <tbody>
+            {% for row in unbilled %}
+              <tr>
+                <td class="fw-600">{{ row.label }}</td>
+                <td class="text-right mono">{{ row.count }}</td>
+                <td class="text-muted">{{ row.note }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        Nothing here has been added to the run and nothing here will be added automatically. Each row is work that happened for this client inside the period and which the rate card has no line for. The fix is a <span class="fw-600">rate-card line</span> on the tariff — which prices it on every future run as well — or, for a one-off, a manual charge on this run.
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ------------------------------------------------------- SUGGESTED SERVICE CREDITS, NOT APPLIED
+    Nothing on this panel reduces the run, raises a credit note or touches Accounting. 4.17 stops at
+    the arithmetic on purpose: applying a credit is a commercial decision with a signature on it, and
+    a credit note is Module 2's document. The heading, the badge and the closing sentence all say so,
+    because a money figure on a billing page is assumed to be live unless it is repeatedly told not
+    to be.
+  {% endcomment %}
+  {% if sla_credits %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Service credits implied by breached SLAs</h2>
+        <div class="badge-group">
+          <span class="badge badge-red">SUGGESTED — NOT APPLIED</span>
+          <span class="badge badge-slate">{{ sla_credit_total|floatformat:2 }} in total</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>SLA</th><th>Metric</th><th>State</th><th class="text-right">Applied to</th><th class="text-right">Suggested credit</th></tr></thead>
+          <tbody>
+            {% for row in sla_credits %}
+              <tr>
+                <td><a href="{% url 'scm:clientsla_detail' row.sla.pk %}" class="mono">{{ row.sla.number }}</a></td>
+                <td>{{ row.sla.get_metric_display }}</td>
+                <td>
+                  <span class="badge {{ row.status_css }}">{{ row.sla.get_status_display }}</span>
+                  {% comment %}
+                    Only a BREACH implies a credit. A row measured at-risk, meeting or no-data is
+                    listed so the period reads whole, and its suggestion is legitimately zero — which
+                    a page that showed the figure without the reason would look like a bug.
+                  {% endcomment %}
+                  {% if row.status != 'breached' %}
+                    <div class="form-help text-muted">No credit — only a breach earns one</div>
+                  {% endif %}
+                </td>
+                <td class="text-right mono">{{ row.basis|floatformat:2 }}</td>
+                <td class="text-right mono fw-600">{{ row.suggested_credit|floatformat:2 }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        These figures are arithmetic and nothing more. <span class="fw-600">No credit note has been raised, the run total above is unreduced, and nothing in Accounts Receivable knows about this panel.</span> Raising a credit note is a commercial decision somebody signs for, and the document belongs to Module 2. The <em>applied to</em> column shows the fee figure the contracted percentage was worked out against, so the suggestion can be checked rather than taken on trust.
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Actions</h2>
+      <span class="badge badge-slate">Every one is POST-only</span>
+    </div>
+    <div class="card-body">
+      <div class="form-actions" style="flex-wrap:wrap;">
+        {% if can_calculate %}
+          <form method="post" action="{% url 'scm:clientbillingrun_calculate' obj.pk %}" onsubmit="return confirm('Recalculate this run? Every machine-derived line is deleted and rebuilt from the ledger, the receipts, the orders and the shipments. Manual charges are left exactly as they are.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="calculator"></i> Calculate</button>
+          </form>
+        {% endif %}
+
+        {% comment %}
+          Approve and Draft Invoice are @tenant_admin_required as well as @require_POST, because both
+          move money: one freezes what a client will be asked to pay, the other puts a document in
+          front of Accounts Receivable. A member shown either button would only be 403ed on it — the
+          4.11 finding — so both live behind the house gate. The decorator is the access control.
+        {% endcomment %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+          {% if can_approve %}
+            <form method="post" action="{% url 'scm:clientbillingrun_approve' obj.pk %}" onsubmit="return confirm('Approve this run? The figures are frozen as what this client will be asked to pay for the period, and your name goes on the approval.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="stamp"></i> Approve</button>
+            </form>
+          {% endif %}
+          {% if can_draft_invoice %}
+            <form method="post" action="{% url 'scm:clientbillingrun_draft_invoice' obj.pk %}" onsubmit="return confirm('Draft an invoice from this run? Supply Chain drafts it — Accounts Receivable issues it, applies the cash and chases it. Nothing is posted to the ledger here.');">
+              {% csrf_token %}
+              <button class="btn btn-primary" type="submit"><i data-lucide="receipt"></i> Draft the invoice</button>
+            </form>
+          {% endif %}
+        {% endif %}
+
+        {% if can_add_line %}
+          <a href="{% url 'scm:clientbillingrunline_create' obj.pk %}" class="btn btn-outline"><i data-lucide="plus"></i> Add a manual charge</a>
+        {% endif %}
+        {% if can_edit %}
+          <a href="{% url 'scm:clientbillingrun_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        {% if can_void %}
+          <form method="post" action="{% url 'scm:clientbillingrun_void' obj.pk %}" onsubmit="return confirm('Void this run? Every line survives as evidence and the run stops being billable. A run that has already been invoiced cannot be voided from here.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Void</button>
+          </form>
+        {% endif %}
+        {% if can_delete %}
+          <form method="post" action="{% url 'scm:clientbillingrun_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every charge line on it goes too, including any manual charges that were typed by hand and cannot be recalculated back. Voiding keeps the whole record.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:clientbillingrun_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      <div class="form-help" style="margin-top:1rem;">
+        The ladder runs <span class="fw-600">draft → calculated → approved → invoiced</span>, and it only goes forwards. Calculate is available while the run is draft or calculated and may be pressed as often as you like; approving freezes the figures; drafting the invoice hands them over. <span class="fw-600">Void is the way back out, and only before the invoice exists</span> — once Accounts Receivable is holding a draft invoice for this period, the document to correct is that invoice and not this run. Delete disappears at the same moment, for the same reason.
+      </div>
+    </div>
+  </div>
+{% endblock %}
