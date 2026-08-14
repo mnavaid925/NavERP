@@ -488,3 +488,75 @@ from .CustomerPortal.PortalDocumentShares import (  # noqa: F401
 from .CustomerPortal.PortalActivities import (  # noqa: F401
     PortalActivity,
 )
+
+# --- 4.17 Third-Party Logistics (3PL) Management --------------------------------------------------
+# The vocabularies come FIRST and are spelled out BY NAME rather than star-imported. Three
+# `_choices` modules are already star-imported at this package root; a fourth re-declaring a shared
+# token would silently shadow one of them with the winner decided by import order, so a collision
+# has to be a visible edit here rather than a runtime coin-flip.
+#
+# 4.17 declares FOUR new tables and TWO additive columns on tables 4.3 already owns
+# (`Item.owner_client`, `Location.owner_client`). There is deliberately NO owner column on
+# `StockMove`: an owner on an append-only ledger would be a second source of truth for the same
+# fact, and the two would disagree the first time an item was re-assigned (L37). Client Inventory
+# Segregation and Warehouse Rental Management are COMPUTED pages with no table at all — the
+# `labor_board` / `sparepart_list` / `cold_storage_report` precedent.
+from .ThirdPartyLogistics._choices import (  # noqa: F401
+    BILLING_CYCLE_CHOICES,
+    CHARGE_BASIS_CHOICES,
+    CHARGE_CATEGORY_CHOICES,
+    CHARGE_CATEGORY_CSS,
+    CLIENT_STATUS_CHOICES,
+    CLIENT_STATUS_CSS,
+    COMMITTED_SPACE_MODELS,
+    EDITABLE_RATE_CARD_STATUSES,
+    EDITABLE_RUN_STATUSES,
+    INTEGRATION_MODE_CHOICES,
+    MANUAL_ONLY_BASES,
+    MAX_CLIENT_DEPTH,
+    MAX_COMMITTED_PALLETS,
+    MAX_COMMITTED_SQFT,
+    MAX_MEASUREMENT_ROWS,
+    MAX_RATE_CARD_LINES,
+    MAX_RUN_LINES,
+    MAX_RUN_PERIOD_DAYS,
+    PERIODIC_BASES,
+    RATE_CARD_STATUS_CHOICES,
+    RATE_CARD_STATUS_CSS,
+    RATE_PERIOD_CHOICES,
+    RUN_STATUS_CHOICES,
+    RUN_STATUS_CSS,
+    SLA_DIRECTION_CHOICES,
+    SLA_METRIC_CHOICES,
+    SLA_METRIC_META,
+    SLA_STATUS_CHOICES,
+    SLA_STATUS_CSS,
+    SLA_UNIT_CHOICES,
+    SLA_WINDOW_CHOICES,
+    SPACE_MODEL_CHOICES,
+    STORAGE_BILLING_METHOD_CHOICES,
+)
+# LogisticsClient FIRST for the reader rather than for Django: every FK below is declared by string
+# so the ORM does not care, but the rate card, the billing run and the SLA all point AT the client,
+# and so do 4.3's two new columns. It is the root of the sub-module.
+from .ThirdPartyLogistics.LogisticsClients import (  # noqa: F401
+    LogisticsClient,
+)
+# The rate card is VERSIONED, not edited: `activate` / `supersede` are why a run calculated last
+# quarter cannot be rewritten by a price change made this quarter.
+from .ThirdPartyLogistics.ClientRateCards import (  # noqa: F401
+    ClientRateCard,
+    ClientRateCardLine,
+)
+# `ClientBillingRunLine` SNAPSHOTS the charge category, basis, period and rate off the rate-card line
+# at calculate time — the line is the invoice's evidence, not a live pointer into pricing.
+from .ThirdPartyLogistics.ClientBillingRuns import (  # noqa: F401
+    ClientBillingRun,
+    ClientBillingRunLine,
+)
+# `ClientSLA` measures itself out of rows other sub-modules already own (4.5 orders, 4.6 shipments,
+# 4.10 returns) through `SLA_METRIC_META`; it stores the RESULT of a recompute, never a hand-typed
+# achievement, and its credit is proposed to a billing run rather than posted to the ledger (L29).
+from .ThirdPartyLogistics.ClientSlas import (  # noqa: F401
+    ClientSLA,
+)
