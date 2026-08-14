@@ -69,11 +69,11 @@ letting the overrun eat the next phase.
 | 0 | Claim the tree | inline, ~2 min | 0:00 |
 | 1 | `research` agent | 1 agent | 0:05–0:30 |
 | 2 | `todo` agent | 1 agent | 0:30–0:45 |
-| 3 | Build the code | Workflow — 1 solo backend writer ‖ 1–3 template agents | 0:45–2:10 |
-| 4 | **Review wave** | **Workflow — 6 reviewers in PARALLEL** → one findings `.md` | 2:10–2:40 |
-| 5 | `code-fixer` agent | 1 agent — fixes and commits one by one | 2:40–3:25 |
-| 6 | **Test wave** | **Workflow — contract → 4 parallel test-writers → 1 green run** | 3:25–3:50 |
-| 7 | Skill + README | inline | 3:50–4:00 |
+| 3 | **Build wave** | **Workflow — spec → per-entity backend ‖ templates → integrate → smoke** | 0:45–1:50 |
+| 4 | **Review wave** | **Workflow — 6 reviewers in PARALLEL** → one findings `.md` | 1:50–2:20 |
+| 5 | `code-fixer` agent | 1 agent — fixes and commits one by one | 2:20–3:05 |
+| 6 | **Test wave** | **Workflow — contract → 4 parallel test-writers → 1 green run** | 3:05–3:30 |
+| 7 | Skill + README | inline | 3:30–3:40 |
 
 ---
 
@@ -92,14 +92,40 @@ as-built core spine, with a recommended 1–4-model build scope. Commit that fil
 plan in `.claude/tasks/todo.md` (models + their fields/choices **driven by the researched features**, plus
 backend/wire-up/template/verify/close-out items). Commit that file.
 
-**Phase 3 — Build the code.** Fan out per `/next-module` §2: **backend + migrations + seeder stay one solo agent**
-(single DB writer), templates go to 1–3 parallel agents over disjoint files. Pin **every** context key the
-templates consume in the shared spec — the list var, the detail/edit object var, every `*_choices`, every FK
-queryset — or parallel agents each invent a different name (L7). Then, **as a post-build single-writer step**:
-assert the expected file count per unit before trusting the output (a workflow can be cut off mid-phase, L21), do
-the `settings.py` / `urls.py` / `navigation.py` wire-up **after** the app files exist (the check-after-edit hook
-blocks otherwise, L12), then `makemigrations` → `migrate` → `seed_<slug>` twice → `manage.py check`. Commit one
-file per commit.
+**Phase 3 — Build wave (parallel Workflow).**
+
+```
+Workflow({ scriptPath: '.claude/workflows/module-build.js',
+           args: { slug: 'scm', submodule: '4.17', title: 'Returns Management',
+                   newApp: false, migrationNumber: '<claimed in Phase 0>' } })
+```
+
+Five phases, and the parallelism axis is **per entity, not per layer**:
+
+1. **Spec** (solo, read-only `explorer`) — reads `.claude/tasks/todo.md`, NavERP.md and the reference apps, and
+   freezes the **contract**: every model field and CHOICES value, form `Meta.fields` + exclusions, url names, and
+   — the field that decides whether the build works — **every view context key**. Pin the list var, the detail
+   and edit-mode object vars, every `*_choices`, every FK filter queryset. A name left unpinned is a silently
+   blank region or a `NoReverseMatch` (L7).
+2. **Scaffold** (solo) — **brand-new app only**; skipped when `apps/<slug>/` exists.
+3. **Build** (parallel) — for each entity, a **backend agent and a template agent run concurrently**: the backend
+   agent owns that entity's four files across `models/forms/views/urls`, the template agent owns its three
+   `list/detail/form.html`. They never see each other's output — the frozen contract is the whole interface,
+   which is exactly why Spec is exhaustive. **No build agent touches a shared file**: package `__init__.py`,
+   `admin.py`, the seeder, `navigation.py`, `settings.py` and `urls.py` are all off-limits.
+4. **Integrate** (solo, single writer, only DB writer) — verifies every expected file actually landed *before*
+   wiring anything (a workflow can be cut off mid-phase, L21), then adds the `__init__.py` re-export blocks
+   surgically, registers admin, extends the seeder, adds the one `LIVE_LINKS["N.M"]` entry, does the
+   `settings.py`/`urls.py` wire-up **only now that the app files exist** (the check-after-edit hook blocks
+   otherwise, L12), then `makemigrations` → `migrate` → `seed_<slug>` **twice** → `manage.py check`, and commits
+   one file per commit with explicit paths.
+5. **Smoke** (solo `qa-smoke-tester`) — the gate that catches fan-out drift: renders every new page as
+   `admin_acme` and asserts content, not just status (a mismatched context var returns 200 and renders blank,
+   L8), plus a junk-param list, page 2, and cross-tenant IDOR → 404. Fixes drift against the contract. This runs
+   so the review wave spends its six agents on quality, not on a page that 500s.
+
+The workflow returns the contract and the expected-file list. If it reports `deadAgents`, confirm those files
+exist before moving on.
 
 **Phase 4 — Review wave (6 agents in ONE parallel Workflow).**
 
