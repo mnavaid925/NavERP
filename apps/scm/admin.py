@@ -50,6 +50,13 @@ from apps.scm.models import (
     PortalDocumentShare,
     PortalOrderInquiry,
 )
+# 4.18 Finance & Accounting Integration
+from apps.scm.models import (
+    DutyTariff,
+    LandedCostAllocation,
+    LandedCostCharge,
+    LandedCostVoucher,
+)
 
 
 class PurchaseRequisitionLineInline(admin.TabularInline):
@@ -1364,3 +1371,72 @@ class ClientSLAAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "last_measured_value", "last_measured_at",
                        "measurement_window_start", "measurement_window_end", "measurement_summary",
                        "sample_size", "breach_count", "status", "created_at", "updated_at")
+
+
+# =================================================================================================
+# 4.18 Finance & Accounting Integration
+# =================================================================================================
+class LandedCostChargeInline(admin.TabularInline):
+    model = LandedCostCharge
+    extra = 0
+
+
+@admin.register(LandedCostVoucher)
+class LandedCostVoucherAdmin(admin.ModelAdmin):
+    """The landed-cost envelope. The charges are editable inline; the RESULT is not.
+
+    Every total is written by ``recalc_totals()`` off the charge lines, ``status`` by the
+    allocate → accrue → draft-bill ladder, and ``bill`` by ``draft_bill()``. All of them are already
+    ``editable=False`` on the model and therefore unreachable here anyway; they are named in
+    ``readonly_fields`` so that a later hand dropping ``editable=False`` for an admin convenience
+    does not silently open a hand-typed total — a second source of truth for money.
+    """
+
+    list_display = ("number", "goods_receipt", "party", "tenant", "cost_date", "status",
+                    "allocation_basis", "actual_total", "variance_amount")
+    list_filter = ("tenant", "status", "allocation_basis")
+    search_fields = ("number", "party__name", "goods_receipt__number")
+    readonly_fields = ("number", "status", "estimated_total", "actual_total", "variance_amount",
+                       "variance_pct", "allocated_total", "accrued_at", "bill",
+                       "created_at", "updated_at")
+    inlines = [LandedCostChargeInline]
+
+
+@admin.register(DutyTariff)
+class DutyTariffAdmin(admin.ModelAdmin):
+    """The HS x origin duty-rate master — the ONE table 4.18 could not reuse from ``accounting``.
+
+    Fully editable, and safely so: the charge line SNAPSHOTS the rate ``rate_for()`` returned, so
+    re-rating a tariff next quarter never restates a shipment that has already cleared customs.
+    """
+
+    list_display = ("hs_code", "country_of_origin", "tenant", "duty_rate_pct", "effective_from",
+                    "effective_to", "is_active")
+    list_filter = ("tenant", "is_active", "country_of_origin")
+    search_fields = ("number", "hs_code", "description", "country_of_origin")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(LandedCostAllocation)
+class LandedCostAllocationAdmin(admin.ModelAdmin):
+    """DERIVED ledger — read-only in the admin, no add/change/delete, mirroring ``StockMoveAdmin``.
+
+    Every row is written by ``LandedCostVoucher.allocate()`` and re-written wholesale on every
+    re-allocation, so a row edited here would be silently discarded the next time the voucher was
+    allocated — and, worse, would disagree with the weighted average until then. Change the charge
+    and re-allocate; that is the only supported path.
+    """
+
+    list_display = ("voucher", "charge", "item", "stock_move", "tenant", "quantity", "basis_used",
+                    "basis_value", "allocated_amount", "unit_cost_uplift")
+    list_filter = ("tenant", "basis_used")
+    search_fields = ("voucher__number", "item__sku", "item__name")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
