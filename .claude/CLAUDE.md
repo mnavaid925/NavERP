@@ -82,6 +82,10 @@ letting the overrun eat the next phase.
   no changeset to read (the build commits as it goes, so the working tree is clean by then).
 * `git status` — a dirty tree at session start is **not yours** (L45). Leave those files alone; never commit them.
 * If another session is building in this same checkout, agree the migration number before generating one (L43).
+* **Register the build so it can survive the session** (see *Session Window & Resume* below):
+  ```
+  venv\Scripts\python.exe .claude/hooks/build_state.py start --slug scm --submodule 4.17 --title 'Returns Management' --base <BASE> --migration <claimed>
+  ```
 
 **Phase 1 — `research` agent.** Research the ~6–10 leading commercial products in the ONE target sub-module's
 (`N.M`) specific domain (not the parent module's generic domain) and write a deduplicated, prioritized feature
@@ -193,6 +197,59 @@ each file on its own. (See **Per-Module Skill (MANDATORY)** below.)
   different sub-module in this same checkout (L43).
 * `git push` is **never** part of this sequence — stop at `git commit` every time.
 * If an agent or lane reports no changes are needed, note that and move on (no empty commit required).
+* **Mark every phase boundary in the build state** — see the next section. A phase that finishes without being
+  marked is a phase the next session will redo.
+
+---
+
+### **Session Window & Resume (MANDATORY)**
+
+The 5-hour usage window kills the session, not the work. Everything below exists so that a session which runs out
+mid-build is an *interruption* rather than a restart. The rule in one line: **the transcript is not state — the
+state file is.**
+
+**At session start (automatic).** The `SessionStart` hook (`.claude/hooks/session_start.py`) records the window in
+`.claude/tasks/build-state.json` and injects into context: when the window ends, how long is left, and — if the
+last session was cut off mid-build — the exact phase to resume from. **Read that block before doing anything
+else.** It is authoritative over your own assumptions about what is built.
+
+A window already in flight is **kept, not restarted**: the limit is anchored to the first message of the window,
+so a second session opened two hours in inherits the original deadline. The hook never resets a live clock.
+
+**At every phase boundary (you must do this).** One command, two seconds, and it is the entire difference between
+resuming and rebuilding:
+
+```
+venv\Scripts\python.exe .claude/hooks/build_state.py phase 3_build done
+venv\Scripts\python.exe .claude/hooks/build_state.py phase 4_review in_progress --note 'review wave running, findings not yet written'
+```
+
+Phase keys: `0_claim 1_research 2_todo 3_build 4_review 5_fix 6_tests 7_docs`. Statuses: `pending in_progress done
+skipped`. When the sub-module is finished and documented, close it out with `build_state.py finish` — otherwise the
+next session will keep offering to resume a build that is already done.
+
+**When the window is nearly spent.** The hook warns at **under 20 minutes left**. At that point do **not** start a
+phase — it will not finish, and being cut off mid-phase is what leaves the tree half-wired and the state file
+stale. Instead check out cleanly, in this order:
+
+1. Commit everything already finished (one file per commit, as always).
+2. `build_state.py phase <current> in_progress --note '<exactly where you stopped and what is half-done>'` — write
+   the note for a reader with **no memory of this session**: which files landed, which did not, what to verify first.
+3. Say plainly in your final message which phase is open and what the next session will pick up.
+
+**Resuming.** A new session started after the window resets reads the hook's resume block and continues from the
+first phase not marked `done`. Before re-running an interrupted phase, **verify against `git log` and the disk what
+actually landed** — a phase marked `in_progress` may be 90% complete, and blindly re-running it duplicates commits
+and migrations. Never restart at Phase 1 because the context is empty; the state file is what remembers.
+
+`build-state.json` is **gitignored on purpose** — it is per-checkout machine state that changes every phase, and
+concurrent sessions in one tree would conflict on it constantly. The hook recreates it, so nothing depends on it
+being committed.
+
+> **A session cannot restart itself.** Once the window is exhausted there is no process left to run anything, so
+> "continue automatically" means: the next session you open resumes with zero instruction from you. For a truly
+> unattended restart at the reset time, an OS-level scheduled task has to launch Claude Code — see the run-book in
+> `.claude/skills/next-module/SKILL.md`.
 
 ---
 
