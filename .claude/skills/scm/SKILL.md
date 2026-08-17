@@ -1705,6 +1705,27 @@ deleting the vouchers first would strand a fresh set of draft bills in AP every 
 `BillLine`s with them), then the allocation → charge → voucher tree, then the `DutyTariff` master **last** — all
 BEFORE 4.1's `GoodsReceiptNote` (PROTECT) and any party cleanup. There is no `JournalEntry` to unwind.
 
+### Tests  (`apps/scm/tests/test_finance_{models,forms,views,security}.py` — 431 for 4.18)
+
+Appended to the shared suite, never a new package: fixtures in `conftest.py`, every function named `test_finance_*`
+and every module-level helper `_finance_*` (`test_suite_hygiene.py` fails the suite on a duplicate). Change an
+invariant below and this is where its regression lock lives.
+
+* **`test_finance_models.py` (139, flat functions)** — the `DTY-`/`LC-` number ladders and their per-tenant restart;
+  **`rate_for()`'s precedence ladder** (named origin beats the blank any-origin row, newest `effective_from` first,
+  retired/closed/not-yet-started rows skipped, `None` returned and never raised, never crossing a workspace);
+  **`allocate()` idempotency** and the `_unallocate()` reversal of the average-cost roll; the `accrued_at` demotion;
+  `recalc_totals()`, `split_charges()`, and `test_finance_draft_bill_posts_no_journal_entry` — ruling 1's lock.
+* **`test_finance_forms.py` (99)** — `TestFinanceFormShapeAcrossTheSubModule` is the **derived/system-fields-off-
+  every-form** check; then shape / validation / queryset classes per form, `TestFinanceLandedCostChargeFormRateDefaulting`
+  (rule 3) and `TestFinanceAllocationHasNoForm`.
+* **`test_finance_views.py` (92)** — both lists and their filters, both CRUD triples, `TestFinanceVoucherVerbLadder`,
+  the nested charge routes, and one class per report page.
+* **`test_finance_security.py` (101)** — `TestFinanceAnonymous`, `TestFinanceAdminGates`, `TestFinanceCsrf`,
+  `TestFinanceCrossTenantIsolation` (**cross-tenant IDOR → 404**), `TestFinanceCraftedForeignKeys`,
+  `TestFinanceNegativeInput`, `TestFinanceLadderPrerequisites`, and **`TestFinancePostOnlyRoutes` — the seven 405s
+  of rule 6.**
+
 ## Conventions & gotchas
 
 - **Every view filters `tenant=request.tenant`**; `crud_*` helpers in `apps/core/crud.py` do this for you.
