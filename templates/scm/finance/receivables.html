@@ -279,9 +279,11 @@ stat-card icon colours are blue / green / orange / purple / slate only.
       </table>
     </div>
     <div class="card-body form-help">
-      The figures above the table cover the whole filtered set; the footer covers only the rows printed.
+      The tiles above and the footer are the same figure: both cover only the documents listed.
       {% if truncated %}
-        They differ on this view because the list is capped at {{ row_cap }} rows.
+        This view is capped at {{ row_cap }} rows, so documents beyond the cap are excluded from
+        <strong>both</strong> — narrow the filters until the cap notice clears before reading these as everything
+        you are owed.
       {% endif %}
       A balance reading &ldquo;Not invoiced&rdquo; is revenue earned but never billed &mdash; a different thing from an
       invoice settled down to zero.
