@@ -9,8 +9,8 @@ App path: `apps/scm`. Templates: `templates/scm/`. URL prefix: `/scm/`, `app_nam
 Mirrors `NavERP.md` "## 4. Supply Chain Management (SCM)" (19 sub-modules, 4.1–4.19).
 
 **As-built: 4.1 Procurement + 4.2 SRM + 4.3 Inventory + 4.4 Warehouse Management + 4.5 Order Management +
-4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management + 4.13 Asset Management + 4.14 Labor Management + 4.15 Cold Chain Management.**
-4.18–4.19 are roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
+4.6 Transportation Management + 4.7 Demand Planning & Forecasting + 4.8 Manufacturing / Production + 4.9 Quality Management + 4.10 Returns Management + 4.11 Supply Chain Analytics + 4.12 Contract & Compliance Management + 4.13 Asset Management + 4.14 Labor Management + 4.15 Cold Chain Management + 4.16 Customer Portal + 4.17 Third-Party Logistics (3PL) + 4.18 Finance & Accounting Integration — 18 of 19.**
+Only **4.19** is roadmap. Build the next one with `/next-module` (it takes the lowest `4.M` without a `LIVE_LINKS["4.M"]` entry) — see the reference apps
 `apps/crm`/`apps/accounting` for the package layout and the mandatory
 [Module Creation Sequence](../../CLAUDE.md).
 
@@ -1572,6 +1572,78 @@ units" — **no conversion between the two is invented**.
 Guarded by `LogisticsClient.exists()`. Three clients — **dedicated**, **shared**, and one mid-**onboarding** — an
 active + a draft + a shared rate card, an invoiced run, an open run and a shared run, and SLAs across metrics.
 `--flush` deletes the drafted AR invoices before the runs and the runs before the PROTECTed rate cards.
+
+## 4.18 Finance & Accounting Integration  (`apps/scm/*/FinanceIntegration/`, templates `templates/scm/finance/`)
+
+**What we owe, what we are owed, and what a receipt actually cost to land.** THREE of its five NavERP bullets —
+Accounts Payable, Accounts Receivable, Budgeting — are **READ-ONLY COMPUTED registers**, not tables: what we owe and
+what we are owed already exist as POINTERS into `apps/accounting` from six shipped models (4.1 `GoodsReceiptNote.bill`,
+4.6 `FreightInvoice.bill`, 4.18 `LandedCostVoucher.bill`; 4.5 `SalesOrder.invoice`, 4.17 `ClientBillingRun.invoice`,
+4.10 `RMA.credit_note`), so an AP/AR/Budget table here would be a second copy of the same money that drifts the first
+time Accounting voids something (L29). **SCM posts NO `JournalEntry`.** The sub-module's one and only accounting write
+is `LandedCostVoucher.draft_bill()`, which creates a DRAFT `accounting.Bill` and **stops** — Accounting posts the
+entry. Landed cost itself is an **ADDITIVE allocation layer over the append-only `StockMove` ledger** (4.3): it never
+edits a move, it rolls `Item.average_cost` via `apply_landed_cost()` and records the uplift as its own rows.
+
+### Models — 2 tenant-scoped + 2 children (`models/FinanceIntegration/`)
+| Model | Prefix | Notes |
+|---|---|---|
+| `DutyTariff` | `DTY-` | The **customs duty master** — one effective-dated rate per `(tenant, hs_code, country_of_origin, effective_from)`. **`effective_from` is NEVER nullable** (a NULL member silently disables the unique key in MySQL — every NULL compares unequal). **Blank `country_of_origin` = "any origin"** catch-all, not "unknown". `rate_for(tenant, hs_code, origin, on_date)` resolves: active-only → window contains date (the `effective_to__isnull` leg carried explicitly) → **named origin beats the any-origin row** → newest `effective_from` first; returns `None`, never raises (it DEFAULTS a form field). `is_current` is a **computed property**, never a column. Exists because **`accounting.TaxCode` structurally cannot be a customs master** (no customs `tax_type`, no `hs_code`, no origin pair) — do NOT re-declare a sales-tax rate here; `tax_code` FK is the *recoverable import-VAT counterpart* only. `clean()` upper-cases/strips `hs_code` BEFORE `validate_unique`. |
+| `LandedCostVoucher` | `LC-` | One receipt's landed cost. `goods_receipt` (**PROTECT** — the evidence), `party` (**PROTECT, required** — the payee, because `accounting.Bill.party` is non-null PROTECT), `shipment`/`trade_document` (SET_NULL, 4.6/4.12), `currency`, `bill` (SET_NULL, **`editable=False`** — `draft_bill()` is its only writer). Status ladder **draft → allocated → accrued → reconciled** (+ `cancelled`); `EDITABLE_STATUSES=("draft",)` and only while `bill is None`. `allocation_basis`: value / quantity / weight / volume / equal (**no `manual`** — deferred, not half-shipped). All derived money (`estimated_total`/`actual_total`/`variance_amount`/`variance_pct`/`allocated_total`/`accrued_at`) is `editable=False`; `recalc_totals()` is their only writer. Verb ladder `allocate() → accrue() → draft_bill()` + `cancel()`; **`allocate()` is idempotent** — it reverses its prior average-cost roll first (ruling 5) and clears `accrued_at` when re-allocation demotes an accrued voucher. Allocation base = `receipt_moves()` (inbound `StockMove` `quantity > 0`, which excludes the compensating negatives a cancelled GRN leaves in the append-only ledger). |
+| `LandedCostCharge` | — | **Tenant-LESS child** (reached via `voucher.tenant`, the `FreightInvoiceLine`/`BillLine` convention). One cost line: `charge_type` (**11 values** — freight/duty/brokerage/insurance/handling/drayage/port_fees/fuel_surcharge/inspection/storage/other), `estimated_amount`/`actual_amount`, `allocation_basis` (blank INHERITS the voucher's via `effective_basis`), `gl_account`, `tax_code`, `is_recoverable` (recoverable tax NEVER capitalises), `capitalise_to_inventory`. **Snapshots** `hs_code`/`country_of_origin`/`duty_rate_pct` from `DutyTariff` at entry — never a live join, so a re-rated tariff can't restate a costed shipment. `clean()` refuses a duty rate on a non-`duty` charge. `allocatable_amount` = actual if > 0 else estimate; `capitalises` = capitalise AND not recoverable. |
+| `LandedCostAllocation` | — | One charge's share of one receipt move. **Carries its OWN `tenant`** — the deliberate exception to the tenant-less-child rule, because the 4.3 valuation report and the 4.18 variance report query these rows DIRECTLY grouped by `stock_move`/`item` (the three `(tenant, …)` indexes serve exactly those queries). Every column `editable=False`; **`allocate()` is the only writer.** No form, view, list or url — rendered inside the voucher detail page and the variance report; admin is READ-ONLY. `stock_move`/`item` are PROTECT; `item` is denormalised off the move so the reports never join through the ledger. |
+
+Migration **0031**. **Deferred index (review M3):** a `(tenant, party)` index on `LandedCostVoucher` was skipped —
+0031 was the number claimed in a shared checkout, and 4.17 deferred its own index finding the same way, so both belong
+in a later **app-wide index-sweep migration**, not a one-off 0032.
+
+### The rules that bit during the build — read before changing anything
+1. **Backend package `FinanceIntegration/` ↔ template folder `templates/scm/finance/` — the asymmetry IS the house
+   rule.** All seventeen shipped scm template folders use a short slug while the Python package uses the NavERP.md
+   sub-module title in PascalCase (`ThirdPartyLogistics/` ↔ `3pl/`, `CustomerPortal/` ↔ `portal/`). **Do NOT "fix"
+   `finance/` into `financeintegration/`.**
+2. **`draft_bill()` is a DRAFT and the only accounting write.** SET_NULL on `bill` so voiding the bill in accounting
+   can't cascade a voucher — and the inventory value it justifies — out of existence. Never make 4.18 post a
+   `JournalEntry`.
+3. **`DutyTariff.rate_for()` DEFAULTS, it does not restate.** The number is snapshotted onto `LandedCostCharge`;
+   correcting a tariff tomorrow must never rewrite what a receipt was costed at today. `LandedCostChargeForm.clean()`
+   calls `rate_for()` only for a **customs charge that carries an `hs_code`**, and never overwrites a rate the user
+   typed.
+4. **A blank `country_of_origin` is the any-origin fallback, not a wildcard alternative** — `rate_for` tries the named
+   origin first (`__iexact`) and the blank row only on a miss. Both can legitimately coexist for one HS code on one day.
+5. **The charge route split is a security decision.** `landed-cost-vouchers/<int:pk>/charges/add/` nests the create
+   under the PARENT (the voucher comes from the ROUTE, never a POST-body pk — the graft-onto-another-workspace vector);
+   `edit`/`delete` take the CHARGE's own pk. All scoped through `voucher__tenant=request.tenant` regardless.
+6. **All four verbs are POST-only AT THE VIEW and `@tenant_admin_required`** — a GET is a 405, not a silent state
+   change. The four report pages are `@login_required` STAFF pages, read-only, no `@require_POST`.
+7. **A purely-recoverable or purely-expensed voucher must still reach AP** — `draft_bill()`/the ladder must not assume
+   every voucher capitalises; the "Draft the bill" button shows even on a voucher that can never be allocated.
+
+### Routes  (`urls/FinanceIntegration/`, `app_name="scm"`)
+`landedcostvoucher_*` (list/create/detail/edit/delete) **+ the verb ladder** `_allocate` / `_accrue` / `_draft_bill` /
+`_cancel`; `landedcostcharge_create` (nested under the voucher) + `landedcostcharge_edit` / `_delete` (own pk);
+`dutytariff_*` (plain CRUD, no verbs — a master, not a document); and **four COMPUTED reports**
+`finance_payables` / `finance_receivables` / `finance_budget_variance` / `landed_cost_variance`. No greedy
+`<str:…>` route (4.10's `return-tracking/<str:token>/` and 4.16's `portal-documents/<str:token>/` remain the app's
+only two). `LandedCostAllocation` has **no url** — it renders inside the voucher detail and the variance report.
+
+### Templates — `templates/scm/finance/`
+Entity folders `dutytariff/` (list/detail/form) and `landedcostvoucher/` (list/detail/form), the nested line form
+`landedcostcharge/form.html`, and **four standalone report pages** at the sub-module root: `payables.html`,
+`receivables.html`, `budget_variance.html`, `landed_cost_variance.html`. The voucher detail page hosts the charge grid
+and the derived allocation grid; an unallocatable per-unit uplift renders as `None`, not `0`.
+
+### Seeder — `_seed_finance_tenant`  (runs LAST in `handle()`, after 4.17)
+Guarded by `LandedCostVoucher.exists()`. **Invents no master data** — every party, item, GL account, tax code,
+currency, shipment, freight invoice and customs document is found among rows earlier passes seeded; an optional link
+whose subject is absent is left null. Sets `weight_kg`/`volume_cbm` on three SKUs (`WS-16`, `MON-27`, `DOCK-C`) **only
+where NULL** so allocate-by-weight/volume don't silently fall back to quantity. Two `DutyTariff` rows (an any-origin
+fallback **and** an origin-specific row — the pair IS the `rate_for` demo). Two `LandedCostVoucher`s: one run all the
+way through the REAL `allocate()` → `draft_bill()` path (so the rounding remainder, `_unallocate()` and the `BillLine`
+precision rules are exercised on every seed), the second **left in DRAFT on purpose** — the ordinary first state, which
+is what makes the estimate-only path and the "Allocate" button visible in the demo. `--flush` deletes the whole
+allocation → charge → voucher tree BEFORE 4.1's `GoodsReceiptNote` (PROTECT) and any party cleanup; there is no
+`JournalEntry` to unwind.
 
 ## Conventions & gotchas
 
