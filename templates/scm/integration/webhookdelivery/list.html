@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — the APPEND-ONLY outbound webhook delivery log.
+
+One row per ATTEMPT, not per event: a subscription that fires once and fails four times leaves four
+rows here, and that is the point — the retry ladder is only readable if every rung is on file. The
+sibling table (Integration Messages) logs documents crossing a partner boundary; this one logs what
+this workspace tried to push out to a subscriber URL.
+
+Renders apps/scm/views/IntegrationApiGateway/WebhookDeliveries.py::webhookdelivery_list, which
+returns crud_list(...). Everything this page may read, and nothing else:
+
+  object_list     the row var, from crud_list (apps/core/crud.py). The loop variable below is `obj`
+  page_obj        paginator page; partials/pagination.html is the L9-safe include (it guards
+                  has_previous / has_next, so page 1 and the last page never call
+                  previous_page_number / next_page_number unconditionally)
+  q               the search string, echoed back into the box. Covers the event name and the
+                  subscription name (subscription__name), which is why the dropdown beside it is the
+                  precise filter and the box is the loose one
+  subscriptions   WebhookSubscription queryset (tenant-scoped, ordered by name) behind the
+                  ?subscription= dropdown — a PK filter, so every option compares with
+                  |stringformat:"d" and NEVER |slugify
+  status_choices  DELIVERY_STATUS_CHOICES  (value, label) pairs
+  date_from       the RAW GET strings, echoed straight back into the two date boxes. They may be ""
+  date_to         and they may be junk: an unparseable date is IGNORED by the view, so the page
+                  returns 200 with that bound simply not applied (L11)
+  stats           dict, exactly five int keys: total, pending, success, failed, exhausted — computed
+                  over the WHOLE tenant queryset, never over the filtered page
+
+Filter params: q / subscription / status / date_from / date_to. `subscription` is the ONLY pk on this
+page, which is why |stringformat:"d" appears exactly once below and |slugify appears nowhere.
+
+The subscription detail page deep-links straight into this list as ?subscription=<pk>, so that
+parameter has to work on a cold first load with nothing else set — it does: the dropdown reflects
+request.GET and the view applies the filter through crud_list before pagination.
+
+--------------------------------------------------------------------------------------------------
+NO ADD BUTTON, NO EDIT, NO DELETE — THAT IS THE DESIGN, NOT AN UNFINISHED PAGE
+--------------------------------------------------------------------------------------------------
+Do not "complete the CRUD" here. There is no webhookdelivery_create / _edit / _delete view, no form
+module for the model (apps/scm/forms/IntegrationApiGateway/WebhookDeliveries.py deliberately does not
+exist) and no route for any of them — only list, detail and retry. The reasons, each sufficient
+alone:
+
+  * A delivery record is EVIDENCE OF WHAT WE TRIED TO SEND. "We pushed shipment.delivered to their
+    URL at 09:14, got a 500, and gave up after eight attempts" is the sentence it exists to make
+    defensible. A subscriber who insists they were never notified is answered by this log, and a log
+    the answering party can edit answers nothing.
+  * An attempt is a historical event. There is no such thing as amending one — a further attempt is
+    APPENDED as a new row, exactly as 4.3's StockMove ledger takes a compensating movement.
+  * The precedent already shipped: 4.13's MeterReading and 4.16's PortalActivity are read-only pages
+    of this same shape, crm.WebhookDelivery describes itself as an immutable append-only record, and
+    apps/scm/tests/test_security.py asserts that the edit and delete routes stay absent.
+
+The one write this page offers is Retry, and it does not change what the row SAYS about the attempt
+that was made — it stamps the NEXT rung of the backoff ladder onto the row. It FIRES NO HTTP REQUEST:
+4.19 ships no outbound transport at all, so pressing it calls nobody, signs nothing and delivers
+nothing. It records the intent and the schedule, and nothing runs on a clock to act on either.
+
+--------------------------------------------------------------------------------------------------
+Why the Retry button here is gated on status alone
+--------------------------------------------------------------------------------------------------
+The detail page gates Retry on TWO conditions — the status, and whether the row has any rungs of the
+ladder left (attempt_no < max_attempts). This page has the first and not the second: `max_attempts`
+is a DETAIL context key and is deliberately not in the list context, so the budget check is not
+available here and is not invented (L7). Gating on status alone is still honest, because the view
+never REFUSES a retry: handed a row that has used its whole ladder it marks the row Exhausted rather
+than scheduling a ninth attempt. So the button on a spent row produces a true and useful outcome —
+"we are done trying" written down — and the confirm text below says exactly that will happen.
+
+--------------------------------------------------------------------------------------------------
+Colour and silences
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges only — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-danger and badge-warning DO NOT EXIST and render
+completely unstyled; that mistake has shipped four times (L33). Every chain below ends in an
+{% else %} that prints the model's own get_status_display, so a status added later still renders its
+label instead of vanishing.
+
+Three cells are legitimately empty and each prints an em dash rather than a blank: `response_code` is
+null on every attempt that never reached a server at all (a DNS failure or a timeout has no status
+line to record), `next_attempt_at` is null on a row that is finished — succeeded or exhausted — and
+`error_message` is blank on every attempt that did not fail. "Nothing to record" and "not recorded"
+are different facts, and the sentence beside each says which one it is.
+
+Nothing in a row costs a query: the view's select_related covers subscription, which is the model's
+one CASCADE FK and is never NULL — a delivery attempt has no life without the subscription that
+raised it — so it needs no null guard.
+
+Every multi-line note on this page is a comment/endcomment block. A multi-line hash comment leaks
+into the rendered page as visible text (L2), so it is never used here.
+{% endcomment %}
+{% block title %}Webhook Deliveries{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Webhook Deliveries</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Webhook Deliveries</span></div>
+      <p class="text-muted">Every attempt this workspace has made to push an event out to a subscriber &mdash; one row per attempt, so a delivery that failed four times before it landed is five rows and reads as the story it was. This is the log that answers &ldquo;we were never notified&rdquo;. <span class="fw-600">Read-only by construction:</span> a row is written once and never edited or deleted.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline"><i data-lucide="webhook"></i> Subscriptions</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The five tiles count the WHOLE tenant table, not the filtered page — a figure that moved every
+    time somebody typed in the search box would read as a workspace fact while being a fact about the
+    filter. stat-icon ships blue / green / orange / purple / slate only; there is no red one, so the
+    failure count wears orange here and the red lives on the status badges in the rows.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="send"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Attempts on file &middot; every subscription, all time. Attempts, not events &mdash; one event can be eight of these</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check"></i></div>
+      <div class="stat-value">{{ stats.success }}</div>
+      <div class="stat-label">Delivered &middot; the subscriber accepted the push</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.pending }}</div>
+      <div class="stat-label">Queued &middot; a slot is stamped on the row. Nothing runs on a clock in this pass, so these move when somebody moves them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ stats.failed }}</div>
+      <div class="stat-label">Failed &middot; the attempt did not land and rungs of the ladder remain</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="ban"></i></div>
+      <div class="stat-value">{{ stats.exhausted }}</div>
+      <div class="stat-label">Exhausted &middot; the whole retry ladder was spent and no further attempt is scheduled</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">This log is append-only</h2>
+      <span class="badge badge-info">No add &middot; No edit &middot; No delete</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0;">
+        Rows below carry a <span class="fw-600">View</span> action and, where the attempt is not already settled, a <span class="fw-600">Retry</span> button. There is no Add, no Edit and no Delete, and none of the three is missing: a delivery record is evidence of what this workspace tried to send, and a row somebody can rewrite after a subscriber has complained is not evidence of anything. A further attempt is <span class="fw-600">appended as a new state on the row&rsquo;s ladder</span>, never typed in by hand.
+      </p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Retry stamps the <span class="fw-600">next rung of the backoff schedule</span> onto the row &mdash; the published eight-attempt ladder that runs 0s, 5s, 5m, 30m, 2h, 5h, 10h, 10h, roughly thirty-two hours end to end. It <span class="fw-600">sends nothing</span>: 4.19 ships no outbound transport, so no subscriber is called, no payload is signed and no delivery is attempted. It records when the next attempt is due, and nothing runs on a clock to act on that. Pressing it opens the row so you can see the result.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Attempts</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search the event name or the subscription&hellip;">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `subscription` is a pk, so every option compares with |stringformat:"d". |slugify would
+            agree only by accident and is banned on pk params. A non-numeric or oversized value is
+            dropped by the view's as_db_int before it reaches the ORM, so ?subscription=abc narrows
+            nothing and still returns 200 (L11).
+
+            This is also the parameter a subscription detail page deep-links with, so it has to
+            select correctly on a first load where nothing else is set.
+          {% endcomment %}
+          <select name="subscription" aria-label="Subscription" class="form-select">
+            <option value="">Every subscription</option>
+            {% for s in subscriptions %}
+              <option value="{{ s.pk }}" {% if request.GET.subscription == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.number }} &middot; {{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Both boxes echo the RAW strings the view handed back, not a parsed date: an entry the view
+            could not read is ignored rather than rejected, and reprinting what was typed is what
+            makes that visible. The note under the bar says the bounds are whole-day inclusive.
+          {% endcomment %}
+          <input type="date" name="date_from" value="{{ date_from }}" aria-label="Triggered on or after" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to }}" aria-label="Triggered on or before" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:webhookdelivery_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        Both date bounds are <span class="fw-600">inclusive of the whole day</span> &mdash; an attempt made at 23:40 on the closing date is inside the window, not dropped at midnight. A date the browser did not supply in <span class="mono">YYYY-MM-DD</span> form is ignored rather than refused: the page still returns its rows with that bound simply not applied. The dates read <span class="fw-600">triggered at</span>, which is when the attempt was made &mdash; not the slot stamped in <span class="fw-600">Next attempt</span>, which is a time in the future that nothing is scheduled to act on.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Triggered</th>
+            <th>Subscription</th>
+            <th>Event</th>
+            <th>Status</th>
+            <th class="text-right">Attempt</th>
+            <th class="text-right">Response</th>
+            <th>Next attempt</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="nowrap">
+                <a href="{% url 'scm:webhookdelivery_detail' obj.pk %}" class="fw-600">{{ obj.triggered_at|date:"M d, Y" }}</a>
+                <div class="form-help mono">{{ obj.triggered_at|date:"H:i:s" }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  subscription is the model's one CASCADE FK and is never NULL — a delivery attempt
+                  has no life without the subscription that raised it — so it needs no null guard,
+                  and the view's select_related means neither the name nor the id costs a query.
+                {% endcomment %}
+                <a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}" class="fw-600">{{ obj.subscription.name }}</a>
+              </td>
+              <td class="mono">{{ obj.event }}</td>
+              <td>
+                {% comment %}
+                  Colour-named literals only. badge-success / badge-danger / badge-warning do not
+                  exist in theme.css and render as unstyled text (L33, shipped four times). Failed
+                  and Exhausted share badge-red on purpose: both mean the subscriber did not get it,
+                  and the difference between them — whether anything further is scheduled — is the
+                  Next attempt column, not the colour. The else branch is the guard for a sixth
+                  status added to the choices without a colour: it still prints its label.
+                {% endcomment %}
+                {% if obj.status == 'success' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'exhausted' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'simulated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+                {% if obj.error_message %}
+                  <div class="form-help mono">{{ obj.error_message|truncatechars:64 }}</div>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ obj.attempt_no }}</td>
+              <td class="text-right">
+                {% comment %}
+                  Null on every attempt that never reached a server: a DNS failure, a refused
+                  connection or a timeout has no status line to record. That is a different fact from
+                  a server that answered badly, so the em dash stands where a zero would lie. Tested
+                  with `is not None` rather than truthiness because a nullable integer read as falsy
+                  would swallow a legitimate zero.
+                {% endcomment %}
+                {% if obj.response_code is not None %}
+                  {% if obj.response_code < 300 %}<span class="badge badge-green">{{ obj.response_code }}</span>
+                  {% elif obj.response_code < 400 %}<span class="badge badge-info">{{ obj.response_code }}</span>
+                  {% else %}<span class="badge badge-red">{{ obj.response_code }}</span>{% endif %}
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  A stamped intent, not a promise. Nothing in this pass runs on a clock, so a slot in
+                  the past means the moment came and went with nobody to act on it — which is exactly
+                  what the row should say. Null on a row that is finished, whether it succeeded or
+                  spent its whole ladder.
+                {% endcomment %}
+                {% if obj.next_attempt_at %}
+                  <span class="mono">{{ obj.next_attempt_at|date:"M d, Y H:i" }}</span>
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:webhookdelivery_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    NO EDIT AND NO DELETE ICON HERE — there is no view, no form and no route for
+                    either, so a button would 404, and a working one would let staff rewrite the log
+                    a subscriber complaint is going to be answered from. See the header comment.
+
+                    Retry is offered on the two statuses that are not settled. A succeeded attempt
+                    has nothing to retry, a simulated one never went anywhere to fail, and an
+                    exhausted one has already spent its ladder. The remaining budget check — is
+                    there a rung left — lives on the detail page, where max_attempts is in context;
+                    it is not available here and is not invented (L7). That gap is harmless because
+                    the view never refuses: handed a spent row it writes Exhausted instead of
+                    scheduling a ninth attempt, which the confirm text says outright.
+                  {% endcomment %}
+                  {% if obj.status == 'failed' or obj.status == 'pending' %}
+                    <form method="post" action="{% url 'scm:webhookdelivery_retry' obj.pk %}" onsubmit="return confirm('Schedule another delivery attempt for {{ obj.event }}? The next slot on the backoff ladder is stamped onto the row and the attempt count goes up by one. If the ladder is already spent, the row is marked Exhausted instead and no further attempt is scheduled. Nothing is sent either way: 4.19 ships no outbound transport, so this records the schedule and calls nobody. You will land on the delivery so you can see the result.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Retry"><i data-lucide="refresh-cw"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <h3>No delivery attempts match these filters</h3>
+                  <p>Nothing has been recorded for this combination of subscription, status and dates. That is a statement about the filters and not about the subscription: clear them to see the whole log. If the log is empty everywhere, no attempt has been recorded yet &mdash; rows land here as events fire, and there is deliberately no way to type one in by hand. Check the <a href="{% url 'scm:webhooksubscription_list' %}">subscriptions</a> to see which rules exist and whether any of them is switched off.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Rows arrive here from the attempt itself and from nowhere else &mdash; no screen in this application writes one by hand, and none edits or removes one. <span class="fw-600">If a row looks wrong, that is what the log says happened.</span> Staff changes to the subscriptions themselves are a different trail entirely and live in the audit log, unchanged. Payload excerpts are <span class="fw-600">truncated by design</span> and may contain partner PII, so a full payload body is never stored, here or anywhere in 4.19 &mdash; and the signature column on the detail page is blank on every row for a related reason: with no plaintext signing key and no transport, there is nothing that could compute one.
+    </div>
+  </div>
+{% endblock %}
