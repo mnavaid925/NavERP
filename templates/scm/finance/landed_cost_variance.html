@@ -286,7 +286,9 @@ stat-card icon colours are blue / green / orange / purple / slate only.
       is a real cost that deliberately stays out of stock value. The gap between the two columns is the expensed
       portion, not a missing allocation.
       {% if truncated %}
-        The figures above the table cover the whole filtered set; the footer covers only the {{ row_cap }} rows printed.
+        This view is capped at {{ row_cap }} rows, and the figures above are summed from the same capped list as the
+        footer &mdash; so vouchers beyond the cap are counted in neither. Narrow the filters until this notice clears
+        before reading these as the period&rsquo;s whole landed-cost variance.
       {% endif %}
     </div>
   </div>
