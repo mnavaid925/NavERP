@@ -5803,7 +5803,16 @@ class Command(BaseCommand):
         # than crash the whole `seed_scm` run at the last pass.
         supplier = (Party.objects.filter(tenant=tenant, roles__role="supplier")
                     .order_by("id").distinct().first())
-        client = LogisticsClient.objects.filter(tenant=tenant).order_by("id").first()
+        # The EDI-CONFIGURED client specifically, not merely the first one. Constraint A makes the
+        # linked client the single home of the interchange identity, and `effective_interchange_id`
+        # reads `edi_partner_id` through the FK — so linking the lowest-id client (4.17 seeds that as
+        # the `api`/NetSuite one, with a blank edi_partner_id) would render an EMPTY interchange id on
+        # the flagship EDI connection. `.exclude(edi_partner_id="")` is the term that makes the link
+        # worth having; when no such client exists the fallback below types its own pair instead.
+        client = (LogisticsClient.objects
+                  .filter(tenant=tenant, integration_mode="edi")
+                  .exclude(edi_partner_id="")
+                  .order_by("id").first())
         # A BIN rather than any location: the RFID reader watches a physical spot, and 4.3's
         # warehouse root would read as "the reader watches the building". The field is
         # `location_type`, NOT `kind` — 4.3's Location predates the `kind` spelling the spine's
@@ -5869,7 +5878,14 @@ class Command(BaseCommand):
             tenant=tenant, name="EDI VAN — trading partner interchange",
             category="edi", system="edi_van", direction="bidirectional", transport="as2",
             auth_method="mtls", endpoint_url="https://as2.van-partner.example.net/exchange",
-            interchange_id="ZZ12345678", interchange_qualifier="ZZ",
+            # CONSTRAINT A, the same rule IntegrationEndpoint.clean() and IntegrationEndpointForm
+            # enforce: a row may not carry its own interchange identity AND a 3PL client link. When
+            # the client is there the identity is read through it, so these stay blank; only the
+            # no-client fallback types a pair. Seeding both produced a row whose detail page showed an
+            # empty interchange id (the properties read through the FK) while the columns held one,
+            # and whose edit form raised a field error on a value nobody had typed.
+            interchange_id="" if client else "ZZ12345678",
+            interchange_qualifier="" if client else "ZZ",
             trigger_mode="realtime", environment="production", lifecycle_stage="certified",
             status="connected",
             # Both optional pointers, and both left NULL when the earlier pass has not run.
