@@ -1758,4 +1758,28 @@ no `crm.CustomerPortalAccess`, so a bullet pointing at a gated customer page wou
 The gated surface is reached by CUSTOMERS at `/scm/portal/`. **No key for `PortalActivity`** — five NavERP.md
 bullets, five keys; the log is a panel on the account detail page.
 
+**`LIVE_LINKS["4.17"]`** → Client Billing `scm:clientbillingrun_list` (the ledger-derived worksheet that stops at
+a DRAFT `accounting.Invoice`), Client Inventory Segregation **`scm:client_inventory_report`** (COMPUTED over
+`Item.owner_client` + `StockMove` — no table), SLA Management `scm:clientsla_list` (`recompute()` derives the
+achievement, it is never typed), Client Integration **`scm:logisticsclient_list`** (the EDI/API field block lives
+ON the client master — there is no sync console to point at, and inventing a dead link is worse than pointing at
+the real thing, L32), Warehouse Rental Management **`scm:client_space_report`** (COMPUTED — committed space beside
+the client's reserved bins). **No key for `ClientRateCard`** or either line child — five NavERP.md bullets, five
+keys; the rate card is the pricing a billing run is calculated against and is reached from the client detail page,
+the billing-run list and the client list.
+
+**`LIVE_LINKS["4.18"]`** → Accounts Payable **`scm:finance_payables`**, Accounts Receivable
+**`scm:finance_receivables`**, Landed Cost Calculation `scm:landedcostvoucher_list`, Budgeting
+**`scm:finance_budget_variance`**, Tax Management `scm:dutytariff_list`. **THREE of the five are READ-ONLY COMPUTED
+registers over pointers, not tables** — payables reads 4.1 `GoodsReceiptNote.bill` + 4.6 `FreightInvoice.bill` +
+4.18 `LandedCostVoucher.bill`; receivables reads 4.5 `SalesOrder.invoice` + 4.17 `ClientBillingRun.invoice` +
+4.10 `ReturnAuthorization.credit_note`; budgeting is computed over `accounting.BudgetLine.org_unit` against PR/PO
+commitments and freight + landed actuals. An AP, AR or Budget table here would be a second copy of the same money
+that drifts the first time Accounting voids something (L29). Landed Cost Calculation is the one genuinely new
+capability, and Tax Management is the **customs** master (HS code × origin) — sales/VAT/GST stays
+`accounting.TaxCode`, FK'd from the charge line. **No key for `LandedCostCharge`, `LandedCostAllocation` or the
+landed-cost variance report `scm:landed_cost_variance`** — five NavERP.md bullets, five keys; the charges and the
+derived allocations are panels on the voucher detail page and the variance report is reached from there (the
+`ClientRateCardLine` / `ReorderRule` / `ReturnReason` / `MeterReading` rule).
+
 `MODULE_ICONS[4]` = `"truck"` (already set). A new sub-module adds ONE `LIVE_LINKS["4.M"]` entry — don't touch others.
