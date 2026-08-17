@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — the APPEND-ONLY integration exchange log.
+
+Renders apps/scm/views/IntegrationApiGateway/IntegrationMessages.py::integrationmessage_list, which
+returns crud_list(...). Everything this page may read, and nothing else:
+
+  object_list            the row var, from crud_list (apps/core/crud.py). NOT `messages` — a context
+                         key by that name would collide with django.contrib.messages and silently
+                         replace the flash list that partials/messages.html renders, so the rows are
+                         `object_list` here and the loop variable below is `obj`
+  page_obj               paginator page; partials/pagination.html is the L9-safe include (it guards
+                         has_previous / has_next, so page 1 and the last page never call
+                         previous_page_number / next_page_number unconditionally)
+  q                      the search string, echoed back into the box
+  endpoints              IntegrationEndpoint queryset (tenant-scoped, ordered by name) behind the
+                         ?endpoint= dropdown — a PK filter, so every option compares with
+                         |stringformat:"d" and NEVER |slugify
+  direction_choices      MESSAGE_DIRECTION_CHOICES   (value, label) pairs
+  document_type_choices  DOCUMENT_TYPE_CHOICES       (value, label) pairs
+  status_choices         MESSAGE_STATUS_CHOICES      (value, label) pairs
+  source_choices         MESSAGE_SOURCE_CHOICES      (value, label) pairs
+  date_from / date_to    the RAW GET strings, echoed straight back into the two date boxes. They may
+                         be "" and they may be junk: an unparseable date is IGNORED by the view, so
+                         the page returns 200 with the filter simply not applied (L11)
+  stats                  dict, exactly four int keys: total, pending, failed, acknowledged —
+                         computed over the WHOLE tenant queryset, never over the filtered page
+
+Filter params: q / endpoint / direction / document_type / status / source / date_from / date_to.
+Every one of them except `endpoint` is a STRING compare against request.GET; `endpoint` is the only
+pk on this page, which is why |stringformat:"d" appears exactly once below.
+
+--------------------------------------------------------------------------------------------------
+NO ADD BUTTON, NO EDIT, NO DELETE — THAT IS THE DESIGN, NOT AN UNFINISHED PAGE
+--------------------------------------------------------------------------------------------------
+Do not "complete the CRUD" here. There is no integrationmessage_create / _edit / _delete view, no
+form module for the model (apps/scm/forms/IntegrationApiGateway/IntegrationMessages.py deliberately
+does not exist) and no route for any of them — only list, detail, reprocess and the exceptions
+report. The reasons, each sufficient on its own:
+
+  * This table is EVIDENCE OF WHAT CROSSED THE BOUNDARY. "Their 850 arrived at 09:14 with control
+    number 000000142 and we acknowledged it at 09:15" is the sentence it exists to make defensible.
+    A log staff can revise after a chargeback opens is not evidence, and one they can add rows to is
+    worse: it is a place to manufacture an interchange that never happened.
+  * A wrong row is corrected by APPENDING a later correct row, exactly as 4.3's StockMove ledger
+    takes a compensating movement and the general ledger takes a reversal — never by editing the
+    original.
+  * The precedent already shipped: 4.13's MeterReading and 4.16's PortalActivity are read-only pages
+    of this same shape, and apps/scm/tests/test_security.py asserts that the routes stay absent.
+
+The one write this page offers is Reprocess, and it does not change what the row SAYS — it re-queues
+the row for handling by resetting status to Pending and clearing the last error. It is refused by the
+view on a row that is already Pending or Acknowledged, and it FIRES NO HTTP REQUEST: 4.19 ships no
+outbound transport at all.
+
+Every multi-line note on this page is a comment/endcomment block. A multi-line hash comment leaks
+into the rendered page as visible text (L2), so it is never used here.
+
+--------------------------------------------------------------------------------------------------
+Colour and silences
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges only — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-danger and badge-warning DO NOT EXIST and render
+completely unstyled; that mistake has shipped four times (L33). Every chain below ends in an {% else %}
+that prints the model's own get_<field>_display, so a choice added later still renders its label
+instead of vanishing.
+
+Three cells can be legitimately empty and each prints an em dash rather than a blank: `control_number`
+is blank for a non-EDI exchange that has no interchange control envelope, `external_id` is blank for a
+partner that sends no de-duplication header, and `error_code` is blank on every row that did not fail.
+"Not applicable" and "nothing recorded" are both real answers, and neither is a gap.
+
+Nothing in a row costs a query: the view's select_related covers endpoint, purchase_order and
+sales_order, and the two typed order pointers are deliberately NOT rendered here — they are joins for
+columns nobody scans a log by, and they are on the detail page instead.
+{% endcomment %}
+{% block title %}Integration Messages{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Integration Messages</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Integration Messages</span></div>
+      <p class="text-muted">Every document that crossed the boundary between this workspace and an outside system — an EDI 850 from a customer, an order import from a storefront, a tag-read batch off a reader. It is the record a partner dispute turns on and the first place to look when a feed goes quiet. <span class="fw-600">Read-only by construction:</span> a row is written once and never edited or deleted.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:integration_exceptions' %}" class="btn btn-outline"><i data-lucide="triangle-alert"></i> Exceptions</a>
+      <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline"><i data-lucide="plug"></i> Endpoints</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The four tiles count the WHOLE tenant table, not the filtered page — a figure that moved every
+    time somebody typed in the search box would read as a workspace fact while being a fact about the
+    filter. stat-icon ships blue / green / orange / purple / slate only; there is no red one, so a
+    failure count wears orange here and the red lives on the status badges in the rows.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="arrow-left-right"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Exchanges on file · every direction, every endpoint, all time</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ stats.pending }}</div>
+      <div class="stat-label">Pending · queued for handling. Nothing runs on a clock in this pass, so these move when somebody moves them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ stats.failed }}</div>
+      <div class="stat-label">Failed · grouped by error code on the <a href="{% url 'scm:integration_exceptions' %}">exceptions page</a></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ stats.acknowledged }}</div>
+      <div class="stat-label">Acknowledged · the partner confirmed receipt, usually with a 997</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">This log is append-only</h2>
+      <span class="badge badge-info">No add · No edit · No delete</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0;">
+        Rows below carry a <span class="fw-600">View</span> action and, where the row is not already pending or acknowledged, a <span class="fw-600">Reprocess</span> button. There is no Add, no Edit and no Delete, and none of the three is missing: an exchange log is evidence of what crossed the boundary, and a row somebody can rewrite after a partner has acted on it is not evidence of anything. To correct a mistaken exchange, the corrected document is <span class="fw-600">appended as a new row</span> — the same posture the stock ledger takes with a compensating movement and the general ledger takes with a reversal.
+      </p>
+      <p class="text-muted" style="margin-top:.75rem;">
+        Reprocess re-queues a row for handling: it sets the status back to Pending, bumps the attempt count and clears the recorded error. It does <span class="fw-600">not</span> alter what the row says arrived, and it <span class="fw-600">sends nothing</span> — 4.19 ships no outbound transport, so nothing is called, signed or delivered by pressing it. Pressing it opens the row so you can see the result.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Exchanges</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search MSG- number, control number, external id or source reference…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `endpoint` is a pk, so every option compares with |stringformat:"d". |slugify would agree
+            only by accident and is banned on pk params. A non-numeric or oversized value is dropped
+            by the view's as_db_int before it reaches the ORM, so ?endpoint=abc narrows nothing and
+            still returns 200 (L11).
+          {% endcomment %}
+          <select name="endpoint" aria-label="Endpoint" class="form-select">
+            <option value="">Every endpoint</option>
+            {% for e in endpoints %}
+              <option value="{{ e.pk }}" {% if request.GET.endpoint == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.number }} · {{ e.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="direction" aria-label="Direction" class="form-select">
+            <option value="">Both directions</option>
+            {% for val, label in direction_choices %}
+              <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="document_type" aria-label="Document type" class="form-select">
+            <option value="">Any document</option>
+            {% for val, label in document_type_choices %}
+              <option value="{{ val }}" {% if request.GET.document_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="source" aria-label="Related record" class="form-select">
+            <option value="">Any related record</option>
+            {% for val, label in source_choices %}
+              <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Both boxes echo the RAW strings the view handed back, not a parsed date: an entry the view
+            could not read is ignored rather than rejected, and reprinting what was typed is what makes
+            that visible. The note under the bar says the bounds are whole-day inclusive.
+          {% endcomment %}
+          <input type="date" name="date_from" value="{{ date_from }}" aria-label="Occurred on or after" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ date_to }}" aria-label="Occurred on or before" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:integrationmessage_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        Both date bounds are <span class="fw-600">inclusive of the whole day</span> — a message that arrived at 23:40 on the closing date is inside the window, not dropped at midnight. A date the browser did not supply in <span class="mono">YYYY-MM-DD</span> form is ignored rather than refused: the page still returns its rows with that bound simply not applied. The search box covers the message number, the interchange control number, the partner&rsquo;s own external id and the source reference — the endpoint is the dropdown beside it, so folding an endpoint name into the free-text box would make one field mean two things at once.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Occurred</th>
+            <th>Endpoint</th>
+            <th>Direction</th>
+            <th>Document</th>
+            <th>Status</th>
+            <th>References</th>
+            <th class="text-right">Records</th>
+            <th class="text-right">Attempts</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="nowrap">
+                <a href="{% url 'scm:integrationmessage_detail' obj.pk %}" class="fw-600">{{ obj.occurred_at|date:"M d, Y" }}</a>
+                <div class="form-help mono">{{ obj.occurred_at|date:"H:i:s" }} · {{ obj.number }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  endpoint is the model's one CASCADE FK and is never NULL — a log line has no life
+                  without the connection it crossed — so it needs no null guard, unlike the two order
+                  pointers, which are not rendered on this page at all.
+                {% endcomment %}
+                <a href="{% url 'scm:integrationendpoint_detail' obj.endpoint_id %}" class="fw-600">{{ obj.endpoint.name }}</a>
+              </td>
+              <td>
+                {% if obj.direction == 'inbound' %}<span class="badge badge-info">{{ obj.get_direction_display }}</span>
+                {% elif obj.direction == 'outbound' %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+              </td>
+              <td>{{ obj.get_document_type_display }}</td>
+              <td>
+                {% comment %}
+                  Colour-named literals only. badge-success / badge-danger / badge-warning do not
+                  exist in theme.css and render as unstyled text (L33, shipped four times). The else
+                  branch is the guard for a seventh status added to the choices without a colour: it
+                  still prints its label.
+                {% endcomment %}
+                {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'received' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+                {% elif obj.status == 'ignored' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+                {% if obj.error_code %}
+                  <div class="form-help mono">{{ obj.error_code }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  Two references, and both are legitimately blank. control_number is the interchange
+                  control number and exists only on an enveloped EDI exchange; external_id is the
+                  partner's own de-duplication key (X-Shopify-Webhook-Id, a Svix eventId) and exists
+                  only where the partner sends one. An em dash says "this kind of exchange carries no
+                  such reference", which is a different fact from "we failed to record it".
+                {% endcomment %}
+                {% if obj.control_number %}
+                  <span class="mono">{{ obj.control_number }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+                {% if obj.external_id %}
+                  <div class="form-help mono">{{ obj.external_id }}</div>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                {% comment %}
+                  The BATCH size, not a row count of anything on this page: 400 tag reads arrive as
+                  one message carrying 400, never as 400 messages. Zero is a real answer — an empty
+                  inventory feed is a thing partners genuinely send.
+                {% endcomment %}
+                {{ obj.record_count }}
+              </td>
+              <td class="text-right">{{ obj.attempt_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:integrationmessage_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    NO EDIT AND NO DELETE ICON HERE — there is no view, no form and no route for
+                    either, so a button would 404, and a working one would let staff rewrite the log
+                    a partner dispute is going to be argued from. See the header comment.
+
+                    Reprocess is offered only where the view will accept it: it refuses a row that is
+                    already Pending (nothing to re-queue) or Acknowledged (the partner has confirmed
+                    receipt — re-queuing it would contradict a fact they hold too). The same rule is
+                    enforced in the view, so a crafted POST is refused with a message rather than
+                    honoured; this condition only keeps the page honest about what the button does.
+                  {% endcomment %}
+                  {% if obj.status != 'pending' and obj.status != 'acknowledged' %}
+                    <form method="post" action="{% url 'scm:integrationmessage_reprocess' obj.pk %}" onsubmit="return confirm('Re-queue {{ obj.number }} for handling? Its status returns to Pending, the attempt count goes up by one and the recorded error is cleared. Nothing is sent: 4.19 ships no outbound transport, so this queues the row and calls no partner. What the row says arrived does not change, and you will land on the message so you can see the result.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Reprocess"><i data-lucide="refresh-cw"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <h3>No exchanges match these filters</h3>
+                  <p>Nothing has been recorded for this combination of endpoint, document type, status and dates. That is a statement about the filters and not about the connection: clear them to see the whole log. If the log is empty everywhere, no exchange has been recorded yet — rows land here as documents cross the boundary, and there is deliberately no way to type one in by hand. Check the <a href="{% url 'scm:integrationendpoint_list' %}">endpoints</a> to see which connections exist and whether any is in error.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Rows arrive here from the exchange itself and from nowhere else — no screen in this application writes one by hand, and none edits or removes one. <span class="fw-600">If a row looks wrong, that is what the log says happened;</span> the corrected document is appended alongside it and the pair is read together. Staff changes to endpoints and subscriptions are a different trail entirely and live in the audit log, unchanged. Payload excerpts are <span class="fw-600">truncated by design</span> and may contain partner PII — a ship-to name and address on an 856 is ordinary — so a full document body is never stored, here or anywhere in 4.19.
+    </div>
+  </div>
+{% endblock %}
