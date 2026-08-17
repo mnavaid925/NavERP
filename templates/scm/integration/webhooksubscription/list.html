@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — the WEBHOOK SUBSCRIPTION register (WHK-).
+
+This page is the sidebar's "Webhooks" bullet target (LIVE_LINKS["4.19"] -> scm:webhooksubscription_list).
+
+Renders apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py::webhooksubscription_list, which
+maps ?status=active|inactive onto is_active ON THE QUERYSET before calling crud_list — crud_list's
+(param, lookup, is_int) tuples cannot express that translation, so the view does it first. That is the
+DutyTariffs.py precedent, and it is why `status` below is a synthetic vocabulary rather than a model
+constant.
+
+Everything this page may read, and NOTHING else:
+
+  object_list      the rows, from crud_list (apps/core/crud.py:106). NOT `subscriptions` — that name
+                   belongs to the DELIVERY list's FK dropdown queryset, and reusing it here would make
+                   two pages mean two different things by one word.
+  page_obj / q     paginator page and the echoed search string. page_obj.window drives the shared
+                   pagination partial.
+  entity_choices   WEBHOOK_ENTITY_CHOICES  -> the ?trigger_entity dropdown
+  event_choices    WEBHOOK_EVENT_CHOICES   -> the ?trigger_event dropdown
+  format_choices   PAYLOAD_FORMAT_CHOICES  -> the ?payload_format dropdown
+  status_choices   the LITERAL [("active","Active"),("inactive","Inactive")] pair. WebhookSubscription
+                   has NO status column — this is the URL spelling of the is_active boolean, and there
+                   must not be a model constant behind it.
+  stats            dict with EXACTLY: total / active / inactive / failing
+                   (failing = consecutive_failures__gt=0), counted over the WHOLE workspace.
+
+Per row, and all of it free — every one is a local column or a plain choices display on a row the
+paginator already loaded, so nothing below costs a query: obj.pk, obj.number, obj.name,
+obj.get_trigger_entity_display, obj.get_trigger_event_display, obj.target_url,
+obj.get_payload_format_display, obj.is_active, obj.consecutive_failures, obj.auto_disable_threshold,
+obj.last_delivery_at, obj.masked.
+
+Filter params: q / trigger_entity / trigger_event / payload_format / status — ALL FOUR ARE STRING
+COMPARISONS, plain equality against request.GET.<param>. There is no pk filter on this page, so
+|stringformat:"d" appears NOWHERE in this file and that absence is deliberate rather than an omission.
+|slugify would be wrong on every one of them: it lowercases and strips, so it agrees only by accident.
+A hand-typed junk value narrows nothing and returns 200 rather than 500 (L11).
+
+--------------------------------------------------------------------------------------------------
+WHAT A SUBSCRIPTION IS, AND WHAT IT IS NOT YET
+--------------------------------------------------------------------------------------------------
+A subscription is a RULE about an internal supply-chain event — "when a shipment is delivered, POST it
+to this URL". It points at no partner and holds no FK but its tenant, because the thing it watches is
+ours, not theirs.
+
+NOTHING IN THIS PASS DELIVERS. There is no outbound HTTP anywhere under apps/scm for 4.19: no
+requests, no urllib, no httpx. Every column that reads like runtime behaviour is therefore a record of
+INTENT or of STATE that a human moves:
+
+  auto_disable_threshold   the attempt budget somebody chose. Nothing trips it.
+  consecutive_failures     a counter. Nothing increments it on a clock and nothing decrements it.
+  last_delivery_at         a timestamp. Nothing stamps it automatically.
+  filter_expression /      recorded, never evaluated — nothing delivers, so nothing filters.
+  include_fields
+
+That is stated on this page rather than left to be discovered, because a "0 of 8 failures" figure that
+looked live would be read as a health signal it cannot be.
+
+--------------------------------------------------------------------------------------------------
+Why the target URL is printed and not linked
+--------------------------------------------------------------------------------------------------
+target_url is TENANT-TYPED. Turning it into an <a href> would hand every colleague who opens this
+register a one-click navigation to whatever another user saved, and a javascript: value would run in
+their session. URLField's validator restricts the scheme at form validation, but a row written by a
+seeder or a migration never passes through that validator — so the defence lives here, where it always
+holds: the value is rendered as autoescaped TEXT. Nothing on this page is |safe.
+
+The same URL is also the SSRF surface the future transport pass has to reckon with: it is the address
+the SERVER would fetch. That pass must add an allow-list plus a private-IP block (RFC1918, loopback,
+169.254.0.0/16, IPv6 ULA) and re-resolve against DNS rebinding before it sends anything.
+
+--------------------------------------------------------------------------------------------------
+Colour
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges ONLY — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-warning and badge-danger DO NOT EXIST and render as
+completely unstyled text (L33, shipped four times). Every badge in this file is one of those six
+literals. stat-icon ships blue / green / orange / purple / slate only.
+
+The payload-format chain ends {% templatetag openblock %} else {% templatetag closeblock %}
+{{ obj.get_payload_format_display }}, so a choices value added to the model later still renders its
+own label instead of vanishing. The is_active chain cannot end that way and does not pretend to:
+is_active is a BOOLEAN, so there is no get_is_active_display to fall back to and the chain ends in a
+plain else branch — the same shape DutyTariff's state column uses.
+
+Delete is @require_POST AND @tenant_admin_required at the view, so it is a real <form method="post">
+and can never be a link. It is rendered for everyone here and refused by the decorator for non-admins:
+the contract pins no is_tenant_admin key for this page, and inventing one would be guessing at a name
+the view does not pass (L7). ONLY the system-generated WHK- number is interpolated into the confirm
+string — `name` and `target_url` are user-typed, and an apostrophe in either escapes to &#39;, which
+HTML decodes back to a bare quote before JavaScript ever parses the attribute; the dialog then breaks
+open and the guard is silently gone (L42). The apostrophes written into that string are \' for exactly
+that reason.
+{% endcomment %}
+{% block title %}Webhook Subscriptions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Webhook Subscriptions</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Webhook Subscriptions</span></div>
+      <p class="text-muted">A subscription is a standing rule: <span class="fw-600">when this happens to one of our documents, tell that URL about it</span>. Pick the entity to watch, the event that matters, and where the payload goes. Each subscription keeps its own <span class="fw-600">signing secret</span> so the receiver can prove a call really came from us — and its own <span class="fw-600">delivery log</span>, so a partner insisting they were never notified can be answered with a record rather than a recollection.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:webhookdelivery_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Delivery Log</a>
+      <a href="{% url 'scm:webhooksubscription_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Subscription</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The tiles count the WHOLE workspace, not the filtered page. "3 failing" is a fact somebody acts
+    on, and a number that re-scoped itself as you browsed would report a healthy estate the moment you
+    filtered to one entity. The "matching" chip on the card header IS the filtered count and says so.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="webhook"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Subscriptions on file, across every entity and event</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="toggle-right"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Switched on — the rules that <span class="fw-600">would</span> fire once a transport exists to send them</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="circle-slash"></i></div>
+      <div class="stat-value">{{ stats.inactive }}</div>
+      <div class="stat-label">Switched off. Kept rather than deleted — the delivery log underneath a subscription is the evidence of what was already sent</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ stats.failing }}</div>
+      <div class="stat-label">Carrying a non-zero failure run. Nothing auto-disables them — the counter is recorded, never enforced</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Subscriptions</h2>
+      <div class="badge-group">
+        {% if stats.failing %}<span class="badge badge-red">{{ stats.failing }} failing</span>{% endif %}
+        {% if stats.inactive %}<span class="badge badge-slate">{{ stats.inactive }} switched off</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search WHK- number, name or target URL…">
+        </div>
+        <div class="form-group">
+          <select name="trigger_entity" aria-label="Trigger entity" class="form-select">
+            <option value="">Any entity</option>
+            {% for value, label in entity_choices %}
+              <option value="{{ value }}" {% if request.GET.trigger_entity == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="trigger_event" aria-label="Trigger event" class="form-select">
+            <option value="">Any event</option>
+            {% for value, label in event_choices %}
+              <option value="{{ value }}" {% if request.GET.trigger_event == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="payload_format" aria-label="Payload format" class="form-select">
+            <option value="">Any format</option>
+            {% for value, label in format_choices %}
+              <option value="{{ value }}" {% if request.GET.payload_format == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            status_choices is the literal active/inactive pair the view passes. WebhookSubscription has
+            no status column, so there is no model constant behind this dropdown and there must not be
+            one — the view maps the chosen value onto is_active BEFORE crud_list. Any other value is
+            ignored, so a hand-typed ?status=deleted narrows nothing and returns 200 rather than 500.
+          {% endcomment %}
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Active and inactive</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">Nothing on this page sends anything.</span> Outbound HTTP is deferred for this pass, so a subscription here is a rule that has been <em>written down</em>, not a rule that is running. Failure counts, attempt budgets and last-delivery timestamps are recorded state that a person moves — no scheduler reads them, and no subscription disables itself.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Subscription</th>
+            <th>Watches</th>
+            <th>Target</th>
+            <th>Signing secret</th>
+            <th class="nowrap">Failure run</th>
+            <th>State</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:webhooksubscription_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a>
+                <div class="form-help mono">{{ obj.number }}</div>
+              </td>
+              <td>
+                <span class="fw-600">{{ obj.get_trigger_entity_display }}</span>
+                <div class="form-help">{{ obj.get_trigger_event_display }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  Printed, never linked. target_url is tenant-typed: an <a href> here would give every
+                  colleague a one-click trip to whatever somebody else saved, and a javascript: value
+                  would run in their session. URLField screens the scheme at form validation, but a row
+                  written by a seeder or a data migration never passes through that validator — so the
+                  defence lives here, where it holds for every row however it arrived. Autoescaped
+                  text, never |safe.
+                {% endcomment %}
+                <span class="mono">{{ obj.target_url }}</span>
+                <div class="form-help">
+                  {% if obj.payload_format == 'json' %}
+                    <span class="badge badge-info">{{ obj.get_payload_format_display }}</span>
+                  {% elif obj.payload_format == 'xml' %}
+                    <span class="badge badge-slate">{{ obj.get_payload_format_display }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ obj.get_payload_format_display }}</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  obj.masked is "" when no secret has been generated, and "abcd1234••••••••" when one
+                  has. Only the first 8 characters of the plaintext are ever stored alongside the
+                  SHA-256 — enough to tell two secrets apart and to confirm a rotation happened, and
+                  useless to anyone who copies it. The hash itself is never rendered anywhere.
+                {% endcomment %}
+                {% if obj.masked %}
+                  <span class="mono">{{ obj.masked }}</span>
+                {% else %}
+                  <span class="badge badge-amber">Not set</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if obj.consecutive_failures %}
+                  <span class="badge badge-red">{{ obj.consecutive_failures }} of {{ obj.auto_disable_threshold }}</span>
+                {% else %}
+                  <span class="badge badge-green">0 of {{ obj.auto_disable_threshold }}</span>
+                {% endif %}
+                <div class="form-help">
+                  {% comment %}
+                    last_delivery_at is nullable, and the guard is an explicit if around the whole
+                    expression rather than a |default — a None inside a filter ARGUMENT raises and 500s
+                    where a bare lookup would quietly print nothing (L10).
+                  {% endcomment %}
+                  {% if obj.last_delivery_at %}
+                    Last attempt {{ obj.last_delivery_at|date:"M d, Y H:i" }}
+                  {% else %}
+                    Never attempted
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                {% comment %}
+                  is_active is a BOOLEAN, so there is no get_is_active_display to close this chain
+                  with — it ends in a plain else branch, exactly as DutyTariff's state column does.
+                  Only the choices-backed chains in this file (payload format, above) carry a
+                  get_<field>_display fallback.
+                {% endcomment %}
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                  <div class="form-help">Switched off — it would be skipped even once a transport exists.</div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:webhooksubscription_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% comment %}
+                    Delete is @require_POST AND @tenant_admin_required, so it is a real form and a GET
+                    on that route is a 405. It is rendered for everyone and refused by the decorator
+                    for non-admins — the contract pins no is_tenant_admin key for this page, and a
+                    variable the view does not pass renders as an empty string with no error anywhere,
+                    which would hide this button from the admins who are allowed to use it (L7).
+
+                    The confirm names the real cost: WebhookDelivery.subscription is CASCADE, so the
+                    entire delivery log goes with the row. Only the system-generated WHK- number is
+                    interpolated; the apostrophes are written \' because &#39; is decoded back to a
+                    bare quote before JavaScript sees the attribute, which breaks the dialog open and
+                    silently removes the guard (L42).
+                  {% endcomment %}
+                  <form method="post" action="{% url 'scm:webhooksubscription_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its ENTIRE DELIVERY LOG is deleted with it — every attempt, response code and error recorded against this subscription — and none of it can be reconstructed, because the log is the only record that a notification was ever raised. If a partner later disputes whether they were told, that answer goes too. If you only want it to stop firing, clear the Active switch instead: the rule stops and the evidence stays.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="webhook"></i>
+                  <h3>No webhook subscriptions</h3>
+                  <p>Nothing is set up to notify anyone when a document changes here, so a partner who needs to know that a shipment was delivered or a goods receipt was posted has to come and look. Add a subscription for each event somebody downstream depends on: choose the entity and the event, give it the URL to call, and generate a signing secret so the receiver can prove the call is ours. If you were expecting rows here, try clearing the filters.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The shared partial, which is the L9 fix in one place: previous_page_number and next_page_number
+      are each called ONLY inside their own has_previous / has_next guard, so page one and the last
+      page cannot raise EmptyPage once this register outgrows a single page. It also carries every
+      current GET param except `page`, so paging never quietly drops the filters.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Ordered by <span class="fw-600">name</span>, with the row id as a tie-break so page two is the same page twice. A subscription is a rule about <span class="fw-600">our</span> events, which is why it names no partner and carries no counterparty link — where a trading partner is involved, that relationship lives on an integration endpoint instead. Deliveries raised against these rules are listed in the <a href="{% url 'scm:webhookdelivery_list' %}">delivery log</a>, which is append-only: a row there is evidence of what crossed the boundary and is never edited.
+    </div>
+  </div>
+{% endblock %}
