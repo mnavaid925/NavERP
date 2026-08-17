@@ -103,8 +103,8 @@ from .ThirdPartyLogistics.ClientBillingRuns import urlpatterns as _tpl_billingru
 from .ThirdPartyLogistics.ClientSlas import urlpatterns as _tpl_slas
 from .ThirdPartyLogistics.Reports import urlpatterns as _tpl_reports
 
-# 4.18 Finance & Accounting Integration. Alias `_fin_`, verified free against all seventeen shipped
-# aliases (`_procurement_ _srm_ _inv_ _wms_ _oms_ _tms_ _dp_ _mf_ _qm_ _rma_ _sca_ _cc_ _am_ _lm_
+# 4.18 Finance & Accounting Integration. Alias `_fin_`, verified free against every shipped scm
+# prefix (`_procurement_ _srm_ _inv_ _wms_ _oms_ _tms_ _dp_ _mf_ _qm_ _rma_ _sca_ _cc_ _am_ _lm_
 # _ccm_ _cp_ _tpl_`). Rebinding a live alias would silently drop another sub-module's routes with no
 # import error at all — the name would simply resolve to the wrong list.
 from .FinanceIntegration.LandedCostVouchers import urlpatterns as _fin_vouchers
