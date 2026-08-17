@@ -44,7 +44,7 @@ only READ; not one of them writes a row of any kind, in scm or in accounting.
 FOLDER-NAME ASYMMETRY — DO NOT "FIX" IT
 --------------------------------------------------------------------------------------------------
 The backend package is ``FinanceIntegration/`` while the template folder is ``templates/scm/finance/``
-— that asymmetry IS the house rule (all seventeen shipped scm template folders use short slugs:
+— that asymmetry IS the house rule (every shipped scm template folder uses a short slug:
 ``3pl/``, ``portal/``, ``coldchain/``, ``srm/``, …). Renaming ``templates/scm/finance/`` to
 ``financeintegration/`` would break every ``render()`` in this sub-module.
 """
