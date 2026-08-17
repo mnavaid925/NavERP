@@ -1,0 +1,451 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — one recorded exchange, read as evidence rather than as a record.
+
+A row in this table is never corrected, so this page is not a form with the inputs switched off: it is
+the readable form of a single fact ("this document crossed this connection, in this direction, at this
+moment") plus the two things that make that fact usable in an argument — what it was filed against
+inside this workspace, and the acknowledgement that does or does not pair with it. "Their 850 landed at
+09:14 and our 997 went back at 09:15" is the reading that settles a chargeback, and no single row can
+say it.
+
+Renders apps/scm/views/IntegrationApiGateway/IntegrationMessages.py::integrationmessage_detail.
+Everything this page may read, and nothing else:
+
+  obj            the IntegrationMessage, from crud_detail. select_related covers endpoint,
+                 acknowledges, purchase_order and sales_order, so every pointer below is already
+                 loaded and nothing on this page costs an extra query
+  ack_message    the row that acknowledges THIS one (its 997), or None. The reverse direction of
+                 obj.acknowledges, which is what this row itself acknowledges — the page links BOTH
+                 ways because the pair is the point and either half can be the missing one
+  can_reprocess  bool, computed by the view: obj.status is neither "pending" nor "acknowledged". It
+                 gates the Reprocess form below, and the view enforces the same rule itself, so a
+                 crafted POST is refused with a message rather than honoured
+
+There is deliberately NO source_label key — the template calls obj.get_source_display directly, and a
+precomputed duplicate would be a second place for the same string to drift.
+
+--------------------------------------------------------------------------------------------------
+ACTIONS: REPROCESS AND BACK TO LIST. THERE IS NO EDIT AND NO DELETE, AND NEITHER IS MISSING
+--------------------------------------------------------------------------------------------------
+There is no integrationmessage_create, no _edit and no _delete — no view, no form module, no route. A
+button for any of them would 404, and a working one would be worse: an exchange log that staff can
+rewrite after a partner has acted on it is not evidence of anything. A wrong exchange is corrected by
+APPENDING the corrected document as a new row, exactly as 4.3's stock ledger takes a compensating
+movement and the general ledger takes a reversal.
+
+Reprocess is the one write, and it does not change what the row SAYS — it re-queues the row by
+resetting the status to Pending, bumping the attempt count and clearing the recorded error. It FIRES
+NO HTTP REQUEST: 4.19 ships no outbound transport at all, so nothing is called, signed or delivered
+by pressing it.
+
+--------------------------------------------------------------------------------------------------
+Nullable pointers, and the difference between "none" and "not yet"
+--------------------------------------------------------------------------------------------------
+endpoint is the model's one CASCADE FK and is never NULL — a log line has no life without the
+connection it crossed. Every OTHER pointer here is SET_NULL and nullable, so each is guarded and each
+prints an em dash with a sentence saying WHICH silence it is: obj.acknowledges is null on a document
+that acknowledges nothing (most of them); ack_message is None both for a document nobody has
+acknowledged yet and for one that never needed acknowledging; purchase_order and sales_order are null
+on every exchange that is not about an order. Rendering a null FK inside a filter argument raises even
+where a bare lookup would not (L10), so nothing below reaches through an unguarded pointer.
+
+theme.css ships COLOUR-named badges only — badge-success / badge-danger / badge-warning do not exist
+and render completely unstyled (L33). Every chain ends in an {% else %} printing the model's own
+get_<field>_display. Multi-line notes are comment/endcomment blocks; a multi-line hash comment leaks
+as visible text (L2).
+
+payload_excerpt is printed inside a <pre> and is ESCAPED like everything else — never |safe. It is
+partner-supplied text that may contain a ship-to name and address, it is TRUNCATED by design, and a
+full document body is never stored.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'received' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'ignored' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        {% if obj.direction == 'inbound' %}<span class="badge badge-info">{{ obj.get_direction_display }}</span>
+        {% elif obj.direction == 'outbound' %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:integrationmessage_list' %}">Integration Messages</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">{{ obj.get_document_type_display }} across <a href="{% url 'scm:integrationendpoint_detail' obj.endpoint_id %}">{{ obj.endpoint.name }}</a>, recorded once as it crossed the boundary and untouched since. There is no edit history to show because there is no edit path to produce one.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:integrationmessage_list' %}?endpoint={{ obj.endpoint_id }}" class="btn btn-outline"><i data-lucide="history"></i> This endpoint&rsquo;s traffic</a>
+      <a href="{% url 'scm:integrationmessage_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ obj.occurred_at|date:"H:i" }}</div>
+      <div class="stat-label">{{ obj.occurred_at|date:"M d, Y" }} · when the document crossed, not when the row was written</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="layers"></i></div>
+      {% comment %}
+        The BATCH size the document carried — 400 tag reads arrive as one message carrying 400, never
+        as 400 messages. Zero is a real answer: an empty inventory feed is a thing partners send, and
+        it is a different fact from a feed that never arrived.
+      {% endcomment %}
+      <div class="stat-value">{{ obj.record_count }}</div>
+      <div class="stat-label">Records in the batch · {% if obj.record_count %}what this one document carried{% else %}an empty document, which is a real thing partners send{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="repeat"></i></div>
+      <div class="stat-value">{{ obj.attempt_count }}</div>
+      <div class="stat-label">Handling attempts · raised by Reprocess, never by a background job — nothing in this pass runs on a clock</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{% if obj.acknowledged_at %}{{ obj.acknowledged_at|date:"H:i" }}{% else %}—{% endif %}</div>
+      <div class="stat-label">{% if obj.acknowledged_at %}Acknowledged {{ obj.acknowledged_at|date:"M d, Y" }}{% else %}Not acknowledged — see whether one was owed, below{% endif %}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 1. the row exactly as recorded
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What was recorded</h2>
+      <span class="badge badge-slate">{{ obj.get_document_type_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Message number</dt>
+          <dd class="mono fw-600">{{ obj.number }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Endpoint</dt>
+          <dd><a href="{% url 'scm:integrationendpoint_detail' obj.endpoint_id %}" class="fw-600">{{ obj.endpoint.name }}</a> <span class="text-muted mono">{{ obj.endpoint.number }}</span></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Direction</dt>
+          <dd>
+            {% if obj.direction == 'inbound' %}<span class="badge badge-info">{{ obj.get_direction_display }}</span>
+            {% elif obj.direction == 'outbound' %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Document type</dt>
+          <dd>{{ obj.get_document_type_display }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Status</dt>
+          <dd>
+            {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'received' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'ignored' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Occurred at</dt>
+          <dd class="mono">{{ obj.occurred_at|date:"M d, Y H:i:s" }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Interchange control number</dt>
+          {% comment %}
+            Blank on every exchange that carries no interchange envelope — an order import off a
+            storefront has no ISA/GS control number to record, and an em dash saying so is a
+            different fact from one that lost its number.
+          {% endcomment %}
+          <dd class="mono">{% if obj.control_number %}{{ obj.control_number }}{% else %}<span class="text-muted">— not an enveloped exchange</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Partner&rsquo;s own id</dt>
+          {% comment %}
+            The partner's de-duplication key — an X-Shopify-Webhook-Id, a Svix eventId. Blank where
+            the partner sends none, which is ordinary for file-drop and VAN traffic.
+          {% endcomment %}
+          <dd class="mono">{% if obj.external_id %}{{ obj.external_id }}{% else %}<span class="text-muted">— none supplied</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Records in batch</dt>
+          <dd class="fw-600">{{ obj.record_count }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Handling attempts</dt>
+          <dd>{{ obj.attempt_count }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Acknowledged at</dt>
+          <dd class="mono">{% if obj.acknowledged_at %}{{ obj.acknowledged_at|date:"M d, Y H:i:s" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Row written</dt>
+          <dd class="mono">{{ obj.created_at|date:"M d, Y H:i:s" }}</dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Occurred at</span> and <span class="fw-600">row written</span> are two different times on purpose. The first is when the document crossed the boundary — supplied by whatever recorded it, and the figure a partner will quote back. The second is stamped on insert and cannot be back-dated by a caller. When they disagree by more than a moment the exchange was recorded after the fact, which is very often the thing worth knowing.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================ 2. what it was filed against, if any
+    NO GenericForeignKey anywhere in scm — a (content_type, object_id) pair cannot be tenant-joined,
+    so it is banned. Correlation is the `source` choice plus the `source_reference` string, with
+    exactly two typed FKs alongside it for the two flows worth joining. Everything else — a goods
+    receipt, a shipment, a stock move, a trade document, an RMA — is reachable through the soft
+    pointer only, and the reference below is a NUMBER rather than a link for exactly that reason.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What it was filed against</h2>
+      {% if obj.purchase_order or obj.sales_order %}
+        <span class="badge badge-info">Linked record</span>
+      {% elif obj.source_reference %}
+        <span class="badge badge-slate">Reference only</span>
+      {% else %}
+        <span class="badge badge-muted">No correlation recorded</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Kind of record</dt>
+          <dd>{{ obj.get_source_display }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Reference</dt>
+          <dd class="mono">{% if obj.source_reference %}{{ obj.source_reference }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Purchase order</dt>
+          {% comment %}
+            SET_NULL and nullable, so it is guarded. A null FK inside a filter argument raises even
+            where a bare lookup would not (L10) — nothing here reaches through it unguarded.
+          {% endcomment %}
+          <dd>
+            {% if obj.purchase_order %}
+              <a href="{% url 'scm:purchaseorder_detail' obj.purchase_order_id %}" class="fw-600 mono">{{ obj.purchase_order.number }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Sales order</dt>
+          <dd>
+            {% if obj.sales_order %}
+              <a href="{% url 'scm:salesorder_detail' obj.sales_order_id %}" class="fw-600 mono">{{ obj.sales_order.number }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        {% if obj.purchase_order or obj.sales_order %}
+          A typed link opens the record <span class="fw-600">as it is now</span>, not as it was when the document crossed. The reference above is the frozen half of the pair and the two are meant to be read together: when they disagree, the order has changed since the exchange, which is often exactly what the argument is about.
+        {% elif obj.source_reference %}
+          This exchange is correlated by <span class="fw-600">reference only</span> — the kind of record and its number are on the row, but there is no link to follow. That is the design rather than a gap: only purchase orders and sales orders carry a typed pointer here, and every other kind of record (a goods receipt, a shipment, a stock move, a trade document, a return authorisation) is correlated by its number so that deleting or renumbering it can never leave this log holding a broken join.
+        {% else %}
+          Nothing was correlated. Plenty of traffic legitimately points at no single record — an inventory feed describes many items, a tag-read batch describes a zone — so this is an ordinary state and not a failed lookup.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================= 3. the acknowledgement pairing
+    Both halves, because either can be the missing one and the two silences mean different things.
+    obj.acknowledges is what THIS row confirms receipt of (a 997 pointing back at the 850 it answers);
+    ack_message is the row that confirmed receipt of THIS one. Both are nullable and both are guarded.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Acknowledgement</h2>
+      <div class="badge-group">
+        {% if ack_message %}<span class="badge badge-green">Acknowledged</span>{% endif %}
+        {% if obj.acknowledges %}<span class="badge badge-info">Acknowledges another message</span>{% endif %}
+        {% if not ack_message and not obj.acknowledges %}<span class="badge badge-muted">Unpaired</span>{% endif %}
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Relation</th><th>Message</th><th>Document</th><th>Status</th><th class="nowrap">Occurred</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">Acknowledged by</td>
+            {% if ack_message %}
+              <td class="mono"><a href="{% url 'scm:integrationmessage_detail' ack_message.pk %}" class="fw-600">{{ ack_message.number }}</a></td>
+              <td>{{ ack_message.get_document_type_display }}</td>
+              <td>
+                {% if ack_message.status == 'acknowledged' %}<span class="badge badge-green">{{ ack_message.get_status_display }}</span>
+                {% elif ack_message.status == 'failed' %}<span class="badge badge-red">{{ ack_message.get_status_display }}</span>
+                {% elif ack_message.status == 'pending' %}<span class="badge badge-amber">{{ ack_message.get_status_display }}</span>
+                {% elif ack_message.status == 'sent' %}<span class="badge badge-info">{{ ack_message.get_status_display }}</span>
+                {% elif ack_message.status == 'received' %}<span class="badge badge-info">{{ ack_message.get_status_display }}</span>
+                {% elif ack_message.status == 'ignored' %}<span class="badge badge-muted">{{ ack_message.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ ack_message.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="mono nowrap">{{ ack_message.occurred_at|date:"M d, Y H:i:s" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:integrationmessage_detail' ack_message.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            {% else %}
+              <td colspan="4" class="text-muted">— nothing has acknowledged this message</td>
+              <td></td>
+            {% endif %}
+          </tr>
+          <tr>
+            <td class="fw-600">This message</td>
+            <td class="mono fw-600">{{ obj.number }}</td>
+            <td>{{ obj.get_document_type_display }}</td>
+            <td>
+              {% if obj.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'sent' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'received' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+              {% elif obj.status == 'ignored' %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+            </td>
+            <td class="mono nowrap">{{ obj.occurred_at|date:"M d, Y H:i:s" }}</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="fw-600">Acknowledges</td>
+            {% if obj.acknowledges %}
+              <td class="mono"><a href="{% url 'scm:integrationmessage_detail' obj.acknowledges_id %}" class="fw-600">{{ obj.acknowledges.number }}</a></td>
+              <td>{{ obj.acknowledges.get_document_type_display }}</td>
+              <td>
+                {% if obj.acknowledges.status == 'acknowledged' %}<span class="badge badge-green">{{ obj.acknowledges.get_status_display }}</span>
+                {% elif obj.acknowledges.status == 'failed' %}<span class="badge badge-red">{{ obj.acknowledges.get_status_display }}</span>
+                {% elif obj.acknowledges.status == 'pending' %}<span class="badge badge-amber">{{ obj.acknowledges.get_status_display }}</span>
+                {% elif obj.acknowledges.status == 'sent' %}<span class="badge badge-info">{{ obj.acknowledges.get_status_display }}</span>
+                {% elif obj.acknowledges.status == 'received' %}<span class="badge badge-info">{{ obj.acknowledges.get_status_display }}</span>
+                {% elif obj.acknowledges.status == 'ignored' %}<span class="badge badge-muted">{{ obj.acknowledges.get_status_display }}</span>
+                {% else %}<span class="badge badge-muted">{{ obj.acknowledges.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="mono nowrap">{{ obj.acknowledges.occurred_at|date:"M d, Y H:i:s" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:integrationmessage_detail' obj.acknowledges_id %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            {% else %}
+              <td colspan="4" class="text-muted">— this message acknowledges nothing, which is ordinary for everything that is not a 997</td>
+              <td></td>
+            {% endif %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The pairing is what makes an exchange defensible: a document we say we sent and an acknowledgement the partner says they returned are two rows, and the argument is almost always about the join between them. Both halves are <span class="mono">SET_NULL</span> pointers at this same table, so an unpaired row is a genuine state and never a broken link — <span class="fw-600">&ldquo;nobody acknowledged it&rdquo; and &ldquo;no acknowledgement was owed&rdquo; are different facts</span>, and only the document type can tell them apart.
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================== 4. payload + error
+    ESCAPED, never |safe. Partner-supplied text, TRUNCATED by design, and it may carry PII — a ship-to
+    name and address on an 856 is ordinary. A full document body is never stored anywhere in 4.19, so
+    what is below is an excerpt and nothing on this page pretends otherwise.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Payload excerpt</h2>
+      <span class="badge badge-amber">Truncated · may contain partner PII</span>
+    </div>
+    <div class="card-body">
+      {% if obj.payload_excerpt %}
+        <pre class="mono" style="white-space:pre-wrap; word-break:break-word; overflow-x:auto; max-height:26rem; overflow-y:auto; margin:0;">{{ obj.payload_excerpt }}</pre>
+        <p class="text-muted" style="margin-top:.75rem;">This is an <span class="fw-600">excerpt</span>, not the document. The full body is never stored: keeping partner PII we do not need is a liability with no matching use, and an excerpt is enough to recognise what arrived and to argue about it. If the whole document is required, it is on the partner&rsquo;s side or in the VAN&rsquo;s own archive.</p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="file-x"></i>
+          <h3>No excerpt recorded</h3>
+          <p>Nothing was captured from the body of this exchange. That is not the same as an empty document — a batch of {{ obj.record_count }} record(s) crossed here regardless. Excerpts are optional by design and their absence is never treated as a failure.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.error_code or obj.error_message %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recorded failure</h2>
+        <span class="badge badge-red">{% if obj.error_code %}{{ obj.error_code }}{% else %}Unclassified{% endif %}</span>
+      </div>
+      <div class="card-body">
+        <dl class="detail-grid">
+          <div class="detail-item">
+            <dt>Error code</dt>
+            <dd class="mono">{% if obj.error_code %}{{ obj.error_code }}{% else %}<span class="text-muted">— unclassified</span>{% endif %}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>Attempts so far</dt>
+            <dd>{{ obj.attempt_count }}</dd>
+          </div>
+        </dl>
+        {% if obj.error_message %}
+          <pre class="mono" style="white-space:pre-wrap; word-break:break-word; overflow-x:auto; max-height:18rem; overflow-y:auto; margin:.75rem 0 0;">{{ obj.error_message }}</pre>
+        {% endif %}
+        <p class="text-muted" style="margin-top:.75rem;">
+          Reprocessing clears both of these fields and returns the status to Pending — the failure text is the <span class="fw-600">last</span> one recorded, not a history of every one. The <a href="{% url 'scm:integration_exceptions' %}">exceptions page</a> groups failures by code across every endpoint, which is the view worth having when one partner change breaks fifty exchanges at once.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ================================================================================= 5. the actions
+    Reprocess and Back to list. There is NO Edit and NO Delete: no view, no form module, no route —
+    see the header comment. Offering a button the app would 404 on is one failure; offering one that
+    "worked" would be worse, because it would let a partner dispute be argued from a log the other
+    party could have rewritten after the dispute opened.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        <span class="badge badge-slate">Append-only</span>
+        There is no Edit and no Delete on this page, and neither is missing. An exchange log is evidence of what crossed the boundary; a row somebody could revise after the other party acted on it would not be evidence, and one they could remove would be worse. A mistaken exchange is corrected by <span class="fw-600">appending the corrected document as a new row</span>, and the pair is read together — the same posture the stock ledger takes with a compensating movement.
+      </p>
+      {% if can_reprocess %}
+        <p class="text-muted" style="margin:0 0 .9rem;">
+          Reprocess re-queues this row: the status returns to Pending, the attempt count goes up by one and the recorded error is cleared. It does <span class="fw-600">not</span> change what the row says arrived, and it <span class="fw-600">sends nothing</span> — 4.19 ships no outbound transport, so no partner is called, no payload is signed and no delivery is attempted. It records the intent to handle the row again.
+        </p>
+      {% else %}
+        <p class="text-muted" style="margin:0 0 .9rem;">
+          <span class="badge badge-muted">Reprocess unavailable</span>
+          This message is {{ obj.get_status_display|lower }}, so there is nothing to re-queue: a pending row is already waiting, and an acknowledged one has been confirmed received by the partner — re-queuing it would contradict a fact they hold too. The view refuses the action for the same two statuses, so the button is absent rather than merely hidden.
+        </p>
+      {% endif %}
+      <div class="form-actions">
+        {% if can_reprocess %}
+          <form method="post" action="{% url 'scm:integrationmessage_reprocess' obj.pk %}" onsubmit="return confirm('Re-queue {{ obj.number }} for handling? Its status returns to Pending, the attempt count goes up by one and the recorded error is cleared. Nothing is sent: 4.19 ships no outbound transport, so this queues the row and calls no partner. What the row says arrived does not change.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i> Reprocess</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:integrationendpoint_detail' obj.endpoint_id %}" class="btn btn-outline"><i data-lucide="plug"></i> Endpoint</a>
+        <a href="{% url 'scm:integrationmessage_list' %}?endpoint={{ obj.endpoint_id }}" class="btn btn-outline"><i data-lucide="history"></i> This endpoint&rsquo;s traffic</a>
+        <a href="{% url 'scm:integrationmessage_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
