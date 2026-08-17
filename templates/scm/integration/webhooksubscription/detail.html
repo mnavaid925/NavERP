@@ -16,6 +16,14 @@ Everything this page may read, and NOTHING else:
                      the increment, and the aggregate cannot.
   is_tenant_admin    bool. Gates rotate-secret and delete, and NOTHING ELSE — Edit is not gated,
                      because webhooksubscription_edit carries no @tenant_admin_required.
+  plaintext_once     the signing secret the rotate action just minted, or None on every ordinary
+                     visit. It travels on a pop-once SESSION key rather than a flash message (L25:
+                     the messages framework serialises to a cookie / django_session, where a
+                     plaintext secret would linger for anyone holding a DB dump or a hijacked
+                     session), and the view pops it, so the card below renders on exactly one page
+                     load. This page is the ONLY place the value is ever displayed — nothing else
+                     reads it and no reveal view exists, so a page that ignores this key makes the
+                     rotate button mint a credential nobody can obtain.
 
 There is no `can_edit`, no `can_delete` and no `today` in the contract, and none of them is reached
 for. A variable the view does not pass renders as an empty string with no error anywhere, which is
@@ -37,8 +45,9 @@ THE THREE THINGS THIS PAGE MUST NOT LET A READER ASSUME
    on a clock, and no subscription switches itself off when the budget is spent.
 3. THE SIGNING SECRET CANNOT BE READ BACK — not by you, not by the code, not ever. Only a 12-character
    prefix and a SHA-256 hash are stored, so the page can say "a secret is registered" and "it changed"
-   without holding anything worth stealing. Rotation displays the new value EXACTLY ONCE and then
-   discards it. There is deliberately no reveal view and no test-delivery button.
+   without holding anything worth stealing. Rotation displays the new value EXACTLY ONCE — in the
+   plaintext_once card directly under the page header, on the redirect that follows the rotate POST —
+   and then discards it. There is deliberately no reveal view and no test-delivery button.
 
    Hashing is NOT the general way to store a signing key — signing needs the plaintext, and SHA-256 is
    one-way, so a hash makes signing mathematically impossible. It is correct HERE AND ONLY HERE
@@ -93,6 +102,29 @@ Nothing on this page is |safe.
       <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
     </div>
   </div>
+
+  {% comment %}
+    THE ONE-TIME REVEAL. plaintext_once is set only on the redirect that follows a successful rotate
+    POST, and webhooksubscription_detail pops the session key that carried it, so this card renders
+    on exactly one page load and a refresh shows nothing. Nowhere else in the codebase displays this
+    value — only a prefix and a SHA-256 hash reach the database — so without this block the rotate
+    button mints a secret that is immediately and permanently unrecoverable, while the flash message
+    and the confirm dialog both promise it is shown.
+
+    It sits at the TOP rather than inside the Signing secret card 200 lines down: this is a value the
+    reader has to copy before navigating away, and it must not be below the fold. That also makes it
+    the same shape and position as the sibling reveals in templates/accounting/integration/detail.html
+    and templates/scm/integration/integrationendpoint/detail.html.
+  {% endcomment %}
+  {% if plaintext_once %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title"><i data-lucide="alert-triangle"></i> Copy this signing secret now — it will not be shown again</h2></div>
+      <div class="card-body">
+        <p class="text-danger fw-600">Give it to whoever verifies these calls before you navigate away. It is stored only as a prefix plus a one-way hash, so it cannot be retrieved later — a lost value has to be rotated again, and until the receiver has the new one they will reject anything signed with it.</p>
+        <code class="mono" style="display:block; margin-top:.75rem; padding:.75rem 1rem; word-break:break-all;">{{ plaintext_once }}</code>
+      </div>
+    </div>
+  {% endif %}
 
   {% comment %}
     delivery_stats is computed by aggregate at read time over this subscription's rows. Six keys,
@@ -298,8 +330,10 @@ Nothing on this page is |safe.
           {% comment %}
             @tenant_admin_required @require_POST — a real form, never a link. The confirm names the
             consequence that actually bites: a receiver still verifying against the old secret will
-            reject every call the moment this completes, and the new value appears exactly once in the
-            flash message afterwards. Only the WHK- number is interpolated; apostrophes are \' (L42).
+            reject every call the moment this completes, and the new value appears exactly once in
+            the plaintext_once card at the TOP of this page afterwards — never in the flash bar, which
+            deliberately carries no secret (L25). Only the WHK- number is interpolated into the
+            confirm string; apostrophes are \' (L42).
           {% endcomment %}
           <form method="post" action="{% url 'scm:webhooksubscription_rotate_secret' obj.pk %}" style="display:inline;">
             {% csrf_token %}
