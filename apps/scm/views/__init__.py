@@ -596,3 +596,43 @@ from .FinanceIntegration.DutyTariffs import (  # noqa: F401
 from .FinanceIntegration.Reports import (  # noqa: F401
     finance_payables, finance_receivables, finance_budget_variance, landed_cost_variance,
 )
+
+# --- 4.19 Integration & API Gateway ------------------------------------------------------------
+# The endpoint register: full CRUD plus ONE verb. `rotate_credential` is @require_POST and
+# @tenant_admin_required; it mints a credential, stores prefix + digest only, and shows the
+# plaintext exactly once. There is deliberately NO reveal route (a secret you can re-read is a
+# secret in every log that ever carried the response) and NO test-connection route (an outbound
+# HTTP call to a tenant-supplied URL is textbook SSRF — 4.19 ships no transport at all).
+# `integrationendpoint_list` is bound by SIX routes: the bare list plus four category bullets that
+# pin `category` through the route's extra-options dict, so each sidebar bullet is a real page with
+# its own heading rather than a query string a user can lose.
+from .IntegrationApiGateway.IntegrationEndpoints import (  # noqa: F401
+    integrationendpoint_list, integrationendpoint_create, integrationendpoint_detail,
+    integrationendpoint_edit, integrationendpoint_delete,
+    integrationendpoint_rotate_credential,
+)
+# LIST + DETAIL ONLY — no create, no edit, no delete, and no ModelForm behind them. The exchange log
+# is append-only (see the model docstring). `reprocess` is the single UI write: it re-queues a row
+# and clears its error text, edits no partner-supplied field, and — since this pass ships no
+# transport — SENDS NOTHING. `integration_exceptions` is the sub-module's failure cockpit, a report
+# over IntegrationMessage rows; it takes no <int:pk> because it is about the whole failure set, and
+# the endpoint arrives as a filter so the page keeps its roll-up while narrowing.
+from .IntegrationApiGateway.IntegrationMessages import (  # noqa: F401
+    integrationmessage_list, integrationmessage_detail, integrationmessage_reprocess,
+    integration_exceptions,
+)
+# Full CRUD plus `rotate_secret` (@require_POST, tenant-admin only) on the standing rule. Same
+# posture as the endpoint's credential: mint, store prefix + hash, reveal once, never again.
+from .IntegrationApiGateway.WebhookSubscriptions import (  # noqa: F401
+    webhooksubscription_list, webhooksubscription_create, webhooksubscription_detail,
+    webhooksubscription_edit, webhooksubscription_delete,
+    webhooksubscription_rotate_secret,
+)
+# LIST + DETAIL ONLY, for the same append-only reason. `retry` is @require_POST and moves the row
+# onto the next slot of the published backoff schedule (or marks it exhausted); it rewrites no
+# recorded outcome and FIRES NO HTTP REQUEST. The button says Retry and it would be entirely
+# reasonable to assume it re-sends, which is why the view, the URL module and the model docstring
+# all say plainly that it does not.
+from .IntegrationApiGateway.WebhookDeliveries import (  # noqa: F401
+    webhookdelivery_list, webhookdelivery_detail, webhookdelivery_retry,
+)
