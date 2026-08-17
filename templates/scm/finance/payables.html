@@ -315,9 +315,11 @@ stat-card icon colours are blue / green / orange / purple / slate only.
       </table>
     </div>
     <div class="card-body form-help">
-      The totals above the table cover the whole filtered set; the footer total covers only the rows printed.
+      The tiles above and the footer total are the same figure: both cover only the documents listed.
       {% if truncated %}
-        They differ on this view because the list is capped at {{ row_cap }} rows.
+        This view is capped at {{ row_cap }} rows, so documents beyond the cap are excluded from
+        <strong>both</strong> — narrow the filters until the cap notice clears before reading these as your total
+        exposure.
       {% endif %}
       A variance reading &ldquo;Not matched&rdquo; is a document that has never been checked against its bill, which is
       a different thing from one that matched to the penny.
