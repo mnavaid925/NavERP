@@ -477,8 +477,14 @@ Nothing on this page is |safe.
                   response_code is nullable — no response was ever received — and the guard wraps the
                   whole expression rather than filtering a possible None (L10). A blank cell here would
                   read as a missing value; "no response" is the actual fact.
+
+                  `is not None`, NOT truthiness: this is a nullable INTEGER, and a bare
+                  {% templatetag openblock %} if d.response_code {% templatetag closeblock %} treats a
+                  legitimate 0 exactly like a null, silently printing the em dash for a real recorded
+                  value. The two sibling templates that render this same column already spell it this
+                  way and say why — webhookdelivery/list.html:280 and webhookdelivery/detail.html:171.
                 {% endcomment %}
-                {% if d.response_code %}
+                {% if d.response_code is not None %}
                   {{ d.response_code }}
                 {% else %}
                   <span class="text-muted">—</span>
