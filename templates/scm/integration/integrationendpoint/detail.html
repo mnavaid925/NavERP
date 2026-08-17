@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — one connection, read as a CONFIGURED CHANNEL.
+
+Renders apps/scm/views/IntegrationApiGateway/IntegrationEndpoints.py::integrationendpoint_detail,
+which returns crud_detail(...) with partner_party / logistics_client / location / spec_document
+joined. Everything this page may read, and NOTHING else:
+
+  obj              the IntegrationEndpoint, with its four nullable FKs joined
+  recent_messages  LIST of the last 10 IntegrationMessage for this endpoint, newest occurred_at
+                   first, with purchase_order / sales_order joined
+  message_stats    dict with EXACTLY: total / pending / sent / received / acknowledged / failed /
+                   ignored — DERIVED by aggregate on read, stored nowhere
+  is_tenant_admin  bool. Gates the rotate-credential and delete controls, matching exactly what
+                   @tenant_admin_required enforces on both views.
+
+There is no `endpoints`, no `stats` and no `page_obj` on this page — those belong to the list.
+
+--------------------------------------------------------------------------------------------------
+THE TWO IDENTIFIERS THIS PAGE MUST NOT PRINT RAW
+--------------------------------------------------------------------------------------------------
+interchange_id and interchange_qualifier are read through obj.effective_interchange_id and
+obj.effective_interchange_qualifier, NEVER as the bare columns. When the connection points at a 4.17
+logistics client, the EDI identity lives on that client and the properties return it; the columns on
+this row are then required to be blank, and printing them would show an empty cell for a connection
+that has a perfectly good interchange id one join away. 4.19 adds no column to LogisticsClient and
+re-declares none of its EDI fields — that boundary is the whole reason the properties exist.
+
+credential_prefix and credential_hash are NEVER printed. The only credential-shaped thing on this
+page is obj.masked, which is prefix plus bullets. There is no reveal view anywhere in this
+sub-module: the plaintext appears exactly once, in the flash message the rotate action produces, and
+is discarded the moment that page is rendered.
+
+--------------------------------------------------------------------------------------------------
+WHAT THIS PAGE PROMISES, AND WHAT IT DOES NOT
+--------------------------------------------------------------------------------------------------
+4.19 ships NO outbound transport — no requests library, no urllib, nothing that opens a socket. So:
+  * Rotate generates a new credential, stores the marker and shows the plaintext once. It does not
+    tell the far end. Whoever rotates has to give the new value to the partner by hand, and the page
+    says so rather than letting "rotated" imply "rolled over".
+  * There is no Test Connection button, because there is nothing to test with.
+  * trigger_mode, schedule_note and the three timestamps record INTENT and STATE. No scheduler runs,
+    nothing writes last_run_at / last_success_at / last_seen_at in this pass, and consecutive_failures
+    is incremented by nothing. A permanent blank is the honest state, not a broken feed — the same
+    posture 4.17 took with last_synced_at.
+
+Every nullable FK — partner_party, logistics_client, location, spec_document — is guarded with an
+"if fk" wrapper. A None FK inside a filter ARGUMENT raises and 500s even where a bare lookup would
+quietly print nothing (L10), so the guard goes round the whole expression.
+
+theme.css ships COLOUR-named badges only: badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-warning / badge-danger DO NOT EXIST and render
+completely unstyled (L33). Every badge below is one of those six, and every chain ends in a fallback
+branch printing get_<field>_display so a later vocabulary addition reads as a label. stat-icon ships
+blue / green / orange / purple / slate only.
+
+Both destructive controls are @require_POST, so both are real forms with a csrf token rather than
+links. Only the system-generated CNX- number is interpolated into either confirm string: `name` is
+user-typed and an apostrophe in it escapes to &#39;, which HTML decodes back to a bare quote before
+JavaScript parses the attribute, breaking the dialog open and removing the guard entirely (L42).
+Apostrophes written into those strings are escaped \' for the same reason.
+{% endcomment %}
+{% block title %}{{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        {% if obj.status == "connected" %}
+          <span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "error" %}
+          <span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "disconnected" %}
+          <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == "disabled" %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+        {% endif %}
+        {% if obj.environment == "production" %}
+          <span class="badge badge-info">{{ obj.get_environment_display }}</span>
+        {% elif obj.environment == "sandbox" %}
+          <span class="badge badge-slate">{{ obj.get_environment_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_environment_display }}</span>
+        {% endif %}
+        {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+        {% if obj.consecutive_failures %}<span class="badge badge-red">{{ obj.consecutive_failures }} consecutive failure{{ obj.consecutive_failures|pluralize }}</span>{% endif %}
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        <a href="{% url 'scm:integrationendpoint_list' %}">Integration Endpoints</a><span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+      <p class="text-muted">
+        A named channel between this workspace and one outside system — who is on the other end, how we reach them, which way the data moves and where the relationship has got to. <span class="fw-600">This row connects to nothing on its own.</span> Nothing on this page opens a socket, signs a payload or polls a partner: it is the register staff read to answer "how do this customer&#39;s orders reach us", and the documents that actually crossed the boundary are rows in the exchange log below.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:integrationendpoint_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'scm:integrationmessage_list' %}?endpoint={{ obj.pk }}" class="btn btn-outline"><i data-lucide="arrow-left-right"></i> All messages</a>
+      <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    message_stats is derived by aggregate on read — seven counts over this endpoint's messages, run
+    once by the view. Nothing on the endpoint row stores any of them, because a stored counter and an
+    append-only log are two sources of truth for the same fact, and the day they disagree there is no
+    way to tell which one is right. stat-icon has no red, so failed takes orange.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="arrow-left-right"></i></div>
+      <div class="stat-value">{{ message_stats.total }}</div>
+      <div class="stat-label">Messages logged against this connection — counted over the log, never stored on this row</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ message_stats.acknowledged }}</div>
+      <div class="stat-label">Acknowledged — the partner confirmed receipt, which on an EDI channel means a 997 came back</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ message_stats.failed }}</div>
+      <div class="stat-label">Failed. Each one is on the exceptions page with its error code, and each can be queued to try again</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ message_stats.pending }}</div>
+      <div class="stat-label">Pending — waiting to be sent. Nothing sends them: there is no transport and no scheduler in this pass</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="inbox"></i></div>
+      <div class="stat-value">{{ message_stats.received }}</div>
+      <div class="stat-label">Received inbound, alongside {{ message_stats.sent }} sent and {{ message_stats.ignored }} ignored</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================ 1. what this connection is
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">The connection</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.number }}</span>
+        <span class="badge badge-slate">{{ obj.get_category_display }}</span>
+        {% if obj.lifecycle_stage == "live" %}
+          <span class="badge badge-green">{{ obj.get_lifecycle_stage_display }}</span>
+        {% elif obj.lifecycle_stage == "certified" %}
+          <span class="badge badge-info">{{ obj.get_lifecycle_stage_display }}</span>
+        {% elif obj.lifecycle_stage == "testing" %}
+          <span class="badge badge-amber">{{ obj.get_lifecycle_stage_display }}</span>
+        {% elif obj.lifecycle_stage == "setup" %}
+          <span class="badge badge-slate">{{ obj.get_lifecycle_stage_display }}</span>
+        {% elif obj.lifecycle_stage == "suspended" %}
+          <span class="badge badge-red">{{ obj.get_lifecycle_stage_display }}</span>
+        {% else %}
+          <span class="badge badge-muted">{{ obj.get_lifecycle_stage_display }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd class="fw-600">{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.get_category_display }}<div class="form-help">Which of the four register views this connection appears under. It is a filing decision, not a capability — every category shares one table and one set of rules.</div></dd></div>
+        <div class="detail-item"><dt>System</dt><dd>{% if obj.system %}{{ obj.get_system_display }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display }}</dd></div>
+        <div class="detail-item"><dt>Transport</dt><dd>{{ obj.get_transport_display }}</dd></div>
+        <div class="detail-item">
+          <dt>Lifecycle stage</dt>
+          <dd>{{ obj.get_lifecycle_stage_display }}
+            <div class="form-help">Where the connection is in being <em>built</em>. It is independent of the status: a connection can be certified by the partner and disconnected at the same moment, so neither value is derived from the other.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Environment</dt>
+          <dd>
+            {% if obj.environment == "production" %}
+              <span class="badge badge-info">{{ obj.get_environment_display }}</span>
+            {% elif obj.environment == "sandbox" %}
+              <span class="badge badge-slate">{{ obj.get_environment_display }}</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_environment_display }}</span>
+            {% endif %}
+            <div class="form-help">A sandbox row and a production row are two separate connections. There is no promotion pipeline in this pass — nothing copies a tested configuration across, and doing it by hand is the honest workflow rather than a hidden one.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Status</dt>
+          <dd>
+            {% if obj.status == "connected" %}
+              <span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "error" %}
+              <span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "disconnected" %}
+              <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == "disabled" %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% endif %}
+            <div class="form-help"><span class="fw-600">Typed by a person, not observed by a check.</span> This sub-module makes no outbound call, so nothing here can discover that a connection went down — the status is what somebody last recorded.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Active</dt>
+          <dd>
+            {% if obj.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+            <div class="form-help">The configuration switch — whether anyone should be using this connection at all. Status is what it is doing; these are deliberately two columns and not one.</div>
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================== 2. how we would reach it
+    endpoint_url is a tenant-editable address the server WOULD fetch if it fetched anything. It does
+    not, in this pass, and the card says so — an SSRF warning that only appears in the code would be
+    invisible to whoever is looking at the screen wondering why nothing happens.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">How we reach it</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_auth_method_display }}</span>
+        <span class="badge badge-amber">Nothing is transmitted from this page</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Endpoint</dt>
+          <dd class="mono">
+            {% if obj.endpoint_url %}
+              {{ obj.endpoint_url }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+            <div class="form-help">Printed as text and never as a link. It is a partner address typed by a tenant user, it can carry a scheme no browser handles (sftp, as2, mqtt, llrp), and a clickable address on an internal page is exactly the shape a hostile value wants.</div>
+          </dd>
+        </div>
+        <div class="detail-item"><dt>Authentication</dt><dd>{{ obj.get_auth_method_display }}</dd></div>
+        <div class="detail-item">
+          <dt>Credential</dt>
+          <dd class="mono">
+            {% if obj.masked %}
+              {{ obj.masked }}
+            {% else %}
+              <span class="text-muted">Not set</span>
+            {% endif %}
+            <div class="form-help">A prefix plus bullets — enough to tell two credentials apart and to see that one is registered. The stored value is a one-way hash and cannot be read back by anybody, including this page.</div>
+          </dd>
+        </div>
+        <div class="detail-item"><dt>External account reference</dt><dd class="mono">{% if obj.external_account_ref %}{{ obj.external_account_ref }}{% else %}<span class="text-muted">—</span>{% endif %}<div class="form-help">The shop domain, seller id or marketplace region that identifies our account on the far side.</div></dd></div>
+        <div class="detail-item"><dt>Device identifier</dt><dd class="mono">{% if obj.device_identifier %}{{ obj.device_identifier }}{% else %}<span class="text-muted">—</span>{% endif %}<div class="form-help">A reader or gateway&#39;s own registry identity, for the IoT channels.</div></dd></div>
+      </dl>
+
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        <span class="fw-600">The stored credential is a marker, not a secret you can use.</span> What is kept is the first few characters plus a one-way hash — enough to answer "is a credential registered, and is it still the same one", and nothing more. That is a correct trade <em>here and only here</em>, because this pass ships no transport: nothing signs a payload and nothing authenticates to a provider, so there is no operation the plaintext is needed for and keeping it would be pure liability.
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="fw-600">The day real calls are built, this is a wall and not a detail.</span> A signing key has to be used to sign and a provider credential has to be replayed to authenticate; a hash can do neither, mathematically. The move at that point is to migrate to <span class="fw-600">encryption at rest</span> — a reversible envelope whose key lives outside the row — and specifically <em>not</em> to quietly turn the column back into plaintext because the hash "does not work".
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="fw-600">The endpoint address is not fetched by anything.</span> Outbound HTTP is deferred across the whole of 4.19, and when it is built the first thing it needs is not a client library: it is an allow-list plus a private-address block covering RFC1918, loopback, link-local and IPv6 unique-local ranges, re-resolved at request time so a hostname cannot answer publicly once and privately the second time. A tenant-editable URL the server fetches is server-side request forgery by definition, and that guard is the feature rather than an afterthought.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================= 3. who is on the other end
+    Four nullable FKs, all joined by the view, every one guarded before anything is read off it (L10).
+    partner_party is a core.Party — customers, vendors and suppliers are PartyRoles on that one
+    record, so an EDI counterparty is never a second partner table.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Who is on the other end</h2>
+      <div class="badge-group">
+        {% if obj.logistics_client %}
+          <span class="badge badge-info">EDI identity from the 3PL client</span>
+        {% elif obj.effective_interchange_id %}
+          <span class="badge badge-slate">Interchange identity on this row</span>
+        {% else %}
+          <span class="badge badge-muted">No interchange identity</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Partner company</dt>
+          <dd>
+            {% if obj.partner_party %}
+              <a href="{% url 'core:party_detail' obj.partner_party.pk %}" class="fw-600">{{ obj.partner_party }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+            <div class="form-help">The counterparty is an existing company record. Customer, vendor and supplier are roles on that record rather than separate tables, so an integration partner is never a new company here.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>3PL client</dt>
+          <dd>
+            {% if obj.logistics_client %}
+              <a href="{% url 'scm:logisticsclient_detail' obj.logistics_client.pk %}" class="mono">{{ obj.logistics_client.code }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Location</dt>
+          <dd>
+            {% if obj.location %}
+              <a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+            <div class="form-help">The zone a reader or sensor gateway watches. Empty on every channel that is not physical.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Specification document</dt>
+          <dd>
+            {% if obj.spec_document %}
+              <a href="{% url 'core:document_detail' obj.spec_document.pk %}">{{ obj.spec_document }}</a>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+            <div class="form-help">The partner&#39;s API specification or EDI implementation guide, attached from the document library. Nothing is uploaded on this screen and no file is stored on this row.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Interchange id</dt>
+          <dd class="mono">
+            {% if obj.effective_interchange_id %}{{ obj.effective_interchange_id }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Interchange qualifier</dt>
+          <dd class="mono">
+            {% if obj.effective_interchange_qualifier %}{{ obj.effective_interchange_qualifier }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      {% if obj.logistics_client %}
+        <p class="text-muted" style="margin:.9rem 0 0;">
+          <span class="badge badge-info">Read from the client record</span>
+          Both interchange values above come from <a href="{% url 'scm:logisticsclient_detail' obj.logistics_client.pk %}">{{ obj.logistics_client.code }}</a>, which already holds this partner&#39;s EDI id and qualifier. This connection stores neither and is refused at save if either is typed here: one company&#39;s EDI identity written in two places is two places that can disagree, and there is no way afterwards to tell which one the partner actually uses. Change them on the client.
+        </p>
+      {% else %}
+        <p class="text-muted" style="margin:.9rem 0 0;">
+          The interchange id and qualifier are the sender/receiver identity in an EDI envelope header. They sit on this row because no 3PL client is attached — when one is, the client record owns them and this row must leave both blank.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================ 4. when it would run
+    Every field in this card is INTENT or STATE. Nothing decrements, nothing trips, nothing fires.
+    Saying so on the screen is the difference between an honest register and a dashboard that quietly
+    lies about being live.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">When it runs</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.get_trigger_mode_display }}</span>
+        <span class="badge badge-amber">No scheduler — nothing runs on a clock</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Trigger mode</dt><dd>{{ obj.get_trigger_mode_display }}<div class="form-help">Recorded intent. Choosing Real-time or Scheduled starts nothing — this pass ships no daemon, no queue and no cron.</div></dd></div>
+        <div class="detail-item"><dt>Schedule note</dt><dd>{% if obj.schedule_note %}{{ obj.schedule_note }}{% else %}<span class="text-muted">—</span>{% endif %}<div class="form-help">Free text, deliberately: a real cron expression here would look like something the system honours.</div></dd></div>
+        <div class="detail-item">
+          <dt>Last run</dt>
+          <dd class="mono">{% if obj.last_run_at %}{{ obj.last_run_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Last success</dt>
+          <dd class="mono">{% if obj.last_success_at %}{{ obj.last_success_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Last seen</dt>
+          <dd class="mono">{% if obj.last_seen_at %}{{ obj.last_seen_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Never</span>{% endif %}<div class="form-help">For a reader or gateway, the last time it reported in at all — which is a different question from the last time it succeeded.</div></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Consecutive failures</dt>
+          <dd class="mono">{{ obj.consecutive_failures }}<div class="form-help">A counter nothing increments and nothing resets in this pass, and nothing auto-disables on. It is the column a real transport will keep, held at its honest value until there is one.</div></dd>
+        </div>
+      </dl>
+      <p class="text-muted" style="margin:.9rem 0 0;">
+        <span class="fw-600">All three stamps above are written by nothing.</span> They exist so that when a real integration is built it has somewhere truthful to record itself — a permanent "Never" here is not a feed that stopped, exactly as 4.17&#39;s last-synced stamp on the client record is not.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    =================================================================== 5. the exchange log
+    `recent_messages` is already a LIST, sliced by the view at 10, with purchase_order and sales_order
+    joined — never re-queried here as obj.messages.all, which would ignore the slice and the joins
+    and run a fresh query per page render.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recent messages</h2>
+      <div class="badge-group">
+        {% if message_stats.failed %}<span class="badge badge-red">{{ message_stats.failed }} failed</span>{% endif %}
+        {% if message_stats.pending %}<span class="badge badge-amber">{{ message_stats.pending }} pending</span>{% endif %}
+        <span class="badge badge-slate">{{ message_stats.total }} in total</span>
+        <a href="{% url 'scm:integrationmessage_list' %}?endpoint={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> All messages</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Message</th><th class="nowrap">When</th><th>Document</th><th>Direction</th><th>Status</th><th>Correlation</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for m in recent_messages %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:integrationmessage_detail' m.pk %}" class="fw-600 mono">{{ m.number }}</a>
+                {% if m.control_number %}<div class="form-help mono">Control {{ m.control_number }}</div>{% endif %}
+              </td>
+              <td class="nowrap mono">{{ m.occurred_at|date:"M d, Y H:i" }}</td>
+              <td>
+                {{ m.get_document_type_display }}
+                {% if m.record_count %}<div class="form-help">{{ m.record_count }} record{{ m.record_count|pluralize }}</div>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% if m.direction == "inbound" %}
+                  <span class="badge badge-info">{{ m.get_direction_display }}</span>
+                {% elif m.direction == "outbound" %}
+                  <span class="badge badge-slate">{{ m.get_direction_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ m.get_direction_display }}</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% if m.status == "acknowledged" %}
+                  <span class="badge badge-green">{{ m.get_status_display }}</span>
+                {% elif m.status == "failed" %}
+                  <span class="badge badge-red">{{ m.get_status_display }}</span>
+                {% elif m.status == "pending" %}
+                  <span class="badge badge-amber">{{ m.get_status_display }}</span>
+                {% elif m.status == "sent" %}
+                  <span class="badge badge-info">{{ m.get_status_display }}</span>
+                {% elif m.status == "received" %}
+                  <span class="badge badge-info">{{ m.get_status_display }}</span>
+                {% elif m.status == "ignored" %}
+                  <span class="badge badge-muted">{{ m.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ m.get_status_display }}</span>
+                {% endif %}
+                {% if m.error_code %}<div class="form-help mono">{{ m.error_code }}</div>{% endif %}
+              </td>
+              <td>
+                {% comment %}
+                  Both typed FKs are nullable and both are joined by the view; each is guarded before
+                  anything is read off it (L10). Everything else a message can point at is reached
+                  through its source + source_reference soft pointer, which is why only these two get
+                  a link here.
+                {% endcomment %}
+                {% if m.purchase_order %}
+                  <a href="{% url 'scm:purchaseorder_detail' m.purchase_order.pk %}" class="mono">{{ m.purchase_order.number }}</a>
+                {% elif m.sales_order %}
+                  <a href="{% url 'scm:salesorder_detail' m.sales_order.pk %}" class="mono">{{ m.sales_order.number }}</a>
+                {% elif m.source_reference %}
+                  <span class="mono">{{ m.source_reference }}</span>
+                  <div class="form-help">{{ m.get_source_display }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:integrationmessage_detail' m.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <h3>Nothing has crossed this connection</h3>
+                  <p>No message is logged against this endpoint. That is the expected state for a connection that has just been registered — the log is append-only and is written when a document actually crosses the boundary, not when a channel is configured.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">
+      The exchange log is <span class="fw-600">append-only</span>. A row is never edited and never deleted: it is the evidence of what crossed the boundary and when, and a record somebody can rewrite after acting on it is not evidence. A wrong row is corrected by appending a later, correct one — and a failed message is queued to try again from its own page, which changes its status and its attempt count and sends nothing.
+    </div>
+  </div>
+
+  {% if obj.notes %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Notes</h2>
+        <span class="badge badge-slate">Internal</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted" style="white-space:pre-line; margin:0;">{{ obj.notes }}</p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ====================================================================== 6. actions
+    is_tenant_admin is the EXACT condition @tenant_admin_required enforces on both the rotate and the
+    delete view, read from the context rather than re-derived here, so a button and its route cannot
+    disagree. Both are @require_POST, so a GET on either URL is a 405 and both are real forms.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Actions</h2>
+      {% if not is_tenant_admin %}<span class="badge badge-muted">Admin-only actions hidden</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:integrationendpoint_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if is_tenant_admin %}
+          <form method="post" action="{% url 'scm:integrationendpoint_rotate_credential' obj.pk %}" onsubmit="return confirm('Rotate the credential on {{ obj.number }}? A new value is generated and the stored marker is replaced immediately. The new credential is shown ONCE, on the next page, and cannot be retrieved afterwards by anyone — copy it before you navigate away, and give it to the partner yourself. Nothing here tells the far end, so the old value stays in use on their side until you do.');">
+            {% csrf_token %}
+            <button class="btn btn-outline" type="submit"><i data-lucide="refresh-cw"></i> Rotate credential</button>
+          </form>
+          <form method="post" action="{% url 'scm:integrationendpoint_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? This also deletes every message logged against it — {{ message_stats.total }} row(s) — and that log is the record of what actually crossed the boundary. Once it is gone there is no way to show a partner what was sent, when, or whether they acknowledged it. Set the status to Disabled instead: that stops the connection being used and keeps the whole history readable.');">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      {% if is_tenant_admin %}
+        <p class="text-muted" style="margin-top:.9rem;">
+          <span class="badge badge-amber">Rotating does not roll anything over</span>
+          It generates a new credential, replaces the stored marker and shows you the plaintext once. It does <span class="fw-600">not</span> contact the partner, because nothing in this sub-module contacts anything — the far end keeps accepting the old value until somebody gives them the new one. Rotation is recorded in the audit log as an event; the value itself is never written to the log, never re-displayed and never recoverable.
+        </p>
+      {% else %}
+        <p class="text-muted" style="margin-top:.9rem;">
+          Rotating the credential and deleting the connection are restricted to <span class="fw-600">workspace admins</span>. Both change something that other people depend on — one silently stops a partner authenticating, the other destroys the record of everything that ever crossed this channel — so both sit behind the same gate the views enforce.
+        </p>
+      {% endif %}
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        Every field on this connection is editable, always. There is no status ladder and no frozen state, because the row is <span class="fw-600">configuration rather than a document</span> — each logged message keeps its own copy of what it carried, so editing this connection afterwards cannot rewrite what already crossed the boundary.
+      </p>
+      <p class="text-muted" style="margin:.6rem 0 0;">
+        <span class="badge badge-red">Deleting is destructive in a way the button cannot show</span>
+        Messages cascade with the connection. <span class="fw-600">Disabled does the same job</span> to day-to-day use and keeps the evidence.
+      </p>
+    </div>
+  </div>
+{% endblock %}
