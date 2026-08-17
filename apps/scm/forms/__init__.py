@@ -437,3 +437,27 @@ from .FinanceIntegration.LandedCostVouchers import (  # noqa: F401
 from .FinanceIntegration.DutyTariffs import (  # noqa: F401
     DutyTariffForm,
 )
+
+# --- 4.19 Integration & API Gateway ------------------------------------------------------------
+# TWO forms for FOUR models, and the two absentees are the load-bearing part rather than an
+# oversight. `IntegrationMessage` and `WebhookDelivery` are APPEND-ONLY logs reached list+detail
+# only — `forms/IntegrationApiGateway/IntegrationMessages.py` and `.../WebhookDeliveries.py`
+# DELIBERATELY DO NOT EXIST, exactly like `forms/CustomerPortal/PortalActivities.py`, which is
+# absent for the same reason. A log that can be retyped after the dispute starts is not evidence;
+# the correction for a wrong row is a later row. If a review pass is here to "complete" this CRUD,
+# the answer is no — read either model's docstring first.
+#
+# What is ABSENT from the two forms below matters just as much. Neither carries a plaintext secret
+# column: `IntegrationEndpointForm` has no `credential_prefix`/`credential_hash` and
+# `WebhookSubscriptionForm` no `signing_secret_prefix`/`signing_secret_hash` — those are written
+# only by the two @require_POST rotate verbs, which mint the value, store a one-way marker and
+# reveal the plaintext exactly once. A secret that a form can round-trip is a secret in a POST body,
+# a browser autofill store and an error report.
+from .IntegrationApiGateway.IntegrationEndpoints import (  # noqa: F401
+    IntegrationEndpointForm,
+)
+# `TenantUniqueMixin` on both: each has a user-typed unique_together beside its auto-assigned
+# number, so a duplicate must come back as a field error rather than as an IntegrityError 500.
+from .IntegrationApiGateway.WebhookSubscriptions import (  # noqa: F401
+    WebhookSubscriptionForm,
+)
