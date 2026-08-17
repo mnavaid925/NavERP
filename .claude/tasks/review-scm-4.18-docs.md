@@ -43,7 +43,7 @@ the five money columns + `updated_at` (`LandedCostVouchers.py:329-330`). `accrue
 (`:522`) and cleared by `allocate()` (`:497`). The same cell contradicts itself two sentences later ("clears
 `accrued_at` when re-allocation demotes an accrued voucher").
 **Fix:** split the sentence — "All derived money (`estimated_total`/`actual_total`/`variance_amount`/`variance_pct`/`allocated_total`) is `editable=False` and `recalc_totals()` is their only writer; `accrued_at` is also `editable=False` but is stamped by `accrue()` and cleared by `allocate()`."
-- [ ] fixed
+- [x] fixed — 7e590f40 docs(scm): correct the 4.18 voucher cell - accrued_at is stamped by accrue() and cleared by allocate(), not written by recalc_totals()
 
 ### D2 — `.claude/skills/scm/SKILL.md` rule 1 + five 4.18 code docstrings
 **Claim:** "All **seventeen** shipped scm template folders use a short slug…"
@@ -56,7 +56,7 @@ own header ("18 of 19"). The identical stale sentence is in **five** of 4.18's o
 **Fix:** make it **count-free** in all six places ("Every shipped scm template folder uses a short slug…" /
 "…verified free against every shipped scm prefix") so it cannot go stale again at 4.19. Do **not** just bump 17→18.
 One commit per file. `manage.py check` after the code-docstring edits (docstring-only, nothing executable changes).
-- [ ] fixed
+- [x] fixed — count-free in all SIX places, not bumped 17 to 18 - a9672ced (SKILL.md rule 1), 58341fe3 (LandedCostVouchers.py), 3d3ccf83 (models/DutyTariffs.py), 13715604 (models/Reports.py), 5f7e6342 (views/DutyTariffs.py), f22b049b (urls/__init__.py, the `_fin_` alias note - its "seventeen" was arithmetically right today but is the same stale-count pattern). manage.py check clean after the code edits; docstring/comment prose only
 
 ### D3 — `.claude/skills/scm/SKILL.md`, `LandedCostCharge` table cell
 **Claim:** the field list runs "…`gl_account`, `tax_code`, `is_recoverable`…, `capitalise_to_inventory`."
@@ -75,7 +75,7 @@ One commit per file. `manage.py check` after the code-docstring edits (docstring
 **app-qualify every other FK target** as the sibling 4.17/4.13 tables do (`gl_account`→`accounting.GLAccount`,
 `tax_code`→`accounting.TaxCode`, voucher `currency`→`accounting.Currency`, voucher `party`→`core.Party`). Also add
 the voucher's two typed columns the cell never names: required `cost_date` and free-text `notes`.
-- [ ] fixed
+- [x] fixed — 02c6c8a5 docs(scm): document the two LandedCostCharge pointer columns (party, freight_invoice), the split_charges() exclusion and the draft_bill() refusal, app-qualify every FK target, and name the voucher typed cost_date/notes
 
 ### D4 — `.claude/skills/scm/SKILL.md`, `### Seeder — _seed_finance_tenant`
 **Claim:** "**Invents no master data** — every party, item, GL account… is found among rows earlier passes seeded."
@@ -88,7 +88,7 @@ nothing matched an item (`:5569-5574`), or no supplier/vendor/partner party exis
 drafted bill's `party` is PROTECT and required). A reader trusting the doc assumes the pass only ever touches its
 own four tables and always yields the two documented vouchers.
 **Fix:** state both — the conditional `_post_grn_receipt` ledger write, and the four early-return cases.
-- [ ] fixed
+- [x] fixed — 1dc91b9c docs(scm): state the conditional _post_grn_receipt ledger write and the four early-return cases
 
 ### D5 — `.claude/skills/scm/SKILL.md`, `## Sidebar wiring` section — **MANDATORY section missing**
 **Missing:** there is **no `LIVE_LINKS["4.18"]` paragraph anywhere in the file**, and the 4.18 section names not a
@@ -104,7 +104,7 @@ Management→`scm:dutytariff_list`; note that **three of the five are read-only 
 `LandedCostCharge` and `LandedCostAllocation` take NO key** — five NavERP bullets, five keys; the charges and
 allocations are panels on the voucher detail page. *(`LIVE_LINKS["4.17"]` is missing from the same section — add it
 in the same pass if you can do so from `navigation.py` without guessing.)*
-- [ ] fixed
+- [x] fixed — 5940e6ef docs(scm): add the missing LIVE_LINKS["4.18"] sidebar paragraph AND the LIVE_LINKS["4.17"] one, both written from navigation.py:1097-1136 (four-of-five key->url mappings re-verified against the code after writing)
 
 ### D6 — `.claude/skills/scm/SKILL.md`, rule 6 (the gating map)
 **Claim:** "All four verbs are POST-only AT THE VIEW and `@tenant_admin_required`… The four report pages are
@@ -121,7 +121,7 @@ deletes are `@login_required @require_POST` (POST-only but **member-permitted**)
 `@login_required`; the four reports are `@login_required` read-only. **Seven POST-only routes in total** — which is
 exactly what `test_finance_security.py` asserts. Say which buttons therefore need the admin `{% if %}` and which
 must NOT.
-- [ ] fixed
+- [x] fixed — f7081609 docs(scm): state the full gating map - seven POST-only routes, four admin-gated verbs, three member-permitted deletes, and which buttons need the admin if-block
 
 ---
 
@@ -137,7 +137,7 @@ docstring at `:769` overstates it the same way — fix the skill; leave the docs
 **Fix:** "Every DERIVED column (`quantity`/`basis_value`/`basis_used`/`allocated_amount`/`unit_cost_uplift`) is
 `editable=False`; the four FKs are plain fields and there is deliberately no form, view, list or url — `allocate()`
 is the only writer."
-- [ ] fixed
+- [x] fixed — ef85b60b (SKILL.md cell) + 7e22e0d6 (the LandedCostAllocation class docstring at :769, which overstated it identically - the finding offered "fix both consistently" and that is what was done)
 
 ### D8 — `.claude/skills/scm/SKILL.md`, `### Templates`
 **Claim:** "an unallocatable per-unit uplift renders as `None`, not `0`."
@@ -148,7 +148,7 @@ dash** `<span class="text-muted">—</span>` in the column (`landedcostvoucher/d
 per-unit badge (`:444`). Anyone writing a smoke assertion from this sentence looks for the literal string "None".
 **Fix:** "a group with no quantity to divide by gets `unit_cost_uplift = None` (never `0`), and the page renders an
 em dash and drops the per-unit badge — zero is a real answer, so the guard is `is not None`, never truthiness."
-- [ ] fixed
+- [x] fixed — dd8c5844 docs(scm): separate the None CONTEXT value from the em dash the page renders, and say the literal string "None" never appears
 
 ### D9 — `.claude/skills/scm/SKILL.md`, `### Seeder` (the `--flush` sentence)
 **Claim:** "`--flush` deletes the whole allocation → charge → voucher tree BEFORE 4.1's `GoodsReceiptNote`
@@ -161,7 +161,7 @@ code comment warns about.
 **Fix:** "…deletes the DRAFT `accounting.Bill`s scoped through `scm_landed_cost_vouchers` FIRST (SET_NULL means
 deleting vouchers first strands them in AP), then the allocation → charge → voucher tree, then `DutyTariff` — all
 BEFORE 4.1's `GoodsReceiptNote` (PROTECT) and any party cleanup; there is no `JournalEntry` to unwind."
-- [ ] fixed
+- [x] fixed — 06228a8c docs(scm): the DRAFT accounting.Bills go FIRST (SET_NULL) and the DutyTariff master LAST
 
 ### D10 — `.claude/skills/scm/SKILL.md` — no `### Forms` subsection
 **Missing:** the section states exactly one form fact (rule 3's `rate_for()` default). Sibling 4.13 ships a
@@ -178,7 +178,7 @@ maintainer cannot guess here:
   `LandedCostVoucherForm(TenantModelForm)` (`:44`) — the mixin is on the tariff deliberately and not on the voucher.
 **Fix:** add a `### Forms  (forms/FinanceIntegration/)` subsection modelled on SKILL.md:966-977, naming the three
 form classes, that `LandedCostAllocation` has none, and the four facts above.
-- [ ] fixed
+- [x] fixed — d808a22d docs(scm): add the ### Forms (forms/FinanceIntegration/) subsection modelled on 4.13, carrying all four named facts
 
 ### D11 — `.claude/skills/scm/SKILL.md` — no `### Tests` line for 4.18
 **Missing:** 4.18 ships four dedicated test modules totalling **431** `test_finance_*` functions and the section
@@ -188,14 +188,14 @@ has no pointer to the regression locks. Sibling 4.14 ships `### Tests (apps/scm/
 **Fix:** add `### Tests  (apps/scm/tests/test_finance_{models,forms,views,security}.py — 431 for 4.18)` naming what
 each module locks: allocate idempotency / `_unallocate` reversal, the `rate_for` precedence ladder, the
 derived/system-fields-off-every-form check, cross-tenant IDOR → 404 and the seven 405 POST-only routes.
-- [ ] fixed
+- [x] fixed — 334a1b4f docs(scm): add ### Tests (test_finance_{models,forms,views,security}.py - 431 for 4.18) naming what each module locks
 
 ### D12 — `.claude/skills/scm/SKILL.md:1674`, module-level `## Common tasks` (pre-existing, unrelated to 4.18)
 **Claim:** "`pytest apps/scm/tests -q` **(2,761 tests)**."
 **Wrong:** `apps/scm/tests` now holds **5,967** `def test_*` functions — the figure is stale by more than half and
 has been left behind by every sub-module since it was written.
 **Fix:** refresh to ~5,967, or better, drop the parenthetical count entirely so it stops going stale each pass.
-- [ ] fixed
+- [x] fixed — 12939324 docs(scm): parenthetical count DROPPED rather than refreshed (the finding preferred option) so it cannot go stale again
 
 ### D13 — `.claude/skills/scm/SKILL.md` + `README.md` — `RMA` is not a class
 **Claim (both files):** "…6 shipped models (… 4.10 `RMA.credit_note`)."
@@ -207,7 +207,7 @@ apps/*/models/`) finds nothing. 4.18's own code spells it correctly
 (`models/FinanceIntegration/Reports.py:18-19`).
 **Fix:** `ReturnAuthorization.credit_note` (optionally "… [`RMA-`]") in **both** the SKILL.md 4.18 intro paragraph
 and the `README.md` Module 4 roadmap row. Two files → **two commits**.
-- [ ] fixed
+- [x] fixed — a69b985a (SKILL.md 4.18 intro) + 41c7871c (README.md Module 4 roadmap row) - two files, two commits
 
 ---
 
