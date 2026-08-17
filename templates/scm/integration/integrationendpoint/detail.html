@@ -13,6 +13,11 @@ joined. Everything this page may read, and NOTHING else:
                    ignored — DERIVED by aggregate on read, stored nowhere
   is_tenant_admin  bool. Gates the rotate-credential and delete controls, matching exactly what
                    @tenant_admin_required enforces on both views.
+  plaintext_once   the credential the rotate action just minted, or None on every ordinary visit.
+                   It arrives on a pop-once SESSION key rather than in a flash message (L25: the
+                   messages framework serialises to a cookie/django_session, where a plaintext
+                   credential would linger for anyone with a DB dump or a hijacked session), and the
+                   view pops it on every visit, so it renders on exactly one page load.
 
 There is no `endpoints`, no `stats` and no `page_obj` on this page — those belong to the list.
 
@@ -28,16 +33,18 @@ re-declares none of its EDI fields — that boundary is the whole reason the pro
 
 credential_prefix and credential_hash are NEVER printed. The only credential-shaped thing on this
 page is obj.masked, which is prefix plus bullets. There is no reveal view anywhere in this
-sub-module: the plaintext appears exactly once, in the flash message the rotate action produces, and
-is discarded the moment that page is rendered.
+sub-module: the plaintext appears exactly once, in the plaintext_once card below, which renders only
+on the redirect that follows a rotate POST and is gone on the very next request because the view
+pops the session key that carried it.
 
 --------------------------------------------------------------------------------------------------
 WHAT THIS PAGE PROMISES, AND WHAT IT DOES NOT
 --------------------------------------------------------------------------------------------------
 4.19 ships NO outbound transport — no requests library, no urllib, nothing that opens a socket. So:
-  * Rotate generates a new credential, stores the marker and shows the plaintext once. It does not
-    tell the far end. Whoever rotates has to give the new value to the partner by hand, and the page
-    says so rather than letting "rotated" imply "rolled over".
+  * Rotate generates a new credential, stores the marker and shows the plaintext once — in the card
+    at the top of this page, not in the flash bar. It does not tell the far end. Whoever rotates has
+    to give the new value to the partner by hand, and the page says so rather than letting "rotated"
+    imply "rolled over".
   * There is no Test Connection button, because there is nothing to test with.
   * trigger_mode, schedule_note and the three timestamps record INTENT and STATE. No scheduler runs,
     nothing writes last_run_at / last_success_at / last_seen_at in this pass, and consecutive_failures
@@ -101,6 +108,22 @@ Apostrophes written into those strings are escaped \' for the same reason.
       <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
     </div>
   </div>
+
+  {% comment %}
+    The one-time reveal. plaintext_once is set only on the redirect that follows a successful rotate
+    POST, and the view pops the session key that carried it, so this card renders on exactly one page
+    load and never again — a refresh here shows nothing. Only a 12-char prefix and a SHA-256 digest
+    reach the database, so there is genuinely nowhere else to read this value from afterwards.
+  {% endcomment %}
+  {% if plaintext_once %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title"><i data-lucide="alert-triangle"></i> Copy this credential now — it will not be shown again</h2></div>
+      <div class="card-body">
+        <p class="text-danger fw-600">Paste it into the partner&#39;s console yourself: 4.19 ships no transport, so nothing has told the far end that this connection&#39;s credential changed. Only a prefix and a one-way digest are stored here, so this value cannot be retrieved later — a lost one has to be rotated again.</p>
+        <code class="mono" style="display:block; margin-top:.75rem; padding:.75rem 1rem; word-break:break-all;">{{ plaintext_once }}</code>
+      </div>
+    </div>
+  {% endif %}
 
   {% comment %}
     message_stats is derived by aggregate on read — seven counts over this endpoint's messages, run
