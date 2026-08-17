@@ -209,6 +209,21 @@ apps/*/models/`) finds nothing. 4.18's own code spells it correctly
 and the `README.md` Module 4 roadmap row. Two files → **two commits**.
 - [x] fixed — a69b985a (SKILL.md 4.18 intro) + 41c7871c (README.md Module 4 roadmap row) - two files, two commits
 
+### D14 — `.claude/skills/scm/SKILL.md`, the migration line under the Models table
+**Found by:** code-fixer (during the D1–D13 burn-down, not in the original audit)
+**Claim:** "Migration **0031**. **Deferred index (review M3):** a `(tenant, party)` index on `LandedCostVoucher` was
+skipped — 0031 was the number claimed in a shared checkout, and 4.17 deferred its own index finding the same way, so
+both belong in a later **app-wide index-sweep migration**, not a one-off 0032."
+**Wrong in all three parts, as of this session:** the index **shipped**, as `apps/scm/migrations/
+0032_landedcostvoucher_scm_lcv_tnt_party_idx.py` (`AddIndex … name='scm_lcv_tnt_party_idx'`) — i.e. as exactly the
+"one-off 0032" the sentence said it should not be; **no app-wide sweep is owed**; and **4.17 never deferred an index
+alongside it** — its `(tenant, owner_client)` pair shipped on `Item` and `Location` in migration **0030**. This became
+false *while this docs pass was running*: a concurrent session in the same checkout landed the index and recorded the
+correction in commits `604e0a48` and `ab59f250` (which edited only `review-scm-4.18.md` and `todo.md`, neither of them
+files this pass touched — no work was clobbered in either direction).
+**Fix:** name migrations 0031 **and** 0032, state M3 as applied rather than deferred, and drop the sweep claim.
+- [x] fixed — e06f0fa5 docs(scm): the 4.18 (tenant, party) index is no longer deferred - review M3 shipped as migration 0032. Verified against the migration file on disk and `makemigrations --check` (No changes detected). Out of the original D1–D13 spec but inside the named scope (the 4.18 SKILL.md section) and provably false against the as-built code, so fixed rather than merely reported; revert that one commit if the deferral is meant to stand.
+
 ---
 
 ## Verified accurate — no change needed
