@@ -45,7 +45,7 @@ THREE DECISIONS A READER SHOULD NOT HAVE TO REDISCOVER
    a row cannot go stale by sitting still (L29).
 
 **BACKEND PACKAGE ``FinanceIntegration/`` vs TEMPLATE FOLDER ``templates/scm/finance/`` — the
-asymmetry IS the house rule, not a defect.** All seventeen shipped scm template folders use a short
+asymmetry IS the house rule, not a defect.** Every shipped scm template folder uses a short
 slug while the Python package uses the NavERP.md sub-module title in PascalCase
 (``ThirdPartyLogistics/`` ↔ ``templates/scm/3pl/``, ``CustomerPortal/`` ↔ ``templates/scm/portal/``,
 ``ContractCompliance/`` ↔ ``templates/scm/compliance/``). Do not "fix" ``finance/`` into
