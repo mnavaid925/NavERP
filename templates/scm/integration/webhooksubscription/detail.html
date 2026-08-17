@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — ONE webhook subscription, read as A RULE PLUS ITS EVIDENCE.
+
+Renders apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py::webhooksubscription_detail,
+which returns crud_detail(model=WebhookSubscription, template=".../detail.html", extra_context={...}).
+
+Everything this page may read, and NOTHING else:
+
+  obj                the WebhookSubscription (crud_detail, apps/core/crud.py:159)
+  recent_deliveries  the last 10 WebhookDelivery rows for this subscription, ordered -triggered_at.
+                     A SLICE, not the log — the whole log lives on its own page and is linked below.
+  delivery_stats     dict with EXACTLY these six int keys: total / pending / success / failed /
+                     exhausted / simulated. DERIVED by aggregate on read, never stored on the row —
+                     a stored count is a count that drifts the first time a delete or a retry misses
+                     the increment, and the aggregate cannot.
+  is_tenant_admin    bool. Gates rotate-secret and delete, and NOTHING ELSE — Edit is not gated,
+                     because webhooksubscription_edit carries no @tenant_admin_required.
+
+There is no `can_edit`, no `can_delete` and no `today` in the contract, and none of them is reached
+for. A variable the view does not pass renders as an empty string with no error anywhere, which is
+this codebase's most repeated frontend bug (L7) — so every gate below mirrors a decorator that
+actually exists on the route it guards:
+
+  webhooksubscription_edit            @login_required                                  -> ungated here
+  webhooksubscription_delete          @login_required @tenant_admin_required @require_POST
+  webhooksubscription_rotate_secret   @login_required @tenant_admin_required @require_POST
+
+--------------------------------------------------------------------------------------------------
+THE THREE THINGS THIS PAGE MUST NOT LET A READER ASSUME
+--------------------------------------------------------------------------------------------------
+1. NOTHING DELIVERS. There is no outbound HTTP anywhere under apps/scm for 4.19 — no requests, no
+   urllib, no httpx. This subscription is a rule that has been written down, not a rule that is
+   running. Every delivery row underneath it was raised by hand or by the seeder.
+2. NOTHING AUTO-DISABLES. consecutive_failures and auto_disable_threshold are recorded and compared
+   for the reader's benefit on this page only. No scheduler reads them, nothing increments the counter
+   on a clock, and no subscription switches itself off when the budget is spent.
+3. THE SIGNING SECRET CANNOT BE READ BACK — not by you, not by the code, not ever. Only a 12-character
+   prefix and a SHA-256 hash are stored, so the page can say "a secret is registered" and "it changed"
+   without holding anything worth stealing. Rotation displays the new value EXACTLY ONCE and then
+   discards it. There is deliberately no reveal view and no test-delivery button.
+
+   Hashing is NOT the general way to store a signing key — signing needs the plaintext, and SHA-256 is
+   one-way, so a hash makes signing mathematically impossible. It is correct HERE AND ONLY HERE
+   because this pass ships no transport: with nothing to sign, the stored value is a CONFIGURATION
+   MARKER rather than a key, and it keeps the whole identification affordance with none of a
+   credential store's liability. The first pass that implements real delivery WILL hit that wall, and
+   the correct move then is ENCRYPTION AT REST (a KMS or Fernet envelope, key held outside the row) —
+   it is NOT to revert the column to plaintext.
+
+--------------------------------------------------------------------------------------------------
+Guards and colour
+--------------------------------------------------------------------------------------------------
+last_delivery_at, next_attempt_at and response_code are all nullable and each is wrapped in an
+explicit {% templatetag openblock %} if {% templatetag closeblock %} around the WHOLE expression
+rather than a |default — a None inside a filter ARGUMENT raises and 500s even where a bare lookup
+would quietly print nothing (L10). signing_secret_hash and signing_secret_prefix are NEVER rendered;
+obj.masked is the only spelling of the secret that appears on this page.
+
+theme.css ships COLOUR-named badges only: badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success / badge-warning / badge-danger DO NOT EXIST and render
+completely unstyled (L33, shipped four times). Every badge below is one of those six. stat-icon ships
+blue / green / orange / purple / slate only. The delivery-status chain ends
+{% templatetag openblock %} else {% templatetag closeblock %} {{ d.get_status_display }} and the
+payload-format chain ends on {{ obj.get_payload_format_display }}; the is_active chain ends in a plain
+else branch because a boolean has no get_<field>_display to fall back to.
+
+Delete and rotate are @require_POST, so both are real forms and a GET on either route is a 405. Only
+the system-generated WHK- number is interpolated into either confirm string: `name`, `target_url` and
+the header values are all user-typed, and an apostrophe in any of them escapes to &#39;, which HTML
+decodes back to a bare quote before JavaScript parses the attribute — the dialog then breaks open and
+the guard is silently gone (L42). Apostrophes written into those strings are \' for that reason.
+Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}{{ obj.name }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}
+        {% if obj.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+        {% if obj.consecutive_failures %}<span class="badge badge-red">{{ obj.consecutive_failures }} consecutive failures</span>{% endif %}
+        {% if not obj.masked %}<span class="badge badge-amber">No signing secret</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:webhooksubscription_list' %}">Webhook Subscriptions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">One standing rule — <span class="fw-600">{{ obj.get_trigger_entity_display }} · {{ obj.get_trigger_event_display }}</span> — and the log of everything raised under it. The rule watches <span class="fw-600">our own</span> documents, which is why it names no partner: a subscription is something we decide to announce, not a relationship with someone outside.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  {% comment %}
+    delivery_stats is computed by aggregate at read time over this subscription's rows. Six keys,
+    exactly: total / pending / success / failed / exhausted / simulated. The four tiles carry the four
+    a person acts on; pending and simulated appear as chips on the log card below so all six are
+    visible and none is silently dropped.
+  {% endcomment %}
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="send"></i></div>
+      <div class="stat-value">{{ delivery_stats.total }}</div>
+      <div class="stat-label">Delivery attempts recorded against this subscription, ever</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-check"></i></div>
+      <div class="stat-value">{{ delivery_stats.success }}</div>
+      <div class="stat-label">Accepted by the receiver</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ delivery_stats.failed }}</div>
+      <div class="stat-label">Failed and still retryable — a person presses Retry, which stamps the next backoff slot and sends nothing</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="battery-warning"></i></div>
+      <div class="stat-value">{{ delivery_stats.exhausted }}</div>
+      <div class="stat-label">Out of attempts. The receiver never took these, and nothing will try again on its own</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================================ 1. what it watches
+    The rule itself. Everything in this card is editable and all of it is what a delivery would carry.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What this subscription watches</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ obj.number }}</span>
+        <span class="badge badge-info">{{ obj.get_trigger_entity_display }} · {{ obj.get_trigger_event_display }}</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Name</dt><dd class="fw-600">{{ obj.name }}</dd></div>
+        <div class="detail-item">
+          <dt>Trigger entity</dt>
+          <dd class="fw-600">{{ obj.get_trigger_entity_display }}
+            <div class="form-help">The supply-chain document being watched. Every member of this list is a real SCM class — which is exactly why this table exists instead of reusing CRM's webhooks, whose entity vocabulary is leads, opportunities and cases and cannot express a delivered shipment or a posted goods receipt.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Trigger event</dt>
+          <dd class="fw-600">{{ obj.get_trigger_event_display }}
+            <div class="form-help">What has to happen to that document before this rule applies.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Target URL</dt>
+          <dd>
+            {% comment %}
+              WARNING — SSRF SURFACE. This is a tenant-editable address the SERVER would fetch once a
+              transport exists. Outbound HTTP is deferred for this pass precisely so that surface is
+              not opened before it is defended: any future delivery pass must first add an allow-list
+              AND a private-IP block (RFC1918, loopback, link-local 169.254.0.0/16, IPv6 ULA) and
+              re-resolve the host at request time against DNS rebinding.
+
+              It is printed and NOT linked, for a second and separate reason: an <a href> would give
+              any colleague opening this record a one-click trip to whatever another user saved, and a
+              javascript: value would run in their session. URLField screens the scheme at form
+              validation, but a row written by a seeder or a data migration never passes through that
+              validator — so the defence lives here, where it holds for every row however it arrived.
+            {% endcomment %}
+            <span class="mono">{{ obj.target_url }}</span>
+            <div class="form-help">Shown as text rather than as a link on purpose — it is an address somebody typed, and this page will not hand you a one-click trip to it.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Payload format</dt>
+          <dd>
+            {% if obj.payload_format == 'json' %}
+              <span class="badge badge-info">{{ obj.get_payload_format_display }}</span>
+            {% elif obj.payload_format == 'xml' %}
+              <span class="badge badge-slate">{{ obj.get_payload_format_display }}</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_payload_format_display }}</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Filter expression</dt>
+          <dd>
+            {% if obj.filter_expression %}
+              <span class="mono">{{ obj.filter_expression }}</span>
+              <span class="badge badge-amber">Not evaluated</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+            <div class="form-help">Recorded, never evaluated in this pass. Nothing delivers, so nothing filters — the column holds the intent so it is not lost between now and the transport pass that will honour it.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Included fields</dt>
+          <dd>
+            {% if obj.include_fields %}
+              <span class="mono">{{ obj.include_fields }}</span>
+              <span class="badge badge-amber">Not evaluated</span>
+            {% else %}
+              <span class="text-muted">—</span>
+              <div class="form-help">Blank means no narrowing was requested.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Description</dt>
+          <dd>{% if obj.description %}{{ obj.description }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================ 2. headers
+    WARNING — headers are stored as PLAIN TEXT in a JSON column and are shown here in full. That is
+    consistent rather than careless: the same values are rendered into the edit form's widget, so
+    hiding them on this page would buy nothing and would only make the register harder to audit. The
+    real point is stated in the caution below — a credential does not belong in this field at all.
+    Proving a call is ours is the signing secret's job, and that one is never stored in a readable
+    form.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Custom request headers</h2>
+      <span class="badge badge-slate">Stored in plain text</span>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Header</th><th>Value</th></tr></thead>
+          <tbody>
+            {% for key, value in obj.headers.items %}
+              <tr>
+                <td class="mono fw-600">{{ key }}</td>
+                <td class="mono">{{ value }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="2"><span class="text-muted">No custom headers. A delivery would carry only the standard ones.</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="form-help" style="margin:.9rem 0 0;">
+        <span class="badge badge-amber">Do not put a credential here</span>
+        Header values are held as readable text and are shown in full on this page and in the edit form. That is fine for a routing hint or a tenant identifier and wrong for an API token or an <span class="mono">Authorization</span> value — anyone who can open this record can read it. Authenticating a webhook is the <span class="fw-600">signing secret's</span> job, and that one is stored as a hash precisely so it cannot be read back off a screen.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 3. the signing secret
+    obj.masked is the ONLY spelling of the secret that appears on this page. signing_secret_hash and
+    signing_secret_prefix are never rendered directly.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Signing secret</h2>
+      <div class="badge-group">
+        {% if obj.masked %}
+          <span class="badge badge-green">Registered</span>
+        {% else %}
+          <span class="badge badge-amber">Not set</span>
+        {% endif %}
+        <span class="badge badge-info">Shown once, never again</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Secret</dt>
+          <dd class="fw-600 mono">
+            {% if obj.masked %}
+              {{ obj.masked }}
+            {% else %}
+              <span class="text-muted">Not set</span>
+            {% endif %}
+            <div class="form-help">The first characters of the value, kept so two secrets can be told apart and a rotation can be confirmed. The rest is a SHA-256 hash and is never displayed.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Can it be read back?</dt>
+          <dd>
+            <span class="badge badge-slate">No — by design</span>
+            <div class="form-help">There is no reveal view and no test-delivery button. If the value has been lost, the only route is to rotate and hand the receiver the new one.</div>
+          </dd>
+        </div>
+      </dl>
+
+      {% if is_tenant_admin %}
+        <div class="form-actions" style="margin-top:.9rem;">
+          {% comment %}
+            @tenant_admin_required @require_POST — a real form, never a link. The confirm names the
+            consequence that actually bites: a receiver still verifying against the old secret will
+            reject every call the moment this completes, and the new value appears exactly once in the
+            flash message afterwards. Only the WHK- number is interpolated; apostrophes are \' (L42).
+          {% endcomment %}
+          <form method="post" action="{% url 'scm:webhooksubscription_rotate_secret' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit" onclick="return confirm('Rotate the signing secret for {{ obj.number }}? A new value is generated and the old one stops being the one we would sign with. The new secret is displayed EXACTLY ONCE, on the next screen — it is stored only as a hash, so there is no way to look it up afterwards and no way to recover it if the page is closed. Copy it before you navigate away, and give it to whoever verifies these calls: until they have it, anything signed with the new secret will be rejected on their side.');"><i data-lucide="key-round"></i> {% if obj.masked %}Rotate secret{% else %}Generate secret{% endif %}</button>
+          </form>
+        </div>
+        <p class="form-help" style="margin:.6rem 0 0;">
+          Rotation is written to the audit log as a rotation — <span class="fw-600">the value itself is never logged</span>, here or anywhere else.
+        </p>
+      {% else %}
+        <p class="form-help" style="margin:.9rem 0 0;">
+          <span class="badge badge-slate">Workspace administrators only</span>
+          Generating or rotating a signing secret changes what every receiver has to verify against, so it is an administrator's action. Ask one to rotate it and to pass you the new value — they will only see it once themselves.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 4. delivery health
+    NOTHING ENFORCES ANY OF THIS. The comparison below is made for the reader, on this page, at read
+    time — no scheduler consults the threshold and no subscription disables itself. Saying so plainly
+    matters more than the numbers: a budget that looked live would be trusted to stop a runaway
+    integration it cannot stop.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Delivery health</h2>
+      <div class="badge-group">
+        {% if obj.consecutive_failures %}
+          <span class="badge badge-red">{{ obj.consecutive_failures }} of {{ obj.auto_disable_threshold }}</span>
+        {% else %}
+          <span class="badge badge-green">0 of {{ obj.auto_disable_threshold }}</span>
+        {% endif %}
+        <span class="badge badge-amber">Recorded, not enforced</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Active switch</dt>
+          <dd>
+            {% if obj.is_active %}
+              <span class="badge badge-green">Active</span>
+              <div class="form-help">This rule would be applied once a transport exists to apply it.</div>
+            {% else %}
+              <span class="badge badge-muted">Inactive</span>
+              <div class="form-help">Skipped whatever else is set here. This is the switch to reach for instead of deleting — the rule stops and the delivery log below survives.</div>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Consecutive failures</dt>
+          <dd class="fw-600 mono">{{ obj.consecutive_failures }}
+            <div class="form-help">A counter, not a live signal. Nothing increments it on a clock and nothing clears it on a success, because nothing is delivering.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Auto-disable threshold</dt>
+          <dd class="fw-600 mono">{{ obj.auto_disable_threshold }}
+            <div class="form-help">The attempt budget somebody chose — it defaults to 8, matching the published Svix schedule of eight attempts over roughly 32 hours. <span class="fw-600">Nothing trips it.</span> It records what should happen, for the pass that will make it happen.</div>
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Last delivery attempt</dt>
+          <dd class="mono">
+            {% if obj.last_delivery_at %}
+              {{ obj.last_delivery_at|date:"M d, Y H:i" }}
+            {% else %}
+              <span class="text-muted">Never</span>
+              <div class="form-help">No attempt has been recorded against this subscription. With no transport in this pass, that is the expected state for a rule nobody has exercised by hand.</div>
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  {% comment %}
+    ========================================================================== 5. recent deliveries
+    recent_deliveries is the last TEN rows, newest first — a slice for orientation, not the log. The
+    full log is its own page and every row here links to its own detail. The loop variable is `d` and
+    never `obj`: rebinding `obj` inside the loop would quietly replace the subscription for the rest
+    of the template.
+
+    Every column below is a local column on a row already loaded, so this table costs no extra query
+    per row. There is no edit and no delete: WebhookDelivery is APPEND-ONLY — a delivery row is
+    evidence of what crossed the boundary, and an editable audit trail is one that can be rewritten
+    after somebody has already acted on it. Retry lives on the delivery's own detail page.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recent deliveries</h2>
+      <div class="badge-group">
+        {% if delivery_stats.pending %}<span class="badge badge-amber">{{ delivery_stats.pending }} pending</span>{% endif %}
+        {% if delivery_stats.failed %}<span class="badge badge-red">{{ delivery_stats.failed }} failed</span>{% endif %}
+        {% if delivery_stats.exhausted %}<span class="badge badge-red">{{ delivery_stats.exhausted }} exhausted</span>{% endif %}
+        {% if delivery_stats.simulated %}<span class="badge badge-info">{{ delivery_stats.simulated }} simulated</span>{% endif %}
+        <span class="badge badge-slate">{{ delivery_stats.total }} in total</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="nowrap">Triggered</th>
+            <th>Event</th>
+            <th>Status</th>
+            <th class="nowrap">Attempt</th>
+            <th class="nowrap">Response</th>
+            <th>Detail</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in recent_deliveries %}
+            <tr>
+              <td class="nowrap mono">{{ d.triggered_at|date:"M d, Y H:i" }}</td>
+              <td class="mono">{{ d.event }}</td>
+              <td>
+                {% if d.status == 'success' %}
+                  <span class="badge badge-green">{{ d.get_status_display }}</span>
+                {% elif d.status == 'failed' %}
+                  <span class="badge badge-red">{{ d.get_status_display }}</span>
+                {% elif d.status == 'exhausted' %}
+                  <span class="badge badge-red">{{ d.get_status_display }}</span>
+                {% elif d.status == 'pending' %}
+                  <span class="badge badge-amber">{{ d.get_status_display }}</span>
+                {% elif d.status == 'simulated' %}
+                  <span class="badge badge-info">{{ d.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ d.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="nowrap mono">#{{ d.attempt_no }}</td>
+              <td class="nowrap mono">
+                {% comment %}
+                  response_code is nullable — no response was ever received — and the guard wraps the
+                  whole expression rather than filtering a possible None (L10). A blank cell here would
+                  read as a missing value; "no response" is the actual fact.
+                {% endcomment %}
+                {% if d.response_code %}
+                  {{ d.response_code }}
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if d.error_message %}
+                  <span class="text-muted">{{ d.error_message|truncatechars:80 }}</span>
+                {% elif d.next_attempt_at %}
+                  <span class="text-muted">Next slot {{ d.next_attempt_at|date:"M d, Y H:i" }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:webhookdelivery_detail' d.pk %}" class="btn-icon" title="View delivery"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <h3>No deliveries yet</h3>
+                  <p>Nothing has been raised against this subscription. That is the expected state in this pass — the rule is recorded but nothing sends it, so a delivery row appears only when one is raised by hand or by the demo seeder.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      <a href="{% url 'scm:webhookdelivery_list' %}?subscription={{ obj.pk }}" class="btn btn-outline"><i data-lucide="list-checks"></i> Open the full delivery log</a>
+      <p class="text-muted" style="margin:.75rem 0 0;">
+        The ten most recent attempts, newest first. The full log is filtered to this subscription by the link above, and it is <span class="fw-600">append-only</span>: rows are never edited and never deleted, because a delivery record is the evidence of what actually crossed the boundary. A wrong row is corrected by appending a later, correct one. Retry is available on each delivery's own page — it stamps the next backoff slot and <span class="fw-600">fires no request</span>.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================================== 6. actions
+    Each button mirrors a decorator that exists on the route it points at. Edit is ungated because
+    webhooksubscription_edit is only @login_required; delete is inside is_tenant_admin because
+    webhooksubscription_delete is @tenant_admin_required. Both delete and rotate are @require_POST, so
+    a GET on either is a 405 and neither can be a link.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <div class="form-actions">
+        <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% if is_tenant_admin %}
+          <form method="post" action="{% url 'scm:webhooksubscription_delete' obj.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit" onclick="return confirm('Delete {{ obj.number }}? Its ENTIRE DELIVERY LOG goes with it — every attempt, response code and error ever recorded against this subscription — and none of it can be reconstructed, because that log is the only record that a notification was raised at all. If a partner later disputes whether they were told, the answer is deleted too. If you only want the rule to stop firing, clear the Active switch instead: the rule stops and the evidence stays.');"><i data-lucide="trash-2"></i> Delete</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+
+      {% if not is_tenant_admin %}
+        <p class="text-muted" style="margin-top:.9rem;">
+          <span class="badge badge-slate">Delete is administrators only</span>
+          Deleting takes the delivery log with it, so it is restricted to workspace administrators. Anyone who can open this page can still edit the rule or switch it off, which is what stops a subscription firing without destroying the record of what it already did.
+        </p>
+      {% endif %}
+
+      <p class="text-muted" style="margin-top:.9rem;">
+        <span class="badge badge-red">Deleting cascades</span>
+        <span class="fw-600">WebhookDelivery.subscription is CASCADE</span>, so removing this row removes {{ delivery_stats.total }} delivery record(s) along with it. Nothing in the database will stop that — it is the intended shape, since a delivery attempt has no meaning without the rule that raised it — and it is precisely why the Active switch exists as the reversible alternative.
+      </p>
+    </div>
+  </div>
+{% endblock %}
