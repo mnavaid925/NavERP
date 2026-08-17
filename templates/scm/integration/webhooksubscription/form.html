@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — shared create/edit form for WebhookSubscription [WHK-].
+
+Rendered by apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py::webhooksubscription_create
+(via crud_create, apps/core/crud.py:131) and ::webhooksubscription_edit (via crud_edit, :149). The
+pinned contract gives this page exactly three keys and nothing here reads anything else:
+
+  form     — WebhookSubscriptionForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the WebhookSubscription on the EDIT path ONLY. crud_create does NOT put it in the
+             context, so every use of it below sits inside {% templatetag openblock %} if is_edit
+             {% templatetag closeblock %} and is never bare — the title, the breadcrumb and the
+             read-only strip at the foot are all guarded for that reason. A variable the view does not
+             pass renders as an empty string with no error anywhere (L7), which is how a blank
+             fragment ships unnoticed.
+
+`delivery_stats`, `recent_deliveries` and `is_tenant_admin` belong to the detail page and are NOT
+passed here. Nothing below reaches for them, and the explanations on this page are therefore written
+as static help text rather than as live verdicts.
+
+Fields are rendered BY NAME through partials/form_field.html, which pairs <label for=...> with the
+widget's own id_for_label and prints that field's help_text and its errors. That couples this page to
+WebhookSubscriptionForm's whitelist on purpose: Meta.fields is an EXPLICIT list of ELEVEN names — a
+positive list, never __all__ — and all eleven appear below in that same order:
+
+  name · trigger_entity · trigger_event
+  target_url · payload_format
+  filter_expression · include_fields · headers
+  auto_disable_threshold · is_active · description
+
+A field added to the model and to that whitelist but NOT to a group here would never reach the POST —
+and on the edit path it would be silently blanked on every save. That failure is invisible from this
+screen, which is why the list above is spelled out.
+
+DELIBERATELY ABSENT, and none of it an oversight:
+  tenant                  — stamped by crud_create, and by TenantUniqueMixin when it checks the
+                            unique key.
+  number                  — the WHK- reference, assigned on save, editable=False.
+  signing_secret_prefix /
+  signing_secret_hash     — the secret. editable=False makes its absence STRUCTURAL rather than a
+                            matter of remembering to leave it out (L20/L22); the rotate action is the
+                            only writer, and it lives on the detail page behind
+                            @tenant_admin_required @require_POST.
+  consecutive_failures    — a derived counter, editable=False. A number a person can type is not a
+                            failure count, it is an opinion about one.
+  last_delivery_at        — a system timestamp, editable=False (L22).
+  created_at / updated_at — automatic.
+
+THIS MODEL HAS NO FOREIGN KEY BUT ITS TENANT, so there is no FK queryset to scope on this form and no
+_reject_foreign call in its clean(). That absence is a decision, not an omission: a subscription is a
+rule about OUR OWN documents — it watches something inside the workspace and therefore points at no
+partner, no client and no location. The cross-tenant FK hole that TENANT_SCOPED_FKS exists to close
+simply has nowhere to open here.
+
+--------------------------------------------------------------------------------------------------
+WHERE THE DUPLICATE LANDS, AND WHY form.non_field_errors IS RENDERED
+--------------------------------------------------------------------------------------------------
+WebhookSubscription carries unique_together (tenant, name), and reusing a name is the ordinary mistake
+on this page. Django reports a unique_together break as a NON-FIELD error — and it SKIPS the check
+entirely whenever any member of the key is excluded from the form, which `tenant` always is.
+WebhookSubscriptionForm therefore inherits TenantUniqueMixin (first in the MRO, deliberately) to run
+that check with the tenant filled in. Without it the duplicate passes is_valid() and raises an
+uncaught IntegrityError — a 500 — from inside .save(). With it, the refusal arrives as a non-field
+error, which is INVISIBLE unless it is rendered. The first card renders it.
+
+Other refusals and where they land:
+  headers                — anything that is not a FLAT object of text-to-text pairs. The field error
+                           appears under the headers box.
+  auto_disable_threshold — outside 1–20.
+  target_url             — not a valid http(s) URL.
+
+--------------------------------------------------------------------------------------------------
+Colour
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges only (badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate); badge-success / badge-warning / badge-danger do not exist and render
+unstyled (L33, shipped four times). Every badge below is one of those six. Nothing here is |safe.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Webhook Subscription{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Webhook Subscription</h1>
+    <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:webhooksubscription_list' %}">Webhook Subscriptions</a><span class="sep">›</span><span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span></div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Changing a rule changes what would be announced <span class="fw-600">next</span>. It rewrites nothing that has already been recorded — the delivery log underneath this subscription keeps every attempt exactly as it happened, including the URL and the event it was raised for. If the rule has genuinely changed purpose, consider switching this one off and adding a new one: the log then stays readable as the history of two different rules rather than one that quietly became another.
+      {% else %}
+        A subscription answers one question: <span class="fw-600">when this happens to one of our documents, who needs to know?</span> Choose the entity and the event, give it the URL to call, and save. The WHK- number is assigned on save, so there is no number field — and neither is there a signing-secret field: the secret is generated by the Rotate action on the record's own page, shown once, and then stored only as a hash.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What this subscription watches</h2>
+        <span class="badge badge-info">One subscription per name</span>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          The unique_together refusal on (tenant, name) arrives here as a NON-FIELD error and nowhere
+          else. Rendering this loop is the whole difference between a clear "that name is taken" and a
+          form that silently appears to do nothing.
+        {% endcomment %}
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Name it for the thing it announces, not for the receiver — <span class="fw-600">"Shipment delivered → carrier portal"</span> reads better in a delivery log a year from now than "Acme hook 2". A workspace may hold one subscription per name, and a second row repeating one is refused rather than saved.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.trigger_entity %}
+          {% include "partials/form_field.html" with field=form.trigger_event %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">Every entity in that list is a real supply-chain document</span> — purchase orders, goods receipts, sales orders, shipments, stock moves, return authorisations, quality inspections, work orders, assets and supply-chain alerts. That is exactly why this table exists rather than reusing CRM's webhooks: CRM's entity vocabulary is leads, opportunities and cases, and it has no way to say <span class="mono">shipment.delivered</span> or <span class="mono">goods_receipt.posted</span>.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          One rule watches <span class="fw-600">one entity and one event</span>. If a receiver needs to hear about both creation and delivery, that is two subscriptions — which is deliberate, because it lets one of them be switched off, re-pointed or rotated without disturbing the other.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Where the payload goes</h2>
+        <span class="badge badge-amber">Nothing is sent in this pass</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The address we would call, and the shape we would call it in. <span class="fw-600">No outbound request is made anywhere in this pass</span> — there is no HTTP client under the supply-chain module at all — so saving a URL here records where a delivery would go, not one that has gone.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.target_url %}
+          {% include "partials/form_field.html" with field=form.payload_format %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          {% comment %}
+            WARNING — SSRF. target_url is a tenant-editable address the SERVER would fetch once a
+            transport exists. Deferring outbound HTTP is what keeps that surface closed for now; the
+            pass that opens it must FIRST add an allow-list AND a private-IP block (RFC1918, loopback,
+            link-local 169.254.0.0/16, IPv6 ULA) and re-resolve the host at request time against DNS
+            rebinding. The warning is stated to the user below as well, because the person typing the
+            URL is the one who knows whether it is an internal address.
+          {% endcomment %}
+          <span class="badge badge-amber">Use a public HTTPS address</span>
+          Point this at a receiver <span class="fw-600">outside</span> your own network. A URL that resolves to an internal or private address — a metadata service, a loopback port, a machine on the office LAN — turns a webhook into a way of asking our server to fetch things on someone else's behalf. Delivery is deferred precisely so that is not possible yet, and the pass that enables it will refuse private addresses outright.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          The URL is shown as <span class="fw-600">plain text</span> on the list and detail pages rather than as a clickable link, so nobody opening this record is one click away from an address somebody else typed.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What the payload carries</h2>
+        <span class="badge badge-slate">Recorded, not yet evaluated</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The narrowing rules and the extra headers a delivery would carry. All three are <span class="fw-600">recorded and not evaluated</span> in this pass — with nothing delivering, there is nothing to filter and nothing to send headers on. They are kept as fields rather than left to a later migration so the intent is captured while the person who has it is still on this screen.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.filter_expression %}
+          {% include "partials/form_field.html" with field=form.include_fields %}
+          {% include "partials/form_field.html" with field=form.headers %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">Headers must be a flat set of text-to-text pairs</span> — <span class="mono">{"X-Source": "naverp"}</span> and nothing nested. Anything deeper is refused here rather than accepted and then discovered to be un-sendable by the pass that has to serialise it into a real request.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="badge badge-amber">Do not put a credential in a header</span>
+          Header values are stored as readable text and are shown in full on this subscription's page and in this form. That is right for a routing hint or a tenant identifier and wrong for an API token or an <span class="mono">Authorization</span> value — anyone who can open the record can read it. Proving that a call really came from us is the <span class="fw-600">signing secret's</span> job, and that one is deliberately stored in a form nobody can read back.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Attempt budget, and whether the rule is on</h2>
+        <span class="badge badge-amber">Recorded, never enforced</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          How many attempts this subscription should be given before somebody gives up on it, and whether the rule is switched on at all.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.auto_disable_threshold %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.description %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          The threshold defaults to <span class="fw-600">8</span>, matching the published Svix retry schedule — eight attempts spread over roughly 32 hours. <span class="fw-600">Nothing trips it.</span> There is no scheduler and no daemon in this pass, so no subscription disables itself and no failure counter moves on its own; the number records the policy for the pass that will act on it. It is bounded to 1–20 so it stays a policy rather than a way to schedule ten thousand retries.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">The active switch is the thing to reach for instead of deleting.</span> An inactive subscription is skipped whatever else is set on it, and it keeps its entire delivery log. Deleting is permanent and <span class="fw-600">cascades</span>: every attempt, response code and error ever recorded against the rule goes with it, and that log is the only evidence a notification was ever raised.
+        </div>
+      </div>
+    </div>
+
+    {% if is_edit %}
+      {% comment %}
+        The read-only strip. `obj` exists on the edit path only (crud_edit:149), which is why this
+        whole block is inside {% templatetag openblock %} if is_edit {% templatetag closeblock %}.
+        Nothing here is a field on this form or on any other: the WHK- number is editable=False, the
+        two timestamps are automatic, and the secret, the failure counter and the last-delivery
+        timestamp are all editable=False by design — which is what makes their absence from the form
+        structural rather than a matter of remembering (L20/L22).
+
+        obj.masked is the ONLY spelling of the secret rendered anywhere. signing_secret_hash and
+        signing_secret_prefix are never printed.
+      {% endcomment %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Reference and system state</h2>
+          <div class="badge-group">
+            <span class="badge badge-slate">Read-only — not editable on any form</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="detail-grid">
+            <div class="detail-item"><dt>Our reference</dt><dd class="fw-600 mono">{{ obj.number }}</dd></div>
+            <div class="detail-item">
+              <dt>Signing secret</dt>
+              <dd class="mono">
+                {% if obj.masked %}
+                  {{ obj.masked }}
+                {% else %}
+                  <span class="text-muted">Not set</span>
+                {% endif %}
+                <div class="form-help">Generated and rotated from this subscription's own page, by a workspace administrator, and shown exactly once. It is stored as a hash and cannot be read back — not here, not anywhere.</div>
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Consecutive failures</dt>
+              <dd class="mono">{{ obj.consecutive_failures }}
+                <div class="form-help">A derived counter, not a field. A number somebody can type is not a failure count.</div>
+              </dd>
+            </div>
+            <div class="detail-item">
+              <dt>Last delivery attempt</dt>
+              <dd class="mono">
+                {% comment %}
+                  Nullable, so the guard wraps the whole expression rather than filtering a possible
+                  None — a None inside a filter ARGUMENT raises and 500s where a bare lookup would
+                  quietly print nothing (L10).
+                {% endcomment %}
+                {% if obj.last_delivery_at %}
+                  {{ obj.last_delivery_at|date:"M d, Y H:i" }}
+                {% else %}
+                  <span class="text-muted">Never</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="detail-item"><dt>Created</dt><dd class="mono">{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+            <div class="detail-item"><dt>Updated</dt><dd class="mono">{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+          </dl>
+          <p class="form-help" style="margin:.9rem 0 0;">
+            The WHK- number is assigned once and never changes, so a delivery log can name the rule that raised it. None of the values on this card is a field on this form and none of them can be typed.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      {% comment %}
+        Cancel goes where Save goes, so the two buttons never land in different places. BOTH paths
+        return to the register here: crud_create's success_url is scm:webhooksubscription_list and
+        crud_edit's is scm:webhooksubscription_list too. That is why this link is unconditional and
+        does not branch on is_edit — branching would send Cancel to the detail page while Save still
+        went to the list, which is the mismatch the rule exists to prevent. It also keeps the link off
+        `obj`, which does not exist on the create path at all.
+      {% endcomment %}
+      <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to the register. The change applies to whatever this rule announces <span class="fw-600">next</span> — every delivery already logged keeps the URL, event and status it was recorded with, which is honest rather than stale: it says what was actually attempted at the time.
+      {% else %}
+        Saving returns to the register, where the new subscription appears with its WHK- number. It will sit there doing nothing until a transport exists to act on it, and until an administrator generates its <span class="fw-600">signing secret</span> from its own page — without one, a receiver has no way to tell a call from us apart from a call from anyone else.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
