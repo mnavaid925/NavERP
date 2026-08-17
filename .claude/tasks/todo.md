@@ -25118,3 +25118,657 @@ Audit coverage note: the `README/sidebar` lane stalled on all six attempts. Its 
 run by hand and are clean — the five `LIVE_LINKS["4.18"]` keys match the NavERP.md 4.18 bullets verbatim, and no
 document still calls 4.18 roadmap or states a wrong SCM count — so no known gap remains, but the lane is recorded
 as missing coverage rather than as a pass.
+
+---
+# Sub-module 4.19 — Integration & API Gateway (Module 4: Supply Chain Management, `scm`) — plan from research-scm-4.19.md  (2026-08-18)
+
+**THE LAST UNBUILT SUB-MODULE OF MODULE 4.** `apps/core/navigation.py` carries `LIVE_LINKS` keys `"4.1"…"4.18"`
+and no `"4.19"`. When this lands, Module 4 is 19 of 19.
+
+**Migration `0033` is claimed for this build** (tip is `0032_landedcostvoucher_scm_lcv_tnt_party_idx`). If a
+concurrent session in this checkout needs a number, it takes 0034 — agree before generating (L43).
+
+## Spine verification (grep-confirmed at plan time — every FK below targets a real class)
+
+- [x] `core.Party` → `apps/core/models/Party.py:5` · `core.Tenant` → `Tenant.py:5` · `core.Document` →
+      `Document.py:5` · `core.PartyRole` → `PartyRole.py:5` · `core.AuditLog` → `AuditLog.py:5`
+- [x] `scm.LogisticsClient` → `apps/scm/models/ThirdPartyLogistics/LogisticsClients.py:61`
+- [x] `scm.Location` → `apps/scm/models/InventoryManagement/Locations.py:14`
+- [x] `scm.PurchaseOrder` → `apps/scm/models/ProcurementManagement/PurchaseOrders.py:15`
+- [x] `scm.SalesOrder` → `apps/scm/models/OrderManagement/SalesOrders.py:20`
+- [x] `TenantOwned` / `TenantNumbered` → `apps/scm/models/_base.py:53,66`; `_base.py` star-exports `secrets`
+      (line 17) but **NOT `hashlib`** — see the Secrets section
+- [x] Reference patterns read in full: `apps/tenants/models/EncryptionKey.py:22-31`,
+      `apps/accounting/models/Integration/IntegrationConfigs.py:36-53`,
+      `apps/crm/models/AutomationWorkflow/Webhooks.py:7,43`
+- [x] Prefixes `CNX` / `MSG` / `WHK` free against all 58 shipped scm prefixes
+- [x] Badge classes exist as `badge-green/red/amber/info/muted/slate` (`static/css/theme.css:285-290`) —
+      `badge-success` / `badge-danger` do **not** exist (L33)
+
+---
+
+## HARD CONSTRAINTS — read these before writing any 4.19 code
+
+### A. Ownership boundary with 4.17 — non-negotiable
+
+`apps/scm/models/ThirdPartyLogistics/LogisticsClients.py:24-29` states, as shipped: *"No secret of any kind lives
+on this row (L20). `integration_mode` / `client_system` / `edi_partner_id` / `edi_qualifier` are non-secret partner
+identifiers … credential storage, EDI transport and webhooks are **4.19's**. `last_synced_at` is written by NOTHING
+in 4.17 — it exists so that when 4.19 lands it writes a real timestamp into a column that already has a home."*
+
+- [ ] **4.19 must NOT re-declare `integration_mode`, `client_system`, `edi_partner_id`, `edi_qualifier` or
+      `last_synced_at`** on any row that links to a `LogisticsClient`. Where `IntegrationEndpoint.logistics_client`
+      is set, the endpoint **reads those identifiers through the FK** and its own `interchange_id` /
+      `interchange_qualifier` columns stay **blank**.
+- [ ] Enforce it in `IntegrationEndpoint.clean()`: *if `logistics_client_id` is set and either `interchange_id` or
+      `interchange_qualifier` is non-blank → `ValidationError`* naming the client's own columns as the place to
+      edit them. Two copies of an EDI envelope id is two places for it to go stale.
+- [ ] Give the model two read-side properties so templates and the seeder have ONE read path:
+      `effective_interchange_id` and `effective_interchange_qualifier` → return
+      `self.logistics_client.edi_partner_id` / `.edi_qualifier` when the client is set, else the local column.
+      Templates render the property, never the raw column.
+- [ ] Only where the endpoint's partner is **not** a logistics client (a plain `core.Party`, or no party at all)
+      does it carry its own `interchange_id` / `interchange_qualifier`.
+- [ ] 4.19 **may** write `LogisticsClient.last_synced_at` (that is the column's stated purpose) — but nothing in
+      this pass does, because nothing syncs. Note it in the endpoint docstring; do not add a fake writer.
+- [ ] 4.19 adds **no column to `LogisticsClient`** and takes **no route** under `logistics-clients/`.
+
+### B. Secrets — prefix + SHA-256 hash only, and the RATIONALE matters as much as the rule
+
+- [ ] Both credential columns on both config models are `*_prefix` + `*_hash`, **both `editable=False`**, so they
+      are off every ModelForm structurally rather than by each form remembering to exclude them (L20/L22).
+      Copy `apps/tenants/models/EncryptionKey.py:22-31` and
+      `apps/accounting/models/Integration/IntegrationConfigs.py:36-53` — `set_secret()` / `generate_secret()` /
+      `hash_secret()` / the `masked` property.
+- [ ] **Write the rationale in the model docstring, in these terms, because the obvious rationale is wrong:**
+      hashing is **NOT** the general way to store an HMAC signing key or an outbound API credential. To HMAC-sign
+      a payload the server needs the actual plaintext key, and to authenticate to SAP or Shopify it needs the real
+      credential; SHA-256 is one-way, so hashing makes both **mathematically impossible**. The general fix for a
+      key you must *use* is **encryption at rest**, not hashing.
+      Prefix+hash is correct **here, and only here, because 4.19 ships no transport**: nothing signs a payload and
+      nothing calls a provider. The stored value is a **configuration marker** meaning "a credential is registered
+      for this endpoint" — prefix+hash keeps the whole identification affordance (last-4 display, "is one set?",
+      rotation detection) while carrying none of a credential store's liability. This is the identical call
+      `accounting.IntegrationConfig` already made, and its docstring says why: *"Live sync against the provider is
+      deferred."*
+- [ ] **MIGRATION HAZARD — write this into the docstring too, as a warning to the future pass that hits it.**
+      The first pass that implements real outbound transport **will hit a wall**: it cannot sign or authenticate
+      from a hash. The correct move at that point is to migrate to **encrypted-at-rest reversible storage**
+      (KMS / Fernet-style envelope encryption, key outside the row). It is **NOT** to "fix" the wall by reverting
+      the column to plaintext. Say so explicitly so the wall arrives with its own instruction attached.
+- [ ] **Describe `crm.Webhook.secret` accurately — do not present hashing as its remedy.**
+      `apps/crm/models/AutomationWorkflow/Webhooks.py:21` is a plaintext `CharField(max_length=128)`, write-only
+      at the form layer (`PasswordInput(render_value=False)`), masked at render by `secret_masked`. It is a real
+      weakness worth fixing separately — a signing key sitting plaintext at rest — but its correct fix is
+      **encryption at rest**, because CRM 1.10 genuinely *intends to sign*. 4.19 differs from CRM because 4.19
+      needs no plaintext at all, **not** because hashing beats plaintext generically. Do not "harmonize" crm's
+      column by hashing it (that would break 1.10's stated design), and do not cite crm as an anti-pattern in a
+      way that implies hashing is the universal answer.
+- [ ] Consequence to encode, so it is not later read as a bug: **`WebhookDelivery.signature` is blank on every row
+      this pass creates.** Nothing can compute a real HMAC — there is no plaintext key and no transport. The
+      column exists as the home for the future transport pass. State that in the field's `help_text` and in the
+      model docstring.
+- [ ] Plaintext is minted server-side by `secrets.token_urlsafe(...)` **only** (never `random`, never
+      `uuid4().hex`), shown **exactly once** on the POST rotate action via a `messages.success`, then discarded.
+      **No reveal view. No "test connection".**
+- [ ] **No OAuth access/refresh tokens anywhere.** Record `auth_method="oauth2"` and stop.
+- [ ] `apps/scm/models/_base.py` re-exports `secrets` but **not `hashlib`** (verified — line 17 imports only
+      `secrets` and `Decimal`). The two entity modules that hash therefore do `import hashlib` themselves, at the
+      top of their own file. **Do NOT edit `apps/scm/models/_base.py`** — it is a shared file and a concurrent
+      session may hold it (L43).
+
+### C. SSRF — both user-supplied URLs, transport deferred
+
+- [ ] `IntegrationEndpoint.endpoint_url` and `WebhookSubscription.target_url` are **tenant-editable URLs the
+      server would fetch**. Each field carries a `# WARNING:` comment naming **SSRF** and stating that outbound
+      HTTP is deferred — the same posture `crm/views` carries on its deferred delivery helper.
+- [ ] **No view in this pass may fetch a user-supplied URL.** No `requests`, no `urllib`, no `httpx` import
+      anywhere under `apps/scm/**` for 4.19. The reprocess / retry / rotate actions mutate rows only.
+- [ ] Any future pass that adds real outbound calls must first add an **allow-list plus a private-IP-range block**
+      (RFC1918, loopback, link-local `169.254.0.0/16`, IPv6 ULA, and DNS-rebinding re-resolution). Write that
+      requirement into both docstrings.
+- [ ] **`IntegrationEndpoint.endpoint_url` is a `CharField(max_length=500, blank=True)`, NOT a `URLField`** — and
+      this is deliberate, not sloppiness. Django's `URLValidator` accepts only `http/https/ftp/ftps`, so a
+      `URLField` would reject the legitimate `sftp://`, `as2://`, `mqtt://` and `llrp://` endpoints this table
+      exists to hold, and the rejection would appear only at ModelForm validation (never at `.save()`), i.e. the
+      seeder would pass and the UI would fail. Put that reasoning in a comment so a reviewer does not "fix" it.
+      **`WebhookSubscription.target_url` IS a `URLField(max_length=500)`** — a webhook target really is HTTP(S).
+
+### D. Append-only logs get list + detail ONLY — a deliberate departure from CRUD Completeness
+
+- [ ] `IntegrationMessage` and `WebhookDelivery` ship **no create view, no edit view, no delete view, no delete
+      route and no ModelForm for the row itself.** No `forms/IntegrationApiGateway/IntegrationMessages.py` and no
+      `forms/IntegrationApiGateway/WebhookDeliveries.py` are created — those files must not exist.
+- [ ] **Why this is not missing CRUD, stated in each url module's docstring so no reviewer flags it** (copy the
+      shape of `apps/scm/urls/AssetManagement/MeterReadings.py:4-23`): an exchange log is evidence of what crossed
+      the boundary. A wrong row is corrected by appending a **later, correct** row — the `scm.StockMove` and
+      `scm.MeterReading` posture verbatim, and the shipped `crm.WebhookDelivery` posture (*"Immutable append-only
+      delivery record … Accessed list+detail only — never edited"*). An editable delivery row is an audit trail
+      that can be rewritten after someone has acted on it, which defeats the only reason to keep it.
+      The pattern is already enforced by a shipped test — `apps/scm/tests/test_security.py`
+      `TestMeterReadingHasNoEditOrDeleteRoute`.
+- [ ] The **only** writes to these two tables from the UI are the POST-only actions below. Each is
+      `@login_required` + `@require_POST`, **tenant-scoped via `get_object_or_404(..., tenant=request.tenant)`**,
+      CSRF-tokened, `onclick="return confirm(...)"` in the template, and audit-logged with `write_audit_log`:
+      - `integrationmessage_reprocess` — sets `status="pending"`, `attempt_count += 1`, clears `error_code` /
+        `error_message`. Refuses (message + redirect) when `status` is already `pending` or `acknowledged`.
+      - `webhookdelivery_retry` — sets `status="pending"`, `attempt_no += 1`, stamps `next_attempt_at` from the
+        Svix-style backoff table; when `attempt_no` exceeds the table, sets `status="exhausted"` instead and does
+        not schedule. **Fires no HTTP request** — say so in the view docstring.
+- [ ] `admin.py` registers both read-only (`has_add_permission` / `has_change_permission` /
+      `has_delete_permission` → `False`), the `MeterReading` precedent.
+
+### E. No `GenericForeignKey` — scm bans it
+
+- [ ] Correlation to an internal document uses the **`source` choice + `source_reference` CharField** soft-pointer
+      idiom, verified in use at `DemandSignals.py:74` (with index `scm_ds_tnt_ref_idx` at `:117`),
+      `ComplianceRequirements.py:239` and `ClientBillingRunLines.py:810`. The ban is documented twice:
+      `ColdChainMonitors.py:18` (*"three typed FKs, exactly one of which is set — never a GenericForeignKey"*) and
+      `PortalDocumentShares.py:9-11` (*"a `(content_type, object_id)` pair cannot be tenant-joined"*).
+- [ ] Two **typed, nullable** FKs are added alongside it for the only two flows worth joining
+      (`purchase_order`, `sales_order`) — the soft pointer stays as the general case.
+
+---
+
+## Models (4 — from the research's recommended scope, unchanged)
+
+Three full-CRUD/config surfaces and two append-only logs, in **four entity files, one model each** (see the
+Backend section for why the delivery log is not folded into the subscription file).
+
+### 1. `IntegrationEndpoint(TenantNumbered)` — `CNX-` — FULL CRUD
+- [ ] **The single connector table serving NavERP.md bullets 1-4**, discriminated by `category`. The compression
+      is the research's central decision: an ERP connector, a Shopify channel, an RFID reader gateway and an EDI
+      trading-partner link are one object under four labels — *a named external counterpart, a direction, a
+      transport, a far-end identifier, a credential, an enabled state and a last-seen stamp*. Four near-identical
+      tables would mean four CRUD stacks, four seeders and four template sets that drift. `accounting.IntegrationConfig`
+      already collapses eight categories onto one table for the same reason.
+- [ ] Fields + the researched feature that drove each:
+      - `name` CharField(120) — *(named connection per external system: Cleo, Celigo, Boomi, SPS, TrueCommerce)*
+      - `category` — `erp · ecommerce · iot · edi · custom` — *(the discriminator that makes bullets 1-4 one table)*
+      - `system` — `sap · oracle · netsuite · dynamics · shopify · magento · woocommerce · amazon · ebay ·
+        walmart · rfid_reader · barcode_scanner · sensor_gateway · edi_van · custom` — *(typed vendor connections;
+        mirrors `accounting.IntegrationConfig.PROVIDER_CHOICES` in shape, deliberately not FK'd to it)*
+      - `direction` — `inbound · outbound · bidirectional` — *(the most load-bearing classification in every
+        product surveyed: Celigo's Shopify↔NetSuite flows, Boomi, Cleo)*
+      - `transport` — `api_rest · api_soap · webhook · sftp · ftps · as2 · van · file_drop · mqtt · llrp ·
+        serial · manual` — *(RFID middleware connects readers over LLRP/vendor SDKs; Cleo lists AS2/SFTP/FTP/VAN/API)*
+      - `auth_method` — `none · api_key · basic · oauth2 · mtls · ssh_key` — *(Kong's credential taxonomy; `oauth2`
+        records intent only, per constraint B)*
+      - `endpoint_url` **CharField(500, blank)** — *(the far end)* — **SSRF `# WARNING`; CharField not URLField,
+        see constraint C**
+      - `external_account_ref` CharField(120, blank) — *(the shop domain / seller id / marketplace region is the
+        practical key, distinct from the credential: Celigo's Shopify–NetSuite app)*
+      - `interchange_id` CharField(32, blank) + `interchange_qualifier` CharField(8, blank) — *(ISA sender/receiver
+        identity on every X12 envelope: SPS, Cleo, TrueCommerce)* — **blank whenever `logistics_client` is set;
+        constraint A**
+      - `device_identifier` CharField(64, blank) — *(Azure IoT Hub identity registry / Impinj-class reader registry:
+        one row per permitted device)*
+      - `trigger_mode` — `realtime · scheduled · manual` + `schedule_note` CharField(200, blank) — *(Celigo's
+        real-time vs scheduled flows)* — **data now, execution never in this pass: there is no scheduler; the
+        field records intent exactly as 4.17's `last_synced_at` does. Say so in `help_text`.**
+      - `environment` — `production · sandbox` — *(Celigo, Boomi environments, Svix's isolated instances)*
+      - `lifecycle_stage` — `setup · testing · certified · live · suspended` — *(Cleo's guided partner onboarding:
+        "setup, testing, validation, ongoing lifecycle management"; SPS sells onboarding as a product. A field,
+        not a table — scorecarding stays 4.2's `SupplierScorecard`.)*
+      - `status` — `disconnected · connected · error · disabled` — *(connection health at a glance: Celigo
+        monitoring, Boomi process reporting, Workato system health)*
+      - `is_active` BooleanField(True)
+      - `consecutive_failures` PositiveIntegerField(0, **editable=False**) — *(Svix auto-disables an endpoint after
+        5 days of failures; Cleo flags "at-risk")*
+      - `last_run_at` / `last_success_at` / `last_seen_at` DateTimeField(null, blank, **editable=False**) —
+        *(last-successful-run in Celigo/Boomi/Workato; last-seen in the IoT device registry)* — L22
+      - `credential_prefix` CharField(12, blank, **editable=False**) + `credential_hash` CharField(64, blank,
+        **editable=False**) — **constraint B**
+      - `notes` TextField(blank)
+- [ ] FKs (all grep-verified above), every one `SET_NULL, null=True, blank=True, related_name="+"`:
+      `partner_party → core.Party` *(the EDI counterparty is an existing party, never a second partner table —
+      customers/vendors are `core.PartyRole`s)* · `logistics_client → scm.LogisticsClient` *(constraint A: reuses
+      4.17's shipped `edi_partner_id`/`edi_qualifier` instead of re-typing them)* · `location → scm.Location`
+      *(the zone an IoT reader watches)* · `spec_document → core.Document` *(the partner spec / EDI
+      implementation guide — the call 4.12 made: "No FileField anywhere in 4.12")*.
+      **`spec_document` is the first thing to cut if the build wave runs long** — it is one nullable FK and no
+      feature depends on it.
+- [ ] Methods: `generate_credential()` staticmethod (`secrets.token_urlsafe(24)`), `set_credential(plaintext)`,
+      `hash_secret(s)` staticmethod, `masked` property, `effective_interchange_id` / `effective_interchange_qualifier`
+      properties (constraint A), `clean()` (constraint A's rejection rule + reject a `logistics_client` /
+      `location` belonging to another tenant, the `TENANT_SCOPED_FKS` posture 4.17 uses).
+- [ ] `Meta`: `ordering = ["name", "id"]` (total order so page 2 is deterministic);
+      `unique_together = (("tenant", "number"), ("tenant", "name"))`;
+      indexes `scm_cnx_tnt_cat_idx (tenant, category)`, `scm_cnx_tnt_status_idx (tenant, status)`,
+      `scm_cnx_tnt_active_idx (tenant, is_active)`.
+- [ ] **Form excludes** (`IntegrationEndpointForm`, `Meta.fields` listed positively — never `__all__`):
+      `tenant`, `number`, `credential_prefix`, `credential_hash`, `consecutive_failures`, `last_run_at`,
+      `last_success_at`, `last_seen_at`, `created_at`, `updated_at`. `status` **is** on the form (it is a
+      human-maintained marker here, not a workflow-owned state — there is no state machine to own it), but
+      `consecutive_failures` is not.
+
+### 2. `IntegrationMessage(TenantNumbered)` — `MSG-` — **APPEND-ONLY: list + detail only** (constraint D)
+- [ ] The exchange log for bullets 1-4 **and the exception cockpit** — the research's highest-value page.
+- [ ] Fields + drivers:
+      - `endpoint` FK → `scm.IntegrationEndpoint`, **CASCADE**, `related_name="messages"`
+      - `direction` — `inbound · outbound`
+      - `document_type` — the X12 vocabulary *(EDI Basics, Cleo, SPS, TrueCommerce, Boomi)*:
+        `edi_850 · edi_855 · edi_860 · edi_856 · edi_810 · edi_820 · edi_846 · edi_214 · edi_864 · edi_940 ·
+        edi_945 · edi_947 · edi_997` **plus** the non-EDI members *(Celigo's Shopify↔NetSuite flow set, and the
+        RFID batch)*: `order_import · inventory_feed · fulfilment_export · item_export · refund_sync ·
+        customer_sync · tag_read_batch · scan_batch · sensor_reading · other`
+      - `status` — `pending · sent · received · acknowledged · failed · ignored` — *(the `acknowledged` member is
+        997 tracking: an unacknowledged 850 is the commonest EDI support ticket — Cleo, SPS, Boomi)*
+      - `control_number` CharField(32, blank) — *(how a human and a partner talk about one transmission)*
+      - `external_id` CharField(120, blank) — *(Shopify's `X-Shopify-Webhook-Id` de-dupe, Svix's `eventId`
+        "for mapping to your internal systems")*
+      - `record_count` PositiveIntegerField(0) — *(RFID middleware "filters noisy raw reads, applies dedup and
+        zone logic" — record the batch, never the tag; a UHF reader emits thousands of reads/second)*
+      - `payload_excerpt` TextField(blank) — **truncated by design; `help_text` must say it may contain partner
+        PII (ship-to names/addresses on an 856) and that a full document body is never stored**
+      - `error_code` CharField(40, blank) + `error_message` TextField(blank) — *(Cleo: "detect, categorize and
+        resolve connectivity, data and process issues"; Celigo error management)*
+      - `attempt_count` PositiveSmallIntegerField(1, **editable=False**)
+      - `occurred_at` DateTimeField(`default=timezone.now`, **editable=False**) — the business timestamp a real
+        transport would read off the envelope; `editable=False` makes "no form ever shows this" structural (L22)
+        and does not stop the seeder assigning it explicitly
+      - `acknowledged_at` DateTimeField(null, blank, **editable=False**)
+      - `source` choice + `source_reference` CharField(60, blank) — **constraint E.** `SOURCE_CHOICES` names the
+        internal document *type*: `purchase_order · goods_receipt · sales_order · shipment · freight_invoice ·
+        stock_move · item · trade_document · return_authorization · logistics_client · none`
+- [ ] FKs: `acknowledges → "self"` (`SET_NULL`, null/blank, `related_name="acknowledged_by"`) — *the 997 row
+      points at the 850 row* · `purchase_order → scm.PurchaseOrder` and `sales_order → scm.SalesOrder`, both
+      `SET_NULL`/null/blank/`related_name="+"` — the two flows worth a joinable link.
+- [ ] `Meta`: `ordering = ["-occurred_at", "-id"]`; `unique_together = (("tenant", "number"),)`;
+      indexes `scm_msg_tnt_status_idx (tenant, status)`, `scm_msg_tnt_endpoint_idx (tenant, endpoint)`,
+      `scm_msg_tnt_extid_idx (tenant, external_id)`, `scm_msg_tnt_occat_idx (tenant, occurred_at)`.
+- [ ] Docstring must carry the Shopify caveat so nobody builds order-dependent logic on it: *delivery is
+      explicitly not ordered and not guaranteed; reconcile separately.*
+- [ ] **No ModelForm. No create/edit/delete.** Only `integrationmessage_reprocess` (POST).
+
+### 3. `WebhookSubscription(TenantNumbered)` — `WHK-` — FULL CRUD
+- [ ] Bullet 5's configuration half. **Why not reuse `crm.Webhook`:** its `trigger_entity` choices come from
+      `crm.WorkflowRule.ENTITY_CHOICES` (`crm/models/AutomationWorkflow/Webhooks.py:3,17`) — a CRM vocabulary
+      (lead/opportunity/case) that **cannot express** `shipment.delivered` or `goods_receipt.posted`. Documented
+      decision, not drift; put it in the docstring.
+- [ ] Fields + drivers:
+      - `name` CharField(120)
+      - `trigger_entity` — **SCM vocabulary, every member a verified existing class**: `purchase_order ·
+        goods_receipt · sales_order · shipment · stock_move · return_authorization · quality_inspection ·
+        work_order · asset · supply_chain_alert`
+      - `trigger_event` — `created · updated · status_changed · approved · posted · cancelled · delivered`
+      - `target_url` **URLField(500)** — *(topic + destination is the irreducible core in Shopify, Svix, Workato,
+        Boomi and the shipped `crm.Webhook`)* — **SSRF `# WARNING`, constraint C**
+      - `payload_format` — `json · xml`
+      - `filter_expression` CharField(200, blank) + `include_fields` CharField(255, blank) — *(Shopify's `filter`
+        params and `include_fields`; Svix endpoint filters)* — **recorded, never evaluated; say so in `help_text`**
+      - `headers` JSONField(`default=dict, blank=True`) — *(Shopify/Svix custom request headers; `crm.Webhook.headers`
+        does the same job)*
+      - `is_active` BooleanField(True)
+      - `auto_disable_threshold` PositiveSmallIntegerField(default=8) — *(Svix publishes 8 attempts over ~32h and
+        auto-disables an endpoint failing for 5 days)* — editable config
+      - `consecutive_failures` PositiveIntegerField(0, **editable=False**) + `last_delivery_at` DateTimeField(null,
+        blank, **editable=False**)
+      - `signing_secret_prefix` CharField(12, blank, **editable=False**) + `signing_secret_hash` CharField(64,
+        blank, **editable=False**) — **constraint B, including the "why hashing is right *here*" docstring and
+        the encryption-at-rest migration hazard note**
+      - `description` TextField(blank)
+- [ ] FKs: `tenant` only. A subscription is a rule about **internal** events, so it points at no partner.
+- [ ] `Meta`: `ordering = ["name", "id"]`; `unique_together = (("tenant", "number"), ("tenant", "name"))`;
+      indexes `scm_whk_tnt_active_idx (tenant, is_active)`, `scm_whk_tnt_entity_idx (tenant, trigger_entity)`.
+- [ ] Form excludes: `tenant`, `number`, `signing_secret_prefix`, `signing_secret_hash`, `consecutive_failures`,
+      `last_delivery_at`, `created_at`, `updated_at`.
+
+### 4. `WebhookDelivery(TenantOwned)` — **NO number** — **APPEND-ONLY: list + detail only** (constraint D)
+- [ ] Bullet 5's log half. No auto-number: it matches the shipped high-volume-log convention (`StockMove`,
+      `TemperatureReading`, `PortalActivity`, `KpiSnapshot`) and `crm.WebhookDelivery`. Human-discussed records get
+      a number; per-attempt telemetry does not.
+- [ ] Fields + drivers *(Svix Attempts: "records of individual delivery tries … capturing response status codes
+      and content for debugging")*:
+      - `subscription` FK → `scm.WebhookSubscription`, **CASCADE**, `related_name="deliveries"`
+      - `event` CharField(60) — e.g. `shipment.delivered`
+      - `payload_excerpt` TextField(blank) — truncated, same PII `help_text` as the message log
+      - `signature` CharField(128, blank) — the HMAC hex a real transport would compute. **Blank on every row this
+        pass creates — see constraint B.** `help_text` and docstring must say why, so it does not read as a bug.
+      - `status` — `pending · success · failed · exhausted · simulated`
+      - `attempt_no` PositiveSmallIntegerField(default=1) + `next_attempt_at` DateTimeField(null, blank) —
+        *(Svix's published schedule: immediate, 5s, 5min, 30min, 2h, 5h, 10h, 10h — 8 attempts over ~32 hours.
+        **Model the state, not the daemon**: a human presses Retry and the view stamps the next slot.)*
+      - `response_code` PositiveSmallIntegerField(null, blank) + `error_message` TextField(blank)
+      - `triggered_at` DateTimeField(`default=timezone.now`, **editable=False**)
+- [ ] `Meta`: `ordering = ["-triggered_at", "-id"]`; indexes `scm_whd_tnt_sub_idx (tenant, subscription)`,
+      `scm_whd_tnt_status_idx (tenant, status)`, `scm_whd_tnt_trigat_idx (tenant, triggered_at)`.
+      (The `scm_` prefix keeps these distinct from crm's `crm_whd_*` names — index names are global.)
+- [ ] Docstring states, as `crm.WebhookDelivery`'s does: **real outbound HTTP is deferred; `webhookdelivery_retry`
+      performs no request.**
+- [ ] **No ModelForm. No create/edit/delete.** Only `webhookdelivery_retry` (POST).
+
+---
+
+## Backend (`apps/scm/{models,forms,views,urls}/IntegrationApiGateway/`)
+
+**Four entity files, one model each** — `WebhookDelivery` is NOT folded into `WebhookSubscriptions.py` even though
+crm keeps its pair in one file. Reasons, so no reviewer "fixes" it: it is a top-level list page with its own
+routes and templates rather than an inline child grid like `PurchaseOrderLine`; `PortalActivity` set exactly this
+precedent in 4.16 (`models/CustomerPortal/PortalActivities.py` is its own module); and the per-entity parallel
+build wave needs four disjoint file sets.
+
+### models
+- [ ] `apps/scm/models/IntegrationApiGateway/__init__.py` (empty marker, own commit)
+- [ ] `apps/scm/models/IntegrationApiGateway/_choices.py` — **ALL choice tuples for the sub-module** live here:
+      `ENDPOINT_CATEGORY_CHOICES`, `ENDPOINT_SYSTEM_CHOICES`, `ENDPOINT_DIRECTION_CHOICES`, `TRANSPORT_CHOICES`,
+      `AUTH_METHOD_CHOICES`, `TRIGGER_MODE_CHOICES`, `ENVIRONMENT_CHOICES`, `LIFECYCLE_STAGE_CHOICES`,
+      `ENDPOINT_STATUS_CHOICES`, `MESSAGE_DIRECTION_CHOICES`, `DOCUMENT_TYPE_CHOICES`, `MESSAGE_STATUS_CHOICES`,
+      `MESSAGE_SOURCE_CHOICES`, `WEBHOOK_ENTITY_CHOICES`, `WEBHOOK_EVENT_CHOICES`, `PAYLOAD_FORMAT_CHOICES`,
+      `DELIVERY_STATUS_CHOICES`, `DELIVERY_BACKOFF_SECONDS = (0, 5, 300, 1800, 7200, 18000, 36000, 36000)`.
+      **The `IntegrationEndpoints.py` agent OWNS this file and creates it**; the other three entity modules and
+      every view import from it **BY NAME**, never `import *` — the package `__init__` already star-imports
+      `_choices` modules, so a fourth star-import could silently shadow a shared token with the winner decided by
+      import order (the comment at `LogisticsClients.py:41-47` spells this out; copy that comment).
+      `_choices.py` imports nothing (not even `_base`), so the dependency edge inside 4.19 runs one way only.
+- [ ] `apps/scm/models/IntegrationApiGateway/IntegrationEndpoints.py` — `IntegrationEndpoint`.
+      `from apps.scm.models._base import *` **plus its own `import hashlib`** (constraint B).
+- [ ] `apps/scm/models/IntegrationApiGateway/IntegrationMessages.py` — `IntegrationMessage`
+- [ ] `apps/scm/models/IntegrationApiGateway/WebhookSubscriptions.py` — `WebhookSubscription` (own `import hashlib`)
+- [ ] `apps/scm/models/IntegrationApiGateway/WebhookDeliveries.py` — `WebhookDelivery`
+- [ ] **Absolute imports only** (`from apps.scm.models...`) — a relative `from .models import X` resolves one
+      package too deep.
+
+### forms — TWO modules only (constraint D)
+- [ ] `apps/scm/forms/IntegrationApiGateway/__init__.py` (empty marker)
+- [ ] `apps/scm/forms/IntegrationApiGateway/IntegrationEndpoints.py` — `IntegrationEndpointForm`
+      (subclass `TenantModelForm` from `apps/core/forms/_common.py`, via `apps/scm/forms/_common.py`)
+- [ ] `apps/scm/forms/IntegrationApiGateway/WebhookSubscriptions.py` — `WebhookSubscriptionForm`
+- [ ] **NO `IntegrationMessages.py` and NO `WebhookDeliveries.py` under `forms/`** — the 4.16 precedent
+      (`forms/CustomerPortal/PortalActivities.py` does not exist because `PortalActivity` is append-only).
+- [ ] Both forms scope every FK queryset to `request.tenant` and reject a foreign-tenant pk with a **field error**
+      (`_reject_foreign`, the 4.17 posture) — the model's `clean()` holds the same rule for the seeder and shell.
+
+### views — function-based, `@login_required`, tenant-scoped, filters + pagination + `write_audit_log`
+- [ ] `apps/scm/views/IntegrationApiGateway/__init__.py` (empty marker)
+- [ ] `.../IntegrationEndpoints.py` — `integrationendpoint_list(request, category=None)` · `_create` · `_detail`
+      · `_edit` · `_delete` · `_rotate_credential`
+- [ ] `.../IntegrationMessages.py` — `integrationmessage_list` · `_detail` · `_reprocess` **(no create/edit/delete)**
+- [ ] `.../WebhookSubscriptions.py` — `webhooksubscription_list` · `_create` · `_detail` · `_edit` · `_delete`
+      · `_rotate_secret`
+- [ ] `.../WebhookDeliveries.py` — `webhookdelivery_list` · `_detail` · `_retry` **(no create/edit/delete)**
+- [ ] `.../Reports.py` — `integration_exceptions` (the cockpit: everything failed, grouped by `error_code`, with
+      per-endpoint counts and an inline reprocess button). **Cut-first item** if the build wave runs long — the
+      fallback is the message list's existing `?status=failed` filter, which already covers the capability.
+      No `forms/IntegrationApiGateway/Reports.py` (plain GET params; `forms/FinanceIntegration/Reports.py` is
+      likewise form-free).
+- [ ] **Every list view passes every dropdown's data** (mandatory Filter rules):
+      - endpoint list → `endpoints`, `category_choices`, `system_choices`, `direction_choices`,
+        `transport_choices`, `status_choices`, `environment_choices`, `lifecycle_choices`, `q`, `active_category`
+        (the pinned category when reached via a category route, so the filter bar reflects it)
+      - message list → `messages_page` (**NOT `messages` — that name collides with `django.contrib.messages` in
+        the template context**), `endpoints` queryset, `category_choices`, `direction_choices`,
+        `document_type_choices`, `status_choices`, date range
+      - subscription list → `subscriptions`, `entity_choices`, `event_choices`, `status`(active/inactive)
+      - delivery list → `deliveries`, `subscriptions` queryset, `status_choices`, date range
+      - exceptions → `messages_page`, `error_groups`, `endpoints`, `document_type_choices`
+- [ ] Search (`q`) with `Q()` lookups on: endpoint `name`/`number`/`external_account_ref`/`interchange_id`/
+      `device_identifier`; message `number`/`control_number`/`external_id`/`source_reference`; subscription
+      `name`/`number`/`target_url`; delivery `event`/`subscription__name`.
+- [ ] Filters applied **before** pagination; pagination on all five list pages.
+- [ ] Privileged writes take `@tenant_admin_required`: `integrationendpoint_rotate_credential`,
+      `webhooksubscription_rotate_secret`, `integrationendpoint_delete`, `webhooksubscription_delete`
+      (rotating a credential and deleting a trading-partner link are both admin acts; `apps/core/decorators.py`
+      already exports it and `apps/scm/views/_common.py:42` imports it).
+- [ ] `write_audit_log` on every hand-rolled save path (`apps/core/utils.py`; the `crud_*` helpers in
+      `apps/core/crud.py` call it automatically — the rotate/reprocess/retry actions do **not** go through those
+      helpers, so they must call it themselves).
+- [ ] `select_related` on the two log lists (`endpoint`, `subscription`, `purchase_order`, `sales_order`) — these
+      are the pages that will grow rows fastest.
+
+### urls
+- [ ] `apps/scm/urls/IntegrationApiGateway/__init__.py` (empty marker)
+- [ ] `.../IntegrationEndpoints.py`, `.../IntegrationMessages.py`, `.../WebhookSubscriptions.py`,
+      `.../WebhookDeliveries.py`, `.../Reports.py`
+- [ ] Route plan — **literal routes BEFORE `<int:pk>`, first-match-wins**:
+      ```
+      integration-endpoints/                          integrationendpoint_list
+      integration-endpoints/add/                      integrationendpoint_create
+      integration-endpoints/erp/                      integrationendpoint_erp_list          (same view, {"category": "erp"})
+      integration-endpoints/ecommerce/                integrationendpoint_ecommerce_list    (same view, {"category": "ecommerce"})
+      integration-endpoints/iot/                      integrationendpoint_iot_list          (same view, {"category": "iot"})
+      integration-endpoints/edi/                      integrationendpoint_edi_list          (same view, {"category": "edi"})
+      integration-endpoints/<int:pk>/                 integrationendpoint_detail
+      integration-endpoints/<int:pk>/edit/            integrationendpoint_edit
+      integration-endpoints/<int:pk>/delete/          integrationendpoint_delete
+      integration-endpoints/<int:pk>/rotate-credential/  integrationendpoint_rotate_credential
+      integration-messages/                           integrationmessage_list
+      integration-messages/<int:pk>/                  integrationmessage_detail
+      integration-messages/<int:pk>/reprocess/        integrationmessage_reprocess
+      integration-exceptions/                         integration_exceptions
+      webhook-subscriptions/                          webhooksubscription_list
+      webhook-subscriptions/add/                      webhooksubscription_create
+      webhook-subscriptions/<int:pk>/                 webhooksubscription_detail
+      webhook-subscriptions/<int:pk>/edit/            webhooksubscription_edit
+      webhook-subscriptions/<int:pk>/delete/          webhooksubscription_delete
+      webhook-subscriptions/<int:pk>/rotate-secret/   webhooksubscription_rotate_secret
+      webhook-deliveries/                             webhookdelivery_list
+      webhook-deliveries/<int:pk>/                    webhookdelivery_detail
+      webhook-deliveries/<int:pk>/retry/              webhookdelivery_retry
+      ```
+      The four category routes are the **same view function** with Django's extra-options dict
+      (`path("integration-endpoints/erp/", views.integrationendpoint_list, {"category": "erp"}, name=...)`) — four
+      reversible names, one view, zero duplication. They are literals and MUST sit above `<int:pk>/`, or
+      `/integration-endpoints/edi/` 404s as "endpoint 'edi' not found".
+- [ ] **COLLISION CHECK, written into `urls/__init__.py` in the 4.17/4.18 comment style** — five new first
+      segments, each checked against the WHOLE concatenated urlconf, not just this block:
+      `integration-endpoints` · `integration-messages` · `integration-exceptions` · `webhook-subscriptions` ·
+      `webhook-deliveries`. **Nothing anywhere in `apps/scm/urls/` previously begins with `integration` or
+      `webhook`.** Django matches whole path components and never splits at a hyphen, so the three
+      `integration-*` segments are three unrelated components, not a shared `integration/` parent — and **none may
+      ever be "tidied" into an `integration/<something>/` parent**, which is the single edit that would turn three
+      independent segments into one greedy component. Near neighbours that are NOT collisions, checked rather than
+      assumed: 4.17's `logistics-clients/` (4.19 FKs the client and takes no route beneath it); 4.18's
+      `finance-*`; 4.16's eight `portal-*`; crm's own `webhooks/` routes, which live in a different app mounted at
+      `/crm/` and cannot collide. **4.19 introduces NO greedy `<str:…>` converter** — 4.10's
+      `return-tracking/<str:token>/` and 4.16's `portal-documents/<str:token>/` remain the app's only two.
+- [ ] **VIEW-NAME check (the `scm:` namespace is flat)**: `integrationendpoint_*`, `integrationmessage_*`,
+      `webhooksubscription_*`, `webhookdelivery_*` and `integration_exceptions` collide with nothing shipped —
+      the existing report names are `valuation_report`, `reorder_alerts`, `cold_storage_report`, `labor_board`,
+      `sparepart_list`, `logistics_kpis`, `client_inventory_report`, `client_space_report`, `finance_payables`,
+      `finance_receivables`, `finance_budget_variance`, `landed_cost_variance`.
+- [ ] `urls/__init__.py` alias prefix **`_iag_`** — verified free against all eighteen shipped aliases
+      (`_procurement_ _srm_ _inv_ _wms_ _oms_ _tms_ _dp_ _mf_ _qm_ _rma_ _sca_ _cc_ _am_ _lm_ _ccm_ _cp_ _tpl_
+      _fin_`). Rebinding a live alias silently drops another sub-module's routes with **no import error**.
+
+### Re-export blocks — MANDATORY, four files, surgical `Edit` only (never a rewrite; L43)
+- [ ] `apps/scm/models/__init__.py` — append a `# 4.19 Integration & API Gateway` block importing
+      `IntegrationEndpoint`, `IntegrationMessage`, `WebhookSubscription`, `WebhookDelivery` **by name**
+- [ ] `apps/scm/forms/__init__.py` — `IntegrationEndpointForm`, `WebhookSubscriptionForm` (+ a comment saying the
+      two log models deliberately have no form, constraint D — the shape of 4.18's comment at `:419-429`)
+- [ ] `apps/scm/views/__init__.py` — all 19 view functions
+- [ ] `apps/scm/urls/__init__.py` — five `from .IntegrationApiGateway.<Entity> import urlpatterns as _iag_*` lines
+      + five `*_iag_*` entries at the END of `urlpatterns` + the collision-check comment block above them
+- [ ] **A model/form/view added without its re-export line is an `ImportError`/`AttributeError` at runtime, not at
+      import time.** Verify after editing: `python manage.py check`.
+
+### admin / migration / seeder
+- [ ] `apps/scm/admin.py` — register all four. `IntegrationMessage` + `WebhookDelivery` **read-only**
+      (`has_add_permission` / `has_change_permission` / `has_delete_permission` → `False`, the `MeterReading`
+      precedent). Never put a raw credential column in `list_display` — use the `masked` property.
+- [ ] `python manage.py makemigrations scm` → must produce **`0033_*`** (incremental; 4 new tables + 11 indexes,
+      **no changes to any existing table** — if the diff touches `LogisticsClient`, constraint A was violated)
+- [ ] Extend `apps/scm/management/commands/seed_scm.py` — **idempotent**, appended as a `_seed_integration(...)`
+      helper called **LAST** in `handle()` (it reads 4.1/4.3/4.5/4.17 rows, so it must run after them), and
+      re-using existing rows rather than inventing duplicates:
+      - **5 `IntegrationEndpoint`s**, keyed idempotently on `(tenant, name)`:
+        `erp` NetSuite bidirectional/api_rest · `ecommerce` Shopify inbound/api_rest with `external_account_ref` ·
+        `iot` RFID reader inbound/llrp with `device_identifier` + FK to an **existing `scm.Location`** ·
+        `edi` **linked to the existing 4.17 `LogisticsClient`** with `interchange_id`/`interchange_qualifier`
+        left **BLANK** (demonstrates constraint A's read-through-FK half) ·
+        `edi` linked to an **existing supplier `core.Party`** (no logistics client) **carrying its own**
+        `interchange_id`/`interchange_qualifier` (demonstrates the other half).
+        Two of them get a credential via `set_secret(generate_secret())` so `masked` renders.
+      - **6 `IntegrationMessage`s**, keyed on `(tenant, endpoint, document_type, control_number)`: an `edi_850`
+        outbound `sent` FK'd to a **seeded `PurchaseOrder`** with `source="purchase_order"` +
+        `source_reference=po.number` · an `edi_997` inbound `received` whose `acknowledges` points at that 850
+        (and flips it to `acknowledged` + stamps `acknowledged_at`) · an `order_import` inbound `received` FK'd to
+        a seeded `SalesOrder` with an `external_id` · a `tag_read_batch` inbound with `record_count` · an
+        `inventory_feed` outbound **`failed`** with `error_code`/`error_message` (so the exception cockpit has a
+        row on a fresh DB) · an `edi_856` outbound `pending`.
+      - **2 `WebhookSubscription`s**, keyed on `(tenant, name)`: `shipment`/`delivered` active with a rotated
+        signing secret; `purchase_order`/`approved` inactive with `consecutive_failures > 0`.
+      - **3 `WebhookDelivery`s**, keyed on `(tenant, subscription, event, attempt_no)`: one `success`
+        (`response_code=200`), one `failed` at `attempt_no=3` with `next_attempt_at` from the backoff table, one
+        `simulated`. **`signature` blank on all three** (constraint B).
+      - Guard every early return with an explicit "skipping 4.19 …" `self.stdout.write` naming the missing
+        prerequisite, the 4.18 seeder's posture.
+      - Update the command `help` string and the final summary line to mention 4.19.
+
+## Wire-up
+- [ ] `apps/core/navigation.py` — **exactly ONE new `LIVE_LINKS["4.19"]` entry, five keys, matching the NavERP.md
+      `### 4.19` bullet bold-text verbatim** (`NavERP.md:860-864`), appended after the `"4.18"` block:
+      ```python
+      "4.19": {
+          "ERP Integration":        "scm:integrationendpoint_erp_list",
+          "E-commerce Integration": "scm:integrationendpoint_ecommerce_list",
+          "IoT Gateway":            "scm:integrationendpoint_iot_list",
+          "EDI Management":         "scm:integrationendpoint_edi_list",
+          "Webhooks":               "scm:webhooksubscription_list",
+      },
+      ```
+- [ ] Precede it with a comment block in the established 4.17/4.18 style, stating:
+      (a) **bullets 1-4 share ONE table** — `IntegrationEndpoint` discriminated by `category` — because an ERP
+      connector, a Shopify channel, an RFID gateway and an EDI partner link are one object under four labels, the
+      same compression `accounting.IntegrationConfig` already made;
+      (b) they nevertheless get **four DISTINCT category-scoped route names**, not four copies of one url name —
+      four identical sidebar links would be four ways to reach the same mixed list, whereas each of these lands on
+      the page that bullet is actually about (the EDI person gets the trading-partner register, not a list with
+      RFID readers in it). All four resolve to one view via Django's extra-options dict;
+      (c) **NO sidebar key for `integrationmessage_list`, `integration_exceptions` or `webhookdelivery_list`** —
+      the exchange log is reached from an endpoint's detail page, the cockpit from the message list, the delivery
+      log from a subscription's detail page. That is the `ClientRateCard` / `ReorderRule` / `ReturnReason` /
+      `MeterReading` / `PortalActivity` rule verbatim: a table reached from the page that uses it takes no bullet
+      of its own, and a sixth key would put a link in the sidebar that NavERP.md does not name;
+      (d) **every target is a real STAFF-facing page that renders today; none is a placeholder** (L32).
+- [ ] **No `config/settings.py` or `config/urls.py` change** — `apps.scm` is already installed and
+      `include("apps.scm.urls")` is already mounted. This is an EXTEND run, not a new app.
+
+## Templates (`templates/scm/integration/…` — the short-slug folder, `integration` verified free in `templates/scm/`)
+Note the deliberate asymmetry, same as 4.17/4.18: backend package `IntegrationApiGateway/` ↔ templates
+`templates/scm/integration/`. It is the house rule, not a defect — the identical note sits at
+`CustomerPortal/PortalAccounts.py:45-47` and `ThirdPartyLogistics/LogisticsClients.py:35-38`.
+
+- [ ] `templates/scm/integration/integrationendpoint/list.html`
+- [ ] `templates/scm/integration/integrationendpoint/detail.html` — the field block, `masked` credential,
+      **`effective_interchange_id` / `effective_interchange_qualifier`** (never the raw columns), a derived
+      messages panel (last 10 + counts by status — annotated in the view, **never stored**), and the rotate-credential
+      POST form
+- [ ] `templates/scm/integration/integrationendpoint/form.html`
+- [ ] `templates/scm/integration/integrationmessage/list.html` (**no Add button**)
+- [ ] `templates/scm/integration/integrationmessage/detail.html` — payload excerpt, the `acknowledges` link both
+      ways, the soft pointer + the two typed FKs, and the reprocess POST form
+- [ ] `templates/scm/integration/webhooksubscription/list.html`
+- [ ] `templates/scm/integration/webhooksubscription/detail.html` — + rotate-secret POST form + recent deliveries
+- [ ] `templates/scm/integration/webhooksubscription/form.html`
+- [ ] `templates/scm/integration/webhookdelivery/list.html` (**no Add button**)
+- [ ] `templates/scm/integration/webhookdelivery/detail.html` — + retry POST form
+- [ ] `templates/scm/integration/exceptions.html` — the cockpit, at the **sub-module root** (template rule 6:
+      reports and standalone pages are not entity folders), like `finance_payables`. **Cut-first.**
+- [ ] Every list page: filter bar reflecting `request.GET` (string fields `{% if request.GET.x == value %}`;
+      **pk comparisons `|stringformat:"d"`, NEVER `|slugify`**), an Actions column, pagination guarded with
+      `has_previous` / `has_next` (L9), and an empty-state.
+- [ ] Actions columns: the two **config** entities get view / edit / delete-POST(+confirm+csrf). The two **log**
+      entities get **view + the one POST action only** — no edit, no delete (constraint D). Add an HTML comment
+      in each log list saying why, so a frontend reviewer does not file it as missing CRUD.
+- [ ] Detail pages: config entities get the full Actions sidebar (Edit / Delete / Back). Log entities get
+      Reprocess-or-Retry / Back only.
+- [ ] **Badges use the colour-named theme classes only** — `badge-green` `badge-red` `badge-amber` `badge-info`
+      `badge-muted` `badge-slate`. `badge-success` / `badge-danger` do **not exist** (L33). Suggested mapping:
+      `connected`/`success`/`acknowledged` → green; `error`/`failed`/`exhausted` → red; `pending`/`disconnected`
+      → amber; `sent`/`received`/`simulated` → info; `disabled`/`ignored` → muted. Every badge block ends with an
+      `{% else %}{{ obj.get_<field>_display }}` fallback, and every condition uses the **exact** choice value.
+- [ ] **No credential column is ever rendered** — the templates may show `masked`, `signing_secret_prefix` (via
+      `masked`) and "not set", nothing else. No queryset the template iterates may carry `*_hash`.
+
+## Verify
+- [ ] `python manage.py makemigrations scm` → `0033_*`; then `makemigrations --check` → "No changes detected"
+- [ ] `python manage.py migrate`
+- [ ] `python manage.py seed_scm` **twice** — second run creates zero new 4.19 rows and raises no
+      `IntegrityError`/`unique_together` error
+- [ ] `python manage.py check` clean
+- [ ] `temp/` smoke sweep as **`admin_acme` / `password`**:
+      - every new `scm:*` url returns 200 (or 302 for the POST-only actions via GET → 405/redirect as designed) —
+        all 23 routes, including the four category-scoped ones
+      - **content assertions, not just status** (a mismatched context var returns 200 and renders blank, L8): the
+        page title, a seeded record's `number` on each list, the `masked` credential on the endpoint detail, the
+        997→850 acknowledgement link on the message detail, the failed row on `integration-exceptions/`
+      - no `{#` or `{% comment` leaks in any rendered body
+      - junk filter params (`?status=zzz&endpoint=abc&page=999`) → 200, not a 500
+      - page 2 of each list renders
+      - **cross-tenant IDOR → 404** on all four detail views and all three POST actions (fetch a `beta`-tenant pk
+        while logged in as `admin_acme`)
+      - **secret leak assertion**: no response body anywhere contains a `*_hash` value or a plaintext token
+      - the POST actions reject GET and require CSRF
+- [ ] Sidebar shows **4.19 Live** with all five bullets linked and no 404 on any of them; Module 4 reads 19/19
+- [ ] Grep the diff for `requests`/`urllib`/`httpx` under `apps/scm/**` → **zero hits** (constraint C)
+- [ ] Grep the diff for `GenericForeignKey`/`content_type` under the 4.19 files → **zero hits** (constraint E)
+- [ ] Confirm `git diff` touches **no** `LogisticsClient` column and **no** `apps/scm/models/_base.py` line
+
+## Close-out
+- [ ] Phase 4 review wave (6 parallel reviewers) → `.claude/tasks/review-scm-4.19.md`, committed
+- [ ] Phase 5 `code-fixer` burns the findings down, one commit per file, none left `[ ] open`
+- [ ] Phase 6 test wave — `subslug: integration`, files `test_integration_{models,forms,views,security}.py`,
+      every function `test_integration_*`, every helper `_integration_*`; final run **unfiltered** and green.
+      Include a test that asserts **no edit/delete route exists** for `IntegrationMessage` and `WebhookDelivery`
+      (the `TestMeterReadingHasNoEditOrDeleteRoute` shape) and one that asserts a foreign-tenant pk 404s.
+- [ ] Update `.claude/skills/scm/SKILL.md` with a 4.19 section — models, the four category routes, the
+      append-only posture, the folder asymmetry, the secrets rationale **and its migration hazard**, seeder rows,
+      **plus the mandatory `## Sidebar wiring` `LIVE_LINKS["4.19"]` paragraph**. While in that file, clear the
+      4.18 carry-over: **write the missing `LIVE_LINKS["4.18"]` AND `LIVE_LINKS["4.17"]` paragraphs** (4.18
+      close-out finding D5 nominated exactly this session as their cheapest home).
+- [ ] `README.md` — mark 4.19 complete and **Module 4 finished, 19 of 19**; update "Next" to Module 5.
+- [ ] `build_state.py finish`
+
+## Later passes / deferred
+Carried from `research-scm-4.19.md` so nothing is lost:
+- **Any actual transport** — outbound HTTP, AS2, SFTP/FTPS, VAN, MQTT, SOAP. No Celery, no queue, no worker.
+  `next_attempt_at` is a displayed intent, not a cron. **This is the pass that must move credentials to
+  encrypted-at-rest storage — see constraint B's migration hazard.**
+- **Field-level mapping / transformation designer** (`MappingProfile` + `MappingRule`) — Cleo's visual mapper,
+  Boomi Suggest, Celigo prebuilt mappings. Two tables and a rule-editor UI; its own pass.
+- **EDI envelope parsing/validation and 997 auto-generation** — needs an X12 parser. 4.19 stores the control
+  number and the acknowledgement link; it does not read an ISA segment.
+- **The inbound API gateway proper** — Kong-style consumers, key auth, sliding-window rate limits, request
+  validation, developer portal. NavERP exposes no public API for a gateway to front. Revisit when one exists
+  (Module 13 or a public-API pass).
+- **OAuth2 authorization-code flows and token storage** — bearer credentials needing a runtime that can refresh
+  them. `auth_method="oauth2"` records intent; nothing is stored.
+- **Bulk recovery / replay-missing** (Svix "Recover Failed" since a date) — single-row retry ships; bulk later.
+- **Device twin desired-vs-reported config push** (Azure IoT Hub) — needs a per-device config table.
+- **A trading-partner network directory** (SPS's pre-built network) — a business, not a table.
+- **AI/ML: mapping suggestions, anomaly detection, conversational root-cause** (Boomi Suggest, Cleo AI workflows,
+  Celigo ML error management).
+- **Sandbox↔production promotion and versioning** — `environment` ships as a field; pipelines do not.
+- **Payload archival and retention policy** — `payload_excerpt` is truncated by design; a real archive with a
+  retention clock belongs with Module 13 (DMS).
+- **`crm.Webhook.secret` → encryption at rest** — a genuine weakness, but **1.10's** to fix and **not** by
+  hashing (CRM intends to sign). Do not touch it from this pass.
+- **Auto-disable enforcement** — `consecutive_failures` + `auto_disable_threshold` are recorded; nothing decrements
+  or trips them automatically, because nothing delivers.
+
+### Parked with sibling sub-modules (not scoped here)
+- Sensor / temperature telemetry rows → **4.15** (`ColdChainMonitor` + `TemperatureReading` + `TemperatureExcursion`
+  are built). 4.19 records the ingestion **batch**, never the readings.
+- Asset meter/gauge readings → **4.13** (`MeterReading` built).
+- Carrier tracking events (EDI 214 *content*) → **4.6** (`TrackingEvent` built). 4.19 logs the 214 *message*.
+- Per-3PL-client integration profile → **4.17** (`LogisticsClient.integration_mode / client_system /
+  edi_partner_id / edi_qualifier / last_synced_at` shipped). **Constraint A.**
+- Trading-partner performance scorecards / compliance scoring → **4.2** (`SupplierScorecard` built).
+- Chargeback & deduction recovery → **4.18 / accounting** — money owed sits in the accounting ledger (L29).
+- Financial/banking/tax connectors (Plaid, Stripe, Avalara, Vertex, QuickBooks) → **accounting 2.15**, already
+  built as `accounting.IntegrationConfig`. 4.19 must not absorb them and must not FK into them.
+- CRM-entity webhooks (lead/opportunity/case events) → **crm 1.10**, already built as `crm.Webhook`.
+- Customer-facing portal delivery of documents → **4.16** (`PortalDocumentShare` built).
+- Item/product master an e-commerce connector syncs → **4.3** (`Item`/`ItemCategory`/`UOM` built) and Module 5.
+- Raising an alert when a message fails → **4.11** (`SupplyChainAlert` built) — not a new 4.19 table.
+
+### Scope guard
+Four models is the ceiling. If the build wave runs long, cut in this order: **(1)** `exceptions.html` + the
+`integration_exceptions` view (fall back to `integration-messages/?status=failed`); **(2)**
+`IntegrationEndpoint.spec_document`; **(3)** the research's own fallback — drop `WebhookDelivery` and fold
+deliveries into `IntegrationMessage` with `document_type="webhook_delivery"`. **(3) is a last resort only** — it
+puts HTTP response codes on an EDI-shaped row and departs from the shipped crm pair.
+
+## Review notes
+(filled in at the end)
