@@ -25,6 +25,9 @@ Everything this page may read, and nothing else:
                         leaving it to be discovered afterwards
   max_attempts          int (8) — the length of the published backoff ladder, so the attempt counter
                         below can read "3 of 8" rather than a bare 3 that means nothing on its own
+  append_only_note      str. The shared statement of why there is no Edit and no Delete, the same
+                        string the delivery list prints. Leads the Actions card; this page's own
+                        wording follows it.
 
 --------------------------------------------------------------------------------------------------
 ACTIONS: RETRY AND BACK TO LIST. THERE IS NO EDIT AND NO DELETE, AND NEITHER IS MISSING
@@ -271,8 +274,16 @@ full payload is never stored.
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
+      {% comment %}
+        append_only_note first — the shared statement of the rule, the same string the delivery list
+        prints, so the two cannot drift into two accounts of one rule (the shipped shape is
+        templates/scm/portal/portalactivity/detail.html:309). The paragraph under it is what only
+        THIS page can say: the two verbs a detail screen is missing, and the cascade caveat.
+      {% endcomment %}
       <p class="text-muted" style="margin:0 0 .9rem;">
-        <span class="badge badge-slate">Append-only</span>
+        <span class="badge badge-slate">Append-only</span> {{ append_only_note }}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
         There is no Edit and no Delete on this page, and neither is missing. A delivery attempt is a historical event &mdash; there is no such thing as amending one, and a log the sending party could revise would answer no complaint at all. The whole trail for a subscription does go away with the subscription itself, which is a deliberate admin-gated act on <a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}">its own page</a> and not an edit of this one.
       </p>
       {% if can_retry %}
