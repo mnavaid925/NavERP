@@ -22,6 +22,17 @@ if not SECRET_KEY or SECRET_KEY.startswith("django-insecure-change-me"):
     if not DEBUG:
         raise RuntimeError("SECRET_KEY is not set. Set a strong key in .env before running with DEBUG=False.")
     SECRET_KEY = "django-insecure-dev-only-do-not-use-in-production"
+
+# Key for reversible encryption of secret columns that must be read back in plaintext —
+# today crm.Webhook.secret, which is HMAC-signed with and therefore cannot be hashed
+# (apps/core/crypto.py explains the distinction). Optional: when unset, the cipher derives
+# its key from SECRET_KEY via HKDF, which keeps dev/CI working and still protects a stolen
+# database, since neither key is ever stored in it. Set it explicitly to rotate this
+# independently of SECRET_KEY — generate with:
+#   venv\Scripts\python.exe -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# WARNING: changing either key makes existing encrypted rows undecryptable — re-encrypt
+# them before rotating, or the webhooks that use them will fail loudly at signing time.
+FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY", "")
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
 INSTALLED_APPS = [
