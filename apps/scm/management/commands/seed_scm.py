@@ -211,12 +211,29 @@ class Command(BaseCommand):
             # would show a plausible figure computed from the wrong basis.
             self._seed_finance_tenant(tenant)
 
+            # 4.19 LAST, and its dependencies are as real as 4.18's even though it writes nothing
+            # back. Every endpoint, message and subscription this pass creates POINTS AT rows the
+            # earlier passes made: the EDI connection's counterparty is one of 4.1's supplier
+            # parties, the 3PL connection reads its interchange identifiers off 4.17's
+            # `LogisticsClient`, the IoT reader watches one of 4.3's bins, the 850/997 pair is filed
+            # against a real 4.1 purchase order and the storefront import against a real 4.5 sales
+            # order. Run this before any of them and the demo is four connections that reference
+            # nothing — the exceptions cockpit works, but there is no way to see what a message was
+            # ABOUT, which is the only question this sub-module exists to answer.
+            #
+            # It writes NO StockMove, NO JournalEntry, and NO column on any other sub-module's
+            # table — 4.19 borrows nothing, unlike 4.17 (`owner_client`) and 4.18 (`weight_kg` /
+            # `volume_cbm`). And it SENDS NOTHING: this sub-module ships no transport at all, so
+            # every row below is a record of traffic that is described rather than performed.
+            self._seed_integration_tenant(tenant)
+
         self.stdout.write(self.style.SUCCESS(
             "SCM 4.1 procurement + 4.2 SRM + 4.3 inventory + 4.4 warehouse + 4.5 orders + "
             "4.6 transportation + 4.7 demand planning + 4.8 manufacturing + 4.9 quality + "
             "4.10 returns + 4.11 analytics + 4.12 contract & compliance + 4.13 asset management + "
             "4.14 labor management + 4.15 cold chain management + 4.16 customer portal + "
-            "4.17 third-party logistics + 4.18 finance & accounting integration seed complete."))
+            "4.17 third-party logistics + 4.18 finance & accounting integration + "
+            "4.19 integration & API gateway seed complete."))
         self.stdout.write("Log in as a tenant admin (e.g. admin_acme / password) to view procurement data.")
         self.stdout.write(self.style.WARNING(
             "Superuser 'admin' has no tenant — SCM pages show no data when logged in as admin."))
@@ -1032,8 +1049,39 @@ class Command(BaseCommand):
         bill_count = orphaned_bills.count()
         orphaned_bills.delete()
 
+        # --- 4.19 Integration & API Gateway ---
+        # 4.19 FIRST (newest sub-module). Unlike every block below it this one has NO outward PROTECT
+        # at all, so it cannot raise ProtectedError against a later delete and its position is for
+        # readability rather than for correctness. That is worth saying plainly, because the absence
+        # is a design property rather than luck: all four of `IntegrationEndpoint`'s pointers
+        # (`partner_party`, `logistics_client`, `location`, `spec_document`) are SET_NULL, as are
+        # `IntegrationMessage.purchase_order` / `.sales_order` / `.acknowledges` — a connection
+        # registration outliving the party or bin it referenced is a stale pointer, never a reason to
+        # destroy the exchange history hanging off it.
+        #
+        # The two CASCADEs (`IntegrationMessage.endpoint`, `WebhookDelivery.subscription`) mean the
+        # two logs would go with their parents regardless; they are deleted first anyway so the
+        # teardown reads top-down and a future reader does not have to re-derive which edges cascade.
+        #
+        # THERE IS NOTHING TO UNWIND ANYWHERE ELSE, and that follows from the sub-module's central
+        # ruling rather than from a short demo: 4.19 ships NO transport (no `requests` / `urllib` /
+        # `httpx` / `http.client` import anywhere) and writes NO StockMove and NO JournalEntry. No
+        # column on any other sub-module's table is touched by this pass, so — unlike the 4.17 and
+        # 4.18 blocks above — there is no borrowed column to consider leaving alone.
+        #
+        # NO drafted `accounting` document either: this sub-module hands nothing to AP or AR, so the
+        # orphaned-bill / orphaned-invoice problem the top of this method and the two blocks below
+        # are careful about simply does not arise here.
+        from apps.scm.models import (IntegrationEndpoint, IntegrationMessage, WebhookDelivery,
+                                     WebhookSubscription)
+
+        WebhookDelivery.objects.all().delete()        # would cascade from the subscription regardless
+        WebhookSubscription.objects.all().delete()
+        IntegrationMessage.objects.all().delete()     # would cascade from the endpoint regardless
+        IntegrationEndpoint.objects.all().delete()    # SET_NULLs its four outward pointers
+
         # --- 4.18 Finance & Accounting Integration ---
-        # 4.18 FIRST (newest sub-module), and here the order is load-bearing FOUR times over —
+        # 4.18 next, and here the order is load-bearing FOUR times over —
         # every one of this sub-module's inward edges is a PROTECT, because every one of them points
         # at the evidence for a number carried in inventory value.
         #
@@ -5700,3 +5748,334 @@ class Command(BaseCommand):
             + f") and billed as {drafted_bill.number} — a DRAFT in AP, no journal entry; "
             f"{pending.number} DELIBERATELY LEFT IN DRAFT (estimate only, one recoverable charge "
             f"that never capitalises).")
+
+    def _seed_integration_tenant(self, tenant):
+        """4.19 demo rows: four connections (one per category bullet), an exchange log, three push
+        rules and their delivery attempts.
+
+        **NOTHING HERE SENDS ANYTHING.** 4.19 ships no transport — there is no ``requests`` /
+        ``urllib`` / ``httpx`` / ``http.client`` import anywhere under ``apps/scm`` for this
+        sub-module, and no scheduler, daemon or task queue. Every row below is a RECORD of traffic
+        that is described rather than performed, which is why the delivery log carries a
+        ``simulated`` status at all: a row that never left the process is neither a success nor a
+        failure, and filing it as ``success`` would make the log evidence of something that did not
+        happen. ``next_attempt_at`` is a stamp, not a trigger — nothing wakes up and reads it.
+
+        **THIS PASS INVENTS NO MASTER DATA.** The counterparty on the EDI connection is one of
+        4.1's supplier parties, the 3PL connection reads its interchange identifiers off 4.17's
+        ``LogisticsClient``, the IoT reader watches one of 4.3's bins, and the two typed message FKs
+        point at a real 4.1 purchase order and a real 4.5 sales order. Every one of those is looked
+        up and left NULL when the earlier pass has not run — an optional link whose subject does not
+        exist is a null, never a row this seeder conjures.
+
+        **NO PLAINTEXT SECRET IS EVER WRITTEN.** The credential and the signing secret both go
+        through the REAL code path — ``IntegrationEndpoint.generate_credential()`` +
+        ``set_credential()`` and ``WebhookSubscription.generate_secret()`` +
+        ``set_signing_secret()`` — so what lands in the database is an 8-character prefix plus a
+        SHA-256 digest, exactly as the two rotate verbs produce. The plaintext exists for the length
+        of this function and is then gone; there is no reveal route anywhere in the sub-module, so
+        it could not be recovered even by somebody who wanted to. That is the 4.13
+        ``_post_stock_move`` / 4.17 ``calculate()`` / 4.18 ``allocate()`` rule applied to secrets:
+        the demo is produced by the same code the buttons run, so the marker path is exercised on
+        every ``seed_scm`` and the demo cannot drift from the implementation.
+
+        **THE FAILING ROWS ARE THE POINT, not filler.** Two messages are left ``failed`` with
+        different error codes and one connection is left in ``error`` status, because
+        ``scm:integration_exceptions`` IS the sub-module's cockpit and a demo where every
+        integration is healthy renders it as an empty table — the one page in 4.19 that is
+        worthless when it has nothing on it. For the same reason one subscription is left inactive
+        with a non-zero failure count, one delivery is left ``pending`` (so the queue state is
+        visible), and one is left ``exhausted`` at the last slot of the published backoff schedule.
+        """
+        from apps.scm.models import (IntegrationEndpoint, IntegrationMessage, Location,
+                                     LogisticsClient, PurchaseOrder, SalesOrder,
+                                     WebhookDelivery, WebhookSubscription)
+
+        if IntegrationEndpoint.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"{tenant.name}: integration data already exists — skipping.")
+            return
+
+        now = timezone.now()
+
+        # ---- the rows the earlier passes own. Every one of these may legitimately be None ---------
+        # `.first()` on an ordered queryset rather than `.get()`: a tenant seeded only up to 4.1 has
+        # no logistics client and no sales order, and 4.19 must still produce a usable demo rather
+        # than crash the whole `seed_scm` run at the last pass.
+        supplier = (Party.objects.filter(tenant=tenant, roles__role="supplier")
+                    .order_by("id").distinct().first())
+        client = LogisticsClient.objects.filter(tenant=tenant).order_by("id").first()
+        # A BIN rather than any location: the RFID reader watches a physical spot, and 4.3's
+        # warehouse root would read as "the reader watches the building". The field is
+        # `location_type`, NOT `kind` — 4.3's Location predates the `kind` spelling the spine's
+        # `Party` uses, and a `kind=` filter here is a FieldError rather than an empty result.
+        dock = (Location.objects.filter(tenant=tenant, location_type="bin").order_by("id").first()
+                or Location.objects.filter(tenant=tenant).order_by("id").first())
+        purchase_order = PurchaseOrder.objects.filter(tenant=tenant).order_by("id").first()
+        sales_order = SalesOrder.objects.filter(tenant=tenant).order_by("id").first()
+
+        # ---- 1. the four connections, ONE PER SIDEBAR BULLET --------------------------------------
+        # Deliberately one each of erp / ecommerce / iot / edi: those four categories are four
+        # separate routes with four separate headings, and a category with no rows renders an honest
+        # but empty page — which is exactly the sidebar bullet a user clicks first (L32).
+        erp = IntegrationEndpoint(
+            tenant=tenant, name="SAP S/4HANA — master data and postings",
+            category="erp", system="sap", direction="bidirectional", transport="api_rest",
+            auth_method="oauth2", endpoint_url="https://sap-erp.internal.example.com/odata/v4/scm",
+            external_account_ref="NAVERP-SCM-PRD", trigger_mode="scheduled",
+            schedule_note="Every 15 minutes, 04:00-23:45 local",
+            environment="production", lifecycle_stage="live", status="connected",
+            notes="Items, vendors and goods movements. Postings are one-way out; master data comes "
+                  "back in on the same channel.",
+        )
+        # The REAL credential path — mint, store prefix + digest, discard the plaintext. See the
+        # docstring: this is the only way a credential is ever written in 4.19.
+        erp.set_credential(IntegrationEndpoint.generate_credential())
+        erp.save()
+
+        storefront = IntegrationEndpoint(
+            tenant=tenant, name="Shopify storefront — order and refund feed",
+            category="ecommerce", system="shopify", direction="inbound", transport="webhook",
+            auth_method="api_key",
+            endpoint_url="https://naverp-demo.myshopify.com/admin/api/2024-10",
+            external_account_ref="naverp-demo.myshopify.com", trigger_mode="realtime",
+            environment="production", lifecycle_stage="live", status="connected",
+            # The caveat is on the row itself as well as in the model docstring, because this is the
+            # note whoever reads the demo needs at the moment they see the feed.
+            notes="Order-created and refund webhooks. Shopify guarantees neither ORDER nor "
+                  "DELIVERY, so this feed is a record of what we saw — current state is reconciled "
+                  "by polling the shop, never by replaying these rows in sequence.",
+        )
+        storefront.set_credential(IntegrationEndpoint.generate_credential())
+        storefront.save()
+
+        reader = IntegrationEndpoint.objects.create(
+            tenant=tenant, name="Inbound dock RFID reader",
+            category="iot", system="rfid_reader", direction="inbound", transport="llrp",
+            auth_method="none", endpoint_url="llrp://10.20.4.17:5084",
+            device_identifier="RDR-DOCK-01", trigger_mode="realtime",
+            environment="production", lifecycle_stage="live",
+            # LEFT IN ERROR ON PURPOSE — see the docstring. This is the row that makes the exceptions
+            # cockpit and the endpoint list's error chip render something.
+            status="error", consecutive_failures=3,
+            last_run_at=now - datetime.timedelta(hours=2),
+            last_success_at=now - datetime.timedelta(days=1, hours=6),
+            last_seen_at=now - datetime.timedelta(hours=2),
+            location=dock,
+            notes="Antenna 2 has been dropping the session since the dock door was re-hung. "
+                  "Facilities ticket FM-2291.",
+        )
+
+        edi = IntegrationEndpoint(
+            tenant=tenant, name="EDI VAN — trading partner interchange",
+            category="edi", system="edi_van", direction="bidirectional", transport="as2",
+            auth_method="mtls", endpoint_url="https://as2.van-partner.example.net/exchange",
+            interchange_id="ZZ12345678", interchange_qualifier="ZZ",
+            trigger_mode="realtime", environment="production", lifecycle_stage="certified",
+            status="connected",
+            # Both optional pointers, and both left NULL when the earlier pass has not run.
+            partner_party=supplier, logistics_client=client,
+            notes="850/855/856/810 with the 997 acknowledgement loop. Certified against the "
+                  "partner's implementation guide; identifiers live on the linked records, not "
+                  "retyped here.",
+        )
+        edi.set_credential(IntegrationEndpoint.generate_credential())
+        edi.save()
+
+        # ---- 2. the exchange log ------------------------------------------------------------------
+        # A walk down one real EDI conversation plus the storefront and IoT rows, so the list page
+        # shows both directions, five document types and four of the six statuses.
+        po_number = purchase_order.number if purchase_order else ""
+        so_number = sales_order.number if sales_order else ""
+        sent_850 = IntegrationMessage.objects.create(
+            tenant=tenant, endpoint=edi, direction="outbound", document_type="edi_850",
+            status="acknowledged", control_number="000000412", record_count=1,
+            occurred_at=now - datetime.timedelta(days=3, hours=4),
+            acknowledged_at=now - datetime.timedelta(days=3, hours=3, minutes=48),
+            source="purchase_order" if purchase_order else "none",
+            source_reference=po_number,
+            purchase_order=purchase_order,
+            payload_excerpt="ISA*00*...*ZZ*ZZ12345678*...~GS*PO*...~ST*850*0001~"
+                            f"BEG*00*SA*{po_number}**~  [truncated]",
+        )
+        # The 997 POINTS AT the 850 it answers — which is precisely why the answered row must not be
+        # editable afterwards: rewriting it silently rewrites what this acknowledgement is an
+        # acknowledgement OF.
+        IntegrationMessage.objects.create(
+            tenant=tenant, endpoint=edi, direction="inbound", document_type="edi_997",
+            status="received", control_number="000000412", record_count=1,
+            occurred_at=now - datetime.timedelta(days=3, hours=3, minutes=48),
+            source="purchase_order" if purchase_order else "none",
+            source_reference=po_number,
+            acknowledges=sent_850,
+            payload_excerpt="ST*997*0001~AK1*PO*412~AK9*A*1*1*1~SE*4*0001~  [truncated]",
+        )
+        IntegrationMessage.objects.create(
+            tenant=tenant, endpoint=edi, direction="inbound", document_type="edi_856",
+            status="pending", control_number="000000418", record_count=3,
+            occurred_at=now - datetime.timedelta(hours=9),
+            source="purchase_order" if purchase_order else "none",
+            source_reference=po_number,
+            purchase_order=purchase_order,
+            payload_excerpt="ST*856*0001~BSN*00*ASN91744*...~HL*1**S~  [truncated — an 856 carries "
+                            "ship-to names and addresses, so only an excerpt is ever stored]",
+        )
+        IntegrationMessage.objects.create(
+            tenant=tenant, endpoint=storefront, direction="inbound", document_type="order_import",
+            status="received",
+            # The provider's OWN delivery id — the de-dupe key. Indexed with the tenant, and
+            # deliberately not unique: a redelivery is a fact worth recording, not an insert to
+            # refuse.
+            external_id="b54f2e10-7c3a-4a91-9f6d-2ad1c8e40b77", record_count=1,
+            occurred_at=now - datetime.timedelta(hours=5, minutes=12),
+            source="sales_order" if sales_order else "none",
+            source_reference=so_number,
+            sales_order=sales_order,
+            payload_excerpt='{"id": 5512094117, "financial_status": "paid", '
+                            '"line_items": [ ... ]}  [truncated]',
+        )
+
+        # THE TWO FAILURES. Different error codes on different connections, so the exceptions
+        # cockpit has something to GROUP as well as something to list.
+        IntegrationMessage.objects.create(
+            tenant=tenant, endpoint=reader, direction="inbound", document_type="tag_read_batch",
+            status="failed", error_code="LLRP_TIMEOUT",
+            error_message="Reader session dropped mid-batch after 2 of 3 antennas reported. "
+                          "Partial read discarded rather than posted — a half-counted dock is worse "
+                          "than an uncounted one.",
+            # ONE ROW FOR THE WHOLE BATCH. 4,200 tag reads are `record_count=4200`, never 4,200 rows
+            # — an exchange log that grows with the volume of the traffic it describes stops being
+            # readable at exactly the moment it matters.
+            record_count=4200,
+            occurred_at=now - datetime.timedelta(hours=2),
+            attempt_count=3,
+            source="stock_move", source_reference="Dock inbound sweep",
+        )
+        IntegrationMessage.objects.create(
+            tenant=tenant, endpoint=storefront, direction="outbound",
+            document_type="inventory_feed", status="failed", error_code="HTTP_429",
+            error_message="Shopify rate limit reached (the 40-call bucket drained). Retry the feed "
+                          "off-peak or split the batch.",
+            external_id="c8a0d4b2-1f77-42de-9c05-6b1e83f5aa10", record_count=612,
+            occurred_at=now - datetime.timedelta(hours=1, minutes=20),
+            attempt_count=2,
+            source="item", source_reference="Full catalogue availability push",
+        )
+
+        # ---- 3. the push rules --------------------------------------------------------------------
+        wms_rule = WebhookSubscription(
+            tenant=tenant, name="Notify WMS when a shipment is delivered",
+            trigger_entity="shipment", trigger_event="delivered",
+            target_url="https://wms.example.com/hooks/naverp/shipment-delivered",
+            payload_format="json",
+            include_fields="number,carrier,delivered_at,pod_reference",
+            headers={"X-Source": "NavERP", "X-Environment": "production"},
+            auto_disable_threshold=8,
+            last_delivery_at=now - datetime.timedelta(minutes=41),
+            description="Closes the delivery out in the warehouse system so the dock team stops "
+                        "chasing it.",
+        )
+        # The REAL secret path, exactly like the endpoint credential above: mint, store prefix +
+        # digest, discard the plaintext. Nothing in this pass could sign with it even if it wanted
+        # to — the digest is one-way and there is no transport.
+        wms_rule.set_signing_secret(WebhookSubscription.generate_secret())
+        wms_rule.save()
+
+        erp_rule = WebhookSubscription(
+            tenant=tenant, name="Push posted goods receipts to the ERP",
+            trigger_entity="goods_receipt", trigger_event="posted",
+            target_url="https://sap-erp.internal.example.com/hooks/goods-receipt",
+            payload_format="xml",
+            filter_expression="status == 'posted' and total_value > 0",
+            headers={"X-Source": "NavERP"},
+            auto_disable_threshold=5,
+            last_delivery_at=now - datetime.timedelta(hours=3, minutes=6),
+            description="RECORDED filter only — nothing evaluates it in this pass, because nothing "
+                        "delivers.",
+        )
+        erp_rule.set_signing_secret(WebhookSubscription.generate_secret())
+        erp_rule.save()
+
+        # LEFT INACTIVE WITH A NON-ZERO FAILURE COUNT ON PURPOSE — a rule switched off after its
+        # receiver stopped answering is the ordinary second state of this feature, and without one
+        # the list's inactive filter and the detail page's disabled panel render nothing.
+        alert_rule = WebhookSubscription(
+            tenant=tenant, name="Escalate supply chain alerts to the ops channel",
+            trigger_entity="supply_chain_alert", trigger_event="created",
+            target_url="https://ops-bridge.example.com/hooks/supply-chain-alerts",
+            payload_format="json", is_active=False,
+            auto_disable_threshold=4, consecutive_failures=4,
+            last_delivery_at=now - datetime.timedelta(days=2, hours=1),
+            description="Switched off after the bridge started refusing the callback. Re-enable "
+                        "once the receiver is fixed — the counter is derived, not typed, so it is "
+                        "not something to edit around.",
+        )
+        alert_rule.set_signing_secret(WebhookSubscription.generate_secret())
+        alert_rule.save()
+
+        # ---- 4. the attempt log -------------------------------------------------------------------
+        # `signature` is BLANK on every row and that is not an oversight: there is no plaintext key
+        # to sign with (only a prefix + digest) and no payload to sign over, because nothing is
+        # serialised and nothing is sent. The detail page says so in those words rather than showing
+        # an empty cell that reads as a bug.
+        WebhookDelivery.objects.create(
+            tenant=tenant, subscription=wms_rule, event="shipment.delivered",
+            status="success", attempt_no=1, response_code=200,
+            triggered_at=now - datetime.timedelta(minutes=41),
+            payload_excerpt='{"event": "shipment.delivered", "number": "SHP-00003", '
+                            '"delivered_at": "..."}  [truncated]',
+        )
+        WebhookDelivery.objects.create(
+            tenant=tenant, subscription=wms_rule, event="shipment.delivered",
+            # PENDING, so the queue state is visible in the demo. `next_attempt_at` is a STAMP —
+            # nothing reads it on a clock, because there is no scheduler in this pass.
+            status="pending", attempt_no=2,
+            next_attempt_at=now + datetime.timedelta(minutes=5),
+            triggered_at=now - datetime.timedelta(minutes=6),
+            payload_excerpt='{"event": "shipment.delivered", "number": "SHP-00004", ...}'
+                            '  [truncated]',
+        )
+        WebhookDelivery.objects.create(
+            tenant=tenant, subscription=erp_rule, event="goods_receipt.posted",
+            status="failed", attempt_no=3, response_code=503,
+            error_message="Receiver returned 503 Service Unavailable (ERP batch window). The next "
+                          "attempt comes from the published backoff schedule; pressing Retry "
+                          "re-queues the row and sends nothing.",
+            next_attempt_at=now + datetime.timedelta(minutes=30),
+            triggered_at=now - datetime.timedelta(hours=3, minutes=6),
+            payload_excerpt="<goodsReceipt><number>GRN-00001</number>...</goodsReceipt>"
+                            "  [truncated]",
+        )
+        WebhookDelivery.objects.create(
+            tenant=tenant, subscription=alert_rule, event="supply_chain_alert.created",
+            # EXHAUSTED at the last slot of the published 8-attempt schedule — which is what
+            # switched `alert_rule` off above, and the reason `WebhookDelivery.MAX_ATTEMPTS` is
+            # derived from the schedule tuple rather than typed.
+            status="exhausted", attempt_no=WebhookDelivery.MAX_ATTEMPTS, response_code=404,
+            error_message="Receiver returned 404 on every attempt in the schedule. The bridge "
+                          "endpoint was retired without the subscription being updated.",
+            triggered_at=now - datetime.timedelta(days=2, hours=1),
+            payload_excerpt='{"event": "supply_chain_alert.created", "severity": "high", ...}',
+        )
+        WebhookDelivery.objects.create(
+            tenant=tenant, subscription=erp_rule, event="goods_receipt.posted",
+            # SIMULATED, and this is the honest status for every row in a pass with no transport: a
+            # delivery that never left the process is neither a success nor a failure, and recording
+            # it as `success` would make this log evidence of something that did not happen.
+            status="simulated", attempt_no=1,
+            triggered_at=now - datetime.timedelta(minutes=18),
+            payload_excerpt="<goodsReceipt><number>GRN-00002</number>...</goodsReceipt>"
+                            "  [truncated]",
+        )
+
+        self.stdout.write(
+            f"{tenant.name}: 4.19 integration — 4 endpoint(s) "
+            f"({erp.number} SAP/erp, {storefront.number} Shopify/ecommerce, "
+            f"{reader.number} RFID/iot LEFT IN ERROR, {edi.number} VAN/edi), "
+            f"3 credential marker(s) written through set_credential() — prefix + SHA-256 only, no "
+            f"plaintext stored anywhere; 6 exchange message(s) incl. an 850 acknowledged by a 997 "
+            f"and TWO DELIBERATE FAILURES (LLRP_TIMEOUT on a 4,200-read batch, HTTP_429 on the "
+            f"catalogue push) so integration-exceptions/ has rows; 3 webhook subscription(s) "
+            f"({wms_rule.number}, {erp_rule.number}, {alert_rule.number} DISABLED at its "
+            f"threshold) and 5 delivery attempt(s) across success/pending/failed/exhausted/"
+            f"simulated. NOTHING WAS SENT — 4.19 ships no transport, so every row describes "
+            f"traffic rather than performing it.")
