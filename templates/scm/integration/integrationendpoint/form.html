@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — shared create/edit form for IntegrationEndpoint [CNX-].
+
+Rendered by apps/scm/views/IntegrationApiGateway/IntegrationEndpoints.py::integrationendpoint_create
+(via crud_create) and ::integrationendpoint_edit (via crud_edit). The pinned contract gives this page
+exactly three keys and nothing here reads anything else:
+
+  form     — IntegrationEndpointForm (bound on POST)
+  is_edit  — False on create, True on edit
+  obj      — the IntegrationEndpoint on the EDIT path ONLY. crud_edit puts it in the context;
+             crud_create does not, so every use of it below sits inside {% if is_edit %} and is never
+             bare. A bare {{ obj.something }} on the create path is not an error — it renders an
+             empty fragment, which is the failure that is invisible from this screen (L7).
+
+Fields are rendered BY NAME through partials/form_field.html, which pairs <label for=...> with the
+widget's own id_for_label and prints that field's help_text and its errors. That couples this page to
+IntegrationEndpointForm's whitelist on purpose: Meta.fields is an EXPLICIT list of 22 names, never
+__all__, and all 22 appear below —
+
+  name · category · system · direction · transport
+  auth_method · endpoint_url
+  partner_party · logistics_client · location · spec_document
+  external_account_ref · interchange_id · interchange_qualifier · device_identifier
+  trigger_mode · schedule_note
+  environment · lifecycle_stage · status · is_active · notes
+
+A field added to the model and to that whitelist but NOT to a group here would never reach the POST —
+and on the edit path it would be silently blanked on every save. That failure is invisible from this
+screen, which is why the list above is spelled out.
+
+Columns deliberately absent, and none of them an oversight:
+  tenant                   — stamped by crud_create, and again in the form's __init__ (TenantUniqueMixin)
+                             so the (tenant, name) uniqueness check has a tenant to validate against
+                             on the CREATE path instead of dying as an IntegrityError after
+                             is_valid() has already said yes.
+  number                   — auto-assigned on save (CNX-#####).
+  credential_prefix        — editable=False. A credential is never typed on a form and never posted;
+  credential_hash            the rotate action on the detail page is the only writer, and it is
+                             @tenant_admin_required and @require_POST.
+  consecutive_failures     — editable=False. A counter, not a setting.
+  last_run_at              — editable=False. System stamps, shown read-only below on the edit path
+  last_success_at            and never as an input (L22).
+  last_seen_at
+  created_at / updated_at  — automatic.
+
+`status` IS on this form deliberately. There is no state machine anywhere in 4.19 that could own it —
+nothing connects, so nothing can discover that a connection went down — which makes it a marker a
+person maintains, exactly like the lifecycle stage beside it. `consecutive_failures` is NOT on the
+form for the mirror-image reason: it is the shape of a thing a machine writes.
+
+Refusals and where they land:
+  form.non_field_errors  — the (tenant, name) duplicate. Django reports a unique_together break as a
+                           NON-FIELD error, so the first card renders form.non_field_errors or the
+                           message is invisible.
+  interchange_id         — either one typed while a 3PL client is attached. The rule is raised as a
+  interchange_qualifier    FIELD error on these two columns rather than on the form, because
+                           add_error() keyed on a column that is not on the form raises ValueError
+                           straight out of clean() and 500s the page.
+  partner_party          — another workspace's row. All four FK selects are narrowed to this tenant,
+  logistics_client         and the ownership rule is ALSO enforced where the row is saved: a narrowed
+  location                 <select> has never held against a crafted POST.
+  spec_document
+
+theme.css ships COLOUR-named badges only (badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate); badge-success / badge-warning / badge-danger do not exist and render
+unstyled (L33). Every badge below is one of those six. Nothing on this page is |safe.
+{% endcomment %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} Integration Endpoint{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} Integration Endpoint</h1>
+    <div class="breadcrumb">
+      <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+      <a href="{% url 'scm:integrationendpoint_list' %}">Integration Endpoints</a><span class="sep">›</span>
+      <span>{% if is_edit %}Edit {{ obj.number }}{% else %}New{% endif %}</span>
+    </div>
+    <p class="text-muted">
+      {% if is_edit %}
+        Every field here is editable and there is nothing to publish: this row <span class="fw-600">is</span> the configuration, and a save takes effect the next time anything reads it. What a save does <span class="fw-600">not</span> touch is the exchange log — each message keeps its own copy of what it carried, so changing a connection afterwards cannot rewrite what already crossed the boundary.
+      {% else %}
+        This registers a <span class="fw-600">channel</span> between this workspace and one outside system — an ERP feed, a storefront or marketplace, a reader or sensor gateway, or an EDI trading relationship. Registering it <span class="fw-600">connects nothing</span>: this sub-module ships no outbound transport, so no call is made, no credential is used and no schedule runs. What it gives you is one place that answers who is on the other end, how we would reach them and where the relationship has got to. The CNX- number is assigned on save, so there is no number field.
+      {% endif %}
+    </p>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">What this connection is</h2>
+        <span class="badge badge-info">One name per workspace</span>
+      </div>
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The <span class="fw-600">category</span> decides which of the four register views this connection appears under — ERP, E-commerce, IoT or EDI — and that is all it decides. All four share one table and one set of rules, because they answer the same questions; splitting them into four near-identical tables would multiply the code without changing a single answer. The name has to be unique in this workspace: it is what people will read on every screen, and two connections called the same thing is a support call waiting to happen.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.name %}
+          {% include "partials/form_field.html" with field=form.category %}
+          {% include "partials/form_field.html" with field=form.system %}
+          {% include "partials/form_field.html" with field=form.direction %}
+          {% include "partials/form_field.html" with field=form.transport %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">Direction is what the data does, transport is how it travels.</span> They are separate on purpose: the same REST channel can be inbound on one relationship and bidirectional on another, and an EDI partner reached over AS2 and one reached through a VAN are the same document flow over different pipes. Nothing in this pass moves anything over any of them.
+        </div>
+        {% if is_edit %}
+          <div class="form-help" style="margin-top:.35rem;">
+            Reference: <span class="fw-600 mono">{{ obj.number }}</span> — assigned on the first save and never reissued.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">How we would reach it</h2>
+        <span class="badge badge-amber">No credential field — and that is deliberate</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">There is no place to type a credential on this form, on purpose.</span> A secret typed into a plain form field is a secret in a POST body, in a browser autofill store and in whatever logs the request touched. The credential for this connection is <span class="fw-600">generated</span> by the Rotate action on the saved connection&#39;s own page, shown once and never again — and what is kept afterwards is a short prefix plus a one-way hash, enough to tell two credentials apart and not enough to authenticate with. That trade only works because this pass ships no transport: nothing signs and nothing calls a provider, so the plaintext has no job to do. When real calls are built the fix is encryption at rest with the key outside the row — never a plaintext column, and never a hash that cannot do the work.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.auth_method %}
+          {% include "partials/form_field.html" with field=form.endpoint_url %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">The endpoint accepts any scheme, and it has to.</span> This one field holds https, sftp, as2, mqtt and llrp addresses — a strict URL validator would accept only http, https, ftp and ftps, and would reject the rest at the moment somebody typed them, while the seeder that never goes through a form carried on writing them happily. So it is a plain text box, validated by nobody, and the honest consequence is stated rather than hidden.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Nothing fetches this address.</span> A URL typed by a tenant user and fetched by the server is server-side request forgery by definition, and outbound HTTP is deferred across the whole of this sub-module. The first thing a future transport pass owes is not a client library but an allow-list plus a private-address block — RFC1918, loopback, link-local and IPv6 unique-local — re-resolved at request time so a hostname cannot answer publicly once and privately the next.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          Choosing <span class="fw-600">OAuth 2.0</span> records the intent and stores nothing. There is no authorization-code flow, no consent screen and no token store in this pass, and a field pretending otherwise would be worse than an honest gap.
+        </div>
+        {% if is_edit %}
+          <div class="form-help" style="margin-top:.75rem;">
+            Credential currently registered: <span class="fw-600 mono">{% if obj.masked %}{{ obj.masked }}{% else %}none{% endif %}</span>. Rotate it from <a href="{% url 'scm:integrationendpoint_detail' obj.pk %}">the connection page</a> — it is a POST, restricted to workspace admins, and it shows the new value exactly once.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Who is on the other end</h2>
+        <span class="badge badge-slate">Existing records only — nothing new is created here</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          The counterparty is an <span class="fw-600">existing company record</span>. Customer, vendor, supplier and partner are roles on that one record rather than four separate tables, so an integration partner is never a new company created from this screen — which is also why the company list here is not narrowed to any single role. Every one of these four selects shows only this workspace&#39;s rows, and the same ownership rule is enforced again where the row is saved: a narrowed dropdown has never held against a crafted POST.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.partner_party %}
+          {% include "partials/form_field.html" with field=form.logistics_client %}
+          {% include "partials/form_field.html" with field=form.location %}
+          {% include "partials/form_field.html" with field=form.spec_document %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">The location is the zone a reader watches</span> — it belongs on an RFID or sensor gateway and is left empty on every channel that is not physical. <span class="fw-600">The specification document</span> is the partner&#39;s API guide or EDI implementation guide, attached from the document library; nothing is uploaded on this screen and no file is stored on this row.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Identifiers</h2>
+        <span class="badge badge-amber">Interchange ids move to the 3PL client when one is attached</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          These are how the far side names itself, and each belongs to a different kind of channel: an <span class="fw-600">account reference</span> is a shop domain, seller id or marketplace region; an <span class="fw-600">interchange id and qualifier</span> are the sender/receiver identity in an EDI envelope header; a <span class="fw-600">device identifier</span> is a reader or gateway&#39;s own registry identity. Leave the ones that do not apply blank — a blank here is a real answer, not a missing one.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.external_account_ref %}
+          {% include "partials/form_field.html" with field=form.interchange_id %}
+          {% include "partials/form_field.html" with field=form.interchange_qualifier %}
+          {% include "partials/form_field.html" with field=form.device_identifier %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">Attach a 3PL client and both interchange fields must be left blank</span> — typing either is refused at save, with the error landing on the field itself. The client record already holds that partner&#39;s EDI id and qualifier, and one company&#39;s EDI identity written in two places is two places that can disagree, with no way afterwards to tell which one the partner actually uses. The connection page reads them through the client, so nothing is lost by leaving them empty here; change them on the client record.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">When it runs</h2>
+        <span class="badge badge-amber">No scheduler — nothing runs on a clock</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          Both fields below record <span class="fw-600">intent</span>. Choosing Real-time or Scheduled starts nothing: this pass ships no daemon, no queue and no cron, so no run is triggered, no retry is attempted and no connection is auto-disabled after a run of failures. Capturing the intent is worth doing anyway — on the day a scheduler exists it reads a column carrying what each partner actually agreed, rather than inventing one cadence for everybody.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.trigger_mode %}
+          {% include "partials/form_field.html" with field=form.schedule_note %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          The schedule note is <span class="fw-600">free text</span> and that is deliberate: a cron expression in a field the system parses would look like something it honours. Write what was agreed — "nightly at 02:00 partner time", "every 15 minutes during trading hours" — and let it read as the note it is.
+        </div>
+        {% if is_edit %}
+          <div class="form-help" style="margin-top:.35rem;">
+            Last run <span class="fw-600 mono">{% if obj.last_run_at %}{{ obj.last_run_at|date:"d M Y H:i" }}{% else %}never{% endif %}</span> · last success <span class="fw-600 mono">{% if obj.last_success_at %}{{ obj.last_success_at|date:"d M Y H:i" }}{% else %}never{% endif %}</span> · last seen <span class="fw-600 mono">{% if obj.last_seen_at %}{{ obj.last_seen_at|date:"d M Y H:i" }}{% else %}never{% endif %}</span> · <span class="fw-600 mono">{{ obj.consecutive_failures }}</span> consecutive failure{{ obj.consecutive_failures|pluralize }}. All four are written by nothing in this pass, which is exactly why none of them is a field here — a permanent blank is the honest state, not a feed that stopped.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Where it stands</h2>
+        <span class="badge badge-slate">Recorded by a person, not observed by a check</span>
+      </div>
+      <div class="card-body">
+        <p class="form-help" style="margin:0 0 .9rem;">
+          <span class="fw-600">Lifecycle stage and status answer different questions and neither is derived from the other.</span> Lifecycle is where the connection is in being built — set up, tested, certified by the partner, live, or suspended. Status is what it is doing now, as far as anyone has recorded. A connection can be certified and disconnected at the same moment, and collapsing the two would lose exactly that. <span class="fw-600">Active</span> is a third thing again: whether anyone should be using this connection at all.
+        </p>
+        <div class="form-grid">
+          {% include "partials/form_field.html" with field=form.environment %}
+          {% include "partials/form_field.html" with field=form.lifecycle_stage %}
+          {% include "partials/form_field.html" with field=form.status %}
+          {% include "partials/form_field.html" with field=form.is_active %}
+          {% include "partials/form_field.html" with field=form.notes %}
+        </div>
+        <div class="form-help" style="margin-top:.75rem;">
+          <span class="fw-600">You are setting the status, not reporting one.</span> Nothing in this sub-module makes an outbound call, so nothing can discover that a partner went down — the value you choose is the value every screen shows until somebody changes it. That is why there is no Test Connection button anywhere: a button that cannot actually test anything is worse than no button.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Sandbox and production are two separate connections</span>, each with its own credential and its own log, and there is no promotion pipeline that copies one into the other. Doing it by hand is the honest workflow rather than a hidden one.
+        </div>
+        <div class="form-help" style="margin-top:.35rem;">
+          <span class="fw-600">Disabled is the move to reach for instead of deleting.</span> Deleting a connection takes every message ever logged against it — the record of what actually crossed the boundary, which is the one thing you cannot reconstruct afterwards. Notes are stored and rendered as plain text: markup typed into them is shown as the characters that were typed and is never interpreted.
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+
+    <p class="text-muted" style="margin-top:.75rem;">
+      {% if is_edit %}
+        Saving returns to the list. Every change above is live the next time anything reads this connection — there is nothing further to publish and no approval step, which is the point of keeping this row configuration rather than a document. Nothing already logged is affected: each message keeps its own copy of what it carried and when.
+      {% else %}
+        Saving returns to the list, where the new connection appears with its CNX- number. Two things are worth doing straight after: open it and <span class="fw-600">rotate a credential</span> if this channel needs one — that is the only way to register one, it is admin-only, and the value is shown exactly once — and set the <span class="fw-600">lifecycle stage</span> to match reality, since a register full of connections stuck on Setup tells nobody anything. Expect the exchange log to stay empty until a document actually crosses: nothing here generates traffic.
+      {% endif %}
+    </p>
+  </form>
+{% endblock %}
