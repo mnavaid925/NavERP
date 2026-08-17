@@ -25104,10 +25104,15 @@ during the build); `README.md` marks the roadmap row **18 of 19, Next: 4.19**. O
    `## Sidebar wiring` section** — 4.17's is missing too (D5); and rule 6's gating map omitting that the three
    delete routes are `@login_required @require_POST` with no admin gate (D6). Cheapest home: the next session that
    touches `.claude/skills/scm/SKILL.md`, i.e. 4.19's Phase 7 — fix 4.18's and 4.19's sidebar paragraphs together.
-2. **Two deferred indexes → one app-wide index-sweep migration.** 4.18's M3 (`(tenant, party)` on
-   `LandedCostVoucher`) and 4.17's equivalent finding were both deferred because their migration numbers were
-   claimed in a shared checkout (L43). One sweep migration is the right home for both; do not spend a number on
-   either alone.
+2. ~~**Two deferred indexes → one app-wide index-sweep migration.**~~ **DONE — and the premise was wrong.**
+   *Corrected 2026-08-17:* there was only ever **one** deferred index, not two. 4.18's M3 —
+   `(tenant, party)` on `LandedCostVoucher` — was real and is now applied: model change `984d527a`, migration
+   **`0032_landedcostvoucher_scm_lcv_tnt_party_idx`** `08d0a3c3` (a single `AddIndex`, no field or destructive
+   ops), applied to `nav_erp` with `makemigrations --check` reporting no drift and `manage.py check` clean.
+   **4.17's `(tenant, owner_client)` finding was never deferred alongside it** — it shipped on *both* `Item` and
+   `Location` in migration **`0030`** at the time (`scm_item_tnt_owner_idx` / `scm_loc_tnt_owner_idx`); the
+   close-out note above claimed otherwise and that claim was incorrect. There is no outstanding index work and no
+   sweep migration is owed.
 
 Audit coverage note: the `README/sidebar` lane stalled on all six attempts. Its two otherwise-uncovered checks were
 run by hand and are clean — the five `LIVE_LINKS["4.18"]` keys match the NavERP.md 4.18 bullets verbatim, and no
