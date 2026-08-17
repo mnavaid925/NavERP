@@ -35,7 +35,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Lesson:** L25
 - **Problem:** `integrationendpoint_rotate_credential` puts the freshly minted plaintext credential straight into `messages.success(...)`, so the secret is serialised into the session backend (`django_session`) and persists there until some later render consumes it — readable from a DB dump, a backup or a hijacked session, and liable to be copied into logs.
 - **Fix:** Mirror the sibling `webhooksubscription_rotate_secret` in this same sub-module: add `_REVEAL_SESSION_KEY = "_cnx_credential_reveal"` at module level, replace the flash with `request.session[_REVEAL_SESSION_KEY] = {"pk": obj.pk, "secret": plaintext}` plus a secret-free `messages.success("Credential rotated — the new value is shown once on this page.")`; in `integrationendpoint_detail` (line 218) add `reveal = request.session.pop(_REVEAL_SESSION_KEY, None)` / `plaintext_once = reveal["secret"] if reveal and reveal.get("pk") == pk else None` and pass `plaintext_once` in `extra_context`; then add a `{% if plaintext_once %}` copy box to `templates/scm/integration/integrationendpoint/detail.html` and correct that template's header note at lines 31-32 and 39-40, which currently promise the flash message.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `security(scm): move the rotated endpoint credential off the messages framework onto a pop-once session key` (d364c3c6) + `fix(scm): render the pop-once credential reveal on the endpoint detail page` (fdd0fa0e). Two files, two commits. Same defect as C2. Verified as `admin_acme`: rotate POST → 200 with the reveal card and the 32-char plaintext, plaintext present exactly once in the document, secret-free flash wording, refresh → card gone and no `_cnx_credential_reveal` in the session.
 
 ### C2 — `apps/scm/views/IntegrationApiGateway/IntegrationEndpoints.py:350`
 
@@ -60,7 +60,7 @@ and in `integrationendpoint_detail`, before `crud_detail(...)`:
 ```
 
 Then add the reveal card to `templates/scm/integration/integrationendpoint/detail.html` (copy the shape at `templates/accounting/integration/detail.html:26-35`): `{% if plaintext_once %}<div class="card">…<code>{{ plaintext_once }}</code></div>{% endif %}`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as C1 (d364c3c6 + fdd0fa0e). Duplicate finding, one fix.
 
 ### C3 — `templates/scm/integration/webhooksubscription/detail.html:274`
 
@@ -80,7 +80,7 @@ Then add the reveal card to `templates/scm/integration/integrationendpoint/detai
 {% endif %}
 
 (`.text-danger` and `.fw-600` both exist in theme.css.) The view already pops the value into the context — `apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py:265-266,278` — and its own module docstring at line 55 states "Until it has one, a rotated secret is never displayed." No Python change is needed.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `fix(scm): render plaintext_once so a rotated webhook signing secret is actually shown` (898c5d28). One template edit resolves C3, I4, I5 and I6, which are four reports of the same missing block. **Placement deviates from the prescription:** C3/I5/I6 asked for it inside the Signing-secret card ~200 lines down; I put it directly under the page header instead. A value the reader must copy before navigating away must not sit below the fold, and the top position is what the shipped reference all four findings name (`templates/accounting/integration/detail.html:26-35`) uses — it also makes this page and `integrationendpoint/detail.html` identical in shape. Verified as `admin_acme`: rotate POST → 200 with the card and a 32-char plaintext whose prefix matches the freshly stored `signing_secret_prefix`, present exactly once in the document; refresh → card gone, `_whk_secret_reveal` no longer in the session.
 
 ## Important
 
@@ -89,14 +89,14 @@ Then add the reveal card to `templates/scm/integration/integrationendpoint/detai
 - **Found by:** explorer
 - **Problem:** This changeset made `crm.Webhook.secret` Fernet-encrypted at rest (apps/crm/models/AutomationWorkflow/Webhooks.py:49 encrypts in `save()`), but the seeder still signs with `wh.secret`, which after `Webhook.objects.create(...)` holds the `fernet.v1:` ciphertext — so every seeded `WebhookDelivery.signature` is an HMAC of the ciphertext and does not match what `_deliver_webhook` now computes, which is the exact failure the engine's new comment (apps/crm/views/AutomationWorkflow/_engine.py:86-88) warns against.
 - **Fix:** Change line 496 to `sig = hmac.new(wh.get_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()` — `get_secret()` is the accessor added on the model at apps/crm/models/AutomationWorkflow/Webhooks.py:52. No other seeder line reads `.secret`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `fix(crm): sign the seeded webhook deliveries with the plaintext secret, not the ciphertext` (df275c64). Same defect as M1; one fix. Confirmed against a rolled-back probe row: the column is `fernet.v1:`-marked straight after `create()`, the `get_secret()` digest equals an HMAC over the true plaintext (which is what `test_webhook_delivery_hmac_correct` pins), and the old `.secret` spelling produced a different digest. Swept `apps/` for other direct readers — only the model itself and `WebhookForm.clean_secret` remain, both correct.
 
 ### I2 — `apps/scm/management/commands/seed_scm.py:5872`
 
 - **Found by:** code-reviewer
 - **Problem:** The seeded EDI endpoint sets `interchange_id="ZZ12345678"`/`interchange_qualifier="ZZ"` AND `logistics_client=client` on the same row, which `IntegrationEndpoint.clean()` and `IntegrationEndpointForm.clean()` explicitly refuse (constraint A); because `client` is picked as `LogisticsClient.objects.filter(tenant=tenant).order_by("id").first()` (line 5806) it lands on the `dedicated` client, whose `edi_partner_id` is blank, so `effective_interchange_id` returns "" and the flagship EDI connection renders an EMPTY interchange id on its detail page while carrying one on the row — and opening its edit form and pressing Save raises a field error on a value the user never typed.
 - **Fix:** At line 5806 select the EDI-configured client instead: `client = (LogisticsClient.objects.filter(tenant=tenant, integration_mode="edi").exclude(edi_partner_id="").order_by("id").first())`, then at lines 5872/5876 pass `interchange_id="" , interchange_qualifier=""` whenever `client` is not None (keep the typed `ZZ12345678`/`ZZ` pair only on the `client is None` fallback, with `logistics_client=None`), so the seeded row satisfies the same `clean()` the form enforces.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `fix(scm): seed the EDI endpoint against the EDI-configured client and honour constraint A` (4702ad4f). Verified by running `_seed_integration_tenant` for real inside a rolled-back transaction: the reseeded CNX-00004 links STARKIND (`integration_mode="edi"`), holds `""` in both of its own interchange columns, resolves `effective_interchange_id="1234567890123"` / qualifier `"ZZ"` through the FK, and passes `full_clean()` — the same validation the form runs. **Note for the next session:** the dev DB still holds the old bad row, because `_seed_integration_tenant` is idempotent-skip. `seed_scm --flush` restores it correctly.
 
 ### I3 — `apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py:204`
 
@@ -118,7 +118,7 @@ def webhooksubscription_edit(request, pk):
 ```
 
 Then stop offering the now-403 controls: wrap the Edit icon at `templates/scm/integration/webhooksubscription/list.html:293` and the "Add" button on that page, plus the Edit button on `webhooksubscription/detail.html`, in `{% if is_tenant_admin %}` (the detail view already passes that key; add it to the list view's `extra_context`), and correct the decorator table in the detail template's header comment at line 25, which currently asserts `webhooksubscription_edit @login_required -> ungated here`. Grep for the same shape across the family: `grep -rn "^def .*_create\|^def .*_edit" -B3 apps/scm/views/IntegrationApiGateway/`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — three files, three commits: `security(scm): gate webhook subscription create and edit behind @tenant_admin_required` (b5dd92a4), `fix(scm): hide the admin-only subscription controls from members on the webhook list` (a0f79410), `fix(scm): gate the subscription detail Edit button and correct its decorator table` (fb210b76). The list-template commit also covers M9/M10 for this page, because the delete form's own comment asserted "the contract pins no `is_tenant_admin` key for this page" — leaving it ungated would have left a comment contradicting the view. Verified: `admin_acme` 200 on create/edit/list; `sales_acme` (non-admin member, same tenant) 403 on create and edit, 200 with rows on the list and neither URL anywhere in the document. Scope held to the two views named — `integrationendpoint_create`/`_edit` are the sub-module's day-to-day register and were deliberately not gated.
 
 ### I4 — `templates/scm/integration/webhooksubscription/detail.html:76`
 
@@ -141,7 +141,7 @@ Then stop offering the now-403 controls: wrap the Edit icon at `templates/scm/in
 ```
 
 Also add `plaintext_once` to the template's contract comment block (lines 8-18) so the next pass does not delete it as an unpinned key.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as C3 (898c5d28). This finding's placement (directly after `{% block content %}`) is the one I took; `plaintext_once` was added to the contract block as asked.
 
 ### I5 — `templates/scm/integration/webhooksubscription/detail.html:274`
 
@@ -149,7 +149,7 @@ Also add `plaintext_once` to the template's contract comment block (lines 8-18) 
 - **Lesson:** L7
 - **Problem:** `webhooksubscription_detail` puts the freshly rotated signing secret into the context as `plaintext_once` (apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py:266,278) but this template never references it, so the one-time reveal is popped from the session and silently discarded — the flash message "the new value is shown once on this page. Copy it now; it cannot be retrieved again" is false and the Generate/Rotate secret button produces a credential no one can ever obtain.
 - **Fix:** Inside the "Signing secret" card body (immediately after `<div class="card-body">` on line 274, before the `<dl class="detail-grid">`), add the pop-once reveal block the sibling pages already use, e.g.: `{% if plaintext_once %}<div class="card-body"><p class="text-muted"><span class="badge badge-amber">Copy it now</span> This value is shown once and is stored only as a hash — it cannot be retrieved again.</p><code class="mono" style="display:block;padding:.6rem;word-break:break-all;">{{ plaintext_once }}</code></div>{% endif %}`. Copy the exact shape from templates/accounting/integration/detail.html:26-32 (the sibling the view docstring names) or templates/tenants/encryptionkey/detail.html:22. Do not change the view — `plaintext_once` is already correct and pk-scoped.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as C3 (898c5d28). Placement is the page header rather than the Signing-secret card body; see C3 for why. The view was left alone, as instructed.
 
 ### I6 — `templates/scm/integration/webhooksubscription/detail.html:306`
 
@@ -157,7 +157,7 @@ Also add `plaintext_once` to the template's contract comment block (lines 8-18) 
 - **Lesson:** L7
 - **Problem:** The rotate button's confirm text promises the new signing secret is "displayed EXACTLY ONCE, on the next screen", and `webhooksubscription_detail` does pass `plaintext_once`, but nothing in this template ever renders it — so rotating replaces the stored marker and the new plaintext is silently discarded with no reveal route to recover it (the view's own docstring at `apps/scm/views/IntegrationApiGateway/WebhookSubscriptions.py:55` flags this as unfinished).
 - **Fix:** Add a `{% if plaintext_once %}` block immediately above the `{% if is_tenant_admin %}` at line 296, inside the signing-secret card: a `<code class="mono">{{ plaintext_once }}</code>` in a `badge-amber`-headed panel with "Copy this now — it is shown once and cannot be retrieved again". No view change is needed; the context key already exists.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as C3 (898c5d28). The rotate-form comment claiming the value "appears exactly once in the flash message afterwards" was corrected in the same commit, since it was the stale half of this finding.
 
 ## Minor
 
@@ -173,14 +173,14 @@ Also add `plaintext_once` to the template's contract comment block (lines 8-18) 
 ```
 
 Sweep for any other surviving direct reader with `grep -rn "\.secret\b" apps/ --include=*.py | grep -v get_secret | grep -v migrations` — this is the only one left outside `crypto.py` and the model.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as I1 (df275c64). The sweep was run: the only other non-migration readers are `Webhook.save()`/`get_secret()` themselves and `WebhookForm.clean_secret`, which returns `self.instance.secret` on the blank-on-edit path — correct, because `encrypt()` is a no-op on an already-marked value.
 
 ### M2 — `apps/crm/models/AutomationWorkflow/Webhooks.py:63`
 
 - **Found by:** code-reviewer
 - **Problem:** `secret_masked` now calls `get_secret()`, which raises `ImproperlyConfigured` from `apps/core/crypto.py:104` when the key no longer matches — so a purely cosmetic mask turns the CRM webhook detail page into a 500 after a `SECRET_KEY`/`FIELD_ENCRYPTION_KEY` change (including the ordinary dev path of setting a real SECRET_KEY after seeding under the insecure fallback). I am unsure between Minor and Important: the boundary only trips on a misconfiguration, but the blast radius is a whole page rather than a signing failure.
 - **Fix:** Wrap the decrypt in `secret_masked` only: `try: s = self.get_secret() except ImproperlyConfigured: return "(set — key mismatch)"`, leaving `get_secret()` itself strict so `_deliver_webhook` still fails loudly at signing time.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `fix(crm): let secret_masked degrade on an undecryptable row instead of 500-ing the page` (e4c6bb2b). Same defect as M3; one fix, using M3's fuller wording. On the severity question you raised: Minor is right — the blast radius is the CRM webhook **detail** page only (`templates/crm/workflow/webhook/detail.html:36` is the sole consumer; the list page does not render it).
 
 ### M3 — `apps/crm/models/AutomationWorkflow/Webhooks.py:63`
 
@@ -200,49 +200,49 @@ Sweep for any other surviving direct reader with `grep -rn "\.secret\b" apps/ --
 ```
 
 with `from django.core.exceptions import ImproperlyConfigured` at the top of the module.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as M2 (e4c6bb2b); this finding's code is what was applied. Correction to the problem statement: only the webhook **detail** page renders `secret_masked`, not the list. Verified against a rolled-back probe — a foreign Fernet token masks to the degraded label while `get_secret()` still raises, and the empty/short branches are unchanged. `apps/crm/tests/test_workflow_110.py`: 160 passed.
 
 ### M4 — `apps/scm/models/IntegrationApiGateway/IntegrationMessages.py:175`
 
 - **Found by:** performance-reviewer
 - **Problem:** `scm_msg_tnt_status_idx` is `(tenant, status)`, which serves the equality filter but not the ORDER BY, so `integration_exceptions` — which ALWAYS filters `tenant + status="failed"` and then orders by `-occurred_at, -id` with a 30-row LIMIT — makes MariaDB filesort the entire failed set on every page load of the sub-module's main report.
 - **Fix:** Widen the existing index rather than adding a fourth: `models.Index(fields=["tenant", "status", "occurred_at"], name="scm_msg_tnt_status_idx")`. The 2-column index remains available as the leftmost prefix, so nothing else regresses. This needs a new migration (RemoveIndex + AddIndex on `integrationmessage`) — agree the migration number with any concurrent session in this checkout before generating it (L43).
-- **Status:** [ ] open
+- **Status:** [x] fixed — two commits: `perf(scm): widen scm_msg_tnt_status_idx to (tenant, status, occurred_at)` (3eb0825c) and `migration(scm): 0034 - rebuild scm_msg_tnt_status_idx as (tenant, status, occurred_at)` (f1ef1d4d). **Claimed migration number 0034** — the tree was clean at the start of this pass and 0033 was the last committed migration, so no concurrent session's number was taken. Applied locally; `makemigrations --check --dry-run` says "No changes detected". Verified in the live schema with `SHOW INDEX` (seq 1/2/3 = `tenant_id`/`status`/`occurred_at`) and by re-rendering both consumers at 200 with their rows.
 
 ### M5 — `apps/scm/views/IntegrationApiGateway/IntegrationMessages.py:204`
 
 - **Found by:** performance-reviewer
 - **Problem:** `integrationmessage_list` SELECTs the `payload_excerpt` and `error_message` TextFields for all 30 rows on every page load; the list template renders neither (it renders `error_code` only), so a truncated-document column is pulled off the fastest-growing table for nothing — the same waste `integrationendpoint_list` already avoids with `.defer("notes")` (IntegrationEndpoints.py:124).
 - **Fix:** Append `.defer("payload_excerpt", "error_message")` to the queryset built on lines 204-205, i.e. `qs = (IntegrationMessage.objects.filter(tenant=request.tenant).select_related("endpoint").defer("payload_excerpt", "error_message"))`. `defer` touches only the SELECT list, so `crud_list`'s search on `number`/`control_number`/`external_id`/`source_reference` and all five filters are unaffected.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `perf(scm): trim the message list SELECT - defer the two TextFields and drop the unused order joins` (0b05d5db). Applied together with M6, since both change the same statement. Verified by capturing the paginated SELECT with `DEBUG=True`: neither TextField is in the column list, and the search plus all five filters plus the date window still return 200.
 
 ### M6 — `apps/scm/views/IntegrationApiGateway/IntegrationMessages.py:205`
 
 - **Found by:** performance-reviewer
 - **Problem:** `integrationmessage_list` joins `purchase_order` and `sales_order`, but no column on the list page renders either FK (the template says so itself at templates/scm/integration/integrationmessage/list.html:73-75: "the two typed order pointers are deliberately NOT rendered here"), so every page load pays two LEFT OUTER JOINs and hydrates ~55 unused columns per row on a 30-row page over the sub-module's fastest-growing table.
 - **Fix:** Change line 205 to `.select_related("endpoint")` only. Do NOT touch `integrationmessage_detail` (line 261), where both pointers ARE rendered (detail.html:239, 249) and the joins are correct.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same commit as M5 (0b05d5db). Verified `scm_purchaseorder` and `scm_salesorder` are gone from the list's paginated SELECT while `scm_integrationendpoint` is still joined; `integrationmessage_detail` was left alone and still renders its purchase-order number at 200.
 
 ### M7 — `apps/scm/views/IntegrationApiGateway/IntegrationMessages.py:398`
 
 - **Found by:** performance-reviewer
 - **Problem:** The exceptions cockpit fetches `payload_excerpt` for every one of the 30 rows on the page and never renders it (exceptions.html renders `error_code` and a truncated `error_message` only), pulling an unused TextField off the failure set on the sub-module's hottest report page.
 - **Fix:** Defer on the PAGINATED queryset only, so the grouped roll-up above is untouched: `page_obj = paginate(request, qs.defer("payload_excerpt"), MESSAGES_PER_PAGE)`. Leave `qs` itself as-is at line 364 — `error_groups` on lines 382-387 goes through `.values()`, and putting the `defer` on `qs` would make the interaction between the two harder to reason about for no gain.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `perf(scm): defer payload_excerpt on the exceptions cockpit page queryset` (35fd2704). Applied exactly as prescribed, on the paginated queryset only. Verified with `DEBUG=True`: `payload_excerpt` is absent from the page SELECT, `error_message` is still there (the table truncates it), the GROUP BY roll-up still runs, and `?q=` / `?document_type=` / a junk `?endpoint=` / `?page=2` all return 200.
 
 ### M8 — `apps/scm/views/IntegrationApiGateway/WebhookDeliveries.py:222`
 
 - **Found by:** performance-reviewer
 - **Problem:** `webhookdelivery_list` SELECTs `WebhookDelivery.payload_excerpt` for all 30 rows and never renders it (the list shows `event`, `status`, `attempt_no`, `response_code` and a truncated `error_message`), pulling an unused TextField off the table that grows one row per attempt.
 - **Fix:** Append `.defer("payload_excerpt")` to the queryset on lines 222-223: `qs = (WebhookDelivery.objects.filter(tenant=request.tenant).select_related("subscription").defer("payload_excerpt"))`. `error_message` must NOT be deferred — it is rendered at webhookdelivery/list.html:257-258.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `perf(scm): defer payload_excerpt on the webhook delivery list` (9ddafb4f). Verified with `DEBUG=True`: `payload_excerpt` gone from the paginated SELECT, `error_message` still present, `scm_webhooksubscription` still joined; the list renders at 200 in a flat 11 queries and `?status=failed` stays at 11, proving the truncated error text costs no per-row fetch.
 
 ### M9 — `templates/scm/integration/integrationendpoint/list.html:397`
 
 - **Found by:** code-reviewer
 - **Problem:** The Delete POST form in the Actions column is rendered for every user even though `integrationendpoint_delete` is `@tenant_admin_required`, so a non-admin member is offered a button that 403s — inconsistent with this sub-module's own detail page, which correctly hides it behind `{% if is_tenant_admin %}` (detail.html:538).
 - **Fix:** Add `"is_tenant_admin": _is_tenant_admin(request.user)` to the `extra_context` of `integrationendpoint_list` (`apps/scm/views/IntegrationApiGateway/IntegrationEndpoints.py:151`) and wrap the delete form at line 397 in `{% if is_tenant_admin %}...{% endif %}`. Same shape in `templates/scm/integration/webhooksubscription/list.html:307` against `webhooksubscription_list` — grep `rg -n 'tenant_admin_required' apps/scm/views/` and check each gated view's list template for an ungated button.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same defect as M10, four commits across the two pages: the subscription half landed under I3 (`fix(scm): hide the admin-only subscription controls from members on the webhook list`, a0f79410, plus the view key in b5dd92a4), and the endpoint half as `fix(scm): pin is_tenant_admin on the endpoint list so the Delete form can be gated` (708e8ba3) + `fix(scm): hide the admin-only Delete form from members on the endpoint list` (7e1d2c28). Verified: `sales_acme` gets 200 with rows and no delete URL on either list, still sees Edit on the endpoint list (that route is plain `@login_required`), and a direct POST to the endpoint delete route is still 403 with the row intact.
 
 ### M10 — `templates/scm/integration/integrationendpoint/list.html:397`
 
@@ -259,7 +259,7 @@ with `from django.core.exceptions import ImproperlyConfigured` at the top of the
 ```
 
 Do the same for `webhooksubscription_list` / `templates/scm/integration/webhooksubscription/list.html:307`. The decorator stays — this only stops offering a button that 403s.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as M9 (708e8ba3 + 7e1d2c28 for the endpoint list; a0f79410 + b5dd92a4 for the subscription list under I3). The decorators were left exactly as they were.
 
 ### M11 — `templates/scm/integration/webhookdelivery/list.html:308`
 
@@ -273,7 +273,7 @@ onsubmit="return confirm('Schedule another delivery attempt for this event? The 
 ```
 
 If the event name must appear, use `{{ obj.event|escapejs }}` (escapes `'` to `'`, which survives HTML-attribute decoding). Apply to both `templates/scm/integration/webhookdelivery/list.html:308` and `templates/scm/integration/webhookdelivery/detail.html:300`. The grep that finds the family: `grep -rn "confirm('[^\"]*{{" templates/scm/integration/`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — two commits: `security(scm): escapejs the event name in the delivery-list retry confirm` (67d3856a) and `security(scm): escapejs the event name in the delivery-detail retry confirm` (4ce3172c). **Took the `|escapejs` branch rather than dropping the value**, which this finding offers and M12 prescribes: the event name is the only thing telling the operator which attempt they are re-queueing, and `WebhookDelivery` is `TenantOwned` with no `number` column, so the sub-module's usual "interpolate the generated number instead" is not available here. Verified by setting a seeded failed delivery's event to `order'); alert(1);//` inside a rolled-back transaction — both pages render the backslash-u escaped form with no `&#x27;`/`&#39;` left for the HTML-attribute decode and no early string terminator.
 
 ### M12 — `templates/scm/integration/webhookdelivery/list.html:308`
 
@@ -281,7 +281,7 @@ If the event name must appear, use `{{ obj.event|escapejs }}` (escapes `'` to `'
 - **Lesson:** L42
 - **Problem:** The Retry confirm string interpolates `{{ obj.event }}` — a free-text CharField, not a system-generated number — straight into a JavaScript string literal; an apostrophe in an event name escapes to `&#39;`, which the HTML parser decodes back to a bare quote before JS parses the attribute, breaking the dialog open and silently removing the confirmation guard (L42). The sibling templates in this sub-module deliberately interpolate only the CNX-/WHK- number for this reason.
 - **Fix:** Apply `|escapejs` to the value in both places it appears in a confirm string: line 308 here and templates/scm/integration/webhookdelivery/detail.html:300 — `confirm('Schedule another delivery attempt for {{ obj.event|escapejs }}? …')`. `|escapejs` emits `'`, which survives the HTML-attribute decode that defeats the default autoescape.
-- **Status:** [ ] open
+- **Status:** [x] fixed — same change as M11 (67d3856a + 4ce3172c); this finding's `|escapejs` prescription is the one applied. Both templates now carry a comment saying why the filter is load-bearing rather than decoration.
 
 ### M13 — `templates/scm/integration/webhookdelivery/list.html:332`
 
@@ -289,14 +289,68 @@ If the event name must appear, use `{{ obj.event|escapejs }}` (escapes `'` to `'
 - **Lesson:** L7
 - **Problem:** `append_only_note` is passed by all five 4.19 log/report views (IntegrationMessages.py:231,275,407 and WebhookDeliveries.py:243,286) and is consumed by none of the eleven 4.19 templates — each page hand-wrote its own wording instead, which is exactly what the WebhookDeliveries.py:219-220 docstring says the key exists to prevent ("so the template can say why in one place rather than each page inventing its own wording"). Dead context key plus five divergent copies of one rule.
 - **Fix:** Either render it — replace the hand-written footer paragraph at line 332 (and its equivalents at templates/scm/integration/integrationmessage/list.html:332, .../integrationmessage/detail.html:426, .../webhookdelivery/detail.html:276 and templates/scm/integration/exceptions.html:284) with `{{ append_only_note }}`, matching templates/scm/assets/meterreading/list.html:61 — or drop the key from the five `extra_context`/`render` dicts and delete the `APPEND_ONLY_NOTE` constants. Rendering is the house pattern; pick one and make the docstrings agree.
-- **Status:** [ ] open
+- **Status:** [x] fixed — **rendered**, five commits, one per template: `12cb4d9e` (message list), `f97d3516` (message detail), `03209175` (exceptions cockpit), `0e55fe96` (delivery list), `f0fd214b` (delivery detail). I first went the other way and deleted the constants, on the grounds that all five pages already say it better and the key was dead — then reverted, because a sweep showed 4.13 `MeterReading`, 4.15 `ColdChain`/`TemperatureReading` and 4.16 `PortalActivity` all pass **and print** this key. Removing it would have forked 4.19 out of step with four sibling append-only logs. It is printed as the LEADING paragraph with each page's own wording following, which is the shipped shape at `templates/scm/assets/meterreading/list.html:61` and `templates/scm/portal/portalactivity/detail.html:309` — the shared sentence states the rule, the paragraph under it names that page's affordances. The key is now pinned in all five contract blocks. Verified: all five pages 200 with the escaped note text present and their page-specific wording intact.
 
 ### M14 — `templates/scm/integration/webhooksubscription/detail.html:444`
 
 - **Found by:** frontend-reviewer
 - **Problem:** The recent-deliveries Response cell guards the nullable `response_code` with truthiness (`{% if d.response_code %}`) while the two sibling templates that render the same column deliberately use `is not None` and document why — `webhookdelivery/list.html:270` and `webhookdelivery/detail.html:168` both say "a nullable integer read for truthiness would swallow a legitimate zero". This file's own header comment (lines 54-57) claims every nullable is wrapped in an explicit guard of that shape.
 - **Fix:** Change line 444 from `{% if d.response_code %}` to `{% if d.response_code is not None %}`, matching `templates/scm/integration/webhookdelivery/list.html:270`. Leave the `{% else %}<span class="text-muted">—</span>` branch as-is.
-- **Status:** [ ] open
+- **Status:** [x] fixed — `fix(scm): guard the recent-deliveries Response cell with is not None, not truthiness` (cecac795). Applied as prescribed; the `{% else %}` branch is untouched, and the cell comment now carries the siblings' explanation. Verified against a rolled-back probe: `response_code=0` renders `0`, `None` still renders the muted em dash, and 503 still renders.
+
+## Fix pass — outcome (code-fixer, 2026-08-18)
+
+All 23 findings resolved: **23 fixed, 0 skipped, 0 left open.** 26 commits, one file each, nothing
+pushed. `manage.py check` clean; `makemigrations --check --dry-run` reports "No changes detected"
+(migration 0034 is committed). `apps/crm/tests/test_workflow_110.py`: 160 passed.
+
+Eight of the 23 were duplicate reports of four defects, so the 23 findings came to 19 distinct fixes:
+C1=C2 (endpoint credential reveal), C3=I4=I5=I6 (webhook secret reveal), I1=M1 (seeder HMAC key),
+M2=M3 (`secret_masked` degradation), M9=M10 (ungated delete buttons), M11=M12 (confirm-string
+escaping).
+
+**Three places where I did not follow the prescribed fix**, each argued in the finding's Status line:
+
+1. **C3/I5/I6 — reveal card placement.** Put at the top of the page rather than inside the
+   Signing-secret card ~200 lines down. A value that must be copied before navigating away cannot sit
+   below the fold, and the top position is what the shipped reference all four findings name
+   (`templates/accounting/integration/detail.html:26-35`) uses.
+2. **M11 — kept the event name.** Took M12's `|escapejs` branch rather than M11's "interpolate
+   nothing". `WebhookDelivery` is `TenantOwned` with no `number` column, so the sub-module's usual
+   "interpolate the generated number instead" was unavailable, and the event name is the only thing
+   identifying which attempt is being re-queued.
+3. **M13 — rendered rather than removed, after first doing the opposite.** I initially deleted the
+   dead key and both `APPEND_ONLY_NOTE` constants, reasoning that all five pages already state the
+   rule in better page-specific words. That was wrong and was reverted before any commit: 4.13
+   `MeterReading`, 4.15 `ColdChain`/`TemperatureReading` and 4.16 `PortalActivity` all pass **and
+   print** this key, so removing it would have forked 4.19 out of step with four sibling append-only
+   logs.
+
+**Verification method.** Every view/template fix was re-rendered through the Django test client as
+`admin_acme` with content asserted, not status alone. Security fixes were additionally checked as
+`sales_acme` (a non-admin member of the same tenant) and, for the escaping fix, against a hostile
+`order'); alert(1);//` value in a rolled-back transaction. Performance fixes were verified by
+capturing the actual SQL with `DEBUG=True` rather than by inspection. Final sweep: all 18 4.19 routes
+200 for the admin with content present, the two newly-gated routes 403 for the member, cross-tenant
+IDOR 404 on all four detail pages as `admin_globex`, no semantic badge class in any `class="..."`
+attribute, and no multi-line `{# #}` comment anywhere in `templates/scm/integration/**`.
+
+### Follow-ups for the next session (not done here — out of this file's scope)
+
+- **The dev DB still holds the pre-I2 EDI endpoint row.** `_seed_integration_tenant` is
+  idempotent-skip, so the seeder fix does not retro-correct CNX-00004: it still carries
+  `interchange_id="ZZ12345678"` alongside the `api`-mode logistics client, which means its detail page
+  shows a blank effective interchange id and its edit form errors on save. `seed_scm --flush` fixes it.
+- **App-wide pass worth scheduling (clone-family, L18):** `(tenant, status)` indexes that also carry a
+  `-timestamp` ORDER BY exist across the app; M4 widened only 4.19's. `WebhookDelivery` has the same
+  shape and was deliberately left (colder path). The performance lane's own note lists it.
+- **`config/settings.py` sets no `MESSAGE_STORAGE`**, so flash messages ride a client-side cookie
+  before falling back to the session. C1/C2 no longer depend on it (the secret is on neither store
+  now), but pinning `SessionStorage` app-wide is still worth doing.
+- **No tests ship for 4.19.** The regression guards the fixes in this pass most want: that neither
+  rotate view leaves a plaintext in `response.wsgi_request.session` after the detail render, that
+  `IntegrationEndpoint.clean()` rejects `interchange_id` alongside a `logistics_client`, and that
+  `webhooksubscription_create`/`_edit` are 403 for a non-admin member.
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
 
