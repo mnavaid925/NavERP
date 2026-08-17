@@ -82,9 +82,13 @@ def _deliver_webhook(webhook, event, payload):
     # to the PINNED resolved IP — do NOT re-resolve at connect time (prevents DNS rebinding); (3) allow
     # port 443 only (block internal port scans); (4) disable redirects; (5) short connect+read timeout;
     # (6) cap the response read + never log/store the body. Never POST to a raw user-supplied URL without that.
+    # The column holds Fernet ciphertext (apps/core/crypto.py), so the key is decrypted here and
+    # exists in plaintext only for the length of this call — never `webhook.secret` directly, which
+    # would silently HMAC with the ciphertext and produce a signature no recipient could verify.
     sig = ""
-    if webhook.secret:
-        sig = hmac.new(webhook.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    signing_key = webhook.get_secret()
+    if signing_key:
+        sig = hmac.new(signing_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return WebhookDelivery.objects.create(
         tenant=webhook.tenant, webhook=webhook, event=event, payload=payload,
         signature=sig, status="pending")
