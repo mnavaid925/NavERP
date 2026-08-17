@@ -1752,7 +1752,9 @@ invariant below and this is where its regression lock lives.
   `(param, lookup, is_int)` tuple to `filters=`; in the template reflect `request.GET` (pk filters use
   `|stringformat:"d"`).
 - **Extend the seeder**: add rows inside the per-tenant guard in `seed_scm.py`, reusing existing Party/OrgUnit rows.
-- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` (2,761 tests). Ad-hoc smoke scripts live in `temp/`.
+- **Verify**: `venv/Scripts/python.exe -m pytest apps/scm/tests -q` — run it **unfiltered**, never `-k`-narrowed (L47).
+  No count is quoted here on purpose: it went stale every sub-module, and the run prints the real one. Ad-hoc smoke
+  scripts live in `temp/`.
 
 ## Sidebar wiring  (`apps/core/navigation.py`)
 
