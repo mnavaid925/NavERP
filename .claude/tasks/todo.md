@@ -25089,11 +25089,21 @@ shadowing. Re-run at close-out: the four 4.18 lanes pass (exit 0).
 asymmetry `FinanceIntegration/` ↔ `templates/scm/finance/`, routes, templates, seeder, and the 7 rules that bit
 during the build); `README.md` marks the roadmap row **18 of 19, Next: 4.19**. Only **4.19** remains.
 
-### Carried forward — open at close-out, deliberately not applied
+### Carried forward — ~~open at close-out~~ **ALL RESOLVED 2026-08-18. Nothing travels to 4.19.**
 
-4.18 is **closed as-is**; two items travel with it. Neither blocks 4.19, and neither is lost:
+> **4.19's Phase 7 must NOT re-do any of this.** Both items below were closed after the section was written.
+> `.claude/tasks/review-scm-4.18-docs.md` now shows **D1–D14 every one `[x] fixed`** with commit shas, and the
+> index shipped as migration `0032`. The only 4.18 work 4.19 inherits is *nothing*. Kept here, struck through
+> rather than deleted, because the reasoning is still the record of why each was deferred in the first place.
 
-1. **13 docs-accuracy findings — `.claude/tasks/review-scm-4.18-docs.md`** (0 Critical, **6 Important**, 7 Minor).
+1. ~~**13 docs-accuracy findings — `.claude/tasks/review-scm-4.18-docs.md`**~~ **DONE — all 13 applied, plus a
+   14th found during the fix run.** *Closed 2026-08-18:* a `code-fixer` pass applied D1–D13 in ID order across
+   23 one-file commits, and raised **D14** itself when the SKILL.md line deferring the index went false mid-run
+   (a concurrent 0032 shipped the very "one-off" it forbade). Highlights: D2 was made **count-free** in all six
+   places rather than bumped 17→18 so it cannot go stale at 4.19; D5 produced the missing `LIVE_LINKS`
+   paragraphs for **both 4.18 and 4.17**, with all 10 bullet→url mappings verified against `navigation.py` and
+   all 11 url names `reverse()`-checked. `manage.py check` clean, `makemigrations --check` no drift, 583 4.18
+   tests green. The original description follows for the record (0 Critical, **6 Important**, 7 Minor).
    A 5-lane read-only audit of the Phase-7 documents against the as-built code, every finding re-verified by hand;
    each carries its exact fix and code evidence. They are **documentation** defects only — no code behaviour is
    implicated and the suite is green. The six Important ones: `accrued_at` attributed to `recalc_totals()` when
@@ -25102,8 +25112,10 @@ during the build); `README.md` marks the roadmap row **18 of 19, Next: 4.19**. O
    `split_charges()` bill-exclusion rule left unstated (D3); the seeder's `_post_grn_receipt` ledger write and its
    four early-return cases undocumented (D4); **no `LIVE_LINKS["4.18"]` paragraph in the skill's mandatory
    `## Sidebar wiring` section** — 4.17's is missing too (D5); and rule 6's gating map omitting that the three
-   delete routes are `@login_required @require_POST` with no admin gate (D6). Cheapest home: the next session that
-   touches `.claude/skills/scm/SKILL.md`, i.e. 4.19's Phase 7 — fix 4.18's and 4.19's sidebar paragraphs together.
+   delete routes are `@login_required @require_POST` with no admin gate (D6). ~~Cheapest home: the next session
+   that touches `.claude/skills/scm/SKILL.md`, i.e. 4.19's Phase 7 — fix 4.18's and 4.19's sidebar paragraphs
+   together.~~ **Superseded — all six were fixed on 2026-08-18, and 4.17's sidebar paragraph was written at the
+   same time. 4.19 only ever needs to add its own.**
 2. ~~**Two deferred indexes → one app-wide index-sweep migration.**~~ **DONE — and the premise was wrong.**
    *Corrected 2026-08-17:* there was only ever **one** deferred index, not two. 4.18's M3 —
    `(tenant, party)` on `LandedCostVoucher` — was real and is now applied: model change `984d527a`, migration
