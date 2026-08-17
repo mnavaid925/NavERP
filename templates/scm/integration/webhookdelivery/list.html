@@ -304,8 +304,22 @@ into the rendered page as visible text (L2), so it is never used here.
                     the view never refuses: handed a spent row it writes Exhausted instead of
                     scheduling a ninth attempt, which the confirm text says outright.
                   {% endcomment %}
+                  {% comment %}
+                    `event` is |escapejs, NOT bare, and that filter is load-bearing rather than
+                    decoration (L42). It is a free-text CharField(60) with no choices and no
+                    validator, and it is the only user-shaped value this sub-module interpolates into
+                    a confirm string — every other one carries a system-generated CNX-/WHK- number,
+                    which is not an option here because WebhookDelivery is TenantOwned and has no
+                    number column. Under plain autoescaping an apostrophe becomes &#x27;, the HTML
+                    parser decodes that back to a bare quote BEFORE the JS engine sees the attribute,
+                    the string literal closes early and the guard is silently gone — a crafted value
+                    executes. escapejs instead emits the backslash-u-0027 numeric escape (and the
+                    same treatment for an ampersand), which leaves the HTML-attribute decode nothing
+                    to turn back into a quote, so the value survives both parsers and still reads
+                    normally in the dialog.
+                  {% endcomment %}
                   {% if obj.status == 'failed' or obj.status == 'pending' %}
-                    <form method="post" action="{% url 'scm:webhookdelivery_retry' obj.pk %}" onsubmit="return confirm('Schedule another delivery attempt for {{ obj.event }}? The next slot on the backoff ladder is stamped onto the row and the attempt count goes up by one. If the ladder is already spent, the row is marked Exhausted instead and no further attempt is scheduled. Nothing is sent either way: 4.19 ships no outbound transport, so this records the schedule and calls nobody. You will land on the delivery so you can see the result.');">
+                    <form method="post" action="{% url 'scm:webhookdelivery_retry' obj.pk %}" onsubmit="return confirm('Schedule another delivery attempt for {{ obj.event|escapejs }}? The next slot on the backoff ladder is stamped onto the row and the attempt count goes up by one. If the ladder is already spent, the row is marked Exhausted instead and no further attempt is scheduled. Nothing is sent either way: 4.19 ships no outbound transport, so this records the schedule and calls nobody. You will land on the delivery so you can see the result.');">
                       {% csrf_token %}<button class="btn-icon" type="submit" title="Retry"><i data-lucide="refresh-cw"></i></button>
                     </form>
                   {% endif %}
