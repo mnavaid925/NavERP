@@ -1599,9 +1599,10 @@ in a later **app-wide index-sweep migration**, not a one-off 0032.
 
 ### The rules that bit during the build — read before changing anything
 1. **Backend package `FinanceIntegration/` ↔ template folder `templates/scm/finance/` — the asymmetry IS the house
-   rule.** All seventeen shipped scm template folders use a short slug while the Python package uses the NavERP.md
+   rule.** Every shipped scm template folder uses a short slug while the Python package uses the NavERP.md
    sub-module title in PascalCase (`ThirdPartyLogistics/` ↔ `3pl/`, `CustomerPortal/` ↔ `portal/`). **Do NOT "fix"
-   `finance/` into `financeintegration/`.**
+   `finance/` into `financeintegration/`.** State the rule without a count — a hard-coded number of template folders
+   goes stale the moment the next sub-module ships one.
 2. **`draft_bill()` is a DRAFT and the only accounting write.** SET_NULL on `bill` so voiding the bill in accounting
    can't cascade a voucher — and the inventory value it justifies — out of existence. Never make 4.18 post a
    `JournalEntry`.
