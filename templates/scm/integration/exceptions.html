@@ -28,6 +28,10 @@ page may read, and nothing else:
                          so options compare with |stringformat:"d" and NEVER |slugify
   document_type_choices  DOCUMENT_TYPE_CHOICES (value, label) pairs for the ?document_type= dropdown
   stats                  dict, EXACTLY three int keys: failed_total, endpoints_affected, codes
+  append_only_note       str. The shared statement of why the exchange log has no Add/Edit/Delete,
+                         the same string the message list and the message detail page print, so the
+                         three cannot drift into three accounts of one rule. Leads the footer card;
+                         this page's own wording about reprocessing follows it.
 
 Filter params on this page: q / endpoint / document_type. There is deliberately no status filter —
 every row here is already failed — and there is no date window: an unbounded failure list is the
@@ -280,7 +284,13 @@ purple / slate and no red, so the failure totals wear orange here and the red st
     </div>
     {% include "partials/pagination.html" %}
 
+    {% comment %}
+      append_only_note first — the shared statement of the rule, the same string the message list and
+      the message detail page print, so the three cannot drift into three accounts of one rule. The
+      paragraph under it is what only this cockpit can say about reprocessing a failure.
+    {% endcomment %}
     <div class="card-body text-muted">
+      <p style="margin:0 0 .75rem;">{{ append_only_note }}</p>
       Reprocessing clears the error text and returns the row to Pending — it does <span class="fw-600">not</span> resend anything, because 4.19 ships no outbound transport. It records that somebody has decided this exchange should be handled again, and it is the only write any screen in this sub-module makes to the exchange log. Nothing here edits or removes a row: <span class="fw-600">if a row looks wrong, that is what the log says happened</span>, and the corrected document is appended alongside it.
     </div>
   </div>
