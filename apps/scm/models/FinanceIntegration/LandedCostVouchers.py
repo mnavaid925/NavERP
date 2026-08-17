@@ -8,7 +8,7 @@ rather than the price printed on the vendor's order.
 
 FOLDER-NAME NOTE (do not "fix" it): the backend package is ``FinanceIntegration/`` while the
 templates live under ``templates/scm/finance/``. That asymmetry is the house rule, not a defect —
-all seventeen shipped scm template folders use a short slug (``3pl/``, ``portal/``, ``coldchain/``,
+every shipped scm template folder uses a short slug (``3pl/``, ``portal/``, ``coldchain/``,
 ``srm/`` …) while the Python package uses the NavERP.md sub-module title in PascalCase.
 ``ThirdPartyLogistics/ClientBillingRuns.py`` and ``CustomerPortal/PortalAccounts.py`` carry the same
 note.
