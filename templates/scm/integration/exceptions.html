@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — the integration EXCEPTIONS cockpit.
+
+This page sits at the SUB-MODULE ROOT rather than inside an entity folder (template rule 6): it is a
+report over IntegrationMessage rows, not one of that model's CRUD pages. The view that renders it,
+apps/scm/views/IntegrationApiGateway/IntegrationMessages.py::integration_exceptions, lives in the
+IntegrationMessages entity module for the same reason — the entity that owns the data owns the report,
+and there is no fifth entity to hand it to.
+
+Renders integration_exceptions, a HAND-ROLLED render() (the ColdChainMonitors / TemperatureExcursions
+house pattern) rather than crud_list — which is why it sets "object_list" EXPLICITLY. Everything this
+page may read, and nothing else:
+
+  object_list            the paginated page slice of failed messages, set explicitly by the view.
+                         Queryset is filter(tenant=…, status="failed").select_related("endpoint") —
+                         so obj.endpoint costs nothing, and the two typed order pointers are NOT
+                         select_related here and are therefore NOT rendered on this page. They are on
+                         the message detail page, one row at a time, where the join is paid once
+  page_obj               paginator page; partials/pagination.html is the L9-safe include (it guards
+                         has_previous / has_next, so page 1 and the last page never call
+                         previous_page_number / next_page_number unconditionally)
+  q                      the search string, echoed back into the box
+  error_groups           list of dicts, EXACTLY three keys each: error_code (str — "" means the
+                         failure was never classified), count (int), endpoint_count (int). Built by
+                         ONE .values("error_code").annotate(...) aggregate, never a per-row query
+  endpoints              IntegrationEndpoint queryset behind the ?endpoint= dropdown — a PK filter,
+                         so options compare with |stringformat:"d" and NEVER |slugify
+  document_type_choices  DOCUMENT_TYPE_CHOICES (value, label) pairs for the ?document_type= dropdown
+  stats                  dict, EXACTLY three int keys: failed_total, endpoints_affected, codes
+
+Filter params on this page: q / endpoint / document_type. There is deliberately no status filter —
+every row here is already failed — and there is no date window: an unbounded failure list is the
+point, because the oldest unresolved failure is usually the one nobody has looked at.
+
+--------------------------------------------------------------------------------------------------
+WHY THE GROUP TABLE DOES NOT LINK ANYWHERE
+--------------------------------------------------------------------------------------------------
+error_groups is a SUMMARY, not a set of filters: neither this page nor the message list accepts an
+?error_code= parameter, so a link on a code would have to invent a param that does not exist and would
+silently return the unfiltered page (L7). The grouping answers one question — "is this fifty separate
+problems or one partner change that broke fifty exchanges?" — and it answers it by being read, not by
+being clicked. The endpoint count beside each code is what separates the two cases: one code across
+one endpoint is that partner; one code across nine is us.
+
+--------------------------------------------------------------------------------------------------
+NO ADD, NO EDIT, NO DELETE — AND THAT IS THE DESIGN
+--------------------------------------------------------------------------------------------------
+IntegrationMessage is append-only: there is no create, edit or delete view, no form module and no
+route for any of them. The single action offered on a row here is Reprocess, which re-queues the row
+by resetting its status to Pending, bumping the attempt count and clearing the recorded error. It
+FIRES NO HTTP REQUEST — 4.19 ships no outbound transport at all — and it redirects to the message,
+so reprocessing from this page leaves it. Multi-line notes are comment/endcomment blocks; a multi-line
+hash comment leaks as visible text (L2).
+
+theme.css ships COLOUR-named badges only. badge-success / badge-danger / badge-warning DO NOT EXIST
+and render completely unstyled (L33, shipped four times). stat-icon ships blue / green / orange /
+purple / slate and no red, so the failure totals wear orange here and the red stays on the badges.
+{% endcomment %}
+{% block title %}Integration Exceptions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Integration Exceptions</h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><span>Integration Exceptions</span></div>
+      <p class="text-muted">Every exchange that failed, grouped by what went wrong. The question this page exists to answer is not &ldquo;what broke&rdquo; but <span class="fw-600">&ldquo;is this one problem or fifty&rdquo;</span> — a single error code spread across nine endpoints is a change on our side; the same code on one endpoint is that partner.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:integrationmessage_list' %}" class="btn btn-outline"><i data-lucide="arrow-left-right"></i> All messages</a>
+      <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline"><i data-lucide="plug"></i> Endpoints</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ stats.failed_total }}</div>
+      <div class="stat-label">Failed exchanges · unbounded on purpose, because the oldest unresolved failure is the one nobody has looked at</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="plug"></i></div>
+      <div class="stat-value">{{ stats.endpoints_affected }}</div>
+      <div class="stat-label">Endpoints affected · one endpoint is that partner, many endpoints is us</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="tags"></i></div>
+      <div class="stat-value">{{ stats.codes }}</div>
+      <div class="stat-label">Distinct error codes · a failure recorded with no code counts as one of them</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ====================================================================== 1. the grouping, read-only
+    One aggregate builds this whole table — never a query per row. It links nowhere on purpose; see
+    the header comment.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Failures by error code</h2>
+      <span class="badge badge-slate">{{ error_groups|length }} code{{ error_groups|length|pluralize }}</span>
+    </div>
+    {% if error_groups %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Error code</th>
+              <th class="text-right">Failed exchanges</th>
+              <th class="text-right">Endpoints hit</th>
+              <th>Shape of the problem</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for g in error_groups %}
+              <tr>
+                <td>
+                  {% comment %}
+                    A blank error_code is a REAL group, not a missing value: the failure was recorded
+                    without being classified. Printing it as "Unclassified" rather than as an empty
+                    cell keeps it countable, because an unclassified pile that grows is itself the
+                    finding.
+                  {% endcomment %}
+                  {% if g.error_code %}
+                    <span class="badge badge-red">{{ g.error_code }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">Unclassified</span>
+                  {% endif %}
+                </td>
+                <td class="text-right fw-600">{{ g.count }}</td>
+                <td class="text-right">{{ g.endpoint_count }}</td>
+                <td class="text-muted">
+                  {% if g.endpoint_count > 1 %}
+                    Spread across {{ g.endpoint_count }} endpoints — look at what changed on our side before opening a ticket with any one partner.
+                  {% else %}
+                    Confined to a single endpoint — this is that connection, not a workspace-wide change.
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">
+        The codes are not clickable, and that is deliberate: neither this page nor the message list accepts an error-code parameter, so a link here would have to invent one and would quietly hand back the unfiltered list. The grouping is meant to be <span class="fw-600">read</span> — it tells you whether to chase a partner or a deployment — and the endpoint dropdown below is how you narrow to the connection it points at.
+      </div>
+    {% else %}
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="check-check"></i>
+          <h3>Nothing has failed</h3>
+          <p>No exchange in this workspace is in a failed state, so there is nothing to group. That is a statement about the log and not about the connections: an endpoint that has never exchanged anything also has nothing to fail. The <a href="{% url 'scm:integrationendpoint_list' %}">endpoints console</a> is where a connection that has gone quiet shows up.</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {% comment %}
+    ============================================================================ 2. the failed rows
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Failed exchanges</h2>
+      <div class="badge-group">
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search MSG- number, control number, external id or source reference…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            `endpoint` is the only pk on this page, so it is the only place |stringformat:"d" appears.
+            |slugify is wrong on a pk everywhere and is banned. A non-numeric or oversized value is
+            dropped before it reaches the ORM, so ?endpoint=abc narrows nothing and still returns 200
+            (L11).
+          {% endcomment %}
+          <select name="endpoint" aria-label="Endpoint" class="form-select">
+            <option value="">Every endpoint</option>
+            {% for e in endpoints %}
+              <option value="{{ e.pk }}" {% if request.GET.endpoint == e.pk|stringformat:"d" %}selected{% endif %}>{{ e.number }} · {{ e.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="document_type" aria-label="Document type" class="form-select">
+            <option value="">Any document</option>
+            {% for val, label in document_type_choices %}
+              <option value="{{ val }}" {% if request.GET.document_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'scm:integration_exceptions' %}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        There is no status filter here because every row on this page is already a failure, and no date window because a failure list that quietly hid the old ones would hide exactly the rows nobody has dealt with. To read the whole log — successes included — open <a href="{% url 'scm:integrationmessage_list' %}">Integration Messages</a>, where the dates, direction, status and related-record filters all live.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Occurred</th>
+            <th>Endpoint</th>
+            <th>Document</th>
+            <th>Error</th>
+            <th class="text-right">Attempts</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="nowrap">
+                <a href="{% url 'scm:integrationmessage_detail' obj.pk %}" class="fw-600">{{ obj.occurred_at|date:"M d, Y" }}</a>
+                <div class="form-help mono">{{ obj.occurred_at|date:"H:i:s" }} · {{ obj.number }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  endpoint is the model's one CASCADE FK and is never NULL, and the view's
+                  select_related covers it — so this cell needs no guard and costs no query. The
+                  purchase_order / sales_order pointers are NOT select_related on this view and are
+                  therefore not rendered here; they are on the message detail page instead.
+                {% endcomment %}
+                <a href="{% url 'scm:integrationendpoint_detail' obj.endpoint_id %}" class="fw-600">{{ obj.endpoint.name }}</a>
+                <div class="form-help">
+                  {% if obj.direction == 'inbound' %}<span class="badge badge-info">{{ obj.get_direction_display }}</span>
+                  {% elif obj.direction == 'outbound' %}<span class="badge badge-slate">{{ obj.get_direction_display }}</span>
+                  {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {{ obj.get_document_type_display }}
+                {% if obj.control_number %}<div class="form-help mono">{{ obj.control_number }}</div>{% endif %}
+              </td>
+              <td>
+                {% if obj.error_code %}
+                  <span class="badge badge-red">{{ obj.error_code }}</span>
+                {% else %}
+                  <span class="badge badge-muted">Unclassified</span>
+                {% endif %}
+                {% if obj.error_message %}
+                  <div class="form-help">{{ obj.error_message|truncatechars:120 }}</div>
+                {% endif %}
+              </td>
+              <td class="text-right">{{ obj.attempt_count }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:integrationmessage_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    NO EDIT AND NO DELETE — no view, no form module and no route for either, so a
+                    button would 404 and a working one would let the log a partner dispute is argued
+                    from be rewritten after the dispute opened. Every row on this page is failed, so
+                    Reprocess is always available: the view refuses it only on pending and
+                    acknowledged rows, neither of which can appear here.
+                  {% endcomment %}
+                  <form method="post" action="{% url 'scm:integrationmessage_reprocess' obj.pk %}" onsubmit="return confirm('Re-queue {{ obj.number }} for handling? Its status returns to Pending, the attempt count goes up by one and the recorded error is cleared. Nothing is sent: 4.19 ships no outbound transport, so this queues the row and calls no partner. You will land on the message, so re-queuing several means coming back here between each.');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="Reprocess"><i data-lucide="refresh-cw"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="shield-check"></i>
+                  <h3>No failed exchanges match these filters</h3>
+                  <p>Nothing is failing for this endpoint and document type. Clear the filters to see every failure in the workspace, or open <a href="{% url 'scm:integrationmessage_list' %}">Integration Messages</a> to read the whole log including the exchanges that worked. An endpoint with no failures and no traffic at all is a different problem, and it shows up on the <a href="{% url 'scm:integrationendpoint_list' %}">endpoints console</a> rather than here.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      Reprocessing clears the error text and returns the row to Pending — it does <span class="fw-600">not</span> resend anything, because 4.19 ships no outbound transport. It records that somebody has decided this exchange should be handled again, and it is the only write any screen in this sub-module makes to the exchange log. Nothing here edits or removes a row: <span class="fw-600">if a row looks wrong, that is what the log says happened</span>, and the corrected document is appended alongside it.
+    </div>
+  </div>
+{% endblock %}
