@@ -773,10 +773,13 @@ class LandedCostAllocation(TenantOwned):
     ``voucher__tenant`` on those queries would turn an indexed lookup into a join on every report
     page — and the indexes below exist precisely to serve them.
 
-    **Every column is ``editable=False`` and** :meth:`LandedCostVoucher.allocate` **is their only
-    writer.** There is no form, no create/edit/delete view, no list page and no url; the rows render
-    inside the voucher detail page and the variance report, and admin registration is READ-ONLY (the
-    ``StockMoveAdmin`` precedent).
+    **Every DERIVED column is ``editable=False``** (``quantity``, ``basis_value``, ``basis_used``,
+    ``allocated_amount``, ``unit_cost_uplift``) **and** :meth:`LandedCostVoucher.allocate` **is the
+    only writer of any of them.** The four FKs above and the inherited ``tenant``/timestamps are
+    ordinary fields; what keeps THEM unwritten is that nothing points a form at this model. There is
+    no form, no create/edit/delete view, no list page and no url; the rows render inside the voucher
+    detail page and the variance report, and admin registration is READ-ONLY (the ``StockMoveAdmin``
+    precedent).
     """
 
     voucher = models.ForeignKey("scm.LandedCostVoucher", on_delete=models.CASCADE,
