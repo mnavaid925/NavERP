@@ -1124,8 +1124,8 @@ LIVE_LINKS = {
     # the first time Accounting voids something (L29). Every target below is a real STAFF-facing page
     # that renders today; none is a placeholder (L32).
     "4.18": {
-        "Accounts Payable":         "scm:finance_payables",          # bullet (READ-ONLY register over 4.1 GRN.bill + 4.6 FreightInvoice.bill + 4.18 LandedCostVoucher.bill - no AP table)
-        "Accounts Receivable":      "scm:finance_receivables",       # bullet (READ-ONLY register over 4.5 SalesOrder.invoice + 4.17 ClientBillingRun.invoice + 4.10 RMA.credit_note - no AR table)
+        "Accounts Payable":         "scm:finance_payables",          # bullet (READ-ONLY register over 4.1 GoodsReceiptNote.bill + 4.6 FreightInvoice.bill + 4.18 LandedCostVoucher.bill - no AP table)
+        "Accounts Receivable":      "scm:finance_receivables",       # bullet (READ-ONLY register over 4.5 SalesOrder.invoice + 4.17 ClientBillingRun.invoice + 4.10 ReturnAuthorization.credit_note - no AR table)
         "Landed Cost Calculation":  "scm:landedcostvoucher_list",    # bullet (the one genuinely new capability - voucher + charges + derived allocations)
         "Budgeting":                "scm:finance_budget_variance",   # bullet (COMPUTED over accounting.BudgetLine.org_unit vs PR/PO commitments vs freight+landed actuals - no Budget table)
         "Tax Management":           "scm:dutytariff_list",           # bullet (HS x origin duty master; sales/VAT/GST stays accounting.TaxCode, FK'd from the charge line)
