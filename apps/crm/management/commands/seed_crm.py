@@ -493,7 +493,12 @@ class Command(BaseCommand):
             is_active=True, description="Posts to #sales when an opportunity is created.")
         for event, status, code in [("opportunity.created", "success", 200), ("manual.test", "pending", None)]:
             payload = json.dumps({"event": event, "demo": True, "at": timezone.now().isoformat()})
-            sig = hmac.new(wh.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+            # get_secret(), never `.secret`: Webhook.save() encrypts the column in place, so after
+            # the create() above `wh.secret` holds `fernet.v1:` ciphertext. Signing with that would
+            # give every seeded delivery an HMAC over the wrong key material — one that no longer
+            # matches what _deliver_webhook computes, which is exactly the mismatch the model's own
+            # comment and the engine's warn against.
+            sig = hmac.new(wh.get_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()
             WebhookDelivery.objects.create(
                 tenant=tenant, webhook=wh, event=event, payload=payload, signature=sig,
                 status=status, response_code=code)
