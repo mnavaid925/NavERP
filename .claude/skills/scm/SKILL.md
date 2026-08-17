@@ -1615,8 +1615,20 @@ in a later **app-wide index-sweep migration**, not a one-off 0032.
 5. **The charge route split is a security decision.** `landed-cost-vouchers/<int:pk>/charges/add/` nests the create
    under the PARENT (the voucher comes from the ROUTE, never a POST-body pk — the graft-onto-another-workspace vector);
    `edit`/`delete` take the CHARGE's own pk. All scoped through `voucher__tenant=request.tenant` regardless.
-6. **All four verbs are POST-only AT THE VIEW and `@tenant_admin_required`** — a GET is a 405, not a silent state
-   change. The four report pages are `@login_required` STAFF pages, read-only, no `@require_POST`.
+6. **The FULL gating map — SEVEN POST-only routes, and only four of them are admin-gated.** A GET on any of the
+   seven is a **405**, not a silent state change, which is exactly what `test_finance_security.py` asserts.
+   * the four **money-committing verbs** `landedcostvoucher_allocate` / `_accrue` / `_draft_bill` / `_cancel` —
+     `@tenant_admin_required @require_POST`;
+   * the three **deletes** `landedcostvoucher_delete`, `landedcostcharge_delete`, `dutytariff_delete` —
+     `@login_required @require_POST`: POST-only but **MEMBER-PERMITTED, with no admin gate**. That is a deliberate
+     divergence from the sibling precedent where 4.13's `asset_delete` IS `@tenant_admin_required`;
+   * every list / detail / create / edit page — voucher, charge (`landedcostcharge_create`/`_edit`) and tariff — is
+     plain `@login_required`; a GET renders the form;
+   * the four report pages are `@login_required` STAFF pages, read-only, no `@require_POST`.
+
+   So in the templates: the **four verb buttons** need `{% if request.user.is_superuser or request.user.is_tenant_admin %}`,
+   and the **three Delete buttons must NOT** — gating them hides an action ordinary members legitimately have, and
+   their un-gated state is a documented decision rather than a security defect to file.
 7. **A purely-recoverable or purely-expensed voucher must still reach AP** — `draft_bill()`/the ladder must not assume
    every voucher capitalises; the "Draft the bill" button shows even on a voucher that can never be allocated.
 
