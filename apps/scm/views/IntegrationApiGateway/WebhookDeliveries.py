@@ -215,12 +215,19 @@ def webhookdelivery_list(request):
     join ``?q=`` searches through (``subscription__name``), which ``select_related`` does not itself
     provide but which shares the same relation.
 
+    ``.defer("payload_excerpt")`` drops the one ``TextField`` no list column renders, off the table
+    that grows a row per attempt. ``error_message`` is emphatically NOT deferred — the failure cell
+    truncates it at 64 chars, and deferring a field the template reads turns one saved column into
+    one extra query PER ROW. ``defer`` touches the SELECT list only, so the search and both filters
+    are unaffected.
+
     **No Add button on this page** and no Edit/Delete in the Actions column — see the module
     docstring. ``append_only_note`` is passed so the template can say why in one place rather than
     each page inventing its own wording.
     """
     qs = (WebhookDelivery.objects.filter(tenant=request.tenant)
-          .select_related("subscription"))
+          .select_related("subscription")
+          .defer("payload_excerpt"))
     qs = _delivery_window(qs, request.GET)
 
     return crud_list(
