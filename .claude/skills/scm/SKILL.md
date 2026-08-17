@@ -1632,6 +1632,38 @@ in a later **app-wide index-sweep migration**, not a one-off 0032.
 7. **A purely-recoverable or purely-expensed voucher must still reach AP** — `draft_bill()`/the ladder must not assume
    every voucher capitalises; the "Draft the bill" button shows even on a voucher that can never be allocated.
 
+### Forms  (`forms/FinanceIntegration/`)
+
+Three classes, and **`LandedCostAllocation` deliberately has none** — its derived columns are `editable=False` and
+`allocate()` is their only writer. All three `Meta.fields` are **WHITELISTS, never `Meta.exclude`**: a whitelist
+fails CLOSED when a column is added later, and what an exclude list would silently admit here is `status` (the verb
+ladder's), `bill` (the AP hand-off) and the derived money/stamp columns.
+
+`LandedCostVoucherForm(TenantModelForm)` builds the *envelope* — `goods_receipt` (narrowed to `status="received"`,
+because a draft GRN has posted nothing to allocate against, so offering it is offering a dead end), `party`,
+`shipment`, `trade_document`, `currency`, `cost_date`, `allocation_basis`, `notes` — and carries **no money at
+all**. `TenantUniqueMixin` is deliberately NOT mixed in: the only `unique_together` here is `("tenant", "number")`
+and `number` is auto-minted by `TenantNumbered.save()` with its own retry guard, so there is no user-enterable
+duplicate for the mixin to catch.
+
+`LandedCostChargeForm(TenantModelForm)` — **three things you cannot guess from the section above:**
+* **the parent is a KEYWORD-ONLY argument** — `__init__(self, *args, voucher=None, **kwargs)`. Instantiate it the
+  ordinary way and the unsaved instance has no voucher, so `effective_basis` has nothing to walk and `full_clean()`
+  validates against the wrong basis. The view passes it from the ROUTE, never from a POST-body pk.
+* it gets **ZERO automatic tenant scoping** — `LandedCostCharge` has no tenant column, so `TenantModelForm` cannot
+  know how to narrow anything. All four FKs (`party`, `freight_invoice`, `gl_account`, `tax_code`) are narrowed
+  **BY HAND** and re-checked in `clean()` through `_reject_foreign`; a narrowed `<select>` has never held against a
+  crafted POST (L39 §2). Each narrowed dropdown also runs `_keep_current` so an already-stored row that has stopped
+  qualifying (role removed, account deactivated) is re-admitted instead of silently NULLing the FK on an edit.
+* the payee dropdown **REUSES `_carrier_parties(tenant)`** — roles supplier / vendor / partner — on **both** forms
+  rather than adding a broker-role helper: a forwarder or customs broker is procured from exactly as a carrier is,
+  and a sixth near-identical role helper is how two copies of one rule start to drift.
+
+`DutyTariffForm(TenantUniqueMixin, TenantModelForm)` — the mixin **is** on the tariff and deliberately **not** on
+the voucher, because `(tenant, hs_code, country_of_origin, effective_from)` is a genuinely user-enterable duplicate.
+Its `tax_code` dropdown is re-filtered from the model (not chained off the base's result) so scoping is true by
+CONSTRUCTION for a tenant-less caller, and `_keep_current` re-admits a deactivated stored code.
+
 ### Routes  (`urls/FinanceIntegration/`, `app_name="scm"`)
 `landedcostvoucher_*` (list/create/detail/edit/delete) **+ the verb ladder** `_allocate` / `_accrue` / `_draft_bill` /
 `_cancel`; `landedcostcharge_create` (nested under the voucher) + `landedcostcharge_edit` / `_delete` (own pk);
