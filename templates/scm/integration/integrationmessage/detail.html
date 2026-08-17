@@ -21,6 +21,9 @@ Everything this page may read, and nothing else:
   can_reprocess  bool, computed by the view: obj.status is neither "pending" nor "acknowledged". It
                  gates the Reprocess form below, and the view enforces the same rule itself, so a
                  crafted POST is refused with a message rather than honoured
+  append_only_note  str. The shared statement of why there is no Edit and no Delete, the same string
+                 the list page and the exceptions cockpit print. Leads the Actions card; this page's
+                 own wording follows it.
 
 There is deliberately NO source_label key — the template calls obj.get_source_display directly, and a
 precomputed duplicate would be a second place for the same string to drift.
@@ -421,8 +424,16 @@ full document body is never stored.
   <div class="card">
     <div class="card-header"><h2 class="card-title">Actions</h2></div>
     <div class="card-body">
+      {% comment %}
+        append_only_note first — the shared statement of the rule, the same string the list page and
+        the exceptions cockpit print, so the three cannot drift into three accounts of one rule
+        (templates/scm/portal/portalactivity/detail.html:309 is the shipped shape). The paragraph
+        under it is what only THIS page can say: which two verbs are absent from a detail screen.
+      {% endcomment %}
       <p class="text-muted" style="margin:0 0 .9rem;">
-        <span class="badge badge-slate">Append-only</span>
+        <span class="badge badge-slate">Append-only</span> {{ append_only_note }}
+      </p>
+      <p class="text-muted" style="margin:0 0 .9rem;">
         There is no Edit and no Delete on this page, and neither is missing. An exchange log is evidence of what crossed the boundary; a row somebody could revise after the other party acted on it would not be evidence, and one they could remove would be worse. A mistaken exchange is corrected by <span class="fw-600">appending the corrected document as a new row</span>, and the pair is read together — the same posture the stock ledger takes with a compensating movement.
       </p>
       {% if can_reprocess %}
