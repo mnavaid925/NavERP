@@ -260,7 +260,11 @@ class TestWebhookForm:
         }, instance=wh, tenant=tenant_a)
         assert form.is_valid(), form.errors
         saved = form.save()
-        assert saved.secret == "original_secret_value"
+        # Read through get_secret(): the column holds Fernet ciphertext now. The behaviour under
+        # test is unchanged — blank still preserves — but the round-trip goes through the cipher,
+        # and asserting the plaintext is absent from the column is what proves it never leaked back.
+        assert saved.get_secret() == "original_secret_value"
+        assert "original_secret_value" not in saved.secret
 
     def test_set_secret_on_edit_updates_it(self, tenant_a):
         """Providing a new secret on edit replaces the stored one."""
@@ -278,7 +282,10 @@ class TestWebhookForm:
         }, instance=wh, tenant=tenant_a)
         assert form.is_valid(), form.errors
         saved = form.save()
-        assert saved.secret == "new_secret_value"
+        # As above — a replacement secret is stored encrypted, and the old one must be gone.
+        assert saved.get_secret() == "new_secret_value"
+        assert "new_secret_value" not in saved.secret
+        assert "old_secret" not in saved.secret
 
     def test_edit_form_html_does_not_contain_raw_secret(self, tenant_a):
         """Rendering the bound edit form must NOT contain the raw secret value in the HTML."""
