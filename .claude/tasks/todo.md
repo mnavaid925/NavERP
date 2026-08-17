@@ -25088,3 +25088,28 @@ shadowing. Re-run at close-out: the four 4.18 lanes pass (exit 0).
 **Docs:** `.claude/skills/scm/SKILL.md` gains a 4.18 section (models, the verb ladder, the folder-name
 asymmetry `FinanceIntegration/` ↔ `templates/scm/finance/`, routes, templates, seeder, and the 7 rules that bit
 during the build); `README.md` marks the roadmap row **18 of 19, Next: 4.19**. Only **4.19** remains.
+
+### Carried forward — open at close-out, deliberately not applied
+
+4.18 is **closed as-is**; two items travel with it. Neither blocks 4.19, and neither is lost:
+
+1. **13 docs-accuracy findings — `.claude/tasks/review-scm-4.18-docs.md`** (0 Critical, **6 Important**, 7 Minor).
+   A 5-lane read-only audit of the Phase-7 documents against the as-built code, every finding re-verified by hand;
+   each carries its exact fix and code evidence. They are **documentation** defects only — no code behaviour is
+   implicated and the suite is green. The six Important ones: `accrued_at` attributed to `recalc_totals()` when
+   `accrue()` stamps it and `allocate()` clears it (D1); the stale "seventeen template folders" count, which also
+   sits in five of 4.18's own docstrings (D2); the charge line's `party`/`freight_invoice` columns and the
+   `split_charges()` bill-exclusion rule left unstated (D3); the seeder's `_post_grn_receipt` ledger write and its
+   four early-return cases undocumented (D4); **no `LIVE_LINKS["4.18"]` paragraph in the skill's mandatory
+   `## Sidebar wiring` section** — 4.17's is missing too (D5); and rule 6's gating map omitting that the three
+   delete routes are `@login_required @require_POST` with no admin gate (D6). Cheapest home: the next session that
+   touches `.claude/skills/scm/SKILL.md`, i.e. 4.19's Phase 7 — fix 4.18's and 4.19's sidebar paragraphs together.
+2. **Two deferred indexes → one app-wide index-sweep migration.** 4.18's M3 (`(tenant, party)` on
+   `LandedCostVoucher`) and 4.17's equivalent finding were both deferred because their migration numbers were
+   claimed in a shared checkout (L43). One sweep migration is the right home for both; do not spend a number on
+   either alone.
+
+Audit coverage note: the `README/sidebar` lane stalled on all six attempts. Its two otherwise-uncovered checks were
+run by hand and are clean — the five `LIVE_LINKS["4.18"]` keys match the NavERP.md 4.18 bullets verbatim, and no
+document still calls 4.18 roadmap or states a wrong SCM count — so no known gap remains, but the lane is recorded
+as missing coverage rather than as a pass.
