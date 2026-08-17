@@ -27,6 +27,10 @@ Everything this page may read, and NOTHING else:
   active_category              "" on the unscoped route; "erp"/"ecommerce"/"iot"/"edi" on the four
                                category routes
   stats                        dict with EXACTLY: total / connected / error / disabled / active
+  is_tenant_admin              bool. Gates the row Delete form and NOTHING ELSE on this page —
+                               integrationendpoint_delete is @tenant_admin_required, while
+                               integrationendpoint_edit and _create are plain @login_required and
+                               stay outside the gate.
 
 Filter params: q / category / system / direction / transport / status / environment /
 lifecycle_stage. Every one is a STRING vocabulary compared directly against request.GET.<param>.
@@ -385,18 +389,23 @@ guard (L42). The apostrophes written into the string are escaped \' for the same
                     everything it recorded, so editing here cannot rewrite what already crossed the
                     boundary.
 
-                    Delete is @require_POST AND @tenant_admin_required. The button is rendered for
-                    everyone and the decorator refuses a non-admin — this list carries no
-                    is_tenant_admin key, and a hidden button would be a second copy of a rule the
-                    view already enforces, free to drift from it. Only the CNX- number goes into the
-                    confirm string (L42) and the apostrophes in it are written \' because &#39; is
-                    decoded back to a quote before JavaScript sees the attribute, which would
-                    silently disable the guard.
+                    Delete is @require_POST AND @tenant_admin_required, so it is gated on
+                    is_tenant_admin — the same key and the same meaning as on the detail page, which
+                    already did this. That is not a second copy of the rule free to drift from it:
+                    the decorator is still the only boundary, and this only stops offering a member a
+                    button whose click lands on a raw 403 PermissionDenied page. Edit is NOT inside
+                    the gate — integrationendpoint_edit is plain @login_required.
+
+                    Only the CNX- number goes into the confirm string (L42) and the apostrophes in it
+                    are written \' because &#39; is decoded back to a quote before JavaScript sees the
+                    attribute, which would silently disable the guard.
                   {% endcomment %}
                   <a href="{% url 'scm:integrationendpoint_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'scm:integrationendpoint_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every message logged against this connection is deleted with it, and the exchange log is the record of what actually crossed the boundary — once it is gone there is no way to show a partner what was sent or when. Deleting is restricted to workspace admins. Set the status to Disabled instead: that stops the connection being used and keeps its whole history readable.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if is_tenant_admin %}
+                    <form method="post" action="{% url 'scm:integrationendpoint_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every message logged against this connection is deleted with it, and the exchange log is the record of what actually crossed the boundary — once it is gone there is no way to show a partner what was sent or when. Deleting is restricted to workspace admins. Set the status to Disabled instead: that stops the connection being used and keeps its whole history readable.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
