@@ -38,7 +38,8 @@ page consumes is listed, not merely the list variable):
   ``{% if request.GET.status == value %}selected{% endif %}`` — so ``|stringformat:"d"`` appears
   nowhere on this page and ``|slugify`` is wrong everywhere.
 * ``scm/integration/integrationendpoint/detail.html`` — ``obj``, ``recent_messages``,
-  ``message_stats``, ``is_tenant_admin``. See :func:`integrationendpoint_detail`.
+  ``message_stats``, ``is_tenant_admin``, ``plaintext_once`` (the pop-once credential reveal, or
+  ``None`` on every ordinary visit). See :func:`integrationendpoint_detail`.
 * ``scm/integration/integrationendpoint/form.html`` — ``form`` + ``is_edit`` (+ ``obj`` on the EDIT
   path only, from ``crud_edit``; ``crud_create`` passes no ``obj``, so every ``{{ obj.* }}`` must sit
   inside ``{% if is_edit %}`` or it renders a blank fragment).
@@ -70,6 +71,16 @@ from apps.scm.models.IntegrationApiGateway._choices import (
 #: builds the whole thing is the payload, not a guard). ``IntegrationMessage`` accumulates one row per
 #: exchange forever, so an unbounded panel is a page that gets slower every week it is left alone.
 RECENT_MESSAGE_ROWS = 10
+
+#: The session key the one-time credential reveal travels on. Written only by
+#: :func:`integrationendpoint_rotate_credential`, read AND POPPED by
+#: :func:`integrationendpoint_detail`. The plaintext must NOT ride the messages framework: that
+#: serialises to the message store — Django's default ``FallbackStorage`` writes a base64 cookie and
+#: falls back to ``django_session`` — where it lingers until some later render consumes it, readable
+#: from a database dump, a backup, a proxy log or a hijacked session (L25). This mirrors the sibling
+#: ``webhooksubscription_rotate_secret`` / ``webhooksubscription_detail`` pair in this same
+#: sub-module, and ``accounting.integration_rotate_key`` before it.
+_REVEAL_SESSION_KEY = "_cnx_credential_reveal"
 
 
 def _detail(pk):
@@ -207,6 +218,11 @@ def integrationendpoint_detail(request, pk):
     * ``is_tenant_admin`` — bool, gates the rotate-credential and delete buttons. Both routes behind
       them are ``@tenant_admin_required``, so this only decides whether a member is shown a button
       that would refuse them; hiding it is courtesy, the decorator is the boundary.
+    * ``plaintext_once`` — the credential :func:`integrationendpoint_rotate_credential` just minted,
+      or ``None``. It arrives on a POP-ONCE session key rather than in a flash message (L25 — see
+      :data:`_REVEAL_SESSION_KEY`), and the pop happens on EVERY visit to this page, which is what
+      makes "exactly once" true: a refresh finds the key already gone. It is compared against ``pk``
+      so a reveal can never bleed onto a different connection's page.
 
     Both panels are keyed on ``endpoint_id=pk`` **plus** ``tenant=request.tenant`` rather than on the
     fetched object, which lets them run alongside ``crud_detail``'s own fetch instead of forcing a
@@ -231,6 +247,9 @@ def integrationendpoint_detail(request, pk):
         ignored=Count("id", filter=Q(status="ignored")),
     )
 
+    reveal = request.session.pop(_REVEAL_SESSION_KEY, None)
+    plaintext_once = reveal["secret"] if reveal and reveal.get("pk") == pk else None
+
     return crud_detail(
         request, model=IntegrationEndpoint, pk=pk,
         template="scm/integration/integrationendpoint/detail.html",
@@ -240,6 +259,7 @@ def integrationendpoint_detail(request, pk):
             "recent_messages": recent_messages,
             "message_stats": message_stats,
             "is_tenant_admin": _is_tenant_admin(request.user),
+            "plaintext_once": plaintext_once,
         },
     )
 
@@ -322,8 +342,17 @@ def integrationendpoint_rotate_credential(request, pk):
     What is stored is a 12-char prefix and a SHA-256 digest, and the module docstring on
     ``IntegrationEndpoint`` explains at length why that is right HERE and wrong in general (a key you
     must USE needs encryption at rest, not hashing; hashing is correct only because nothing signs and
-    nothing dials). The plaintext exists in this function's local scope and in exactly one flash
-    message, then it is gone: **there is no reveal view and there must not be one.**
+    nothing dials). The plaintext exists in this function's local scope and on ONE pop-once session
+    key that the redirect target consumes, then it is gone: **there is no reveal view and there must
+    not be one.**
+
+    It rides :data:`_REVEAL_SESSION_KEY` rather than ``messages.success`` because the messages
+    framework serialises to the message store — a base64 cookie under Django's default
+    ``FallbackStorage``, falling back to ``django_session`` — and a plaintext credential parked there
+    survives until some later render consumes it, readable from a DB dump, a backup, a proxy log or a
+    hijacked session (L25). The flash still fires; it just carries no secret. The pop-once key is
+    read exactly once and is pk-scoped, so a reveal cannot bleed onto another connection's page. This
+    is byte-for-byte the sibling :func:`webhooksubscription_rotate_secret` in this same sub-module.
 
     ``write_audit_log`` records that a rotation happened and NEVER the value — ``crud.py``'s
     ``_SENSITIVE_AUDIT_FIELDS`` redaction protects the ``crud_*`` paths, but this is a hand-rolled
@@ -347,8 +376,9 @@ def integrationendpoint_rotate_credential(request, pk):
         obj.save(update_fields=["credential_prefix", "credential_hash", "updated_at"])
         write_audit_log(request.user, obj, "update", changes={"credential": "rotated"})
 
+    request.session[_REVEAL_SESSION_KEY] = {"pk": obj.pk, "secret": plaintext}
     messages.success(
         request,
-        f"New credential for {obj.number}: {plaintext} — copy it now. It is shown once and is not "
-        "stored; only a prefix and a one-way digest are kept, so it cannot be recovered from here.")
+        f"Credential rotated for {obj.number} — the new value is shown once on this page. Copy it "
+        "now; only a prefix and a one-way digest are kept, so it cannot be retrieved again.")
     return _detail(pk)
