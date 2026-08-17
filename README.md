@@ -49,8 +49,8 @@ This repository currently delivers the **Module 0 foundation** (System Admin & S
 `core`/`accounts`/`tenants`/`dashboard`) plus three domain modules built on it: **Module 1 — CRM** (1.1–1.12),
 **Module 2 — Accounting & Finance** (2.1–2.15), **Module 3 — HRM** (employees, org structure, onboarding,
 offboarding, recruiting, attendance, leave, time tracking, holidays, payroll, statutory/tax, and performance
-management — goals, reviews, continuous feedback, and performance improvement — 38 of 41 sub-modules), and the start
-of **Module 4 — Supply Chain Management** (4.1 Procurement: requisition → RFQ → purchase order → goods receipt with
+management — goals, reviews, continuous feedback, and performance improvement — 38 of 41 sub-modules), and
+**Module 4 — Supply Chain Management** at 18 of 19 sub-modules (4.1 Procurement: requisition → RFQ → purchase order → goods receipt with
 three-way match; 4.2 Supplier Relationship Management: onboarding, signal-derived scorecards, contracts, catalogs,
 risk; 4.3 Inventory Management: the append-only stock-move ledger with derived on-hand, transfers, adjustments,
 reorder automation and FIFO/LIFO/WAC valuation; 4.4 Warehouse Management: putaway, wave/batch/zone picking,
@@ -86,8 +86,39 @@ stack. MTBF, MTTR and availability return **None, never 0**, on a zero denominat
 of 4.3's one item master — there is no second parts catalogue — and issuing parts is the sub-module's only
 ledger write, posting a new `maintenance` `StockMove` type deliberately kept out of COGS (a spare fitted to a
 machine is upkeep, not the cost of a good sold) and equally out of `issue` (which 4.7 reads as customer demand).
-Asset Depreciation READS `accounting.FixedAsset`; SCM stores no depreciation figure and posts no journal entry).
-The remaining functional modules (5–13) and SCM 4.19 are planned and scaffolded against the same core. The suite stands at **9,000+ passing tests**.
+Asset Depreciation READS `accounting.FixedAsset`; SCM stores no depreciation figure and posts no journal entry;
+4.14 Labor Management: engineered multi-determinant labour standards resolved most-specific-wins and answering
+**None, never a zero standard** — an unmeasured job that reads as a failing one is worse than no measurement —
+warehouse shift sessions whose productivity figures are every one derived, and booked activity intervals that
+**snapshot** their standard at file time so re-timing it cannot rewrite last month; it declares no attendance table
+(HRM owns attendance), no task table (4.4 owns tasks), and writes no stock move and no journal entry at all;
+4.15 Cold Chain Management: monitors watching exactly one of a location, an asset or a shipment through typed FKs
+rather than a generic relation, an append-only temperature log with no edit and no delete, and excursions whose
+every measured column is written solely by the detector under a lock on the monitor row, with the breached limits
+snapshotted onto the episode; mean kinetic temperature returns **None** rather than 0 on frozen ranges per
+USP &lt;1079.2&gt;, and no temperature is ever coerced through a zero default — −18 °C is the normal operating point,
+so a blank cell must not become a plausible 0 °C;
+4.16 Customer Portal: a per-customer entitlement record that is deliberately **not a login** (users bind through
+CRM's existing access model, since a second binding could disagree about *which party a user is* and whichever page
+read it would decide whose orders that user saw), expiring/revocable/download-audited document shares whose
+ownership is re-checked **in the download view** rather than only at the form, and order tracking that earns its
+place by joining 4.5 to 4.6 in one row neither module's own list shows;
+4.17 Third-Party Logistics (3PL): warehouse-as-a-service billing — client configuration on `core.Party` rather than
+a second company table, versioned rate cards over a 14-value charge basis, and a reviewable billing worksheet whose
+quantities are **derived** from receipts, picks, shipments and the ledger before being approved into a **draft**
+invoice; charge bases that are priceable but not measurable today write `needs_manual_quantity` and name the missing
+measurement instead of guessing a conversion factor;
+4.18 Finance & Accounting Integration: three of its five bullets are **read-only computed registers rather than
+tables**, because what we owe and what we are owed already exist as pointers into `apps/accounting` from six shipped
+models — an AP, AR or budget table here would be a second copy of the same money that drifts the first time
+Accounting voids something. The one genuinely new capability is **landed cost**: a voucher over a goods receipt
+whose typed charges (freight, duty, brokerage, insurance, drayage, port fees…) are spread across the receipt's
+inbound stock moves by value, quantity, weight, volume or equal share as an **additive layer over the append-only
+ledger** — it never edits a move, it rolls `Item.average_cost`, and re-allocating reverses its own prior roll first
+so the button is safe to press twice. Alongside it sits an effective-dated customs-duty master keyed by HS code ×
+country of origin, **snapshotted onto the charge** so a re-rate next quarter cannot rewrite what a shipment cleared
+customs at. `draft_bill()` drafts an `accounting.Bill` and stops — SCM posts no journal entry).
+The remaining functional modules (5–13) and SCM 4.19 are planned and scaffolded against the same core. The suite stands at **16,917 passing tests**.
 
 - [`NavERP.md`](NavERP.md) — the master catalog of all modules (0–13) and their sub-modules.
 - [`NavERP-ERD.md`](NavERP-ERD.md) — the unified core data model (the `Party` + two-ledger spine every module reuses).
