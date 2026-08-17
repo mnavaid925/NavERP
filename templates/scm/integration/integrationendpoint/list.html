@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — the CONNECTION REGISTER (CNX-).
+
+Renders apps/scm/views/IntegrationApiGateway/IntegrationEndpoints.py::integrationendpoint_list,
+which returns crud_list(...). ONE view sits behind FIVE routes: the unscoped
+scm:integrationendpoint_list plus four category-scoped literals (erp / ecommerce / iot / edi) that
+pass their category through Django's extra-options dict. That is why this page is written once and
+retitles itself — the EDI person clicking "EDI Management" in the sidebar lands on the trading-partner
+register rather than on a mixed list they then have to filter by hand.
+
+Everything this page may read, and NOTHING else:
+
+  object_list / page_obj / q   from crud_list (apps/core/crud.py). object_list is THE ROW VAR —
+                               `endpoints` is a different page's dropdown queryset and does not
+                               exist here.
+  category_choices             ENDPOINT_CATEGORY_CHOICES   (erp / ecommerce / iot / edi / custom)
+  system_choices               ENDPOINT_SYSTEM_CHOICES     (sap … custom)
+  direction_choices            ENDPOINT_DIRECTION_CHOICES  (inbound / outbound / bidirectional)
+  transport_choices            TRANSPORT_CHOICES           (api_rest … manual)
+  status_choices               ENDPOINT_STATUS_CHOICES     (disconnected / connected / error / disabled)
+  environment_choices          ENVIRONMENT_CHOICES         (production / sandbox)
+  lifecycle_choices            LIFECYCLE_STAGE_CHOICES     (setup / testing / certified / live / suspended)
+                               NOTE the key is `lifecycle_choices` while the GET param it fills is
+                               `lifecycle_stage`. They deliberately do not match and both spellings
+                               below are the pinned ones.
+  active_category              "" on the unscoped route; "erp"/"ecommerce"/"iot"/"edi" on the four
+                               category routes
+  stats                        dict with EXACTLY: total / connected / error / disabled / active
+
+Filter params: q / category / system / direction / transport / status / environment /
+lifecycle_stage. Every one is a STRING vocabulary compared directly against request.GET.<param>.
+There is deliberately NO pk filter on this list, so |stringformat:"d" appears nowhere on this page —
+and |slugify is wrong everywhere, for every filter, always.
+
+--------------------------------------------------------------------------------------------------
+WHAT A ROW MAY NOT READ
+--------------------------------------------------------------------------------------------------
+The pinned per-row set is: pk, number, name, get_category_display, get_system_display,
+get_direction_display, get_transport_display, get_status_display, get_environment_display,
+get_lifecycle_stage_display, is_active, masked, consecutive_failures, last_success_at, partner_party,
+logistics_client, location — plus the raw choice keys the badge chains switch on. The three FKs are
+joined by the view's select_related, so printing them costs nothing; spec_document is NOT joined and
+is not read here.
+
+`masked` is a property over two stored columns and is the ONLY credential-shaped thing this page
+prints. It renders the first 8 characters plus bullets, which answers "is a credential registered and
+which one" and nothing else. There is no reveal anywhere in this sub-module: the plaintext is shown
+exactly once, by the rotate action on the detail page, and is then gone.
+
+--------------------------------------------------------------------------------------------------
+WHAT THIS SCREEN DOES NOT DO
+--------------------------------------------------------------------------------------------------
+Nothing here connects to anything. 4.19 ships NO outbound transport — no request is made, no
+credential is used, no schedule runs. `status`, `lifecycle_stage`, `last_success_at` and
+`consecutive_failures` are a register of what staff know about each connection, not a monitor
+reporting on one. A green "Connected" badge means somebody recorded that it works, and the page says
+so in words rather than letting the colour imply a live health check.
+
+--------------------------------------------------------------------------------------------------
+Colour
+--------------------------------------------------------------------------------------------------
+theme.css ships COLOUR-named badges ONLY — badge-green / badge-red / badge-amber / badge-info /
+badge-muted / badge-slate. badge-success, badge-warning and badge-danger DO NOT EXIST and render as
+completely unstyled text (L33, shipped four times). Every badge below is one of those six literals,
+and every chain ends in an {% else %} that still prints get_<field>_display, so a value added to a
+vocabulary later reads as a label rather than as a blank cell. stat-icon ships blue / green / orange
+/ purple / slate only — there is no red, so the attention tile takes orange.
+
+Delete is @require_POST AND @tenant_admin_required at the view, so it is a real <form method="post">
+with a csrf token. The button is rendered for everyone and the decorator refuses a non-admin: this
+list carries no is_tenant_admin key, and inventing one to hide a button would be a second copy of a
+rule the view already owns. Only the system-generated CNX- number goes into the confirm string —
+`name` is user-typed, and an apostrophe in it escapes to &#39;, which HTML decodes back to a bare
+quote before JavaScript ever parses the attribute, breaking the dialog open and silently removing the
+guard (L42). The apostrophes written into the string are escaped \' for the same reason.
+{% endcomment %}
+{% block title %}{% if active_category == "erp" %}ERP Integration{% elif active_category == "ecommerce" %}E-commerce Integration{% elif active_category == "iot" %}IoT Gateway{% elif active_category == "edi" %}EDI Management{% else %}Integration Endpoints{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">
+        {% if active_category == "erp" %}ERP Integration
+        {% elif active_category == "ecommerce" %}E-commerce Integration
+        {% elif active_category == "iot" %}IoT Gateway
+        {% elif active_category == "edi" %}EDI Management
+        {% else %}Integration Endpoints{% endif %}
+        {% if active_category %}<span class="badge badge-info">Scoped to this category</span>{% endif %}
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span>
+        {% if active_category %}
+          <a href="{% url 'scm:integrationendpoint_list' %}">Integration Endpoints</a><span class="sep">›</span>
+          <span>{% if active_category == "erp" %}ERP{% elif active_category == "ecommerce" %}E-commerce{% elif active_category == "iot" %}IoT{% else %}EDI{% endif %}</span>
+        {% else %}
+          <span>Integration Endpoints</span>
+        {% endif %}
+      </div>
+      <p class="text-muted">
+        One row per <span class="fw-600">connection</span> — a named channel between this workspace and one outside system. ERP feeds, marketplace and storefront links, reader and sensor gateways and EDI trading relationships all live in this one register because they answer the same four questions: who is on the other end, how we reach them, what direction the data moves, and whether it is working. What they carry is separate: every document that crosses a connection is a row in the <a href="{% url 'scm:integrationmessage_list' %}">exchange log</a>, and a connection holds no payload of its own.
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:integrationmessage_list' %}" class="btn btn-outline"><i data-lucide="arrow-left-right"></i> Exchange Log</a>
+      <a href="{% url 'scm:integration_exceptions' %}" class="btn btn-outline"><i data-lucide="alert-triangle"></i> Exceptions</a>
+      <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline"><i data-lucide="webhook"></i> Webhooks</a>
+      <a href="{% url 'scm:integrationendpoint_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Endpoint</a>
+    </div>
+  </div>
+
+  {% comment %}
+    The four category routes, offered as links rather than as a filter the user has to assemble.
+    They are the same five sidebar targets, so arriving here from the sidebar and switching category
+    from this bar land on exactly the same URL — one address per view of this register, not two.
+
+    The tiles are counted over the WHOLE tenant queryset, never over the filtered page: "3 in error"
+    is a fact somebody has to act on, and a number that re-scoped itself as you browsed would report
+    all-clear the moment you filtered to one system. stat-icon has no red, so the error tile is
+    orange.
+  {% endcomment %}
+  <div class="badge-group" style="margin-bottom:1rem;">
+    <a href="{% url 'scm:integrationendpoint_list' %}" class="btn btn-outline btn-sm">All</a>
+    <a href="{% url 'scm:integrationendpoint_erp_list' %}" class="btn btn-outline btn-sm"><i data-lucide="server"></i> ERP</a>
+    <a href="{% url 'scm:integrationendpoint_ecommerce_list' %}" class="btn btn-outline btn-sm"><i data-lucide="shopping-cart"></i> E-commerce</a>
+    <a href="{% url 'scm:integrationendpoint_iot_list' %}" class="btn btn-outline btn-sm"><i data-lucide="radio"></i> IoT</a>
+    <a href="{% url 'scm:integrationendpoint_edi_list' %}" class="btn btn-outline btn-sm"><i data-lucide="file-text"></i> EDI</a>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="plug"></i></div>
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Connections configured — every channel this workspace has ever registered, in every category</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+      <div class="stat-value">{{ stats.connected }}</div>
+      <div class="stat-label">Recorded as connected. A person set that, not a health check — nothing in this pass calls anything</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.error }}</div>
+      <div class="stat-label">In error — the connection somebody has already flagged as broken</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="power-off"></i></div>
+      <div class="stat-value">{{ stats.disabled }}</div>
+      <div class="stat-label">Disabled — switched off deliberately, and keeping every message it ever carried</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="toggle-right"></i></div>
+      <div class="stat-value">{{ stats.active }}</div>
+      <div class="stat-label">Flagged active. Active is the configuration switch; status is what staff observed — two different questions, kept apart on purpose</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Connections</h2>
+      <div class="badge-group">
+        {% if stats.error %}<span class="badge badge-red">{{ stats.error }} in error</span>{% endif %}
+        {% if stats.disabled %}<span class="badge badge-muted">{{ stats.disabled }} disabled</span>{% endif %}
+        <span class="badge badge-slate">{{ page_obj.paginator.count }} matching</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:240px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name, CNX- number, account ref, interchange id or device id…">
+        </div>
+        <div class="form-group">
+          {% comment %}
+            Seven string vocabularies, seven identical comparisons. `value` is the raw choice key, so
+            each test is a plain string equality against request.GET.<param> — never |slugify, which
+            would agree only by accident, and never |stringformat:"d", which is for pk filters and
+            this list has none.
+
+            The category select is the one exception in SHAPE, not in comparison: on a category route
+            the category is pinned by the URL, so the widget shows what is pinned and is disabled. A
+            disabled control submits nothing, which is exactly right — the route carries the category
+            and the query string must not carry a second, editable copy of it that could disagree.
+          {% endcomment %}
+          <select name="category" aria-label="Category" class="form-select" {% if active_category %}disabled{% endif %}>
+            <option value="">Any category</option>
+            {% for value, label in category_choices %}
+              <option value="{{ value }}" {% if active_category %}{% if active_category == value %}selected{% endif %}{% else %}{% if request.GET.category == value %}selected{% endif %}{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="system" aria-label="System" class="form-select">
+            <option value="">Any system</option>
+            {% for value, label in system_choices %}
+              <option value="{{ value }}" {% if request.GET.system == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="direction" aria-label="Direction" class="form-select">
+            <option value="">Any direction</option>
+            {% for value, label in direction_choices %}
+              <option value="{{ value }}" {% if request.GET.direction == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="transport" aria-label="Transport" class="form-select">
+            <option value="">Any transport</option>
+            {% for value, label in transport_choices %}
+              <option value="{{ value }}" {% if request.GET.transport == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">Any status</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="environment" aria-label="Environment" class="form-select">
+            <option value="">Any environment</option>
+            {% for value, label in environment_choices %}
+              <option value="{{ value }}" {% if request.GET.environment == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          {% comment %}
+            The context key is `lifecycle_choices`; the GET param is `lifecycle_stage`. That
+            asymmetry is pinned in the contract and is NOT a typo to tidy up — renaming either half
+            here silently unselects the widget on every reload.
+          {% endcomment %}
+          <select name="lifecycle_stage" aria-label="Lifecycle stage" class="form-select">
+            <option value="">Any lifecycle stage</option>
+            {% for value, label in lifecycle_choices %}
+              <option value="{{ value }}" {% if request.GET.lifecycle_stage == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        {% comment %}
+          Reset drops the query string and stays on whichever of the five routes you are on, so
+          clearing the filters on the EDI page does not silently throw you back to the mixed list.
+        {% endcomment %}
+        <a href="{{ request.path }}" class="btn btn-outline">Reset</a>
+      </form>
+      <div class="form-help">
+        <span class="fw-600">Status and lifecycle stage answer different questions.</span> Lifecycle is where the connection is in being <em>built</em> — set up, tested, certified by the partner, live, or suspended. Status is what it is doing <em>now</em> as far as anyone has recorded. A connection can be certified and disconnected at the same time, which is why neither value is derived from the other. <span class="fw-600">Both are typed by a person</span>: this sub-module ships no transport and no scheduler, so nothing here polls a system, and no badge on this page is the output of a live check.
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Connection</th>
+            <th>Category</th>
+            <th>System</th>
+            <th>Channel</th>
+            <th>Counterparty</th>
+            <th>Status</th>
+            <th>Stage</th>
+            <th class="table-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:integrationendpoint_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a>
+                <div class="form-help mono">{{ obj.number }}</div>
+                {% comment %}
+                  `masked` is a property over credential_prefix + credential_hash and prints the
+                  first 8 characters plus bullets. It is empty when no credential has ever been set,
+                  and "Not set" is a real state rather than a gap — most rows in this register are
+                  file-drop, manual or VAN channels that never had a credential to register.
+                {% endcomment %}
+                {% if obj.masked %}
+                  <div class="form-help mono">Key {{ obj.masked }}</div>
+                {% else %}
+                  <div class="form-help text-muted">No credential registered</div>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  Category is the taxonomy the four sidebar bullets and the four category routes are
+                  cut from. It is not a severity, so it takes the neutral slate literal everywhere
+                  rather than a colour that would imply one kind of connection matters more.
+                {% endcomment %}
+                <span class="badge badge-slate">{{ obj.get_category_display }}</span>
+              </td>
+              <td class="nowrap">
+                {% if obj.system %}{{ obj.get_system_display }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                <span class="badge badge-slate">{{ obj.get_transport_display }}</span>
+                <div class="form-help">{{ obj.get_direction_display }}</div>
+              </td>
+              <td>
+                {% comment %}
+                  All three FKs are nullable and all three are joined by the view. Each is guarded
+                  by an "if fk" wrapper before anything is read off it: a None FK inside a filter
+                  ARGUMENT raises and 500s even where a bare lookup would quietly print nothing
+                  (L10), so the guard goes round the whole expression rather than round the value.
+
+                  A logistics client is shown by its own code, and the EDI identity for such a row is
+                  read THROUGH that client rather than duplicated onto this one — 4.19 adds no column
+                  to 4.17's client and re-declares none of its EDI fields.
+                {% endcomment %}
+                {% if obj.logistics_client %}
+                  <a href="{% url 'scm:logisticsclient_detail' obj.logistics_client.pk %}" class="mono">{{ obj.logistics_client.code }}</a>
+                  <div class="form-help">3PL client — EDI identity read from the client record</div>
+                {% elif obj.partner_party %}
+                  <a href="{% url 'core:party_detail' obj.partner_party.pk %}">{{ obj.partner_party }}</a>
+                {% elif obj.location %}
+                  <a href="{% url 'scm:location_detail' obj.location.pk %}">{{ obj.location }}</a>
+                  <div class="form-help">The zone this reader watches</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="nowrap">
+                {% comment %}
+                  ENDPOINT_STATUS_CHOICES spelled out on the exact keys, ending in a fallback that
+                  still prints a readable label if the vocabulary ever grows. consecutive_failures is
+                  a stored counter that nothing in this pass increments and nothing decrements —
+                  it is state, not a monitor, and where it is non-zero the number is worth showing.
+                {% endcomment %}
+                {% if obj.status == "connected" %}
+                  <span class="badge badge-green">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "error" %}
+                  <span class="badge badge-red">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "disconnected" %}
+                  <span class="badge badge-amber">{{ obj.get_status_display }}</span>
+                {% elif obj.status == "disabled" %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+                {% if obj.consecutive_failures %}
+                  <div class="form-help">{{ obj.consecutive_failures }} consecutive failure{{ obj.consecutive_failures|pluralize }}</div>
+                {% endif %}
+                <div class="form-help">
+                  {% if obj.last_success_at %}Last success {{ obj.last_success_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">No success recorded</span>{% endif %}
+                </div>
+              </td>
+              <td class="nowrap">
+                {% if obj.lifecycle_stage == "live" %}
+                  <span class="badge badge-green">{{ obj.get_lifecycle_stage_display }}</span>
+                {% elif obj.lifecycle_stage == "certified" %}
+                  <span class="badge badge-info">{{ obj.get_lifecycle_stage_display }}</span>
+                {% elif obj.lifecycle_stage == "testing" %}
+                  <span class="badge badge-amber">{{ obj.get_lifecycle_stage_display }}</span>
+                {% elif obj.lifecycle_stage == "setup" %}
+                  <span class="badge badge-slate">{{ obj.get_lifecycle_stage_display }}</span>
+                {% elif obj.lifecycle_stage == "suspended" %}
+                  <span class="badge badge-red">{{ obj.get_lifecycle_stage_display }}</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_lifecycle_stage_display }}</span>
+                {% endif %}
+                <div class="form-help">
+                  {% if obj.environment == "production" %}
+                    <span class="badge badge-info">{{ obj.get_environment_display }}</span>
+                  {% elif obj.environment == "sandbox" %}
+                    <span class="badge badge-slate">{{ obj.get_environment_display }}</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ obj.get_environment_display }}</span>
+                  {% endif %}
+                </div>
+                {% if not obj.is_active %}
+                  <div class="form-help"><span class="badge badge-muted">Inactive</span></div>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:integrationendpoint_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% comment %}
+                    Edit is unconditional and that is the rule rather than an oversight: this row IS
+                    the configuration. There is no frozen state and no approval ladder for an edit to
+                    rewrite, and the exchange log that references a connection keeps its own copy of
+                    everything it recorded, so editing here cannot rewrite what already crossed the
+                    boundary.
+
+                    Delete is @require_POST AND @tenant_admin_required. The button is rendered for
+                    everyone and the decorator refuses a non-admin — this list carries no
+                    is_tenant_admin key, and a hidden button would be a second copy of a rule the
+                    view already enforces, free to drift from it. Only the CNX- number goes into the
+                    confirm string (L42) and the apostrophes in it are written \' because &#39; is
+                    decoded back to a quote before JavaScript sees the attribute, which would
+                    silently disable the guard.
+                  {% endcomment %}
+                  <a href="{% url 'scm:integrationendpoint_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'scm:integrationendpoint_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Every message logged against this connection is deleted with it, and the exchange log is the record of what actually crossed the boundary — once it is gone there is no way to show a partner what was sent or when. Deleting is restricted to workspace admins. Set the status to Disabled instead: that stops the connection being used and keeps its whole history readable.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="plug"></i>
+                  <h3>No connections{% if active_category %} in this category{% endif %}</h3>
+                  <p>
+                    {% if active_category %}
+                      Nothing is registered under this category yet. The four categories are views of one register, so a connection filed under another one will not appear here — <a href="{% url 'scm:integrationendpoint_list' %}">see every connection</a>, or add one below.
+                    {% else %}
+                      No channel between this workspace and an outside system is registered yet. A connection records who is on the other end, how we reach them, which way the data moves and where the relationship has got to — it does not connect to anything on its own, because this sub-module ships no outbound transport. Add one, then log what crosses it in the exchange log. If you were expecting rows here, try clearing the filters.
+                    {% endif %}
+                  </p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% comment %}
+      The shared partial, which is the L9 fix in one place: previous_page_number and next_page_number
+      are each called ONLY inside their own has_previous / has_next guard, so page one and the last
+      page cannot raise EmptyPage once the register outgrows a single page. It also carries every
+      current GET param except `page`, so paging never quietly drops the filters.
+    {% endcomment %}
+    {% include "partials/pagination.html" %}
+
+    <div class="card-body text-muted">
+      <span class="fw-600">No credential on this page is usable, by design.</span> What is stored for each connection is a short prefix plus a one-way hash — enough to say a credential is registered and which one it is, and not enough to authenticate with. That is the right trade only because 4.19 ships no transport: nothing signs and nothing calls a provider, so there is nothing to lose by keeping a marker instead of a secret. The day real outbound calls are built, the fix is <span class="fw-600">encryption at rest</span> with the key held outside the row — never a plaintext column, and never a hash that no longer works because a hash cannot be used to sign or to log in.
+    </div>
+  </div>
+{% endblock %}
