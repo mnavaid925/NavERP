@@ -1134,6 +1134,30 @@ LIVE_LINKS = {
     # variance report: the charges are reached from the voucher detail page and the allocations are a
     # derived ledger shown there too — the `ClientRateCardLine` / `ReorderRule` / `ReturnReason` /
     # `MeterReading` rule. A sidebar entry per child row would list plumbing, not features.
+    # 4.19 Integration & API Gateway. The first FOUR bullets are four CATEGORY-SCOPED ROUTES over one
+    # `IntegrationEndpoint` table — `integrationendpoint_erp_list` and its three siblings all bind
+    # the same view with `category` pinned by the route's extra-options dict. That is deliberate and
+    # it is the honest shape: ERP, e-commerce, IoT and EDI are four kinds of the same thing (a
+    # registered connection with a transport, an auth method and a health state), so four tables
+    # would be one table copied four times with the copies free to drift. Pinning the category in the
+    # ROUTE rather than in a query string is what keeps each bullet a real page with its own heading
+    # and its own header chips — a `?category=` link is a filter a user loses on the next click.
+    # Every target below renders today; none is a placeholder (L32).
+    "4.19": {
+        "ERP Integration":        "scm:integrationendpoint_erp_list",        # bullet (category-pinned route: SAP / Oracle / NetSuite / Dynamics connections)
+        "E-commerce Integration": "scm:integrationendpoint_ecommerce_list",  # bullet (category-pinned route: Shopify / Magento / WooCommerce / Amazon)
+        "IoT Gateway":            "scm:integrationendpoint_iot_list",        # bullet (category-pinned route: RFID readers / scanners / sensor gateways)
+        "EDI Management":         "scm:integrationendpoint_edi_list",        # bullet (category-pinned route: VAN / AS2 interchange + the X12 exchange log)
+        "Webhooks":               "scm:webhooksubscription_list",            # bullet (the standing push rules; their attempt log hangs off each rule's detail page)
+    },
+    # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
+    # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
+    # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
+    # page's recent-attempts panel, which deep-links `webhookdelivery_list?subscription=<pk>` — the
+    # `ClientRateCardLine` / `ReorderRule` / `ReturnReason` / `MeterReading` / `PortalActivity` rule.
+    # `integration_exceptions` is a REPORT over those messages rather than a NavERP.md feature
+    # bullet, and this dict maps bullets to pages; it is linked from the endpoint list and from every
+    # failed message. A sidebar entry per log and per report would list plumbing, not features.
 }
 
 _MODULE_RE = re.compile(r"^##\s+(\d+)\.\s+(.+?)\s*$")
