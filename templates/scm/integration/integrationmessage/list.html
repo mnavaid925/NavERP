@@ -25,6 +25,10 @@ returns crud_list(...). Everything this page may read, and nothing else:
                          the page returns 200 with the filter simply not applied (L11)
   stats                  dict, exactly four int keys: total, pending, failed, acknowledged —
                          computed over the WHOLE tenant queryset, never over the filtered page
+  append_only_note       str. The one sentence-set explaining the missing Add/Edit/Delete, shared
+                         with the detail page and the exceptions cockpit so the three cannot drift
+                         into three different accounts of the same rule. Printed as the FIRST
+                         paragraph of the append-only card; the page-specific wording follows it.
 
 Filter params: q / endpoint / direction / document_type / status / source / date_from / date_to.
 Every one of them except `endpoint` is a STRING compare against request.GET; `endpoint` is the only
@@ -123,7 +127,14 @@ columns nobody scans a log by, and they are on the detail page instead.
       <span class="badge badge-info">No add · No edit · No delete</span>
     </div>
     <div class="card-body">
-      <p class="text-muted" style="margin:0;">
+      {% comment %}
+        append_only_note first, then this page's own wording — the shipped shape at
+        templates/scm/assets/meterreading/list.html:61 and templates/scm/portal/portalactivity/
+        detail.html:309. The shared sentence is the rule; the paragraphs under it name THIS page's
+        affordances, which the shared one cannot.
+      {% endcomment %}
+      <p class="text-muted" style="margin:0;">{{ append_only_note }}</p>
+      <p class="text-muted" style="margin-top:.75rem;">
         Rows below carry a <span class="fw-600">View</span> action and, where the row is not already pending or acknowledged, a <span class="fw-600">Reprocess</span> button. There is no Add, no Edit and no Delete, and none of the three is missing: an exchange log is evidence of what crossed the boundary, and a row somebody can rewrite after a partner has acted on it is not evidence of anything. To correct a mistaken exchange, the corrected document is <span class="fw-600">appended as a new row</span> — the same posture the stock ledger takes with a compensating movement and the general ledger takes with a reversal.
       </p>
       <p class="text-muted" style="margin-top:.75rem;">
