@@ -33,8 +33,9 @@ page consumes is listed, not merely the list variable):
   ``direction_choices`` / ``transport_choices`` / ``status_choices`` / ``environment_choices`` /
   ``lifecycle_choices`` (**note the last key is ``lifecycle_choices`` while its GET param is
   ``lifecycle_stage``**); ``active_category`` (str — ``"erp"``/``"ecommerce"``/``"iot"``/``"edi"`` on
-  a category route, else ``""``); and ``stats`` (dict, keys ``total`` / ``connected`` / ``error`` /
-  ``disabled`` / ``active``). Every filter here is a STRING compare —
+  a category route, else ``""``); ``stats`` (dict, keys ``total`` / ``connected`` / ``error`` /
+  ``disabled`` / ``active``); and ``is_tenant_admin`` (bool), which gates the row Delete form and
+  NOTHING else on this page — ``integrationendpoint_edit`` is plain ``@login_required``. Every filter here is a STRING compare —
   ``{% if request.GET.status == value %}selected{% endif %}`` — so ``|stringformat:"d"`` appears
   nowhere on this page and ``|slugify`` is wrong everywhere.
 * ``scm/integration/integrationendpoint/detail.html`` — ``obj``, ``recent_messages``,
@@ -171,6 +172,12 @@ def integrationendpoint_list(request, category=None):
             "lifecycle_choices": LIFECYCLE_STAGE_CHOICES,
             "active_category": active_category,
             "stats": stats,
+            # `integrationendpoint_delete` is @tenant_admin_required, so the row's Delete form was
+            # being offered to members whose click lands on a raw 403 PermissionDenied page. Same key
+            # and same meaning as on the detail page, which already gated it: the decorator is the
+            # boundary, this only stops handing somebody a dead end. Edit is NOT gated by it —
+            # `integrationendpoint_edit` is plain `@login_required` and stays that way.
+            "is_tenant_admin": _is_tenant_admin(request.user),
         },
     )
 
