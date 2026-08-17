@@ -171,8 +171,15 @@ class IntegrationMessage(TenantNumbered):
         # MSG-00001.
         unique_together = (("tenant", "number"),)
         indexes = [
-            # The list page's status filter and the exceptions cockpit's `status="failed"` scan.
-            models.Index(fields=["tenant", "status"], name="scm_msg_tnt_status_idx"),
+            # The list page's status filter AND the exceptions cockpit, which is the reason for the
+            # third column. `integration_exceptions` always filters tenant + status="failed" and then
+            # takes 30 rows in `ordering` order, so a 2-column (tenant, status) index served the
+            # equality and left MariaDB to filesort the whole failure set on every page load of the
+            # sub-module's main report. With `occurred_at` in the index the sort is satisfied by the
+            # index order — the DESC direction is fine, InnoDB reads a B-tree backwards. Widened
+            # rather than added alongside: (tenant, status) is this index's own leftmost prefix, so
+            # every query the 2-column version served still uses it and nothing regresses.
+            models.Index(fields=["tenant", "status", "occurred_at"], name="scm_msg_tnt_status_idx"),
             # The endpoint detail page's "recent messages" panel and the list's ?endpoint= filter.
             models.Index(fields=["tenant", "endpoint"], name="scm_msg_tnt_endpoint_idx"),
             # The redelivery de-dupe probe — the one lookup that has to stay cheap while this table
