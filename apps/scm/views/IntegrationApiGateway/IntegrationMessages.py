@@ -405,7 +405,12 @@ def integration_exceptions(request):
         codes=Count("error_code", distinct=True),
     )
 
-    page_obj = paginate(request, qs, MESSAGES_PER_PAGE)
+    # `.defer` on the PAGINATED queryset only, never on `qs` itself: the roll-up above goes through
+    # `.values("error_code")`, and putting a deferral on the shared queryset would make the
+    # interaction between the two harder to reason about for no gain. The table below renders
+    # `error_code` and a truncated `error_message` — `payload_excerpt` is a TextField no cell on this
+    # page reads, pulled off the failure set 30 rows at a time on the sub-module's hottest report.
+    page_obj = paginate(request, qs.defer("payload_excerpt"), MESSAGES_PER_PAGE)
     return render(request, "scm/integration/exceptions.html", {
         "object_list": page_obj.object_list,
         "page_obj": page_obj,
