@@ -65,7 +65,9 @@ page consumes is listed here, not merely the row variable)
     queryset), ``page_obj``, ``q`` — all from ``crud_list``; guard prev/next with
     ``has_previous``/``has_next`` (L9). Filter widgets: ``entity_choices``, ``event_choices``,
     ``format_choices``, ``status_choices``. Header chips: ``stats`` with EXACTLY ``total`` /
-    ``active`` / ``inactive`` / ``failing`` (ints).
+    ``active`` / ``inactive`` / ``failing`` (ints). Plus ``is_tenant_admin`` (bool) — the row and
+    header controls that lead to an ``@tenant_admin_required`` route are hidden from members rather
+    than offered and then refused with a raw 403.
 
 ``scm/integration/webhooksubscription/form.html`` (shared create + edit)
     ``form``, ``is_edit`` — plus ``obj`` **on the edit path only**. ``crud_create`` passes no ``obj``,
@@ -150,7 +152,9 @@ def webhooksubscription_list(request):
 
     **Context**, exhaustively — ``object_list`` / ``page_obj`` / ``q`` from ``crud_list``, plus
     ``entity_choices`` / ``event_choices`` / ``format_choices`` / ``status_choices`` for the four
-    widgets and ``stats`` for the header chips.
+    widgets, ``stats`` for the header chips, and ``is_tenant_admin`` so the page stops offering the
+    Add / Edit / Delete controls to a member every one of those routes would refuse. The decorators
+    remain the boundary; this only avoids handing somebody a button that 403s.
 
     ``stats`` is computed over the WHOLE workspace queryset, never the filtered page: *"3 rules are
     failing"* is a fact somebody acts on, and a figure that moved as you browsed or filtered would be
@@ -195,6 +199,7 @@ def webhooksubscription_list(request):
             "format_choices": PAYLOAD_FORMAT_CHOICES,
             "status_choices": STATUS_CHOICES,
             "stats": {key: value or 0 for key, value in stats.items()},
+            "is_tenant_admin": _is_tenant_admin(request.user),
         })
 
 
@@ -202,8 +207,18 @@ def webhooksubscription_list(request):
 # CRUD
 # =================================================================================================
 @login_required
+@tenant_admin_required  # webhook config (target_url = an egress path out of the workspace + the
+                        # signing secret) is admin-level, per crm.webhook_create (L27).
 def webhooksubscription_create(request):
     """Add an event rule. ``crud_create`` stamps the tenant, writes the audit row and redirects.
+
+    ``@tenant_admin_required`` for the same reason ``webhooksubscription_delete`` and
+    ``webhooksubscription_rotate_secret`` carry it: a subscription's ``target_url`` is a destination
+    workspace data is pushed to, so *registering* one is workspace configuration rather than ordinary
+    member work. Gating only the delete left the door it guards standing open — a member could not
+    remove a rule but could add one pointing anywhere. The identical CRM view
+    (``apps/crm/views/AutomationWorkflow/Webhooks.py::webhook_create``) was gated in a prior review
+    on exactly this ground.
 
     ``_need_tenant`` refuses FIRST so the message steers back to this list rather than to the
     dashboard: the superuser has ``tenant=None`` BY DESIGN and every scm view filters by tenant, so
@@ -241,8 +256,8 @@ def webhooksubscription_detail(request, pk):
       ``exhausted`` / ``simulated`` (ints). **DERIVED on read by one ``aggregate()``, never stored**
       (L29): a cached counter beside an append-only log is a second source of truth for a fact the
       log already answers, and the two disagree the first time a write is rolled back.
-    * ``is_tenant_admin`` — gates the rotate-secret and delete buttons. Both actions are
-      ``@tenant_admin_required``, and hiding a button a member's POST would be refused anyway is
+    * ``is_tenant_admin`` — gates the edit, rotate-secret and delete controls. All three routes are
+      ``@tenant_admin_required``, and hiding a button a member's request would be refused anyway is
       courtesy, not the control: the decorator is the control.
     * ``plaintext_once`` — the freshly rotated secret, shown exactly once, or ``None``. ADDITIVE to
       the frozen contract; see the module docstring for why the reveal travels on a pop-once session
@@ -280,10 +295,16 @@ def webhooksubscription_detail(request, pk):
 
 
 @login_required
+@tenant_admin_required  # retargeting is the same egress decision as registering — see _create.
 def webhooksubscription_edit(request, pk):
     """Correct a rule: retarget it, change what fires it, switch it off.
 
-    No status ladder and no edit gate, deliberately — a subscription is CONFIGURATION, not a document
+    ``@tenant_admin_required``: editing reaches ``target_url``, so an ungated edit is an ungated
+    *retarget* — the strictly more dangerous half of the create it sits beside, because it can point
+    an existing, trusted, already-firing rule at a new destination. Gating create alone would have
+    been theatre.
+
+    No status ladder, deliberately — a subscription is CONFIGURATION, not a document
     with a lifecycle. Nothing it has already "done" can be restated by editing it either, because
     every :class:`~apps.scm.models.WebhookDelivery` row snapshots its own ``event`` and payload
     excerpt at the moment it was written; changing the rule changes what the NEXT attempt would carry
