@@ -8,8 +8,12 @@ optionally rides on a consolidated ``Load``, and is executed by a ``Carrier``.
 as the ``StockMove`` ledger. The summary fields on ``Shipment`` (``status``, ``current_status_text``,
 ``last_known_location``, ``eta``, POD, actual pickup/delivery) are DERIVED from events by
 ``apply_tracking_event()``: an event is the fact, the summary is a projection of the latest fact.
-Cube inputs (``weight_kg``/``volume_cbm``/``package_count``) live here because ``scm.Item`` has no
-physical-dimension fields yet — the same stand-in posture 4.1 used before the item catalog existed.
+Cube inputs (``weight_kg``/``volume_cbm``/``package_count``) live here because a **consignment total
+is a different quantity from a per-unit dimension**, not because the item master lacks one. 4.18
+added ``Item.weight_kg``/``Item.volume_cbm`` in migration ``0031`` for landed-cost allocation, and
+these columns stayed: a shipment is weighed and measured as packed — pallets, dunnage, mixed
+contents — so deriving it by multiplying unit weights would be a different (and usually wrong)
+number. Do not "consolidate" the two.
 """
 from apps.scm.models._base import *  # noqa: F401,F403
 from apps.scm.models.TransportationManagement.Carriers import MODE_CHOICES
