@@ -16,10 +16,21 @@ every finding below was independently confirmed against the cited code before be
 | Important | 6 |
 | Minor | 7 |
 
-Lane status: `models` ✅ · `routes/forms` ✅ (returned on 3rd retry) · `templates/seeder` ✅ · `README/sidebar` ✅ ·
-`completeness` ⚠️ **NO RESULT** (died on all 4 attempts). Its territory is substantially covered by D5/D9/D10/D11
-(which the README/sidebar and routes lanes raised independently), but it is recorded here as missing coverage
-rather than as a clean bill of health.
+Lane status (per the workflow's own return, which is authoritative — an earlier mid-flight reading of the journal
+attributed these backwards): `models` ✅ 5 · `routes` ✅ 4 · `templates/seeder` ✅ 4 · `completeness` ✅ 6 ·
+**`README/sidebar` ⚠️ NO RESULT** — it stalled on all 6 attempts. 19 raw findings, all of which reduce to D1–D13
+below; the surviving four lanes raised D5 (the missing sidebar paragraph) and the RMA identifier independently of
+the dead lane, so its territory is mostly covered. **The two checks nothing else covered were run by hand in the
+main session and both come back clean:**
+
+* **`LIVE_LINKS["4.18"]`'s five keys match the `### 4.18` NavERP.md bullets verbatim** — `Accounts Payable`,
+  `Accounts Receivable`, `Landed Cost Calculation`, `Budgeting`, `Tax Management`. Five bullets, five keys, no
+  drift, and each target url name resolves.
+* **No document anywhere still calls 4.18 roadmap / planned / unbuilt**, and the only SCM counts stated in the docs
+  are `18 of 19` (README.md:1162, SKILL.md:12) and `19 sub-modules` (SKILL.md:9) — all correct.
+
+So the dead lane leaves **no known uncovered gap**; it is recorded because a stalled lane is missing coverage, not a
+clean bill of health, and because D5's fix should be re-checked against `navigation.py` when applied.
 
 ---
 
