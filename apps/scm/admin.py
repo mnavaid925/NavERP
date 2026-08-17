@@ -1440,3 +1440,126 @@ class LandedCostAllocationAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# 4.19 Integration & API Gateway
+from apps.scm.models import (  # noqa: E402
+    IntegrationEndpoint,
+    IntegrationMessage,
+    WebhookDelivery,
+    WebhookSubscription,
+)
+
+
+@admin.register(IntegrationEndpoint)
+class IntegrationEndpointAdmin(admin.ModelAdmin):
+    """The connection register. Editable — but NOT its credential and NOT its health counters.
+
+    ``credential_prefix`` / ``credential_hash`` store a one-way marker, never a plaintext secret,
+    and they are written only by ``set_credential()`` behind the POST-only
+    ``integrationendpoint_rotate_credential`` verb, which reveals the plaintext exactly once. They
+    are already ``editable=False`` on the model and so unreachable here anyway; naming them in
+    ``readonly_fields`` means a later hand dropping ``editable=False`` for some admin convenience
+    cannot silently turn the digest column into a hand-typed field — which would let somebody paste
+    a marker that matches no key anybody holds, and there is deliberately no reveal route to find
+    out.
+
+    The four health columns (``consecutive_failures`` and the three timestamps) are DERIVED state
+    for the same reason: a hand-typed failure count is a health signal that agrees with nothing that
+    actually happened.
+    """
+
+    list_display = ("number", "name", "tenant", "category", "system", "direction", "transport",
+                    "environment", "status", "is_active", "consecutive_failures", "last_run_at")
+    list_filter = ("tenant", "category", "system", "direction", "transport", "environment",
+                   "lifecycle_stage", "status", "is_active")
+    search_fields = ("number", "name", "external_account_ref", "interchange_id",
+                     "device_identifier", "endpoint_url")
+    readonly_fields = ("number", "credential_prefix", "credential_hash", "consecutive_failures",
+                       "last_run_at", "last_success_at", "last_seen_at", "created_at", "updated_at")
+
+
+@admin.register(IntegrationMessage)
+class IntegrationMessageAdmin(admin.ModelAdmin):
+    """APPEND-ONLY exchange log — read-only here, no add/change/delete, mirroring ``StockMoveAdmin``.
+
+    This is not admin tidiness, it is the same ruling the URLconf makes by shipping no add, edit or
+    delete route: an exchange log is *evidence of what crossed the boundary*, and evidence that can
+    be revised after the dispute starts is not evidence. "Your 855 said 400 units" has to rest on a
+    row nobody could have quietly retyped from the admin either — leaving the change form open here
+    would reopen through the back door exactly what the front door closes.
+
+    A wrong row is corrected by appending a later, correct one, the same way a wrong stock movement
+    is corrected by a compensating move. The one supported write is the ``reprocess`` verb on the
+    detail page, which re-queues a row and clears its error text.
+    """
+
+    list_display = ("number", "tenant", "endpoint", "direction", "document_type", "status",
+                    "record_count", "occurred_at", "attempt_count", "error_code")
+    list_filter = ("tenant", "direction", "document_type", "status", "source")
+    search_fields = ("number", "control_number", "external_id", "source_reference",
+                     "endpoint__name", "error_code")
+    date_hierarchy = "occurred_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(WebhookSubscription)
+class WebhookSubscriptionAdmin(admin.ModelAdmin):
+    """The standing push rule. Editable — but NOT its signing secret and NOT its failure counter.
+
+    ``signing_secret_prefix`` / ``signing_secret_hash`` are a one-way marker written only by the
+    POST-only ``webhooksubscription_rotate_secret`` verb, which reveals the plaintext once and then
+    forgets it. Named in ``readonly_fields`` for the same defence-in-depth reason as the endpoint's
+    credential above.
+
+    ``consecutive_failures`` drives the ``auto_disable_threshold`` cut-out, so a hand-typed value
+    would let somebody switch a failing subscription back on by editing the count rather than by
+    fixing the receiver.
+    """
+
+    list_display = ("number", "name", "tenant", "trigger_entity", "trigger_event",
+                    "payload_format", "is_active", "consecutive_failures",
+                    "auto_disable_threshold", "last_delivery_at")
+    list_filter = ("tenant", "trigger_entity", "trigger_event", "payload_format", "is_active")
+    search_fields = ("number", "name", "target_url", "description")
+    readonly_fields = ("number", "signing_secret_prefix", "signing_secret_hash",
+                       "consecutive_failures", "last_delivery_at", "created_at", "updated_at")
+
+
+@admin.register(WebhookDelivery)
+class WebhookDeliveryAdmin(admin.ModelAdmin):
+    """APPEND-ONLY attempt log — read-only here, no add/change/delete, mirroring ``StockMoveAdmin``.
+
+    A delivery log answers the question a partner asks in a dispute: *did you ever send it, how many
+    times, and what came back?* An answer somebody can retype after the argument starts is not an
+    answer, so the correction for a wrong row is a later row — which is exactly why ``attempt_no``
+    counts up instead of one row being rewritten in place. The only supported write is the
+    POST-only ``retry`` verb, which advances the row's queue state and rewrites no recorded outcome.
+
+    ``signature`` is blank on every row this pass creates and that is not a bug: there is no
+    plaintext signing key to sign with (only a prefix + hash marker) and no payload to sign over,
+    because 4.19 ships no transport at all.
+    """
+
+    list_display = ("subscription", "tenant", "event", "status", "attempt_no", "response_code",
+                    "triggered_at", "next_attempt_at")
+    list_filter = ("tenant", "status")
+    search_fields = ("event", "subscription__name", "subscription__number", "error_message")
+    date_hierarchy = "triggered_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
