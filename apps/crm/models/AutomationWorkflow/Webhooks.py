@@ -1,4 +1,6 @@
 """CRM 1.10 Automation & Workflow Engine — Webhooks models (split from apps/crm/models.py)."""
+from django.core.exceptions import ImproperlyConfigured
+
 from apps.core.crypto import decrypt as decrypt_secret, encrypt as encrypt_secret
 from apps.crm.models._base import *  # noqa: F401,F403
 from apps.crm.models.AutomationWorkflow.WorkflowRules import WorkflowRule
@@ -58,9 +60,24 @@ class Webhook(TenantNumbered):
 
     @property
     def secret_masked(self):
-        # Decrypt first — masking the ciphertext would show four characters of base64,
-        # which identifies nothing and changes on every re-encryption.
-        s = self.get_secret()
+        """A display-only fingerprint. Degrades rather than raising — unlike get_secret().
+
+        Decrypt first: masking the ciphertext would show four characters of base64, which
+        identifies nothing and changes on every re-encryption.
+
+        The try/except is the whole point and belongs HERE and not in get_secret(). This is a
+        cosmetic column on a detail page, so a row that will not decrypt — a rotated
+        SECRET_KEY/FIELD_ENCRYPTION_KEY, a database restored into another environment, or the
+        ordinary dev path of setting a real SECRET_KEY after seeding under the insecure fallback —
+        must degrade to a label rather than 500 the whole page. get_secret() stays strict, so
+        _deliver_webhook still fails loudly at signing time: signing with the wrong key material
+        produces a signature no recipient can verify, and that failure has to surface here rather
+        than at the far end.
+        """
+        try:
+            s = self.get_secret()
+        except ImproperlyConfigured:
+            return "(set — undecryptable with the current key)"
         return f"••••{s[-4:]}" if len(s) >= 4 else ("(set)" if s else "(none)")
 
 
