@@ -586,3 +586,67 @@ from .FinanceIntegration.LandedCostVouchers import (  # noqa: F401
 from .FinanceIntegration.DutyTariffs import (  # noqa: F401
     DutyTariff,
 )
+
+# --- 4.19 Integration & API Gateway ------------------------------------------------------------
+# `_choices` FIRST and BY NAME, not `import *`. Four `_choices` modules are already star-imported at
+# this package root (4.11, 4.13, plus the package-root one); a fifth star-import would re-declare a
+# shared token with the winner decided by import ORDER rather than by intent, and the loser would
+# fail nowhere — it would simply resolve to the wrong list. Verified free against every name already
+# bound here: none of the eighteen below collides with anything in scm.models.
+#
+# `IntegrationApiGateway/_choices.py` imports NOTHING (not even `_base`), so the dependency edge
+# inside 4.19 runs one way only and no cycle is possible.
+from .IntegrationApiGateway._choices import (  # noqa: F401
+    AUTH_METHOD_CHOICES,
+    DELIVERY_BACKOFF_SECONDS,
+    DELIVERY_STATUS_CHOICES,
+    DOCUMENT_TYPE_CHOICES,
+    ENDPOINT_CATEGORY_CHOICES,
+    ENDPOINT_DIRECTION_CHOICES,
+    ENDPOINT_STATUS_CHOICES,
+    ENDPOINT_SYSTEM_CHOICES,
+    ENVIRONMENT_CHOICES,
+    LIFECYCLE_STAGE_CHOICES,
+    MESSAGE_DIRECTION_CHOICES,
+    MESSAGE_SOURCE_CHOICES,
+    MESSAGE_STATUS_CHOICES,
+    PAYLOAD_FORMAT_CHOICES,
+    TRANSPORT_CHOICES,
+    TRIGGER_MODE_CHOICES,
+    WEBHOOK_ENTITY_CHOICES,
+    WEBHOOK_EVENT_CHOICES,
+)
+# `IntegrationEndpoint` FIRST for the reader rather than for Django — every FK below is declared by
+# string, so the ORM does not care about order, but the endpoint is the root of the sub-module: the
+# exchange log CASCADEs off it and the credential marker lives on it. It stores
+# `credential_prefix` + `credential_hash` and NEVER a plaintext secret; there is deliberately no
+# reveal route and no test-connection route (the latter would be an outbound call to a
+# tenant-supplied URL — the SSRF surface 4.19 defers along with all transport).
+from .IntegrationApiGateway.IntegrationEndpoints import (  # noqa: F401
+    IntegrationEndpoint,
+)
+# APPEND-ONLY, and that is a ruling rather than an omission: an exchange log is evidence of what
+# crossed the boundary, and evidence that can be revised after the dispute starts is not evidence.
+# List + detail + one `reprocess` POST, no ModelForm anywhere, registered read-only in the admin —
+# the `StockMove` / `MeterReading` / `PortalActivity` posture verbatim. A wrong row is corrected by
+# appending a later, correct one. Correlation to an internal document is a SOFT pointer
+# (`source` + `source_reference`) plus two typed FKs, because the app bans GenericForeignKey — a
+# (content_type, object_id) pair cannot be tenant-joined.
+from .IntegrationApiGateway.IntegrationMessages import (  # noqa: F401
+    IntegrationMessage,
+)
+# The standing rule ("when a shipment is delivered, POST it here"). Its signing secret is stored as
+# `signing_secret_prefix` + `signing_secret_hash`, one-way by design; the plaintext is revealed
+# exactly once at rotation and then gone.
+from .IntegrationApiGateway.WebhookSubscriptions import (  # noqa: F401
+    WebhookSubscription,
+)
+# APPEND-ONLY telemetry — one row per ATTEMPT, which is why `attempt_no` counts up instead of a
+# single row being rewritten in place. `TenantOwned`, NOT `TenantNumbered`: human-discussed records
+# get a number, per-attempt telemetry does not (`StockMove`, `TemperatureReading`, `PortalActivity`,
+# `KpiSnapshot` and `crm.WebhookDelivery` all sit on the same side of that line). Its three index
+# names carry an `scm_whd_` prefix because index names are GLOBAL to the database — crm's own
+# WebhookDelivery already owns `crm_whd_tnt_*`.
+from .IntegrationApiGateway.WebhookDeliveries import (  # noqa: F401
+    WebhookDelivery,
+)
