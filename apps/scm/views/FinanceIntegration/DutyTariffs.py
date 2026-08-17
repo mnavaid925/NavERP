@@ -7,8 +7,8 @@ This module maintains the master that ``LandedCostCharge`` reads ONCE, through
 number, so nothing on these pages can restate what a receipt was already costed at.
 
 FOLDER-NAME NOTE (do not "fix" it): the backend package is ``FinanceIntegration/`` while the
-templates live under ``templates/scm/finance/``. That asymmetry is the house rule — all seventeen
-shipped scm template folders use a short slug while the Python package uses the NavERP.md sub-module
+templates live under ``templates/scm/finance/``. That asymmetry is the house rule — every shipped
+scm template folder uses a short slug while the Python package uses the NavERP.md sub-module
 title in PascalCase. ``ThirdPartyLogistics/ClientSlas.py`` carries the same note.
 
 --------------------------------------------------------------------------------------------------
