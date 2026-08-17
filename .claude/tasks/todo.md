@@ -25044,4 +25044,47 @@ anchored `Edit` only, never `Write`.**
   dimensions) → **Module 5**.
 
 ## Review notes
-(filled in at the end)
+
+**Delivered (2026-08-17).** 4.18 is Live in the sidebar with all five NavERP.md bullets linked, across
+**74 commits** over 55 files from `ac4d600b` to close-out. Migration
+**`0031_item_volume_cbm_item_weight_kg_landedcostvoucher_and_more`** is **additive-only** — 4 `CreateModel`
+(`DutyTariff`, `LandedCostVoucher`, `LandedCostCharge`, `LandedCostAllocation`) + 2 `AddField`
+(`Item.weight_kg`, `Item.volume_cbm`), and **zero** `AlterField`/`RemoveField`/`DeleteModel`. 21 routes, 11
+templates under `templates/scm/finance/`, `_seed_finance_tenant`, and a 4.18 tile row on
+`templates/scm/overview.html`. `manage.py check` clean.
+
+**The central ruling held: three of five bullets ship as READ-ONLY COMPUTED registers with no table.**
+Accounts Payable, Accounts Receivable and Budgeting are derived from pointers into `apps/accounting` that six
+already-shipped models carry (4.1 `GoodsReceiptNote.bill`, 4.6 `FreightInvoice.bill`, 4.18
+`LandedCostVoucher.bill`; 4.5 `SalesOrder.invoice`, 4.17 `ClientBillingRun.invoice`, 4.10
+`ReturnAuthorization.credit_note`). An AP/AR/Budget table here would have been a second copy of the same money
+that drifts the first time Accounting voids something (L29). **SCM still posts no `JournalEntry`** — the
+sub-module's one accounting write is `draft_bill()`, which drafts an `accounting.Bill` and stops.
+
+**§0(a)'s correction survived contact.** The research file's `LandedCostAllocation.goods_receipt_line` was
+never written; allocation FKs `stock_move` + `item` and the base is the inbound `receipt` moves
+`_post_grn_receipt` already posts, filtered `quantity__gt=ZERO` so a cancelled receipt's compensating
+negatives cannot attract cost. Landed cost is therefore an **additive layer over the append-only ledger** — it
+edits no move, rolls `Item.average_cost` through `apply_landed_cost()`, and `allocate()` reverses its prior
+roll before re-spreading, so re-allocation is idempotent (and demoting an accrued voucher clears `accrued_at`).
+
+**Review wave:** 6 parallel reviewers over `ac4d600b..HEAD`, no dead lanes, **15 deduped findings — 0 Critical,
+4 Important, 11 Minor**. `code-fixer` landed **14** in 19 one-file commits. The headline three were a silent
+FK-null when editing a charge whose GL account or tax code had since been deactivated (fixed by promoting
+`_keep_current` into the shared forms toolkit), `DutyTariff.rate_for()` never being reached from the request
+path despite the form promising a snapshotted rate (fixed in `LandedCostChargeForm.clean()`), and an unclamped
+high end on `Item.apply_landed_cost()`.
+
+**One finding deferred, deliberately: M3**, a `(tenant, party)` index on `LandedCostVoucher`. It needs its own
+migration and `0031` was the number claimed in a shared checkout (L43); 4.17 deferred its own index finding the
+same way, so **both belong in one app-wide index-sweep migration** rather than two one-off numbers racing a
+concurrent session. Nothing is left `[ ] open` in `review-scm-4.18.md`.
+
+**Tests:** 4 lanes written in parallel over disjoint files — `test_finance_{models,forms,views,security}.py`,
+**431 test functions** plus `finance_`-prefixed fixtures in the shared `apps/scm` conftest; the phase-6 full
+**unfiltered** run was green project-wide (16,917 passed, 0 failed) and `test_suite_hygiene` confirmed no name
+shadowing. Re-run at close-out: the four 4.18 lanes pass (exit 0).
+
+**Docs:** `.claude/skills/scm/SKILL.md` gains a 4.18 section (models, the verb ladder, the folder-name
+asymmetry `FinanceIntegration/` ↔ `templates/scm/finance/`, routes, templates, seeder, and the 7 rules that bit
+during the build); `README.md` marks the roadmap row **18 of 19, Next: 4.19**. Only **4.19** remains.
