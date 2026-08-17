@@ -296,8 +296,18 @@ full payload is never stored.
         </p>
       {% endif %}
       <div class="form-actions">
+        {% comment %}
+          `event` is |escapejs, NOT bare (L42). It is a free-text CharField(60) with no choices and
+          no validator, and it is the only user-shaped value this sub-module puts inside a confirm
+          string — every other one carries a system-generated CNX-/WHK- number, which is unavailable
+          here because WebhookDelivery is TenantOwned and has no number column. Under plain
+          autoescaping an apostrophe becomes &#x27;, the HTML parser decodes that back to a bare quote
+          BEFORE the JS engine parses the attribute, the string literal closes early and the
+          confirmation guard is silently gone. escapejs emits the backslash-u-0027 numeric escape
+          instead, which the attribute decode cannot turn back into a quote.
+        {% endcomment %}
         {% if can_retry %}
-          <form method="post" action="{% url 'scm:webhookdelivery_retry' obj.pk %}" onsubmit="return confirm('Schedule another delivery attempt for {{ obj.event }}? The next slot on the backoff ladder is stamped onto this row and the attempt count goes up by one. Nothing is sent: 4.19 ships no outbound transport, so this records the schedule and calls nobody.');">
+          <form method="post" action="{% url 'scm:webhookdelivery_retry' obj.pk %}" onsubmit="return confirm('Schedule another delivery attempt for {{ obj.event|escapejs }}? The next slot on the backoff ladder is stamped onto this row and the attempt count goes up by one. Nothing is sent: 4.19 ships no outbound transport, so this records the schedule and calls nobody.');">
             {% csrf_token %}
             <button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i> Retry</button>
           </form>
