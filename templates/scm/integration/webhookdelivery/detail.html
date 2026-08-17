@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% comment %}
+SCM 4.19 Integration & API Gateway — one outbound delivery attempt, read as evidence rather than as a
+record.
+
+A row in this table is never corrected, so this page is not a form with the inputs switched off: it is
+the readable form of a single fact ("this workspace tried to push this event to this subscriber, at
+this moment, and this is what came back") plus the two things that make that fact usable in an
+argument — where the attempt sits on the retry ladder, and what the subscriber's own server said. "We
+pushed shipment.delivered at 09:14, got a 500, and the ladder was spent by 17:20 the next day" is the
+reading that answers a subscriber who says they were never notified, and no single number on the page
+says it alone.
+
+Renders apps/scm/views/IntegrationApiGateway/WebhookDeliveries.py::webhookdelivery_detail.
+Everything this page may read, and nothing else:
+
+  obj                   the WebhookDelivery, from crud_detail. select_related covers subscription,
+                        so every pointer below is already loaded and nothing here costs an extra
+                        query
+  can_retry             bool, computed by the view: the status is "failed" or "pending" AND the row
+                        has a rung of the ladder left (attempt_no < max_attempts). It gates the Retry
+                        form below
+  next_backoff_seconds  int, or None when the ladder is spent — the delay the NEXT rung carries, so
+                        the page can say what pressing Retry will actually schedule instead of
+                        leaving it to be discovered afterwards
+  max_attempts          int (8) — the length of the published backoff ladder, so the attempt counter
+                        below can read "3 of 8" rather than a bare 3 that means nothing on its own
+
+--------------------------------------------------------------------------------------------------
+ACTIONS: RETRY AND BACK TO LIST. THERE IS NO EDIT AND NO DELETE, AND NEITHER IS MISSING
+--------------------------------------------------------------------------------------------------
+There is no webhookdelivery_create, no _edit and no _delete — no view, no form module, no route. A
+button for any of them would 404, and a working one would be worse: a delivery log that staff can
+rewrite after a subscriber has complained cannot answer the complaint. A delivery attempt is a
+historical event; there is no such thing as amending one. The precedent already shipped in 4.13's
+MeterReading and 4.16's PortalActivity, crm.WebhookDelivery describes itself the same way, and
+apps/scm/tests/test_security.py asserts that the edit and delete routes stay absent.
+
+Retry is the one write, and it does not change what the row SAYS about the attempt that was made — it
+stamps the NEXT rung of the backoff ladder onto the row, or marks the row Exhausted when the ladder is
+spent. It FIRES NO HTTP REQUEST: 4.19 ships no outbound transport at all, so pressing it calls nobody,
+signs nothing and delivers nothing. Deleting the whole trail is still possible from exactly one place
+— removing the SUBSCRIPTION cascades its deliveries away — and that is a deliberate, admin-gated act
+on a different page, not an edit of this one.
+
+--------------------------------------------------------------------------------------------------
+The silences, and which silence each one is
+--------------------------------------------------------------------------------------------------
+subscription is the model's one CASCADE FK and is never NULL — a delivery attempt has no life without
+the subscription that raised it — so it needs no null guard. Rendering a null FK inside a filter
+ARGUMENT raises even where a bare lookup would not (L10), so nothing below reaches through an
+unguarded pointer regardless.
+
+Four other things are legitimately empty, and each prints an explicit sentence rather than a blank
+cell that would read as a bug:
+
+  signature        BLANK ON EVERY ROW THIS PASS CREATES, and this is not a defect. Computing an HMAC
+                   needs a plaintext signing key and something to sign for; 4.19 stores only a
+                   prefix+hash marker (deliberately — see the subscription page) and ships no
+                   transport, so nothing exists that COULD compute one. The column is the home the
+                   future transport pass will write into.
+  response_code    null on every attempt that never reached a server at all — a DNS failure, a
+                   refused connection or a timeout has no status line to record. Tested with
+                   `is not None`, because a nullable integer read for truthiness would swallow a
+                   legitimate zero.
+  next_attempt_at  null on a finished row: one that succeeded, or one that spent its whole ladder.
+  error_message    blank on every attempt that did not fail.
+
+theme.css ships COLOUR-named badges only — badge-success / badge-danger / badge-warning do not exist
+and render completely unstyled (L33). Every chain ends in an {% else %} printing the model's own
+get_status_display. Multi-line notes are comment/endcomment blocks; a multi-line hash comment leaks as
+visible text (L2).
+
+payload_excerpt is printed inside a <pre> and is ESCAPED like everything else — never |safe. It is the
+body this workspace would have pushed, it is TRUNCATED by design, and it may carry partner PII, so a
+full payload is never stored.
+{% endcomment %}
+{% block title %}{{ obj.event }} &middot; attempt {{ obj.attempt_no }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><span class="mono">{{ obj.event }}</span>
+        {% if obj.status == 'success' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'exhausted' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+        {% elif obj.status == 'simulated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+        {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+        <span class="badge badge-slate">Attempt {{ obj.attempt_no }} of {{ max_attempts }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'scm:overview' %}">Supply Chain</a><span class="sep">›</span><a href="{% url 'scm:webhookdelivery_list' %}">Webhook Deliveries</a><span class="sep">›</span><span>{{ obj.event }} &middot; attempt {{ obj.attempt_no }}</span></div>
+      <p class="text-muted">One attempt to push this event to <a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}">{{ obj.subscription.name }}</a>, recorded once as it was made and untouched since. There is no edit history to show because there is no edit path to produce one.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:webhookdelivery_list' %}?subscription={{ obj.subscription_id }}" class="btn btn-outline"><i data-lucide="history"></i> This subscription&rsquo;s deliveries</a>
+      <a href="{% url 'scm:webhookdelivery_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ obj.triggered_at|date:"H:i" }}</div>
+      <div class="stat-label">{{ obj.triggered_at|date:"M d, Y" }} &middot; when the attempt was made, not when the row was written</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="repeat"></i></div>
+      <div class="stat-value">{{ obj.attempt_no }} <span class="text-muted">/ {{ max_attempts }}</span></div>
+      <div class="stat-label">Position on the retry ladder &middot; {% if obj.attempt_no < max_attempts %}rungs remain{% else %}the ladder is spent{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="server"></i></div>
+      {% comment %}
+        A nullable integer, so tested with `is not None` — truthiness would swallow a zero, and while
+        no HTTP status is 0, reading a nullable number for truth is the habit that eventually does
+        swallow a real value somewhere else.
+      {% endcomment %}
+      <div class="stat-value">{% if obj.response_code is not None %}{{ obj.response_code }}{% else %}&mdash;{% endif %}</div>
+      <div class="stat-label">{% if obj.response_code is not None %}What the subscriber&rsquo;s server answered{% else %}No status line &mdash; the attempt never reached a server{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="calendar-clock"></i></div>
+      <div class="stat-value">{% if obj.next_attempt_at %}{{ obj.next_attempt_at|date:"H:i" }}{% else %}&mdash;{% endif %}</div>
+      <div class="stat-label">{% if obj.next_attempt_at %}Next slot due {{ obj.next_attempt_at|date:"M d, Y" }} &mdash; a stamped intent, not a job{% else %}Nothing further scheduled{% endif %}</div>
+    </div>
+  </div>
+
+  {% comment %}
+    ============================================================== 1. the attempt exactly as recorded
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">What was recorded</h2>
+      <span class="badge badge-slate">{{ obj.event }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item">
+          <dt>Event</dt>
+          <dd class="mono fw-600">{{ obj.event }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Subscription</dt>
+          <dd><a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}" class="fw-600">{{ obj.subscription.name }}</a> <span class="text-muted mono">{{ obj.subscription.number }}</span></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Status</dt>
+          <dd>
+            {% if obj.status == 'success' %}<span class="badge badge-green">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'failed' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'exhausted' %}<span class="badge badge-red">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'pending' %}<span class="badge badge-amber">{{ obj.get_status_display }}</span>
+            {% elif obj.status == 'simulated' %}<span class="badge badge-info">{{ obj.get_status_display }}</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Attempt</dt>
+          <dd class="fw-600">{{ obj.attempt_no }} <span class="text-muted">of {{ max_attempts }}</span></dd>
+        </div>
+        <div class="detail-item">
+          <dt>Triggered at</dt>
+          <dd class="mono">{{ obj.triggered_at|date:"M d, Y H:i:s" }}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Response code</dt>
+          <dd>
+            {% if obj.response_code is not None %}
+              {% if obj.response_code < 300 %}<span class="badge badge-green">{{ obj.response_code }}</span>
+              {% elif obj.response_code < 400 %}<span class="badge badge-info">{{ obj.response_code }}</span>
+              {% else %}<span class="badge badge-red">{{ obj.response_code }}</span>{% endif %}
+            {% else %}
+              <span class="text-muted">&mdash; the attempt never reached a server</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div class="detail-item">
+          <dt>Next attempt due</dt>
+          {% comment %}
+            A stamped intent, not a promise. Nothing in this pass runs on a clock, so a slot in the
+            past means the moment came and went with nobody to act on it — which is exactly what the
+            row should say, rather than the page quietly hiding a stale date.
+          {% endcomment %}
+          <dd class="mono">{% if obj.next_attempt_at %}{{ obj.next_attempt_at|date:"M d, Y H:i:s" }}{% else %}<span class="text-muted">&mdash; nothing scheduled</span>{% endif %}</dd>
+        </div>
+        <div class="detail-item">
+          <dt>Row written</dt>
+          <dd class="mono">{{ obj.created_at|date:"M d, Y H:i:s" }}</dd>
+        </div>
+      </dl>
+
+      <p class="text-muted" style="margin-top:.75rem;">
+        <span class="fw-600">Triggered at</span> and <span class="fw-600">row written</span> are two different times on purpose. The first is when the attempt was made; the second is stamped on insert and cannot be back-dated by a caller. When they disagree by more than a moment the attempt was recorded after the fact, which is very often the thing worth knowing. <span class="fw-600">Next attempt due</span> is neither of those &mdash; it is a time in the future, or in the past, that <span class="fw-600">nothing is scheduled to act on</span>: 4.19 records the retry schedule and ships no daemon to run it.
+      </p>
+    </div>
+  </div>
+
+  {% comment %}
+    ================================================================== 2. the signature, and why not
+    The most likely thing on this page to be mistaken for a bug, so it gets its own card and a
+    sentence rather than an empty cell. Blank here is a consequence of a deliberate design decision
+    taken two models away, and it is worth being able to read that decision from the row it affects.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Signature</h2>
+      {% if obj.signature %}
+        <span class="badge badge-green">Computed</span>
+      {% else %}
+        <span class="badge badge-slate">Not computed &middot; by design</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if obj.signature %}
+        <pre class="mono" style="white-space:pre-wrap; word-break:break-all; margin:0;">{{ obj.signature }}</pre>
+        <p class="text-muted" style="margin-top:.75rem;">The HMAC a subscriber recomputes over the payload to satisfy themselves the push came from here and arrived unaltered.</p>
+      {% else %}
+        <p class="text-muted" style="margin:0;">
+          <span class="fw-600">Not computed &mdash; outbound transport is deferred.</span> This is the design, not a gap. Signing a payload needs the <span class="fw-600">plaintext</span> signing key, and a subscription stores only a prefix and a one-way hash of its secret &mdash; enough to show that a secret is registered and to recognise which one, and mathematically insufficient to sign with. That trade is correct here precisely because <span class="fw-600">nothing is delivered</span>: 4.19 ships no HTTP client at all, so there is no push to sign and no liability in holding a key that could. The first pass that adds real delivery has to solve both halves together &mdash; reversible encrypted-at-rest storage for the key, and the transport that uses it &mdash; and this column is where the result lands.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% comment %}
+    =============================================================================== 3. the payload
+    ESCAPED, never |safe. TRUNCATED by design, and it may carry partner PII. A full payload body is
+    never stored anywhere in 4.19, so what is below is an excerpt and nothing here pretends otherwise.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Payload excerpt</h2>
+      <span class="badge badge-amber">Truncated &middot; may contain partner PII</span>
+    </div>
+    <div class="card-body">
+      {% if obj.payload_excerpt %}
+        <pre class="mono" style="white-space:pre-wrap; word-break:break-word; overflow-x:auto; max-height:26rem; overflow-y:auto; margin:0;">{{ obj.payload_excerpt }}</pre>
+        <p class="text-muted" style="margin-top:.75rem;">This is an <span class="fw-600">excerpt</span> of what would have been pushed, not the payload. The full body is never stored: keeping data we do not need is a liability with no matching use, and an excerpt is enough to recognise what the event carried and to argue about it.</p>
+      {% else %}
+        <div class="empty-state">
+          <i data-lucide="file-x"></i>
+          <h3>No excerpt recorded</h3>
+          <p>Nothing was captured from the body of this push. Excerpts are optional by design and their absence is never treated as a failure &mdash; the attempt, its timing and its outcome are all recorded regardless, and those are what the log exists to prove.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if obj.error_message %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Recorded failure</h2>
+        <span class="badge badge-red">{% if obj.response_code is not None %}HTTP {{ obj.response_code }}{% else %}No response{% endif %}</span>
+      </div>
+      <div class="card-body">
+        <pre class="mono" style="white-space:pre-wrap; word-break:break-word; overflow-x:auto; max-height:18rem; overflow-y:auto; margin:0;">{{ obj.error_message }}</pre>
+        <p class="text-muted" style="margin-top:.75rem;">
+          This is what <span class="fw-600">this attempt</span> recorded, and it is not overwritten by a later one: each attempt is its own row, so the sequence of failures is readable end to end on the <a href="{% url 'scm:webhookdelivery_list' %}?subscription={{ obj.subscription_id }}">subscription&rsquo;s delivery log</a> rather than collapsing into a single last error. A failure with no response code never reached a server at all &mdash; a name that would not resolve, a connection refused, a request that timed out &mdash; and one with a 4xx reached it and was rejected, which is usually a subscriber-side problem rather than a transport one.
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  {% comment %}
+    ================================================================================= 4. the actions
+    Retry and Back to list. There is NO Edit and NO Delete: no view, no form module, no route — see
+    the header comment. Offering a button the app would 404 on is one failure; offering one that
+    "worked" would be worse, because it would let a subscriber complaint be answered from a log the
+    answering party could have rewritten after the complaint arrived.
+  {% endcomment %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Actions</h2></div>
+    <div class="card-body">
+      <p class="text-muted" style="margin:0 0 .9rem;">
+        <span class="badge badge-slate">Append-only</span>
+        There is no Edit and no Delete on this page, and neither is missing. A delivery attempt is a historical event &mdash; there is no such thing as amending one, and a log the sending party could revise would answer no complaint at all. The whole trail for a subscription does go away with the subscription itself, which is a deliberate admin-gated act on <a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}">its own page</a> and not an edit of this one.
+      </p>
+      {% if can_retry %}
+        <p class="text-muted" style="margin:0 0 .9rem;">
+          Retry stamps the next rung of the backoff ladder onto this row: the status returns to Pending, the attempt count goes up by one, and the next slot is scheduled
+          {% if next_backoff_seconds is not None %}
+            <span class="fw-600">{{ next_backoff_seconds }} second{{ next_backoff_seconds|pluralize }}</span> from the moment you press it.
+          {% else %}
+            for the next published interval.
+          {% endif %}
+          The ladder is the published eight-attempt schedule &mdash; 0s, 5s, 5m, 30m, 2h, 5h, 10h, 10h, roughly thirty-two hours end to end &mdash; and this row is at attempt {{ obj.attempt_no }} of {{ max_attempts }}. It <span class="fw-600">sends nothing</span>: 4.19 ships no outbound transport, so no subscriber is called, no payload is signed and no delivery is attempted. It records when the next attempt is due, and nothing runs on a clock to act on that.
+        </p>
+      {% else %}
+        <p class="text-muted" style="margin:0 0 .9rem;">
+          <span class="badge badge-muted">Retry unavailable</span>
+          {% if obj.attempt_no < max_attempts %}
+            This attempt is {{ obj.get_status_display|lower }}, so there is nothing to retry: a delivery that succeeded needs no second push, and a simulated one never went anywhere to fail.
+          {% else %}
+            This row has used every rung of the ladder &mdash; {{ obj.attempt_no }} of {{ max_attempts }} attempts &mdash; so no further slot can be scheduled. A subscriber that has been unreachable for the whole ladder is a subscription problem rather than a delivery one, and the fix is on <a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}">the subscription</a>: correct the target URL, then let a fresh event raise a fresh delivery.
+          {% endif %}
+        </p>
+      {% endif %}
+      <div class="form-actions">
+        {% if can_retry %}
+          <form method="post" action="{% url 'scm:webhookdelivery_retry' obj.pk %}" onsubmit="return confirm('Schedule another delivery attempt for {{ obj.event }}? The next slot on the backoff ladder is stamped onto this row and the attempt count goes up by one. Nothing is sent: 4.19 ships no outbound transport, so this records the schedule and calls nobody.');">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i> Retry</button>
+          </form>
+        {% endif %}
+        <a href="{% url 'scm:webhooksubscription_detail' obj.subscription_id %}" class="btn btn-outline"><i data-lucide="webhook"></i> Subscription</a>
+        <a href="{% url 'scm:webhookdelivery_list' %}?subscription={{ obj.subscription_id }}" class="btn btn-outline"><i data-lucide="history"></i> This subscription&rsquo;s deliveries</a>
+        <a href="{% url 'scm:webhookdelivery_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
