@@ -111,6 +111,15 @@ from .FinanceIntegration.LandedCostVouchers import urlpatterns as _fin_vouchers
 from .FinanceIntegration.DutyTariffs import urlpatterns as _fin_tariffs
 from .FinanceIntegration.Reports import urlpatterns as _fin_reports
 
+# 4.19 Integration & API Gateway. Alias `_iag_`, verified free against every shipped scm prefix
+# (`_procurement_ _srm_ _inv_ _wms_ _oms_ _tms_ _dp_ _mf_ _qm_ _rma_ _sca_ _cc_ _am_ _lm_ _ccm_
+# _cp_ _tpl_ _fin_`). Rebinding a live alias would silently drop another sub-module's routes with no
+# import error at all — the name would simply resolve to the wrong list.
+from .IntegrationApiGateway.IntegrationEndpoints import urlpatterns as _iag_endpoints
+from .IntegrationApiGateway.IntegrationMessages import urlpatterns as _iag_messages
+from .IntegrationApiGateway.WebhookSubscriptions import urlpatterns as _iag_subscriptions
+from .IntegrationApiGateway.WebhookDeliveries import urlpatterns as _iag_deliveries
+
 
 app_name = "scm"
 
@@ -456,4 +465,39 @@ urlpatterns = [
     *_fin_vouchers,                      # FinanceIntegration/LandedCostVouchers (+ 4 verbs + charges)
     *_fin_tariffs,                       # FinanceIntegration/DutyTariffs (the HS x origin rate master)
     *_fin_reports,                       # FinanceIntegration/Reports (AP + AR + budget + LC variance)
+
+    # --- 4.19 Integration & API Gateway --------------------------------------------------------
+    # PREFIX-COLLISION CHECK, run against this WHOLE concatenated list rather than against the four
+    # modules below on their own — which is the only check that means anything here, since every
+    # entity module's patterns land in one flat `scm:` namespace.
+    #
+    # Nothing anywhere in apps/scm/urls/ previously began with `integration` or with `webhook`, so
+    # all five new first components are new: `integration-endpoints/`, `integration-messages/`,
+    # `integration-exceptions/`, `webhook-subscriptions/` and `webhook-deliveries/`. Django matches
+    # WHOLE path components and NEVER splits one at a hyphen, so those are five unrelated segments
+    # and none can shadow another. It also means none of them may ever be "tidied" into an
+    # `integration/<something>/` or `webhooks/<something>/` parent — that would turn independent
+    # segments into one segment plus a captured value and put them in each other's way for the
+    # first time. Near neighbours checked rather than assumed: 4.17's `logistics-clients/`, 4.18's
+    # `finance-*`, 4.16's eight `portal-*`, and CRM's own `webhooks/` (a different app, mounted at
+    # /crm/, so it cannot collide regardless of spelling).
+    #
+    # 4.19 introduces NO greedy `<str:…>` converter — 4.10's `return-tracking/<str:token>/` and
+    # 4.16's `portal-documents/<str:token>/` remain the app's only two. Within each module below,
+    # literal routes (`add/`, and the endpoint register's four category bullets) precede every
+    # `<int:pk>/` one.
+    #
+    # VIEW-NAME check (the `scm:` namespace is flat): every 4.19 name is new — no shipped scm view
+    # is named `integration*` or `webhook*`, and the report name `integration_exceptions` collides
+    # with none of `valuation_report`, `reorder_alerts`, `cold_storage_report`, `labor_board`,
+    # `sparepart_list`, `logistics_kpis`, `client_inventory_report`, `client_space_report`,
+    # `finance_payables`, `finance_receivables`, `finance_budget_variance` or
+    # `landed_cost_variance`.
+    *_iag_endpoints,                     # IntegrationApiGateway/IntegrationEndpoints (+ 4 category
+                                         #   bullets + rotate-credential)
+    *_iag_messages,                      # IntegrationApiGateway/IntegrationMessages (append-only:
+                                         #   list + detail + reprocess) + the exceptions cockpit
+    *_iag_subscriptions,                 # IntegrationApiGateway/WebhookSubscriptions (+ rotate-secret)
+    *_iag_deliveries,                    # IntegrationApiGateway/WebhookDeliveries (append-only:
+                                         #   list + detail + retry; no sidebar bullet of its own)
 ]
