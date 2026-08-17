@@ -1579,7 +1579,8 @@ active + a draft + a shared rate card, an invoiced run, an open run and a shared
 Accounts Payable, Accounts Receivable, Budgeting — are **READ-ONLY COMPUTED registers**, not tables: what we owe and
 what we are owed already exist as POINTERS into `apps/accounting` from six shipped models (4.1 `GoodsReceiptNote.bill`,
 4.6 `FreightInvoice.bill`, 4.18 `LandedCostVoucher.bill`; 4.5 `SalesOrder.invoice`, 4.17 `ClientBillingRun.invoice`,
-4.10 `RMA.credit_note`), so an AP/AR/Budget table here would be a second copy of the same money that drifts the first
+4.10 `ReturnAuthorization.credit_note` — the class is `ReturnAuthorization`; `RMA-` is only its number prefix and
+there is no `RMA` class or alias anywhere in the project), so an AP/AR/Budget table here would be a second copy of the same money that drifts the first
 time Accounting voids something (L29). **SCM posts NO `JournalEntry`.** The sub-module's one and only accounting write
 is `LandedCostVoucher.draft_bill()`, which creates a DRAFT `accounting.Bill` and **stops** — Accounting posts the
 entry. Landed cost itself is an **ADDITIVE allocation layer over the append-only `StockMove` ledger** (4.3): it never
