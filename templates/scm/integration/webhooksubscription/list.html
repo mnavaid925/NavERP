@@ -25,6 +25,10 @@ Everything this page may read, and NOTHING else:
                    must not be a model constant behind it.
   stats            dict with EXACTLY: total / active / inactive / failing
                    (failing = consecutive_failures__gt=0), counted over the WHOLE workspace.
+  is_tenant_admin  bool. Gates Add / Edit / Delete, which is exactly the set of routes carrying
+                   @tenant_admin_required: create, edit, delete and rotate-secret are all admin-level
+                   because target_url is an egress path out of the workspace (L27). The decorators
+                   are the boundary — this only stops offering a member a control that 403s them.
 
 Per row, and all of it free — every one is a local column or a plain choices display on a row the
 paginator already loaded, so nothing below costs a query: obj.pk, obj.number, obj.name,
@@ -104,7 +108,9 @@ that reason.
     </div>
     <div class="page-actions">
       <a href="{% url 'scm:webhookdelivery_list' %}" class="btn btn-outline"><i data-lucide="list-checks"></i> Delivery Log</a>
-      <a href="{% url 'scm:webhooksubscription_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Subscription</a>
+      {% if is_tenant_admin %}
+        <a href="{% url 'scm:webhooksubscription_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Subscription</a>
+      {% endif %}
     </div>
   </div>
 
@@ -290,23 +296,27 @@ that reason.
               <td>
                 <div class="table-actions">
                   <a href="{% url 'scm:webhooksubscription_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
                   {% comment %}
-                    Delete is @require_POST AND @tenant_admin_required, so it is a real form and a GET
-                    on that route is a 405. It is rendered for everyone and refused by the decorator
-                    for non-admins — the contract pins no is_tenant_admin key for this page, and a
-                    variable the view does not pass renders as an empty string with no error anywhere,
-                    which would hide this button from the admins who are allowed to use it (L7).
+                    Edit and Delete are BOTH @tenant_admin_required (delete is @require_POST on top,
+                    so it is a real form and a GET on that route is a 405), and the view now pins
+                    is_tenant_admin for exactly this reason. Offering a member a control that answers
+                    with a raw 403 PermissionDenied page is not a security boundary, it is a dead end
+                    — the decorators are the boundary and this is only courtesy. The key IS in the
+                    contract at the top of this file, so it cannot silently render empty and hide the
+                    buttons from the admins who are allowed to use them (L7).
 
-                    The confirm names the real cost: WebhookDelivery.subscription is CASCADE, so the
-                    entire delivery log goes with the row. Only the system-generated WHK- number is
-                    interpolated; the apostrophes are written \' because &#39; is decoded back to a
-                    bare quote before JavaScript sees the attribute, which breaks the dialog open and
-                    silently removes the guard (L42).
+                    The delete confirm names the real cost: WebhookDelivery.subscription is CASCADE,
+                    so the entire delivery log goes with the row. Only the system-generated WHK-
+                    number is interpolated; the apostrophes are written \' because &#39; is decoded
+                    back to a bare quote before JavaScript sees the attribute, which breaks the
+                    dialog open and silently removes the guard (L42).
                   {% endcomment %}
-                  <form method="post" action="{% url 'scm:webhooksubscription_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its ENTIRE DELIVERY LOG is deleted with it — every attempt, response code and error recorded against this subscription — and none of it can be reconstructed, because the log is the only record that a notification was ever raised. If a partner later disputes whether they were told, that answer goes too. If you only want it to stop firing, clear the Active switch instead: the rule stops and the evidence stays.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  {% if is_tenant_admin %}
+                    <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'scm:webhooksubscription_delete' obj.pk %}" onsubmit="return confirm('Delete {{ obj.number }}? Its ENTIRE DELIVERY LOG is deleted with it — every attempt, response code and error recorded against this subscription — and none of it can be reconstructed, because the log is the only record that a notification was ever raised. If a partner later disputes whether they were told, that answer goes too. If you only want it to stop firing, clear the Active switch instead: the rule stops and the evidence stays.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
