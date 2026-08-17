@@ -26,6 +26,9 @@ returns crud_list(...). Everything this page may read, and nothing else:
                   returns 200 with that bound simply not applied (L11)
   stats           dict, exactly five int keys: total, pending, success, failed, exhausted — computed
                   over the WHOLE tenant queryset, never over the filtered page
+  append_only_note  str. The one sentence-set explaining the missing Add/Edit/Delete, shared with the
+                  detail page so the two cannot drift into two accounts of the same rule. Printed as
+                  the FIRST paragraph of the append-only card; the page-specific wording follows it.
 
 Filter params: q / subscription / status / date_from / date_to. `subscription` is the ONLY pk on this
 page, which is why |stringformat:"d" appears exactly once below and |slugify appears nowhere.
@@ -143,7 +146,14 @@ into the rendered page as visible text (L2), so it is never used here.
       <span class="badge badge-info">No add &middot; No edit &middot; No delete</span>
     </div>
     <div class="card-body">
-      <p class="text-muted" style="margin:0;">
+      {% comment %}
+        append_only_note first, then this page's own wording — the shipped shape at
+        templates/scm/assets/meterreading/list.html:61. The shared sentence states the rule and is
+        the same string the detail page prints; the paragraphs under it name THIS page's
+        affordances and the backoff ladder, which the shared one cannot.
+      {% endcomment %}
+      <p class="text-muted" style="margin:0;">{{ append_only_note }}</p>
+      <p class="text-muted" style="margin-top:.75rem;">
         Rows below carry a <span class="fw-600">View</span> action and, where the attempt is not already settled, a <span class="fw-600">Retry</span> button. There is no Add, no Edit and no Delete, and none of the three is missing: a delivery record is evidence of what this workspace tried to send, and a row somebody can rewrite after a subscriber has complained is not evidence of anything. A further attempt is <span class="fw-600">appended as a new state on the row&rsquo;s ladder</span>, never typed in by hand.
       </p>
       <p class="text-muted" style="margin-top:.75rem;">
