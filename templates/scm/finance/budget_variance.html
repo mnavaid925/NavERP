@@ -258,7 +258,9 @@ stat-card icon colours are blue / green / orange / purple / slate only.
       alone and still be over once its open orders are counted &mdash; which is the whole reason the two columns
       are kept apart rather than added together.
       {% if truncated %}
-        The totals above the table cover the whole filtered set; the footer covers only the {{ row_cap }} rows printed.
+        This view is capped at {{ row_cap }} rows, and the tiles above are summed from the same capped list as the
+        footer &mdash; so budget lines beyond the cap are counted in neither. Narrow the filters until this notice
+        clears before reading these as the department&rsquo;s full position.
       {% endif %}
     </div>
   </div>
