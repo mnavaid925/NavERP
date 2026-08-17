@@ -1667,9 +1667,11 @@ where NULL** so allocate-by-weight/volume don't silently fall back to quantity. 
 fallback **and** an origin-specific row — the pair IS the `rate_for` demo). Two `LandedCostVoucher`s: one run all the
 way through the REAL `allocate()` → `draft_bill()` path (so the rounding remainder, `_unallocate()` and the `BillLine`
 precision rules are exercised on every seed), the second **left in DRAFT on purpose** — the ordinary first state, which
-is what makes the estimate-only path and the "Allocate" button visible in the demo. `--flush` deletes the whole
-allocation → charge → voucher tree BEFORE 4.1's `GoodsReceiptNote` (PROTECT) and any party cleanup; there is no
-`JournalEntry` to unwind.
+is what makes the estimate-only path and the "Allocate" button visible in the demo. `--flush` deletes the DRAFT
+`accounting.Bill`s scoped through `scm_landed_cost_vouchers` **FIRST** (`LandedCostVoucher.bill` is SET_NULL, so
+deleting the vouchers first would strand a fresh set of draft bills in AP every cycle — CASCADE takes their
+`BillLine`s with them), then the allocation → charge → voucher tree, then the `DutyTariff` master **last** — all
+BEFORE 4.1's `GoodsReceiptNote` (PROTECT) and any party cleanup. There is no `JournalEntry` to unwind.
 
 ## Conventions & gotchas
 
