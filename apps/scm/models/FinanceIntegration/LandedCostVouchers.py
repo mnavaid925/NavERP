@@ -203,6 +203,13 @@ class LandedCostVoucher(TenantNumbered):
             models.Index(fields=["tenant", "cost_date"], name="scm_lcv_tnt_date_idx"),
             # The GRN detail page's "what did this receipt cost to land" panel.
             models.Index(fields=["tenant", "goods_receipt"], name="scm_lcv_tnt_grn_idx"),
+            # The list page's ?party= filter AND `_party_qs`'s reverse join
+            # (`scm_landed_cost_vouchers__tenant=tenant`), which runs on EVERY list page load to
+            # build the dropdown. Django's plain single-column FK index on `party_id` cannot serve
+            # either: both re-check `tenant` per row. This is the app-wide pattern for a
+            # tenant-scoped FK list filter — cf. `scm_cbr_tnt_cli_end_idx` (4.17) and
+            # `scm_rma_tnt_cust_idx` (4.10) — not a 4.18 fork.
+            models.Index(fields=["tenant", "party"], name="scm_lcv_tnt_party_idx"),
         ]
 
     def __str__(self):
