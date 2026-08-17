@@ -1644,7 +1644,10 @@ only two). `LandedCostAllocation` has **no url** — it renders inside the vouch
 Entity folders `dutytariff/` (list/detail/form) and `landedcostvoucher/` (list/detail/form), the nested line form
 `landedcostcharge/form.html`, and **four standalone report pages** at the sub-module root: `payables.html`,
 `receivables.html`, `budget_variance.html`, `landed_cost_variance.html`. The voucher detail page hosts the charge grid
-and the derived allocation grid; an unallocatable per-unit uplift renders as `None`, not `0`.
+and the derived allocation grid; a group with no quantity to divide by gets `unit_cost_uplift = None` (never `0`) in
+the CONTEXT, and the page renders an **em dash** in the column and drops the per-unit badge — zero is a real answer,
+so the guard is `{% if group.unit_cost_uplift is not None %}`, never truthiness. Nothing on the page ever prints the
+literal string "None"; do not write a smoke assertion looking for it.
 
 ### Seeder — `_seed_finance_tenant`  (runs LAST in `handle()`, after 4.17)
 Guarded by `LandedCostVoucher.exists()`. **Invents no master data** — every party, item, GL account, tax code,
