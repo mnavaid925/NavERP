@@ -190,9 +190,18 @@ def _message_stats(tenant):
 def integrationmessage_list(request):
     """The append-only exchange log: search, endpoint, direction, type, status, source, date window.
 
-    ``select_related("endpoint", "purchase_order", "sales_order")`` covers every FK a row renders or
-    whose ``__str__`` a link prints; without it a page of 30 messages is up to 90 extra queries for
-    three columns (L18).
+    ``select_related("endpoint")`` covers every FK a row renders or whose ``__str__`` a link prints;
+    without it a page of 30 messages is 30 extra queries for the endpoint column (L18). The two typed
+    order pointers are deliberately NOT joined here — the template says so itself and renders
+    neither, so joining them was two LEFT OUTER JOINs and ~55 unused columns per row on every page of
+    the sub-module's fastest-growing table. :func:`integrationmessage_detail` joins both, because
+    that page does render them.
+
+    ``.defer("payload_excerpt", "error_message")`` drops the two ``TextField``s no list column reads
+    (the failure cell renders ``error_code`` only) — a truncated document body pulled off this table
+    30 rows at a time for nothing. ``defer`` touches the SELECT list ONLY, so the search over
+    ``number``/``control_number``/``external_id``/``source_reference`` and all five filters are
+    unaffected.
 
     The date window is applied BEFORE ``crud_list`` paginates — a filter applied afterwards would
     page over the unfiltered set and quietly show the wrong rows on page 2. ``endpoint`` goes
@@ -202,7 +211,8 @@ def integrationmessage_list(request):
     rather than 500-ing.
     """
     qs = (IntegrationMessage.objects.filter(tenant=request.tenant)
-          .select_related("endpoint", "purchase_order", "sales_order"))
+          .select_related("endpoint")
+          .defer("payload_excerpt", "error_message"))
     qs = _message_window(qs, request.GET)
 
     return crud_list(
