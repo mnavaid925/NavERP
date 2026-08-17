@@ -14,8 +14,9 @@ Everything this page may read, and NOTHING else:
                      exhausted / simulated. DERIVED by aggregate on read, never stored on the row —
                      a stored count is a count that drifts the first time a delete or a retry misses
                      the increment, and the aggregate cannot.
-  is_tenant_admin    bool. Gates rotate-secret and delete, and NOTHING ELSE — Edit is not gated,
-                     because webhooksubscription_edit carries no @tenant_admin_required.
+  is_tenant_admin    bool. Gates Edit, rotate-secret and delete — all three routes carry
+                     @tenant_admin_required, because target_url is an egress path out of the
+                     workspace and an ungated edit is an ungated RETARGET (L27).
   plaintext_once     the signing secret the rotate action just minted, or None on every ordinary
                      visit. It travels on a pop-once SESSION key rather than a flash message (L25:
                      the messages framework serialises to a cookie / django_session, where a
@@ -30,7 +31,7 @@ for. A variable the view does not pass renders as an empty string with no error 
 this codebase's most repeated frontend bug (L7) — so every gate below mirrors a decorator that
 actually exists on the route it guards:
 
-  webhooksubscription_edit            @login_required                                  -> ungated here
+  webhooksubscription_edit            @login_required @tenant_admin_required
   webhooksubscription_delete          @login_required @tenant_admin_required @require_POST
   webhooksubscription_rotate_secret   @login_required @tenant_admin_required @require_POST
 
@@ -98,7 +99,9 @@ Nothing on this page is |safe.
       <p class="text-muted">One standing rule — <span class="fw-600">{{ obj.get_trigger_entity_display }} · {{ obj.get_trigger_event_display }}</span> — and the log of everything raised under it. The rule watches <span class="fw-600">our own</span> documents, which is why it names no partner: a subscription is something we decide to announce, not a relationship with someone outside.</p>
     </div>
     <div class="page-actions">
-      <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if is_tenant_admin %}
+        <a href="{% url 'scm:webhooksubscription_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
       <a href="{% url 'scm:webhooksubscription_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
     </div>
   </div>
