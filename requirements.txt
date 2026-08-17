@@ -5,6 +5,9 @@ PyMySQL==1.2.0
 python-dotenv==1.2.2
 stripe==15.2.1
 Pillow==12.2.0
+# Fernet, for reversible encryption of secrets that must be recovered in plaintext
+# (crm.Webhook.secret is HMAC-signed with, so it cannot be hashed) — apps/core/crypto.py
+cryptography==46.0.3
 
 # Dev / test
 pytest==9.1.1
