@@ -1637,7 +1637,17 @@ and the derived allocation grid; an unallocatable per-unit uplift renders as `No
 ### Seeder — `_seed_finance_tenant`  (runs LAST in `handle()`, after 4.17)
 Guarded by `LandedCostVoucher.exists()`. **Invents no master data** — every party, item, GL account, tax code,
 currency, shipment, freight invoice and customs document is found among rows earlier passes seeded; an optional link
-whose subject is absent is left null. Sets `weight_kg`/`volume_cbm` on three SKUs (`WS-16`, `MON-27`, `DOCK-C`) **only
+whose subject is absent is left null. **It does, however, WRITE THE STOCK LEDGER, and that is the pass's biggest side
+effect:** when the chosen `received` GRN has no `receipt` `StockMove`s, it posts them through the **real
+`_post_grn_receipt` helper** — the same function `goodsreceipt_receive` calls from the UI — inside
+`transaction.atomic()`, so the inbound cost layers and the weighted-average roll follow the app's own path rather
+than a seeder's copy of it. That deliberately closes **4.1's documented gap**: 4.1 books its GRN `received` without
+posting stock because it runs *before* `_seed_inventory_tenant` (no item master, no location to post against), while
+this pass runs LAST and the PO lines' `sku_hint`s are the exact SKUs 4.3 seeds. It is guarded by the same
+`exists()` check the flush filter describes, so a second run posts nothing. **It also returns early and seeds ZERO
+vouchers in four cases**, each with its own WARNING: no `received` GRN at all; the receipt post came back *blocked*;
+the post matched *no item*; or there is **no supplier/vendor/partner party** (the drafted bill's `party` is PROTECT
+and required, and this pass creates no party). Sets `weight_kg`/`volume_cbm` on three SKUs (`WS-16`, `MON-27`, `DOCK-C`) **only
 where NULL** so allocate-by-weight/volume don't silently fall back to quantity. Two `DutyTariff` rows (an any-origin
 fallback **and** an origin-specific row — the pair IS the `rate_for` demo). Two `LandedCostVoucher`s: one run all the
 way through the REAL `allocate()` → `draft_bill()` path (so the rounding remainder, `_unallocate()` and the `BillLine`
