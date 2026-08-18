@@ -3765,3 +3765,426 @@ def finance_budget_a(db, tenant_a, finance_fiscal_period_a, gl_expense, org_unit
     BudgetLine.objects.create(tenant=tenant_a, budget=budget, gl_account=gl_expense,
                               org_unit=org_unit_a, amount=Decimal("10000.00"))
     return budget
+
+
+# =================================================================================================
+# SCM 4.19 Integration & API Gateway — the ``integration_`` fixtures
+# =================================================================================================
+# NAMING: every fixture below carries the ``integration_`` prefix; the four test modules are
+# ``test_integration_{models,forms,views,security}.py``, every test function is ``test_integration_*``
+# and every module-level helper ``_integration_*``. Nothing here shadows an existing name (the
+# hygiene guard in ``test_suite_hygiene.py`` parses this file and fails on any module-level name
+# defined twice).
+#
+# TIME BASIS (L16): every moment below is derived from ``timezone.now()`` — the SAME basis
+# ``IntegrationMessage.occurred_at``, ``WebhookDelivery.triggered_at`` and
+# ``webhookdelivery_retry``'s ``next_attempt_at`` all read. NEVER ``datetime.datetime.now()`` and
+# never ``datetime.date.today()``.
+#
+# FOUR THINGS THAT MAKE 4.19 DIFFERENT FROM ITS SIBLINGS, and that decide what a fixture may set:
+#
+# 1. NO TRANSPORT EXISTS. Nothing in this sub-module fetches, posts, signs or polls. ``reprocess``
+#    and ``retry`` move queue state and send nothing, so no fixture needs (or may add) a network
+#    stub — there is nothing to stub.
+#
+# 2. THE TWO SECRETS ARE PREFIX + SHA-256 MARKERS, and both column pairs are ``editable=False``.
+#    ``credential_prefix``/``credential_hash`` and ``signing_secret_prefix``/``signing_secret_hash``
+#    are written ONLY through ``set_credential()`` / ``set_signing_secret()``, which is exactly how
+#    the two "…_with_credential/secret_a" fixtures below reach them — never by assigning the columns,
+#    which would assert the fixture rather than the model.
+#
+# 3. THE TWO LOGS ARE APPEND-ONLY. ``IntegrationMessage`` and ``WebhookDelivery`` have NO ModelForm
+#    and no create/edit/delete route anywhere, so their fixtures are written straight through
+#    ``objects.create`` — there is no form path to drive them through, deliberately.
+#
+# 4. CONSTRAINT A: an endpoint that names a ``LogisticsClient`` must leave ``interchange_id`` /
+#    ``interchange_qualifier`` BLANK — 4.17 owns that partner's EDI identity and the endpoint reads
+#    it through the FK (``effective_interchange_id`` / ``effective_interchange_qualifier``).
+#    ``integration_endpoint_edi_a`` is the no-client row that carries its OWN pair;
+#    ``integration_endpoint_client_a`` is the linked row that carries none. Both shapes exist because
+#    the model's ``clean()`` and the form both refuse the combination.
+
+
+# ------------------------------------------------------------------ IntegrationEndpoint [CNX-]
+@pytest.fixture
+def integration_endpoint_a(db, tenant_a):
+    """tenant_a's ERP connection — the plain, credential-less root row.
+
+    ``status="connected"`` and ``is_active=True`` so it lands in the list page's ``connected`` and
+    ``active`` chips. NO credential is registered, so ``masked`` is ``""`` and the detail page renders
+    the literal "Not set" — the opposite of ``integration_endpoint_with_credential_a``.
+    """
+    from apps.scm.models import IntegrationEndpoint
+    return IntegrationEndpoint.objects.create(
+        tenant=tenant_a, name="SAP S/4HANA master data",
+        category="erp", system="sap", direction="bidirectional", transport="api_rest",
+        auth_method="oauth2", endpoint_url="https://sap-erp.internal.example.com/odata/v4/scm",
+        external_account_ref="NAVERP-SCM-PRD", trigger_mode="scheduled",
+        schedule_note="Every 15 minutes, 04:00-23:45 local",
+        environment="production", lifecycle_stage="live", status="connected",
+        notes="Items, vendors and goods movements.")
+
+
+@pytest.fixture
+def integration_endpoint_iot_a(db, tenant_a, location_a):
+    """tenant_a's IoT reader, left IN ERROR on purpose — the ``error`` chip's and the cockpit's row.
+
+    ``consecutive_failures`` / ``last_run_at`` / ``last_success_at`` / ``last_seen_at`` are
+    ``editable=False`` (so they are structurally off every form) but freely assignable at
+    ``create()`` — which is the only way a test can reach the "recorded, never enforced" state the
+    model documents.
+    """
+    from django.utils import timezone
+    from apps.scm.models import IntegrationEndpoint
+    now = timezone.now()
+    return IntegrationEndpoint.objects.create(
+        tenant=tenant_a, name="Inbound dock RFID reader",
+        category="iot", system="rfid_reader", direction="inbound", transport="llrp",
+        auth_method="none", endpoint_url="llrp://10.20.4.17:5084",
+        device_identifier="RDR-DOCK-01", trigger_mode="realtime",
+        environment="production", lifecycle_stage="live", status="error",
+        consecutive_failures=3,
+        last_run_at=now - datetime.timedelta(hours=2),
+        last_success_at=now - datetime.timedelta(days=1, hours=6),
+        last_seen_at=now - datetime.timedelta(hours=2),
+        location=location_a,
+        notes="Antenna 2 drops the session since the dock door was re-hung.")
+
+
+@pytest.fixture
+def integration_endpoint_edi_a(db, tenant_a, supplier_a):
+    """tenant_a's EDI VAN connection carrying its OWN interchange identity — NO 3PL client link.
+
+    This is the legal half of constraint A: with ``logistics_client`` unset, ``interchange_id`` /
+    ``interchange_qualifier`` are this row's own and ``effective_interchange_id`` returns
+    ``"ZZ12345678"`` straight off the column. Its mirror is ``integration_endpoint_client_a``.
+    """
+    from apps.scm.models import IntegrationEndpoint
+    return IntegrationEndpoint.objects.create(
+        tenant=tenant_a, name="EDI VAN trading partner interchange",
+        category="edi", system="edi_van", direction="bidirectional", transport="as2",
+        auth_method="mtls", endpoint_url="https://as2.van-partner.example.net/exchange",
+        interchange_id="ZZ12345678", interchange_qualifier="ZZ",
+        trigger_mode="realtime", environment="production", lifecycle_stage="certified",
+        status="connected", partner_party=supplier_a)
+
+
+@pytest.fixture
+def integration_endpoint_client_a(db, tenant_a, tpl_client_shared_a):
+    """tenant_a's EDI connection LINKED to a 4.17 ``LogisticsClient`` — its own pair stays blank.
+
+    ``tpl_client_shared_a`` carries ``code="SHARED"``, ``edi_partner_id="1234567890123"`` and
+    ``edi_qualifier="ZZ"``, so ``effective_interchange_id`` reads ``"1234567890123"`` THROUGH the FK
+    while ``interchange_id`` is ``""``. That read-through is the whole of constraint A: one place a
+    partner's ISA id lives, and a second copy on this row is refused by ``clean()`` and by the form.
+    """
+    from apps.scm.models import IntegrationEndpoint
+    return IntegrationEndpoint.objects.create(
+        tenant=tenant_a, name="3PL client interchange",
+        category="edi", system="edi_van", direction="bidirectional", transport="van",
+        auth_method="ssh_key", environment="production", lifecycle_stage="live",
+        status="connected", logistics_client=tpl_client_shared_a)
+
+
+@pytest.fixture
+def integration_endpoint_disabled_a(db, tenant_a):
+    """A SWITCHED-OFF sandbox connection — the ``disabled`` chip's row and the ``is_active=False`` one.
+
+    Deliberately every default's opposite (``category="custom"``, ``environment="sandbox"``,
+    ``lifecycle_stage="setup"``), so a filter assertion that narrows to it is narrowing on a value no
+    other tenant_a endpoint carries.
+    """
+    from apps.scm.models import IntegrationEndpoint
+    return IntegrationEndpoint.objects.create(
+        tenant=tenant_a, name="Retired sandbox connector",
+        category="custom", system="custom", direction="outbound", transport="file_drop",
+        auth_method="none", environment="sandbox", lifecycle_stage="setup",
+        status="disabled", is_active=False)
+
+
+@pytest.fixture
+def integration_endpoint_with_credential_a(db, tenant_a):
+    """An endpoint whose credential marker was registered THROUGH ``set_credential()``.
+
+    The plaintext is the literal ``"cred-plaintext-0123456789"``, so:
+    ``credential_prefix == "cred-pla"`` (the first 8 characters),
+    ``credential_hash == IntegrationEndpoint.hash_secret("cred-plaintext-0123456789")`` and
+    ``masked == "cred-pla" + "•" * 8``.
+
+    Written through the model's own writer rather than by assigning the two columns: they are
+    ``editable=False`` and ``set_credential`` is their ONLY legitimate writer, so a fixture that set
+    them directly would be asserting itself instead of the model. The plaintext is never stored.
+    """
+    from apps.scm.models import IntegrationEndpoint
+    endpoint = IntegrationEndpoint(
+        tenant=tenant_a, name="Shopify storefront feed",
+        category="ecommerce", system="shopify", direction="inbound", transport="webhook",
+        auth_method="api_key", endpoint_url="https://naverp-demo.myshopify.com/admin/api/2024-10",
+        external_account_ref="naverp-demo.myshopify.com", trigger_mode="realtime",
+        environment="production", lifecycle_stage="live", status="connected")
+    endpoint.set_credential("cred-plaintext-0123456789")
+    endpoint.save()
+    return endpoint
+
+
+@pytest.fixture
+def integration_endpoint_b(db, tenant_b):
+    """tenant_b's connection — the cross-tenant target every 4.19 endpoint route must 404 on."""
+    from apps.scm.models import IntegrationEndpoint
+    return IntegrationEndpoint.objects.create(
+        tenant=tenant_b, name="Globex NetSuite link",
+        category="erp", system="netsuite", direction="outbound", transport="api_rest",
+        environment="production", lifecycle_stage="live", status="connected")
+
+
+# ------------------------------------------------------------------ IntegrationMessage [MSG-]
+@pytest.fixture
+def integration_message_a(db, tenant_a, integration_endpoint_edi_a, purchase_order_a):
+    """An OUTBOUND 850 in ``sent`` state, correlated to ``purchase_order_a`` both ways.
+
+    ``source`` + ``source_reference`` is the SOFT pointer (scm bans ``GenericForeignKey``) and
+    ``purchase_order`` is one of the only two TYPED FKs on the table — this row carries both, which
+    is what the detail page renders. ``sent`` is deliberately NOT in ``REPROCESS_BLOCKED_STATUSES``,
+    so this is the row a positive reprocess acts on.
+    """
+    from django.utils import timezone
+    from apps.scm.models import IntegrationMessage
+    return IntegrationMessage.objects.create(
+        tenant=tenant_a, endpoint=integration_endpoint_edi_a,
+        direction="outbound", document_type="edi_850", status="sent",
+        control_number="000000412", record_count=1,
+        occurred_at=timezone.now() - datetime.timedelta(days=3, hours=4),
+        source="purchase_order", source_reference=purchase_order_a.number,
+        purchase_order=purchase_order_a,
+        payload_excerpt="ISA*00*...~ST*850*0001~  [truncated]")
+
+
+@pytest.fixture
+def integration_message_ack_a(db, tenant_a, integration_endpoint_edi_a, integration_message_a):
+    """The INBOUND 997 that answers ``integration_message_a`` — the acknowledgement chain's far end.
+
+    ``integrationmessage_detail`` renders the chain in BOTH directions: ``obj.acknowledges`` is what
+    a row answers, and ``ack_message`` is the row that answered IT. So on ``integration_message_a``'s
+    page this row IS ``ack_message``, and on this row's page ``obj.acknowledges`` is that 850.
+    """
+    from django.utils import timezone
+    from apps.scm.models import IntegrationMessage
+    return IntegrationMessage.objects.create(
+        tenant=tenant_a, endpoint=integration_endpoint_edi_a,
+        direction="inbound", document_type="edi_997", status="received",
+        control_number="000000412", record_count=1,
+        occurred_at=timezone.now() - datetime.timedelta(days=3, hours=3),
+        source="purchase_order", source_reference=integration_message_a.source_reference,
+        acknowledges=integration_message_a,
+        payload_excerpt="ST*997*0001~AK9*A*1*1*1~  [truncated]")
+
+
+@pytest.fixture
+def integration_message_acknowledged_a(db, tenant_a, integration_endpoint_edi_a):
+    """A CLOSED exchange — ``status="acknowledged"``, which ``reprocess`` REFUSES.
+
+    One of the two members of ``REPROCESS_BLOCKED_STATUSES``: the partner has already answered it, so
+    re-queuing would invite a duplicate document against an acknowledgement already on file. The
+    refusal is the assertion (L35), never a fall-through.
+    """
+    from django.utils import timezone
+    from apps.scm.models import IntegrationMessage
+    now = timezone.now()
+    return IntegrationMessage.objects.create(
+        tenant=tenant_a, endpoint=integration_endpoint_edi_a,
+        direction="outbound", document_type="edi_810", status="acknowledged",
+        control_number="000000415", record_count=1,
+        occurred_at=now - datetime.timedelta(days=2),
+        acknowledged_at=now - datetime.timedelta(days=2) + datetime.timedelta(minutes=12),
+        source="none")
+
+
+@pytest.fixture
+def integration_message_failed_a(db, tenant_a, integration_endpoint_iot_a):
+    """A FAILED tag-read batch on the IoT reader — ``error_code="LLRP_TIMEOUT"``.
+
+    ONE row for the whole batch (``record_count=4200``), which is the model's stated rule: an
+    exchange log that grows with the traffic it describes stops being readable exactly when it
+    matters. ``attempt_count`` is ``editable=False`` but assignable at ``create()``, and
+    ``reprocess`` bumps it — so a positive reprocess on this row moves 3 to 4.
+    """
+    from django.utils import timezone
+    from apps.scm.models import IntegrationMessage
+    return IntegrationMessage.objects.create(
+        tenant=tenant_a, endpoint=integration_endpoint_iot_a,
+        direction="inbound", document_type="tag_read_batch", status="failed",
+        error_code="LLRP_TIMEOUT",
+        error_message="Reader session dropped mid-batch after 2 of 3 antennas reported.",
+        record_count=4200, attempt_count=3,
+        occurred_at=timezone.now() - datetime.timedelta(hours=2),
+        source="stock_move", source_reference="Dock inbound sweep")
+
+
+@pytest.fixture
+def integration_message_failed_http_a(db, tenant_a, integration_endpoint_a):
+    """A SECOND failure, with a DIFFERENT error code on a DIFFERENT endpoint — ``HTTP_429``.
+
+    The exceptions cockpit's ``error_groups`` roll-up needs two codes to have anything to group, and
+    ``stats.endpoints_affected`` needs two endpoints to be anything but 1. Paired with
+    ``integration_message_failed_a`` that page reads ``failed_total=2``, ``endpoints_affected=2``,
+    ``codes=2``.
+    """
+    from django.utils import timezone
+    from apps.scm.models import IntegrationMessage
+    return IntegrationMessage.objects.create(
+        tenant=tenant_a, endpoint=integration_endpoint_a,
+        direction="outbound", document_type="inventory_feed", status="failed",
+        error_code="HTTP_429",
+        error_message="Shopify rate limit reached (the 40-call bucket drained).",
+        external_id="c8a0d4b2-1f77-42de-9c05-6b1e83f5aa10", record_count=612, attempt_count=2,
+        occurred_at=timezone.now() - datetime.timedelta(hours=1, minutes=20),
+        source="item", source_reference="Full catalogue availability push")
+
+
+@pytest.fixture
+def integration_message_b(db, tenant_b, integration_endpoint_b):
+    """tenant_b's exchange row — the cross-tenant target for the message detail and reprocess routes."""
+    from django.utils import timezone
+    from apps.scm.models import IntegrationMessage
+    return IntegrationMessage.objects.create(
+        tenant=tenant_b, endpoint=integration_endpoint_b,
+        direction="inbound", document_type="order_import", status="failed",
+        error_code="GBX_ERR", record_count=1,
+        occurred_at=timezone.now() - datetime.timedelta(hours=4),
+        source="sales_order", source_reference="SO-00001")
+
+
+# ------------------------------------------------------------------ WebhookSubscription [WHK-]
+@pytest.fixture
+def integration_subscription_a(db, tenant_a):
+    """tenant_a's ACTIVE push rule, with NO signing secret registered.
+
+    ``masked`` is therefore ``""`` and the detail page renders "Not set" — the state a rotate acts
+    from. ``headers`` is a flat ``{str: str}`` object, the only shape ``clean_headers`` accepts.
+    """
+    from apps.scm.models import WebhookSubscription
+    return WebhookSubscription.objects.create(
+        tenant=tenant_a, name="Notify WMS when a shipment is delivered",
+        trigger_entity="shipment", trigger_event="delivered",
+        target_url="https://wms.example.com/hooks/naverp/shipment-delivered",
+        payload_format="json",
+        include_fields="number,carrier,delivered_at,pod_reference",
+        headers={"X-Source": "NavERP"}, auto_disable_threshold=8, is_active=True,
+        description="Closes the delivery out in the warehouse system.")
+
+
+@pytest.fixture
+def integration_subscription_with_secret_a(db, tenant_a):
+    """A rule whose signing secret was registered THROUGH ``set_signing_secret()``.
+
+    The plaintext is the literal ``"whk-plaintext-0123456789"``, so
+    ``signing_secret_prefix == "whk-plai"``,
+    ``signing_secret_hash == WebhookSubscription.hash_secret("whk-plaintext-0123456789")`` and
+    ``masked == "whk-plai" + "•" * 8``. Written through the model's own writer because both
+    columns are ``editable=False`` and that method is their only legitimate writer.
+    """
+    from apps.scm.models import WebhookSubscription
+    subscription = WebhookSubscription(
+        tenant=tenant_a, name="Push posted goods receipts to the ERP",
+        trigger_entity="goods_receipt", trigger_event="posted",
+        target_url="https://sap-erp.internal.example.com/hooks/goods-receipt",
+        payload_format="xml", filter_expression="status == 'posted'",
+        headers={"X-Source": "NavERP"}, auto_disable_threshold=5, is_active=True)
+    subscription.set_signing_secret("whk-plaintext-0123456789")
+    subscription.save()
+    return subscription
+
+
+@pytest.fixture
+def integration_subscription_inactive_a(db, tenant_a):
+    """A SWITCHED-OFF rule with a non-zero failure counter — the ``inactive`` and ``failing`` chips.
+
+    ``consecutive_failures`` is ``editable=False`` (a DERIVED counter, never typed on a form) and
+    assignable only at ``create()``; nothing in this pass increments it, because nothing delivers.
+    """
+    from apps.scm.models import WebhookSubscription
+    return WebhookSubscription.objects.create(
+        tenant=tenant_a, name="Escalate supply chain alerts to the ops channel",
+        trigger_entity="supply_chain_alert", trigger_event="created",
+        target_url="https://ops-bridge.example.com/hooks/supply-chain-alerts",
+        payload_format="json", is_active=False,
+        auto_disable_threshold=4, consecutive_failures=4)
+
+
+@pytest.fixture
+def integration_subscription_b(db, tenant_b):
+    """tenant_b's rule — the cross-tenant target for every subscription route and the rotate verb."""
+    from apps.scm.models import WebhookSubscription
+    return WebhookSubscription.objects.create(
+        tenant=tenant_b, name="Globex order webhook",
+        trigger_entity="sales_order", trigger_event="created",
+        target_url="https://globex.example.com/hooks/orders", payload_format="json")
+
+
+# ------------------------------------------------------------------ WebhookDelivery (no number)
+@pytest.fixture
+def integration_delivery_a(db, tenant_a, integration_subscription_a):
+    """A FAILED attempt 3 of 8 — the retryable row.
+
+    ``failed`` is in ``RETRYABLE_STATUSES`` and ``attempt_no=3`` is below the 8-slot ceiling, so
+    ``can_retry`` is True and ``next_backoff_seconds`` is ``DELIVERY_BACKOFF_SECONDS[3] == 1800``.
+    Pressing Retry moves it to ``pending``/attempt 4 and stamps ``next_attempt_at`` 1800 s out —
+    and, since 4.19 ships no transport, sends nothing.
+    """
+    from django.utils import timezone
+    from apps.scm.models import WebhookDelivery
+    return WebhookDelivery.objects.create(
+        tenant=tenant_a, subscription=integration_subscription_a,
+        event="shipment.delivered", status="failed", attempt_no=3, response_code=503,
+        error_message="Receiver returned 503 Service Unavailable (ERP batch window).",
+        triggered_at=timezone.now() - datetime.timedelta(hours=1),
+        payload_excerpt='{"event": "shipment.delivered", "number": "SHP-00004"}  [truncated]')
+
+
+@pytest.fixture
+def integration_delivery_success_a(db, tenant_a, integration_subscription_a):
+    """A SUCCEEDED attempt 1 — NOT retryable, and the ``success`` chip's row.
+
+    ``success`` is outside ``RETRYABLE_STATUSES``, so ``can_retry`` is False and a POST to
+    ``webhookdelivery_retry`` must be REFUSED with a message rather than fall through (L35).
+    ``signature`` is blank, as it is on every row this pass creates: there is no plaintext key to
+    sign with and no payload to sign over — the detail page says so explicitly.
+    """
+    from django.utils import timezone
+    from apps.scm.models import WebhookDelivery
+    return WebhookDelivery.objects.create(
+        tenant=tenant_a, subscription=integration_subscription_a,
+        event="shipment.delivered", status="success", attempt_no=1, response_code=200,
+        triggered_at=timezone.now() - datetime.timedelta(minutes=41),
+        payload_excerpt='{"event": "shipment.delivered", "number": "SHP-00003"}  [truncated]')
+
+
+@pytest.fixture
+def integration_delivery_final_a(db, tenant_a, integration_subscription_inactive_a):
+    """A FAILED attempt 8 — the last slot of the published schedule, so a Retry EXHAUSTS it.
+
+    ``next_backoff_seconds`` indexes ``DELIVERY_BACKOFF_SECONDS`` with ``attempt_no`` itself, so at
+    8 the index runs off the end and returns ``None``; ``webhookdelivery_retry`` then marks the row
+    ``exhausted`` and CLEARS ``next_attempt_at`` rather than inventing a slot the schedule does not
+    describe. ``can_retry`` is False on this row (``attempt_no < MAX_ATTEMPTS`` fails), which is the
+    same fact stated from the template's side.
+    """
+    from django.utils import timezone
+    from apps.scm.models import WebhookDelivery
+    return WebhookDelivery.objects.create(
+        tenant=tenant_a, subscription=integration_subscription_inactive_a,
+        event="supply_chain_alert.created", status="failed", attempt_no=8, response_code=500,
+        error_message="Bridge refused the callback.",
+        next_attempt_at=timezone.now() + datetime.timedelta(minutes=30),
+        triggered_at=timezone.now() - datetime.timedelta(days=2))
+
+
+@pytest.fixture
+def integration_delivery_b(db, tenant_b, integration_subscription_b):
+    """tenant_b's attempt — the cross-tenant target for the delivery detail and retry routes."""
+    from django.utils import timezone
+    from apps.scm.models import WebhookDelivery
+    return WebhookDelivery.objects.create(
+        tenant=tenant_b, subscription=integration_subscription_b,
+        event="sales_order.created", status="failed", attempt_no=1, response_code=502,
+        triggered_at=timezone.now() - datetime.timedelta(hours=3))
