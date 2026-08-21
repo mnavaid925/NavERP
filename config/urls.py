@@ -15,6 +15,7 @@ urlpatterns = [
     path("hrm/", include("apps.hrm.urls")),         # /hrm/, employees/leave/attendance/shifts/holidays
     path("scm/", include("apps.scm.urls")),         # /scm/, requisitions/rfqs/orders/receipts
     path("inventory/", include("apps.inventory.urls")),  # /inventory/, catalog attributes/prices/files
+    path("procurement/", include("apps.procurement.urls")),  # /procurement/, portal/alerts/reports
 ]
 
 if settings.DEBUG:
