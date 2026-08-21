@@ -4,12 +4,13 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">{{ obj.item.sku }} · {{ obj.get_price_type_display }}
-        <span class="badge badge-{% if obj.price_type == 'retail' %}green{% elif obj.price_type == 'wholesale' %}info{% elif obj.price_type == 'promotional' %}amber{% else %}red{% endif %}">{{ obj.unit_price|floatformat:2 }}</span>
+        <span class="badge badge-{% if obj.price_type == 'retail' %}green{% elif obj.price_type == 'wholesale' %}info{% elif obj.price_type == 'promotional' %}amber{% elif obj.price_type == 'clearance' %}slate{% else %}red{% endif %}">{{ obj.unit_price|floatformat:2 }}</span>
         {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
       </h1>
       <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:itemprice_list' %}">Prices</a><span class="sep">›</span><span>{{ obj }}</span></div>
     </div>
     <div class="page-actions">
+      <a href="{% url 'inventory:itemprice_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
       <a href="{% url 'inventory:itemprice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'inventory:itemprice_delete' obj.pk %}" onsubmit="return confirm('Delete this price row?');">
         {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
@@ -51,9 +52,9 @@
       <table class="table">
         <thead><tr><th>Type</th><th>Unit Price</th><th>Min Qty</th><th>Window</th><th>Status</th></tr></thead>
         <tbody>
-          {% for p in obj.item.catalog_prices.all %}
+          {% for p in siblings %}
             <tr>
-              <td>{% if p.pk == obj.pk %}{{ p.get_price_type_display }}{% else %}<a href="{% url 'inventory:itemprice_detail' p.pk %}">{{ p.get_price_type_display }}</a>{% endif %}</td>
+              <td><a href="{% url 'inventory:itemprice_detail' p.pk %}">{{ p.get_price_type_display }}</a></td>
               <td>{{ p.unit_price|floatformat:2 }}</td>
               <td>{{ p.min_quantity|floatformat:"-2" }}</td>
               <td>{% if p.valid_from or p.valid_until %}{{ p.valid_from|date:"M d, Y"|default:"…" }} – {{ p.valid_until|date:"M d, Y"|default:"open" }}{% else %}<span class="text-muted">Always</span>{% endif %}</td>
