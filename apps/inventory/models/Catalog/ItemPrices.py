@@ -70,16 +70,19 @@ class ItemPrice(TenantOwned):
 
     @property
     def margin_pct(self):
-        """(price − standard_cost) / price × 100 — ``None`` without a saved item or cost basis.
+        """(price − standard_cost) / price × 100 — ``None`` without a saved item or while the
+        cost basis is zero/unknown.
 
-        An unsaved instance (or any row whose item pointer is unset) has NO cost basis, which is
-        not the same as a zero one: reporting 100 % for it would be a fabricated figure.
+        ``standard_cost`` is non-nullable with default 0, so a zero there usually means "not
+        costed yet", not "free": answering 100 % would paint every uncosted SKU as a perfect
+        margin. Same discipline as ``markup_pct`` below — when the basis cannot be distinguished
+        from absent, refuse to answer.
         """
         if not self.item_id:
             return None
         cost = self.item.standard_cost
         price = self.unit_price or ZERO
-        if price <= ZERO:
+        if price <= ZERO or cost <= ZERO:
             return None
         return ((price - cost) / price * Decimal("100")).quantize(Decimal("0.01"))
 
