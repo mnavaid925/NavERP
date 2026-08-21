@@ -101,6 +101,16 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Vendor Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:vendorcommunication_list' %}" class="btn btn-outline"><i data-lucide="message-square"></i> Communication Log</a>
+      <a href="{% url 'scm:supplierprofile_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Supplier Directory (SCM)</a>
+      <a href="{% url 'scm:scorecard_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Scorecards (SCM)</a>
+      <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="file-signature"></i> Contracts &amp; Terms (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
