@@ -25877,3 +25877,33 @@ feed scope/action/window behavior, cross-tenant 404s on every verb, POST-only st
 CSV formula-injection neutralization, foreign-FK field errors. Full unfiltered suite:
 17,963 tests / 0 errors / 4 failures - ALL in apps/inventory/tests/test_catalog_forms.py,
 which belongs to the concurrent inventory session (L45 - not this changeset).
+
+---
+
+## 5.2 Vendor / Supplier Management (inventory) - built 2026-08-22
+
+**Scope ruling - three of four bullets are the 4.2 SRM pages, one new table.** The supplier spine
+(directory = ``scm.SupplierProfile``, performance = signal-derived ``scm.SupplierScorecard``, terms =
+``scm.SupplierContract`` + per-line lead-time/MOQ on ``SupplierCatalogItem``) is owned by SCM 4.2 per
+L36, so those LIVE_LINKS bullets point at the owning module's live pages (the 4.12 "Contract
+Repository"/5.1 "SKU Management" precedent). The one genuine gap was the conversation itself:
+**``inventory.VendorCommunication``** [VC-#####] - channel (email/call/meeting/site_visit/note),
+direction, subject+body, occurred_at, optional ``follow_up_on`` driving due/overdue list chips,
+PROTECT FK to the vendor ``core.Party`` (deleting a party cannot destroy interaction history),
+cross-tenant party guard in ``clean()`` and re-checked by ``_reject_foreign`` at the form.
+"Logged by" deliberately not a column - every write lands in ``core.AuditLog`` via the CRUD helpers.
+Inventory gains its own ``TenantNumbered`` base this pass (local copy of scm's) for the VC numbering.
+
+**What shipped:** 1 model x 4 layers under ``VendorSupplierManagement/`` (+ ``_vendor_parties()``
+helper in forms/_common), 5 routes (prefix ``vendor-communications/``), 3 templates + a Vendor Pages
+card on the overview, admin row, migration 0003, idempotent seeder block (six scripted interactions
+per tenant over existing supplier-role parties), LIVE_LINKS["5.2"].
+
+**Smoke:** all pages 200 as admin_acme incl. channel/party/direction/follow-up filters + search;
+list shows seeded numbers; sidebar lights the log; cross-tenant detail/edit/delete -> 404; the three
+SCM cross-links render; no leak markers. One bug found+fixed in smoke: missing ``timezone`` import in
+the view module (NameError on list). Full inventory suite green (65 passed).
+
+**Deliberately not built:** no second supplier master/scorecard/contract table (4.2 owns them);
+no purchase-order linkage on the log (5.3 PO Management may add an optional FK when it lands);
+no email-send engine - the log records interactions, it does not dispatch them.
