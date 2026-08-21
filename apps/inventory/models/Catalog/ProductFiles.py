@@ -9,8 +9,11 @@ CRUD surface to express one choice field's worth of difference.
 The pointer is **file OR url**: an uploaded artifact for what the workspace owns, a link for what
 it merely references. ``clean()`` insists on at least one so a detail page never renders a card
 that goes nowhere. Uploads follow the crm pattern (``Expenses.receipt``,
-``DocumentVersion.file``): a dated ``upload_to`` under MEDIA_ROOT, extension allowlisting left to
-the shared core document tooling rather than duplicated here.
+``DocumentVersion.file``): a dated ``upload_to`` under MEDIA_ROOT, with this module's OWN
+allowlist enforced in ``clean()`` — deliberately a CURATED SUBSET of the core document tooling's
+``ALLOWED_DOC_EXTENSIONS``: product artifacts are images and documents opened directly in a
+browser or PDF reader, so archives (``.zip``) are excluded; the size cap stays with the core
+constant, enforced at the form boundary.
 
 ``is_primary`` picks the thumbnail; ``save()`` demotes the item's other primary rows so there is
 exactly one per product — the same auto-demote discipline as HRM 3.25's EmergencyContact.
@@ -51,7 +54,13 @@ class ProductFile(TenantOwned):
 
     class Meta:
         ordering = ["item_id", "-is_primary", "kind", "title"]
-        indexes = [models.Index(fields=["tenant", "item"], name="inv_pfl_tnt_item_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "item"], name="inv_pfl_tnt_item_idx"),
+            # The kind dropdown filter and the overview's recent-files sort are both per-tenant
+            # hot paths; without these they full-scan the tenant's range.
+            models.Index(fields=["tenant", "kind"], name="inv_pfl_tnt_kind_idx"),
+            models.Index(fields=["tenant", "created_at"], name="inv_pfl_tnt_created_idx"),
+        ]
 
     def clean(self):
         errors = {}
