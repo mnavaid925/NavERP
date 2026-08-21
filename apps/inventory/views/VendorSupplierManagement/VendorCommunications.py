@@ -58,9 +58,10 @@ def vendorcommunication_detail(request, pk):
         "obj": obj,
         # The same vendor's other interactions — scoped + self-excluded here rather than
         # trusted from the reverse relation, so a future raw writer cannot render another
-        # workspace's rows inline on this page.
+        # workspace's rows inline on this page. No select_related: the siblings table
+        # never dereferences party.
         "siblings": (VendorCommunication.objects.filter(tenant=request.tenant, party=obj.party)
-                     .exclude(pk=obj.pk).select_related("party")[:8]),
+                     .exclude(pk=obj.pk)[:8]),
     })
 
 
