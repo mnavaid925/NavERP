@@ -69,6 +69,18 @@ def _active_currencies(form):
         form.fields["currency"].queryset = Currency.objects.filter(condition)
 
 
+def _vendor_parties(tenant):
+    """Parties this workspace can buy from — the vendor-role slice for 5.2's log.
+
+    Same both-spellings rule as scm's ``_supplier_parties``: ``core.PartyRole`` distinguishes
+    ``supplier`` from ``vendor`` and parties tagged by other modules carry either, so accept BOTH
+    rather than silently hiding half the counterparties. The join needs ``.distinct()``."""
+    from apps.core.models import Party
+    if tenant is None:
+        return Party.objects.none()
+    return Party.objects.filter(tenant=tenant, roles__role__in=("supplier", "vendor")).distinct()
+
+
 def _reject_foreign(form, cleaned, names):
     """Field-error any chosen FK whose row belongs to another workspace.
 
