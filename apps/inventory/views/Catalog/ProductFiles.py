@@ -37,9 +37,14 @@ def productfile_create(request):
 
 @login_required
 def productfile_detail(request, pk):
-    return crud_detail(request, model=ProductFile, pk=pk,
-                       template="inventory/catalog/productfile/detail.html",
-                       select_related=("item",))
+    obj = get_object_or_404(
+        ProductFile.objects.select_related("item"), pk=pk, tenant=request.tenant)
+    return render(request, "inventory/catalog/productfile/detail.html", {
+        "obj": obj,
+        # Scoped + self-excluded in the view — same reasoning as the price detail's siblings.
+        "siblings": (obj.item.catalog_files.filter(tenant=request.tenant)
+                     .exclude(pk=obj.pk)),
+    })
 
 
 @login_required
