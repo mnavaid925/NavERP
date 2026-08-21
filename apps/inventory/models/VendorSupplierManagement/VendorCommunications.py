@@ -21,6 +21,7 @@ second who-wrote-this figure could only drift from it.
 import datetime
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from apps.inventory.models._base import *  # noqa: F401,F403
 
@@ -72,6 +73,11 @@ class VendorCommunication(TenantNumbered):
             models.Index(fields=["tenant", "party"], name="inv_vc_tnt_party_idx"),
             models.Index(fields=["tenant", "channel"], name="inv_vc_tnt_channel_idx"),
             models.Index(fields=["tenant", "follow_up_on"], name="inv_vc_tnt_followup_idx"),
+            # Backs the default ordering: the paginated list ORDER BY occurred_at DESC
+            # otherwise filesorts the tenant's range on every hit (the ProductFile
+            # inv_pfl_tnt_created_idx precedent — a log grows unbounded, a list page is
+            # rendered per request).
+            models.Index(fields=["tenant", "occurred_at"], name="inv_vc_tnt_occur_idx"),
         ]
 
     def clean(self):
@@ -90,8 +96,11 @@ class VendorCommunication(TenantNumbered):
         """True when the next action date has passed with no recorded completion.
 
         A follow-up dated TODAY is still due, not overdue — "call them back on Friday"
-        is not broken until Friday ends."""
-        return bool(self.follow_up_on and self.follow_up_on < datetime.date.today())
+        is not broken until Friday ends. ``localdate()``, never ``date.today()``: the
+        list's overdue chip filters on the same local calendar, so the badge and the
+        filter cannot disagree around midnight."""
+        return bool(self.follow_up_on and self.follow_up_on < timezone.localdate())
 
     def __str__(self):
-        return f"{self.number or 'VC'} · {self.get_channel_display()} · {self.party_id and self.party.name}"
+        vendor = self.party.name if self.party_id else ""
+        return f"{self.number or 'VC'} · {self.get_channel_display()}" + (f" · {vendor}" if vendor else "")
