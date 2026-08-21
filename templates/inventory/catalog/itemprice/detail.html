@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ obj }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.item.sku }} · {{ obj.get_price_type_display }}
+        <span class="badge badge-{% if obj.price_type == 'retail' %}green{% elif obj.price_type == 'wholesale' %}info{% elif obj.price_type == 'promotional' %}amber{% else %}red{% endif %}">{{ obj.unit_price|floatformat:2 }}</span>
+        {% if not obj.is_active %}<span class="badge badge-muted">Inactive</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:itemprice_list' %}">Prices</a><span class="sep">›</span><span>{{ obj }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:itemprice_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:itemprice_delete' obj.pk %}" onsubmit="return confirm('Delete this price row?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Price Row</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Product</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}">{{ obj.item.sku }} · {{ obj.item.name }}</a></dd></div>
+        <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_price_type_display }}</dd></div>
+        <div class="detail-item"><dt>Unit price</dt><dd class="fw-600">{{ obj.unit_price|floatformat:4 }} {{ obj.currency.code|default:"" }}</dd></div>
+        <div class="detail-item"><dt>Min quantity</dt><dd>{{ obj.min_quantity|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>Valid from</dt><dd>{{ obj.valid_from|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Valid until</dt><dd>{{ obj.valid_until|date:"M d, Y"|default:"Open-ended" }}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{{ obj.notes|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Costing</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Standard cost (item)</dt><dd>{{ obj.item.standard_cost|floatformat:4 }}</dd></div>
+        <div class="detail-item"><dt>Margin</dt><dd>{% if obj.margin_pct is not None %}<span class="badge badge-green">{{ obj.margin_pct|floatformat:2 }}%</span>{% else %}<span class="text-muted">No cost basis yet</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Markup</dt><dd>{% if obj.markup_pct is not None %}{{ obj.markup_pct|floatformat:2 }}%{% else %}<span class="text-muted">Undefined at a zero cost basis</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted">Margin and markup are computed against the item's current standard cost at render time — repricing the cost never rewrites these rows' history.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Other Prices on {{ obj.item.sku }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Type</th><th>Unit Price</th><th>Min Qty</th><th>Window</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for p in obj.item.catalog_prices.all %}
+            <tr>
+              <td>{% if p.pk == obj.pk %}{{ p.get_price_type_display }}{% else %}<a href="{% url 'inventory:itemprice_detail' p.pk %}">{{ p.get_price_type_display }}</a>{% endif %}</td>
+              <td>{{ p.unit_price|floatformat:2 }}</td>
+              <td>{{ p.min_quantity|floatformat:"-2" }}</td>
+              <td>{% if p.valid_from or p.valid_until %}{{ p.valid_from|date:"M d, Y"|default:"…" }} – {{ p.valid_until|date:"M d, Y"|default:"open" }}{% else %}<span class="text-muted">Always</span>{% endif %}</td>
+              <td>{% if p.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="tag"></i><h3>No other prices</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
