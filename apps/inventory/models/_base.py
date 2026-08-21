@@ -22,6 +22,8 @@ from django.db import IntegrityError, models, transaction
 from django.db.models import F, Q, Sum
 from django.utils import timezone
 
+from apps.core.utils import next_number
+
 
 ZERO = Decimal("0")
 
@@ -37,3 +39,27 @@ class TenantOwned(models.Model):
 
     class Meta:
         abstract = True
+
+
+class TenantNumbered(TenantOwned):
+    """Adds a human-readable per-tenant ``number`` (e.g. ``VC-00001``) assigned once in
+    ``save()`` with a retry-on-collision guard. Local copy of the proven apps/scm base —
+    peer apps deliberately don't import each other's internals."""
+
+    NUMBER_PREFIX = ""
+
+    number = models.CharField(max_length=20, editable=False)
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self.number and self.tenant_id and self.NUMBER_PREFIX:
+            for _ in range(5):
+                self.number = next_number(type(self), self.tenant, self.NUMBER_PREFIX)
+                try:
+                    with transaction.atomic():
+                        return super().save(*args, **kwargs)
+                except IntegrityError:
+                    self.number = ""
+        return super().save(*args, **kwargs)
