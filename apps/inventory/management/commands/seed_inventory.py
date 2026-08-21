@@ -181,13 +181,13 @@ class Command(BaseCommand):
                 "first, skipping the communication log.")
             return
         created = 0
-        now = timezone.now()
+        today = timezone.localdate()
         for index, (channel, direction, subject, body, follow_up_offset) in enumerate(INTERACTION_SCRIPTS):
             party = vendors[index % len(vendors)]
             occurred_at = now - datetime.timedelta(days=(index + 1) * 3)
             follow_up_on = None
             if follow_up_offset is not None:
-                follow_up_on = (now + datetime.timedelta(days=follow_up_offset)).date()
+                follow_up_on = today + datetime.timedelta(days=follow_up_offset)
             VendorCommunication.objects.create(
                 tenant=tenant, party=party, channel=channel, direction=direction,
                 subject=subject, body=body, occurred_at=occurred_at, follow_up_on=follow_up_on)
