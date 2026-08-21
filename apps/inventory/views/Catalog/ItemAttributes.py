@@ -34,9 +34,14 @@ def itemattribute_create(request):
 
 @login_required
 def itemattribute_detail(request, pk):
-    return crud_detail(request, model=ItemAttribute, pk=pk,
-                       template="inventory/catalog/itemattribute/detail.html",
-                       select_related=("item",))
+    obj = get_object_or_404(
+        ItemAttribute.objects.select_related("item"), pk=pk, tenant=request.tenant)
+    return render(request, "inventory/catalog/itemattribute/detail.html", {
+        "obj": obj,
+        # Scoped + self-excluded in the view — same reasoning as the price detail's siblings.
+        "siblings": (obj.item.catalog_attributes.filter(tenant=request.tenant)
+                     .exclude(pk=obj.pk).order_by("sequence", "name")),
+    })
 
 
 @login_required
