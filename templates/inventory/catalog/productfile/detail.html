@@ -10,6 +10,7 @@
       <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:productfile_list' %}">Files</a><span class="sep">›</span><span>{{ obj.title }}</span></div>
     </div>
     <div class="page-actions">
+      <a href="{% url 'inventory:productfile_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
       {% if obj.href %}<a href="{{ obj.href }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline"><i data-lucide="external-link"></i> Open</a>{% endif %}
       <a href="{% url 'inventory:productfile_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
       <form method="post" action="{% url 'inventory:productfile_delete' obj.pk %}" onsubmit="return confirm('Detach this file from the product?');">
@@ -38,9 +39,9 @@
       <table class="table">
         <thead><tr><th>Title</th><th>Kind</th><th>Cover</th></tr></thead>
         <tbody>
-          {% for f in obj.item.catalog_files.all %}
+          {% for f in siblings %}
             <tr>
-              <td>{% if f.pk == obj.pk %}{{ f.title }}{% else %}<a href="{% url 'inventory:productfile_detail' f.pk %}">{{ f.title }}</a>{% endif %}</td>
+              <td><a href="{% url 'inventory:productfile_detail' f.pk %}">{{ f.title }}</a></td>
               <td>{{ f.get_kind_display }}</td>
               <td>{% if f.is_primary %}<span class="badge badge-amber">Cover</span>{% else %}—{% endif %}</td>
             </tr>
