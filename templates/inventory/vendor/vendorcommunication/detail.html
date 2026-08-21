@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ obj }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.subject }}
+        <span class="badge {{ obj.channel_css }}">{{ obj.get_channel_display }}</span>
+        {% if obj.direction %}<span class="badge badge-{% if obj.direction == 'inbound' %}info{% else %}slate{% endif %}">{{ obj.get_direction_display }}</span>{% endif %}
+        {% if obj.is_follow_up_overdue %}<span class="badge badge-red">Follow-up overdue</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:vendorcommunication_list' %}">Vendors</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:vendorcommunication_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      <a href="{% url 'inventory:vendorcommunication_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:vendorcommunication_delete' obj.pk %}" onsubmit="return confirm('Delete this logged interaction?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Interaction</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd class="fw-600">{{ obj.number }}</dd></div>
+        <div class="detail-item"><dt>Vendor</dt><dd>{{ obj.party.name }}</dd></div>
+        <div class="detail-item"><dt>Channel</dt><dd>{{ obj.get_channel_display }}</dd></div>
+        <div class="detail-item"><dt>Direction</dt><dd>{{ obj.get_direction_display|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Occurred at</dt><dd>{{ obj.occurred_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Follow-up</dt><dd>
+          {% if obj.follow_up_on %}
+            {% if obj.is_follow_up_overdue %}<span class="badge badge-red">Overdue since {{ obj.follow_up_on|date:"M d, Y" }}</span>
+            {% else %}<span class="badge badge-amber">Due {{ obj.follow_up_on|date:"M d, Y" }}</span>{% endif %}
+          {% else %}<span class="text-muted">None scheduled</span>{% endif %}
+        </dd></div>
+        <div class="detail-item"><dt>Logged</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Notes</h2></div>
+    <div class="card-body">
+      {% if obj.body %}<p style="white-space:pre-line;">{{ obj.body }}</p>{% else %}<p class="text-muted">No notes recorded for this interaction.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Supplier Record — {{ obj.party.name }}</h2></div>
+    <div class="card-body">
+      <p class="text-muted">The vendor's master data, performance and terms live on the SCM supplier-relationship pages:</p>
+      <div class="page-actions" style="justify-content:flex-start;">
+        <a href="{% url 'scm:supplierprofile_list' %}" class="btn btn-outline"><i data-lucide="building-2"></i> Supplier Directory</a>
+        <a href="{% url 'scm:scorecard_list' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Performance Scorecards</a>
+        <a href="{% url 'scm:contract_list' %}" class="btn btn-outline"><i data-lucide="file-signature"></i> Contracts &amp; Terms</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Other Interactions with {{ obj.party.name }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>When</th><th>Channel</th><th>Subject</th><th>Follow-up</th></tr></thead>
+        <tbody>
+          {% for c in siblings %}
+            <tr>
+              <td><a href="{% url 'inventory:vendorcommunication_detail' c.pk %}" class="fw-600">{{ c.number }}</a></td>
+              <td>{{ c.occurred_at|date:"M d, Y H:i" }}</td>
+              <td><span class="badge {{ c.channel_css }}">{{ c.get_channel_display }}</span></td>
+              <td>{{ c.subject|truncatechars:60 }}</td>
+              <td>
+                {% if c.follow_up_on %}
+                  {% if c.is_follow_up_overdue %}<span class="badge badge-red">Overdue {{ c.follow_up_on|date:"M d" }}</span>
+                  {% else %}<span class="badge badge-amber">Due {{ c.follow_up_on|date:"M d" }}</span>{% endif %}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="message-square"></i><h3>No other interactions</h3><p>This is the only logged interaction with this vendor so far.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
