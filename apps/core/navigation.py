@@ -1162,6 +1162,19 @@ LIVE_LINKS = {
         "Pricing & Costing":           "inventory:itemprice_list",
         "Product Imagery & Documents": "inventory:productfile_list",
     },
+    # --- Module 6 Procurement Management System -------------------------------------------------
+    # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
+    # 4.1's `scm.PurchaseRequisition` / `scm.PurchaseOrder` (L36: extend the spine, never
+    # re-declare it) — the Quick Requisition Entry bullet lands on the fast-track form that drafts
+    # INTO that spine, and the activity feed is `core.AuditLog` filtered to procurement content
+    # types, so no bullet needs a second copy of either table.
+    "6.1": {
+        "Personalized Overview":   "procurement:dashboard",       # bullet (the landing page itself)
+        "Task & Alert Center":     "procurement:alert_list",      # bullet (the alert inbox + its acknowledge/resolve actions)
+        "Quick Requisition Entry": "procurement:quickreq_create", # bullet (one-screen fast track drafting into scm.PurchaseRequisition)
+        "Recent Activity Feed":    "procurement:activity_list",   # bullet (core.AuditLog scoped to procurement documents)
+        "Self-Service Reporting":  "procurement:report_index",    # bullet (personal usage/spend report + own-requisitions CSV)
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
