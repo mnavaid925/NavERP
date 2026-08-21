@@ -78,3 +78,48 @@ def product_file_b(db, tenant_b, item_b):
         tenant=tenant_b, item=item_b, kind="manual", title="Globex manual",
         url="https://files.example.com/catalog/globex/manual.pdf",
     )
+
+
+# ---- 5.2 Vendor / Supplier Management ---------------------------------------------------------
+
+@pytest.fixture
+def vendor_party_a(db, tenant_a):
+    """A supplier-role core.Party on the spine, tenant_a."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Acme Supplies Ltd", kind="organization")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="supplier")
+    return party
+
+
+@pytest.fixture
+def vendor_party_b(db, tenant_b):
+    """A vendor-role core.Party, tenant_b — the foreign target for IDOR/guard tests."""
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_b, name="Globex Vendors Inc", kind="organization")
+    PartyRole.objects.create(tenant=tenant_b, party=party, role="vendor")
+    return party
+
+
+@pytest.fixture
+def communication_a(db, tenant_a, vendor_party_a):
+    """An overdue follow-up call logged against vendor_party_a."""
+    import datetime
+
+    from apps.inventory.models import VendorCommunication
+    return VendorCommunication.objects.create(
+        tenant=tenant_a, party=vendor_party_a, channel="call", direction="outbound",
+        subject="Quarterly capacity check",
+        body="Asked for a revised lead-time commitment.",
+        occurred_at=datetime.datetime(2026, 8, 10, 10, 0),
+        follow_up_on=datetime.date(2026, 8, 15),  # past → overdue badge/chip
+    )
+
+
+@pytest.fixture
+def communication_b(db, tenant_b, vendor_party_b):
+    from apps.inventory.models import VendorCommunication
+    return VendorCommunication.objects.create(
+        tenant=tenant_b, party=vendor_party_b, channel="email", direction="inbound",
+        subject="Revised price list",
+        body="Their 3% increase lands in January.",
+    )
