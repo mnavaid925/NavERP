@@ -25907,3 +25907,96 @@ the view module (NameError on list). Full inventory suite green (65 passed).
 **Deliberately not built:** no second supplier master/scorecard/contract table (4.2 owns them);
 no purchase-order linkage on the log (5.3 PO Management may add an optional FK when it lands);
 no email-send engine - the log records interactions, it does not dispatch them.
+
+---
+
+## 6.2 Requisition Management (procurement) - build plan (frozen contract)
+
+**Scope ruling (L29/L36):** scm 4.1 OWNS `PurchaseRequisition`/lines and their status machine. 6.2 adds ZERO
+columns to scm models - it adds the requisition UX layer AROUND the spine: templates that draft PRs, a personal
+tracker with a derived timeline + advisory duplicate flags, and the cancel/amend verbs the spine lacks.
+Research: `.claude/tasks/research-procurement-6.2.md` (committed 46b49a5e). Migration **0003**.
+
+### Models (`apps/procurement/models/RequisitionMgmt/`)
+- `_base.py` gains abstract `TenantNumbered` (local copy of scm's - peer apps never import each other's internals).
+- `RequisitionTemplates.py`:
+  - `RequisitionTemplate(TenantNumbered)` [RT-#####]: name Char120; description Text blank; default_title
+    Char255 blank; default_org_unit FK core.OrgUnit SET_NULL null blank rn="procurement_requisition_templates";
+    default_budget FK accounting.Budget SET_NULL null blank same rn; default_currency FK accounting.Currency
+    SET_NULL null blank same rn; is_active Bool True; created_by FK user SET_NULL null blank editable=False
+    rn="procurement_requisition_templates_created"; last_applied_at DateTime null editable=False;
+    apply_count PosInt 0 editable=False. Meta ordering ["name"], unique_together ("tenant","name"),
+    index prc_rt_tenant_active_idx on (tenant,is_active). Verb `apply_to(user, *, required_by=None,
+    justification="", notes="")`: ONE transaction cloning header defaults + lines into a DRAFT scm.PR under
+    `user`, `recalc_totals()`, bumps apply_count/last_applied_at, returns the PR.
+  - `RequisitionTemplateLine(TenantOwned)`: template FK CASCADE rn="lines"; item_description Char255;
+    sku_hint Char64 blank; uom_hint Char32 blank; quantity Dec(14,4) default 1 min 0.0001;
+    estimated_unit_price Dec(14,2) default 0 min 0; gl_account FK accounting.GLAccount SET_NULL null blank
+    rn="procurement_template_lines". NO date column - dates are apply-time inputs. Meta ordering ["id"].
+- `RequisitionAmendments.py`: `RequisitionAmendment(TenantOwned)` - requisition FK "scm.PurchaseRequisition"
+  PROTECT rn="procurement_amendments"; action Char8 choices cancel/amend; reason Text REQUIRED;
+  changed_fields JSONField default dict editable=False; requested_by/applied_by FK user SET_NULL null
+  editable=False rn="+"; applied_at auto_now_add editable=False. Meta ordering ["-applied_at","-id"], index
+  prc_ra_tenant_req_idx on (tenant,requisition). Append-only: no edit/delete routes.
+
+### Forms (`apps/procurement/forms/RequisitionMgmt/`)
+- `RequisitionTemplates.py`: `RequisitionTemplateForm` fields ["name","description","default_title",
+  "default_org_unit","default_budget","default_currency","is_active"] + clean() re-checks the 3 FKs via
+  `_reject_foreign`; `RequisitionTemplateLineForm` fields ["item_description","sku_hint","uom_hint",
+  "quantity","estimated_unit_price","gl_account"]; `RequisitionTemplateLineFormSet` inlineformset extra=2
+  can_delete=True form_kwargs tenant. `RequisitionAmendmentForm(forms.Form)`: reason CharField(Textarea,
+  max_length=2000, required).
+- Amend reuses scm's OWN `PurchaseRequisitionForm` + `PurchaseRequisitionLineFormSet` (imported, not forked).
+
+### Views (`apps/procurement/views/RequisitionMgmt/`)
+- `RequisitionTemplates.py`: template_list (search q on name/description, is_active filter, pagination);
+  template_create/template_edit (form+formset in one atomic save); template_detail (header + lines +
+  apply panel); template_delete POST-only; template_apply POST ?pk= -> drafts spine PR via apply_to(),
+  audit "create", success msg with PR number, THEN duplicate warning if suspects found.
+- `Requisitions.py` (tracker + verbs over the scm spine):
+  - `requisition_tracker` GET: personal-by-default list of tenant PRs (?scope=all widens for admins only);
+    filters q/status/requester(?scope=all)/dup flag; select_related requester/org_unit/approved_by +
+    prefetch lines; per-page-row derived extras: timeline stages (Draft->Submitted->Decision->Ordered from
+    approved_by/at + purchase_orders/rfqs reverse FKs), duplicate suspect pks via _dupes.find_duplicates;
+    context: page_obj, scope, show_scope_toggle, status_choices, requesters, dup_map, timeline_map, stats
+    {mine_open,total_open,dup_count}. Manual "Check duplicates again" = resubmit GET (dup=1 forces recompute).
+  - `requisition_cancel` POST pk: pending_approval -> requester-or-admin; approved -> admin ONLY; refuses
+    draft (scm delete owns it)/rejected/cancelled/converted (scm PO-cancel owns converted); reason REQUIRED;
+    sets status cancelled + RequisitionAmendment(cancel) row atomically; audit "update" {"action":"cancel"}.
+  - `requisition_amend` GET/POST pk: approved ONLY, @tenant_admin_required; header form + line formset +
+    reason; diff old-vs-clean into changed_fields JSON (+line adds/dels as counts); stays approved;
+    recalc_totals(); amendment(amend) row; audit {"action":"amend"}. Success message re-surfaces elevated tier.
+  - `amendment_list` GET: newest-first, filters action/requisition (?requisition=<pk> embeds as panel),
+    pagination.
+- `_dupes.py` (private, this sub-module): constants DUPLICATE_WINDOW_DAYS=14, TOKEN_MIN_LEN=3,
+    TOTAL_TOLERANCE=0.15, SCAN_CAP=200, OPEN_STATUSES=("draft","pending_approval","approved");
+    `find_duplicates(pr)` -> list[susppect] iff same tenant+requester, other OPEN, |created_at diff|<=window,
+    AND (shared alnum token len>=3 between any line descriptions OR same dominant gl_account AND totals
+    within 15%); never auto-cancels anything.
+
+### URLs (`apps/procurement/urls/RequisitionMgmt/`) - app_name stays "procurement"
+templates CRUD: requisitiontemplate_list/create/detail/edit/delete; requisitiontemplate_apply POST;
+requisition_tracker GET; requisition_duplicate_check GET (JSON fragment); requisition_cancel POST;
+requisition_amend GET/POST; requisitionamendment_list GET.
+
+### Templates (`templates/procurement/requisitionmgmt/`)
+- requisitiontemplate/list.html detail.html form.html
+- requisition/tracker.html amend_form.html   (standalone computed pages at entity level)
+- requisitionamendment/list.html
+- partials/_timeline.html _dup_banner.html
+
+### Wire-up
+- views/__init__, models/__init__, forms/__init__ re-export blocks; urls/__init__ += RequisitionMgmt block;
+- admin.py: RequisitionTemplate(+line inline, readonly counters), RequisitionAmendment read-only-ish;
+- views/_helpers.py PROCUREMENT_CONTENT_MODELS += ("requisitiontemplate", "requisitionamendment");
+- seed_procurement.py: extend with 2 templates (3-line office supplies GL-coded; 1-line safety gear),
+  1 applied draft PR from template A (apply_count=1), two deliberate near-duplicate pending PRs
+  (same requester/GL, ~3 days apart, totals <15% apart), 1 amend example on an approved PR when present;
+- navigation.py LIVE_LINKS["6.2"]: Creation->requisitiontemplate_list, Tracking->requisition_tracker,
+  Duplicate Check->requisition_tracker, Templates->requisitiontemplate_list,
+  Cancellation/Amendment->requisitionamendment_list.
+
+### Verify
+makemigrations procurement (0003) -> migrate -> seed_procurement x2 idempotent -> check; smoke: tracker +
+templates pages 200 as admin_acme, dup banner fires on seeded pair, cancel/amend gates by status x role,
+cross-tenant 404s everywhere, no leak markers; review wave -> fixer -> tests (test_requisition_*) -> docs.
