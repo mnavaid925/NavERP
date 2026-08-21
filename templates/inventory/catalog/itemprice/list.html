@@ -52,7 +52,7 @@
             <tr>
               <td><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></td>
               <td>
-                <span class="badge badge-{% if obj.price_type == 'retail' %}green{% elif obj.price_type == 'wholesale' %}info{% elif obj.price_type == 'promotional' %}amber{% else %}red{% endif %}">{{ obj.get_price_type_display }}</span>
+                <span class="badge badge-{% if obj.price_type == 'retail' %}green{% elif obj.price_type == 'wholesale' %}info{% elif obj.price_type == 'promotional' %}amber{% elif obj.price_type == 'clearance' %}slate{% else %}red{% endif %}">{{ obj.get_price_type_display }}</span>
               </td>
               <td class="fw-600">{{ obj.unit_price|floatformat:2 }}</td>
               <td>{{ obj.currency.code|default:"—" }}</td>
