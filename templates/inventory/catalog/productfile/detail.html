@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}
+        <span class="badge badge-{% if obj.kind == 'photo' %}info{% elif obj.kind == 'safety_sheet' %}red{% elif obj.kind == 'manual' %}amber{% elif obj.kind == 'datasheet' %}green{% else %}slate{% endif %}">{{ obj.get_kind_display }}</span>
+        {% if obj.is_primary %}<span class="badge badge-amber">Cover</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:productfile_list' %}">Files</a><span class="sep">›</span><span>{{ obj.title }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.href %}<a href="{{ obj.href }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline"><i data-lucide="external-link"></i> Open</a>{% endif %}
+      <a href="{% url 'inventory:productfile_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:productfile_delete' obj.pk %}" onsubmit="return confirm('Detach this file from the product?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Attachment</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Product</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}">{{ obj.item.sku }} · {{ obj.item.name }}</a></dd></div>
+        <div class="detail-item"><dt>Kind</dt><dd>{{ obj.get_kind_display }}</dd></div>
+        <div class="detail-item"><dt>Source</dt><dd>{% if obj.file %}Uploaded — {{ obj.file.name }}{% elif obj.url %}<a href="{{ obj.url }}" target="_blank" rel="noopener noreferrer">{{ obj.url }}</a>{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Cover image</dt><dd>{% if obj.is_primary %}Yes{% else %}No{% endif %}</dd></div>
+        <div class="detail-item"><dt>Attached</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Other Files on {{ obj.item.sku }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Title</th><th>Kind</th><th>Cover</th></tr></thead>
+        <tbody>
+          {% for f in obj.item.catalog_files.all %}
+            <tr>
+              <td>{% if f.pk == obj.pk %}{{ f.title }}{% else %}<a href="{% url 'inventory:productfile_detail' f.pk %}">{{ f.title }}</a>{% endif %}</td>
+              <td>{{ f.get_kind_display }}</td>
+              <td>{% if f.is_primary %}<span class="badge badge-amber">Cover</span>{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="paperclip"></i><h3>No other files</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
