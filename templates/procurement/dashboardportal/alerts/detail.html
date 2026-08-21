@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:alert_list' %}">Alerts</a><span class="sep">›</span><span>#{{ obj.pk }}</span></div>
+      <p>
+        <span class="badge {{ obj.kind_css }}">{{ obj.get_kind_display }}</span>
+        <span class="badge {{ obj.severity_css }}">{{ obj.get_severity_display }}</span>
+        <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+        {% if obj.is_overdue %}<span class="badge badge-red">Overdue</span>{% endif %}
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == "open" %}
+        <form method="post" action="{% url 'procurement:alert_acknowledge' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="eye"></i> Acknowledge</button>
+        </form>
+      {% endif %}
+      {% if obj.status != "resolved" %}
+        <form method="post" action="{% url 'procurement:alert_resolve' obj.pk %}" onsubmit="return confirm('Resolve this alert?');">
+          {% csrf_token %}
+          <input type="hidden" name="resolution_note" value="">
+          <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Resolve</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'procurement:alert_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Alert</h2></div>
+    <div class="card-body">
+      {% if obj.message %}<p>{{ obj.message|linebreaksbr }}</p>{% else %}<p class="text-muted">No message — the title carries everything.</p>{% endif %}
+      {% if obj.link_url %}<p><a href="{{ obj.link_url }}" class="btn btn-outline btn-sm">Open linked page <i data-lucide="arrow-right"></i></a></p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Details</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <tbody>
+          <tr><th style="width:220px;">Assigned to</th><td>{{ obj.assigned_to.get_full_name|default:obj.assigned_to.username|default:"Team (unassigned)" }}</td></tr>
+          <tr><th>Due</th><td>{{ obj.due_at|date:"M d, Y H:i"|default:"—" }}{% if obj.is_overdue %} <span class="badge badge-red">Overdue</span>{% endif %}</td></tr>
+          <tr><th>Raised</th><td>{{ obj.raised_at|date:"M d, Y H:i" }}</td></tr>
+          <tr><th>Raised by</th><td>{{ obj.created_by.username|default:"System / seed" }}</td></tr>
+          {% if obj.acknowledged_at %}
+            <tr><th>Acknowledged</th><td>{{ obj.acknowledged_at|date:"M d, Y H:i" }} by {{ obj.acknowledged_by.username|default:"—" }}</td></tr>
+          {% endif %}
+          {% if obj.resolved_at %}
+            <tr><th>Resolved</th><td>{{ obj.resolved_at|date:"M d, Y H:i" }} by {{ obj.resolved_by.username|default:"—" }}</td></tr>
+          {% endif %}
+          {% if obj.resolution_note %}
+            <tr><th>Resolution note</th><td>{{ obj.resolution_note|linebreaksbr }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if obj.status != "resolved" %}
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Resolve with a note</h2></div>
+    <div class="card-body">
+      <form method="post" action="{% url 'procurement:alert_resolve' obj.pk %}">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label" for="resolution_note">Resolution note (optional)</label>
+          <textarea name="resolution_note" id="resolution_note" rows="3" class="form-textarea" placeholder="How was this closed out?"></textarea>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Resolve Alert</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:alert_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Alerts</a>
+  </div>
+{% endblock %}
