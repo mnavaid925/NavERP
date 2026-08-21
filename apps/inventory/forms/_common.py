@@ -20,7 +20,7 @@ other's internals:
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 
-from apps.core.forms import TenantModelForm
+from apps.core.forms import MAX_UPLOAD_BYTES, TenantModelForm
 
 
 class TenantUniqueMixin:
@@ -30,6 +30,13 @@ class TenantUniqueMixin:
     field and the CRUD helpers only assign it AFTER ``is_valid()`` — and `tenant` must be removed
     from the validation exclusions, because Django skips a ``unique_together`` entirely if ANY of
     its fields is excluded. Mix in BEFORE TenantModelForm.
+
+    SECOND role, easy to miss: ``__init__`` also stamps ``instance.tenant`` for models with NO
+    unique constraint at all. Any model ``clean()`` that compares a chosen FK's tenant against
+    ``self.tenant_id`` (ProductFile's foreign-item check) reads that stamp during
+    ``full_clean()`` on CREATE — without it every create would be falsely rejected as
+    cross-tenant, because the CRUD helpers only assign the real tenant after ``is_valid()``.
+    So the mixin stays on every form whose model carries such a check, constraint or not.
     """
 
     def __init__(self, *args, **kwargs):
@@ -48,10 +55,18 @@ class TenantUniqueMixin:
 
 def _active_currencies(form):
     """Constrain a ``currency`` field to active currencies. Currency is GLOBAL (no tenant FK), so
-    the TenantModelForm base cannot scope it."""
+    the TenantModelForm base cannot scope it.
+
+    The stored value is unioned back in: a currency deactivated AFTER a price row was saved must
+    stay selectable on that row's edit form, or submitting the untouched form would clean to None
+    and silently wipe the field (the scm ``_keep_current`` rule, inlined for one call site)."""
     if "currency" in form.fields:
         from apps.accounting.models import Currency
-        form.fields["currency"].queryset = Currency.objects.filter(is_active=True)
+        current_id = getattr(form.instance, "currency_id", None)
+        condition = Q(is_active=True)
+        if current_id:
+            condition |= Q(pk=current_id)
+        form.fields["currency"].queryset = Currency.objects.filter(condition)
 
 
 def _reject_foreign(form, cleaned, names):
