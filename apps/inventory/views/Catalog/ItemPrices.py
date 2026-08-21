@@ -12,7 +12,10 @@ from apps.scm.models import Item
 
 @login_required
 def itemprice_list(request):
-    qs = ItemPrice.objects.filter(tenant=request.tenant).select_related("item")
+    # currency joins in for the list's currency column — without it every rendered row with a
+    # currency pays its own query (the detail view already carried it; the list is where the N+1
+    # actually bites, one row per page-line).
+    qs = ItemPrice.objects.filter(tenant=request.tenant).select_related("item", "currency")
     return crud_list(
         request, qs, "inventory/catalog/itemprice/list.html",
         search_fields=["item__sku", "item__name", "notes"],
@@ -36,9 +39,16 @@ def itemprice_create(request):
 
 @login_required
 def itemprice_detail(request, pk):
-    return crud_detail(request, model=ItemPrice, pk=pk,
-                       template="inventory/catalog/itemprice/detail.html",
-                       select_related=("item", "currency"))
+    obj = get_object_or_404(
+        ItemPrice.objects.select_related("item", "currency"), pk=pk, tenant=request.tenant)
+    return render(request, "inventory/catalog/itemprice/detail.html", {
+        "obj": obj,
+        # Scoped + self-excluded here rather than trusted from the reverse relation: the write
+        # paths keep item.tenant == row.tenant, but a future raw writer must not be able to
+        # render another workspace's rows inline on this page.
+        "siblings": (obj.item.catalog_prices.filter(tenant=request.tenant)
+                     .exclude(pk=obj.pk)),
+    })
 
 
 @login_required
