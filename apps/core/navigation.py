@@ -1150,6 +1150,18 @@ LIVE_LINKS = {
         "EDI Management":         "scm:integrationendpoint_edi_list",        # bullet (category-pinned route: VAN / AS2 interchange + the X12 exchange log)
         "Webhooks":               "scm:webhooksubscription_list",            # bullet (the standing push rules; their attempt log hangs off each rule's detail page)
     },
+    # --- Module 5 Inventory Management System ---------------------------------------------------
+    # 5.1 Product & Catalog Management. The SKU master and its hierarchical categorization are
+    # 4.3's `scm.Item` / `scm.ItemCategory` (L36: extend the spine, never re-declare it), so those
+    # two bullets point AT the owning module's live pages. What 5.1 itself adds is the catalog
+    # layer around that spine — typed attributes, sell-side price rows, imagery & documents.
+    "5.1": {
+        "SKU Management":              "scm:item_list",
+        "Product Categorization":      "scm:category_list",
+        "Product Attributes":          "inventory:itemattribute_list",
+        "Pricing & Costing":           "inventory:itemprice_list",
+        "Product Imagery & Documents": "inventory:productfile_list",
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
