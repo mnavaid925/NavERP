@@ -46,9 +46,36 @@ Seeder: `seed_inventory` — idempotent per tenant per entity; reuses seeded `sc
 tenant with none); price ladder off real standard costs; files seed as RFC 2606 links, never
 uploads.
 
-### Not built yet (NavERP.md order): 5.2–5.20
-Vendor/supplier management (5.2 — likely maps onto `core.Party` roles + 4.2 SRM rather than new
-tables), PO management (5.3 → scm owns), receiving/putaway (5.4 → 4.1 GRN + 4.4 WMS),
+### 5.2 Vendor / Supplier Management (COMPLETE)
+The extend-don't-redeclare rule applied to the buy side: three of the four NavERP bullets ARE the
+4.2 SRM pages (the supplier spine is owned by SCM per L36 — the sidebar bullets point at
+`scm:supplierprofile_list` / `scm:scorecard_list` / `scm:contract_list`; payment terms live on
+`SupplierContract`, per-line lead times + MOQs on `SupplierCatalogItem`). The one genuine gap was
+the conversation itself, so 5.2's only new table is (`apps/inventory/models/VendorSupplierManagement/`):
+- **`VendorCommunication`** [VC-#####] — one logged interaction with a vendor: `channel`
+  (email/call/meeting/site_visit/note; `CHANNEL_CSS` badge map, colour-named only), `direction`
+  (inbound/outbound/blank), `subject`+`body`, `occurred_at` (when it actually happened), optional
+  `follow_up_on` driving due/overdue list chips and the `is_follow_up_overdue` property
+  (`timezone.localdate()`, never `date.today()`); **PROTECT** FK to the vendor `core.Party`
+  (deleting a party cannot destroy interaction history) with a cross-tenant guard in `clean()`.
+  "Logged by" is deliberately NOT a column — every write lands in `core.AuditLog` via the CRUD
+  helpers. This pass gave the app its own `TenantNumbered` base in `models/_base.py`
+  (local copy of scm's, backed by `apps.core.utils.next_number`).
+
+Routes (+5, prefix `vendor-communications/`): `vendorcommunication_{list,detail,create,edit,delete}`.
+Templates: `templates/inventory/vendor/vendorcommunication/{list,detail,form}.html`; the overview
+gained a "Vendor Pages" card linking the log + the three SRM pages. Detail page shows the same
+vendor's other interactions (scoped + self-excluded from the view, no select_related — the panel
+never dereferences party) and cross-links the three SRM pages.
+Seeder: `_seed_vendor_communications` in `seed_inventory` — six scripted interactions per tenant
+(one overdue follow-up, one future) over existing supplier/vendor-role parties via
+`forms/_common._vendor_parties()` (roles supplier|vendor, `.distinct()`); skips a tenant with none;
+follow-up dates derive from `timezone.localdate()`.
+Tests: `test_vendor_{models,forms,views,security}.py` (39 tests) + conftest fixtures
+`vendor_party_a/b`, `communication_a/b`. Full inventory suite green (104 as of 5.2).
+
+### Not built yet (NavERP.md order): 5.3–5.20
+PO management (5.3 → scm owns), receiving/putaway (5.4 → 4.1 GRN + 4.4 WMS),
 warehousing/bins (5.5 → 4.3/4.4), tracking & control (5.6), movements/transfers (5.7 → 4.3),
 lot/serial (5.8 → 4.3), order mgmt (5.9 → 4.5), returns (5.10 → 4.10), stocktaking (5.11 → 4.4
 cycle counts), multi-location (5.12), forecasting (5.13 → 4.7), barcode/RFID (5.14 — identifiers
@@ -60,9 +87,9 @@ its factor column are what's actually missing).
 ## House rules inherited from the peer apps
 
 - Backend package layout: `models/ forms/ views/ urls/` packages, one `<SubModule>/` folder per
-  NavERP sub-module (here: `Catalog/`), one `<Entity>.py` per entity in each layer, re-export
-  blocks in every touched `__init__.py`, absolute imports throughout. No flat files, no
-  `*_advanced.py`.
+  NavERP sub-module (here: `Catalog/`, `VendorSupplierManagement/`), one `<Entity>.py` per entity
+  in each layer, re-export blocks in every touched `__init__.py`, absolute imports throughout.
+  No flat files, no `*_advanced.py`.
 - Views are thin FBVs over `apps/core/crud.py` (`crud_list/create/detail/edit/delete`) — tenant
   scoping, L11 int-filter guard, pagination and audit logging come from there. Deletes are
   `@require_POST`.
@@ -85,5 +112,9 @@ its factor column are what's actually missing).
 `LIVE_LINKS["5.1"]` in `apps/core/navigation.py`: SKU Management → `scm:item_list`,
 Product Categorization → `scm:category_list`, Product Attributes →
 `inventory:itemattribute_list`, Pricing & Costing → `inventory:itemprice_list`,
-Product Imagery & Documents → `inventory:productfile_list`. Later 5.x sub-modules add ONE
+Product Imagery & Documents → `inventory:productfile_list`.
+`LIVE_LINKS["5.2"]`: Supplier Directory → `scm:supplierprofile_list`, Supplier Performance
+Tracking → `scm:scorecard_list`, Contract & Terms Management → `scm:contract_list`
+(all three reuse 4.2 SRM per L36), Vendor Communication Log →
+`inventory:vendorcommunication_list`. Later 5.x sub-modules add ONE
 `LIVE_LINKS["N.M"]` entry each; do not touch the parse_catalog machinery or other entries.
