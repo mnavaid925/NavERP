@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Pricing &amp; Costing{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Pricing &amp; Costing</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Prices</span></div>
+      <p class="text-muted">Sell-side price rows on the catalog spine — retail, wholesale and dated promotional windows with price breaks.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:itemprice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Price</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU, product or notes…">
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="price_type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.price_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_active == "True" %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == "False" %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:itemprice_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Product</th><th>Type</th><th>Unit Price</th><th>Currency</th><th>Min Qty</th><th>Window</th><th>Margin</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></td>
+              <td>
+                <span class="badge badge-{% if obj.price_type == 'retail' %}green{% elif obj.price_type == 'wholesale' %}info{% elif obj.price_type == 'promotional' %}amber{% else %}red{% endif %}">{{ obj.get_price_type_display }}</span>
+              </td>
+              <td class="fw-600">{{ obj.unit_price|floatformat:2 }}</td>
+              <td>{{ obj.currency.code|default:"—" }}</td>
+              <td>{{ obj.min_quantity|floatformat:"-2" }}</td>
+              <td>{% if obj.valid_from or obj.valid_until %}{{ obj.valid_from|date:"M d, Y"|default:"…" }} – {{ obj.valid_until|date:"M d, Y"|default:"open" }}{% else %}<span class="text-muted">Always</span>{% endif %}</td>
+              <td>{% if obj.margin_pct is not None %}{{ obj.margin_pct|floatformat:2 }}%{% else %}<span class="text-muted" title="No cost basis on the item yet">—</span>{% endif %}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:itemprice_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:itemprice_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:itemprice_delete' obj.pk %}" onsubmit="return confirm('Delete this price row?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="tag"></i><h3>No price rows</h3><p>Add a retail or wholesale price to a SKU to start the price book.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
