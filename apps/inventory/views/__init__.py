@@ -24,6 +24,13 @@ from .Catalog.ProductFiles import (
     productfile_edit,
     productfile_list,
 )
+from .VendorSupplierManagement.VendorCommunications import (
+    vendorcommunication_create,
+    vendorcommunication_delete,
+    vendorcommunication_detail,
+    vendorcommunication_edit,
+    vendorcommunication_list,
+)
 
 __all__ = [
     "overview",
@@ -33,4 +40,6 @@ __all__ = [
     "itemprice_edit", "itemprice_delete",
     "productfile_list", "productfile_detail", "productfile_create",
     "productfile_edit", "productfile_delete",
+    "vendorcommunication_list", "vendorcommunication_detail", "vendorcommunication_create",
+    "vendorcommunication_edit", "vendorcommunication_delete",
 ]
