@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Quick Requisition Entry{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Quick Requisition Entry</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Quick Requisition</span></div>
+      <p class="text-muted">Fast track for frequent, low-value or catalog purchases — one screen, one line. The draft lands in the SCM requisition workflow for review and approval.</p>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted">Raised under your name as a <strong>draft</strong> — nothing is committed until you submit it for approval on the next screen.</p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="zap"></i> Draft Requisition</button>
+      <a href="{% url 'procurement:dashboard' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">My Recent Quick Entries</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Status</th><th>Est. Total</th><th>Raised</th></tr></thead>
+        <tbody>
+          {% for r in recent %}
+            <tr>
+              <td class="fw-600"><a href="{% url 'scm:requisition_detail' r.pk %}">{{ r.number }}</a></td>
+              <td>{{ r.title }}</td>
+              <td><span class="badge {% if r.status == 'pending_approval' %}badge-amber{% elif r.status == 'approved' %}badge-green{% elif r.status == 'rejected' %}badge-red{% elif r.status == 'converted' %}badge-info{% else %}badge-slate{% endif %}">{{ r.get_status_display }}</span></td>
+              <td>{{ r.estimated_total }}</td>
+              <td>{{ r.created_at|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="zap"></i><h3>No requisitions yet</h3><p>Your quick entries will be listed here for one-click follow-up.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
