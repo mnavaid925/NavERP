@@ -48,7 +48,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
-            help="Delete this module's demo rows for all tenants before seeding.")
+            help=("Delete ALL inventory catalog rows (attributes, prices, files) for ALL tenants "
+                  "before seeding — not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
