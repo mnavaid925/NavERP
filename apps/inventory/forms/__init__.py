@@ -5,5 +5,6 @@ Re-exports every form so ``from apps.inventory.forms import X`` resolves.
 from .Catalog.ItemAttributes import ItemAttributeForm
 from .Catalog.ItemPrices import ItemPriceForm
 from .Catalog.ProductFiles import ProductFileForm
+from .VendorSupplierManagement.VendorCommunications import VendorCommunicationForm
 
-__all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm"]
+__all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommunicationForm"]
