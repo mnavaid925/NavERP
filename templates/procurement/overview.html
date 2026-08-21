@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Procurement Portal{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Procurement Portal</h1>
+      <div class="breadcrumb"><span>Procurement</span><span class="sep">›</span><span>Dashboard &amp; Portal</span></div>
+      <p class="text-muted">Your personalized procurement workspace — pending work, alerts, spend and your own activity, over the requisition spine owned by SCM 4.1.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:quickreq_create' %}" class="btn btn-primary"><i data-lucide="zap"></i> Quick Requisition</a>
+      <a href="{% url 'procurement:alert_create' %}" class="btn btn-outline"><i data-lucide="bell-plus"></i> Raise Alert</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="bell-ring"></i></div>
+      <div class="stat-value">{{ stats.my_open_alerts }}</div>
+      <div class="stat-label">My Open Alerts · {{ stats.open_alerts }} workspace-wide</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="clock-4"></i></div>
+      <div class="stat-value">{{ stats.pending_approvals }}</div>
+      <div class="stat-label">Requisitions Awaiting Approval · {{ stats.po_pending_approvals }} POs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{{ stats.committed_this_month }}</div>
+      <div class="stat-label">Committed This Month (raised &amp; approved)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="shopping-cart"></i></div>
+      <div class="stat-value">{{ stats.open_po_value }}</div>
+      <div class="stat-label">Open PO Value · {{ stats.open_pos }} orders</div>
+    </div>
+  </div>
+
+  {% if widgets %}<details class="card" style="margin-bottom:1rem;">
+    <summary class="card-header" style="cursor:pointer;"><h2 class="card-title">Customize Widgets</h2></summary>
+    <div class="card-body">
+      <form method="post" action="{% url 'procurement:dashboard' %}">
+        {% csrf_token %}
+        {{ widget_form.widgets }}
+        {% for e in widget_form.widgets.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-actions"><button class="btn btn-primary btn-sm" type="submit">Save Layout</button></div>
+      </form>
+    </div>
+  </details>{% endif %}
+
+  {% for w in widgets %}
+    {% if w.visible and w.key == "approvals" %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Pending Approvals</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Requisition</th><th>Requester</th><th>Est. Total</th><th>Raised</th><th></th></tr></thead>
+          <tbody>
+            {% for r in pending_requisitions %}
+              <tr>
+                <td class="fw-600">{{ r.number }}</td>
+                <td>{{ r.requester.username|default:"—" }}</td>
+                <td>{{ r.estimated_total }}</td>
+                <td>{{ r.created_at|date:"M d, Y" }}</td>
+                <td><a href="{% url 'scm:requisition_detail' r.pk %}" class="btn btn-outline btn-sm">Review</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-check"></i><h3>Nothing waiting on approval</h3><p>Submitted requisitions land here until a decision is made.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">My drafts: {{ stats.my_drafts }} · POs awaiting approval: {{ stats.po_pending_approvals }}</div>
+    </div>
+    {% endif %}
+
+    {% if w.visible and w.key == "alerts" %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Task &amp; Alert Center — Assigned to Me</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Alert</th><th>Kind</th><th>Severity</th><th>Status</th><th>Due</th><th></th></tr></thead>
+          <tbody>
+            {% for a in my_open_alerts_list %}
+              <tr>
+                <td class="fw-600">{{ a.title }}</td>
+                <td><span class="badge {{ a.kind_css }}">{{ a.get_kind_display }}</span></td>
+                <td><span class="badge {{ a.severity_css }}">{{ a.get_severity_display }}</span></td>
+                <td><span class="badge {{ a.status_css }}">{{ a.get_status_display }}</span></td>
+                <td>{{ a.due_at|date:"M d, H:i"|default:"—" }}</td>
+                <td><a href="{% url 'procurement:alert_detail' a.pk %}" class="btn btn-outline btn-sm">Open</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><h3>No open alerts assigned to you</h3><p>{{ stats.overdue_alerts }} overdue across the workspace — see the full Task &amp; Alert Center.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if w.visible and w.key == "spend" %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Spend Summary</h2></div>
+      <div class="card-body form-grid">
+        <div class="form-group"><label class="form-label">Raised this month &amp; now committed (approved + converted requisitions)</label><p class="fw-600">{{ stats.committed_this_month }}</p></div>
+        <div class="form-group"><label class="form-label">Raised last month &amp; now committed</label><p class="fw-600">{{ stats.committed_last_month }}</p></div>
+        <div class="form-group"><label class="form-label">I requested this month</label><p class="fw-600">{{ stats.my_requested_this_month }}</p></div>
+        <div class="form-group"><label class="form-label">Open purchase-order value</label><p class="fw-600">{{ stats.open_po_value }}</p></div>
+      </div>
+      <div class="card-body text-muted">Estimated figures at requisition value; committed spend by month and personal reports live under <a href="{% url 'procurement:report_index' %}">Self-Service Reporting</a>.</div>
+    </div>
+    {% endif %}
+
+    {% if w.visible and w.key == "deadlines" %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Approaching Deadlines — next {{ deadline_window_days }} days</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Type</th><th>Reference</th><th>Due</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for a in upcoming_alerts %}
+              <tr>
+                <td><span class="badge {{ a.kind_css }}">{{ a.get_kind_display }}</span></td>
+                <td><a href="{% url 'procurement:alert_detail' a.pk %}" class="fw-600">{{ a.title }}</a></td>
+                <td>{{ a.due_at|date:"M d, H:i" }}</td>
+                <td><span class="badge {{ a.status_css }}">{{ a.get_status_display }}</span></td>
+              </tr>
+            {% endfor %}
+            {% for r in due_requisitions %}
+              <tr>
+                <td><span class="badge badge-info">Requisition</span></td>
+                <td><a href="{% url 'scm:requisition_detail' r.pk %}" class="fw-600">{{ r.number }} · {{ r.title }}</a></td>
+                <td>{{ r.required_by|date:"M d, Y" }}</td>
+                <td><span class="badge {% if r.status == 'pending_approval' %}badge-amber{% elif r.status == 'approved' %}badge-green{% elif r.status == 'rejected' %}badge-red{% elif r.status == 'converted' %}badge-info{% else %}badge-slate{% endif %}">{{ r.get_status_display }}</span></td>
+              </tr>
+            {% empty %}
+              {% if upcoming_alerts|length == 0 %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="calendar-clock"></i><h3>Nothing due in the next {{ deadline_window_days }} days</h3><p>Dated alerts and requisition need-by dates appear here as they approach.</p></div></td></tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if w.visible and w.key == "activity" %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Recent Activity</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What</th></tr></thead>
+          <tbody>
+            {% for e in recent_activity %}
+              <tr>
+                <td>{{ e.at|date:"M d, H:i" }}</td>
+                <td>{{ e.user.username|default:"System" }}</td>
+                <td><span class="badge {% if e.action == 'create' %}badge-green{% elif e.action == 'delete' %}badge-red{% else %}badge-info{% endif %}">{{ e.get_action_display }}</span></td>
+                <td><a href="{% url 'procurement:activity_detail' e.pk %}">{{ e.target }}</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4"><div class="empty-state"><i data-lucide="activity"></i><h3>No procurement activity yet</h3><p>Create or submit a requisition and it will show up here.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body"><a href="{% url 'procurement:activity_list' %}" class="btn btn-outline btn-sm">Full Activity Feed</a></div>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Procurement Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'procurement:alert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Task &amp; Alert Center</a>
+      <a href="{% url 'procurement:quickreq_create' %}" class="btn btn-outline"><i data-lucide="zap"></i> Quick Requisition Entry</a>
+      <a href="{% url 'procurement:activity_list' %}" class="btn btn-outline"><i data-lucide="activity"></i> Recent Activity Feed</a>
+      <a href="{% url 'procurement:report_index' %}" class="btn btn-outline"><i data-lucide="file-bar-chart"></i> Self-Service Reporting</a>
+      <a href="{% url 'scm:requisition_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Requisitions (SCM)</a>
+      <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="shopping-cart"></i> Purchase Orders (SCM)</a>
+    </div>
+  </div>
+{% endblock %}
