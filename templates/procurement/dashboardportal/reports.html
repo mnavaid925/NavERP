@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Self-Service Reporting{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Self-Service Reporting</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Reports</span></div>
+      <p class="text-muted">Your personal usage and the workspace's committed spend, computed live over the requisition spine — nothing here is stored, so a report can never disagree with its documents.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:report_export' %}" class="btn btn-primary"><i data-lucide="download"></i> Export My Requisitions (CSV)</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+      <div class="stat-value">{{ stats.my_total }}</div>
+      <div class="stat-label">Requisitions Raised by Me</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="badge-check"></i></div>
+      <div class="stat-value">{{ stats.my_committed }}</div>
+      <div class="stat-label">My Committed Value (approved + converted)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="calendar-check"></i></div>
+      <div class="stat-value">{{ stats.my_requested_this_month }}</div>
+      <div class="stat-label">I Requested This Month · {{ stats.my_requested_last_month }} last month</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+      <div class="stat-value">{{ stats.tenant_committed_this_month }}</div>
+      <div class="stat-label">Workspace Committed This Month (raised &amp; approved)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Committed Spend by Month — last {{ trend_months }} months</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Month</th><th>Requisitions committed</th><th>Estimated value</th></tr></thead>
+        <tbody>
+          {% for row in trend %}
+            <tr>
+              <td class="fw-600">{{ row.month|date:"M Y" }}</td>
+              <td>{{ row.count }}</td>
+              <td>{{ row.total }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No committed spend yet</h3><p>Approve or convert requisitions and the monthly trend builds here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">My Requisitions by Status</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Status</th><th>Count</th></tr></thead>
+        <tbody>
+          {% for value, label, count in by_status %}
+            <tr>
+              <td><span class="badge {% if value == 'pending_approval' %}badge-amber{% elif value == 'approved' %}badge-green{% elif value == 'rejected' %}badge-red{% elif value == 'converted' %}badge-info{% else %}badge-slate{% endif %}">{{ label }}</span></td>
+              <td>{{ count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">My Latest Requisitions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Status</th><th>Est. Total</th><th>Raised</th><th></th></tr></thead>
+        <tbody>
+          {% for r in recent_of_mine %}
+            <tr>
+              <td class="fw-600">{{ r.number }}</td>
+              <td>{{ r.title }}</td>
+              <td><span class="badge {% if r.status == 'pending_approval' %}badge-amber{% elif r.status == 'approved' %}badge-green{% elif r.status == 'rejected' %}badge-red{% elif r.status == 'converted' %}badge-info{% else %}badge-slate{% endif %}">{{ r.get_status_display }}</span></td>
+              <td>{{ r.estimated_total }}</td>
+              <td>{{ r.created_at|date:"M d, Y" }}</td>
+              <td><a href="{% url 'scm:requisition_detail' r.pk %}" class="btn btn-outline btn-sm">Open</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="zap"></i><h3>You have not raised any requisitions</h3><p>Use Quick Requisition Entry for fast-track requests.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
