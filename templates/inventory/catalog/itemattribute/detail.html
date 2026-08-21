@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ obj }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="badge badge-info">{{ obj.display_value }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:itemattribute_list' %}">Attributes</a><span class="sep">›</span><span>{{ obj }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:itemattribute_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:itemattribute_delete' obj.pk %}" onsubmit="return confirm('Delete this attribute?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Attribute</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Product</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}">{{ obj.item.sku }} · {{ obj.item.name }}</a></dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Value</dt><dd class="fw-600">{{ obj.value }}</dd></div>
+        <div class="detail-item"><dt>Unit</dt><dd>{{ obj.unit|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Spec-sheet order</dt><dd>{{ obj.sequence }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Other Attributes on {{ obj.item.sku }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Attribute</th><th>Value</th><th>Order</th></tr></thead>
+        <tbody>
+          {% for a in obj.item.catalog_attributes.all %}
+            <tr {% if a.pk == obj.pk %}class="fw-600"{% endif %}>
+              <td>{% if a.pk == obj.pk %}{{ a.name }}{% else %}<a href="{% url 'inventory:itemattribute_detail' a.pk %}">{{ a.name }}</a>{% endif %}</td>
+              <td>{{ a.display_value }}</td>
+              <td>{{ a.sequence }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3"><div class="empty-state"><i data-lucide="list-tree"></i><h3>No other attributes</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
