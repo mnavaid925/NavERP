@@ -25784,3 +25784,47 @@ puts HTTP response codes on an EDI-shaped row and departs from the shipped crm p
 
 ## Review notes
 (filled in at the end)
+
+## Review notes — 5.1 Product & Catalog Management delivered (2026-08-21)
+
+**Module rollover:** SCM closed at 4.19 (all 19 wired), so this run rolled to Module 5 and scaffolded
+``apps/inventory`` (packages ``models/ forms/ views/ urls/``, one ``Catalog/`` sub-package, ``_base.py``/``_common.py``
+local copies of the proven scm toolkit, ``seed_inventory``).
+
+**The load-bearing ruling — extend, don't duplicate.** The skill text still says Module 5 owns Item/UOM/Location,
+but the code is the truth: SCM 4.3 shipped ``scm.Item`` / ``scm.ItemCategory`` / ``scm.UOM`` / ``scm.Location`` /
+``scm.StockMove`` (L36). So 5.1 builds NO item master: SKU Management and Product Categorization map their sidebar
+bullets straight at ``scm:item_list`` / ``scm:category_list``, and the three new tables are children FK'ing
+``scm.Item`` by string (``catalog_attributes`` / ``catalog_prices`` / ``catalog_files``). A second SKU master would
+have forked every valuation/BOM/forecast reader on day one.
+
+**What shipped (3 models, 16 routes, 10 templates):**
+- ``ItemAttribute`` — name/value/unit spec-sheet rows; ``(tenant, item, name)`` unique so a SKU can't carry "Color"
+  twice; ``sequence`` lays out the spec sheet; ``display_value`` joins unit.
+- ``ItemPrice`` — sell-side rows only. The COST side stays on ``scm.Item.standard_cost``; storing a second cost here
+  would be two sources of truth for money. Types retail/wholesale/promotional/clearance x price-break
+  ``min_quantity`` x dated window; ``margin_pct``/``markup_pct`` computed against current standard cost at render time
+  (markup returns None at a zero basis rather than pretending 0 %).
+- ``ProductFile`` — photo/safety_sheet/manual/datasheet/certificate/other; file-upload OR external url with
+  ``clean()`` demanding at least one (error keyed on ``file``, which the form has); extension allowlist on uploads;
+  ``is_primary`` auto-demotes siblings in ``save()`` (HRM EmergencyContact discipline). Delete removes the row, not
+  the artifact on disk.
+- ``/inventory/`` overview computes catalog completeness (priced %, photographed %) as progress bars — gaps read as
+  progress, not alerts.
+
+**Form boundary security:** local copies of ``TenantUniqueMixin`` + ``_reject_foreign`` (a narrowed ``<select>`` is
+UX, not authorization) — same reasoning as scm's, but peer apps don't import each other's internals.
+
+**Seeder:** reuses seeded ``scm.Item``s (skips a tenant with none, telling you to run ``seed_scm`` first), prices are
+laddered off real standard costs (skips zero-cost items rather than faking margins), files seed as RFC 2606 links —
+never uploads from a seeder.
+
+**Smoke:** all 16 routes render 200 logged-in / 302 anonymous; cross-tenant detail/edit -> 404 and cross-tenant
+delete POST -> 404 with the row intact; GET on delete -> 405 by design; no ``{#`` leaks; filters narrow.
+
+### Deliberately not built (parked for later 5.x)
+- UOM conversions beyond 4.3's factor column -> **5.20**.
+- Price-list versioning/approval, customer-segment pricing -> later pricing pass if a bullet demands it.
+- Attribute sets/templates applied per category -> a later catalog pass; today attributes attach per item.
+- Image thumbnails/resizing -> needs storage tooling; the model stores the artifact pointer only.
+- Barcode/RFID identifiers on the SKU -> **5.14**, and they belong beside ``scm.Item``'s spine columns, not here.
