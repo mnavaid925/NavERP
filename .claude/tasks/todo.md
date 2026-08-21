@@ -25828,3 +25828,52 @@ delete POST -> 404 with the row intact; GET on delete -> 405 by design; no ``{#`
 - Attribute sets/templates applied per category -> a later catalog pass; today attributes attach per item.
 - Image thumbnails/resizing -> needs storage tooling; the model stores the artifact pointer only.
 - Barcode/RFID identifiers on the SKU -> **5.14**, and they belong beside ``scm.Item``'s spine columns, not here.
+
+## Review notes - 6.1 User Dashboard & Portal delivered (2026-08-21)
+
+**Explicit argument run:** `/next-module 6.1` resolved to Module 6 Procurement Management System, sub-module
+6.1 User Dashboard & Portal. Module 5 (inventory) is still open at 5.1, but an explicit N.M builds exactly that
+sub-module, so this run scaffolded a NEW app ``apps/procurement`` (packages ``models/ forms/ views/ urls/``, one
+``DashboardPortal/`` sub-package, ``_base.py``/``_common.py`` local copies of the proven toolkit,
+``seed_procurement``) and wired ``config.settings`` + ``config/urls.py`` + ``LIVE_LINKS["6.1"]``.
+
+**The load-bearing ruling - the portal owns people/workflow, scm owns documents.** Every requisition/PO figure
+the portal shows is read from 4.1's spine; Quick Requisition Entry WRITES into ``scm.PurchaseRequisition``
+(header + one line in one transaction, requester = signed-in user, derived total via ``recalc_totals()``) and
+hands off to scm's submit/approve. The Recent Activity Feed is ``core.AuditLog`` filtered to procurement content
+types through one shared queryset builder (``views/_helpers.py``) used by both the overview widget and the full
+page - no second feed table. Self-Service Reporting stores nothing at all.
+
+**What shipped (2 models, 12 routes, 7 templates):**
+- ``ProcurementAlert`` - Task & Alert Center: kind (deadline/approval/delivery/task), severity, open ->
+  acknowledged -> resolved with who/when stamps via acknowledge()/resolve() verbs (status is OFF the form);
+  ``link_url`` restricted to internal paths in clean() (open-redirect guard); colour-named badge css properties.
+- ``WidgetPreference`` - per-user overview layout, one row per (tenant, user, widget); ABSENCE of a row means
+  visible, so the seeder seeds none and the default view is the full set. Registry lives on the model.
+- Computed pages: overview (stat cards + five toggleable widget sections over live aggregates), quick
+  requisition form (+ my recent entries), activity feed (always windowed, my-actions default, junk-token action
+  filter narrows nothing, per-entry field-level diff detail restricted to the same domain filter),
+  self-service reports (my usage by status, six-month committed-spend trend in ONE grouped query, CSV export of
+  MY OWN requisitions with formula-injection neutralization).
+
+**Smoke:** all pages render 200 as admin_acme; alert create/edit/delete/acknowledge/resolve verified end to
+end (including created_by stamping); quick requisition produced PR-00004 with recalculated total 99.80; feed
+shows the audit rows; widget toggle persists and hides sections; cross-tenant alert detail -> 404; no leak
+markers. One real bug found and fixed during smoke: the custom alert_create wrapper forgot the tenant stamp
+crud_create normally applies (IntegrityError on POST) - now guarded like the generic helper.
+
+### Deliberately not built (parked for later 6.x)
+- Alert auto-raising from approval SLAs/deadlines -> **6.3** Approval Workflow Engine writes into this table.
+- Requisition templates/duplicate detection -> **6.2** owns the requisition UX layer.
+- Tenant-wide spend analytics/maverick spend -> **6.14**; this page exports only the user's own rows.
+- Widget drag-and-drop ordering -> only show/hide shipped; order is the model registry's fixed order.
+
+**Test wave (2026-08-21):** ``apps/procurement/tests/`` - contract conftest (alerts across every
+lifecycle state + accounting masters) plus ``test_portal_{models,forms,views,security}.py``
+(89 tests): lifecycle idempotence incl. the CR-2 no-restamp regression at BOTH model and view
+layer, link-guard parametrized shapes (CR-1), badge palette locked to theme.css classes,
+widget-pref semantics (absence=visible), quickreq spine hand-off (requester/total server-side),
+feed scope/action/window behavior, cross-tenant 404s on every verb, POST-only state changes,
+CSV formula-injection neutralization, foreign-FK field errors. Full unfiltered suite:
+17,963 tests / 0 errors / 4 failures - ALL in apps/inventory/tests/test_catalog_forms.py,
+which belongs to the concurrent inventory session (L45 - not this changeset).
