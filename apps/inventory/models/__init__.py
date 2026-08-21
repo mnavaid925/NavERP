@@ -6,5 +6,6 @@ Re-exports every model so ``from apps.inventory.models import ItemPrice`` works 
 from .Catalog.ItemAttributes import ItemAttribute
 from .Catalog.ItemPrices import ItemPrice
 from .Catalog.ProductFiles import ProductFile
+from .VendorSupplierManagement.VendorCommunications import VendorCommunication
 
-__all__ = ["ItemAttribute", "ItemPrice", "ProductFile"]
+__all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication"]
