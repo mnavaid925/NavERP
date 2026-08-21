@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Product Imagery &amp; Documents{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Product Imagery &amp; Documents</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Files</span></div>
+      <p class="text-muted">Photos, safety sheets, manuals and datasheets attached to the catalog — upload a file or link one.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:productfile_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Attach File</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU, product, title or link…">
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for i in items %}
+              <option value="{{ i.pk }}" {% if request.GET.item == i.pk|stringformat:"d" %}selected{% endif %}>{{ i.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Kind" class="form-select">
+            <option value="">All kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_primary" aria-label="Cover image" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_primary == "True" %}selected{% endif %}>Cover images</option>
+            <option value="False" {% if request.GET.is_primary == "False" %}selected{% endif %}>Non-cover</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:productfile_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Title</th><th>Product</th><th>Kind</th><th>Source</th><th>Cover</th><th>Attached</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.title }}</td>
+              <td><a href="{% url 'scm:item_detail' obj.item_id %}">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></td>
+              <td>
+                <span class="badge badge-{% if obj.kind == 'photo' %}info{% elif obj.kind == 'safety_sheet' %}red{% elif obj.kind == 'manual' %}amber{% elif obj.kind == 'datasheet' %}green{% else %}slate{% endif %}">{{ obj.get_kind_display }}</span>
+              </td>
+              <td>{% if obj.file %}<span class="badge badge-slate">Upload</span>{% elif obj.url %}<a href="{{ obj.url }}" target="_blank" rel="noopener noreferrer" class="text-muted">Link ↗</a>{% else %}—{% endif %}</td>
+              <td>{% if obj.is_primary %}<span class="badge badge-amber">Cover</span>{% else %}—{% endif %}</td>
+              <td>{{ obj.created_at|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:productfile_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:productfile_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:productfile_delete' obj.pk %}" onsubmit="return confirm('Detach this file from the product? The uploaded artifact itself is kept on disk.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="paperclip"></i><h3>No files attached</h3><p>Attach a photo, safety sheet or manual to a SKU to start its document set.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
