@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Recent Activity Feed{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Recent Activity Feed</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Activity</span></div>
+      <p class="text-muted">{{ feed_note }}</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:report_index' %}" class="btn btn-outline"><i data-lucide="file-bar-chart"></i> Reports</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search what changed…">
+        </div>
+        <div class="form-group">
+          <select name="scope" aria-label="Scope" class="form-select">
+            <option value="mine" {% if scope == 'mine' %}selected{% endif %}>My actions</option>
+            <option value="all" {% if scope == 'all' %}selected{% endif %}>Whole workspace</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="action" aria-label="Action" class="form-select">
+            <option value="">All actions</option>
+            {% for val, label in action_choices %}
+              <option value="{{ val }}" {% if action == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_from" value="{{ window.date_from|date:'Y-m-d' }}" aria-label="From" class="form-input">
+        </div>
+        <div class="form-group">
+          <input type="date" name="date_to" value="{{ window.date_to|date:'Y-m-d' }}" aria-label="To" class="form-input">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:activity_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+      {% if window_defaulted %}<p class="text-muted">Showing the default {{ window_days }}-day window — pick dates to look further back.</p>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>What changed</th><th></th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>{{ obj.at|date:"M d, H:i" }}</td>
+              <td>{{ obj.user.username|default:"System" }}</td>
+              <td><span class="badge {% if obj.action == 'create' %}badge-green{% elif obj.action == 'delete' %}badge-red{% else %}badge-info{% endif %}">{{ obj.get_action_display }}</span></td>
+              <td class="fw-600">{{ obj.target }}</td>
+              <td><a href="{% url 'procurement:activity_detail' obj.pk %}" class="btn-icon" title="View changes"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="activity"></i><h3>No activity in this window</h3><p>Create, submit or approve a procurement document and it will appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
