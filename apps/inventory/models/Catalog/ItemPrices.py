@@ -70,21 +70,30 @@ class ItemPrice(TenantOwned):
 
     @property
     def margin_pct(self):
-        """(price − standard_cost) / price × 100 — ``None`` at a zero or missing cost basis."""
-        cost = self.item.standard_cost if self.item_id else ZERO
+        """(price − standard_cost) / price × 100 — ``None`` without a saved item or cost basis.
+
+        An unsaved instance (or any row whose item pointer is unset) has NO cost basis, which is
+        not the same as a zero one: reporting 100 % for it would be a fabricated figure.
+        """
+        if not self.item_id:
+            return None
+        cost = self.item.standard_cost
         price = self.unit_price or ZERO
-        if price <= ZERO or cost is None:
+        if price <= ZERO:
             return None
         return ((price - cost) / price * Decimal("100")).quantize(Decimal("0.01"))
 
     @property
     def markup_pct(self):
-        """(price − standard_cost) / standard_cost × 100 — ``None`` while the cost basis is zero.
+        """(price − standard_cost) / standard_cost × 100 — ``None`` while the cost basis is zero
+        (or the row has no item at all).
 
         A zero-cost markup is undefined (division by zero), not 0 %: saying "0 %" would read as
         "priced at cost", the one thing a zero cost basis cannot tell you.
         """
-        cost = self.item.standard_cost if self.item_id else ZERO
+        if not self.item_id:
+            return None
+        cost = self.item.standard_cost
         price = self.unit_price or ZERO
         if cost <= ZERO:
             return None
