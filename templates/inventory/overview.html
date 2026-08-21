@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Inventory Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Inventory Management</h1>
+      <div class="breadcrumb"><span>Inventory</span></div>
+      <p class="text-muted">The catalog layer on the item spine — attributes, sell-side pricing and product imagery &amp; documents.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:itemprice_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Price</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="box"></i></div>
+      <div class="stat-value">{{ stats.skus }}</div>
+      <div class="stat-label">SKUs · {{ stats.active_skus }} active</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="folder-tree"></i></div>
+      <div class="stat-value">{{ stats.categories }}</div>
+      <div class="stat-label">Categories</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="list-tree"></i></div>
+      <div class="stat-value">{{ stats.attributes }}</div>
+      <div class="stat-label">Product Attributes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="tag"></i></div>
+      <div class="stat-value">{{ stats.prices }}</div>
+      <div class="stat-label">Price Rows</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="paperclip"></i></div>
+      <div class="stat-value">{{ stats.files }}</div>
+      <div class="stat-label">Images &amp; Documents</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Catalog Completeness</h2></div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Priced SKUs — {{ priced_items }} of {{ stats.skus }}</label>
+          <div class="progress"><div class="progress-bar" style="width:{% widthratio priced_items stats.skus 100 %}%;"></div></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">SKUs with a photo — {{ imaged_items }} of {{ stats.skus }}</label>
+          <div class="progress"><div class="progress-bar" style="width:{% widthratio imaged_items stats.skus 100 %}%;"></div></div>
+        </div>
+      </div>
+      <p class="text-muted">A SKU with no price row or no image is a gap in the catalog, not an error — these bars read as progress, not alerts.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Largest Categories</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th>Items</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for c in top_categories %}
+            <tr>
+              <td class="fw-600">{{ c.name }}</td>
+              <td>{{ c.item_count }}</td>
+              <td>{% if c.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td><a href="{% url 'scm:category_list' %}" class="btn btn-outline btn-sm">Manage</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="folder-tree"></i><h3>No categories yet</h3><p>Group products hierarchically (Department › Category › Sub-category) on the SCM category page.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recently Attached Files</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Title</th><th>Product</th><th>Kind</th><th>Cover</th><th>Attached</th></tr></thead>
+        <tbody>
+          {% for f in recent_files %}
+            <tr>
+              <td><a href="{% url 'inventory:productfile_detail' f.pk %}" class="fw-600">{{ f.title }}</a></td>
+              <td>{{ f.item.sku }}</td>
+              <td>{{ f.get_kind_display }}</td>
+              <td>{% if f.is_primary %}<span class="badge badge-amber">Cover</span>{% else %}—{% endif %}</td>
+              <td>{{ f.created_at|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="image"></i><h3>No files attached yet</h3><p>Attach photos, safety sheets and manuals from Product Imagery &amp; Documents.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
+      <a href="{% url 'scm:category_list' %}" class="btn btn-outline"><i data-lucide="folder-tree"></i> Categories (SCM)</a>
+      <a href="{% url 'scm:uom_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> Units of Measure (SCM)</a>
+      <a href="{% url 'inventory:itemattribute_list' %}" class="btn btn-outline"><i data-lucide="list-tree"></i> Attributes</a>
+      <a href="{% url 'inventory:itemprice_list' %}" class="btn btn-outline"><i data-lucide="tag"></i> Prices</a>
+      <a href="{% url 'inventory:productfile_list' %}" class="btn btn-outline"><i data-lucide="paperclip"></i> Files</a>
+    </div>
+  </div>
+{% endblock %}
