@@ -5,7 +5,7 @@ works because apps/inventory/models/__init__.py re-exports everything.
 """
 from django.contrib import admin
 
-from apps.inventory.models import ItemAttribute, ItemPrice, ProductFile
+from apps.inventory.models import ItemAttribute, ItemPrice, ProductFile, VendorCommunication
 
 
 @admin.register(ItemAttribute)
@@ -28,3 +28,12 @@ class ProductFileAdmin(admin.ModelAdmin):
     list_display = ("item", "title", "kind", "is_primary", "created_at")
     list_filter = ("tenant", "kind", "is_primary")
     search_fields = ("item__sku", "item__name", "title")
+
+
+@admin.register(VendorCommunication)
+class VendorCommunicationAdmin(admin.ModelAdmin):
+    list_display = ("number", "party", "channel", "direction", "subject", "occurred_at",
+                    "follow_up_on")
+    list_filter = ("tenant", "channel", "direction")
+    search_fields = ("number", "subject", "body", "party__name")
+    date_hierarchy = "occurred_at"
