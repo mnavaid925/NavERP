@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Vendor Communication Log{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Vendor Communication Log</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Vendors</span></div>
+      <p class="text-muted">Calls, emails, meetings and site visits with your suppliers — the interaction history behind the directory, scorecards and contracts.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:vendorcommunication_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Log Interaction</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, vendor, subject or notes…">
+        </div>
+        <div class="form-group">
+          <select name="party" aria-label="Vendor" class="form-select">
+            <option value="">All vendors</option>
+            {% for p in parties %}
+              <option value="{{ p.pk }}" {% if request.GET.party == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="channel" aria-label="Channel" class="form-select">
+            <option value="">All channels</option>
+            {% for val, label in channel_choices %}
+              <option value="{{ val }}" {% if request.GET.channel == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="direction" aria-label="Direction" class="form-select">
+            <option value="">In &amp; out</option>
+            {% for val, label in direction_choices %}
+              <option value="{{ val }}" {% if request.GET.direction == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="follow_up" aria-label="Follow-up" class="form-select">
+            <option value="">All interactions</option>
+            <option value="due" {% if follow_up == "due" %}selected{% endif %}>Follow-up due</option>
+            <option value="overdue" {% if follow_up == "overdue" %}selected{% endif %}>Follow-up overdue</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:vendorcommunication_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>When</th><th>Vendor</th><th>Channel</th><th>Subject</th><th>Direction</th><th>Follow-up</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{{ obj.occurred_at|date:"M d, Y H:i" }}</td>
+              <td><a href="{% url 'inventory:vendorcommunication_detail' obj.pk %}" class="fw-600">{{ obj.party.name }}</a></td>
+              <td><span class="badge {{ obj.channel_css }}">{{ obj.get_channel_display }}</span></td>
+              <td>{{ obj.subject|truncatechars:60 }}</td>
+              <td>{% if obj.direction %}<span class="badge badge-{% if obj.direction == 'inbound' %}info{% else %}slate{% endif %}">{{ obj.get_direction_display }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.follow_up_on %}
+                  {% if obj.is_follow_up_overdue %}<span class="badge badge-red">Overdue {{ obj.follow_up_on|date:"M d" }}</span>
+                  {% else %}<span class="badge badge-amber">Due {{ obj.follow_up_on|date:"M d" }}</span>{% endif %}
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:vendorcommunication_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:vendorcommunication_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:vendorcommunication_delete' obj.pk %}" onsubmit="return confirm('Delete this logged interaction?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="message-square"></i><h3>No interactions logged</h3><p>Log a call, email or meeting with a supplier to start building the relationship history.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
