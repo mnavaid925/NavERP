@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.hrm",
     "apps.scm",
     "apps.inventory",
+    "apps.procurement",
 ]
 
 MIDDLEWARE = [
