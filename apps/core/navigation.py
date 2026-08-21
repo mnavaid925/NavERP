@@ -1162,6 +1162,16 @@ LIVE_LINKS = {
         "Pricing & Costing":           "inventory:itemprice_list",
         "Product Imagery & Documents": "inventory:productfile_list",
     },
+    # 5.2 Vendor / Supplier Management. Three of the four bullets are ALREADY the 4.2 SRM pages —
+    # the supplier spine (directory/scorecard/contract) is owned by SCM per L36, and re-declaring
+    # any of it here would be a second master for the same vendor. The one genuine gap is the
+    # conversation itself, so 5.2's only new table is the inventory.VendorCommunication log.
+    "5.2": {
+        "Supplier Directory":            "scm:supplierprofile_list",          # bullet (4.2 SRM master)
+        "Supplier Performance Tracking": "scm:scorecard_list",                # bullet (4.2 signal-derived)
+        "Contract & Terms Management":   "scm:contract_list",                 # bullet (terms on the contract; lead time/MOQ on catalog lines)
+        "Vendor Communication Log":      "inventory:vendorcommunication_list",  # bullet (the new log)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
     # 4.1's `scm.PurchaseRequisition` / `scm.PurchaseOrder` (L36: extend the spine, never
