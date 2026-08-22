@@ -59,14 +59,22 @@
               <td>{{ obj.estimated_total|floatformat:2 }}</td>
               <td>
                 {% if obj.pk in dupe_pks %}
-                  <a href="{% url 'procurement:req_detail' obj.pk %}" class="badge badge-red" title="Matches a recent request">Possible duplicate</a>
+                  <span class="badge badge-red" title="Matches a recent request">Possible duplicate</span>
                 {% else %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:req_detail' obj.pk %}" class="btn-icon" title="Track"><i data-lucide="eye"></i></a>
                   {% if obj.is_editable %}
+                    <a href="{% url 'scm:requisition_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% endif %}
+                  {% if obj.status == 'pending_approval' or obj.status == 'approved' %}
                     <a href="{% url 'procurement:req_amendment_create' obj.pk %}" class="btn-icon" title="Request amendment / cancellation"><i data-lucide="file-pen"></i></a>
+                  {% endif %}
+                  {% if obj.status == 'draft' %}
+                    <form method="post" action="{% url 'scm:requisition_delete' obj.pk %}" onsubmit="return confirm('Delete this draft requisition? This cannot be undone.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
                   {% endif %}
                 </div>
               </td>
