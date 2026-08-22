@@ -358,7 +358,7 @@ class Command(BaseCommand):
                 "first, skipping putaway rules.")
             return
 
-        created = 0
+        created, task_created = 0, False
 
         def sku(s):
             return Item.objects.filter(tenant=tenant, sku=s).first()
@@ -392,6 +392,7 @@ class Command(BaseCommand):
                     tenant=tenant, item=mon, from_location=dock, to_location=bin_a1,
                     quantity=Decimal("12"), strategy="directed", status="pending",
                     notes="Seeded receiving queue demo.")
+                task_created = True
 
         # 3. Category fallback for everything else in IT Equipment.
         it_cat = ItemCategory.objects.filter(tenant=tenant, name="IT Equipment").first()
@@ -409,7 +410,8 @@ class Command(BaseCommand):
         created += 1
 
         self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: {created} putaway rules (+1 open putaway task)."))
+            f"  {tenant.name}: {created} putaway rules"
+            + (" (+1 open putaway task)." if task_created else ".")))
 
     def _seed_warehousing(self, tenant, items):
         """5.5 Warehousing & Bin Management — capacity envelopes + cross-dock flows.
