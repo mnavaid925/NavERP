@@ -64,21 +64,25 @@ class BaseRequisitionAmendmentLineFormSet(forms.BaseInlineFormSet):
             if not hasattr(form, "cleaned_data"):
                 continue
             data = form.cleaned_data
+            if data.get("DELETE"):
+                continue  # a row being dropped proposes nothing — it must not block its twin
             target = data.get("target_line")
             if target is not None:
                 if target.requisition_id != requisition.pk:
                     form.add_error("target_line",
                                    "That line belongs to a different requisition.")
-                elif data.get("action") == "update" and target in seen_targets:
-                    # Two updates against one line would apply in form order and silently keep
-                    # only the last — refuse the ambiguity instead.
+                elif target in seen_targets:
+                    # Two live rows against one line would apply in form order and silently keep
+                    # only the last (or double-delete) — refuse the ambiguity instead.
                     form.add_error("target_line", "This line is targeted by more than one row.")
                 seen_targets.append(target)
 
 
 RequisitionAmendmentLineFormSet = inlineformset_factory(
     RequisitionAmendment, RequisitionAmendmentLine, form=RequisitionAmendmentLineForm,
-    formset=BaseRequisitionAmendmentLineFormSet, extra=1, can_delete=True,
+    # max_num caps a crafted management form at a sane row count — each accepted row becomes a
+    # line write on approval.
+    formset=BaseRequisitionAmendmentLineFormSet, extra=1, can_delete=True, max_num=25,
 )
 
 #: The two decide forms are deliberately plain Forms: they capture a REASON about a decision that
