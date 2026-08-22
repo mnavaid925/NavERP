@@ -12,7 +12,14 @@ don't import each other's internals:
 * ``_reject_foreign`` is the crafted-POST re-check: a narrowed ``<select>`` is UX, not an
   authorization boundary, so every tenant-scoped FK is re-checked where it renders as a field
   error instead of leaking another workspace's row into this one.
+
+6.2 adds inline formsets (template lines / amendment line changes), so ``forms`` and
+``inlineformset_factory`` join the shared toolkit here rather than each entity module importing
+its own copy.
 """
+from django import forms
+from django.forms import inlineformset_factory
+
 from apps.core.forms import TenantModelForm
 
 
