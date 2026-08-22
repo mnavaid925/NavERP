@@ -8,6 +8,9 @@ from .Catalog.ProductFiles import ProductFileForm
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRuleForm
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatchForm
 from .VendorSupplierManagement.VendorCommunications import VendorCommunicationForm
+from .WarehousingBinManagement.BinCapacities import BinCapacityForm
+from .WarehousingBinManagement.CrossDockOrders import CrossDockOrderForm
 
 __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommunicationForm",
-           "PurchaseOrderApprovalRuleForm", "PurchaseOrderDispatchForm"]
+           "PurchaseOrderApprovalRuleForm", "PurchaseOrderDispatchForm",
+           "BinCapacityForm", "CrossDockOrderForm"]
