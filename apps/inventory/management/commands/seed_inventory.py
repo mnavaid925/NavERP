@@ -120,9 +120,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL inventory rows (attributes, prices, files, vendor communications, "
-                  "PO approval rules/dispatches, bin capacities, cross-dock orders, stock "
-                  "statuses, reservations) for ALL tenants before seeding — not just "
-                  "seeder-created ones."))
+                  "PO approval rules/dispatches, putaway rules, bin capacities, cross-dock "
+                  "orders, stock statuses, reservations) for ALL tenants before seeding — "
+                  "not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
