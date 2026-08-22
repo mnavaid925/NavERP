@@ -77,6 +77,19 @@ def reservation_create(request):
 
 @login_required
 def reservation_edit(request, pk):
+    """Edit an editable claim — and REFUSE to touch history.
+
+    crud_edit would happily re-save any row handed to it, so the ``is_editable``
+    invariant (EDITABLE_STATUSES: reserved only) is enforced here first, exactly as
+    reservation_delete guards its own verb; otherwise a crafted POST could rewrite a
+    released/consumed/cancelled row's quantity after the fact.
+    """
+    obj = get_object_or_404(InventoryReservation, pk=pk, tenant=request.tenant)
+    if not obj.is_editable:
+        messages.error(
+            request,
+            f"{obj.number} is {obj.get_status_display().lower()} and cannot be edited.")
+        return redirect("inventory:reservation_detail", pk=obj.pk)
     return crud_edit(
         request, model=InventoryReservation, pk=pk,
         form_class=InventoryReservationForm,
