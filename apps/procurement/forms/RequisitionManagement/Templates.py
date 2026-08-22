@@ -48,5 +48,7 @@ class BaseRequisitionTemplateLineFormSet(forms.BaseInlineFormSet):
 
 RequisitionTemplateLineFormSet = inlineformset_factory(
     RequisitionTemplate, RequisitionTemplateLine, form=RequisitionTemplateLineForm,
-    formset=BaseRequisitionTemplateLineFormSet, extra=2, can_delete=True,
+    # max_num caps a crafted management form (TOTAL_FORMS≈1000) at a sane row count — each
+    # accepted row is validated and later copied verbatim on every apply.
+    formset=BaseRequisitionTemplateLineFormSet, extra=2, can_delete=True, max_num=50,
 )
