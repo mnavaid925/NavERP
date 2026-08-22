@@ -1185,6 +1185,17 @@ LIVE_LINKS = {
         "Recent Activity Feed":    "procurement:activity_list",   # bullet (core.AuditLog scoped to procurement documents)
         "Self-Service Reporting":  "procurement:report_index",    # bullet (personal usage/spend report + own-requisitions CSV)
     },
+    # 6.2 Requisition Management. The requisition DOCUMENTS stay 4.1's scm.PurchaseRequisition
+    # (L36), so the Creation bullet maps to the spine's own full form (item descriptions,
+    # quantities, required dates and account codes — exactly what the bullet names) rather than a
+    # second copy of it; the other four bullets land on 6.2's management layer around that spine.
+    "6.2": {
+        "Requisition Creation":            "scm:requisition_create",           # bullet (4.1's full creation form on the spine)
+        "Requisition Tracking":            "procurement:req_list",             # bullet (register + draft→approval→PO tracking detail)
+        "Duplicate Requisition Check":     "procurement:req_list?dupes=1",     # bullet (register filtered to flagged rows; reasons on each detail)
+        "Requisition Templates":           "procurement:template_list",        # bullet (recurring-order blueprints + apply-into-draft)
+        "Requisition Cancellation/Amendment": "procurement:amendment_list",    # bullet (request → admin approve/reject workflow)
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
