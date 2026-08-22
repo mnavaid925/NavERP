@@ -7,12 +7,11 @@ StockStatus claim subtracting held units, and on-order outstanding from 4.1's op
 lines net of receipts. Beside it the two CRUD entities (StockStatus, InventoryReservation)
 run their full create/edit/delete + lifecycle contracts through the HTTP surface only.
 
-One known defect OUTSIDE this file is pinned rather than chased: ``reservation_delete``
-re-reads its row with ``request.tenant_id`` (InventoryReservations.py:116), an attribute
-the tenant middleware never attaches — so every DELETE POST dies with AttributeError
-before the guard runs. The verifiable halves (GET → 405) stay live assertions; the
-broken halves are STRICT xfails, so fixing the view flips them to XPASS failures and
-demands they be promoted back to real assertions.
+One former defect OUTSIDE this file is now fixed and pinned as regression: ``reservation_delete``
+used to re-read its row with ``request.tenant_id`` (an attribute the tenant middleware
+never attaches), so every DELETE POST died with AttributeError before the guard ran.
+The two delete-POST tests below were STRICT xfails pinning exactly that; the view is
+fixed, so they stand as plain assertions.
 """
 import datetime
 from decimal import Decimal
@@ -450,10 +449,6 @@ def test_tracking_reservation_delete_reserved_get_405(
     assert refused.status_code == 405
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "View defect outside this file: reservation_delete re-reads with request.tenant_id "
-    "(InventoryReservations.py:116), which TenantMiddleware never sets — every DELETE "
-    "POST raises AttributeError (500) before the guard or crud_delete runs."))
 def test_tracking_reservation_delete_reserved_post_removes(
         client_a, tenant_a, admin_user, item_a, trk_spot_a):
     from apps.inventory.models import InventoryReservation
@@ -466,10 +461,6 @@ def test_tracking_reservation_delete_reserved_post_removes(
     assert not InventoryReservation.objects.filter(pk=reserved.pk).exists()
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "View defect outside this file: reservation_delete re-reads with request.tenant_id "
-    "(InventoryReservations.py:116), which TenantMiddleware never sets — every DELETE "
-    "POST raises AttributeError (500) before the consumed-guard redirect can run."))
 def test_tracking_reservation_delete_consumed_redirects_and_row_survives(
         client_a, tenant_a, admin_user, item_a, trk_spot_a):
     from apps.inventory.models import InventoryReservation
