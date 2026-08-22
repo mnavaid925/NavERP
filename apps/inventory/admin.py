@@ -6,6 +6,8 @@ works because apps/inventory/models/__init__.py re-exports everything.
 from django.contrib import admin
 
 from apps.inventory.models import (
+    BinCapacity,
+    CrossDockOrder,
     ItemAttribute,
     ItemPrice,
     ProductFile,
@@ -70,3 +72,17 @@ class PurchaseOrderDispatchAdmin(admin.ModelAdmin):
     search_fields = ("number", "purchase_order__number", "recipient", "reference")
     date_hierarchy = "dispatched_at"
 
+
+@admin.register(BinCapacity)
+class BinCapacityAdmin(admin.ModelAdmin):
+    list_display = ("location", "max_weight_kg", "max_volume_m3", "max_quantity", "notes")
+    list_filter = ("tenant",)
+    search_fields = ("location__code", "location__name", "notes")
+
+
+@admin.register(CrossDockOrder)
+class CrossDockOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "dock_location", "quantity", "scheduled_date", "status")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "item__sku", "item__name", "inbound_reference",
+                     "outbound_reference")
