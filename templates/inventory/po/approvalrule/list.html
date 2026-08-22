@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}PO Approval Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PO Approval Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:approval_queue' %}">Purchase Orders</a><span class="sep">›</span><span>Approval Rules</span></div>
+      <p class="text-muted">Routing policy for purchase-order approvals — how many sequential sign-offs an order needs, by value band and department. The orders themselves live on the SCM procurement pages.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:approvalrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search rule names…">
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Department" class="form-select">
+            <option value="">All departments</option>
+            {% for u in org_units %}
+              <option value="{{ u.pk }}" {% if request.GET.org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="active" aria-label="State" class="form-select">
+            <option value="">Active &amp; inactive</option>
+            <option value="True" {% if request.GET.active == "True" %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.active == "False" %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:approvalrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Value band</th><th>Department</th><th>Tiers required</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:approvalrule_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>
+                {{ obj.min_amount }}{% if obj.max_amount %} – {{ obj.max_amount }}{% else %} and above{% endif %}
+              </td>
+              <td>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="badge badge-slate">All departments</span>{% endif %}</td>
+              <td>{{ obj.tier_count }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:approvalrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:approvalrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:approvalrule_delete' obj.pk %}" onsubmit="return confirm('Delete this approval rule? Past decisions keep a snapshot reference but will show no rule name.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No approval rules yet</h3><p>Without rules every pending order falls back to a single default sign-off. Add bands (e.g. above 10,000 → two tiers) to route by value or department.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
