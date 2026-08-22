@@ -21,7 +21,7 @@ No lane NO RESULT — no re-run needed.
 
 ### Critical
 
-- [ ] **C1** — `apps/inventory/models/ReceivingPutaway/PutawayRules.py:94` — `clean()` reads
+- [x] fixed **C1** — `apps/inventory/models/ReceivingPutaway/PutawayRules.py:94` — `clean()` reads
       `getattr(self, name)` on the required `destination` FK; when a POST supplies a cross-tenant
       pk (removed from cleaned_data by the tenant-scoped queryset) or omits destination entirely,
       `construct_instance` leaves the FK unassigned and attribute access raises
@@ -33,13 +33,13 @@ No lane NO RESULT — no re-run needed.
 
 ### Important
 
-- [ ] **I1** — `apps/inventory/views/ReceivingPutaway/PutawayRules.py:54-85` — rule
+- [x] fixed **I1** — `apps/inventory/views/ReceivingPutaway/PutawayRules.py:54-85` — rule
       create/edit/delete are `@login_required` only; sibling 5.x config CRUD is admin-gated
       (`ApprovalRules.py` uses `core.decorators.tenant_admin_required`). Any workspace member can
       rewrite routing config. **Fix:** add `@tenant_admin_required` to `_create/_edit/_delete`
       and hide Edit/Delete affordances for non-admins in list/detail templates (mirror 5.3's
       template gating pattern).
-- [ ] **I2** — view:140-145 + models:156-178 — stats loop resolves the FULL filtered set at
+- [x] fixed **I2** — view:140-145 + models:156-178 — stats loop resolves the FULL filtered set at
       ~3 queries/task (rules + StockMove GROUP BY + tenant Location map each call; `by_pk` and
       ancestry chains rebuilt per task). Q ≈ 3N+4 vs measured sibling `labor_board` O(1)/request;
       multi-second at a few-hundred-task backlog. **Fix:** signature-compatible batch preloader —
@@ -47,45 +47,45 @@ No lane NO RESULT — no re-run needed.
       view preloads once per request (rules select_related'd; locations map; StockMove aggregate
       grouped by item via `item_id__in=distinct items`); resolver falls back to self-loading when
       kwargs absent (keeps direct-call tests working). Target flat ≤~10 queries/request.
-- [ ] **I3** — `apps/inventory/{models,forms,views,urls}/ReceivingPutaway/` lack `__init__.py`
+- [x] fixed **I3** — `apps/inventory/{models,forms,views,urls}/ReceivingPutaway/` lack `__init__.py`
       (implicit namespace packages). Every sibling sub-module ships docstring inits; models copy
       also re-exports. Works today by accident. **Fix:** add four `__init__.py` mirroring siblings
       (`models/__init__.py` gets `from .PutawayRules import PutawayRule, resolve_putaway_suggestion` + `__all__`).
 
 ### Minor
 
-- [ ] **M1** — models:134-138 — consolidation tier sorts by `_walk_key` which prepends an
+- [x] fixed **M1** — models:134-138 — consolidation tier sorts by `_walk_key` which prepends an
       `is_pickable` group flag; frozen contract says "pick_sequence ASC then code ASC".
       Deterministic but off-contract. **Fix:** tier-2 sort key `(pick_sequence or _UNSEQUENCED, code)`.
-- [ ] **M2** — views:`_ancestry_contains` starts at `start_pk`'s parent, so a task staged AT the
+- [x] fixed **M2** — views:`_ancestry_contains` starts at `start_pk`'s parent, so a task staged AT the
       warehouse row itself vanishes from its own warehouse filter (qa-verified: seeded PUT-00002
       disappears). **Fix:** return True when `start_pk == ancestor_pk` before walking parents.
-- [ ] **M3** — putaway_suggestions.html:67-68 — refusal rows read "No Suggestion Found" twice
+- [x] fixed **M3** — putaway_suggestions.html:67-68 — refusal rows read "No Suggestion Found" twice
       (hardcoded span + resolver reason already begins with that phrase). **Fix:** drop the
       hardcoded span; render only `row.suggestion_reason` as muted text.
-- [ ] **M4** — putaway_suggestions.html:65 — suggestion reason rendered inside `badge-info`; full
+- [x] fixed **M4** — putaway_suggestions.html:65 — suggestion reason rendered inside `badge-info`; full
       sentences wrap awkwardly in a pill. **Fix:** render reason as small muted text under the bin
       code (badges stay for short statuses only).
-- [ ] **M5** — forms/views import models via direct entity-module path
+- [x] fixed **M5** — forms/views import models via direct entity-module path
       (`from apps.inventory.models.ReceivingPutaway.PutawayRules import ...`) while all 11 sibling
       modules use package-root spellings. **Fix:** switch to `from apps.inventory.models import ...`
       / `from apps.inventory.forms import ...`; delete the stale build-phase comments.
-- [ ] **M6** — urls/__init__.py docstring lists `putaway-rules/`, `putaway-suggestions/` after
+- [x] fixed **M6** — urls/__init__.py docstring lists `putaway-rules/`, `putaway-suggestions/` after
       `warehouse-map/` but the concat places them before vendor-communications. **Fix:** align the
       prose with actual route order.
-- [ ] **M7** — seed_inventory.py --flush help text omits "putaway rules" though flush deletes them.
+- [x] fixed **M7** — seed_inventory.py --flush help text omits "putaway rules" though flush deletes them.
       **Fix:** add to the enumeration string.
-- [ ] **M8** — seed_inventory.py success line always prints "(+1 open putaway task)" even when zero
+- [x] fixed **M8** — seed_inventory.py success line always prints "(+1 open putaway task)" even when zero
       tasks were ensured. **Fix:** track whether a task was created and interpolate accordingly.
-- [ ] **M9** — seed_inventory.py docstring claims "no items are invented here" while rule 1 may
+- [x] fixed **M9** — seed_inventory.py docstring claims "no items are invented here" while rule 1 may
       invent location CR-01. **Fix:** reword honestly ("creates CR-01 if missing").
-- [ ] **M10** — models cost-note parenthetical says "~a 25-row page" but the view resolves the whole
+- [x] fixed **M10** — models cost-note parenthetical says "~a 25-row page" but the view resolves the whole
       filtered queue for stats. **Fix:** reword to reflect full-set resolution (post-I2 wording:
       preloaded context, flat queries).
-- [ ] **M11** — models:161,247 — resolver trusts `task.item`/`task.from_location` tenancy (unreachable
+- [x] fixed **M11** — models:161,247 — resolver trusts `task.item`/`task.from_location` tenancy (unreachable
       today; future non-form write paths could poison reasons). **Fix:** cheap top-of-resolver guard:
       if `task.item.tenant_id != task.tenant_id` return the honest refusal triple.
-- [ ] **M12** — suggestions page has no nudge when `stats.covered_by_rule == 0`. **Fix (template-only):**
+- [x] fixed **M12** — suggestions page has no nudge when `stats.covered_by_rule == 0`. **Fix (template-only):**
       one-line hint under the stat strip pointing at Manage Rules.
 
 ### Accepted-as-is (no action)
