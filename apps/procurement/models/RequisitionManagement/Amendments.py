@@ -12,7 +12,6 @@ The proposed line changes live on ``RequisitionAmendmentLine`` rows so the diff 
 BEFORE it happens; applying is deterministic (add/update/remove) rather than free-text.
 """
 from apps.procurement.models._base import *  # noqa: F401,F403
-from apps.scm.models import PurchaseRequisitionLine
 
 
 class RequisitionAmendment(TenantNumbered):
@@ -64,6 +63,7 @@ class RequisitionAmendment(TenantNumbered):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+        unique_together = ("tenant", "number")
         indexes = [
             models.Index(fields=["tenant", "status"], name="prc_ram_tenant_status_idx"),
             models.Index(fields=["tenant", "amendment_type"], name="prc_ram_tenant_type_idx"),
@@ -190,10 +190,16 @@ class RequisitionAmendmentLine(models.Model):
                 raise ValidationError({"item_description": "A new line needs a description."})
 
     def apply_to_requisition(self):
-        """Write THIS proposed change onto the parent requisition. Returns a human summary, or
-        ``""`` when the target vanished before approval (reported upstream, never raised)."""
+        """Write THIS proposed change onto the parent requisition. Returns a human summary, or a
+        ``"not applied — …"`` note when the target vanished before approval (the requisition
+        stayed editable while this amendment pended). Never raises for a lost target: one stale
+        row must not abort the whole batch."""
         pr = self.amendment.requisition
         if self.action == "add":
+            # Deferred import: the only cross-app MODEL touch in the models layer, used at apply
+            # time (string FKs everywhere else) so module loading stays decoupled from scm.
+            from apps.scm.models import PurchaseRequisitionLine
+
             PurchaseRequisitionLine.objects.create(
                 requisition=pr,
                 item_description=self.item_description,
@@ -205,7 +211,7 @@ class RequisitionAmendmentLine(models.Model):
             )
             return f"added '{(self.item_description or '')[:60]}'"
         if self.target_line_id is None:
-            return ""
+            return f"'{self.get_action_display()}' not applied — target line no longer exists"
         if self.action == "remove":
             desc = self.target_line.item_description[:60]
             self.target_line.delete()
