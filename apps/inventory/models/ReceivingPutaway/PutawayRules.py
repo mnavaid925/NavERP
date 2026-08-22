@@ -172,6 +172,14 @@ def resolve_putaway_suggestion(task, *, rules=None, by_pk=None, on_hand=None):
     """
     item = task.item
 
+    # Tenancy guard, cheap and FIRST: today every write path keeps task.tenant ==
+    # task.item.tenant, but nothing structural forces it — a future non-form writer could
+    # hang a foreign item off a task and poison every reason string below with another
+    # workspace's SKUs. Refuse honestly rather than route on borrowed data.
+    if item is not None and item.tenant_id != task.tenant_id:
+        return None, ("No Suggestion Found: this task's item belongs to another "
+                      "workspace; fix the tenancy mismatch before routing it."), []
+
     # --- shared inputs (each self-loaded only when the caller didn't preload it) ---------
     # On-hand per location for THIS item straight off the append-only ledger. One GROUP BY
     # feeds the consolidation tier AND every full-bin check below.
