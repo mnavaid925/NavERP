@@ -6,8 +6,8 @@ once and concatenates them.
 Django is first-match-wins: within each module the literal routes (`add/`) precede the
 ``<int:pk>`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
 shadowing surface to reason about; the first segments (`""`, `attributes/`, `prices/`,
-`files/`, `vendor-communications/`, `bin-capacity/`, `cross-dock/`, `warehouse-map/`,
-`putaway-rules/`, `putaway-suggestions/`,
+`files/`, `putaway-rules/`, `putaway-suggestions/`, `vendor-communications/`,
+`bin-capacity/`, `cross-dock/`, `warehouse-map/`,
 `tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
 distinct whole components and none can swallow another.
 """
