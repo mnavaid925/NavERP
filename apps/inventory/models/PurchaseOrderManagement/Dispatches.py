@@ -41,8 +41,10 @@ class PurchaseOrderDispatch(TenantNumbered):
     purchase_order = models.ForeignKey(
         "scm.PurchaseOrder", on_delete=models.CASCADE, related_name="inventory_dispatches")
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default="email")
+    #: blank=True so a print/PDF row may carry no address; the model clean() still demands
+    #: one for the ADDRESSED_CHANNELS — forms render it as a per-field error.
     recipient = models.CharField(
-        max_length=255,
+        max_length=255, blank=True,
         help_text="Vendor email address, or EDI mailbox/partner ID")
     reference = models.CharField(
         max_length=255, blank=True,
