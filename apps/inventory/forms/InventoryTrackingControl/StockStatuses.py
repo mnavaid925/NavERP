@@ -65,7 +65,11 @@ class StockStatusForm(TenantModelForm):
         # Σ(classifications at spot) may never exceed what the ledger says is there.
         # Excluding THIS row keeps the check honest on edit.
         if item and location and quantity and self.instance.tenant_id is not None:
-            moves = item.stock_moves.filter(location=location)
+            # The tenant predicate is for the PLANNER, not the semantics — item and
+            # location are already same-tenant by _reject_foreign. With it, MariaDB can
+            # drive the (tenant, item, location) ledger index prefix instead of scanning
+            # the item's move history across every location on every submit.
+            moves = item.stock_moves.filter(tenant=item.tenant_id, location=location)
             if lot is not None:
                 moves = moves.filter(lot_serial=lot)
             on_hand = moves.aggregate(q=Sum("quantity"))["q"] or 0
