@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Real-Time Stock Levels{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Real-Time Stock Levels</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Tracking &amp; Control</span><span class="sep">›</span><span>Stock Levels</span></div>
+      <p class="text-muted">On-hand, allocated, available and on-order per item × location — every figure a live aggregate, nothing stored.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:stockstatus_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Stock Status</a>
+      <a href="{% url 'inventory:reservation_list' %}" class="btn btn-outline"><i data-lucide="lock"></i> Reservations</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU or item name…">
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for it in items %}
+              <option value="{{ it.pk }}" {% if request.GET.item == it.pk|stringformat:"d" %}selected{% endif %}>{{ it.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="view" aria-label="Availability" class="form-select">
+            <option value="">Any availability</option>
+            <option value="shortage" {% if shortage_only %}selected{% endif %}>Short / over-allocated only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:stocklevels' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>On Hand</th><th>Allocated</th><th>Held (status)</th><th>Available</th><th>On Order</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> <span class="text-muted">{{ row.item.name }}</span></td>
+              <td>{{ row.location.code }} <span class="text-muted">{{ row.location.name }}</span></td>
+              <td>{{ row.on_hand|floatformat:"-2" }}</td>
+              <td>{{ row.allocated|floatformat:"-2" }}</td>
+              <td>{% if row.held %}<span class="badge badge-amber">{{ row.held|floatformat:"-2" }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.available <= 0 %}<span class="badge badge-red">{{ row.available|floatformat:"-2" }}</span>
+                {% elif row.held %}<span class="badge badge-amber">{{ row.available|floatformat:"-2" }}</span>
+                {% else %}<span class="badge badge-green">{{ row.available|floatformat:"-2" }}</span>{% endif %}
+              </td>
+              <td>{{ row.on_order|floatformat:"-2" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="boxes"></i><h3>No stock levels yet</h3><p>Levels appear once stock moves are posted — receive goods on the SCM goods-receipt pages to start the ledger.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Available = on-hand − active claims (order allocations + reservations) − non-sellable classifications. A negative figure means more has been promised than can ship. The FIFO/LIFO/WAC value of these quantities is SCM's <a href="{% url 'scm:valuation_report' %}">Stock Valuation report</a>.</p>
+{% endblock %}
