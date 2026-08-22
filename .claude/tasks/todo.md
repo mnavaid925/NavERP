@@ -26259,3 +26259,11 @@ all green; full unfiltered app run 249 passed, 3 failed — the 3 are test_po_mo
 introduced AFTER this session base by the concurrent workstream (verified not an ancestor of
 ea0add1). Test wave also caught a real regression the reviewers missed: reservation_delete read
 request.tenant_id (middleware never sets it) so every DELETE POST 500'd — fixed, xfails promoted.
+
+---
+
+## TEST WAVE REVIEW — 6.2 Requisition Management (2026-08-23)
+
+- [x] Four files per the parallel test wave: test_reqmgmt_{models(19),forms(15+fixes),views(18+tz-pin),security(16)}.py — every function `test_reqmgmt_*`, shared fixtures added to apps/procurement/tests/conftest.py (requisition_approved_a/pending_a on the scm spine, template_with_lines_a, amendment_pending_a).
+- [x] Full unfiltered app suite GREEN via junitxml: **158 passed / 0 failed / 0 errors / 0 skipped** (pytest-django, --no-migrations SQLite in-memory; runner kills long shells under concurrent-session load, so the XML report is the source of truth).
+- [x] Fixes surfaced BY the wave: midnight-boundary flake (test pinned to timezone.now() like the view); duplicate-target twin-deleted assertion matched Django's dropped-forms behavior; helper default type mismatch.
