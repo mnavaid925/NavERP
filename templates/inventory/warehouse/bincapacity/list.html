@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Bin Capacity Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Bin Capacity Management</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Warehousing &amp; Bins</span><span class="sep">›</span><span>Bin Capacity</span></div>
+      <p class="text-muted">Weight, volume and quantity limits per bin — utilisation is derived live from the stock ledger.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:warehousemap' %}" class="btn btn-outline"><i data-lucide="map"></i> Warehouse Map</a>
+      <a href="{% url 'inventory:bincapacity_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Capacity Profile</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search bin code, name or notes…">
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="utilisation" aria-label="Utilisation" class="form-select">
+            <option value="">Any utilisation</option>
+            <option value="over" {% if utilisation == 'over' %}selected{% endif %}>At / over limit only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:bincapacity_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Bin</th><th>Max Weight (kg)</th><th>Max Volume (m³)</th><th>Max Quantity</th><th>On Hand</th><th style="min-width:140px;">Utilisation</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:bincapacity_detail' obj.pk %}" class="fw-600">{{ obj.location.code }}</a>
+                <span class="text-muted">{{ obj.location.name }}</span>
+              </td>
+              <td>{{ obj.max_weight_kg|default_if_none:"—" }}</td>
+              <td>{{ obj.max_volume_m3|default_if_none:"—" }}</td>
+              <td>{{ obj.max_quantity|default_if_none:"—" }}</td>
+              <td>{{ obj.on_hand|floatformat:"-2" }}</td>
+              <td>
+                {% if obj.max_quantity %}
+                  {% widthratio obj.on_hand obj.max_quantity 100 as pct %}
+                  <div class="progress"><div class="progress-bar" style="width:{% if pct >= 100 %}100{% else %}{{ pct }}{% endif %}%;"></div></div>
+                  <span class="{% if pct >= 100 %}badge badge-red{% else %}text-muted{% endif %}" style="font-size:12px;">{{ pct }}%</span>
+                {% else %}
+                  <span class="text-muted">No qty limit</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:bincapacity_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:bincapacity_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:bincapacity_delete' obj.pk %}" onsubmit="return confirm('Delete this capacity profile?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="warehouse"></i><h3>No capacity profiles</h3><p>Declare what a bin can hold — weight, volume or quantity — and the map will show how full it runs.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ over_count }} profile{{ over_count|pluralize }} currently at or over their quantity limit. The warehouse/zone/bin structure itself is managed on the SCM location pages.</p>
+{% endblock %}
