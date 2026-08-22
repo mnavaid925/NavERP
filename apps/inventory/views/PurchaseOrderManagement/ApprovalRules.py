@@ -1,9 +1,12 @@
 """Inventory 5.3 Purchase Order (PO) Management — PurchaseOrderApprovalRule views.
 
-Plain thin CRUD over ``apps.core.crud`` like every other inventory catalog page. The rule
-catalog is policy, not workflow: deciding outcomes happens on the approvals queue
+Thin CRUD over ``apps.core.crud`` like every other inventory catalog page — except the
+WRITES are tenant-admin gated: a rule IS the money gate (it decides how many signatures an
+order needs), so policy edits carry the same privilege as the decisions they govern. Reads
+stay open to every signed-in member; deciding outcomes happens on the approvals queue
 (``Approvals.py``), never here.
 """
+from apps.core.decorators import tenant_admin_required
 from apps.core.models import OrgUnit
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.forms import PurchaseOrderApprovalRuleForm
@@ -18,7 +21,8 @@ def _org_units(tenant):
 
 @login_required
 def approvalrule_list(request):
-    qs = PurchaseOrderApprovalRule.objects.filter(tenant=request.tenant)
+    qs = (PurchaseOrderApprovalRule.objects.filter(tenant=request.tenant)
+          .select_related("org_unit"))
     return crud_list(
         request, qs, "inventory/po/approvalrule/list.html",
         search_fields=["name"],
@@ -26,11 +30,13 @@ def approvalrule_list(request):
         extra_context={
             "org_units": _org_units(request.tenant),
             "max_tiers": PurchaseOrderApprovalRule.MAX_TIERS,
+            # Writes are tenant-admin gated server-side; hide the affordances to match.
+            "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
         },
     )
 
 
-@login_required
+@tenant_admin_required
 def approvalrule_create(request):
     return crud_create(
         request, form_class=PurchaseOrderApprovalRuleForm,
@@ -47,12 +53,16 @@ def approvalrule_detail(request, pk):
     return render(request, "inventory/po/approvalrule/detail.html", {
         "obj": obj,
         # Decisions taken under this rule, newest first — the audit of what the policy did.
-        "decisions": (obj.decisions.select_related("purchase_order", "decided_by")
+        # Tenant-filtered explicitly (defense-in-depth): the writer stamps tenant today, but
+        # this page must not depend on every future writer being as careful.
+        "decisions": (obj.decisions.filter(tenant=request.tenant)
+                      .select_related("purchase_order", "decided_by")
                       .order_by("-decided_at", "-id")[:10]),
+        "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
     })
 
 
-@login_required
+@tenant_admin_required
 def approvalrule_edit(request, pk):
     return crud_edit(
         request, model=PurchaseOrderApprovalRule, pk=pk,
@@ -62,7 +72,7 @@ def approvalrule_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def approvalrule_delete(request, pk):
     return crud_delete(request, model=PurchaseOrderApprovalRule, pk=pk,
