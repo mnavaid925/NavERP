@@ -156,28 +156,36 @@ class Command(BaseCommand):
             return
         from decimal import Decimal
 
+        from django.db import transaction
+
         org_unit = tenant.org_units.first() if hasattr(tenant, "org_units") else None
         created = 0
-        for name, description, lead_days, justification, line_rows in self._TEMPLATE_ROWS:
-            template = RequisitionTemplate.objects.create(
-                tenant=tenant,
-                name=name,
-                description=description,
-                default_lead_days=lead_days,
-                justification=justification,
-                org_unit=org_unit,
-                created_by=None,
-            )
-            for desc, sku, uom, qty, price in line_rows:
-                RequisitionTemplateLine.objects.create(
-                    template=template,
-                    item_description=desc,
-                    sku_hint=sku,
-                    uom_hint=uom,
-                    quantity=Decimal(qty),
-                    estimated_unit_price=Decimal(price),
+        # One transaction per template: a mid-line crash must not leave a lineless template that
+        # the per-tenant existence guard would then preserve forever.
+        with transaction.atomic():
+            for name, description, lead_days, justification, line_rows in self._TEMPLATE_ROWS:
+                template = RequisitionTemplate.objects.create(
+                    tenant=tenant,
+                    name=name,
+                    description=description,
+                    default_lead_days=lead_days,
+                    justification=justification,
+                    org_unit=org_unit,
+                    created_by=None,
                 )
-            created += 1
+                for desc, sku, uom, qty, price in line_rows:
+                    RequisitionTemplateLine.objects.create(
+                        template=template,
+                        item_description=desc,
+                        sku_hint=sku,
+                        uom_hint=uom,
+                        quantity=Decimal(qty),
+                        estimated_unit_price=Decimal(price),
+                    )
+                # The feed reads core.AuditLog; seed its baseline so templates are not invisible
+                # there until first UI edit (same contract as _seed_alerts).
+                write_audit_log(None, template, "create")
+                created += 1
         self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {created} requisition templates."))
 
     def _seed_amendment(self, tenant):
