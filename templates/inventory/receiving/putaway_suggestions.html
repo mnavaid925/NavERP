@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Putaway Suggestions{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Putaway Suggestions</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Receiving &amp; Putaway</span><span class="sep">›</span><span>Suggestions</span></div>
+      <p class="text-muted">Deterministic rule-and-ledger suggestions computed over the open putaway tasks — accepting or overriding a suggestion happens on the task itself in SCM, never here.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:putawayrule_list' %}" class="btn btn-outline"><i data-lucide="list-plus"></i> Manage Rules</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="list-plus"></i></div>
+      <div class="stat-value">{{ stats.open_tasks }}</div>
+      <div class="stat-label">Open tasks</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="lightbulb"></i></div>
+      <div class="stat-value">{{ stats.covered_by_rule }}</div>
+      <div class="stat-label">Covered by rule</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="scale"></i></div>
+      <div class="stat-value">{{ stats.uncovered }}</div>
+      <div class="stat-label">Uncovered</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search task number or item SKU…">
+        </div>
+        <div class="form-group">
+          <select name="warehouse" aria-label="Warehouse" class="form-select">
+            <option value="">All warehouses</option>
+            {% for w in warehouses %}
+              <option value="{{ w.pk }}" {% if request.GET.warehouse == w.pk|stringformat:"d" %}selected{% endif %}>{{ w.code }} — {{ w.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:putaway_suggestions' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Task #</th><th>GRN</th><th>Item</th><th>Qty</th><th>Staging</th><th>Suggested Bin</th><th>Alternatives</th><th class="th-actions">Action</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'scm:putawaytask_detail' row.task.pk %}" class="fw-600 mono">{{ row.task.number }}</a></td>
+              <td>{% if row.receipt %}<a href="{% url 'scm:goodsreceipt_detail' row.receipt.pk %}" class="mono">{{ row.receipt.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><span class="fw-600">{{ row.item.sku }}</span><div class="text-muted" style="font-size:12px;">{{ row.item.name }}</div></td>
+              <td>{{ row.task.quantity|floatformat:"-2" }}</td>
+              <td>{% if row.staging %}<span class="mono">{{ row.staging.code }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if row.suggestion %}
+                  <span class="mono fw-600">{{ row.suggestion.code }}</span>
+                  <div style="margin-top:.25rem;"><span class="badge badge-info">{{ row.suggestion_reason }}</span></div>
+                {% else %}
+                  <span class="text-muted">No Suggestion Found</span>
+                  {% if row.suggestion_reason %}<div class="text-muted" style="font-size:12px;">{{ row.suggestion_reason }}</div>{% endif %}
+                {% endif %}
+              </td>
+              <td>{% if row.suggestion %}{{ row.candidates|length|add:"-1" }}{% else %}0{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'scm:putawaytask_edit' row.task.pk %}" class="btn btn-outline btn-icon" title="Edit in SCM"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="package-check"></i><h3>No open putaway tasks</h3><p>When goods receipts create putaway work, the suggested bins appear here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
