@@ -24,6 +24,25 @@ from .Catalog.ProductFiles import (
     productfile_edit,
     productfile_list,
 )
+from .PurchaseOrderManagement.ApprovalRules import (
+    approvalrule_create,
+    approvalrule_delete,
+    approvalrule_detail,
+    approvalrule_edit,
+    approvalrule_list,
+)
+from .PurchaseOrderManagement.Approvals import (
+    approval_queue,
+    approval_tier_approve,
+    approval_tier_reject,
+)
+from .PurchaseOrderManagement.Dispatches import (
+    dispatch_create,
+    dispatch_delete,
+    dispatch_detail,
+    dispatch_list,
+)
+from .PurchaseOrderManagement.ReorderDrafts import reorderdraft
 from .VendorSupplierManagement.VendorCommunications import (
     vendorcommunication_create,
     vendorcommunication_delete,
@@ -31,6 +50,24 @@ from .VendorSupplierManagement.VendorCommunications import (
     vendorcommunication_edit,
     vendorcommunication_list,
 )
+from .WarehousingBinManagement.BinCapacities import (
+    bincapacity_create,
+    bincapacity_delete,
+    bincapacity_detail,
+    bincapacity_edit,
+    bincapacity_list,
+)
+from .WarehousingBinManagement.CrossDockOrders import (
+    crossdockorder_cancel,
+    crossdockorder_create,
+    crossdockorder_delete,
+    crossdockorder_detail,
+    crossdockorder_edit,
+    crossdockorder_list,
+    crossdockorder_receive,
+    crossdockorder_ship,
+)
+from .WarehousingBinManagement.WarehouseMap import warehousemap
 
 __all__ = [
     "overview",
@@ -42,4 +79,15 @@ __all__ = [
     "productfile_edit", "productfile_delete",
     "vendorcommunication_list", "vendorcommunication_detail", "vendorcommunication_create",
     "vendorcommunication_edit", "vendorcommunication_delete",
+    "approvalrule_list", "approvalrule_detail", "approvalrule_create",
+    "approvalrule_edit", "approvalrule_delete",
+    "approval_queue", "approval_tier_approve", "approval_tier_reject",
+    "dispatch_list", "dispatch_detail", "dispatch_create", "dispatch_delete",
+    "reorderdraft",
+    "bincapacity_list", "bincapacity_detail", "bincapacity_create",
+    "bincapacity_edit", "bincapacity_delete",
+    "crossdockorder_list", "crossdockorder_detail", "crossdockorder_create",
+    "crossdockorder_edit", "crossdockorder_delete",
+    "crossdockorder_receive", "crossdockorder_ship", "crossdockorder_cancel",
+    "warehousemap",
 ]
