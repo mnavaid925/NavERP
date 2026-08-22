@@ -1,4 +1,4 @@
-"""Procurement 6.2 - Requisition Management view flows (requisitions/templates/amendments).
+﻿"""Procurement 6.2 - Requisition Management view flows (requisitions/templates/amendments).
 
 Every surface is exercised through the rendered BYTES and real redirects. The load-bearing
 contracts here: templates APPLY into scm's requisition spine as drafts under the signed-in
@@ -12,6 +12,7 @@ from decimal import Decimal
 import pytest
 
 from django.test import Client
+from django.utils import timezone
 from django.urls import reverse
 
 from apps.accounts.models import User
@@ -135,7 +136,7 @@ def test_reqmgmt_template_apply_drafts_requisition_on_spine(
     assert req.status == "draft"
     assert req.estimated_total == Decimal("102.60")
     assert req.lines.count() == 2
-    assert req.required_by == datetime.date.today() + datetime.timedelta(days=7)
+    assert req.required_by == timezone.now().date() + datetime.timedelta(days=7)
 
 
 def test_reqmgmt_template_apply_zero_line_template_refused(client_a, tenant_a):
