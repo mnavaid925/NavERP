@@ -54,9 +54,9 @@
               <td>{{ obj.reference|default:"—" }}</td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'inventory:dispatch_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:dispatch_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View dispatch {{ obj.number }}"><i data-lucide="eye"></i></a>
                   <form method="post" action="{% url 'inventory:dispatch_delete' obj.pk %}" onsubmit="return confirm('Delete this dispatch record? The provenance stays in the audit log.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete dispatch {{ obj.number }}"><i data-lucide="trash-2"></i></button>
                   </form>
                 </div>
               </td>
