@@ -1,7 +1,45 @@
 """Django admin for the procurement app."""
 from django.contrib import admin
 
-from .models import ProcurementAlert, WidgetPreference
+from .models import (
+    ProcurementAlert,
+    RequisitionAmendment,
+    RequisitionAmendmentLine,
+    RequisitionTemplate,
+    RequisitionTemplateLine,
+    WidgetPreference,
+)
+
+
+class RequisitionTemplateLineInline(admin.TabularInline):
+    model = RequisitionTemplateLine
+    extra = 0
+
+
+@admin.register(RequisitionTemplate)
+class RequisitionTemplateAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "org_unit", "currency", "is_active", "created_by")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("number", "name", "description")
+    raw_id_fields = ("org_unit", "currency", "created_by")
+    inlines = [RequisitionTemplateLineInline]
+
+
+class RequisitionAmendmentLineInline(admin.TabularInline):
+    model = RequisitionAmendmentLine
+    extra = 0
+
+
+@admin.register(RequisitionAmendment)
+class RequisitionAmendmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "requisition", "amendment_type", "status",
+                    "requested_by", "decided_by", "decided_at")
+    list_filter = ("tenant", "status", "amendment_type")
+    search_fields = ("number", "reason", "decision_note")
+    raw_id_fields = ("requisition", "requested_by", "decided_by")
+    readonly_fields = ("requested_by", "decided_by", "decided_at", "applied_at",
+                       "created_at", "updated_at")
+    inlines = [RequisitionAmendmentLineInline]
 
 
 @admin.register(ProcurementAlert)
