@@ -11,7 +11,15 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'scm:requisition_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open in SCM</a>
-      {% if obj.status == 'pending_approval' or obj.status == 'approved' %}
+      {% if obj.is_editable %}
+        <a href="{% url 'scm:requisition_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'scm:requisition_delete' obj.pk %}" onsubmit="return confirm('Delete this draft requisition? This cannot be undone.');">
+          {% csrf_token %}
+          <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% elif obj.status == 'pending_approval' or obj.status == 'approved' %}
         {% if not open_amendment %}
           <a href="{% url 'procurement:req_amendment_create' obj.pk %}" class="btn btn-primary"><i data-lucide="file-pen"></i> Request change / cancellation</a>
         {% endif %}
@@ -67,7 +75,7 @@
                 <td><a href="{% url 'procurement:req_detail' dup.requisition.pk %}" class="fw-600">{{ dup.requisition.number }}</a></td>
                 <td>{{ dup.requisition.title }}</td>
                 <td>{% if dup.requisition.requester %}{{ dup.requisition.requester.get_full_name|default:dup.requisition.requester.username }}{% else %}—{% endif %}</td>
-                <td><span class="badge badge-muted">{{ dup.requisition.get_status_display }}</span></td>
+                <td><span class="badge {% if dup.requisition.status == 'approved' or dup.requisition.status == 'converted' %}badge-green{% elif dup.requisition.status == 'pending_approval' %}badge-amber{% else %}badge-muted{% endif %}">{{ dup.requisition.get_status_display }}</span></td>
                 <td>{{ dup.requisition.created_at|date:"M d, Y" }}</td>
                 <td>{% for reason in dup.reasons %}<span class="badge badge-amber">{{ reason }}</span> {% endfor %}</td>
               </tr>
