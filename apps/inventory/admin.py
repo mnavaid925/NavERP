@@ -8,12 +8,14 @@ from django.contrib import admin
 from apps.inventory.models import (
     BinCapacity,
     CrossDockOrder,
+    InventoryReservation,
     ItemAttribute,
     ItemPrice,
     ProductFile,
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
+    StockStatus,
     VendorCommunication,
 )
 
@@ -86,3 +88,18 @@ class CrossDockOrderAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status")
     search_fields = ("number", "item__sku", "item__name", "inbound_reference",
                      "outbound_reference")
+
+
+@admin.register(StockStatus)
+class StockStatusAdmin(admin.ModelAdmin):
+    list_display = ("item", "location", "lot_serial", "status", "quantity", "effective_at")
+    list_filter = ("tenant", "status")
+    search_fields = ("item__sku", "item__name", "reason")
+
+
+@admin.register(InventoryReservation)
+class InventoryReservationAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "location", "purpose", "reference", "quantity",
+                    "status", "reserved_by", "resolved_at")
+    list_filter = ("tenant", "status", "purpose")
+    search_fields = ("number", "reference", "item__sku", "item__name", "notes")
