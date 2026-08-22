@@ -42,6 +42,7 @@ from apps.inventory.models import (
     ItemAttribute,
     ItemPrice,
     ProductFile,
+    PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
     PutawayRule,
@@ -127,9 +128,10 @@ class Command(BaseCommand):
             deleted = (ItemAttribute.objects.all().count()
                        + ItemPrice.objects.all().count()
                        + ProductFile.objects.all().count()
-                       + VendorCommunication.objects.all().count()
-                       + PurchaseOrderDispatch.objects.all().count()
-                       + PurchaseOrderApprovalRule.objects.all().count()
+                        + VendorCommunication.objects.all().count()
+                        + PurchaseOrderDispatch.objects.all().count()
+                        + PurchaseOrderApproval.objects.all().count()
+                        + PurchaseOrderApprovalRule.objects.all().count()
                        + PutawayRule.objects.all().count()
                        + StockStatus.objects.all().count()
                        + InventoryReservation.objects.all().count())
@@ -138,6 +140,7 @@ class Command(BaseCommand):
             ProductFile.objects.all().delete()
             VendorCommunication.objects.all().delete()
             PurchaseOrderDispatch.objects.all().delete()  # child rows first: FKs to spine POs
+            PurchaseOrderApproval.objects.all().delete()
             PurchaseOrderApprovalRule.objects.all().delete()
             PutawayRule.objects.all().delete()
             BinCapacity.objects.all().delete()
