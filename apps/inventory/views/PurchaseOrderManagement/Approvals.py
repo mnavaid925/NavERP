@@ -44,20 +44,22 @@ def _pending_orders(tenant):
 def approval_queue(request):
     """The console over pending orders + the recent-decision trail."""
     tenant = request.tenant
-    pending = list(_pending_orders(tenant))
+    pending = list(_pending_orders(tenant)[:100])  # bounded like every other table
     chain = {}
     if pending:
         rows = (PurchaseOrderApproval.objects
-                .filter(purchase_order_id__in=[p.pk for p in pending])
+                .filter(tenant=tenant, purchase_order_id__in=[p.pk for p in pending])
                 .select_related("decided_by", "rule")
                 .order_by("decided_at", "id"))
         for row in rows:
             chain.setdefault(row.purchase_order_id, []).append(row)
 
+    # ONE rules fetch for the whole queue; resolution is pure Python per order.
+    active_rules = list(PurchaseOrderApprovalRule.objects.filter(tenant=tenant, is_active=True))
     queue = []
     for po in pending:
         decisions = chain.get(po.pk, [])
-        rule = PurchaseOrderApprovalRule.resolve(tenant, po.total, po.ship_to_id)
+        rule = PurchaseOrderApprovalRule.resolve_from(active_rules, po.total, po.ship_to_id)
         cleared = PurchaseOrderApproval.cleared_tier_count(decisions)
         required = _required_tiers(rule)
         queue.append({
@@ -86,31 +88,40 @@ def _decide(request, po_pk, tier, approving):
     """Record one tier's decision; the two URL verbs are thin wrappers around this.
 
     Tenant-admin gated like scm's approve: clearing tiers commits tenant money to a vendor.
-    The tier must be exactly the next uncleared one; the chain is strictly sequential.
+    The whole read-guard-write runs under ``select_for_update`` on the ORDER row: two admins
+    hitting the same next tier serialize, and the loser re-reads the chain the winner just
+    extended. There is deliberately no ``(po, tier)`` uniqueness to fall back on — that
+    constraint bricked every rejected-then-resubmitted chain (the replay resets progress to
+    tier 1 while the previous run's row still occupied the slot) — sequential integrity here
+    is the lock's job.
     """
-    po = get_object_or_404(PurchaseOrder, pk=po_pk, tenant=request.tenant)
-    if po.status != "pending_approval":
-        messages.info(request, "This order is not awaiting approval.")
-        return redirect("inventory:approval_queue")
-
-    decisions = list(PurchaseOrderApproval.objects
-                     .filter(tenant=request.tenant, purchase_order=po)
-                     .order_by("decided_at", "id"))
-    cleared = PurchaseOrderApproval.cleared_tier_count(decisions)
-    if tier != cleared + 1:
-        messages.error(request, f"Tier {cleared + 1} must be decided first.")
-        return redirect("inventory:approval_queue")
-
-    rule = PurchaseOrderApprovalRule.resolve(request.tenant, po.total, po.ship_to_id)
-    required = _required_tiers(rule)
-
     with transaction.atomic():
-        PurchaseOrderApproval.objects.create(
+        po = get_object_or_404(
+            PurchaseOrder.objects.select_for_update(), pk=po_pk, tenant=request.tenant)
+        if po.status != "pending_approval":
+            messages.info(request, "This order is not awaiting approval.")
+            return redirect("inventory:approval_queue")
+
+        decisions = list(PurchaseOrderApproval.objects
+                         .filter(tenant=request.tenant, purchase_order=po)
+                         .order_by("decided_at", "id"))
+        cleared = PurchaseOrderApproval.cleared_tier_count(decisions)
+        if tier != cleared + 1:
+            messages.error(request, f"Tier {cleared + 1} must be decided first.")
+            return redirect("inventory:approval_queue")
+
+        rule = PurchaseOrderApprovalRule.resolve(request.tenant, po.total, po.ship_to_id)
+        required = _required_tiers(rule)
+
+        decision_row = PurchaseOrderApproval.objects.create(
             tenant=request.tenant, purchase_order=po, rule=rule, tier=tier,
             decision="approved" if approving else "rejected",
             decided_by=request.user, decided_at=timezone.now(),
             note=(request.POST.get("note") or "").strip()[:2000],
         )
+        write_audit_log(request.user, decision_row, "create",
+                        {"action": "tier_approve" if approving else "tier_reject",
+                         "tier": tier})
         if approving:
             if tier >= required:
                 # The spine's own final transition — same fields scm's approve writes.
