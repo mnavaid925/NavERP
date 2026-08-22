@@ -157,8 +157,13 @@ def _run_action(request, pk, action):
 
 
 def _spot_on_hand(obj):
-    """Live ledger total for this claim's (item, location, lot) scope."""
-    moves = obj.item.stock_moves.filter(location=obj.location)
+    """Live ledger total for this claim's (item, location, lot) scope.
+
+    The ``tenant`` predicate is deliberate (same as ``StockStatus.spot_moves``): it is
+    what lets the (tenant, item, location) ledger index drive this hot aggregate instead
+    of scanning the item's move history across every location.
+    """
+    moves = obj.item.stock_moves.filter(tenant=obj.tenant_id, location=obj.location)
     if obj.lot_serial_id is not None:
         moves = moves.filter(lot_serial_id=obj.lot_serial_id)
     return moves.aggregate(s=Sum("quantity"))["s"] or 0
