@@ -64,16 +64,15 @@
                 <td>{{ row.value|floatformat:"-2" }}</td>
                 <td>
                   {% if row.profile %}
-                    {% if row.profile.max_weight_kg %}{{ row.profile.max_weight_kg }} kg{% endif %}
-                    {% if row.profile.max_volume_m3 %}{% if row.profile.max_weight_kg %} · {% endif %}{{ row.profile.max_volume_m3 }} m³{% endif %}
+                    {% if row.profile.max_weight_kg %}{{ row.profile.max_weight_kg|floatformat:"-2" }} kg{% endif %}
+                    {% if row.profile.max_volume_m3 %}{% if row.profile.max_weight_kg %} · {% endif %}{{ row.profile.max_volume_m3|floatformat:"-3" }} m³{% endif %}
                     {% if row.profile.max_quantity %}{% if row.profile.max_weight_kg or row.profile.max_volume_m3 %} · {% endif %}{{ row.profile.max_quantity|floatformat:"-2" }} u{% endif %}
                   {% else %}<span class="text-muted">No profile</span>{% endif %}
                 </td>
                 <td>
-                  {% if row.profile and row.profile.max_quantity %}
-                    {% widthratio row.on_hand row.profile.max_quantity 100 as pct %}
-                    <div class="progress"><div class="progress-bar" style="width:{% if pct >= 100 %}100{% else %}{{ pct }}{% endif %}%;"></div></div>
-                    <span class="{% if pct >= 100 %}badge badge-red{% else %}text-muted{% endif %}" style="font-size:12px;">{{ pct }}%</span>
+                  {% if row.pct is not none %}
+                    <div class="progress"><div class="progress-bar" style="width:{% if row.pct >= 100 %}100{% else %}{{ row.pct }}{% endif %}%;"></div></div>
+                    <span class="{% if row.pct >= 100 %}badge badge-red{% else %}text-muted{% endif %}" style="font-size:12px;">{{ row.pct }}%</span>
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
               </tr>
