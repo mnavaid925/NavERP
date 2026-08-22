@@ -17,7 +17,7 @@ core.crud.paginate; only then does the resolver run — one pass over the full f
 feeds BOTH the stats strip and the current page's rows, so a page render never pays for
 resolution twice and stats always describe the whole queue, not just the visible page.
 """
-from django.db.models import Q
+from django.db.models import Q, Sum
 
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.views._common import *  # noqa: F401,F403
@@ -29,7 +29,7 @@ from apps.inventory.models.ReceivingPutaway.PutawayRules import (
     PutawayRule,
     resolve_putaway_suggestion,
 )
-from apps.scm.models import Location, PutawayTask
+from apps.scm.models import Location, PutawayTask, StockMove
 
 #: Ancestry-walk budget for the warehouse filter — same posture as the model's resolver.
 _MAX_ANCESTRY_HOPS = 8
@@ -148,10 +148,32 @@ def putaway_suggestions(request):
     # One resolution pass over the FULL filtered set feeds the stats strip AND the page
     # rows (cached by pk) — stats must describe the whole queue, and re-running the
     # resolver twice per task would double the cost for the identical numbers.
+    #
+    # The three resolver inputs are PRELOADED once for the whole request so a task count
+    # of N costs 3 queries total instead of ~3N: active rules, the tenant location map,
+    # and ONE StockMove GROUP BY over every distinct task item feeding an
+    # {item_id: {location_id: qty}} map. Resolution itself stays in the model layer.
+    tasks = list(qs)
+    rules, by_pk, on_hand = [], {}, {}
+    if tasks:
+        rules = list(
+            PutawayRule.objects.filter(tenant=request.tenant, is_active=True)
+            .select_related("item", "category", "source_location", "destination")
+            .order_by("priority", "id"))
+        by_pk = {loc.pk: loc for loc in Location.objects.filter(tenant=request.tenant)}
+        for item_id, location_id, held in (
+                StockMove.objects.filter(
+                    tenant=request.tenant,
+                    item_id__in={t.item_id for t in tasks})
+                .values("item", "location").annotate(held=Sum("quantity"))
+                .values_list("item", "location", "held")):
+            on_hand.setdefault(item_id, {})[location_id] = held
+
     resolved, open_tasks, covered_by_rule = {}, 0, 0
-    for task in qs:
+    for task in tasks:
         open_tasks += 1
-        suggestion, reason, candidates = resolve_putaway_suggestion(task)
+        suggestion, reason, candidates = resolve_putaway_suggestion(
+            task, rules=rules, by_pk=by_pk, on_hand=on_hand)
         resolved[task.pk] = (suggestion, reason, candidates)
         if reason.startswith("Rule:"):
             covered_by_rule += 1
