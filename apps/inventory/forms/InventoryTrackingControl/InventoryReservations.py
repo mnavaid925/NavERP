@@ -67,6 +67,11 @@ class InventoryReservationForm(TenantUniqueMixin, TenantModelForm):
         # every OTHER active claim on it (4.5's allocations AND this module's reservations)
         # minus non-sellable classifications — the same formula the Real-Time Stock Levels
         # page renders; keep the two in step.
+        #
+        # Excluding THIS row keeps the check honest on EDIT (the same exclusion as
+        # StockStatusForm.clean): an active row's own quantity is part of what the spot
+        # already holds, so counting it again would validate 8 against an availability its
+        # own claim had already consumed.
         if item and location and quantity and self.instance.tenant_id is not None:
             moves = item.stock_moves.filter(location=location)
             if lot is not None:
@@ -75,7 +80,8 @@ class InventoryReservationForm(TenantUniqueMixin, TenantModelForm):
             held = (
                 _active_held(InventoryReservation.objects.filter(
                     tenant=self.instance.tenant, item=item, location=location,
-                    status__in=InventoryReservation.ACTIVE_STATUSES), lot)
+                    status__in=InventoryReservation.ACTIVE_STATUSES
+                ).exclude(pk=self.instance.pk), lot)
                 + _active_allocations(item, location)
                 + _unsellable_classified(self.instance.tenant, item, location, lot))
             available = on_hand - held
