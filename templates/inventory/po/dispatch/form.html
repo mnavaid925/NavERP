@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Record PO Dispatch{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">Record PO Dispatch</h1>
+    <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:approval_queue' %}">Purchase Orders</a><span class="sep">›</span><a href="{% url 'inventory:dispatch_list' %}">Dispatches</a><span class="sep">›</span><span>Record</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted">
+        Only approved-and-beyond orders are listed — a draft or pending order has nothing to send yet.
+        The first dispatch of an <strong>approved</strong> order moves it to <strong>Sent</strong>; later rows
+        are re-sends and change nothing. Dispatch records cannot be edited afterwards — correct a mistake by
+        recording the real transmission as another row.
+      </p>
+    </div></div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Record dispatch</button>
+      <a href="{% url 'inventory:dispatch_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
