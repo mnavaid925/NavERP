@@ -25,9 +25,9 @@ promised more than it can physically ship, which is precisely what this page exi
 to surface.
 """
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.db.models import F, Sum
 
+from apps.core.crud import paginate
 from apps.inventory.models import InventoryReservation, StockStatus
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.scm.models import (GoodsReceiptLine, Item, Location, PurchaseOrder,
@@ -141,27 +141,16 @@ def stocklevels(request):
     if shortage_only:
         rows = [r for r in rows if r["available"] <= 0]
 
-    page_obj = _paginate(request, rows)
+    # The shared crud helper paginates plain lists too; 25 keeps this page's window.
+    page_obj = paginate(request, rows, per_page=25)
     return render(request, "inventory/tracking/stocklevels.html", {
         "page_obj": page_obj,
         "object_list": page_obj.object_list,
         "q": q,
-        "items": Item.objects.filter(tenant=tenant).order_by("sku"),
-        "locations": Location.objects.filter(tenant=tenant).order_by("code"),
+        # The filter dropdowns reuse the maps already loaded for the merge (sorted
+        # copies) — re-querying Item/Location here was a second fetch of both tables
+        # on every request for identical rows.
+        "items": sorted(items.values(), key=lambda obj: obj.sku),
+        "locations": sorted(locations.values(), key=lambda loc: loc.code),
         "shortage_only": shortage_only,
     })
-
-
-def _paginate(request, rows, per_page=25):
-    """Paginate plain dict rows through the same windowed Paginator crud_list uses."""
-    page = Paginator(rows, per_page).get_page(request.GET.get("page"))
-    n, total = page.number, page.paginator.num_pages
-    nums = sorted(set([1, total] + list(range(max(1, n - 2), min(total, n + 2) + 1))))
-    window, prev = [], 0
-    for x in nums:
-        if x - prev > 1:
-            window.append(None)
-        window.append(x)
-        prev = x
-    page.window = window
-    return page
