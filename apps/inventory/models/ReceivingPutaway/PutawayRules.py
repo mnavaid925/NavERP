@@ -140,9 +140,10 @@ def _nearest_condition(chain):
 
 
 def _walk_key(location):
-    """Total walk order for bins: pickable first, then pick_sequence ASC, then code ASC."""
-    return (0 if location.is_pickable else 1,
-            location.pick_sequence if location.pick_sequence is not None else _UNSEQUENCED,
+    """Total walk order for bins, per the frozen contract: pick_sequence ASC then code ASC.
+    Bins without a ``pick_sequence`` sort LAST, deterministically (_UNSEQUENCED); no
+    pickable/unpickable group flag — tiers that need one filter it before sorting."""
+    return (location.pick_sequence if location.pick_sequence is not None else _UNSEQUENCED,
             location.code)
 
 
