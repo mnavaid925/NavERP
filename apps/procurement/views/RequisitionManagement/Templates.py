@@ -7,8 +7,11 @@ so applying is a write INTO ``scm`` tables inside one transaction, followed by t
 check warning when a near-identical request already exists.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Count, F, Sum
+from django.db.models.fields import DecimalField
 from django.utils import timezone
 
 from apps.core.crud import crud_delete, crud_list
@@ -21,10 +24,25 @@ from apps.procurement.views._common import *  # noqa: F401,F403
 from apps.procurement.views._helpers import DUPLICATE_WINDOW_DAYS, find_duplicate_requisitions
 from apps.scm.models import PurchaseRequisition, PurchaseRequisitionLine
 
+ZERO = Decimal("0")
+
 
 @login_required
 def template_list(request):
-    qs = RequisitionTemplate.objects.filter(tenant=request.tenant)
+    # Line count + estimated total are annotated (one aggregate query) rather than read off each
+    # row's related manager — the naive version cost ~3 extra queries PER ROW.
+    qs = (RequisitionTemplate.objects
+          .filter(tenant=request.tenant)
+          .select_related("org_unit")
+          # Aggregation ignores Meta.ordering, and an unordered queryset makes the paginator warn
+          # (and page boundaries unstable) — restate it explicitly.
+          .annotate(
+              n_lines=Count("lines", distinct=True),
+              est_total=Sum(
+                  F("lines__quantity") * F("lines__estimated_unit_price"),
+                  output_field=DecimalField(max_digits=18, decimal_places=2)),
+          )
+          .order_by("name", "id"))
     return crud_list(
         request, qs, "procurement/requisitionmanagement/templates/list.html",
         search_fields=["number", "name", "description"],
@@ -39,9 +57,13 @@ def template_detail(request, pk):
         RequisitionTemplate.objects.select_related("org_unit", "currency", "created_by"),
         pk=pk, tenant=request.tenant,
     )
+    lines = list(obj.lines.select_related("gl_account"))
+    # Sum the ALREADY-FETCHED lines — the model property would re-query them a second time.
+    est_total = sum((line.line_total for line in lines), ZERO)
     return render(request, "procurement/requisitionmanagement/templates/detail.html", {
         "obj": obj,
-        "lines": obj.lines.select_related("gl_account"),
+        "lines": lines,
+        "estimated_total": est_total,
     })
 
 
@@ -108,6 +130,11 @@ def template_apply(request, pk):
         messages.error(request, "Select a tenant workspace before raising requisitions.")
         return redirect("dashboard:home")
     template = get_object_or_404(RequisitionTemplate, pk=pk, tenant=request.tenant)
+    if not template.is_active:
+        # Server-side enforcement of what the UI hides — a crafted POST must not apply a
+        # retired template.
+        messages.error(request, "This template is inactive and cannot be applied.")
+        return redirect("procurement:template_detail", pk=pk)
     lines = list(template.lines.all())
     if not lines:
         messages.error(request, "This template has no lines — add at least one before applying.")
