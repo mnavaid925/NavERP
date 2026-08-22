@@ -1172,6 +1172,32 @@ LIVE_LINKS = {
         "Contract & Terms Management":   "scm:contract_list",                 # bullet (terms on the contract; lead time/MOQ on catalog lines)
         "Vendor Communication Log":      "inventory:vendorcommunication_list",  # bullet (the new log)
     },
+    # 5.3 Purchase Order (PO) Management. The PO DOCUMENT is 4.1's scm.PurchaseOrder (L36:
+    # extend the spine, never re-declare it) - manual drafting and status tracking point AT
+    # the spine's own pages. What SCM's built-in lifecycle lacks is the management layer this
+    # sub-module adds: reorder-point AUTO-drafting into spine orders, multi-tier approval
+    # ROUTING (rules + per-tier decisions; scm's approve is a single signature), and an
+    # email/EDI dispatch log (scm's send is a bare status flip with no proof of transmission).
+    "5.3": {
+        "PO Creation & Drafting":         "scm:purchaseorder_create",   # bullet (the spine's full creation form)
+        "Auto-Draft from Reorder Points": "inventory:reorderdraft",     # extra (reorder rules -> draft spine POs)
+        "Approval Workflows":             "inventory:approval_queue",   # bullet (multi-tier routing + decision trail)
+        "PO Dispatch":                    "inventory:dispatch_list",    # bullet (email/EDI transmission log)
+        "PO Tracking":                    "scm:purchaseorder_list",     # bullet (Draft/Sent/Partially Received/Closed live on the spine)
+    },
+    # 5.5 Warehousing & Bin Management. The warehouse/zone/aisle/rack/bin STRUCTURE is
+    # 4.3's self-referential scm.Location tree (L36 - extend the spine, never re-declare
+    # it), so the structure bullet points AT the spine's own pages. What nothing else
+    # records is the per-bin capacity ENVELOPE (weight AND volume AND quantity - the one
+    # generic Location.capacity number cannot say "full by weight before full by count"),
+    # a layout map computed over that tree plus the ledger, and the bypass-storage
+    # cross-dock flow whose two legs post into the same append-only StockMove book.
+    "5.5": {
+        "Warehouse Structure":      "scm:location_list",           # bullet (4.3's location tree master)
+        "Bin Capacity Management":  "inventory:bincapacity_list",  # bullet (per-bin weight/volume/qty envelopes)
+        "Warehouse Mapping":        "inventory:warehousemap",      # bullet (computed layout page - declares no table)
+        "Cross-Docking":            "inventory:crossdockorder_list",  # bullet (dock-to-dock flow posting StockMoves)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
     # 4.1's `scm.PurchaseRequisition` / `scm.PurchaseOrder` (L36: extend the spine, never
