@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Warehouse Map{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Warehouse Map</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Warehousing &amp; Bins</span><span class="sep">›</span><span>Map</span></div>
+      <p class="text-muted">The location blueprint with live on-hand from the stock ledger — a computed view, not a copy of it.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:bincapacity_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Bin Capacity</a>
+      <a href="{% url 'scm:location_list' %}" class="btn btn-outline"><i data-lucide="git-fork"></i> Manage Structure</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="warehouse"></i></div>
+      <div class="stat-value">{{ stats.warehouse }}</div>
+      <div class="stat-label">Warehouses · {{ stats.zone }} zones</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ stats.bin }}</div>
+      <div class="stat-label">Bins · {{ stats.staging }} dock/staging</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="scale"></i></div>
+      <div class="stat-value">{{ stats.profiled }}</div>
+      <div class="stat-label">Capacity profiles declared</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="triangle-alert"></i></div>
+      <div class="stat-value">{{ stats.over }}</div>
+      <div class="stat-label">At / over quantity limit</div>
+    </div>
+  </div>
+
+  {% for section in sections %}
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">
+        <h2 class="card-title"><i data-lucide="warehouse"></i> {{ section.warehouse.code }} — {{ section.warehouse.name }}</h2>
+        <a href="{% url 'scm:location_detail' section.warehouse.pk %}" class="btn btn-outline btn-icon" title="Open in SCM"><i data-lucide="eye"></i></a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th style="min-width:260px;">Location</th><th>Type</th><th>On Hand</th><th>Ledger Value</th><th>Declared Limits</th><th style="min-width:140px;">Qty Utilisation</th></tr></thead>
+          <tbody>
+            {% for row in section.rows %}
+              <tr>
+                <td>
+                  <span style="display:inline-block; width:{{ row.indent }}px;"></span>
+                  <a href="{% url 'scm:location_detail' row.loc.pk %}" class="fw-600">{{ row.loc.code }}</a>
+                  {% if not row.loc.is_pickable %}<span class="badge badge-slate">no-pick</span>{% endif %}
+                  <div class="text-muted" style="font-size:12px;">{{ row.loc.name }}</div>
+                </td>
+                <td>
+                  {% if row.loc.location_type == 'bin' %}<span class="badge badge-green">Bin</span>
+                  {% elif row.loc.location_type == 'zone' %}<span class="badge badge-amber">Zone</span>
+                  {% elif row.loc.location_type == 'staging' %}<span class="badge badge-muted">Staging</span>
+                  {% else %}<span class="badge badge-slate">{{ row.loc.get_location_type_display }}</span>{% endif %}
+                </td>
+                <td>{{ row.on_hand|floatformat:"-2" }}</td>
+                <td>{{ row.value|floatformat:"-2" }}</td>
+                <td>
+                  {% if row.profile %}
+                    {% if row.profile.max_weight_kg %}{{ row.profile.max_weight_kg }} kg{% endif %}
+                    {% if row.profile.max_volume_m3 %}{% if row.profile.max_weight_kg %} · {% endif %}{{ row.profile.max_volume_m3 }} m³{% endif %}
+                    {% if row.profile.max_quantity %}{% if row.profile.max_weight_kg or row.profile.max_volume_m3 %} · {% endif %}{{ row.profile.max_quantity|floatformat:"-2" }} u{% endif %}
+                  {% else %}<span class="text-muted">No profile</span>{% endif %}
+                </td>
+                <td>
+                  {% if row.profile and row.profile.max_quantity %}
+                    {% widthratio row.on_hand row.profile.max_quantity 100 as pct %}
+                    <div class="progress"><div class="progress-bar" style="width:{% if pct >= 100 %}100{% else %}{{ pct }}{% endif %}%;"></div></div>
+                    <span class="{% if pct >= 100 %}badge badge-red{% else %}text-muted{% endif %}" style="font-size:12px;">{{ pct }}%</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6"><div class="empty-state"><i data-lucide="map-pin-off"></i><h3>No structure under this warehouse yet</h3><p>Add zones and bins on the SCM location pages and they appear here.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if orphan_rows %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Outside Any Warehouse</h2></div>
+      <div class="card-body">
+        <p class="text-muted">These locations have no parent — attach them to a warehouse so the map reflects the real floor.</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Location</th><th>Type</th><th>On Hand</th><th>Ledger Value</th><th>Declared Limits</th></tr></thead>
+          <tbody>
+            {% for row in orphan_rows %}
+              <tr>
+                <td><a href="{% url 'scm:location_detail' row.loc.pk %}" class="fw-600">{{ row.loc.code }}</a> <span class="text-muted">{{ row.loc.name }}</span></td>
+                <td><span class="badge badge-slate">{{ row.loc.get_location_type_display }}</span></td>
+                <td>{{ row.on_hand|floatformat:"-2" }}</td>
+                <td>{{ row.value|floatformat:"-2" }}</td>
+                <td>{% if row.profile %}<span class="badge badge-info">profiled</span>{% else %}<span class="text-muted">No profile</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if not sections and not orphan_rows %}
+    <div class="card">
+      <div class="card-body">
+        <div class="empty-state">
+          <i data-lucide="warehouse"></i>
+          <h3>No locations yet</h3>
+          <p>Create your first warehouse on the SCM location pages — zones, aisles and bins hang under it as children.</p>
+          <a href="{% url 'scm:location_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Location</a>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
