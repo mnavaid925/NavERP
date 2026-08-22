@@ -36,6 +36,18 @@ IDs assigned after sort. Fix order = ID order.
 | frontend-reviewer | 3 findings (I5, M1, M2); context-var/badge/filter/pagination sweep clean |
 | qa-smoke-tester | Executed during build (temp/smoke_56.py): all pages 200/302, IDOR 404s, verbs guarded, leak markers absent — PASS |
 
+## Test-wave addendum
+
+- R0 (regression found BY the test wave, fixed): `reservation_delete` re-read its row with
+  `request.tenant_id`, an attribute TenantMiddleware never sets — every DELETE POST 500'd.
+  Introduced by the M4 TOCTOU fix; caught by two STRICT xfails in test_tracking_views.py.
+  Fixed (`request.tenant`) commit `872c13df`; xfails promoted to plain asserts commit `da33b1bb`.
+- Suites: models 29 · forms 15 · views 21 · security 18 — ALL GREEN.
+- Full unfiltered app run: **249 passed, 3 failed** — the 3 are `test_po_models.py` (5.3
+  approval logic), introduced by commit `26943710` which landed after this session's base
+  `ea0add1` (concurrent workstream; verified not an ancestor of BASE). Out of scope here;
+  not chased per the shared-tree rule (L45).
+
 Fix rules for the fixer agent: work in ID order; **one file per git commit** (`git add 'file'; git commit -m '...'`,
 PowerShell-safe, never push); never touch `apps/inventory/*/ReceivingPutaway/*`, `templates/inventory/receiving/*`
 or `apps/procurement/tests/*` (concurrent session's WIP); after each model change run
