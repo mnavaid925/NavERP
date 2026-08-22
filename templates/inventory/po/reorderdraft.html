@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Auto-Draft POs from Reorder Points{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Draft Purchase Orders from Reorder Points</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:approval_queue' %}">Purchase Orders</a><span class="sep">›</span><span>Reorder Drafting</span></div>
+      <p class="text-muted">Every active reorder rule whose on-hand stock has fallen to or below its point, with the quantity the policy asks for. Tick lines, pick a vendor per line, and draft orders land as <strong>Drafts on the SCM purchase-order pages</strong> — nothing is submitted or sent automatically.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:reorder_alerts' %}" class="btn btn-outline"><i data-lucide="bell"></i> Reorder Alerts (SCM)</a>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">{{ suggestions|length }} suggestion{{ suggestions|length|pluralize }} · {{ total_value }} total replenishment value</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th></th><th>Item</th><th>Location</th><th>On hand</th><th>Reorder point</th><th>Suggested qty</th><th>Unit cost</th><th>Extended</th><th>Vendor</th></tr></thead>
+          <tbody>
+            {% for s in suggestions %}
+              <tr>
+                <td><input type="checkbox" name="select" value="{{ s.rule.pk }}" aria-label="Select {{ s.rule.item.name }}"></td>
+                <td>
+                  <span class="fw-600">{{ s.rule.item.sku }}</span>
+                  <div class="text-muted">{{ s.rule.item.name }}</div>
+                </td>
+                <td>{{ s.rule.location.code }}</td>
+                <td>{{ s.on_hand }}</td>
+                <td>{{ s.rule.reorder_point }}</td>
+                <td class="fw-600">{{ s.qty }}</td>
+                <td>{{ s.unit_cost }}</td>
+                <td>{{ s.extended }}</td>
+                <td>
+                  <select name="vendor_{{ s.rule.pk }}" class="form-select" style="min-width:160px;" aria-label="Vendor for {{ s.rule.item.sku }}">
+                    <option value="">— pick vendor —</option>
+                    {% for v in vendors %}
+                      <option value="{{ v.pk }}">{{ v.name }}</option>
+                    {% endfor %}
+                  </select>
+                  {% if not vendors %}<div class="form-help">No supplier/vendor-role parties exist yet.</div>{% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="9"><div class="empty-state"><i data-lucide="package-check"></i><h3>Nothing needs reordering</h3><p>No active reorder rule is at or below its point right now. Rules are maintained on the SCM reorder-rules page.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if suggestions %}
+        <div class="card-body">
+          <button class="btn btn-primary" type="submit"><i data-lucide="file-plus-2"></i> Draft orders from ticked lines</button>
+          <span class="text-muted" style="margin-left:8px;">Lines without a vendor are skipped.</span>
+        </div>
+      {% endif %}
+    </div>
+  </form>
+{% endblock %}
