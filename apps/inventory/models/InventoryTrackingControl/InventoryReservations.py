@@ -144,9 +144,16 @@ class InventoryReservation(TenantNumbered):
         return type(self).objects.select_for_update().get(pk=self.pk)
 
     def _advance(self, user, target):
+        """Move one lifecycle step under lock, refusing anything else.
+
+        The ``status == target`` arm matters as much as the ACTIONABLE guard: release()
+        on an already-released row would otherwise re-write ``resolved_at`` and append a
+        second identical audit entry every time it was double-clicked — consume/cancel
+        were already terminal-guarded, released-to-released was the one hole.
+        """
         with transaction.atomic():
             obj = self._locked()
-            if obj.status not in obj.ACTIONABLE_STATUSES:
+            if obj.status == target or obj.status not in obj.ACTIONABLE_STATUSES:
                 raise ValidationError(
                     f"{obj.number} cannot move to {obj._target_label(target)} — it is "
                     f"{obj.get_status_display().lower()}.")
