@@ -59,6 +59,9 @@
                   {% if obj.is_active %}<form method="post" action="{% url 'inventory:reservation_cancel' obj.pk %}" onsubmit="return confirm('Cancel this reservation and free the stock?');">
                     {% csrf_token %}<button class="btn-icon danger" type="submit" title="Cancel"><i data-lucide="x-circle"></i></button>
                   </form>{% endif %}
+                  {% if obj.is_editable %}<form method="post" action="{% url 'inventory:reservation_delete' obj.pk %}" onsubmit="return confirm('Delete this reservation?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>{% endif %}
                 </div>
               </td>
             </tr>
