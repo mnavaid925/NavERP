@@ -47,15 +47,16 @@
                 <a href="{% url 'inventory:bincapacity_detail' obj.pk %}" class="fw-600">{{ obj.location.code }}</a>
                 <span class="text-muted">{{ obj.location.name }}</span>
               </td>
-              <td>{{ obj.max_weight_kg|default_if_none:"—" }}</td>
-              <td>{{ obj.max_volume_m3|default_if_none:"—" }}</td>
-              <td>{{ obj.max_quantity|default_if_none:"—" }}</td>
-              <td>{{ obj.on_hand|floatformat:"-2" }}</td>
+              <td>{% if obj.max_weight_kg is not none %}{{ obj.max_weight_kg|floatformat:"-2" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.max_volume_m3 is not none %}{{ obj.max_volume_m3|floatformat:"-3" }}{% else %}—{% endif %}</td>
+              <td>{% if obj.max_quantity is not none %}{{ obj.max_quantity|floatformat:"-2" }}{% else %}—{% endif %}</td>
+              <td>{{ obj.on_hand_qty|floatformat:"-2" }}</td>
               <td>
                 {% if obj.max_quantity %}
-                  {% widthratio obj.on_hand obj.max_quantity 100 as pct %}
-                  <div class="progress"><div class="progress-bar" style="width:{% if pct >= 100 %}100{% else %}{{ pct }}{% endif %}%;"></div></div>
-                  <span class="{% if pct >= 100 %}badge badge-red{% else %}text-muted{% endif %}" style="font-size:12px;">{{ pct }}%</span>
+                  {% with p=obj.utilisation_pct %}
+                    <div class="progress"><div class="progress-bar" style="width:{% if p >= 100 %}100{% else %}{{ p }}{% endif %}%;"></div></div>
+                    <span class="{% if p >= 100 %}badge badge-red{% else %}text-muted{% endif %}" style="font-size:12px;">{{ p }}%</span>
+                  {% endwith %}
                 {% else %}
                   <span class="text-muted">No qty limit</span>
                 {% endif %}
