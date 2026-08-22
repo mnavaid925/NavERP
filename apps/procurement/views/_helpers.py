@@ -75,9 +75,16 @@ DUPLICATE_ACTIVE_STATUSES = ("draft", "pending_approval", "approved", "converted
 #: Cap on how many matches the detail panel renders — it is a review aid, not an export.
 DUPLICATE_MATCH_LIMIT = 5
 
+#: Cap on how many window candidates one check may load. The engine is O(window) by design (two
+#: queries, then in-memory matching); without a ceiling a tenant with thousands of live requests
+#: would materialize all of them on every register render. Newest N is the right cut: duplicates
+#: are about what the workspace has been raising LATELY, and the register itself is newest-first.
+DUPLICATE_CANDIDATE_CAP = 1000
+
 
 def _duplicate_maps(tenant_id, window_days):
-    """One-pass index of every LIVE requisition raised inside the window for a tenant.
+    """One-pass index of every LIVE requisition raised inside the window for a tenant, newest
+    ``DUPLICATE_CANDIDATE_CAP`` rows at most.
 
     Returns ``(by_pk, title_map, item_map)`` where ``title_map``/``item_map`` key the
     normalised title / item description to the pks that carry them. Two queries total,
@@ -91,7 +98,7 @@ def _duplicate_maps(tenant_id, window_days):
         tenant_id=tenant_id,
         created_at__gte=cutoff,
         status__in=DUPLICATE_ACTIVE_STATUSES,
-    ).values_list("id", "number", "title"))
+    ).order_by("-id").values_list("id", "number", "title")[:DUPLICATE_CANDIDATE_CAP])
     item_rows = list(PurchaseRequisitionLine.objects.filter(
         requisition_id__in=[r[0] for r in rows],
     ).values_list("requisition_id", "item_description"))
@@ -162,7 +169,10 @@ def find_duplicate_requisitions(requisition, window_days=DUPLICATE_WINDOW_DAYS):
     ordered = sorted(candidates.items(), key=lambda kv: kv[0], reverse=True)[:DUPLICATE_MATCH_LIMIT]
     if not ordered:
         return []
-    found = (PurchaseRequisition.objects.filter(pk__in=[pk for pk, _ in ordered])
+    # Tenant filter is defense-in-depth: the pks already come from the tenant-scoped map, but the
+    # fetch itself should not RELY on that to stay inside the workspace.
+    found = (PurchaseRequisition.objects
+             .filter(pk__in=[pk for pk, _ in ordered], tenant_id=requisition.tenant_id)
              .select_related("requester", "org_unit"))
     reasons = dict(ordered)
     return [{"requisition": pr, "reasons": sorted(reasons[pr.pk])} for pr in found]
