@@ -9,11 +9,13 @@ from .InventoryTrackingControl.InventoryReservations import InventoryReservation
 from .InventoryTrackingControl.StockStatuses import StockStatusForm
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRuleForm
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatchForm
+from .ReceivingPutaway.PutawayRules import PutawayRuleForm
 from .VendorSupplierManagement.VendorCommunications import VendorCommunicationForm
 from .WarehousingBinManagement.BinCapacities import BinCapacityForm
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrderForm
 
 __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommunicationForm",
            "PurchaseOrderApprovalRuleForm", "PurchaseOrderDispatchForm",
+           "PutawayRuleForm",
            "BinCapacityForm", "CrossDockOrderForm",
            "StockStatusForm", "InventoryReservationForm"]
