@@ -1,4 +1,5 @@
 """Inventory 5.5 Warehousing & Bin Management — CrossDockOrder form."""
+from apps.core.crud import as_db_int
 from apps.inventory.forms._common import *  # noqa: F401,F403
 from apps.inventory.forms._common import TenantUniqueMixin, _reject_foreign
 from apps.inventory.models import CrossDockOrder
@@ -49,9 +50,10 @@ class CrossDockOrderForm(TenantUniqueMixin, TenantModelForm):
         qs = LotSerial.objects.filter(tenant=self.tenant).select_related("item")
         item_id = None
         if self.is_bound:
-            raw = (self.data.get("item") or "").strip()
-            if raw.isdecimal():
-                item_id = int(raw)
+            # as_db_int, not isdecimal()/int(): a megabyte of digits passes isdecimal()
+            # and 500s inside the driver on OverflowError (the L11 family) — a value no
+            # integer column could hold is simply "no item posted".
+            item_id = as_db_int(self.data.get("item"))
         elif self.instance.item_id:
             item_id = self.instance.item_id
         if item_id:
