@@ -53,17 +53,26 @@ class PurchaseOrderApprovalRule(TenantOwned):
     def resolve(cls, tenant, total, org_unit_id=None):
         """The most-specific active rule whose band covers ``total``, or ``None``.
 
-        Resolution is most-specific-wins: a rule scoped to the order's org unit beats any
-        unscoped rule, then the NARROWEST band wins (an open-ended max counts as infinitely
-        wide). ``None`` is a real answer — the queue falls back to a single default tier —
-        never a silent zero-tier bypass. Bands are half-open (``min <= total < max``) so two
-        adjacent rules can never both match at their shared boundary.
+        Convenience wrapper over :meth:`resolve_from` that fetches this tenant's active
+        rules itself — right for one-off decisions (the decide action), wrong for a loop
+        (the queue batches instead).
         """
-        rules = list(
-            cls.objects
-            .filter(tenant=tenant, is_active=True, min_amount__lte=total)
-            .filter(Q(max_amount__isnull=True) | Q(max_amount__gt=total))
-        )
+        return cls.resolve_from(
+            cls.objects.filter(tenant=tenant, is_active=True), total, org_unit_id)
+
+    @classmethod
+    def resolve_from(cls, active_rules, total, org_unit_id=None):
+        """:meth:`resolve` over an ALREADY-FETCHED rules iterable — the queue resolves P
+        pending orders against ONE queryset this way. Selection is most-specific-wins: a
+        rule scoped to the order's org unit beats an unscoped one, then the NARROWEST band
+        wins (an open-ended max counts as infinitely wide). ``None`` is a real answer — the
+        queue falls back to a single default tier — never a silent zero-tier bypass. Bands
+        are half-open (``min <= total < max``) so two adjacent rules can never both match at
+        their shared boundary."""
+        rules = [
+            r for r in active_rules
+            if r.min_amount <= total and (r.max_amount is None or r.max_amount > total)
+        ]
         for candidates in (
             [r for r in rules if r.org_unit_id and r.org_unit_id == org_unit_id],
             [r for r in rules if not r.org_unit_id],
