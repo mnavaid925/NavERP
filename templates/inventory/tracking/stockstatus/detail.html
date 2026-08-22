@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.item.sku }} — {{ obj.get_status_display }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.item.sku }} <span class="text-muted">· {{ obj.location.code }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:stockstatus_list' %}">Stock Status</a><span class="sep">›</span><span>{{ obj.item.sku }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:stockstatus_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      <a href="{% url 'inventory:stockstatus_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:stockstatus_delete' obj.pk %}" onsubmit="return confirm('Delete this classification?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Classification</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Location</dt><dd><a href="{% url 'scm:location_detail' obj.location_id %}" class="fw-600">{{ obj.location.code }}</a> <span class="text-muted">{{ obj.location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}">{{ obj.lot_serial.number }}</a>{% else %}<span class="text-muted">Whole-location pool</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>{% if not obj.is_sellable %} <span class="text-muted">(not sellable)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quantity classified</dt><dd class="fw-600">{{ obj.quantity|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>On hand at this spot (ledger)</dt><dd>{{ obj.spot_on_hand|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>Observed</dt><dd>{{ obj.effective_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.reason %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.reason }}</p>
+      {% else %}<p class="text-muted" style="margin-top:12px;">No reason recorded.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Sibling Claims on the Same Pool</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Status</th><th>Quantity</th><th>Reason</th><th>Since</th></tr></thead>
+        <tbody>
+          {% for s in siblings %}
+            <tr>
+              <td>{{ s.item.sku }}</td>
+              <td><span class="badge {{ s.status_css }}">{{ s.get_status_display }}</span></td>
+              <td>{{ s.quantity|floatformat:"-2" }}</td>
+              <td>{{ s.reason|default:"—"|truncatechars:40 }}</td>
+              <td>{{ s.effective_at|date:"M d, Y" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-circle-2"></i><h3>No sibling claims</h3><p>This is the only classification drawing on this pool.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Movements at This Spot</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Type</th><th>Qty</th><th>Unit Cost</th><th>Reference</th></tr></thead>
+        <tbody>
+          {% for move in recent_moves %}
+            <tr>
+              <td>{{ move.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ move.get_move_type_display }}</td>
+              <td class="fw-600">{% if move.quantity < 0 %}<span class="badge badge-red">{{ move.quantity|floatformat:"-2" }}</span>{% else %}<span class="badge badge-green">+{{ move.quantity|floatformat:"-2" }}</span>{% endif %}</td>
+              <td>{{ move.unit_cost|floatformat:"-4" }}</td>
+              <td>{{ move.reference|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="git-commit-horizontal"></i><h3>No stock movements</h3><p>The ledger shows nothing physically sitting at this spot — reconcile this claim with a receipt or adjustment.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
