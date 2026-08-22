@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Requisition Tracking{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Requisition Tracking</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Requisitions</span></div>
+      <p class="text-muted">Every request from draft through approval to PO conversion — with potential duplicates flagged within the last {{ window_days }} days.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:requisition_create' %}" class="btn btn-primary"><i data-lucide="file-plus-2"></i> New Requisition</a>
+      <a href="{% url 'procurement:template_list' %}" class="btn btn-outline"><i data-lucide="layout-template"></i> Templates</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        {% if dupes_only %}<input type="hidden" name="dupes" value="1">{% endif %}
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title or justification…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="org_unit" aria-label="Department" class="form-select">
+            <option value="">All departments</option>
+            {% for u in org_units %}
+              <option value="{{ u.pk }}" {% if request.GET.org_unit == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% if dupes_only %}{% url 'procurement:req_list' %}?dupes=1{% else %}{% url 'procurement:req_list' %}{% endif %}" class="btn btn-outline">Reset</a>
+      </form>
+      {% if dupes_only %}
+        <p><span class="badge badge-amber"><i data-lucide="copy"></i> Duplicate watch</span>
+        <span class="text-muted">Showing only live requests raised in the last {{ window_days }} days whose title or items match another request. Open one to see the exact matches.</span></p>
+      {% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Requester</th><th>Department</th><th>Status</th><th>Required by</th><th>Total</th><th>Duplicates</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{{ obj.title }}</td>
+              <td>{% if obj.requester %}{{ obj.requester.get_full_name|default:obj.requester.username }}{% else %}—{% endif %}</td>
+              <td>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}—{% endif %}</td>
+              <td><span class="badge {% if obj.status == 'approved' or obj.status == 'converted' %}badge-green{% elif obj.status == 'pending_approval' %}badge-amber{% elif obj.status == 'rejected' %}badge-red{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-slate{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>{{ obj.required_by|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ obj.estimated_total|floatformat:2 }}</td>
+              <td>
+                {% if obj.pk in dupe_pks %}
+                  <a href="{% url 'procurement:req_detail' obj.pk %}" class="badge badge-red" title="Matches a recent request">Possible duplicate</a>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:req_detail' obj.pk %}" class="btn-icon" title="Track"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'procurement:req_amendment_create' obj.pk %}" class="btn-icon" title="Request amendment / cancellation"><i data-lucide="file-pen"></i></a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No requisitions match</h3><p>Raise one from the New Requisition button, apply a template, or reset the filters.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
