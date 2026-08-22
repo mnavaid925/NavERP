@@ -6,6 +6,11 @@ table and writes NOTHING into scm (the only action offered is ``scm:putawaytask_
 Every row is resolved by :func:`resolve_putaway_suggestion`, so what the page shows is an
 explainable suggestion or the honest "No Suggestion Found" refusal, never a guess.
 
+Like sibling 5.3's approval rules, the RULE WRITES are tenant-admin gated (a routing rule
+decides where every arrival goes): reads stay open to every signed-in member, while
+create/edit/delete carry ``core.decorators.tenant_admin_required`` and the list/detail
+templates hide the affordances to match.
+
 Ordering of operations on the queue is deliberate: search + warehouse filter apply to the
 queryset BEFORE pagination; pagination happens at 25/page in the database via
 core.crud.paginate; only then does the resolver run — one pass over the full filtered set
@@ -14,6 +19,7 @@ resolution twice and stats always describe the whole queue, not just the visible
 """
 from django.db.models import Q
 
+from apps.core.decorators import tenant_admin_required
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.core.crud import as_db_int, paginate
 # Direct entity-module paths rather than the package roots: the package __init__ re-export
@@ -47,11 +53,13 @@ def putawayrule_list(request):
         extra_context={
             "is_active_choices": [["active", "Active"], ["inactive", "Inactive"]],
             "is_active": is_active,
+            # Writes are tenant-admin gated server-side; hide the affordances to match.
+            "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
         },
     )
 
 
-@login_required
+@tenant_admin_required
 def putawayrule_create(request):
     return crud_create(
         request, form_class=PutawayRuleForm,
@@ -66,10 +74,14 @@ def putawayrule_detail(request, pk):
         request, model=PutawayRule, pk=pk,
         template="inventory/receiving/putawayrule/detail.html",
         select_related=("item", "category", "source_location", "destination"),
+        extra_context={
+            # Same flag as the list: Edit/Delete render only for admins.
+            "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
+        },
     )
 
 
-@login_required
+@tenant_admin_required
 def putawayrule_edit(request, pk):
     return crud_edit(
         request, model=PutawayRule, pk=pk, form_class=PutawayRuleForm,
@@ -78,7 +90,7 @@ def putawayrule_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def putawayrule_delete(request, pk):
     return crud_delete(request, model=PutawayRule, pk=pk,
