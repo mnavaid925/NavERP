@@ -112,8 +112,10 @@ def reservation_delete(request, pk):
     """
     get_object_or_404(InventoryReservation, pk=pk, tenant=request.tenant)
     with transaction.atomic():
+        # ``request.tenant_id`` does not exist — TenantMiddleware sets only
+        # ``request.tenant`` (the regression the view-suite xfails caught).
         obj = InventoryReservation.objects.select_for_update().get(
-            pk=pk, tenant_id=request.tenant_id)
+            pk=pk, tenant=request.tenant)
         if not obj.is_editable:
             messages.error(
                 request,
