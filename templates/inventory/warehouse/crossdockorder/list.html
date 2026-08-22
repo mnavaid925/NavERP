@@ -48,7 +48,7 @@
               <td><a href="{% url 'inventory:crossdockorder_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
               <td>{{ obj.item.sku }} <span class="text-muted">{{ obj.item.name|truncatechars:30 }}</span></td>
               <td>{{ obj.dock_location.code }}</td>
-              <td>{{ obj.quantity|floatformat:"-2" }}</td>
+              <td>{{ obj.quantity|floatformat:"-4" }}</td>
               <td>{{ obj.scheduled_date|date:"M d, Y" }}</td>
               <td>{{ obj.inbound_reference|default:"—" }}</td>
               <td>{{ obj.outbound_reference|default:"—" }}</td>
