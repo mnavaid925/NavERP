@@ -111,6 +111,16 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Warehousing &amp; Bin Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:bincapacity_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Bin Capacity</a>
+      <a href="{% url 'inventory:warehousemap' %}" class="btn btn-outline"><i data-lucide="map"></i> Warehouse Map</a>
+      <a href="{% url 'inventory:crossdockorder_list' %}" class="btn btn-outline"><i data-lucide="truck"></i> Cross-Docking</a>
+      <a href="{% url 'scm:location_list' %}" class="btn btn-outline"><i data-lucide="git-fork"></i> Warehouse Structure (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
