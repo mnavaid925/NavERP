@@ -29,6 +29,9 @@
       <div class="stat-label">Uncovered</div>
     </div>
   </div>
+  {% if stats.open_tasks and stats.covered_by_rule == 0 %}
+    <p class="text-muted" style="font-size:12px; margin-top:-.5rem;">No open task is covered by a rule yet — use Manage Rules above to add routing so arrivals get a deterministic bin.</p>
+  {% endif %}
 
   <div class="card">
     <div class="card-body">
