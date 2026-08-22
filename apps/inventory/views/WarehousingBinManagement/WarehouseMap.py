@@ -6,7 +6,7 @@ location spine SCM 4.3 owns plus the capacity profiles and the append-only ledge
 (scm 4.15's precedent: when a NavERP bullet is answerable from existing tables, the
 honest build is the page, not another copy of the rows).
 
-Everything on it is derived in two queries + one per-profile dict:
+Everything on it is derived in three queries:
 
 * all tenant locations in one fetch (the tree is walked in Python — a location tree is
   dozens of rows, not thousands);
@@ -15,7 +15,9 @@ Everything on it is derived in two queries + one per-profile dict:
 * the ``BinCapacity`` profiles keyed by location.
 
 A malformed self-parent cycle in the location tree cannot hang the page: the walk
-carries a seen-set exactly like ``Location.path()`` does.
+carries a seen-set exactly like ``Location.path()`` does, and a residual pass sweeps
+any island the two walks missed into the orphans table — the map promises nothing
+silently dropped, cycles included.
 """
 from decimal import Decimal
 
@@ -61,32 +63,50 @@ def warehousemap(request):
 
     def _row(loc, depth):
         total = totals.get(loc.pk) or {}
+        profile = capacities.get(loc.pk)
+        on_hand = total.get("qty") or ZERO
         return {
             "loc": loc,
             "depth": depth,
             # Pre-computed: Django templates can't multiply, so the row carries its own
             # indent in px (14px per level reads clearly without swallowing wide codes).
             "indent": depth * 14,
-            "on_hand": total.get("qty") or ZERO,
+            "on_hand": on_hand,
             "value": (total.get("value") or ZERO).quantize(Decimal("0.01")),
-            "profile": capacities.get(loc.pk),
+            "profile": profile,
+            # Raw ratio quantized to one decimal, computed HERE where both operands are
+            # real Decimals — widthratio yields a string, which silently failed every
+            # `>= 100` comparison. The template clamps the bar at full width but keeps
+            # the true figure, so an over-limit bin stays honestly red.
+            "pct": ((on_hand / profile.max_quantity) * Decimal("100")).quantize(
+                       Decimal("0.1")) if profile and profile.max_quantity else None,
         }
 
     def _walk(parent_pk, depth, seen):
-        """Flatten one subtree into indented rows, cycle-guarded."""
+        """Flatten one subtree into indented rows, cycle-guarded.
+
+        Warehouse-typed children are skipped: a warehouse under a warehouse heads its
+        OWN section below, so emitting it as an indented child row here would render
+        the same location twice.
+        """
         rows = []
         if depth > _MAX_DEPTH:
             return rows
         for loc in children.get(parent_pk, []):
-            if loc.pk in seen:
+            if loc.pk in seen or loc.location_type == "warehouse":
                 continue
             rows.append(_row(loc, depth))
             rows.extend(_walk(loc.pk, depth + 1, seen | {loc.pk}))
         return rows
 
+    emitted = set()
+
     sections = []
     for wh in [loc for loc in locations if loc.location_type == "warehouse"]:
-        sections.append({"warehouse": wh, "rows": _walk(wh.pk, 0, {wh.pk})})
+        rows = _walk(wh.pk, 0, {wh.pk})
+        emitted.add(wh.pk)
+        emitted.update(row["loc"].pk for row in rows)
+        sections.append({"warehouse": wh, "rows": rows})
 
     # Roots outside any warehouse (a stray top-level zone, an unattached transit lane)
     # still appear — silently dropping them from the map would hide bad structure data.
@@ -102,6 +122,15 @@ def warehousemap(request):
         for row in _walk(loc.pk, 1, seen):
             orphan_rows.append(row)
             seen.add(row["loc"].pk)
+    emitted |= seen
+
+    # Residual pass: whatever neither walk reached — a cycle island among non-warehouse
+    # locations has no root and no warehouse head to hang off — lands in the orphans
+    # table rather than vanishing.
+    for loc in locations:
+        if loc.pk not in emitted and loc.location_type != "warehouse":
+            orphan_rows.append(_row(loc, 0))
+            emitted.add(loc.pk)
 
     type_counts = {"warehouse": 0, "zone": 0, "bin": 0, "staging": 0, "transit": 0}
     for loc in locations:
