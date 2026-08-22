@@ -6,5 +6,23 @@ everywhere (views, tests). Imports inside the entity modules are ABSOLUTE.
 from .DashboardPortal.ProcurementAlerts import ProcurementAlertForm
 from .DashboardPortal.QuickRequisitions import QuickRequisitionForm
 from .DashboardPortal.WidgetPreferences import WidgetToggleForm
+from .RequisitionManagement.Amendments import (
+    AmendmentDecisionForm,
+    RequisitionAmendmentForm,
+    RequisitionAmendmentLineFormSet,
+)
+from .RequisitionManagement.Templates import (
+    RequisitionTemplateForm,
+    RequisitionTemplateLineFormSet,
+)
 
-__all__ = ["ProcurementAlertForm", "QuickRequisitionForm", "WidgetToggleForm"]
+__all__ = [
+    "AmendmentDecisionForm",
+    "ProcurementAlertForm",
+    "QuickRequisitionForm",
+    "RequisitionAmendmentForm",
+    "RequisitionAmendmentLineFormSet",
+    "RequisitionTemplateForm",
+    "RequisitionTemplateLineFormSet",
+    "WidgetToggleForm",
+]
