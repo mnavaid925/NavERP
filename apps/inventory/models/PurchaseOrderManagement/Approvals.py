@@ -8,7 +8,11 @@ Rows are written ONLY by the approval queue's tier actions (never a generic crea
 so ``decided_by`` is stamped from the request, not typed. A REJECTION does not delete the
 earlier approvals: :meth:`PurchaseOrderApproval.cleared_tier_count` replays the decisions
 in order and restarts the count after the latest rejection, so history survives while
-progress honestly resets.
+progress honestly resets — and a resubmitted order re-decides its tiers as fresh rows
+rather than colliding with the previous run's (there is deliberately NO ``(tenant, po,
+tier)`` uniqueness: it would brick every rejected-then-resubmitted chain with an
+IntegrityError). Sequential integrity instead comes from the decide view locking the ORDER
+row (``select_for_update``), which also stops two admins clearing the same next tier.
 """
 from django.conf import settings
 
@@ -52,7 +56,6 @@ class PurchaseOrderApproval(TenantNumbered):
 
     class Meta:
         ordering = ["purchase_order_id", "tier"]
-        unique_together = ("tenant", "purchase_order", "tier")
         indexes = [
             models.Index(fields=["tenant", "purchase_order"], name="inv_pa_tnt_po_idx"),
         ]
