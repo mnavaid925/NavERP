@@ -24,6 +24,24 @@ from .Catalog.ProductFiles import (
     productfile_edit,
     productfile_list,
 )
+from .InventoryTrackingControl.InventoryReservations import (
+    reservation_cancel,
+    reservation_consume,
+    reservation_create,
+    reservation_delete,
+    reservation_detail,
+    reservation_edit,
+    reservation_list,
+    reservation_release,
+)
+from .InventoryTrackingControl.StockLevels import stocklevels
+from .InventoryTrackingControl.StockStatuses import (
+    stockstatus_create,
+    stockstatus_delete,
+    stockstatus_detail,
+    stockstatus_edit,
+    stockstatus_list,
+)
 from .PurchaseOrderManagement.ApprovalRules import (
     approvalrule_create,
     approvalrule_delete,
@@ -90,4 +108,10 @@ __all__ = [
     "crossdockorder_edit", "crossdockorder_delete",
     "crossdockorder_receive", "crossdockorder_ship", "crossdockorder_cancel",
     "warehousemap",
+    "stocklevels",
+    "stockstatus_list", "stockstatus_detail", "stockstatus_create",
+    "stockstatus_edit", "stockstatus_delete",
+    "reservation_list", "reservation_detail", "reservation_create",
+    "reservation_edit", "reservation_delete",
+    "reservation_release", "reservation_consume", "reservation_cancel",
 ]
