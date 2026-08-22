@@ -1,4 +1,4 @@
-"""Procurement 6.2 Requisition Management — RequisitionAmendments forms.
+﻿"""Procurement 6.2 Requisition Management â€” RequisitionAmendments forms.
 
 The request form captures the PROPOSED change (header fields + a line-change formset); the
 decide forms capture only the reason, mirroring scm's approve/reject/cancel reason forms.
@@ -21,7 +21,7 @@ class RequisitionAmendmentForm(TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        # A cancellation carries no proposed changes — mirror the model's rule at form level so
+        # A cancellation carries no proposed changes â€” mirror the model's rule at form level so
         # the user sees it as a field error instead of a 500 from full_clean().
         if cleaned.get("amendment_type") == "cancel":
             for field in ("new_required_by", "new_justification"):
@@ -65,7 +65,7 @@ class BaseRequisitionAmendmentLineFormSet(forms.BaseInlineFormSet):
                 continue
             data = form.cleaned_data
             if data.get("DELETE"):
-                continue  # a row being dropped proposes nothing — it must not block its twin
+                continue  # a row being dropped proposes nothing â€” it must not block its twin
             target = data.get("target_line")
             if target is not None:
                 if target.requisition_id != requisition.pk:
@@ -73,20 +73,20 @@ class BaseRequisitionAmendmentLineFormSet(forms.BaseInlineFormSet):
                                    "That line belongs to a different requisition.")
                 elif target in seen_targets:
                     # Two live rows against one line would apply in form order and silently keep
-                    # only the last (or double-delete) — refuse the ambiguity instead.
+                    # only the last (or double-delete) â€” refuse the ambiguity instead.
                     form.add_error("target_line", "This line is targeted by more than one row.")
                 seen_targets.append(target)
 
 
 RequisitionAmendmentLineFormSet = inlineformset_factory(
     RequisitionAmendment, RequisitionAmendmentLine, form=RequisitionAmendmentLineForm,
-    # max_num caps a crafted management form at a sane row count — each accepted row becomes a
+    # max_num caps a crafted management form at a sane row count â€” each accepted row becomes a
     # line write on approval.
-    formset=BaseRequisitionAmendmentLineFormSet, extra=1, can_delete=True, max_num=25,
+    formset=BaseRequisitionAmendmentLineFormSet, extra=1, can_delete=True, max_num=25, validate_max=True,
 )
 
 #: The two decide forms are deliberately plain Forms: they capture a REASON about a decision that
-#: has already been made on an existing row — there is no model fields behind them beyond
+#: has already been made on an existing row â€” there is no model fields behind them beyond
 #: decision_note, which only the approve/reject actions write.
 
 
