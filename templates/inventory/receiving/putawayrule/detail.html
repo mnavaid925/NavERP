@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ obj }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj }}</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Receiving &amp; Putaway</span><span class="sep">›</span><span>{{ obj.destination.code }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:putawayrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      <a href="{% url 'inventory:putawayrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:putawayrule_delete' obj.pk %}" onsubmit="return confirm('Delete this putaway rule?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rule</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd>{% if obj.item %}<span class="fw-600">{{ obj.item.sku }}</span> {{ obj.item.name }}{% else %}<span class="text-muted">— (any item)</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Category</dt><dd>{{ obj.category.name|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Source location</dt><dd>{% if obj.source_location %}<span class="mono">{{ obj.source_location.code }}</span> {{ obj.source_location.name }}{% else %}Any arrival point{% endif %}</dd></div>
+        <div class="detail-item"><dt>Destination</dt><dd><span class="mono fw-600">{{ obj.destination.code }}</span> {{ obj.destination.name }}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }} <span class="text-muted" style="font-size:12px;">lower runs first</span></dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Notes</h2></div>
+    <div class="card-body">
+      {% if obj.notes %}<p style="white-space:pre-line;">{{ obj.notes }}</p>{% else %}<p class="text-muted">No notes recorded for this rule.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Where Rules Apply</h2></div>
+    <div class="card-body">
+      <p class="text-muted">Rules are evaluated on the Putaway Suggestions page against open putaway tasks; accepting or overriding a suggestion happens on the task itself in SCM warehouse management.</p>
+      <div class="page-actions" style="justify-content:flex-start;">
+        <a href="{% url 'inventory:putaway_suggestions' %}" class="btn btn-outline"><i data-lucide="lightbulb"></i> Putaway Suggestions</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
