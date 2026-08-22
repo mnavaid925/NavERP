@@ -10,9 +10,6 @@ from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
 from .PurchaseOrderManagement.Approvals import PurchaseOrderApproval
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatch
 from .VendorSupplierManagement.VendorCommunications import VendorCommunication
-from .WarehousingBinManagement.BinCapacities import BinCapacity
-from .WarehousingBinManagement.CrossDockOrders import CrossDockOrder
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
-           "PurchaseOrderApprovalRule", "PurchaseOrderApproval", "PurchaseOrderDispatch",
-           "BinCapacity", "CrossDockOrder"]
+           "PurchaseOrderApprovalRule", "PurchaseOrderApproval", "PurchaseOrderDispatch"]
