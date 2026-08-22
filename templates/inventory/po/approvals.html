@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}PO Approvals{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">PO Approval Workflows</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Purchase Orders</span></div>
+      <p class="text-muted">Every purchase order awaiting approval, routed by value band and department. Clearing the final tier approves the order on the SCM pages; a rejection returns it to draft for amendment.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:approvalrule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Approval Rules</a>
+      <a href="{% url 'scm:purchaseorder_list' %}" class="btn btn-outline"><i data-lucide="external-link"></i> All Purchase Orders (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Awaiting Approval</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Order</th><th>Vendor</th><th>Total</th><th>Routing rule</th><th>Progress</th><th>Decision</th><th>Tiers so far</th></tr></thead>
+        <tbody>
+          {% for item in queue %}
+            <tr>
+              <td><a href="{% url 'scm:purchaseorder_detail' item.po.pk %}" class="fw-600">{{ item.po.number }}</a></td>
+              <td>{{ item.po.vendor.name }}</td>
+              <td>{{ item.po.total }}</td>
+              <td>
+                {% if item.rule %}
+                  <a href="{% url 'inventory:approvalrule_detail' item.rule.pk %}">{{ item.rule.name }}</a>
+                {% else %}
+                  <span class="badge badge-slate">Default · {{ default_tiers }} tier{{ default_tiers|pluralize }}</span>
+                {% endif %}
+                {% if item.po.ship_to %}<div class="text-muted">{{ item.po.ship_to.name }}</div>{% endif %}
+              </td>
+              <td>{{ item.cleared }} of {{ item.required }}</td>
+              <td>
+                {% if is_admin and not item.done %}
+                  <form method="post" action="{% url 'inventory:approval_tier_approve' item.po.pk item.next_tier %}">
+                    {% csrf_token %}
+                    <input type="text" name="note" class="form-input" style="min-width:140px;" placeholder="Note (optional)" aria-label="Decision note">
+                    <div class="table-actions" style="margin-top:6px;">
+                      <button class="btn btn-sm btn-primary" type="submit" formaction="{% url 'inventory:approval_tier_approve' item.po.pk item.next_tier %}"><i data-lucide="check"></i> Approve tier {{ item.next_tier }}</button>
+                      <button class="btn btn-sm btn-danger" type="submit" formaction="{% url 'inventory:approval_tier_reject' item.po.pk item.next_tier %}" onclick="return confirm('Reject this order? It returns to draft for the buyer to amend.');"><i data-lucide="x"></i> Reject</button>
+                    </div>
+                  </form>
+                {% elif item.done %}
+                  <span class="text-muted">Fully cleared — finishing…</span>
+                {% else %}
+                  <span class="text-muted">Admin sign-off required</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.decisions %}
+                  {% for d in item.decisions %}
+                    <div><span class="badge {{ d.decision_css }}">T{{ d.tier }} {{ d.get_decision_display }}</span>
+                      <span class="text-muted">{{ d.decided_by.username|default:"—" }}</span></div>
+                  {% endfor %}
+                {% else %}<span class="text-muted">None yet</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="git-branch"></i><h3>Nothing awaiting approval</h3><p>Submit a draft purchase order on the SCM procurement pages and it will appear here for routing.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent Decisions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Decision</th><th>Purchase order</th><th>Vendor</th><th>Tier</th><th>Rule</th><th>Decided by</th><th>When</th></tr></thead>
+        <tbody>
+          {% for d in recent %}
+            <tr>
+              <td><span class="badge {{ d.decision_css }}">{{ d.get_decision_display }}</span></td>
+              <td><a href="{% url 'scm:purchaseorder_detail' d.purchase_order.pk %}" class="fw-600">{{ d.purchase_order.number }}</a></td>
+              <td>{{ d.purchase_order.vendor.name }}</td>
+              <td>{{ d.tier }}</td>
+              <td>{% if d.rule %}{{ d.rule.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ d.decided_by.username|default:"—" }}</td>
+              <td>{{ d.decided_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="stamp"></i><h3>No decisions recorded yet</h3><p>Approve or reject a pending order above to start the trail.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
