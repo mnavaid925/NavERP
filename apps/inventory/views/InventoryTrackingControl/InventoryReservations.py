@@ -10,6 +10,7 @@ Create is hand-rolled rather than ``crud_create`` for ONE reason: ``reserved_by`
 the acting user, which only the view knows.
 """
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q, Sum
 
 from apps.inventory.views._common import *  # noqa: F401,F403
@@ -102,15 +103,24 @@ def reservation_edit(request, pk):
 @require_POST
 def reservation_delete(request, pk):
     """Delete a reserved claim outright. Once consumed/cancelled the row is history and
-    its number may be referenced elsewhere — those go through cancel instead."""
-    obj = get_object_or_404(InventoryReservation, pk=pk, tenant=request.tenant)
-    if not obj.is_editable:
-        messages.error(
-            request,
-            f"{obj.number} is {obj.get_status_display().lower()} and cannot be deleted.")
-        return redirect("inventory:reservation_detail", pk=obj.pk)
-    return crud_delete(request, model=InventoryReservation, pk=pk,
-                       success_url="inventory:reservation_list")
+    its number may be referenced elsewhere — those go through cancel instead.
+
+    Guard and delete share ONE transaction with the row re-read FOR UPDATE: checked on
+    an unlocked read, a concurrent consume() could land in the gap before crud_delete's
+    own re-fetch and turn this POST into history erasure — the same lock discipline as
+    the model's verbs.
+    """
+    get_object_or_404(InventoryReservation, pk=pk, tenant=request.tenant)
+    with transaction.atomic():
+        obj = InventoryReservation.objects.select_for_update().get(
+            pk=pk, tenant_id=request.tenant_id)
+        if not obj.is_editable:
+            messages.error(
+                request,
+                f"{obj.number} is {obj.get_status_display().lower()} and cannot be deleted.")
+            return redirect("inventory:reservation_detail", pk=obj.pk)
+        return crud_delete(request, model=InventoryReservation, pk=pk,
+                           success_url="inventory:reservation_list")
 
 
 @login_required
