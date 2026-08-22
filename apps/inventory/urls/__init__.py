@@ -7,6 +7,7 @@ Django is first-match-wins: within each module the literal routes (`add/`) prece
 ``<int:pk>`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
 shadowing surface to reason about; the first segments (````, `attributes/`, `prices/`,
 `files/`, `vendor-communications/`, `bin-capacity/`, `cross-dock/`, `warehouse-map/`,
+`putaway-rules/`, `putaway-suggestions/`,
 `tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
 distinct whole components and none can swallow another.
 """
@@ -21,6 +22,7 @@ from .PurchaseOrderManagement.ApprovalRules import urlpatterns as _po_approvalru
 from .PurchaseOrderManagement.Approvals import urlpatterns as _po_approvals
 from .PurchaseOrderManagement.Dispatches import urlpatterns as _po_dispatches
 from .PurchaseOrderManagement.ReorderDrafts import urlpatterns as _po_reorderdrafts
+from .ReceivingPutaway.PutawayRules import urlpatterns as _rp_putawayrules
 from .VendorSupplierManagement.VendorCommunications import urlpatterns as _vsm_vendorcommunications
 from .WarehousingBinManagement.BinCapacities import urlpatterns as _wh_bincapacities
 from .WarehousingBinManagement.CrossDockOrders import urlpatterns as _wh_crossdockorders
@@ -38,6 +40,7 @@ urlpatterns = [
     *_po_approvals,        # PurchaseOrderManagement/Approvals (queue + tier verbs)
     *_po_dispatches,       # PurchaseOrderManagement/Dispatches
     *_po_reorderdrafts,    # PurchaseOrderManagement/ReorderDrafts
+    *_rp_putawayrules,     # ReceivingPutaway/PutawayRules (+ computed suggestions page)
     *_vsm_vendorcommunications,  # VendorSupplierManagement/VendorCommunications
     *_wh_bincapacities,    # WarehousingBinManagement/BinCapacities
     *_wh_crossdockorders,  # WarehousingBinManagement/CrossDockOrders (CRUD + lifecycle verbs)
