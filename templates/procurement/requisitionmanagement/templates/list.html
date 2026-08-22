@@ -40,8 +40,8 @@
               <td>{{ obj.name }}</td>
               <td>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}—{% endif %}</td>
               <td>{% if obj.default_lead_days %}+{{ obj.default_lead_days }} days{% else %}—{% endif %}</td>
-              <td>{{ obj.lines.count }}</td>
-              <td>{{ obj.estimated_total|floatformat:2 }}</td>
+              <td>{{ obj.n_lines|default:0 }}</td>
+              <td>{{ obj.est_total|default:0|floatformat:2 }}</td>
               <td><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span></td>
               <td>
                 <div class="table-actions">
