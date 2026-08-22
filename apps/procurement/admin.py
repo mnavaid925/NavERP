@@ -22,6 +22,7 @@ class RequisitionTemplateAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "is_active")
     search_fields = ("number", "name", "description")
     raw_id_fields = ("org_unit", "currency", "created_by")
+    readonly_fields = ("number", "created_by", "created_at", "updated_at")
     inlines = [RequisitionTemplateLineInline]
 
 
@@ -37,7 +38,10 @@ class RequisitionAmendmentAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status", "amendment_type")
     search_fields = ("number", "reason", "decision_note")
     raw_id_fields = ("requisition", "requested_by", "decided_by")
-    readonly_fields = ("requested_by", "decided_by", "decided_at", "applied_at",
+    # status/amendment_type are read-only here ON PURPOSE: the admin must not be able to flip a
+    # pending amendment to approved without apply() running — decisions go through the view.
+    readonly_fields = ("number", "amendment_type", "status", "applied_at",
+                       "requested_by", "decided_by", "decided_at",
                        "created_at", "updated_at")
     inlines = [RequisitionAmendmentLineInline]
 
