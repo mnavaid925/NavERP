@@ -98,9 +98,12 @@ def putawayrule_delete(request, pk):
 
 
 def _ancestry_contains(parent_map, start_pk, ancestor_pk):
-    """True when ``ancestor_pk`` sits anywhere on ``start_pk``'s parent chain. Walks a
-    preloaded {pk: parent_pk} map — dict hops, zero queries — cycle-guarded exactly like
-    ``Location.path()`` so a malformed self-parent row costs a few hops, not a hung page."""
+    """True when ``ancestor_pk`` IS ``start_pk`` or sits anywhere on its parent chain —
+    a task staged AT the warehouse row itself belongs to that warehouse's filter too.
+    Walks a preloaded {pk: parent_pk} map — dict hops, zero queries — cycle-guarded exactly
+    like ``Location.path()`` so a malformed self-parent row costs a few hops, not a hung page."""
+    if start_pk == ancestor_pk:
+        return True
     node, seen, hops = parent_map.get(start_pk), {start_pk}, 0
     while node is not None and node not in seen and hops <= _MAX_ANCESTRY_HOPS:
         if node == ancestor_pk:
