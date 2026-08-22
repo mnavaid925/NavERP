@@ -26187,3 +26187,55 @@ navigation.py) are integrate-phase-only; build agents never touch them.
 - [ ] code-fixer burn-down: no finding left open, manage.py check clean
 - [ ] test-wave files `test_receiving_{models,forms,views,security}.py`, every test named `test_receiving_*`
 - [ ] full unfiltered suite green
+
+---
+
+## 5.5 Warehousing & Bin Management (inventory) - built 2026-08-22
+
+**Scope ruling - the structure is the SCM spine; two new tables + one computed page.** The
+warehouse/zone/aisle/rack/bin tree is 4.3's self-referential ``scm.Location`` (L36), so the
+"Warehouse Structure" bullet points at ``scm:location_list`` (the 5.1 SKU-Management precedent).
+What nothing else records: **``inventory.BinCapacity``** - ONE envelope per location
+(``unique_together tenant+location``, PROTECT FK): max_weight_kg / max_volume_m3 / max_quantity
+(all nullable, >=0), notes. Quantity utilisation is DERIVED from the StockMove aggregate and
+answers ``None`` when no limit was declared rather than a flattering 0% (the 4.15 honesty rule);
+weight/volume limits are stored but NOT converted to percentages because ``scm.Item`` carries no
+structured unit-weight - the page says so instead of inventing figures. And
+**``inventory.CrossDockOrder``** [XD-#####] - item/lot_serial/dock_location/quantity/unit_cost/
+scheduled_date/inbound_reference/outbound_reference/status(draft→received→shipped|cancelled);
+receive() posts a REAL receipt leg into scm.StockMove (rolling Item.average_cost exactly like
+scm's posting service), ship() posts a guarded issue leg at average cost, cancel-from-received
+posts a GUARDED compensating −receipt (JournalEntry-reversal pattern - the ledger is never
+deleted). Every action re-reads its row FOR UPDATE inside atomic and writes its audit row inside
+the transaction (the _status_transition guarantee); received/shipped documents refuse deletion.
+The **Warehouse Mapping** bullet ships as a COMPUTED page (4.15 precedent) over the location
+tree: all locations in one fetch + ONE group-by for per-bin on-hand AND value, cycle-guarded
+Python walk (_MAX_DEPTH 8), orphan roots surfaced not hidden, over-capacity count from data
+already in hand.
+
+**What shipped:** 2 models x 4 layers under ``WarehousingBinManagement/``, 14 routes
+(``bin-capacity/`` quintet, ``cross-dock/`` CRUD + receive/ship/cancel verbs BEFORE the pk
+routes, ``warehouse-map/``), 7 templates (two entity triples + map.html), admin rows, migration
+0006, idempotent seeder block (extends seed_scm's WH-MAIN tree with a zone/two bins/second dock,
+four capacity profiles - one deliberately driven over-limit by the real flow - and four cross-dock
+orders walked through the REAL receive/ship/cancel actions so every stage has genuine ledger
+legs), LIVE_LINKS["5.5"], overview card.
+
+**Smoke:** 36/36 checks - all pages 200 for both tenants incl. the utilisation=over subquery
+filter and junk GET params; receive/ship walked over HTTP posts two balanced legs (+q then -q,
+dock nets zero); shipped refuses cancel AND delete; cancel-from-received posts the compensating
+leg (net zero); IDOR on both entities -> 404; superuser sees no data; no leak markers. Found+fixed
+during build: missing write_audit_log import (NameError on first seed), widthratio executed before
+its None-guard in the list template, dead elif branch on the detail actions, _walk(None) would
+have re-walked parentless warehouses as orphans.
+
+**Concurrency note (L43/L45):** inventory 5.3 built in parallel in this same checkout. The
+shared __init__/admin/navigation/seeder files were clobbered repeatedly by that session's stale
+whole-file writes; each time re-applied surgically and re-committed (fix commits in log). Final
+state verified green AFTER the last clobber. Migration numbering: their 5.3 took 0005, mine took
+0006 - the next free number is **0007** (the 5.4 plan above still says 0005).
+
+**Deliberately not built:** no second location/zone/bin master (4.3 owns them); no aisle/rack
+TYPE vocabulary on Location (the self-FK covers arbitrary depth; type churn is scm's call); no
+weight/volume utilisation percentages (no item unit-weight master); no pick/putaway logic (4.4
+owns it); cross-dock ships only what one order holds - partial quantities are a future split.
