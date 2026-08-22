@@ -99,7 +99,10 @@ class CrossDockOrder(TenantNumbered):
     class Meta:
         ordering = ["-scheduled_date", "-id"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="inv_xd_tnt_status_idx")]
+        indexes = [models.Index(fields=["tenant", "status"], name="inv_xd_tnt_status_idx"),
+                   # Supports the default list ORDER BY (-scheduled_date, -id) without a filesort.
+                   models.Index(fields=["tenant", "scheduled_date", "id"],
+                                name="inv_xd_tnt_sched_idx")]
 
     # -- state ---------------------------------------------------------------------------------
 
@@ -120,6 +123,8 @@ class CrossDockOrder(TenantNumbered):
 
     def clean(self):
         super().clean()
+        if self.item_id and self.item.tenant_id != self.tenant_id:
+            raise ValidationError({"item": "That item belongs to another workspace."})
         if self.dock_location_id and self.dock_location.tenant_id != self.tenant_id:
             raise ValidationError({"dock_location": "That location belongs to another workspace."})
         if self.lot_serial_id:
@@ -161,10 +166,21 @@ class CrossDockOrder(TenantNumbered):
 
     # -- actions (called by the views, which flash + audit around them) ------------------------
 
+    def _stock_lock(self):
+        """Lock the Item row FOR UPDATE inside the caller's atomic block.
+
+        Serializes balance-checked postings that share one stock pool (two docks moving
+        the same product) so racing POSTs cannot both pass the shortfall read and drive
+        a location negative, and keeps the weighted-average-cost roll single-writer.
+        """
+        from apps.scm.models import Item
+        return Item.objects.select_for_update().get(pk=self.item_id)
+
     def receive(self, user):
         """Post the inbound leg: the trailer is unloaded onto the dock."""
         with transaction.atomic():
             obj = self._locked()
+            _item_lock = obj._stock_lock()
             if obj.status != "draft":
                 raise ValidationError(
                     f"{obj.number} cannot be received — it is {obj.get_status_display().lower()}.")
@@ -180,6 +196,7 @@ class CrossDockOrder(TenantNumbered):
         """Post the outbound leg: the goods leave the dock for their outbound reference."""
         with transaction.atomic():
             obj = self._locked()
+            _item_lock = obj._stock_lock()
             if obj.status != "received":
                 raise ValidationError(
                     f"{obj.number} cannot be shipped — it is {obj.get_status_display().lower()}; "
@@ -202,6 +219,7 @@ class CrossDockOrder(TenantNumbered):
         so nothing is ever deleted."""
         with transaction.atomic():
             obj = self._locked()
+            _item_lock = obj._stock_lock()
             if obj.status not in obj.CANCELLABLE_STATUSES:
                 raise ValidationError(
                     f"{obj.number} cannot be cancelled — it is {obj.get_status_display().lower()}.")
