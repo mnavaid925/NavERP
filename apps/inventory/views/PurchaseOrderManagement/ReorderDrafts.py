@@ -76,28 +76,33 @@ def reorderdraft(request):
 
 
 def _draft_orders(request, vendor_map, today):
-    """Group the ticked rows by their chosen vendor into DRAFT spine orders."""
-    wanted = set(request.POST.getlist("select"))
+    """Group the ticked rows by their chosen vendor into DRAFT spine orders.
+
+    Quantities are recomputed at POST time from a fresh on-hand map (never trusted from the
+    rendered page): stock may have moved — or a crafted POST may claim otherwise — since
+    the suggestions were drawn.
+    """
+    wanted = {v for v in request.POST.getlist("select") if v.isdecimal()}
     if not wanted:
         messages.error(request, "Tick at least one suggestion to draft.")
         return redirect("inventory:reorderdraft")
 
+    # TWO queries for any number of ticked rows: the rules batch + one on-hand map over the
+    # ledger (the same shape the GET path uses).
+    rules = list(
+        ReorderRule.objects.filter(tenant=request.tenant, is_active=True,
+                                   pk__in={int(v) for v in wanted})
+        .select_related("item", "item__uom"))
+    on_hand_map = ReorderRule.on_hand_map(request.tenant, rules)
+
     rows = []
-    for raw in sorted(wanted, key=lambda v: (not v.isdecimal(), int(v) if v.isdecimal() else 0)):
-        if not raw.isdecimal():
-            continue  # a hand-edited non-pk value is a skipped row, never a 500 (L11)
-        rule = ReorderRule.objects.filter(
-            tenant=request.tenant, pk=int(raw), is_active=True).select_related(
-            "item", "item__uom").first()
-        if rule is None:
-            continue
+    for rule in sorted(rules, key=lambda r: r.pk):
         vendor = vendor_map.get(request.POST.get(f"vendor_{rule.pk}", ""))
         if vendor is None:
             continue  # unrouted line: the buyer simply didn't pick a vendor yet
-        on_hand = rule.current_on_hand()
-        qty = rule.suggested_quantity(on_hand)
+        qty = rule.suggested_quantity(on_hand_map.get((rule.item_id, rule.location_id), ZERO))
         if qty <= ZERO:
-            continue
+            continue  # restocked between render and submit — nothing to buy anymore
         rows.append((rule, vendor, qty))
     if not rows:
         messages.warning(request, "Nothing drafted — pick a vendor for each ticked line.")
