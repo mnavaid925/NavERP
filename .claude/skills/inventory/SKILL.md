@@ -74,12 +74,45 @@ follow-up dates derive from `timezone.localdate()`.
 Tests: `test_vendor_{models,forms,views,security}.py` (39 tests) + conftest fixtures
 `vendor_party_a/b`, `communication_a/b`. Full inventory suite green (104 as of 5.2).
 
-### Not built yet (NavERP.md order): 5.3–5.20
-PO management (5.3 → scm owns), receiving/putaway (5.4 → 4.1 GRN + 4.4 WMS),
-warehousing/bins (5.5 → 4.3/4.4), tracking & control (5.6), movements/transfers (5.7 → 4.3),
-lot/serial (5.8 → 4.3), order mgmt (5.9 → 4.5), returns (5.10 → 4.10), stocktaking (5.11 → 4.4
-cycle counts), multi-location (5.12), forecasting (5.13 → 4.7), barcode/RFID (5.14 — identifiers
-belong beside the spine columns, not in a parallel master), QC/inspection (5.15 → 4.9), alerts
+### 5.5 Warehousing & Bin Management (COMPLETE)
+The location spine is SCM's (L36): "Warehouse Structure" points at `scm:location_list` — the
+tree already nests warehouse → zone → aisle → rack → bin through its self-FK, so no second
+location master exists here. What nothing else records (`apps/inventory/models/WarehousingBinManagement/`):
+- **`BinCapacity`** — ONE capacity envelope per location (`unique_together tenant+location`,
+  PROTECT FK `scm.Location`, rn `bin_capacity`): `max_weight_kg` / `max_volume_m3` /
+  `max_quantity` (each nullable, ≥0; a form-level rule demands AT LEAST ONE limit), notes.
+  Quantity utilisation is DERIVED from the StockMove aggregate (`on_hand`,
+  `quantity_utilisation` → None when no limit declared — never a flattering 0%, the 4.15
+  honesty rule); weight/volume limits are stored but NOT turned into percentages because
+  `scm.Item` has no structured unit-weight — pages say so instead of inventing figures.
+- **`CrossDockOrder`** [XD-#####] — dock-to-dock bypass: `item`(PROTECT)/`lot_serial`(SET_NULL,
+  must belong to the item)/`dock_location`(PROTECT)/`quantity`(>0)/`unit_cost`(inbound layer)/
+  `scheduled_date`/`inbound_reference`/`outbound_reference`/`status`
+  draft→received→shipped|cancelled. `receive()` posts a REAL receipt leg into scm.StockMove
+  (rolling `Item.average_cost` exactly like scm's posting service), `ship()` posts a guarded
+  issue leg at average cost, cancel-from-received posts a GUARDED compensating −receipt —
+  the ledger is never deleted. Every action re-reads its row FOR UPDATE inside atomic and
+  writes its audit row INSIDE the transaction; received/shipped documents refuse deletion.
+- **Warehouse Mapping** is a COMPUTED page (no table): all locations in one fetch + ONE
+  group-by for per-bin on-hand AND value, cycle-guarded Python walk (_MAX_DEPTH 8), orphan
+  roots surfaced not hidden, over-capacity count from data already in hand.
+
+Routes (+14): `bin-capacity/` quintet; `cross-dock/` CRUD with the receive/ship/cancel verbs as
+literal segments BEFORE `<int:pk>`; `warehouse-map/`. Templates:
+`templates/inventory/warehouse/{bincapacity,crossdockorder}/{list,detail,form}.html` +
+`warehouse/map.html`. Seeder: `_seed_warehousing` in `seed_inventory` — extends seed_scm's
+WH-MAIN tree (zone WH-MAIN-ZA, bins A2/B1, dock DOCK-2 via get_or_create), four capacity
+profiles (DOCK-1 capped at 8 so the received cross-dock of 10 shows genuinely over-limit), and
+four XD orders walked through the REAL actions (draft/received/shipped/cancelled-with-reversal).
+Sidebar: `LIVE_LINKS["5.5"]` — Warehouse Structure → `scm:location_list`; Bin Capacity →
+`inventory:bincapacity_list`; Warehouse Mapping → `inventory:warehousemap`; Cross-Docking →
+`inventory:crossdockorder_list`.
+
+### Not built yet (NavERP.md order): 5.4, 5.6–5.20
+receiving/putaway (5.4 → 4.1 GRN + 4.4 WMS), tracking & control (5.6), movements/transfers
+(5.7 → 4.3), lot/serial (5.8 → 4.3), order mgmt (5.9 → 4.5), returns (5.10 → 4.10), stocktaking
+(5.11 → 4.4 cycle counts), multi-location (5.12), forecasting (5.13 → 4.7), barcode/RFID (5.14 —
+identifiers belong beside the spine columns, not in a parallel master), QC/inspection (5.15 → 4.9), alerts
 (5.16 → 4.11 pattern), reporting (5.17), accounting integration (5.18 → accounting owns the
 ledger), third-party APIs (5.19 → 4.19 pattern), UOM (5.20 → scm.UOM exists; conversions beyond
 its factor column are what's actually missing).
