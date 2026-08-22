@@ -1198,6 +1198,18 @@ LIVE_LINKS = {
         "Warehouse Mapping":        "inventory:warehousemap",      # bullet (computed layout page - declares no table)
         "Cross-Docking":            "inventory:crossdockorder_list",  # bullet (dock-to-dock flow posting StockMoves)
     },
+    # 5.6 Inventory Tracking & Control. The QUANTITY spine is 4.3's append-only StockMove
+    # ledger and its FIFO/LIFO/WAC cost-layer walk already lives on scm's valuation report
+    # (L36 - point at it, never re-declare it). What this sub-module adds is the CONTROL
+    # layer around that ledger: real-time availability derived from every claim on stock
+    # (4.5 allocations + reservations), a status classification for damaged/expired/held
+    # units, and general-purpose soft locks against any reference.
+    "5.6": {
+        "Real-Time Stock Levels":   "inventory:stocklevels",       # bullet (computed page - on-hand/allocated/available/on-order)
+        "Stock Status Management":  "inventory:stockstatus_list",  # bullet (active/damaged/expired/on-hold classifications)
+        "Inventory Valuation":      "scm:valuation_report",        # bullet (4.3's FIFO/LIFO/WAC cost-layer walk owns this)
+        "Inventory Reservations":   "inventory:reservation_list",  # bullet (RSV- soft claims vs SO/job/project)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
     # 4.1's `scm.PurchaseRequisition` / `scm.PurchaseOrder` (L36: extend the spine, never
