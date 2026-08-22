@@ -27,6 +27,7 @@ is a no-op without ``--flush``.
 from decimal import Decimal
 
 import datetime
+import re
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -133,6 +134,8 @@ class Command(BaseCommand):
                         + PurchaseOrderApproval.objects.all().count()
                         + PurchaseOrderApprovalRule.objects.all().count()
                        + PutawayRule.objects.all().count()
+                       + BinCapacity.objects.all().count()
+                       + CrossDockOrder.objects.all().count()
                        + StockStatus.objects.all().count()
                        + InventoryReservation.objects.all().count())
             ItemAttribute.objects.all().delete()
@@ -425,13 +428,16 @@ class Command(BaseCommand):
                 "the warehousing seed.")
             return
 
-        # --- structure: a zone, two bins and a second dock under the seeded warehouse ------
+        # --- structure: a zone and two more bins under the seeded warehouse -----------------
+        # WH-MAIN-A1 is NOT created here under the zone on purpose: seed_scm already owns
+        # that code as a bin directly under WH-MAIN, so this module only adds Zone A (which
+        # holds A2) and B1 — get_or_create defaults never re-parent an existing row.
         zone, _ = Location.objects.get_or_create(
             tenant=tenant, code="WH-MAIN-ZA",
             defaults={"name": "Zone A", "location_type": "zone", "parent": main})
         bin_a1, _ = Location.objects.get_or_create(
             tenant=tenant, code="WH-MAIN-A1",
-            defaults={"name": "Aisle A Bin 1", "location_type": "bin", "parent": zone,
+            defaults={"name": "Aisle A Bin 1", "location_type": "bin", "parent": main,
                       "pick_sequence": 10, "abc_class": "a", "capacity": Decimal("500")})
         bin_a2, _ = Location.objects.get_or_create(
             tenant=tenant, code="WH-MAIN-A2",
@@ -484,20 +490,40 @@ class Command(BaseCommand):
             return
         today = timezone.localdate()
 
-        def _order(item, qty, day_offset, inbound, outbound):
+        # Next SAFE sequence across BOTH tables that carry an XD- number: orders live in
+        # CrossDockOrder.number while their posted legs persist as StockMove.reference —
+        # and --flush deletes only the former (the ledger is append-only). Restarting at
+        # XD-00001 would make reseeded orders adopt the PREVIOUS generation's legs via
+        # the reference match, so the base is the highest number either table holds.
+        seqs = []
+        for value in (list(CrossDockOrder.objects.filter(tenant=tenant)
+                           .values_list("number", flat=True))
+                      + list(StockMove.objects.filter(tenant=tenant,
+                                                      reference__startswith="XD-")
+                             .values_list("reference", flat=True))):
+            digits = re.search(r"(\d+)$", value or "")
+            if digits:
+                seqs.append(int(digits.group(1)))
+        base = max(seqs, default=0)
+
+        def _order(item, qty, day_offset, inbound, outbound, number):
+            # Explicit numbers: TenantNumbered.save() only auto-numbers an empty number,
+            # so the sequence chosen above is honoured as-is.
             return CrossDockOrder(
-                tenant=tenant, item=item, dock_location=dock1,
+                tenant=tenant, number=f"XD-{number:05d}", item=item, dock_location=dock1,
                 quantity=Decimal(qty), unit_cost=item.standard_cost or Decimal("0"),
                 scheduled_date=today + datetime.timedelta(days=day_offset),
                 inbound_reference=inbound, outbound_reference=outbound)
 
         orders = [
-            (_order(items[0], "25", 5, "PO-SEED-101", "SO-SEED-201"), None),
+            (_order(items[0], "25", 5, "PO-SEED-101", "SO-SEED-201", base + 1), None),
             # Lands 10 units on DOCK-1 whose cap is 8 -> the honest over-limit demo.
-            (_order(items[1 % len(items)], "10", 0, "PO-SEED-102", "SO-SEED-202"), "received"),
-            (_order(items[2 % len(items)], "12", -1, "PO-SEED-103", "SO-SEED-203"), "shipped"),
-            (_order(items[3 % len(items)], "6", -2, "PO-SEED-104", "SO-SEED-204"),
-             "cancelled"),
+            (_order(items[1 % len(items)], "10", 0, "PO-SEED-102", "SO-SEED-202",
+                    base + 2), "received"),
+            (_order(items[2 % len(items)], "12", -1, "PO-SEED-103", "SO-SEED-203",
+                    base + 3), "shipped"),
+            (_order(items[3 % len(items)], "6", -2, "PO-SEED-104", "SO-SEED-204",
+                    base + 4), "cancelled"),
         ]
         for order, target in orders:
             order.save()
@@ -533,9 +559,11 @@ class Command(BaseCommand):
         ``_stocked_spots``), each for a SMALL slice of that spot so a visible remainder
         stays unclassified and availability never reads as fabricated. Reservations are
         walked through the REAL release/cancel actions like 5.5's cross-docks, so their
-        statuses carry genuine audit rows. Quantities are kept modest against typical
-        seeded receipts; direct model creation deliberately bypasses the form's ATP check
-        (that guard is for user input), so the numbers stay small to keep the demo true.
+        statuses carry genuine audit rows, and the ACTIVE ones are capped at the anchor
+        spot's ledger balance minus existing classifications (the page's own available
+        figure) so a modest spot is never seeded into permanent negative availability;
+        direct model creation deliberately bypasses the form's ATP check (that guard is
+        for user input).
         """
         spots = self._stocked_spots(tenant)
         items_by_pk = {i.pk: i for i in items}
@@ -591,25 +619,49 @@ class Command(BaseCommand):
                 f"  {tenant.name}: no locations — run `seed_scm` first, skipping reservations.")
             return
 
-        reserved = InventoryReservation.objects.create(
-            tenant=tenant, item=demo_item, location=demo_location,
-            purpose="sales_order", reference="SO-SEED-301", quantity=Decimal("4"),
-            reserved_by=user, notes="Seeded hold for an open customer order.")
+        # Demo claims are capped at the anchor spot's REAL headroom: ledger balance minus
+        # what classifications already hold back — the same available figure the Real-Time
+        # Stock Levels page derives. Direct model creation bypasses the form's ATP check
+        # (that guard is for user input), so the cap here is what keeps a modest spot from
+        # being seeded into permanently negative availability; a claim with no room left
+        # is skipped rather than squeezed to an arbitrary fraction.
+        on_hand = (StockMove.objects.filter(tenant=tenant, item=demo_item,
+                                            location=demo_location)
+                   .aggregate(q=Sum("quantity"))["q"] or Decimal("0"))
+        classified = (StockStatus.objects.filter(tenant=tenant, item=demo_item,
+                                                 location=demo_location)
+                      .exclude(status="active")
+                      .aggregate(s=Sum("quantity"))["s"] or Decimal("0"))
+        room = max(on_hand - classified, Decimal("0"))
 
-        released = InventoryReservation(
-            tenant=tenant, item=demo_item, location=demo_location,
-            purpose="job", reference="JOB-0042", quantity=Decimal("3"),
-            reserved_by=user, notes="Seeded lock handed to the floor.")
-        released.save()
-        released.release(user)
+        summary = []
+        reserved_qty = min(Decimal("4"), room)
+        released_qty = min(Decimal("3"), room - reserved_qty)
 
+        if reserved_qty > Decimal("0"):
+            reserved = InventoryReservation.objects.create(
+                tenant=tenant, item=demo_item, location=demo_location,
+                purpose="sales_order", reference="SO-SEED-301", quantity=reserved_qty,
+                reserved_by=user, notes="Seeded hold for an open customer order.")
+            summary.append(f"{reserved.number} reserved")
+
+        if released_qty > Decimal("0"):
+            released = InventoryReservation(
+                tenant=tenant, item=demo_item, location=demo_location,
+                purpose="job", reference="JOB-0042", quantity=released_qty,
+                reserved_by=user, notes="Seeded lock handed to the floor.")
+            released.save()
+            released.release(user)
+            summary.append(f"{released.number} released")
+
+        # Cancelled holds nothing back — it seeds unconditionally as the lifecycle demo.
         cancelled = InventoryReservation(
             tenant=tenant, item=demo_item, location=demo_location,
             purpose="project", reference="PRJ-2026-Q3", quantity=Decimal("2"),
             reserved_by=user, notes="Seeded claim dropped when the project paused.")
         cancelled.save()
         cancelled.cancel(user)
+        summary.append(f"{cancelled.number} cancelled")
 
         self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: 3 reservations ({reserved.number} reserved / "
-            f"{released.number} released / {cancelled.number} cancelled)."))
+            f"  {tenant.name}: {len(summary)} reservations ({' / '.join(summary)})."))
