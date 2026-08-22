@@ -11,7 +11,9 @@ stay 4.3's; only the limits live here.
 ``StockMove`` ledger every other figure reads — one aggregate over the reverse of the
 FK, so nothing here can drift from the ledger. Utilisation answers ``None`` when no
 limit was set rather than a flattering 0% (the 4.15 honesty rule), because "no limit
-declared" and "0% used" are different facts.
+declared" and "0% used" are different facts. When a value DOES exceed its limit the
+pages say so plainly: the bar clamps at 100% wide but the badge keeps the true figure
+and turns red — an honest over-limit signal, not a hidden one.
 
 Weight/volume limits are stored but NOT converted into percentages: ``scm.Item``
 carries no structured unit-weight/volume columns (its attributes are free-form
@@ -56,7 +58,8 @@ class BinCapacity(TenantOwned):
     @property
     def on_hand(self):
         """Units currently at this location — the live StockMove aggregate, never stored."""
-        total = self.location.stock_moves.aggregate(q=Sum("quantity"))["q"]
+        total = self.location.stock_moves.filter(tenant_id=self.tenant_id).aggregate(
+            q=Sum("quantity"))["q"]
         return total or ZERO
 
     @property
@@ -64,13 +67,31 @@ class BinCapacity(TenantOwned):
         """On-hand as a percentage of ``max_quantity``, or ``None`` when no limit applies.
 
         Deliberately un-clamped: a value over 100 is the interesting case — the bin is
-        over its declared limit — and the template turns it red rather than hiding it.
+        over its declared limit — and the templates turn it red rather than hiding it.
         ``None`` means "no quantity limit declared", which must stay visually distinct
-        from 0%.
+        from 0%. The raw, unquantized comparison behind the over-capacity chip is
+        applied in SQL (see the views), so this display figure can never contradict it.
         """
         if not self.max_quantity:
             return None
         return ((self.on_hand / self.max_quantity) * Decimal("100")).quantize(Decimal("0.1"))
+
+    @property
+    def utilisation_pct(self):
+        """The template-facing utilisation: same contract as :meth:`quantity_utilisation`.
+
+        Prefers an annotated ``on_hand_qty`` (the list view's Subquery) when present so a
+        rendered page costs no extra query per row, falling back to the live ``on_hand``
+        aggregate everywhere else. Quantized to one decimal for display; over-limit rows
+        keep their true >100 figure — the badge colours it red while the bar clamps at
+        full width.
+        """
+        if not self.max_quantity:
+            return None
+        on_hand = getattr(self, "on_hand_qty", None)
+        if on_hand is None:
+            on_hand = self.on_hand
+        return ((on_hand / self.max_quantity) * Decimal("100")).quantize(Decimal("0.1"))
 
     def __str__(self):
         code = self.location.code if self.location_id else "?"
