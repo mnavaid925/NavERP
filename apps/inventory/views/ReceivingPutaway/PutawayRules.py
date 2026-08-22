@@ -22,13 +22,8 @@ from django.db.models import Q, Sum
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.core.crud import as_db_int, paginate
-# Direct entity-module paths rather than the package roots: the package __init__ re-export
-# blocks are integrate-phase wiring; both spellings resolve to the same objects once landed.
-from apps.inventory.forms.ReceivingPutaway.PutawayRules import PutawayRuleForm
-from apps.inventory.models.ReceivingPutaway.PutawayRules import (
-    PutawayRule,
-    resolve_putaway_suggestion,
-)
+from apps.inventory.forms import PutawayRuleForm
+from apps.inventory.models import PutawayRule, resolve_putaway_suggestion
 from apps.scm.models import Location, PutawayTask, StockMove
 
 #: Ancestry-walk budget for the warehouse filter — same posture as the model's resolver.
