@@ -7,7 +7,10 @@ detail page that reads the immutable audit trail as the real-time timeline from 
 approval to PO conversion. Creation itself maps to scm's full form (the sidebar bullet links
 there); everything AFTER creation lives here.
 """
+from datetime import timedelta
+
 from django.contrib.contenttypes.models import ContentType
+from django.utils import timezone
 
 from apps.core.crud import apply_search, as_db_int, paginate
 from apps.core.models import AuditLog
@@ -49,14 +52,14 @@ def req_list(request):
     duplicate-flag badge computed for exactly the rows on THIS page (two queries total, not one
     per row). ``?dupes=1`` narrows to live requisitions inside the duplicate window — the
     sidebar's Duplicate Requisition Check entry deep-links to precisely that slice."""
+    if request.tenant is None:
+        # The superuser has no workspace by design; every register here is tenant-scoped.
+        messages.error(request, "Select a tenant workspace before tracking requisitions.")
+        return redirect("dashboard:home")
     qs = (PurchaseRequisition.objects.filter(tenant=request.tenant)
           .select_related("requester", "org_unit"))
     dupes_only = request.GET.get("dupes") == "1"
     if dupes_only:
-        from datetime import timedelta
-
-        from django.utils import timezone
-
         qs = qs.filter(status__in=DUPLICATE_ACTIVE_STATUSES,
                        created_at__gte=timezone.now() - timedelta(days=DUPLICATE_WINDOW_DAYS))
 
