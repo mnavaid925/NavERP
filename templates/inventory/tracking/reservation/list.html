@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Inventory Reservations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Inventory Reservations</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Tracking &amp; Control</span><span class="sep">›</span><span>Reservations</span></div>
+      <p class="text-muted">Lock quantities of stock for a sales order, job or project — soft claims that hold availability without touching the ledger.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:stocklevels' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Stock Levels</a>
+      <a href="{% url 'inventory:reservation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Reservation</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, reference, SKU…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:reservation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Item</th><th>Location</th><th>For</th><th>Qty</th><th>Status</th><th>Raised By</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:reservation_detail' obj.pk %}" class="fw-600">{{ obj.number }}</a></td>
+              <td>{{ obj.item.sku }} <span class="text-muted">{{ obj.item.name }}</span></td>
+              <td>{{ obj.location.code }}</td>
+              <td>{{ obj.get_purpose_display }}{% if obj.reference %}<span class="text-muted"> · {{ obj.reference }}</span>{% endif %}</td>
+              <td class="fw-600">{{ obj.quantity|floatformat:"-2" }}</td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>{% if obj.reserved_by %}{{ obj.reserved_by.get_username|default:obj.reserved_by.pk }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:reservation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}<a href="{% url 'inventory:reservation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  {% if obj.status == 'reserved' %}<form method="post" action="{% url 'inventory:reservation_cancel' obj.pk %}" onsubmit="return confirm('Cancel this reservation and free the stock?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Cancel"><i data-lucide="x-circle"></i></button>
+                  </form>{% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="lock"></i><h3>No reservations yet</h3><p>Raise a lock when units must be set aside for an order, job or project before any document exists to promise them.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ active_count }} active claim{{ active_count|pluralize }} currently holding stock back from availability. A reservation posts no ledger move — the outbound document that actually issues the goods does.</p>
+{% endblock %}
