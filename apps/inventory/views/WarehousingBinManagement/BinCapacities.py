@@ -2,9 +2,9 @@
 
 Thin CRUD over the shared helpers. The list's one non-declarative piece is the
 over-capacity filter: utilisation compares two COLUMNS (live ledger total vs declared
-limit), which ``crud_list``'s equality spec cannot express, so it is applied to the
-queryset before the helper runs — as a correlated-subquery annotation, not a Python
-walk, so pagination still happens in the database.
+limit), which ``crud_list``'s equality spec cannot express, so every row's on-hand is
+annotated once as a correlated subquery on the scoped queryset and the filter becomes
+a plain column-vs-column comparison — pagination still happens in the database.
 """
 from django.db.models import DecimalField, F, OuterRef, Subquery, Sum
 
@@ -13,9 +13,27 @@ from apps.inventory.forms import BinCapacityForm
 from apps.inventory.models import BinCapacity
 
 
+def _on_hand_subquery():
+    """Live on-hand per profiled location as ONE correlated subquery.
+
+    Matching on location_id alone is tenant-safe: location pks are globally unique and
+    the outer rows are already tenant-scoped.
+    """
+    from apps.scm.models import StockMove
+    return (StockMove.objects.filter(location_id=OuterRef("location_id"))
+            .values("location_id")
+            .annotate(q=Sum("quantity")).values("q"))
+
+
 def _scoped(tenant):
-    """Tenant-scoped BinCapacity queryset with its location joined."""
-    return BinCapacity.objects.filter(tenant=tenant).select_related("location")
+    """Tenant-scoped BinCapacity queryset with its location joined and each row's live
+    ledger on-hand carried as ``on_hand_qty`` — every rendered cell reads the annotation
+    instead of re-aggregating the bin's whole move history per row."""
+    return (BinCapacity.objects.filter(tenant=tenant)
+            .select_related("location")
+            .annotate(on_hand_qty=Subquery(
+                _on_hand_subquery(),
+                output_field=DecimalField(max_digits=16, decimal_places=4))))
 
 
 @login_required
@@ -23,18 +41,11 @@ def bincapacity_list(request):
     qs = _scoped(request.tenant)
     over = request.GET.get("utilisation", "").strip()
     if over == "over":
-        # Live on-hand per profiled location as ONE correlated subquery, then the
-        # column-vs-column comparison. Matching on location_id alone is tenant-safe:
-        # location pks are globally unique and the outer rows are already tenant-scoped.
-        from apps.scm.models import StockMove
-        on_hand = (StockMove.objects.filter(location_id=OuterRef("location_id"))
-                   .values("location_id")
-                   .annotate(q=Sum("quantity")).values("q"))
-        qs = (qs.filter(max_quantity__isnull=False)
-              .annotate(on_hand_qty=Subquery(on_hand,
-                                             output_field=DecimalField(max_digits=16,
-                                                                       decimal_places=4)))
-              .filter(on_hand_qty__gte=F("max_quantity")))
+        # Column-vs-column comparison over the annotation _scoped already carries.
+        # RAW on_hand_qty vs max_quantity — deliberately NOT the rounded display figure,
+        # so a 99.96%-full bin can never disagree between this filter, the map and the chip.
+        qs = qs.filter(max_quantity__isnull=False,
+                       on_hand_qty__gte=F("max_quantity"))
     return crud_list(
         request, qs, "inventory/warehouse/bincapacity/list.html",
         search_fields=["location__code", "location__name", "notes"],
@@ -52,9 +63,10 @@ def bincapacity_detail(request, pk):
     obj = get_object_or_404(_scoped(request.tenant), pk=pk)
     return render(request, "inventory/warehouse/bincapacity/detail.html", {
         "obj": obj,
-        # The same ledger aggregate the model property reads, but as ROWS for the
-        # recent-movements table — scoped to this bin and capped.
-        "recent_moves": obj.location.stock_moves.select_related("item")[:10],
+        # The same ledger rows the model property aggregates, but as ROWS for the
+        # recent-movements table — explicitly tenant-scoped like ledger_moves(), capped.
+        "recent_moves": obj.location.stock_moves.filter(
+            tenant=request.tenant).select_related("item")[:10],
     })
 
 
@@ -102,11 +114,12 @@ def _capacity_locations(tenant):
 def _over_capacity_count(tenant):
     """How many profiles are at or past their quantity limit — the list header chip.
 
-    One pass over a bounded table (a tenant has dozens of bins, not thousands); the
-    per-row aggregate is the ledger read, which is what actually grows.
+    ONE annotated COUNT: the same correlated-subquery on-hand the list rows carry,
+    compared RAW against ``max_quantity`` — the identical comparison the
+    ``?utilisation=over`` filter applies, so the chip and the filter can never
+    disagree on a boundary row (a 99.96%-full bin rounds to 100.0 for display but is
+    still counted, consistently, as under).
     """
-    return sum(
-        1 for profile in BinCapacity.objects.filter(
-            tenant=tenant, max_quantity__isnull=False).select_related("location")
-        if profile.quantity_utilisation is not None
-        and profile.quantity_utilisation >= 100)
+    return (_scoped(tenant)
+            .filter(max_quantity__isnull=False, on_hand_qty__gte=F("max_quantity"))
+            .count())
