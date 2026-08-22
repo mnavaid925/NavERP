@@ -75,8 +75,14 @@ class StockStatus(TenantOwned):
 
     def spot_moves(self):
         """The ledger queryset this claim draws from: the item's moves at its location,
-        narrowed to the named lot when there is one."""
-        qs = self.item.stock_moves.filter(location=self.location)
+        narrowed to the named lot when there is one.
+
+        The ``tenant`` predicate is not optional scoping — item and location are already
+        same-tenant by clean() — it is what lets MariaDB drive
+        ``scm_move_tnt_item_loc_idx`` from its (tenant, item, location) prefix instead of
+        scanning the item's whole move history across every location.
+        """
+        qs = self.item.stock_moves.filter(tenant=self.tenant_id, location=self.location)
         if self.lot_serial_id is not None:
             qs = qs.filter(lot_serial=self.lot_serial)
         return qs
