@@ -20,12 +20,15 @@ def _stock_locations(tenant):
 
 class InventoryReservationForm(TenantUniqueMixin, TenantModelForm):
     """One soft lock. ``number`` is auto-assigned in ``save()`` and ``status`` moves
-    only through the release/consume/cancel actions, so neither is a form field."""
+    only through the release/consume/cancel actions, so neither is a form field — and
+    ``reserved_by`` stays off it too: create stamps ``request.user`` in the view, edit
+    keeps whatever the instance already carries.
+    """
 
     class Meta:
         model = InventoryReservation
         fields = ["item", "location", "lot_serial", "purpose", "reference", "quantity",
-                  "reserved_by", "notes"]
+                  "notes"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
