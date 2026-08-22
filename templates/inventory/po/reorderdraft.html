@@ -51,8 +51,12 @@
       </div>
       {% if suggestions %}
         <div class="card-body">
-          <button class="btn btn-primary" type="submit"><i data-lucide="file-plus-2"></i> Draft orders from ticked lines</button>
-          <span class="text-muted" style="margin-left:8px;">Lines without a vendor are skipped.</span>
+          {% if vendors %}
+            <button class="btn btn-primary" type="submit"><i data-lucide="file-plus-2"></i> Draft orders from ticked lines</button>
+            <span class="text-muted" style="margin-left:8px;">Lines without a vendor are skipped.</span>
+          {% else %}
+            <span class="text-muted">No supplier/vendor-role parties exist yet — add vendors before drafting orders.</span>
+          {% endif %}
         </div>
       {% endif %}
     </div>
