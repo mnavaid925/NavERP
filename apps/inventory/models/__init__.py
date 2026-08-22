@@ -6,6 +6,8 @@ Re-exports every model so ``from apps.inventory.models import ItemPrice`` works 
 from .Catalog.ItemAttributes import ItemAttribute
 from .Catalog.ItemPrices import ItemPrice
 from .Catalog.ProductFiles import ProductFile
+from .InventoryTrackingControl.InventoryReservations import InventoryReservation
+from .InventoryTrackingControl.StockStatuses import StockStatus
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
 from .PurchaseOrderManagement.Approvals import PurchaseOrderApproval
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatch
@@ -15,4 +17,5 @@ from .WarehousingBinManagement.CrossDockOrders import CrossDockOrder
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "PurchaseOrderApprovalRule", "PurchaseOrderApproval", "PurchaseOrderDispatch",
-           "BinCapacity", "CrossDockOrder"]
+           "BinCapacity", "CrossDockOrder",
+           "StockStatus", "InventoryReservation"]
