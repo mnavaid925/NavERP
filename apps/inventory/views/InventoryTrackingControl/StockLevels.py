@@ -26,12 +26,12 @@ to surface.
 """
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import F, Q, Sum
+from django.db.models import F, Sum
 
 from apps.inventory.models import InventoryReservation, StockStatus
 from apps.inventory.views._common import *  # noqa: F401,F403
-from apps.scm.models import (Item, Location, PurchaseOrder, PurchaseOrderLine,
-                             SalesOrderAllocation, StockMove)
+from apps.scm.models import (GoodsReceiptLine, Item, Location, PurchaseOrder,
+                             PurchaseOrderLine, SalesOrderAllocation, StockMove)
 
 
 def _on_order_map(tenant):
@@ -42,17 +42,29 @@ def _on_order_map(tenant):
     case-insensitive guess would attach someone else's open order line to the wrong
     SKU. Outstanding = ordered − accepted receipts (cancelled GRNs excluded), floored
     at zero so an over-receipt cannot read as negative demand.
+
+    Ordered and received are TWO grouped queries merged in Python, deliberately not one:
+    annotating the line's ``quantity`` alongside child ``receipt_lines__quantity_received``
+    joins each receipt row onto its line, and that fan-out multiplies ``ordered`` by the
+    receipt count — an order of 10 received as 4+6 would report 10 outstanding instead of 0.
     """
-    rows = (PurchaseOrderLine.objects
-            .filter(purchase_order__tenant=tenant,
-                    purchase_order__status__in=PurchaseOrder.RECEIVABLE_STATUSES)
-            .exclude(sku_hint="")
-            .values("sku_hint")
-            .annotate(ordered=Sum("quantity"),
-                      received=Sum("receipt_lines__quantity_received",
-                                   filter=~Q(receipt_lines__goods_receipt__status="cancelled"))))
-    return {row["sku_hint"]: max((row["ordered"] or 0) - (row["received"] or 0), 0)
-            for row in rows}
+    ordered_rows = (PurchaseOrderLine.objects
+                    .filter(purchase_order__tenant=tenant,
+                            purchase_order__status__in=PurchaseOrder.RECEIVABLE_STATUSES)
+                    .exclude(sku_hint="")
+                    .values("sku_hint")
+                    .annotate(ordered=Sum("quantity")))
+    # Received is scoped to the SAME receivable POs so both halves of the subtraction
+    # cover exactly the same order population.
+    received_rows = (GoodsReceiptLine.objects
+                     .filter(po_line__purchase_order__tenant=tenant,
+                             po_line__purchase_order__status__in=PurchaseOrder.RECEIVABLE_STATUSES)
+                     .exclude(goods_receipt__status="cancelled")
+                     .values(sku=F("po_line__sku_hint"))
+                     .annotate(received=Sum("quantity_received")))
+    ordered = {row["sku_hint"]: row["ordered"] or 0 for row in ordered_rows}
+    received = {row["sku"]: row["received"] or 0 for row in received_rows}
+    return {sku: max(qty - received.get(sku, 0), 0) for sku, qty in ordered.items()}
 
 
 def _pair_map(queryset, item_key="item_id", location_key="location_id"):
