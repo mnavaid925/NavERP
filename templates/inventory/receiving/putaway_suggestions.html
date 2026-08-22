@@ -62,10 +62,11 @@
               <td>
                 {% if row.suggestion %}
                   <span class="mono fw-600">{{ row.suggestion.code }}</span>
-                  <div style="margin-top:.25rem;"><span class="badge badge-info">{{ row.suggestion_reason }}</span></div>
+                  <div class="text-muted" style="font-size:12px;">{{ row.suggestion_reason }}</div>
+                {% elif row.suggestion_reason %}
+                  <div class="text-muted" style="font-size:12px;">{{ row.suggestion_reason }}</div>
                 {% else %}
-                  <span class="text-muted">No Suggestion Found</span>
-                  {% if row.suggestion_reason %}<div class="text-muted" style="font-size:12px;">{{ row.suggestion_reason }}</div>{% endif %}
+                  <span class="text-muted">—</span>
                 {% endif %}
               </td>
               <td>{% if row.suggestion %}{{ row.candidates|length|add:"-1" }}{% else %}0{% endif %}</td>
