@@ -1,5 +1,5 @@
 """Inventory 5.6 Inventory Tracking & Control — InventoryReservation form."""
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from apps.inventory.forms._common import TenantUniqueMixin, TenantModelForm, _reject_foreign
 from apps.inventory.models import InventoryReservation
@@ -94,21 +94,34 @@ class InventoryReservationForm(TenantUniqueMixin, TenantModelForm):
 
 
 def _active_held(reservations, lot):
-    """Σ quantity over ``reservations``, narrowed to the lot when there is one."""
+    """Σ quantity over ``reservations``, narrowed to the lot when there is one.
+
+    The narrow is a CONSERVATIVE UNION when a lot is named: ``Q(lot_serial=lot) |
+    Q(lot_serial__isnull=True)`` keeps the unlotted whole-pool claims in scope. An
+    unlotted claim competes for every unit at the spot — its units can legally be
+    consumed by any lot — so dropping it would let a lot-named row pass ATP on units
+    that are already spoken for. Counting too much costs a false "no"; counting too
+    little over-promises, which is the worse error.
+    """
     qs = reservations
     if lot is not None:
-        qs = qs.filter(lot_serial=lot)
+        qs = qs.filter(Q(lot_serial=lot) | Q(lot_serial__isnull=True))
     return qs.aggregate(s=Sum("quantity"))["s"] or 0
 
 
 def _unsellable_classified(tenant, item, location, lot):
     """Σ non-sellable StockStatus classifications at this spot — damaged/expired/on-hold
-    stock must not promise itself to a reservation any more than to an order."""
+    stock must not promise itself to a reservation any more than to an order.
+
+    Same conservative union as :func:`_active_held`: when a lot is named, unlotted
+    classifications count against it too — a whole-pool "30 damaged" claim may be
+    eating exactly the units this lot's ATP would otherwise promise.
+    """
     from apps.inventory.models import StockStatus
     qs = StockStatus.objects.filter(tenant=tenant, item=item, location=location).exclude(
         status__in=StockStatus.SELLABLE_STATUSES)
     if lot is not None:
-        qs = qs.filter(lot_serial=lot)
+        qs = qs.filter(Q(lot_serial=lot) | Q(lot_serial__isnull=True))
     return qs.aggregate(s=Sum("quantity"))["s"] or 0
 
 
