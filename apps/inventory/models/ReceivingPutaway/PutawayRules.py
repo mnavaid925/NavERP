@@ -146,7 +146,7 @@ def _walk_key(location):
             location.code)
 
 
-def resolve_putaway_suggestion(task):
+def resolve_putaway_suggestion(task, *, rules=None, by_pk=None, on_hand=None):
     """Rank putaway destinations for one open ``PutawayTask``.
 
     Returns ``(suggestion_or_None, reason_str, candidates)`` where ``candidates`` is the
@@ -161,22 +161,29 @@ def resolve_putaway_suggestion(task):
     capacity reached — blank capacity is unlimited), a client-dedicated bin that belongs to
     someone else's goods, and the staging location itself.
 
-    Cost note: the resolver runs once per open task (~a 25-row page). Three bounded queries
-    per call — active rules, the item's per-location ledger aggregate, the tenant's
-    location map — is acceptable at this scale; a batch preloader would complicate the
-    signature for no visible win.
+    Cost modes: called bare (direct tests, single-task callers) the resolver self-loads
+    three bounded inputs — active rules, the item's per-location ledger aggregate, the
+    tenant's location map. Queue pages instead PRELOAD all three once per request and pass
+    them in (``rules=…``, ``by_pk=…``, ``on_hand={item_id: {location_id: qty}}``), which
+    skips those internal fetches entirely and keeps a whole-backlog render flat-cost;
+    keyword-only args, so positional callers are unaffected either way. The ancestry-chain
+    cache derives from whichever ``by_pk`` map is in scope — dict hops, zero queries.
     """
     item = task.item
 
-    # --- shared inputs -----------------------------------------------------------------
+    # --- shared inputs (each self-loaded only when the caller didn't preload it) ---------
     # On-hand per location for THIS item straight off the append-only ledger. One GROUP BY
     # feeds the consolidation tier AND every full-bin check below.
-    on_hand_at = dict(
-        StockMove.objects.filter(tenant=task.tenant_id, item_id=item.pk)
-        .values("location").annotate(held=Sum("quantity")).values_list("location", "held"))
+    if on_hand is None:
+        on_hand_at = dict(
+            StockMove.objects.filter(tenant=task.tenant_id, item_id=item.pk)
+            .values("location").annotate(held=Sum("quantity")).values_list("location", "held"))
+    else:
+        on_hand_at = on_hand.get(item.pk) or {}
     # Every location once, parents resolvable in memory: turns each ancestry walk into dict
     # lookups instead of a query-per-hop (the N+1 a naive .parent walk would do per task).
-    by_pk = {loc.pk: loc for loc in Location.objects.filter(tenant=task.tenant_id)}
+    if by_pk is None:
+        by_pk = {loc.pk: loc for loc in Location.objects.filter(tenant=task.tenant_id)}
     chains = {}
 
     def chain_of(loc):
@@ -207,8 +214,11 @@ def resolve_putaway_suggestion(task):
 
     # --- tier 1: matching active rules ---------------------------------------------------
     matched = []
-    for rule in (PutawayRule.objects.filter(tenant=task.tenant_id, is_active=True)
-                 .select_related("item", "category", "source_location", "destination")):
+    rule_stream = rules
+    if rule_stream is None:
+        rule_stream = (PutawayRule.objects.filter(tenant=task.tenant_id, is_active=True)
+                       .select_related("item", "category", "source_location", "destination"))
+    for rule in rule_stream:
         # A rule scoped to an arrival point fires only for goods actually sitting there.
         if rule.source_location_id is not None and rule.source_location_id != task.from_location_id:
             continue
