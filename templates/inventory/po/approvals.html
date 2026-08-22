@@ -34,17 +34,18 @@
               </td>
               <td>{{ item.cleared }} of {{ item.required }}</td>
               <td>
-                {% if is_admin and not item.done %}
+                {% if is_admin %}
+                  {# The form stays available even when every tier is cleared ("done"): that state is reachable mid-chain when a rule is edited or deactivated under a pending order — the honest exit is an explicit human confirm, not a silent auto-finish. #}
                   <form method="post" action="{% url 'inventory:approval_tier_approve' item.po.pk item.next_tier %}">
                     {% csrf_token %}
                     <input type="text" name="note" class="form-input" style="min-width:140px;" placeholder="Note (optional)" aria-label="Decision note">
                     <div class="table-actions" style="margin-top:6px;">
-                      <button class="btn btn-sm btn-primary" type="submit" formaction="{% url 'inventory:approval_tier_approve' item.po.pk item.next_tier %}"><i data-lucide="check"></i> Approve tier {{ item.next_tier }}</button>
+                      <button class="btn btn-sm btn-primary" type="submit" formaction="{% url 'inventory:approval_tier_approve' item.po.pk item.next_tier %}"><i data-lucide="check"></i> {% if item.done %}Confirm &amp; approve{% else %}Approve tier {{ item.next_tier }}{% endif %}</button>
                       <button class="btn btn-sm btn-danger" type="submit" formaction="{% url 'inventory:approval_tier_reject' item.po.pk item.next_tier %}" onclick="return confirm('Reject this order? It returns to draft for the buyer to amend.');"><i data-lucide="x"></i> Reject</button>
                     </div>
                   </form>
                 {% elif item.done %}
-                  <span class="text-muted">Fully cleared — finishing…</span>
+                  <span class="text-muted">All {{ item.required }} tier{{ item.required|pluralize }} cleared — awaiting admin confirmation</span>
                 {% else %}
                   <span class="text-muted">Admin sign-off required</span>
                 {% endif %}
