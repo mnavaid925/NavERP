@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Cross-Dock{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:crossdockorder_list' %}">Cross-Docking</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:crossdockorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'inventory:crossdockorder_receive' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="package-check"></i> Receive at Dock</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'received' %}
+        <form method="post" action="{% url 'inventory:crossdockorder_ship' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="truck"></i> Ship</button>
+        </form>
+      {% endif %}
+      {% if obj.is_editable %}
+        <a href="{% url 'inventory:crossdockorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if obj.is_editable or obj.status == 'received' %}
+        <form method="post" action="{% url 'inventory:crossdockorder_cancel' obj.pk %}" onsubmit="return confirm('{% if obj.status == 'received' %}Cancel this received order? A compensating ledger move will reverse its receipt.{% else %}Cancel this order?{% endif %}');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="ban"></i> Cancel Order</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Flow</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}{{ obj.lot_serial.number }}{% else %}<span class="text-muted">Not tracked</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Dock location</dt><dd><a href="{% url 'scm:location_detail' obj.dock_location_id %}">{{ obj.dock_location.code }}</a> <span class="text-muted">{{ obj.dock_location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Quantity</dt><dd class="fw-600">{{ obj.quantity|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>Unit cost (inbound)</dt><dd>{{ obj.unit_cost|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Scheduled date</dt><dd>{{ obj.scheduled_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Inbound reference</dt><dd>{{ obj.inbound_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Outbound reference</dt><dd>{{ obj.outbound_reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Received at dock</dt><dd>{{ obj.received_at|date:"M d, Y H:i"|default_if_none:"—" }}</dd></div>
+        <div class="detail-item"><dt>Shipped</dt><dd>{{ obj.shipped_at|date:"M d, Y H:i"|default_if_none:"—" }}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ledger Moves — {{ obj.number }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Type</th><th>Location</th><th>Qty</th><th>Unit Cost</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for move in moves %}
+            <tr>
+              <td>{{ move.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ move.get_move_type_display }}</td>
+              <td>{{ move.location.code }}</td>
+              <td class="fw-600">{% if move.quantity < 0 %}<span class="badge badge-red">{{ move.quantity|floatformat:"-2" }}</span>{% else %}<span class="badge badge-green">+{{ move.quantity|floatformat:"-2" }}</span>{% endif %}</td>
+              <td>{{ move.unit_cost|floatformat:"-4" }}</td>
+              <td>{{ move.reason }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-commit-horizontal"></i><h3>No ledger moves yet</h3><p>The receipt leg posts when the order is received at the dock; the dispatch leg posts when it ships.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
