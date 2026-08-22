@@ -91,8 +91,16 @@ class PutawayRule(TenantOwned):
         super().clean()
         errors = {}
         for name in ("item", "category", "source_location", "destination"):
+            # Key off the raw ``<name>_id``, never attribute access: a crafted or incomplete
+            # POST (foreign pk removed from cleaned_data, destination omitted entirely)
+            # leaves a required FK unassigned here, and reading it then raises
+            # RelatedObjectDoesNotExist — which is not a ValidationError and would escape
+            # full_clean() as an unhandled 500 instead of a form error. Unset = nothing to
+            # reject; the form's own required/field errors cover those cases.
+            if getattr(self, f"{name}_id") is None:
+                continue
             chosen = getattr(self, name)
-            if chosen is not None and chosen.tenant_id != self.tenant_id:
+            if chosen.tenant_id != self.tenant_id:
                 errors[name] = "That record belongs to another workspace."
         if self.source_location_id and self.source_location_id == self.destination_id:
             errors["__all__"] = "Source and destination must be different locations."
