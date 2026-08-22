@@ -26239,3 +26239,23 @@ state verified green AFTER the last clobber. Migration numbering: their 5.3 took
 TYPE vocabulary on Location (the self-FK covers arbitrary depth; type churn is scm's call); no
 weight/volume utilisation percentages (no item unit-weight master); no pick/putaway logic (4.4
 owns it); cross-dock ships only what one order holds - partial quantities are a future split.
+
+---
+
+# Inventory 5.6 — Inventory Tracking & Control — build review (2026-08-23)
+
+Built as ONE sub-module run extending apps/inventory (packages `InventoryTrackingControl/` in all
+four layers + `templates/inventory/tracking/`). Bullet→surface map: Real-Time Stock Levels =
+computed page `inventory:stocklevels` (no table; four grouped queries merged into dict rows:
+ledger on-hand, active claims allocated = SO allocations + reservations, non-sellable held,
+on-order from open POs matched EXACTLY by sku_hint with ordered/received split into two queries to
+avoid join fan-out); Stock Status Management = `StockStatus` soft claims (ceiling check in the
+FORM per the SalesOrderAllocation split); Inventory Valuation points at `scm:valuation_report`
+(L36); Inventory Reservations = `InventoryReservation` [RSV-] locked lifecycle verbs.
+
+Review wave: 4 parallel lanes -> 15 findings (1 Critical, 5 Important, 9 Minor), all fixed by the
+code-fixer agent one-file-per-commit. Test wave: models 29 / forms 15 / views 21 / security 18
+all green; full unfiltered app run 249 passed, 3 failed — the 3 are test_po_models.py (5.3)
+introduced AFTER this session base by the concurrent workstream (verified not an ancestor of
+ea0add1). Test wave also caught a real regression the reviewers missed: reservation_delete read
+request.tenant_id (middleware never sets it) so every DELETE POST 500'd — fixed, xfails promoted.
