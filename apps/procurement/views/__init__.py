@@ -16,6 +16,22 @@ from .DashboardPortal.ProcurementAlerts import (
 )
 from .DashboardPortal.QuickRequisitions import quickreq_create
 from .DashboardPortal.SelfServiceReports import report_export, report_index
+from .RequisitionManagement.Amendments import (
+    amendment_approve,
+    amendment_detail,
+    amendment_list,
+    amendment_reject,
+    req_amendment_create,
+)
+from .RequisitionManagement.Requisitions import req_detail, req_list
+from .RequisitionManagement.Templates import (
+    template_apply,
+    template_create,
+    template_delete,
+    template_detail,
+    template_edit,
+    template_list,
+)
 
 __all__ = [
     "activity_detail",
@@ -31,4 +47,17 @@ __all__ = [
     "quickreq_create",
     "report_export",
     "report_index",
+    "amendment_approve",
+    "amendment_detail",
+    "amendment_list",
+    "amendment_reject",
+    "req_amendment_create",
+    "req_detail",
+    "req_list",
+    "template_apply",
+    "template_create",
+    "template_delete",
+    "template_detail",
+    "template_edit",
+    "template_list",
 ]
