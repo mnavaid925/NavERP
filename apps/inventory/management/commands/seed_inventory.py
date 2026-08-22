@@ -44,11 +44,20 @@ from apps.inventory.models import (
     ProductFile,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
+    PutawayRule,
     StockStatus,
     VendorCommunication,
 )
 from apps.inventory.forms._common import _vendor_parties
-from apps.scm.models import Item, Location, PurchaseOrder, PurchaseOrderLine, StockMove
+from apps.scm.models import (
+    Item,
+    ItemCategory,
+    Location,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    PutawayTask,
+    StockMove,
+)
 
 # Per-item attribute sets, cycled across the catalog. (name, value, unit)
 ATTRIBUTE_SETS = [
@@ -121,6 +130,7 @@ class Command(BaseCommand):
                        + VendorCommunication.objects.all().count()
                        + PurchaseOrderDispatch.objects.all().count()
                        + PurchaseOrderApprovalRule.objects.all().count()
+                       + PutawayRule.objects.all().count()
                        + StockStatus.objects.all().count()
                        + InventoryReservation.objects.all().count())
             ItemAttribute.objects.all().delete()
@@ -129,6 +139,7 @@ class Command(BaseCommand):
             VendorCommunication.objects.all().delete()
             PurchaseOrderDispatch.objects.all().delete()  # child rows first: FKs to spine POs
             PurchaseOrderApprovalRule.objects.all().delete()
+            PutawayRule.objects.all().delete()
             BinCapacity.objects.all().delete()
             CrossDockOrder.objects.all().delete()
             StockStatus.objects.all().delete()
@@ -146,6 +157,7 @@ class Command(BaseCommand):
             self._seed_files(tenant, items)
             self._seed_vendor_communications(tenant)
             self._seed_purchase_orders(tenant, items)
+            self._seed_putaway_rules(tenant, items)
             self._seed_warehousing(tenant, items)
             self._seed_tracking(tenant, items)
 
@@ -315,6 +327,83 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {created} purchase-order management rows "
             f"(rules/dispatch/{po.number} pending approval)."))
+
+    def _seed_putaway_rules(self, tenant, items):
+        """5.4 Receiving & Putaway — the directed-putaway RULES behind the suggestion engine.
+
+        Four standing instructions over the seeded location tree, chosen so every resolver
+        tier shows on one suggestions page: an item rule (MON-27) that beats its own
+        category rule (IT Equipment) beats the catch-all — plus a guarded cold-chain row
+        for when a chilled item ever exists. Also guarantees exactly ONE open putaway
+        task off DOCK-1 so /inventory/putaway-suggestions/ renders with real candidates.
+        Reuses seed_scm rows only; no items are invented here.
+        """
+        if PutawayRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: putaway rules already present, skipping.")
+            return
+
+        warehouse = Location.objects.filter(tenant=tenant, code="WH-MAIN",
+                                            location_type="warehouse").first()
+        dock = Location.objects.filter(tenant=tenant, code="DOCK-1").first()
+        bin_a1 = Location.objects.filter(tenant=tenant, code="WH-MAIN-A1").first()
+        if not (warehouse and dock and bin_a1):
+            self.stdout.write(
+                f"  {tenant.name}: WH-MAIN/DOCK-1/WH-MAIN-A1 missing — run `seed_scm` "
+                "first, skipping putaway rules.")
+            return
+
+        created = 0
+
+        def sku(s):
+            return Item.objects.filter(tenant=tenant, sku=s).first()
+
+        # 1. Item-specific cold-chain rule — seeded only when such an item exists at all;
+        #    an absent cold chain must not invent one.
+        vac = sku("VAC-10")
+        if vac is not None:
+            cold_zone, _ = Location.objects.get_or_create(
+                tenant=tenant, code="CR-01",
+                defaults={"name": "Cold Room 1", "location_type": "zone",
+                          "parent": warehouse, "storage_condition": "chilled"})
+            PutawayRule.objects.create(
+                tenant=tenant, item=vac, source_location=dock,
+                destination=cold_zone, priority=10,
+                notes="Cold-chain arrivals go straight to the cold room.")
+            created += 1
+
+        # 2. The specificity demo: this item rule out-ranks rule 3 despite its priority.
+        mon = sku("MON-27")
+        if mon is not None:
+            PutawayRule.objects.create(
+                tenant=tenant, item=mon, source_location=dock,
+                destination=bin_a1, priority=20)
+            created += 1
+            open_task = (PutawayTask.objects.filter(
+                tenant=tenant, item=mon, from_location=dock,
+                status__in=PutawayTask.OPEN_STATUSES).order_by("id").first())
+            if open_task is None:
+                PutawayTask.objects.create(
+                    tenant=tenant, item=mon, from_location=dock, to_location=bin_a1,
+                    quantity=Decimal("12"), strategy="directed", status="pending",
+                    notes="Seeded receiving queue demo.")
+
+        # 3. Category fallback for everything else in IT Equipment.
+        it_cat = ItemCategory.objects.filter(tenant=tenant, name="IT Equipment").first()
+        if it_cat is not None:
+            PutawayRule.objects.create(
+                tenant=tenant, category=it_cat, source_location=dock,
+                destination=bin_a1, priority=30)
+            created += 1
+
+        # 4. Odoo's documented catch-all best practice: an empty rule so nothing arrives
+        #    without guidance.
+        PutawayRule.objects.create(
+            tenant=tenant, source_location=dock, destination=warehouse,
+            priority=900, notes="Catch-all: anything else lands under WH-MAIN.")
+        created += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created} putaway rules (+1 open putaway task)."))
 
     def _seed_warehousing(self, tenant, items):
         """5.5 Warehousing & Bin Management — capacity envelopes + cross-dock flows.
