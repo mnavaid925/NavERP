@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Reservation{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge {{ obj.status_css }}" style="vertical-align:middle;">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:reservation_list' %}">Reservations</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:reservation_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if obj.is_editable %}
+        <a href="{% url 'inventory:reservation_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:reservation_release' obj.pk %}" onsubmit="return confirm('Release to the floor?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'reserved' or obj.status == 'released' %}
+        {% if obj.status == 'reserved' %}<form method="post" action="{% url 'inventory:reservation_cancel' obj.pk %}" onsubmit="return confirm('Cancel this reservation and free the stock?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="x-circle"></i> Cancel Claim</button>
+        </form>{% endif %}
+        <form method="post" action="{% url 'inventory:reservation_consume' obj.pk %}" onsubmit="return confirm('Close this claim because the goods have been issued?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check-circle-2"></i> Mark Consumed</button>
+        </form>
+      {% endif %}
+      {% if obj.is_editable %}
+        <form method="post" action="{% url 'inventory:reservation_delete' obj.pk %}" onsubmit="return confirm('Delete this reservation?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Reservation</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Location</dt><dd><a href="{% url 'scm:location_detail' obj.location_id %}" class="fw-600">{{ obj.location.code }}</a> <span class="text-muted">{{ obj.location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}<a href="{% url 'scm:lotserial_detail' obj.lot_serial.pk %}">{{ obj.lot_serial.number }}</a>{% else %}<span class="text-muted">Any lot at this spot</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Purpose</dt><dd>{{ obj.get_purpose_display }}{% if obj.reference %} <span class="text-muted">· {{ obj.reference }}</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quantity reserved</dt><dd class="fw-600">{{ obj.quantity|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>Raised by</dt><dd>{% if obj.reserved_by %}{{ obj.reserved_by.get_username|default:obj.reserved_by.pk }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raised</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Closed</dt><dd>{% if obj.resolved_at %}{{ obj.resolved_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">Still active</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">What This Spot Can Still Promise</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>On hand (ledger)</dt><dd class="fw-600">{{ spot_on_hand|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>Other active claims here</dt><dd>{{ other_claims|floatformat:"-2" }}</dd></div>
+        <div class="detail-item"><dt>This claim</dt><dd>{% if obj.is_active %}<span class="badge badge-info">{{ obj.quantity|floatformat:"-2" }}</span>{% else %}<span class="text-muted">released — {{ obj.quantity|floatformat:"-2" }} no longer held</span>{% endif %}</dd></div>
+      </dl>
+      <p class="text-muted" style="margin-top:8px;">Figures are live aggregates over the stock ledger and every claim on it; nothing is stored on the reservation itself.</p>
+    </div>
+  </div>
+{% endblock %}
