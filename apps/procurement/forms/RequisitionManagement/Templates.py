@@ -1,4 +1,4 @@
-"""Procurement 6.2 Requisition Management — RequisitionTemplates forms.
+﻿"""Procurement 6.2 Requisition Management â€” RequisitionTemplates forms.
 
 A template is edited as a header form + an inline line formset (the same shape 4.1 uses for its
 requisitions), so a recurring order reads exactly like the requisition it produces.
@@ -35,7 +35,7 @@ class BaseRequisitionTemplateLineFormSet(forms.BaseInlineFormSet):
     """Crafted-POST re-check for each line's tenant-scoped FKs.
 
     TenantModelForm narrows the rendered ``gl_account`` dropdown to this workspace, but a narrowed
-    select is UX, not an authorization boundary — a hand-posted foreign pk must land as a field
+    select is UX, not an authorization boundary â€” a hand-posted foreign pk must land as a field
     error instead of silently charging another workspace's account.
     """
 
@@ -48,7 +48,7 @@ class BaseRequisitionTemplateLineFormSet(forms.BaseInlineFormSet):
 
 RequisitionTemplateLineFormSet = inlineformset_factory(
     RequisitionTemplate, RequisitionTemplateLine, form=RequisitionTemplateLineForm,
-    # max_num caps a crafted management form (TOTAL_FORMS≈1000) at a sane row count — each
+    # max_num caps a crafted management form (TOTAL_FORMSâ‰ˆ1000) at a sane row count â€” each
     # accepted row is validated and later copied verbatim on every apply.
-    formset=BaseRequisitionTemplateLineFormSet, extra=2, can_delete=True, max_num=50,
+    formset=BaseRequisitionTemplateLineFormSet, extra=2, can_delete=True, max_num=50, validate_max=True,
 )
