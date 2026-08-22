@@ -61,6 +61,14 @@ from .PurchaseOrderManagement.Dispatches import (
     dispatch_list,
 )
 from .PurchaseOrderManagement.ReorderDrafts import reorderdraft
+from .ReceivingPutaway.PutawayRules import (
+    putaway_suggestions,
+    putawayrule_create,
+    putawayrule_delete,
+    putawayrule_detail,
+    putawayrule_edit,
+    putawayrule_list,
+)
 from .VendorSupplierManagement.VendorCommunications import (
     vendorcommunication_create,
     vendorcommunication_delete,
@@ -102,6 +110,9 @@ __all__ = [
     "approval_queue", "approval_tier_approve", "approval_tier_reject",
     "dispatch_list", "dispatch_detail", "dispatch_create", "dispatch_delete",
     "reorderdraft",
+    "putawayrule_list", "putawayrule_detail", "putawayrule_create",
+    "putawayrule_edit", "putawayrule_delete",
+    "putaway_suggestions",
     "bincapacity_list", "bincapacity_detail", "bincapacity_create",
     "bincapacity_edit", "bincapacity_delete",
     "crossdockorder_list", "crossdockorder_detail", "crossdockorder_create",
