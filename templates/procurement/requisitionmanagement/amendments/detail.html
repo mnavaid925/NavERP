@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · Amendment{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {% if obj.amendment_type == 'cancel' %}badge-red{% else %}badge-info{% endif %}">{{ obj.get_amendment_type_display }}</span>
+        <span class="badge {% if obj.status == 'approved' %}badge-green{% elif obj.status == 'rejected' %}badge-red{% else %}badge-amber{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:req_list' %}">Requisitions</a><span class="sep">›</span><a href="{% url 'procurement:amendment_list' %}">Amendments</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% if obj.requisition %}{% url 'procurement:req_detail' obj.requisition.pk %}{% else %}{% url 'procurement:amendment_list' %}{% endif %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Requisition</a>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Requisition</dt><dd>{% if obj.requisition %}{{ obj.requisition.number }} · {{ obj.requisition.title }} <span class="badge badge-slate">{{ obj.requisition.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Requested by</dt><dd>{% if obj.requested_by %}{{ obj.requested_by.get_full_name|default:obj.requested_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      <div class="detail-item"><dt>Reason</dt><dd>{{ obj.reason }}</dd></div>
+      {% if not obj.is_cancel %}
+        <div class="detail-item"><dt>Proposed required-by</dt><dd>{% if obj.new_required_by %}<span class="badge badge-amber">{{ obj.new_required_by|date:"M d, Y" }}</span> (was {{ obj.requisition.required_by|date:"M d, Y"|default:"—" }}){% else %}unchanged{% endif %}</dd></div>
+        <div class="detail-item"><dt>Proposed justification</dt><dd>{% if obj.new_justification %}<span class="badge badge-amber">replaced</span> — see below{% else %}unchanged{% endif %}</dd></div>
+        {% if obj.new_justification %}<div class="detail-item"><dt>New justification text</dt><dd>{{ obj.new_justification }}</dd></div>{% endif %}
+      {% endif %}
+    </dl>
+  </div></div>
+
+  {% if not obj.is_cancel %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Proposed line changes</h2></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Action</th><th>Target line</th><th>Description (adds)</th><th>SKU</th><th>UOM</th><th>Proposed qty</th><th>Proposed price</th><th>Needed by</th></tr></thead>
+          <tbody>
+            {% for line in lines %}
+              <tr>
+                <td><span class="badge {% if line.action == 'add' %}badge-green{% elif line.action == 'remove' %}badge-red{% else %}badge-info{% endif %}">{{ line.get_action_display }}</span></td>
+                <td>{% if line.target_line %}{{ line.target_line.item_description }}{% else %}— new line —{% endif %}</td>
+                <td>{{ line.item_description|default:"—" }}</td>
+                <td>{{ line.sku_hint|default:"—" }}</td>
+                <td>{{ line.uom_hint|default:"—" }}</td>
+                <td>{% if line.quantity is not None %}{{ line.quantity }}{% else %}keep{% endif %}</td>
+                <td>{% if line.estimated_unit_price is not None %}{{ line.estimated_unit_price|floatformat:2 }}{% else %}keep{% endif %}</td>
+                <td>{{ line.needed_by|date:"M d, Y"|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-x"></i><p>No line changes proposed — header fields only.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">On approval each row is applied in order; the requisition's estimated total is then recalculated from its lines.</div>
+    </div>
+  {% endif %}
+
+  {% if obj.status == 'pending' %}
+    {% if request.user.is_superuser or request.user.is_tenant_admin %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Decide this amendment</h2></div>
+        <div class="card-body">
+          <form method="post" action="{% url 'procurement:amendment_approve' obj.pk %}" onsubmit="return confirm('Approve and apply this amendment to the requisition? This cannot be undone.');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="approve_note">Approval note</label>
+              {{ decision_form.decision_note }}
+              <div class="form-help">Optional — recorded against the decision.</div>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Approve &amp; apply</button>
+          </form>
+          <hr>
+          <form method="post" action="{% url 'procurement:amendment_reject' obj.pk %}" onsubmit="return confirm('Reject this amendment?');">
+            {% csrf_token %}
+            <div class="form-group">
+              <label class="form-label" for="reject_note">Rejection reason <span class="req">*</span></label>
+              <textarea name="decision_note" id="reject_note" class="form-textarea" rows="2" required></textarea>
+              <div class="form-help">Required — an amendment cannot be rejected without a reason.</div>
+            </div>
+            <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Reject</button>
+          </form>
+        </div>
+      </div>
+    {% else %}
+      <div class="card"><div class="card-body text-muted">Waiting for a workspace admin to decide. You will see the outcome here.</div></div>
+    {% endif %}
+  {% else %}
+    <div class="card"><div class="card-body">
+      <p><span class="fw-600">Decision:</span>
+        <span class="badge {% if obj.status == 'approved' %}badge-green{% else %}badge-red{% endif %}">{{ obj.get_status_display }}</span>
+        {% if obj.decided_by %}by {{ obj.decided_by.get_full_name|default:obj.decided_by.username }}{% endif %}
+        {% if obj.decided_at %}on {{ obj.decided_at|date:"M d, Y H:i" }}{% endif %}</p>
+      {% if obj.decision_note %}<p class="text-muted">{{ obj.decision_note }}</p>{% endif %}
+      {% if obj.applied_at %}<p class="text-muted">Applied to the requisition on {{ obj.applied_at|date:"M d, Y H:i" }}.</p>{% endif %}
+    </div></div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:amendment_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to amendments</a>
+  </div>
+{% endblock %}
