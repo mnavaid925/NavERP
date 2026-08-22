@@ -10,7 +10,7 @@ Create is hand-rolled rather than ``crud_create`` for ONE reason: ``reserved_by`
 the acting user, which only the view knows.
 """
 from django.core.exceptions import ValidationError
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.forms import InventoryReservationForm
@@ -168,8 +168,11 @@ def _other_active_qty(obj):
     """Σ OTHER active claims at the same spot — spine allocations AND sibling
     reservations — so the detail page can show what remains unclaimed beside it.
 
-    Narrowed to the claim's lot only when it names one: an unlotted claim competes for
-    the whole location pool, exactly as the reservation form's ATP check treats it.
+    When the claim names a lot, siblings narrow to a CONSERVATIVE UNION — same-lot
+    rows PLUS unlotted whole-pool rows (``Q(lot_serial=lot) | Q(lot_serial__isnull=True)``),
+    mirroring the reservation form's ATP check. An unlotted claim may consume any lot's
+    units at this spot, so it competes with a lot-named row just the same; counting
+    only same-lot siblings would flatter the "still unclaimed" figure.
     """
     from apps.scm.models import SalesOrderAllocation
 
@@ -177,7 +180,8 @@ def _other_active_qty(obj):
         tenant=obj.tenant_id, item=obj.item, location=obj.location,
         status__in=InventoryReservation.ACTIVE_STATUSES).exclude(pk=obj.pk))
     if obj.lot_serial_id is not None:
-        own = own.filter(lot_serial_id=obj.lot_serial_id)
+        own = own.filter(
+            Q(lot_serial_id=obj.lot_serial_id) | Q(lot_serial_id__isnull=True))
     held_reservations = own.aggregate(s=Sum("quantity"))["s"] or 0
     # Spine allocations are lot-blind (no lot column) — they compete for the whole pool.
     held_allocations = (SalesOrderAllocation.objects.filter(
