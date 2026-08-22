@@ -121,6 +121,16 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Tracking &amp; Control Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:stocklevels' %}" class="btn btn-outline"><i data-lucide="gauge"></i> Real-Time Stock Levels</a>
+      <a href="{% url 'inventory:stockstatus_list' %}" class="btn btn-outline"><i data-lucide="shield-alert"></i> Stock Status</a>
+      <a href="{% url 'inventory:reservation_list' %}" class="btn btn-outline"><i data-lucide="lock"></i> Reservations</a>
+      <a href="{% url 'scm:valuation_report' %}" class="btn btn-outline"><i data-lucide="calculator"></i> Valuation (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
