@@ -7,6 +7,7 @@ is a user-facing "cannot", never a 500), and an audit trail written by the model
 inside its transaction.
 """
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.forms import CrossDockOrderForm
@@ -56,6 +57,16 @@ def crossdockorder_create(request):
 
 @login_required
 def crossdockorder_edit(request, pk):
+    # Server-side status guard: the template hides Edit on non-drafts, but a crafted
+    # POST must not re-open quantity/item/dock beneath already-posted StockMove legs
+    # (StockTransfers precedent). crud_edit cannot know about EDITABLE_STATUSES, so the
+    # guard runs here before delegating.
+    obj = get_object_or_404(_scoped(request.tenant), pk=pk)
+    if not obj.is_editable:
+        messages.error(
+            request,
+            f"{obj.number} has posted ledger moves and can no longer be edited.")
+        return redirect("inventory:crossdockorder_detail", pk=obj.pk)
     return crud_edit(
         request, model=CrossDockOrder, pk=pk, form_class=CrossDockOrderForm,
         template="inventory/warehouse/crossdockorder/form.html",
@@ -67,15 +78,30 @@ def crossdockorder_edit(request, pk):
 @require_POST
 def crossdockorder_delete(request, pk):
     """Delete a draft only. A received/shipped order's number is written into immutable
-    StockMove rows — deleting the document would orphan its legs' provenance."""
-    obj = get_object_or_404(CrossDockOrder, pk=pk, tenant=request.tenant)
-    if not obj.is_editable:
-        messages.error(
-            request,
-            f"{obj.number} has posted ledger moves and cannot be deleted — cancel it instead.")
-        return redirect("inventory:crossdockorder_detail", pk=obj.pk)
-    return crud_delete(request, model=CrossDockOrder, pk=pk,
-                       success_url="inventory:crossdockorder_list")
+    StockMove rows — deleting the document would orphan its legs' provenance.
+
+    Hand-rolled rather than delegated to crud_delete (MaintenanceWorkOrders precedent):
+    crud_delete re-fetches by pk WITHOUT a lock and re-checks neither guard, so the
+    is_editable answer below is read from the row WHILE it is locked — a concurrent
+    receive() either commits first (and the delete refuses) or waits (and the delete
+    removes a still-draft document that never posted anything).
+    """
+    with transaction.atomic():
+        obj = get_object_or_404(CrossDockOrder.objects.select_for_update(),
+                                pk=pk, tenant=request.tenant)
+        if not obj.is_editable:
+            messages.error(
+                request,
+                f"{obj.number} has posted ledger moves and cannot be deleted — "
+                "cancel it instead.")
+            return redirect("inventory:crossdockorder_detail", pk=obj.pk)
+        # Inside the transaction so it rolls back with a failed delete rather than
+        # recording a deletion that did not happen.
+        write_audit_log(request.user, obj, "delete")
+        number = obj.number
+        obj.delete()
+    messages.success(request, f"{number} deleted.")
+    return redirect("inventory:crossdockorder_list")
 
 
 @login_required
