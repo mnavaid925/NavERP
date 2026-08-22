@@ -15,6 +15,7 @@ from apps.inventory.models import (
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
+    PutawayRule,
     StockStatus,
     VendorCommunication,
 )
@@ -88,6 +89,14 @@ class CrossDockOrderAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status")
     search_fields = ("number", "item__sku", "item__name", "inbound_reference",
                      "outbound_reference")
+
+
+@admin.register(PutawayRule)
+class PutawayRuleAdmin(admin.ModelAdmin):
+    list_display = ("item", "category", "source_location", "destination", "priority",
+                    "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("item__sku", "item__name", "destination__code")
 
 
 @admin.register(StockStatus)
