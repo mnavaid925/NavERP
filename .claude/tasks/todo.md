@@ -26019,3 +26019,171 @@ cross-tenant 404s everywhere, no leak markers; review wave -> fixer -> tests (te
 - [x] Verify: migrate OK; seed×2 idempotent; check clean; smoke script (temp/smoke_62.py): all pages 200, detail shows seeded number, IDOR→404 across all three entities, apply drafts PR (count+1), staff approve blocked (403/PendingDenied), admin approve applies (required_by moved), duplicate engine flags repeated template applies with reasons; no leak markers.
 
 **Deliberate scope calls:** creation stays 4.1's full form (L36 — sidebar maps the bullet there); no apply_count/last_applied_at counters (usage stats not promised by any bullet); duplicate heuristic is title/item text only (no GL+totals branch) — deterministic and explainable; no auto-cancel ever.
+
+## 5.4 Receiving & Putaway
+
+Build plan for inventory 5.4 per `.claude/tasks/research-inventory-5.4.md`: ONE new model
+(`PutawayRule`) + ONE computed page (`putaway_suggestions`). Shape clones the 5.2
+VendorCommunications quadruple (models/forms/views/urls + templates + seeder section). Bullets
+1-3 stay SCM-owned — the sidebar points AT scm routes. **Migration claim: 0005** (agreed in
+build state). Shared files (each package's `__init__.py`, admin.py, seed_inventory.py,
+navigation.py) are integrate-phase-only; build agents never touch them.
+
+### Contract (frozen names — the build wave implements exactly these)
+
+- [ ] Backend packages `apps/inventory/{models,forms,views,urls}/ReceivingPutaway/PutawayRules.py`;
+      templates `templates/inventory/receiving/putawayrule/{list,detail,form}.html` plus
+      `templates/inventory/receiving/putaway_suggestions.html` (computed page at sub-module root,
+      WarehouseMap precedent).
+- [ ] Model `PutawayRule(TenantOwned)` in `models/ReceivingPutaway/PutawayRules.py` — plain
+      configuration row, NO `[PWR-]` numbering / number column:
+      `item = FK("scm.Item", PROTECT, null=True, blank=True, related_name="inventory_putaway_rules")`;
+      `category = FK("scm.ItemCategory", PROTECT, null=True, blank=True, related_name="category_putaway_rules")`
+      (distinct from item's — two FKs on one model need distinct accessors);
+      `source_location = FK("scm.Location", SET_NULL, null=True, blank=True, related_name="putaway_rules_from", help_text="Applies when goods arrive in this staging/dock; blank = any arrival point")`;
+      `destination = FK("scm.Location", PROTECT, related_name="putaway_rules_to", help_text="Destination bin or zone")`.
+      All four related_names grepped repo-wide: unused — no reverse-accessor clash on scm.Item /
+      scm.ItemCategory / scm.Location.
+- [ ] Model continued: `priority = PositiveIntegerField(default=100)`;
+      `is_active = BooleanField(default=True)`; `notes = TextField(blank=True)`. `Meta`:
+      `ordering = ["priority", "id"]`; index `(tenant, is_active)` named `inv_pwr_tnt_active_idx`;
+      NO unique_together (overlapping rules legal; the resolver order decides). `clean()`:
+      cross-tenant ValidationError keyed per field on item / category / source_location /
+      destination + non-field error when source_location == destination. `__str__` pinned:
+      `f"{scope} → {self.destination.code}"`, scope = item.sku | category.name | "Any item".
+- [ ] Resolver lives IN THE MODEL FILE as a module-level function:
+      `resolve_putaway_suggestion(task)` returns `(suggestion_or_None, reason_str, candidates)`
+      where `candidates` is a ranked list of `(location, reason_str)` best-first and, when
+      non-empty, candidates[0] IS the suggestion. Tier order FROZEN: rule tier DESC (item=3 >
+      category=2 > catch-all=1) then priority ASC then id ASC; then consolidation (bin already
+      holds task.item; pick_sequence ASC then code ASC); then storage-condition match (item's
+      requirement vs candidate's own-or-inherited condition); then walk-order fallback (first
+      active pickable bin under the receipt's warehouse ancestor with free capacity).
+      Disqualifiers: inactive location; full bin (`capacity` set AND on_hand >= capacity — blank
+      capacity = unlimited, labelled as such); owner_client conflict vs the item's owner_client;
+      candidate == task.from_location. Reasons cite codes/SKUs ONLY, pinned formats:
+      `"Rule: VAC-10 arriving DOCK-1 → CR-01"` (drop " arriving X" when rule.source_location is
+      null); `"Already holds MON-27"`; `"Condition '<value>' matched at <ancestor.code>"`;
+      `"First pickable bin by walk order"`. Refusal starts `"No Suggestion Found"` — never a
+      guessed bin. Per-bin on-hand derives from StockMove (reuse `scm.Item.on_hand(location=...)`
+      or an equal aggregate); ancestor walks reuse Location.path()'s bounded cycle-guard pattern.
+- [ ] Form `PutawayRuleForm(TenantUniqueMixin, TenantModelForm)` in
+      `forms/ReceivingPutaway/PutawayRules.py`: `Meta.fields` EXACTLY
+      `["item", "category", "source_location", "destination", "priority", "is_active", "notes"]`;
+      `clean()` runs `_reject_foreign(self, cleaned, ["item", "category", "source_location", "destination"])`.
+      NO custom __init__ queryset narrowing [FROZEN] — TenantModelForm already scopes all three
+      targets (they carry tenant); 5.2 narrowed party for role reasons only, nothing analogous
+      here. The mixin stamps instance.tenant during CREATE validation so the model's cross-tenant
+      clean() cannot falsely reject (SEC-1 two-jobs rule).
+- [ ] Views in `views/ReceivingPutaway/PutawayRules.py`, thin over apps/core/crud.py:
+      putawayrule_list — qs `PutawayRule.objects.filter(tenant=request.tenant).select_related("item", "category", "source_location", "destination")`;
+      `search_fields=["item__sku", "item__name", "destination__code"]`; `filters=()`;
+      `?is_active=` values "active"/"inactive" mapped to True/False on the qs BEFORE crud_list
+      (house filter rule); extra_context FROZEN:
+      `{"is_active_choices": [["active", "Active"], ["inactive", "Inactive"]], "is_active": <raw GET echo>}`.
+      putawayrule_create/edit — template="inventory/receiving/putawayrule/form.html",
+      success_url="inventory:putawayrule_list". putawayrule_detail — get_object_or_404 with the
+      same select_related, ctx {"obj": obj} (crud_detail may be used instead). putawayrule_delete
+      — @require_POST + crud_delete.
+- [ ] View `putaway_suggestions(request)` — custom @login_required render, NOT crud. Queue:
+      `PutawayTask.objects.filter(tenant=request.tenant, status__in=PutawayTask.OPEN_STATUSES).select_related("item", "from_location", "to_location", "goods_receipt")`.
+      Filters BEFORE pagination: `q` → Q(number__icontains) | Q(item__sku__icontains);
+      `warehouse` → as_db_int guard, keeps tasks whose staging-location ancestry contains that
+      warehouse pk (junk value ignored, L11 posture). Paginate FIRST at 25/page via
+      core.crud.paginate and resolve rows ONLY for that page; stats computed over the FULL
+      filtered set. Context keys FROZEN: `rows` = list of dicts with EXACT keys {task, receipt,
+      item, staging, candidates, suggestion, suggestion_reason}; `stats` = dict EXACT keys
+      {open_tasks, covered_by_rule, uncovered}; plus `page_obj`, `warehouses` (tenant
+      Location location_type="warehouse", ordered by code), `q`, `warehouse` (raw GET echoes).
+      ZERO writes into SCM — the only action links scm:putawaytask_edit.
+- [ ] URLs in `urls/ReceivingPutaway/PutawayRules.py` (literals before `<int:pk>`):
+      `path("putaway-suggestions/", views.putaway_suggestions, name="putaway_suggestions")`;
+      `path("putaway-rules/", views.putawayrule_list, name="putawayrule_list")`;
+      `path("putaway-rules/add/", views.putawayrule_create, name="putawayrule_create")`;
+      `path("putaway-rules/<int:pk>/", views.putawayrule_detail, name="putawayrule_detail")`;
+      `path("putaway-rules/<int:pk>/edit/", views.putawayrule_edit, name="putawayrule_edit")`;
+      `path("putaway-rules/<int:pk>/delete/", views.putawayrule_delete, name="putawayrule_delete")`.
+- [ ] Templates: list.html = page-header (+ Add Rule button + link to the suggestions page), GET
+      filter bar (q input + is_active select fed by is_active_choices, selected via plain string
+      comparison), table columns Item | Category | From | Destination | Priority | Status
+      (badge-green Active / badge-muted Inactive) | Actions (eye/pencil/trash-2; delete = POST
+      form + confirm + csrf_token), empty-state row, `{% include "partials/pagination.html" %}`.
+      detail.html = detail-grid dl of every field, colour-named badges only, Actions sidebar
+      (Edit / POST Delete+confirm / Back to list). form.html = shared create/edit form, submit
+      label driven by is_edit, cancel link back. putaway_suggestions.html = stats strip reading
+      stats.open_tasks / stats.covered_by_rule / stats.uncovered; filter bar q + warehouse select
+      (pk compared via `|stringformat:"d"`); columns FROZEN: Task # | GRN (link to the receipt's
+      SCM detail route) | Item | Qty | Staging | Suggested Bin + reason badge | Alternatives
+      count | Action (Edit in SCM → scm:putawaytask_edit); no-suggestion rows render muted
+      "No Suggestion Found"; honest empty state; pagination partial.
+- [ ] Package wiring (surgical appends — other sessions hold adjacent lines):
+      models/__init__.py += `from .ReceivingPutaway.PutawayRules import PutawayRule, resolve_putaway_suggestion`
+      (+ both names into __all__); forms/__init__.py +=
+      `from .ReceivingPutaway.PutawayRules import PutawayRuleForm` (+ __all__); views/__init__.py
+      += imports of the five putawayrule_* views + putaway_suggestions (+ __all__);
+      urls/__init__.py += `from .ReceivingPutaway.PutawayRules import urlpatterns as _rp_putawayrules`
+      and concat entry `*_rp_putawayrules,  # ReceivingPutaway/PutawayRules (+ suggestions computed page)`.
+- [ ] admin.py: register PutawayRule — list_display ("item", "category", "source_location",
+      "destination", "priority", "is_active"); list_filter ("tenant", "is_active");
+      search_fields ("item__sku", "item__name", "destination__code").
+- [ ] Seeder `_seed_putaway_rules(tenant, items)` appended after `_seed_purchase_orders`: FIRST
+      LINE guard `if PutawayRule.objects.filter(tenant=tenant).exists(): skip` (sibling style).
+      Anchors reuse seed_scm rows via filter(...).first()/get_or_create: WH-MAIN (warehouse);
+      WH-MAIN-A1 (pick_sequence 10, abc_class "a", capacity 500); DOCK-1 (staging under WH-MAIN,
+      not pickable); CR-01 (chilled zone); items WS-16 / MON-27 / DOCK-C (IT Equipment) and
+      VAC-10 only if present (Temperature-controlled goods, chilled). Four demo rows FROZEN:
+      (1) VAC-10 @ DOCK-1 → CR-01, priority 10 (skipped gracefully if cold-chain seed absent);
+      (2) MON-27 @ DOCK-1 → WH-MAIN-A1, priority 20; (3) category IT Equipment @ DOCK-1 →
+      WH-MAIN-A1, priority 30; (4) catch-all @ DOCK-1 → WH-MAIN, priority 900. Each created only
+      when no tenant row matches its specificity key. Ensure exactly ONE open PutawayTask for
+      MON-27 off DOCK-1 — reuse an existing open task if present, else create; never duplicate.
+      handle(): call site appended after `self._seed_purchase_orders(tenant, items)`; --flush
+      block += PutawayRule count/delete.
+- [ ] Wire-up LIVE_LINKS["5.4"] in apps/core/navigation.py EXACTLY as research §3 (verbatim
+      bullet titles): "Goods Receipt Note (GRN)": "scm:goodsreceipt_list"; "Three-Way Matching":
+      "scm:goodsreceipt_list"; "Quality Inspection (Receiving)": "scm:qualityinspection_list";
+      "Putaway Logic": "inventory:putaway_suggestions".
+- [ ] Migration claim: **0005** — makemigrations inventory expected to generate
+      `0005_putawayrule` (+ its index).
+
+### Build-wave checklist (per-entity parallel split)
+
+- [ ] Backend entity owner: the four ReceivingPutaway layer files
+      (`models/forms/views/urls/ReceivingPutaway/PutawayRules.py`) implementing the Contract
+      verbatim. OFF-LIMITS: every package `__init__.py`, admin.py, management/commands/,
+      apps/core/navigation.py, project urls/settings.
+- [ ] Template owner: the four template files above (`receiving/putawayrule/{list,detail,form}.html`
+      + `receiving/putaway_suggestions.html`), theme.css classes only, colour-named badges.
+
+### Integrate checklist (solo)
+
+- [ ] re-export blocks appended (exact lines listed above)
+- [ ] urls/__init__.py concat entry
+- [ ] admin registration
+- [ ] seeder section + handle() call site + --flush entry
+- [ ] LIVE_LINKS["5.4"]
+- [ ] makemigrations inventory (expect 0005_putawayrule)
+- [ ] migrate
+- [ ] seed_inventory twice (2nd run reports skip, zero dupes)
+- [ ] manage.py check clean
+- [ ] commits one-file-each
+
+### Verify checklist (smoke)
+
+- [ ] login admin_acme; GET all six routes → 200 (rules quintet + suggestions; detail/edit/delete
+      against a seeded pk)
+- [ ] suggestions page renders the seeded MON-27 row WITH a reason string; GRN link resolves
+- [ ] junk ?q=zzz and ?warehouse=999 harmless (no 500; unknown filters ignored, not obeyed)
+- [ ] ?page=2 fine on both paginated pages
+- [ ] cross-tenant: globex pk on putawayrule detail → 404
+- [ ] no `{#` template-artifact leaks on any rendered page
+- [ ] superuser admin (tenant=None) opens lists without error (empty by design)
+
+### Close-out checklist
+
+- [ ] README roadmap row for 5.4
+- [ ] SKILL.md gains the 5.4 section (models / routes / templates / seeder / sidebar rows)
+- [ ] review-wave findings committed to `.claude/tasks/review-inventory-5.4.md`
+- [ ] code-fixer burn-down: no finding left open, manage.py check clean
+- [ ] test-wave files `test_receiving_{models,forms,views,security}.py`, every test named `test_receiving_*`
+- [ ] full unfiltered suite green
