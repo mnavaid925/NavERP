@@ -8,6 +8,8 @@ foreign target.
 """
 from decimal import Decimal
 
+import datetime
+
 import pytest
 
 
