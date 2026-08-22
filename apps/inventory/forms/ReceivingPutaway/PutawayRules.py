@@ -11,9 +11,7 @@ reasons only; nothing analogous exists here).
 """
 from apps.inventory.forms._common import *  # noqa: F401,F403
 from apps.inventory.forms._common import TenantUniqueMixin, _reject_foreign
-# Direct entity-module path rather than the package root: the package __init__ re-export
-# blocks are integrate-phase wiring; both spellings resolve to the same class once they land.
-from apps.inventory.models.ReceivingPutaway.PutawayRules import PutawayRule
+from apps.inventory.models import PutawayRule
 
 
 class PutawayRuleForm(TenantUniqueMixin, TenantModelForm):
