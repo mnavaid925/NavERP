@@ -4,15 +4,19 @@ Each entity module exposes its own ``urlpatterns``; this __init__ sets ``app_nam
 once and concatenates them.
 
 Django is first-match-wins: within each module the literal routes (`add/`) precede the
-``<int:pk>/`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
+``<int:pk>`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
 shadowing surface to reason about; the first segments (````, `attributes/`, `prices/`,
-`files/`, `vendor-communications/`, `bin-capacity/`, `cross-dock/`, `warehouse-map/`) are
+`files/`, `vendor-communications/`, `bin-capacity/`, `cross-dock/`, `warehouse-map/`,
+`tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
 distinct whole components and none can swallow another.
 """
 from .Catalog.ItemAttributes import urlpatterns as _cat_itemattributes
 from .Catalog.ItemPrices import urlpatterns as _cat_itemprices
 from .Catalog.ProductFiles import urlpatterns as _cat_productfiles
 from .Catalog.Overview import urlpatterns as _cat_overview
+from .InventoryTrackingControl.InventoryReservations import urlpatterns as _tc_reservations
+from .InventoryTrackingControl.StockLevels import urlpatterns as _tc_stocklevels
+from .InventoryTrackingControl.StockStatuses import urlpatterns as _tc_stockstatuses
 from .PurchaseOrderManagement.ApprovalRules import urlpatterns as _po_approvalrules
 from .PurchaseOrderManagement.Approvals import urlpatterns as _po_approvals
 from .PurchaseOrderManagement.Dispatches import urlpatterns as _po_dispatches
@@ -38,4 +42,7 @@ urlpatterns = [
     *_wh_bincapacities,    # WarehousingBinManagement/BinCapacities
     *_wh_crossdockorders,  # WarehousingBinManagement/CrossDockOrders (CRUD + lifecycle verbs)
     *_wh_warehousemap,     # WarehousingBinManagement/WarehouseMap (computed page)
+    *_tc_stocklevels,      # InventoryTrackingControl/StockLevels (computed page)
+    *_tc_stockstatuses,    # InventoryTrackingControl/StockStatuses (CRUD)
+    *_tc_reservations,     # InventoryTrackingControl/InventoryReservations (CRUD + lifecycle verbs)
 ]
