@@ -342,7 +342,8 @@ class Command(BaseCommand):
         category rule (IT Equipment) beats the catch-all — plus a guarded cold-chain row
         for when a chilled item ever exists. Also guarantees exactly ONE open putaway
         task off DOCK-1 so /inventory/putaway-suggestions/ renders with real candidates.
-        Reuses seed_scm rows only; no items are invented here.
+        Items and the core location tree come from seed_scm; the one row this block may
+        invent is rule 1's cold-room zone CR-01 (get_or_create) when VAC-10 exists.
         """
         if PutawayRule.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: putaway rules already present, skipping.")
