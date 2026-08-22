@@ -25,6 +25,7 @@
             {{ field }}
             {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
             {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            {% if field.name == 'amendment_type' %}<div class="form-help">The two proposed-change fields below apply only when the type is "Amend details".</div>{% endif %}
           </div>
         {% endfor %}
       </div>
