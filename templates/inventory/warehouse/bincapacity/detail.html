@@ -20,8 +20,8 @@
     <div class="card-body">
       <dl class="detail-grid">
         <div class="detail-item"><dt>Location</dt><dd><a href="{% url 'scm:location_detail' obj.location_id %}" class="fw-600">{{ obj.location.code }}</a> <span class="text-muted">{{ obj.location.get_location_type_display }}</span></dd></div>
-        <div class="detail-item"><dt>Max weight</dt><dd>{% if obj.max_weight_kg %}{{ obj.max_weight_kg }} kg{% else %}<span class="text-muted">Not limited</span>{% endif %}</dd></div>
-        <div class="detail-item"><dt>Max volume</dt><dd>{% if obj.max_volume_m3 %}{{ obj.max_volume_m3 }} m³{% else %}<span class="text-muted">Not limited</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Max weight</dt><dd>{% if obj.max_weight_kg %}{{ obj.max_weight_kg|floatformat:"-2" }} kg{% else %}<span class="text-muted">Not limited</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Max volume</dt><dd>{% if obj.max_volume_m3 %}{{ obj.max_volume_m3|floatformat:"-3" }} m³{% else %}<span class="text-muted">Not limited</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>Max quantity</dt><dd>{% if obj.max_quantity %}{{ obj.max_quantity|floatformat:"-2" }} units{% else %}<span class="text-muted">Not limited</span>{% endif %}</dd></div>
         <div class="detail-item"><dt>On hand (ledger)</dt><dd class="fw-600">{{ obj.on_hand|floatformat:"-2" }}</dd></div>
         <div class="detail-item"><dt>Quantity utilisation</dt><dd>
@@ -51,7 +51,7 @@
               <td>{{ move.moved_at|date:"M d, Y H:i" }}</td>
               <td><a href="{% url 'scm:item_detail' move.item_id %}" class="fw-600">{{ move.item.sku }}</a> <span class="text-muted">{{ move.item.name }}</span></td>
               <td>{{ move.get_move_type_display }}</td>
-              <td class="fw-600">{% if move.quantity < 0 %}<span class="badge badge-red">{{ move.quantity|floatformat:"-2" }}</span>{% else %}<span class="badge badge-green">+{{ move.quantity|floatformat:"-2" }}</span>{% endif %}</td>
+              <td class="fw-600">{% if move.quantity < 0 %}<span class="badge badge-red">{{ move.quantity|floatformat:"-4" }}</span>{% else %}<span class="badge badge-green">+{{ move.quantity|floatformat:"-4" }}</span>{% endif %}</td>
               <td>{{ move.unit_cost|floatformat:"-4" }}</td>
               <td>{{ move.reference|default:"—" }}</td>
             </tr>
