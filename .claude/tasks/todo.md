@@ -26000,3 +26000,22 @@ requisition_amend GET/POST; requisitionamendment_list GET.
 makemigrations procurement (0003) -> migrate -> seed_procurement x2 idempotent -> check; smoke: tracker +
 templates pages 200 as admin_acme, dup banner fires on seeded pair, cancel/amend gates by status x role,
 cross-tenant 404s everywhere, no leak markers; review wave -> fixer -> tests (test_requisition_*) -> docs.
+
+---
+
+## BUILD REVIEW — 6.2 Requisition Management (procurement) — built 2026-08-22
+
+**As-built** (extends `apps/procurement`, migration `0003_requisitionamendment_requisitionamendmentline_and_more`):
+
+- [x] `models/_base.py`: added `TenantNumbered` (local copy of scm's, on `core.utils.next_number`) + `settings`/`MAX_Q2`/`q2()` toolkit — procurement had no numbered model before 6.2.
+- [x] `models/RequisitionManagement/Templates.py`: `RequisitionTemplate` [RQT-] (name/description/org_unit/currency/default_lead_days/justification/is_active/created_by; derived `estimated_total`) + `RequisitionTemplateLine` (free-text item fields mirroring the spine line, derived `line_total` property — no stored total).
+- [x] `models/RequisitionManagement/Amendments.py`: `RequisitionAmendment` [RAM-] (FK PROTECT `scm.PurchaseRequisition`, amend/cancel type, pending/approved/rejected status, proposed header changes, decided/applied stamps, AMENDABLE_STATUSES=(pending_approval, approved), `has_open_for` one-open-per-requisition guard, atomic `apply(decider, note)` writing the spine + reporting a change summary) + `RequisitionAmendmentLine` (action add/update/remove against optional target line, SET_NULL so losing the target degrades to "skipped + reported", never a cross-app ProtectedError).
+- [x] Duplicate engine in `views/_helpers.py`: `_duplicate_maps` (two queries per tenant window) → `duplicate_pk_set(tenant, page_rows)` for the register badge and `find_duplicate_requisitions(pr)` returning per-match REASONS ("same title", "same item: '…'"); constants DUPLICATE_WINDOW_DAYS=30 / live statuses / match cap.
+- [x] Views: `req_list` (search+status+dept filters before pagination, ?dupes=1 deep-link, per-page dup badges), `req_detail` (4-stage pipeline strip, lines, amendments table, duplicates panel with reasons, downstream RFQs/POs, audit-trail-as-timeline history), template CRUD + POST-only `template_apply` (drafts spine PR via individual line creates so save()-derived totals compute; duplicate warning after), amendment list/detail/create/approve/reject (request self-service, decide @tenant_admin_required, reject needs reason).
+- [x] Forms: template header form + guarded line formset (`_reject_foreign` gl_account); amendment form (cancel-carries-no-changes rule at form level) + line-change formset scoping target_line to the parent requisition + duplicate-target refusal; AmendmentDecisionForm.
+- [x] URLs `urls/RequisitionManagement/{Requisitions,Templates,Amendments}.py`; names req_list/req_detail/req_amendment_create/template_*/amendment_*; literals precede <int:pk>.
+- [x] admin.py: both new models registered with child inlines; seed_procurement extended (3 templates ×3 lines + 1 pending amendment reusing a seeded PR; per-block idempotent guards); navigation LIVE_LINKS["6.2"] (Creation→scm:requisition_create cross-app, Tracking→req_list, Dup→req_list?dupes=1, Templates→template_list, Cancel/Amend→amendment_list); PROCUREMENT_CONTENT_MODELS += template/amendment.
+- [x] Templates: procurement/requisitionmanagement/{requisitions,templates,amendments}/{list,detail,form}.html (8 files), theme.css classes only (badge-green/red/amber/info/muted/slate verified), pagination partial, empty states, Actions columns, confirm+csrf POST forms.
+- [x] Verify: migrate OK; seed×2 idempotent; check clean; smoke script (temp/smoke_62.py): all pages 200, detail shows seeded number, IDOR→404 across all three entities, apply drafts PR (count+1), staff approve blocked (403/PendingDenied), admin approve applies (required_by moved), duplicate engine flags repeated template applies with reasons; no leak markers.
+
+**Deliberate scope calls:** creation stays 4.1's full form (L36 — sidebar maps the bullet there); no apply_count/last_applied_at counters (usage stats not promised by any bullet); duplicate heuristic is title/item text only (no GL+totals branch) — deterministic and explainable; no auto-cancel ever.
