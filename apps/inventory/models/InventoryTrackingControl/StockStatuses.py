@@ -60,7 +60,16 @@ class StockStatus(TenantOwned):
 
     class Meta:
         ordering = ["item__sku", "location__code", "-effective_at"]
-        indexes = [models.Index(fields=["tenant", "status"], name="inv_ss_tnt_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="inv_ss_tnt_status_idx"),
+            # The mirror of InventoryReservation's spot index: every hot shape on this
+            # table (detail-page siblings, the reservation form's classification
+            # aggregate, the stock-levels merge) probes exactly the (tenant, item,
+            # location) prefix — without it MariaDB scans the item's classifications
+            # across all locations.
+            models.Index(fields=["tenant", "item", "location"],
+                         name="inv_ss_tnt_item_loc_idx"),
+        ]
 
     # -- state ---------------------------------------------------------------------------------
 
