@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Track {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}
+        <span class="badge {% if obj.status == 'approved' or obj.status == 'converted' %}badge-green{% elif obj.status == 'pending_approval' %}badge-amber{% elif obj.status == 'rejected' %}badge-red{% elif obj.status == 'cancelled' %}badge-muted{% else %}badge-slate{% endif %}">{{ obj.get_status_display }}</span>
+        {% if open_amendment %}<span class="badge badge-info">Amendment pending</span>{% endif %}
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:req_list' %}">Requisitions</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:requisition_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open in SCM</a>
+      {% if obj.status == 'pending_approval' or obj.status == 'approved' %}
+        {% if not open_amendment %}
+          <a href="{% url 'procurement:req_amendment_create' obj.pk %}" class="btn btn-primary"><i data-lucide="file-pen"></i> Request change / cancellation</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Pipeline</h2></div>
+    <div class="card-body">
+      <ol style="display:flex; flex-wrap:wrap; gap:.5rem; list-style:none; padding:0; margin:0;">
+        {% for stage in pipeline %}
+          <li>
+            {% if stage.state == 'done' %}
+              <span class="badge badge-green"><i data-lucide="check"></i> {{ stage.label }}</span>
+            {% elif stage.state == 'current' %}
+              <span class="badge badge-amber"><i data-lucide="clock"></i> {{ stage.label }}</span>
+            {% else %}
+              <span class="badge badge-slate">{{ stage.label }}</span>
+            {% endif %}
+          </li>
+          {% if not forloop.last %}<li class="text-muted">→</li>{% endif %}
+        {% endfor %}
+      </ol>
+      {% if obj.status == 'rejected' or obj.status == 'cancelled' %}
+        <p class="text-muted" style="margin-top:.5rem;">This requisition ended as
+          <span class="badge {% if obj.status == 'rejected' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+          {% if obj.decision_note %}— {{ obj.decision_note }}{% endif %}</p>
+      {% endif %}
+      <dl class="detail-grid" style="margin-top:1rem;">
+        <div class="detail-item"><dt>Title</dt><dd>{{ obj.title }}</dd></div>
+        <div class="detail-item"><dt>Requester</dt><dd>{% if obj.requester %}{{ obj.requester.get_full_name|default:obj.requester.username }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Department</dt><dd>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}—{% endif %}</dd></div>
+        <div class="detail-item"><dt>Raised</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+        <div class="detail-item"><dt>Required by</dt><dd>{{ obj.required_by|date:"M d, Y"|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Estimated total</dt><dd class="fw-600">{{ obj.estimated_total|floatformat:2 }}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  {% if duplicates %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><i data-lucide="copy"></i> Potential duplicates</h2>
+        <span class="badge badge-red">Review before submitting</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Number</th><th>Title</th><th>Requester</th><th>Status</th><th>Raised</th><th>Matched on</th></tr></thead>
+          <tbody>
+            {% for dup in duplicates %}
+              <tr>
+                <td><a href="{% url 'procurement:req_detail' dup.requisition.pk %}" class="fw-600">{{ dup.requisition.number }}</a></td>
+                <td>{{ dup.requisition.title }}</td>
+                <td>{% if dup.requisition.requester %}{{ dup.requisition.requester.get_full_name|default:dup.requisition.requester.username }}{% else %}—{% endif %}</td>
+                <td><span class="badge badge-muted">{{ dup.requisition.get_status_display }}</span></td>
+                <td>{{ dup.requisition.created_at|date:"M d, Y" }}</td>
+                <td>{% for reason in dup.reasons %}<span class="badge badge-amber">{{ reason }}</span> {% endfor %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Text matches (title / item description, case-insensitive) against live requests raised within the last {{ window_days }} days. Confirm or cancel the request — the flag is advisory and never blocks submission.</div>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Description</th><th>SKU</th><th>UOM</th><th>Quantity</th><th>Est. unit price</th><th>Total</th><th>GL account</th><th>Needed by</th></tr></thead>
+        <tbody>
+          {% for line in lines %}
+            <tr>
+              <td>{{ line.item_description }}</td>
+              <td>{{ line.sku_hint|default:"—" }}</td>
+              <td>{{ line.uom_hint|default:"—" }}</td>
+              <td>{{ line.quantity }}</td>
+              <td>{{ line.estimated_unit_price|floatformat:2 }}</td>
+              <td>{{ line.line_total|floatformat:2 }}</td>
+              <td>{% if line.gl_account %}{{ line.gl_account.code }} · {{ line.gl_account.name }}{% else %}—{% endif %}</td>
+              <td>{{ line.needed_by|date:"M d, Y"|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-checks"></i><p>No lines on this requisition.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="5" class="fw-600">Estimated total</td><td class="fw-600">{{ obj.estimated_total|floatformat:2 }}</td><td colspan="2"></td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Amendments &amp; cancellations</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Status</th><th>Requested by</th><th>Filed</th><th>Decided</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for a in amendments %}
+            <tr>
+              <td class="fw-600">{{ a.number }}</td>
+              <td><span class="badge {% if a.amendment_type == 'cancel' %}badge-red{% else %}badge-info{% endif %}">{{ a.get_amendment_type_display }}</span></td>
+              <td><span class="badge {% if a.status == 'approved' %}badge-green{% elif a.status == 'rejected' %}badge-red{% else %}badge-amber{% endif %}">{{ a.get_status_display }}</span></td>
+              <td>{% if a.requested_by %}{{ a.requested_by.get_full_name|default:a.requested_by.username }}{% else %}System{% endif %}</td>
+              <td>{{ a.created_at|date:"M d, Y H:i" }}</td>
+              <td>{% if a.decided_at %}{{ a.decided_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
+              <td><div class="table-actions"><a href="{% url 'procurement:amendment_detail' a.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="file-diff"></i><p>No amendments filed against this requisition.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Downstream documents</h2></div>
+    <div class="card-body">
+      <p class="fw-600">RFQs</p>
+      {% for r in rfqs %}
+        <p><a href="{% url 'scm:rfq_detail' r.pk %}" class="fw-600">{{ r.number }}</a> · {{ r.title|default:"—" }} · <span class="badge badge-muted">{{ r.get_status_display }}</span></p>
+      {% empty %}<p class="text-muted">None raised.</p>{% endfor %}
+      <p class="fw-600">Purchase orders</p>
+      {% for po in purchase_orders %}
+        <p><a href="{% url 'scm:purchaseorder_detail' po.pk %}" class="fw-600">{{ po.number }}</a> · {% if po.vendor %}{{ po.vendor.name }}{% else %}—{% endif %} · <span class="badge badge-muted">{{ po.get_status_display }}</span> · {{ po.total|floatformat:2 }}</p>
+      {% empty %}<p class="text-muted">None created.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">History</h2><span class="text-muted">from the immutable audit trail</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
+        <tbody>
+          {% for h in history %}
+            <tr>
+              <td>{{ h.at|date:"M d, Y H:i" }}</td>
+              <td>{% if h.user %}{{ h.user.get_full_name|default:h.user.username }}{% else %}System{% endif %}</td>
+              <td><span class="badge badge-slate">{{ h.action }}</span></td>
+              <td class="text-muted">{% for k, v in h.changes.items %}{{ k }}: {{ v }}{% if not forloop.last %}; {% endif %}{% endfor %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="history"></i><p>No recorded activity yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
