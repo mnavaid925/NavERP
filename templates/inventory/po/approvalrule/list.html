@@ -8,7 +8,7 @@
       <p class="text-muted">Routing policy for purchase-order approvals — how many sequential sign-offs an order needs, by value band and department. The orders themselves live on the SCM procurement pages.</p>
     </div>
     <div class="page-actions">
-      <a href="{% url 'inventory:approvalrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>
+      {% if is_admin %}<a href="{% url 'inventory:approvalrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>{% endif %}
     </div>
   </div>
   <div class="card">
@@ -51,11 +51,13 @@
               <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'inventory:approvalrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'inventory:approvalrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                  <form method="post" action="{% url 'inventory:approvalrule_delete' obj.pk %}" onsubmit="return confirm('Delete this approval rule? Past decisions keep a snapshot reference but will show no rule name.');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                  </form>
+                  <a href="{% url 'inventory:approvalrule_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View rule {{ obj.name }}"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:approvalrule_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit rule {{ obj.name }}"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:approvalrule_delete' obj.pk %}" onsubmit="return confirm('Delete this approval rule? Past decisions keep a snapshot reference but will show no rule name.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete rule {{ obj.name }}"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
