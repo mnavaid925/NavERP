@@ -1185,6 +1185,17 @@ LIVE_LINKS = {
         "PO Dispatch":                    "inventory:dispatch_list",    # bullet (email/EDI transmission log)
         "PO Tracking":                    "scm:purchaseorder_list",     # bullet (Draft/Sent/Partially Received/Closed live on the spine)
     },
+    # 5.4 Receiving & Putaway. Bullets 1-3 are SCM-owned (L29/L36): the GRN document, its
+    # three-way match machine and 4.9's receiving inspections already exist - the sidebar
+    # points AT them. The genuine gap is bullet 4: "directed" putaway has a strategy label
+    # on scm.PutawayTask but no engine, so inventory owns the rule table + a computed
+    # suggestions page over open tasks (zero writes into SCM; overrides happen there).
+    "5.4": {
+        "Goods Receipt Note (GRN)":       "scm:goodsreceipt_list",          # bullet (4.1 document)
+        "Three-Way Matching":             "scm:goodsreceipt_list",          # bullet (match_status badges live there)
+        "Quality Inspection (Receiving)": "scm:qualityinspection_list",     # bullet (4.9 QMS)
+        "Putaway Logic":                  "inventory:putaway_suggestions",  # bullet (computed queue; rules CRUD linked from its header)
+    },
     # 5.5 Warehousing & Bin Management. The warehouse/zone/aisle/rack/bin STRUCTURE is
     # 4.3's self-referential scm.Location tree (L36 - extend the spine, never re-declare
     # it), so the structure bullet points AT the spine's own pages. What nothing else
