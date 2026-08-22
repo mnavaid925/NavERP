@@ -5,7 +5,15 @@ works because apps/inventory/models/__init__.py re-exports everything.
 """
 from django.contrib import admin
 
-from apps.inventory.models import ItemAttribute, ItemPrice, ProductFile, VendorCommunication
+from apps.inventory.models import (
+    ItemAttribute,
+    ItemPrice,
+    ProductFile,
+    PurchaseOrderApproval,
+    PurchaseOrderApprovalRule,
+    PurchaseOrderDispatch,
+    VendorCommunication,
+)
 
 
 @admin.register(ItemAttribute)
@@ -37,3 +45,28 @@ class VendorCommunicationAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "channel", "direction")
     search_fields = ("number", "subject", "body", "party__name")
     date_hierarchy = "occurred_at"
+
+
+@admin.register(PurchaseOrderApprovalRule)
+class PurchaseOrderApprovalRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "min_amount", "max_amount", "org_unit", "tier_count", "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("name",)
+
+
+@admin.register(PurchaseOrderApproval)
+class PurchaseOrderApprovalAdmin(admin.ModelAdmin):
+    list_display = ("number", "purchase_order", "tier", "decision", "decided_by",
+                    "decided_at", "rule")
+    list_filter = ("tenant", "decision")
+    search_fields = ("number", "purchase_order__number", "note")
+
+
+@admin.register(PurchaseOrderDispatch)
+class PurchaseOrderDispatchAdmin(admin.ModelAdmin):
+    list_display = ("number", "purchase_order", "channel", "recipient", "reference",
+                    "dispatched_at")
+    list_filter = ("tenant", "channel")
+    search_fields = ("number", "purchase_order__number", "recipient", "reference")
+    date_hierarchy = "dispatched_at"
+
