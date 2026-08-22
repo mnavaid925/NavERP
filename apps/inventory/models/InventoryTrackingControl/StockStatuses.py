@@ -94,6 +94,11 @@ class StockStatus(TenantOwned):
 
     def clean(self):
         super().clean()
+        # The form's _reject_foreign covers user input; these checks cover every OTHER
+        # write path (admin, seeder, a future import) that could attach another
+        # workspace's row to this classification.
+        if self.item_id and self.item.tenant_id != self.tenant_id:
+            raise ValidationError({"item": "That item belongs to another workspace."})
         if self.location_id and self.location.tenant_id != self.tenant_id:
             raise ValidationError({"location": "That location belongs to another workspace."})
         if self.lot_serial_id:
