@@ -57,6 +57,28 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, …) with PROTECT on i
   consume any lot). Edit/delete gated to EDITABLE_STATUSES ("reserved"); delete guard+delete share
   one atomic select_for_update block.
 
+### 5.3 Purchase Order (PO) Management — the workflow slice
+
+- **Approval routing**: `PurchaseOrderApprovalRule` value bands are HALF-OPEN (`min <= total < max`)
+  so adjacent rules never both match; `resolve()`/batched `resolve_from()` pick most-specific-wins
+  (org-scoped beats unscoped, then narrowest band; `None` = ONE default tier, never zero).
+  Rule writes are `@tenant_admin_required` — a rule IS the money gate.
+- **Tier decisions**: `PurchaseOrderApproval` [PA-] rows replay via `cleared_tier_count()`
+  (rejection resets to zero, history from BOTH runs survives). **Deliberately NO (tenant, po, tier)
+  uniqueness** — it bricked every rejected-then-resubmitted chain with an IntegrityError (review
+  C1); sequential integrity = `_decide` holds `select_for_update()` on the ORDER row inside one
+  atomic block. Final tier performs the spine's own approve transition; reject returns to draft.
+  EVERY decision is audited (`tier_approve`/`tier_reject`), not just the flip.
+- **Dispatch log**: `PurchaseOrderDispatch` [PD-] has NO edit route by design (proof of
+  transmission is not rewritable); model clean() demands recipients for email/edi only;
+  FIRST dispatch of an approved order flips it to Sent transactionally with the log row.
+- **Reorder auto-drafting** (`reorderdraft`): suggestions from below-point `scm.ReorderRule`s over
+  `on_hand_map`; POST recomputes quantities from the ledger (never trusts the rendered page),
+  groups by buyer-chosen vendor-role party, drafts DRAFT spine orders only.
+- Tests: `test_po_{models,forms,views,security}.py` (85) + conftest fixtures `location_a`,
+  `approval_rule_std_a/cap_a`, `po_pending_a/po_sent_a`, `tier_decision_a`, `po_dispatch_a`,
+  `reorder_below_a`.
+
 ## URLs / routes
 
 `app_name = "inventory"`; each entity module exposes `urlpatterns`, concatenated in
@@ -88,8 +110,8 @@ actually-stocked spots (small slices) and three RSV rows walked through release/
 - Forms take `tenant=` kwarg (TenantModelForm); use `_reject_foreign` + TenantUniqueMixin patterns
   from `apps/inventory/forms/_common.py`.
 - Spot-ledger aggregates must carry the tenant predicate so `scm_move_tnt_item_loc_idx` applies.
-- Migrations are sequential app-wide: next number after 0010 is 0011 (concurrent sessions may take
-  numbers — check `apps/inventory/migrations/` before generating).
+- Migrations are sequential app-wide: 0011 is taken (5.3 dispatch recipient state); check
+  `apps/inventory/migrations/` before generating — concurrent sessions may take numbers.
 
 ## Sidebar wiring
 
