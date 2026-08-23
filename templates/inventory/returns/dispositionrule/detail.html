@@ -101,7 +101,19 @@
             <div>
               <dt class="text-muted" style="font-size:13px;">Suggested Disposition Action</dt>
               <dd class="mt-1">
-                <span class="badge badge-info" style="font-size:13px; padding:4px 8px;">{{ obj.get_suggested_disposition_display }}</span>
+                {% if obj.suggested_disposition == 'restock' %}
+                  <span class="badge badge-green" style="font-size:13px; padding:4px 8px;">Restock</span>
+                {% elif obj.suggested_disposition == 'refurbish' %}
+                  <span class="badge badge-info" style="font-size:13px; padding:4px 8px;">Refurbish</span>
+                {% elif obj.suggested_disposition == 'quarantine' %}
+                  <span class="badge badge-slate" style="font-size:13px; padding:4px 8px;">Quarantine</span>
+                {% elif obj.suggested_disposition == 'scrap' %}
+                  <span class="badge badge-red" style="font-size:13px; padding:4px 8px;">Scrap</span>
+                {% elif obj.suggested_disposition == 'return_to_vendor' %}
+                  <span class="badge badge-amber" style="font-size:13px; padding:4px 8px;">RTV</span>
+                {% else %}
+                  <span class="badge badge-slate" style="font-size:13px; padding:4px 8px;">{{ obj.get_suggested_disposition_display }}</span>
+                {% endif %}
               </dd>
             </div>
             <div>
