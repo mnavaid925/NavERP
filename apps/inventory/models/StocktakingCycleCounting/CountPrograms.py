@@ -102,7 +102,7 @@ class CountProgram(TenantNumbered):
         marker = f"Via count program {self.number}"
         existing = (CycleCountTask.objects
                     .filter(tenant_id=self.tenant_id, location=self.location,
-                            scheduled_date=today, notes=marker)
+                            scheduled_date=today, notes__startswith=marker)
                     .exclude(status__in=("cancelled",)).first())
         if existing is not None:
             task = existing
