@@ -33,8 +33,35 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 | 5.6 | `InventoryTrackingControl/` | StockStatus, InventoryReservation [RSV-] (+ stocklevels computed page) | valuation bullet points at `scm:valuation_report` |
 | 5.7 | `StockMovementTransfers/` | TransferRoute, TransferApprovalRule, TransferApproval [TA-] (+ transfer_board / transfer_queue / transfer_panel pages) | movement documents stay `scm.StockTransfer`; spine grew pending_approval/approved statuses + nullable route FK (scm migration 0035) |
 | 5.8 | `LotSerialTracking/` | LotNumberRule, ShelfLifePolicy (+ `fefo_board` / `traceability` computed pages) | lot/serial ROWS stay `scm.LotSerial` (Serial Number Tracking bullet points at the spine master); classify_lot is THE shared expiry verdict |
+| 5.9 | `FulfillmentOrchestration/` | FulfillmentWave [WAV-], FulfillmentWaveOrder (+ `wave_board` computed page) | order/pick/ship/shipping bullets point at `scm:salesorder_list` / `scm:picktask_list` / `scm:carrier_list`; zero writes into SCM |
 | 5.11 | `StocktakingCycleCounting/` | CountProgram [CTP-], PhysicalInventory [PHY-] (+ variance_report computed page) | count EXECUTION stays `scm.CycleCountTask`; Blind Counts bullet points at the spine master; reconcile() refuses while spawned sheets are open |
 | 5.10 | `ReturnsManagement/` | ReturnInspection [RMI-], ReturnInspectionChecklist, DispositionRoutingRule (+ `returns_workbench` computed board) | Primary RMA documents and ledger postings stay in SCM 4.10 (L36/L29); 5.10 adds warehouse physical inspection grading checklists and automated disposition routing engine |
+
+### 5.9 Order Management & Fulfillment — the wave-planning slice
+
+- **One header + membership rows, zero SCM writes**: `FulfillmentWave` [WAV-#####] groups
+  EXISTING `scm.SalesOrder`s for the floor — status planned→released→closed|cancelled is
+  verb-driven (`release()` refuses zero-member waves; `close()`/`cancel()` stamp `closed_at`,
+  cancel preserves `released_at` history), every verb a `select_for_update` + in-txn audit
+  (CrossDockOrder pattern). `FulfillmentWaveOrder` (unique wave+SO, PROTECT) locks once the
+  wave leaves planned.
+- **None-honest progress**: `orders_fulfilled_count` counts only `FULFILLED_STATUSES`
+  ("partially_fulfilled"/"fulfilled"/"invoiced"/"closed" — cancelled is never progress);
+  `pick_progress_pct` rides the L28 TEXT CONVENTION `PickTask.wave_ref == wave.number`
+  (indexed `scm_pik_tnt_wave_idx`; SCM's operator types the ref) and answers **None** when no
+  picks reference the wave or all matched picks are cancelled.
+- **Board first** (`inventory:wave_board`, `/inventory/waves-board/`): paginate-then-THREE
+  grouped queries per page (members/fulfilled/pick stats merged in Python — flat ~20 queries
+  total); stats trio `{open_waves, released_today, unassigned_orders}` where unassigned =
+  fulfillable SOs absent from every wave via one NOT-IN subquery. List page mirrors the
+  discipline: `member_count` annotation + shared `_pick_stats_by_ref()` merge (the review's
+  N+1 finding).
+- **Gating**: create/edit/delete/verbs/membership ALL `@tenant_admin_required` (C2 fix);
+  duplicate membership is refused at the FORM with an `"__all__"` error because
+  `validate_unique` skips the non-form `wave` field (C1 fix). Membership locks at model clean,
+  form clean AND view pre-check.
+- Tests: `test_fulfillment_{models,forms,views,security}.py` (82) + conftest fixtures
+  `fulfillment_{loc_wave,carrier,so_open,so_second,wave_planned,wave_released,member,foreign_wave}_*`.
 
 ### 5.10 Returns Management (RMA) — the reverse-flow floor operations slice
 
@@ -255,7 +282,7 @@ THIS module's tables â€” seed_scm already creates one plain transfer per te
 
 ## Sidebar wiring
 
-`LIVE_LINKS["5.1"â€¦"5.8"]` in `apps/core/navigation.py` map NavERP.md bullet names â†’ live routes,
+`LIVE_LINKS["5.1"…"5.11"]` in `apps/core/navigation.py` map NavERP.md bullet names â†’ live routes,
 pointing master-data bullets at owning scm pages. Overview card groups per sub-module.
 
 ## Common tasks
