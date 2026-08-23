@@ -1,4 +1,59 @@
 ---
+# Module 5 — Inventory — Sub-module 5.3 Purchase Order (PO) Management — review (2026-08-23)
+
+**Built 5.3 end-to-end as the management layer AROUND 4.1's `scm.PurchaseOrder` spine (L36 — the PO
+document is never re-declared; creation/tracking bullets point at the SCM pages).**
+
+## What landed
+
+- **Models** (`apps/inventory/models/PurchaseOrderManagement/`): `PurchaseOrderApprovalRule`
+  (half-open value bands + optional OrgUnit scope, most-specific-wins `resolve()`/`resolve_from()`;
+  writes admin-gated), `PurchaseOrderApproval` [PA-] per-tier decision log with replay-based
+  progress (`cleared_tier_count`, rejection resets), `PurchaseOrderDispatch` [PD-]
+  email/EDI/print transmission log (append-only, no edit route; recipient required only for
+  addressed channels). Migration 0005 (models) + 0008 shared alter (constraint drop swept into a
+  concurrent session's migration) + 0011 (recipient blank=True state).
+- **Views/forms/urls** packages mirror the spine: rule CRUD quintet (`po/approval-rules/`),
+  approval queue + sequential tier verbs under an order-row `select_for_update` lock
+  (`po/approvals/`), dispatch list/create/detail/delete (`po/dispatches/` — first dispatch of an
+  approved order flips it to Sent transactionally), and reorder-point auto-drafting
+  (`po/reorder-draft/` — below-point `scm.ReorderRule`s -> DRAFT spine orders grouped per
+  buyer-chosen vendor, quantities recomputed from the ledger at POST time).
+- **Templates** `templates/inventory/po/{approvalrule,dispatch}/* + approvals.html +
+  reorderdraft.html`; overview card links the new pages.
+- **Wiring**: `LIVE_LINKS["5.3"]` (five entries: two point at SCM pages, three at new inventory
+  pages); seeder `_seed_purchase_orders` idempotent per tenant (+ fixed a latent undefined-`now`
+  crash in the 5.2 block); admin registrations x3.
+
+## Review wave (6 parallel lanes) — `.claude/tasks/review-inventory-5.3.md`
+
+QA smoke 10/10 areas PASS (67 assertions); wiring lane fully green. Findings all fixed:
+- **C1**: `(tenant, po, tier)` uniqueness bricked rejected->resubmitted chains with IntegrityError
+  (replay resets progress to tier 1 while the old row held the slot). Constraint dropped; decide
+  path serialized via order-row lock; regression test proves reject -> resubmit -> full re-approval
+  keeps both runs' history.
+- **M1**: intermediate tier approvals now audited (every PA row writes its own AuditLog entry).
+- **L1/L2**: tenant filters added to decision panels/prefetches; rule writes admin-gated with
+  affordances hidden for members; **I1** approvals "done" dead-end replaced by honest copy + admin
+  Confirm-&-approve; **M2-M7** batching (queue rules in one query, reorder POST over on_hand_map),
+  select_related, queue bound at 100, aria-labels, vendor-less submit guard.
+
+## Test wave
+
+`test_po_{models,forms,views,security}.py` — 85 tests written by four parallel writers against the
+frozen conftest contract (fixtures: `approval_rule_std_a/cap_a`, `po_pending_a/po_sent_a`,
+`tier_decision_a`, `po_dispatch_a`, `location_a`, `reorder_below_a`). Each file green individually;
+full-suite run was executed file-by-file because the box was saturated by three concurrent
+sub-module sessions sharing this checkout.
+
+## Concurrent-session notes (L43/L45)
+
+Three sibling sessions built 5.5/5.6/5.4 in the same tree during this run. Shared-file edits
+coexisted; migration numbering collided twice (resolved by stripping foreign ops from my 0005 /
+accepting the sweep in 0008); their session re-merged and committed re-export lines after one
+clobber. No cross-session work was committed by this run beyond its own files.
+
+---
 # Module 3 — HRM — Sub-module 3.21 Performance Improvement (hrm-performance-improvement) — plan from research-hrm-performance-improvement.md (2026-07-07)
 
 Fourth and FINAL Performance-Management sub-module (3.18 Goal Setting -> 3.19 Performance Review ->
