@@ -1235,10 +1235,10 @@ class Command(BaseCommand):
         done = PhysicalInventory.objects.create(
             tenant=tenant, warehouse=main,
             scheduled_date=today - datetime.timedelta(days=30),
-            requested_by=user, notes="Seeded half-year wall-to-wall - already closed.")
+            requested_by=user, notes='Seeded aborted wall-to-wall - frozen, then called off.')
         try:
             done.start(user)
-            done.reconcile(user)
+            done.cancel(user)
         except ValidationError:
             pass  # spine state moved on; leave the honest status rather than fake it
 
