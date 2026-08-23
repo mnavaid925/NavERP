@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Stock Transfers{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Movement &amp; Transfers</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Transfers</span></div>
+      <p class="text-muted">Every movement between locations, classified live into inter- and intra-warehouse. Drafts are submitted here for tiered approval; execution still posts the ledger pair on the movement's SCM page.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:transfer_queue' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Approval Queue</a>
+      <a href="{% url 'inventory:transferroute_list' %}" class="btn btn-outline"><i data-lucide="route"></i> Routes</a>
+      <a href="{% url 'scm:stocktransfer_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Transfer</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or notes…">
+        </div>
+        <div class="form-group">
+          <select name="scope" aria-label="Scope" class="form-select">
+            <option value="">All scopes</option>
+            <option value="inter" {% if scope == 'inter' %}selected{% endif %}>Inter-warehouse</option>
+            <option value="intra" {% if scope == 'intra' %}selected{% endif %}>Intra-warehouse</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:transfer_board' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>
+          <th>Number</th><th>Scope</th><th>From → To</th><th>Route</th><th>Units</th>
+          <th>Status</th><th>Approval</th><th class="table-actions">Actions</th>
+        </tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:transfer_panel' row.trf.pk %}" class="fw-600">{{ row.trf.number }}</a>
+                <div class="text-muted">{{ row.trf.transfer_date|date:"M d, Y" }}</div>
+              </td>
+              <td><span class="badge {{ row.scope_css }}">{{ row.scope_label }}</span></td>
+              <td>{{ row.trf.from_location.code }} <span class="text-muted">→</span> {{ row.trf.to_location.code }}</td>
+              <td>{% if row.trf.route %}<span class="text-muted">{{ row.trf.route.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td class="fw-600">{{ row.units|floatformat:"-2" }}</td>
+              <td><span class="badge {{ row.status_css }}">{{ row.trf.get_status_display }}</span></td>
+              <td>
+                {% if row.progress %}
+                  {% if row.progress.decision_count %}<span class="text-muted">{{ row.progress.cleared }}/{{ row.progress.required }} cleared</span>{% else %}<span class="badge badge-amber">0/{{ row.progress.required }} tiers</span>{% endif %}
+                {% elif row.trf.status == 'approved' %}<span class="text-muted">chain cleared</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:transfer_panel' row.trf.pk %}" class="btn-icon" title="Governance panel"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'scm:stocktransfer_detail' row.trf.pk %}" class="btn-icon" title="Open on SCM"><i data-lucide="external-link"></i></a>
+                  {% if row.trf.status == 'draft' %}
+                    <form method="post" action="{% url 'inventory:transfer_submit' row.trf.pk %}" onsubmit="return confirm('Submit this movement for approval?');">
+                      {% csrf_token %}
+                      <select name="route" aria-label="Route" class="form-select" style="width:auto; padding:2px 6px;">
+                        <option value="">No route</option>
+                        {% for route in routes %}<option value="{{ route.pk }}">{{ route.name }}</option>{% endfor %}
+                      </select>
+                      <button class="btn-icon" type="submit" title="Submit for approval"><i data-lucide="send"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="arrow-left-right"></i><h3>No transfers yet</h3><p>Draft one on its SCM page, then submit it here for approval — inter-warehouse moves between warehouses, intra-warehouse between bins of the same one.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ pending_count }} movement{{ pending_count|pluralize }} awaiting approval. Completing an approved movement posts its paired StockMove legs on the SCM pages; this board only decides who may.</p>
+{% endblock %}
