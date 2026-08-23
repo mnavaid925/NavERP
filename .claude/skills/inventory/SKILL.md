@@ -75,11 +75,11 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
   `formset.save_m2m()` (unsaved inline formset has none, no m2m anyway); audit rows use the
   `write_audit_log(user, obj, action, changes)` signature; templates carry only existing theme
   classes (`badge-slate` not the nonexistent `badge-purple`, `btn-sm` not `btn-xs`).
-- Tests: `test_returns_{models,forms,views,security}.py` (16) + conftest fixtures
+- Tests: `test_returns_{models,forms,views,security}.py` (17) + conftest fixtures
   `return_reason_{a,b}`, `rma_{a,b}`, `rma_line_{a,b}`, `disposition_rule_{a,b}`, `inspection_{a,b}`.
   Gotcha of record: `scm.ReturnLine` is TENANT-LESS with `quantity_requested`/`quantity_approved`
-  and a REQUIRED `reason` FK — fixtures must scope lines via `return_authorization__tenant`, never
-  pass `tenant=`/`quantity_authorized=`.
+  and a REQUIRED `reason` FK; `scm.ReturnAuthorization` requires `requested_on` — fixtures must
+  scope lines via `return_authorization__tenant`, never pass `tenant=`/`quantity_authorized=`.
 
 ### 5.4 Receiving & Putaway — the directed-putaway slice
 
