@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}RFID Tags — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">RFID Tags</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <span>RFID Tags</span>
+      </div>
+      <p class="text-muted">EPC tag registry for items, locations, lots and pallets, with last-seen tracking from bulk RFID reads.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:rfidtag_bulkread' %}" class="btn btn-outline"><i data-lucide="radio"></i> Bulk Read Ingest</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:rfidtag_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Tag</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="radio"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Tags</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.active }}</div>
+        <div class="stat-label">Active</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="tag"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.unassigned }}</div>
+        <div class="stat-label">Unassigned Stock</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="archive"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.retired }}</div>
+        <div class="stat-label">Retired</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="alert-triangle"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.lost }}</div>
+        <div class="stat-label">Lost</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by EPC, item SKU or pallet reference…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Kind" class="form-select">
+            <option value="">All Kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:rfidtag_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>EPC</th>
+            <th>Kind</th>
+            <th>Status</th>
+            <th>Item</th>
+            <th>Location</th>
+            <th>Lot / Serial</th>
+            <th>Pallet Ref</th>
+            <th>Last Seen At</th>
+            <th>Last Seen Location</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="mono fw-600">{{ obj.epc|truncatechars:24 }}</span></td>
+              <td><span class="badge badge-info">{{ obj.get_kind_display }}</span></td>
+              <td>
+                {% if obj.status == 'unassigned' %}
+                  <span class="badge badge-muted">Unassigned</span>
+                {% elif obj.status == 'active' %}
+                  <span class="badge badge-green">Active</span>
+                {% elif obj.status == 'retired' %}
+                  <span class="badge badge-slate">Retired</span>
+                {% elif obj.status == 'lost' %}
+                  <span class="badge badge-red">Lost</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.item %}
+                  <span class="fw-600">{{ obj.item.sku }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.location %}
+                  <span class="mono">{{ obj.location.code }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.lot_serial %}
+                  <span class="mono">{{ obj.lot_serial.number }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ obj.pallet_ref|default:"—" }}</td>
+              <td>{{ obj.last_seen_at|date:"Y-m-d H:i"|default:"—" }}</td>
+              <td>
+                {% if obj.last_seen_location %}
+                  <span class="mono fw-600">{{ obj.last_seen_location.code }}</span>
+                {% else %}
+                  <span class="text-muted">Never read</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:rfidtag_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:rfidtag_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if is_admin %}
+                    {% if obj.status == 'unassigned' %}
+                      <form method="post" action="{% url 'inventory:rfidtag_activate' obj.pk %}" onsubmit="return confirm('Activate this RFID tag?');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Activate"><i data-lucide="zap"></i></button>
+                      </form>
+                    {% endif %}
+                    {% if obj.status == 'active' or obj.status == 'unassigned' %}
+                      <form method="post" action="{% url 'inventory:rfidtag_retire' obj.pk %}" onsubmit="return confirm('Retire this RFID tag?');">
+                        {% csrf_token %}<button class="btn-icon" type="submit" title="Retire"><i data-lucide="archive"></i></button>
+                      </form>
+                    {% endif %}
+                    {% if obj.status == 'active' %}
+                      <form method="post" action="{% url 'inventory:rfidtag_mark_lost' obj.pk %}" onsubmit="return confirm('Mark this RFID tag as lost?');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Mark Lost"><i data-lucide="alert-triangle"></i></button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{% url 'inventory:rfidtag_delete' obj.pk %}" onsubmit="return confirm('Delete this RFID tag?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="radio"></i>
+                  <h3>No RFID tags found</h3>
+                  <p>Register EPC tags manually, or ingest a bulk RFID reader dump to auto-stamp last-seen data.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
