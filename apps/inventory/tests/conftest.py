@@ -11,6 +11,7 @@ from decimal import Decimal
 import datetime
 
 import pytest
+from django.utils import timezone
 
 
 @pytest.fixture
@@ -341,3 +342,140 @@ def receiving_foreign_rule_b(db, tenant_b, item_b, receiving_loc_dock_b, receivi
         tenant=tenant_b, item=item_b, source_location=receiving_loc_dock_b,
         destination=receiving_loc_bin_b, priority=10,
         notes="Globex-side routing — foreign workspace control")
+
+
+# ---- 5.8 Lot & Serial Number Tracking ----------------------------------------------------------
+#
+# FROZEN CONTRACT — every 5.8 test writer MUST use exactly these names and nothing else:
+#
+#   Model     : LotNumberRule — fields name / item (nullable = tenant default) / kind
+#               ("lot"|"serial") / prefix / include_date / sequence_padding / is_active /
+#               notes; unique_together (tenant, name). Classmethods:
+#               resolve(tenant, item) -> active rule or None (item rule beats default);
+#               generate(user, item, *, expiry_date=None, notes="") -> scm.LotSerial
+#               (refuses None/untracked/foreign/mismatched-kind items via ValidationError;
+#               mints status="expired" when expiry already past).
+#   Model     : ShelfLifePolicy — OneToOne item (+ related shelf_life_policy); fields
+#               shelf_life_days / min_remaining_days / warning_days / fefo_enforced /
+#               notes; clean() refuses warning_days < min_remaining_days.
+#   Classifier: classify_lot(lot, policy, today=None) -> (code, css, label) with codes
+#               exactly none/expired/blocked/warning/ok and css badge-muted/red/red/
+#               amber/green.
+#   Urls      : inventory:lotrule_list            /inventory/lot-rules/
+#               inventory:lotrule_create          /inventory/lot-rules/add/
+#               inventory:lot_generate            /inventory/lot-generate/
+#               inventory:lotrule_detail/edit/delete  /inventory/lot-rules/<pk>[…]
+#               inventory:shelflifepolicy_list/create/detail/edit/delete
+#                                                 /inventory/shelf-life-policies[/…]
+#               inventory:fefo_board              /inventory/fefo-board/
+#               inventory:traceability            /inventory/traceability/?lot=<pk>
+#   Context   : fefo_board -> object_list rows{item, lot, on_hand, policy, flag, css,
+#               label, remaining} + q/flag_choices/items/counts/today/page_obj.
+#               traceability -> picker mode {obj:None, lots[{lot,on_hand}], q};
+#               trace mode {obj, on_hand, inbound, outbound, parents, children,
+#               policy, flag, css, label, today}.
+#               Rule/policy CRUD via core.crud -> list: object_list/page_obj/q(+extras);
+#               detail: obj (+sample/recent_lots | lot_rows).
+
+def _lot_tracked_item(tenant, sku):
+    from apps.scm.models import Item
+    return Item.objects.create(
+        tenant=tenant, sku=sku, name=f"Batched {sku}", standard_cost=Decimal("6.00"),
+        tracking="lot")
+
+
+def _post_move(tenant, item, location, lot=None, quantity="4", move_type="receipt",
+               reference="", reason=""):
+    from apps.scm.models import StockMove
+    return StockMove.objects.create(
+        tenant=tenant, item=item, location=location, lot_serial=lot,
+        quantity=Decimal(quantity), unit_cost=Decimal("1"),
+        move_type=move_type, reference=reference, reason=reason,
+        moved_at=timezone.now())
+
+
+@pytest.fixture
+def tracked_item_a(db, tenant_a):
+    return _lot_tracked_item(tenant_a, "LOT-A")
+
+
+@pytest.fixture
+def tracked_item_b(db, tenant_b):
+    return _lot_tracked_item(tenant_b, "LOT-B")
+
+
+@pytest.fixture
+def lot_rule_default_a(db, tenant_a):
+    from apps.inventory.models import LotNumberRule
+    return LotNumberRule.objects.create(
+        tenant=tenant_a, name="Default batch numbering", item=None, kind="lot",
+        prefix="LOT", include_date=True, sequence_padding=5)
+
+
+@pytest.fixture
+def lot_rule_item_a(db, tenant_a, tracked_item_a):
+    from apps.inventory.models import LotNumberRule
+    return LotNumberRule.objects.create(
+        tenant=tenant_a, name="Pinned batches", item=tracked_item_a, kind="lot",
+        prefix="PINA", include_date=False, sequence_padding=3)
+
+
+@pytest.fixture
+def lot_rule_default_b(db, tenant_b):
+    from apps.inventory.models import LotNumberRule
+    return LotNumberRule.objects.create(
+        tenant=tenant_b, name="Globex default", item=None, kind="lot",
+        prefix="GBATCH", include_date=True, sequence_padding=4)
+
+
+@pytest.fixture
+def shelf_policy_a(db, tenant_a, tracked_item_a):
+    from apps.inventory.models import ShelfLifePolicy
+    return ShelfLifePolicy.objects.create(
+        tenant=tenant_a, item=tracked_item_a, shelf_life_days=180,
+        min_remaining_days=14, warning_days=45)
+
+
+@pytest.fixture
+def shelf_policy_b(db, tenant_b, tracked_item_b):
+    from apps.inventory.models import ShelfLifePolicy
+    return ShelfLifePolicy.objects.create(
+        tenant=tenant_b, item=tracked_item_b, min_remaining_days=7, warning_days=20)
+
+
+@pytest.fixture
+def stocked_lot_a(db, tenant_a, tracked_item_a, location_a):
+    """A dated lot holding 10 units at DOCK-1 — the FEFO board's owned row."""
+    from apps.scm.models import LotSerial
+    import datetime
+    from django.utils import timezone
+
+    lot = LotSerial.objects.create(
+        tenant=tenant_a, item=tracked_item_a, number="LOTA-0001",
+        expiry_date=timezone.localdate() + datetime.timedelta(days=30))
+    _post_move(tenant_a, tracked_item_a, location_a, lot=lot, quantity="10")
+    return lot
+
+
+@pytest.fixture
+def stocked_lot_b(db, tenant_b, tracked_item_b, location_b):
+    """Foreign-workspace mirror lot — must never surface on acme pages."""
+    from apps.scm.models import Location, LotSerial
+    import datetime
+    from django.utils import timezone
+
+    loc, _ = Location.objects.get_or_create(
+        tenant=tenant_b, code="DOCK-1", defaults={"name": "Receiving dock"})
+    lot = LotSerial.objects.create(
+        tenant=tenant_b, item=tracked_item_b, number="LOTB-0001",
+        expiry_date=timezone.localdate() + datetime.timedelta(days=300))
+    _post_move(tenant_b, tracked_item_b, loc, lot=lot, quantity="5")
+    return lot
+
+
+@pytest.fixture
+def location_b(db, tenant_b):
+    from apps.scm.models import Location
+    loc, _ = Location.objects.get_or_create(
+        tenant=tenant_b, code="BDOCK", defaults={"name": "Globex dock"})
+    return loc
