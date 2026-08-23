@@ -98,20 +98,19 @@ def returninspection_create(request):
     if request.method == "POST":
         form = ReturnInspectionForm(request.POST, tenant=request.tenant)
         formset = ReturnInspectionChecklistFormSet(request.POST, instance=ReturnInspection(tenant=request.tenant))
-        if form.is_valid():
+        if form.is_valid() and formset.is_valid():
             with transaction.atomic():
                 inspection = form.save(commit=False)
                 inspection.tenant = request.tenant
                 inspection.save()
 
                 formset.instance = inspection
-                if formset.is_valid():
-                    for ck_form in formset:
-                        if ck_form.cleaned_data and not ck_form.cleaned_data.get("DELETE", False):
-                            ck = ck_form.save(commit=False)
-                            ck.tenant = request.tenant
-                            ck.inspection = inspection
-                            ck.save()
+                for ck_form in formset:
+                    if ck_form.cleaned_data and not ck_form.cleaned_data.get("DELETE", False):
+                        ck = ck_form.save(commit=False)
+                        ck.tenant = request.tenant
+                        ck.inspection = inspection
+                        ck.save()
 
                 write_audit_log(
                     request.user,
