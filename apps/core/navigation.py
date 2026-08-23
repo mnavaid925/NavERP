@@ -1221,6 +1221,19 @@ LIVE_LINKS = {
         "Inventory Valuation":      "scm:valuation_report",        # bullet (4.3's FIFO/LIFO/WAC cost-layer walk owns this)
         "Inventory Reservations":   "inventory:reservation_list",  # bullet (RSV- soft claims vs SO/job/project)
     },
+    # 5.7 Stock Movement & Transfers. The movement DOCUMENT is 4.3's scm.StockTransfer
+    # (L36 - extend the spine, never re-declare it): drafting and execution stay on its
+    # SCM pages, whose complete action still posts the paired StockMove legs (the spine
+    # grew a pending_approval/approved pair of governed states plus a nullable route FK
+    # for exactly this). What this sub-module adds is the governance around that
+    # document: the board classifies every movement live into inter- vs intra-warehouse,
+    # tiered approval rules gate who may move stock, and the routing catalog says how.
+    "5.7": {
+        "Inter-Warehouse Transfers":   "inventory:transfer_board?scope=inter",   # bullet (board lens over the spine register)
+        "Intra-Warehouse Transfers":   "inventory:transfer_board?scope=intra",   # bullet (same ledger, within one warehouse root)
+        "Transfer Approval Workflow":  "inventory:transfer_queue",               # bullet (tiered sign-off; TA- decision rows)
+        "Transfer Routing":            "inventory:transferroute_list",           # bullet (routing catalog + transit windows)
+    },
     # 5.8 Lot & Serial Number Tracking. The lot/serial ROWS are 4.3's scm.LotSerial
     # (L36 - point at it, never re-declare it), so Serial Number Tracking maps straight
     # at that master. What nothing else provides is the management layer around it:
