@@ -31,7 +31,7 @@ QA lane result up front: **42/42 smoke checks PASS** (routes, content, filters v
 | M13 | Minor | E6 | urls/__init__ docstring has a malformed empty-segment token where `""` was meant | [x] fixed (docstring token replaced with `""`) |
 | M14 | Minor | QA(a) | custom "different item" clean() message unreachable via normal POSTs (form narrowing intercepts with generic invalid-choice wording) — refusal correct, wording differs | [~] skipped — refusal is correct server-side (model clean() still enforces it); generic invalid-choice wording is standard Django UX |
 | M15 | Minor | QA(b) | seeded over-limit demo self-destructs if a smoke cancels the seeded received order (compensating move nets DOCK-1 back under cap) — mitigation belongs in temp scripts / future fixture, not app code | [~] skipped — demo-data lifecycle note; mitigation lives in temp/ smoke scripts, not shipped code |
-| M16 | Minor | E7 | no test_warehousing_* quartet yet — addressed by Phase 6 test wave, not the fixer | [~] skipped — owned by the Phase 6 test wave |
+| M16 | Minor | E7 | no test_warehousing_* quartet yet — addressed by Phase 6 test wave, not the fixer | [x] closed by test wave — test_warehousing_{models,forms,views,security}.py shipped, 84 tests green (25/17/28/14) |
 
 Dedup notes: F1/E1/E2 are one defect in two templates (frontend found it independently of explorer). R1≡S1 and R2≡S2 were found by both the code and security lanes. P2≡R5 same finding.
 
