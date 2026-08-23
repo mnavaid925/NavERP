@@ -1261,6 +1261,19 @@ LIVE_LINKS = {
         "Blind Counts":                    "scm:cyclecounttask_list",           # bullet (4.4 execution master owns blind counting)
         "Variance Analysis & Adjustments": "inventory:variance_report",         # bullet (computed page - no table of its own)
     },
+    # 5.13 Inventory Forecasting & Planning. The FORECAST and the MATH are SCM 4.7's:
+    # DemandForecast predicts, SeasonalityProfile carries the index curve, ReorderRule
+    # computes safety stock / reorder point and is the only writer that may promote
+    # them (L36 - point at it, never re-declare it), so Demand Forecasting maps straight
+    # at the spine's list. What inventory adds is the DECISION layer: a seasonality-aware
+    # stock target plan per SKU, and the review board over each rule's live-vs-computed
+    # parameter gap with a tenant-admin apply into the spine's own writer.
+    "5.13": {
+        "Demand Forecasting":              "scm:demandforecast_list",        # bullet (4.7 forecast master owns prediction)
+        "Reorder Point (ROP) Calculation": "inventory:planning_board",       # bullet (computed page over rules' live-vs-computed gap)
+        "Safety Stock Calculation":        "inventory:planning_board",       # bullet (same board - computed SS column + gated apply)
+        "Seasonality Planning":            "inventory:stocklevelplan_list",  # bullet (SLP- seasonal targets applying SCM index curves)
+    },
     # 5.9 Order Management & Fulfillment. The order DOCUMENT and its fulfilment lifecycle are
     # 4.5's scm.SalesOrder (credit checks, soft allocations, backorders) with 4.4 PickTask doing
     # the picking and 4.6 TMS owning carriers/shipments (L36 - point at them, never re-declare).

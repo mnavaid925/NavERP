@@ -15,6 +15,7 @@ from .StocktakingCycleCounting.CountPrograms import (
     CountProgramForm,
     PhysicalInventoryForm,
 )
+from .ForecastingPlanning.StockLevelPlans import StockLevelPlanForm
 from .LotSerialTracking.LotNumberRules import (
     GenerateLotForm,
     LotNumberRuleForm,
@@ -41,6 +42,7 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "BinCapacityForm", "CrossDockOrderForm",
            "StockStatusForm", "InventoryReservationForm",
            "LotNumberRuleForm", "ShelfLifePolicyForm", "GenerateLotForm",
+           "StockLevelPlanForm",
            "CountProgramForm", "PhysicalInventoryForm",
            "TransferRouteForm", "TransferApprovalRuleForm",
            "ReturnInspectionForm", "ReturnInspectionChecklistForm",

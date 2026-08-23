@@ -7,6 +7,7 @@ from django.contrib import admin
 
 from apps.inventory.models import (
     BinCapacity,
+    StockLevelPlan,
     CountProgram,
     CrossDockOrder,
     FulfillmentWave,
@@ -162,6 +163,14 @@ class TransferApprovalAdmin(admin.ModelAdmin):
                     "decided_at")
     list_filter = ("tenant", "decision")
     search_fields = ("number", "transfer__number")
+
+
+@admin.register(StockLevelPlan)
+class StockLevelPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "location", "seasonal_profile",
+                    "base_target_qty", "effective_from", "status")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "item__sku", "item__name")
 
 
 @admin.register(CountProgram)

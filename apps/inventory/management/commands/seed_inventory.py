@@ -53,6 +53,7 @@ from apps.inventory.models import (
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
+    StockLevelPlan,
     PhysicalInventory,
     PutawayRule,
     ReturnInspection,
@@ -217,6 +218,7 @@ class Command(BaseCommand):
             self._seed_returns_management(tenant, items)
             self._seed_fulfillment_waves(tenant, items)
             self._seed_stocktaking(tenant, items)
+            self._seed_forecasting_planning(tenant, items)
 
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -1257,3 +1259,51 @@ class Command(BaseCommand):
             f"  {tenant.name}: {live.number} {live.get_status_display().lower()} "
             f"({live.spawned_tasks().count()} sheets spawned); "
             f"{done.number} {done.get_status_display().lower()}."))
+
+    def _seed_forecasting_planning(self, tenant, items):
+        """5.13 Inventory Forecasting & Planning - seasonal stock targets over the
+        SCM seasonality spine. One flat ACTIVE plan and one seasonal draft with a small
+        monthly index profile attached (get_or_create on the spine's own model), so the
+        derived-recommendation path and supersede-on-activate both have real rows.
+        Reorder rules come from seed_scm; the planning board reads them."""
+        from apps.scm.models import SeasonalityIndex, SeasonalityProfile
+
+        if StockLevelPlan.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"  {tenant.name}: stock level plans already present, skipping.")
+            return
+        User = get_user_model()
+        user = User.objects.filter(tenant=tenant).order_by("pk").first()
+        if not items or user is None:
+            self.stdout.write(
+                f"  {tenant.name}: no items or workspace user - skipping plans.")
+            return
+
+        today = timezone.localdate()
+        made = 0
+        for idx, item in enumerate(items[:2]):
+            plan = StockLevelPlan.objects.create(
+                tenant=tenant, item=item,
+                base_target_qty=(Decimal("40") if idx == 0 else Decimal("25")),
+                min_qty=Decimal("8"), max_qty=Decimal("120"),
+                effective_from=today,
+                notes="Seeded seasonal target." if idx else "Seeded flat target.")
+            if idx == 1:
+                profile, _c = SeasonalityProfile.objects.get_or_create(
+                    tenant=tenant, name=f"Q4 peak {item.sku}",
+                    defaults={"bucket": "month", "scope": "item", "item": item})
+                if not profile.indices.exists():
+                    for month_no, pct in ((11, Decimal("1.30")), (12, Decimal("1.50"))):
+                        SeasonalityIndex.objects.create(
+                            profile=profile, period_number=month_no,
+                            index_factor=pct)
+                plan.seasonal_profile = profile
+                plan.save(update_fields=["seasonal_profile", "updated_at"])
+            if idx == 0:
+                try:
+                    plan.activate(user)
+                except ValidationError:
+                    pass
+            made += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {made} stock level plans (1 active, 1 seasonal draft)."))
