@@ -6,6 +6,7 @@ Re-exports every model so ``from apps.inventory.models import ItemPrice`` works 
 from .Catalog.ItemAttributes import ItemAttribute
 from .Catalog.ItemPrices import ItemPrice
 from .Catalog.ProductFiles import ProductFile
+from .FulfillmentOrchestration.FulfillmentWaves import FulfillmentWave, FulfillmentWaveOrder
 from .InventoryTrackingControl.InventoryReservations import InventoryReservation
 from .InventoryTrackingControl.StockStatuses import StockStatus
 from .LotSerialTracking.LotNumberRules import LotNumberRule
@@ -14,6 +15,12 @@ from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
 from .PurchaseOrderManagement.Approvals import PurchaseOrderApproval
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatch
 from .ReceivingPutaway.PutawayRules import PutawayRule, resolve_putaway_suggestion
+from .ReturnsManagement import (
+    DispositionRoutingRule,
+    ReturnInspection,
+    ReturnInspectionChecklist,
+    resolve_disposition_routing,
+)
 from .StockMovementTransfers import (
     APPLIES_TO_CHOICES,
     SCOPE_ALL,
@@ -28,10 +35,14 @@ from .WarehousingBinManagement.BinCapacities import BinCapacity
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrder
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
+           "FulfillmentWave", "FulfillmentWaveOrder",
            "PurchaseOrderApprovalRule", "PurchaseOrderApproval", "PurchaseOrderDispatch",
            "PutawayRule", "resolve_putaway_suggestion",
            "BinCapacity", "CrossDockOrder",
            "StockStatus", "InventoryReservation",
            "LotNumberRule", "ShelfLifePolicy", "classify_lot", "FLAG_CSS",
            "TransferRoute", "TransferApprovalRule", "TransferApproval",
-           "APPLIES_TO_CHOICES", "SCOPE_ALL", "SCOPE_INTER", "SCOPE_INTRA"]
+           "APPLIES_TO_CHOICES", "SCOPE_ALL", "SCOPE_INTER", "SCOPE_INTRA",
+           "ReturnInspection", "ReturnInspectionChecklist",
+           "DispositionRoutingRule", "resolve_disposition_routing"]
+
