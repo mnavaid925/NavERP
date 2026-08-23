@@ -22,10 +22,14 @@
     </div>
     <div class="page-actions">
       <a href="{% url 'inventory:barcodelabel_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Label</a>
-      <form method="post" action="{% url 'inventory:barcodelabel_print' obj.pk %}" style="display:inline;">
-        {% csrf_token %}
-        <button class="btn btn-primary" type="submit"><i data-lucide="printer"></i> Confirm Print Run</button>
-      </form>
+      {% if obj.status != 'void' %}
+        <form method="post" action="{% url 'inventory:barcodelabel_print' obj.pk %}" style="display:inline;">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="printer"></i> Confirm Print Run</button>
+        </form>
+      {% else %}
+        <span class="badge badge-red">Voided — printing refused</span>
+      {% endif %}
     </div>
   </div>
 
