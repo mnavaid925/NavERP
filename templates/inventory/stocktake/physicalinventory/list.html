@@ -63,7 +63,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="6"><div class="empty-state"><i data-lucide="warehouse"></i><h3>No physical inventory events yet</h3><p>A full wall-to-wall count starts here: schedule it, start the freeze, and the sheets appear in SCM for your counters.</p></div></td></tr>
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="warehouse"></i><h3>No physical inventory events yet</h3><p>A full wall-to-wall count starts here: schedule it, start the freeze, and the sheets appear in SCM for your counters.</p><a href="{% url 'inventory:physicalinventory_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Event</a></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
