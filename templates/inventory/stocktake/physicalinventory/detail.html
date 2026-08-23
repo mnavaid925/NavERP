@@ -9,7 +9,7 @@
     <div class="page-actions">
       <a href="{% url 'inventory:physicalinventory_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
       {% if obj.status == "draft" %}
-        <form method="post" action="{% url 'inventory:physicalinventory_start' obj.pk %}" onsubmit="return confirm('Freeze {{ obj.warehouse.code }} and spawn count sheets for every bin?');">
+        <form method="post" action="{% url 'inventory:physicalinventory_start' obj.pk %}" onsubmit="return confirm('Freeze the warehouse and spawn one blind count sheet for every bin/zone?');">
           {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="snowflake"></i> Start &amp; Freeze</button>
         </form>
       {% endif %}
