@@ -1,6 +1,6 @@
-﻿---
+---
 name: inventory
-description: Work on the Inventory Management System module (Module 5 â€” 5.1 Product & Catalog, 5.2 Vendor/Supplier Management, 5.3 Purchase Order Management, 5.5 Warehousing & Bins, 5.6 Inventory Tracking & Control, 5.7 Stock Movement & Transfers, 5.8 Lot & Serial Number Tracking; 5.4 Receiving & Putaway in progress). Extends apps/inventory around the SCM 4.3 item/location/StockMove spines (L36 â€” never re-declares them). Use when the user asks to add/change/debug anything under apps/inventory or templates/inventory, extend the seed_inventory seeder, touch inventory sidebar wiring (LIVE_LINKS 5.x), or invokes /inventory.
+description: Work on the Inventory Management System module (Module 5 â€” 5.1 Product & Catalog, 5.2 Vendor/Supplier Management, 5.3 Purchase Order Management, 5.5 Warehousing & Bins, 5.6 Inventory Tracking & Control, 5.7 Stock Movement & Transfers, 5.8 Lot & Serial Number Tracking, 5.11 Stocktaking & Cycle Counting; 5.4 Receiving and 5.10 Returns landed in a shared checkout). Extends apps/inventory around the SCM 4.3 item/location/StockMove spines (L36 â€” never re-declares them). Use when the user asks to add/change/debug anything under apps/inventory or templates/inventory, extend the seed_inventory seeder, touch inventory sidebar wiring (LIVE_LINKS 5.x), or invokes /inventory.
 ---
 
 # Inventory Management System (Module 5)
@@ -33,8 +33,17 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 | 5.6 | `InventoryTrackingControl/` | StockStatus, InventoryReservation [RSV-] (+ stocklevels computed page) | valuation bullet points at `scm:valuation_report` |
 | 5.7 | `StockMovementTransfers/` | TransferRoute, TransferApprovalRule, TransferApproval [TA-] (+ transfer_board / transfer_queue / transfer_panel pages) | movement documents stay `scm.StockTransfer`; spine grew pending_approval/approved statuses + nullable route FK (scm migration 0035) |
 | 5.8 | `LotSerialTracking/` | LotNumberRule, ShelfLifePolicy (+ `fefo_board` / `traceability` computed pages) | lot/serial ROWS stay `scm.LotSerial` (Serial Number Tracking bullet points at the spine master); classify_lot is THE shared expiry verdict |
+| 5.11 | `StocktakingCycleCounting/` | CountProgram [CTP-], PhysicalInventory [PHY-] (+ variance_report computed page) | count EXECUTION stays `scm.CycleCountTask`; Blind Counts bullet points at the spine master; reconcile() refuses while spawned sheets are open |
+| 5.10 | `ReturnsManagement/` | ReturnInspection [RMI-], ReturnInspectionChecklist, DispositionRoutingRule (+ `returns_workbench` computed board) | Primary RMA documents and ledger postings stay in SCM 4.10 (L36/L29); 5.10 adds warehouse physical inspection grading checklists and automated disposition routing engine |
 
-### 5.4 Receiving & Putaway — the directed-putaway slice
+### 5.10 Returns Management (RMA) — the reverse-flow floor operations slice
+
+- **Ownership & Core Integration (L36/L29)**: SCM 4.10 owns the primary customer RMA document (`scm.ReturnAuthorization` `[RMA-]`), return lines, receiving disposition ledger postings (`scm.ReturnDisposition`), return policies, and the accounting refund queue (`scm:refund_queue`). Module 5 extends this by adding the warehouse floor receiving inspection and automated disposition routing logic.
+- **Physical Inspection (`ReturnInspection` [RMI-] & `ReturnInspectionChecklist`)**: Comprehensive warehouse inspection record capturing packaging integrity (intact/opened/damaged/missing), component completeness, functional testing verdict (pass/partial/fail/untested), cosmetic condition (new/minor_wear/heavy_wear/broken), assigned condition grade (A/B/C/D), serial number verification against authorization ticket, restock eligibility flag, recommended restocking fee percentage, and checklist checkpoints.
+- **Disposition Routing Engine (`DispositionRoutingRule` & `resolve_disposition_routing`)**: Configurable rule engine mapping item SKU/category + condition grade to recommended disposition actions (restock, refurbish, scrap, donate, recycle, liquidate, return to vendor, quarantine) and suggested warehouse destination bins. Deterministic hierarchy: Specific Item (Tier 3) > Category (Tier 2) > Catch-all (Tier 1) → Grade Specificity → Priority ASC → ID ASC.
+- **Warehouse Returns Workbench (`inventory:returns_workbench`)**: Real-time computed operational dashboard providing visibility over open RMAs, bench inventory, and automated disposition recommendations with one-click inspection creation.
+- **Sidebar Wiring**: `LIVE_LINKS["5.10"]` maps RMA Ticket & Credit/Refund Processing to SCM 4.10 (`scm:returnauthorization_list` and `scm:refund_queue`), and Return Inspection & Disposition Routing to Inventory 5.10 (`inventory:returninspection_list` and `inventory:dispositionrule_list`).
+
 
 - **One config table + one pure engine**: `PutawayRule` is a standing instruction (nullable
   `item` / `category` / `source_location` FKs onto the spine, required `destination`,
@@ -94,11 +103,35 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
   collect-only worked); they must run green in a normal dev shell.
 
 
+
+### 5.11 Stocktaking & Cycle Counting - the scheduling/freeze slice
+
+- **Cycle Count Scheduling** -> CountProgram [CTP-]: cadence (daily / weekday / day-of-month
+  1-28) over a zone-or-bin location + optional ABC class; is_due(today) honours last_run_date;
+  generate_tasks(user) mints today's marked CycleCountTask (notes 'Via count program CTP-...')
+  with same-day REUSE, stamps last_run, audits run/rerun. Run verb: POST-only.
+- **Full Physical Inventory** -> PhysicalInventory [PHY-] over a warehouse: start() freezes
+  (is_frozen marker; advisory to ops, surfaced on the board) and spawns ONE full-method sheet
+  per bin/zone under the warehouse (provenance via task_marker notes prefix); reconcile()
+  REFUSES while any spawned sheet is outside reconciled/cancelled - naming the first three -
+  then lifts the freeze; cancel() lifts from draft/counting. All verbs select_for_update,
+  status editable=False. Delete guarded to unfrozen drafts without spawned sheets.
+- **Variance Analysis & Adjustments** -> inventory:variance_report (computed page): per counted
+  sheet - lines counted/total, disagreeing count, net variance, posted adjustment link. Filters
+  q/status before pagination; rows ranked by absolute variance within the page.
+- **Blind Counts** -> scm:cyclecounttask_list pointer (the spine owns server-side expected
+  snapshots and single-adjustment reconciliation).
+- Templates: templates/inventory/stocktake/ - countprogram/physicalinventory triples plus
+  page-only variance.html. Seeder _seed_stocktaking: Zone A weekly program + one event walked
+  through REAL start/cancel and one left live frozen with sheets awaiting counters (the
+  refused reconcile IS the demo). Tests: test_stocktake_{models,views}.py (20).
+
 ### 5.8 Lot & Serial Number Tracking - the traceability slice
 
 - **Lot/Batch Generation** -> LotNumberRule: pattern rules (prefix upper-cased on save,
   optional YYMMDD date component, zero-padded 1-9 digit sequence; per-item or tenant default,
-  unique (tenant, name)). esolve(tenant, item) is most-specific-wins (item rule beats the
+  unique (tenant, name)). 
+esolve(tenant, item) is most-specific-wins (item rule beats the
   default, inactive rules skipped, None when nothing governs); generate(user, item, *,
   expiry_date=None, notes="") mints the next scm.LotSerial under a collision-retried
   sequence, refuses None/untracked(	racking='none')/foreign/mismatched-kind items via
