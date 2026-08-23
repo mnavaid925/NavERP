@@ -1,6 +1,6 @@
 """Inventory 5.10 Returns Management — ReturnInspection CRUD views."""
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from apps.core.crud import as_db_int
 from apps.core.decorators import tenant_admin_required
@@ -52,13 +52,18 @@ def returninspection_list(request):
     if functional_status:
         qs = qs.filter(functional_status=functional_status)
 
-    # KPIs calculated across the tenant's full inspection register
-    all_tenant_qs = ReturnInspection.objects.filter(tenant=request.tenant)
+    # KPIs across the tenant's full inspection register — one grouped query, not four COUNTs
+    status_counts = {
+        row["status"]: row["n"]
+        for row in ReturnInspection.objects.filter(tenant=request.tenant)
+        .values("status")
+        .annotate(n=Count("id"))
+    }
     stats = {
-        "total": all_tenant_qs.count(),
-        "passed": all_tenant_qs.filter(status="passed").count(),
-        "failed": all_tenant_qs.filter(status="failed").count(),
-        "quarantined": all_tenant_qs.filter(status="quarantined").count(),
+        "total": sum(status_counts.values()),
+        "passed": status_counts.get("passed", 0),
+        "failed": status_counts.get("failed", 0),
+        "quarantined": status_counts.get("quarantined", 0),
     }
 
     return crud_list(
