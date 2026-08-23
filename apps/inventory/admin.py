@@ -11,11 +11,13 @@ from apps.inventory.models import (
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
+    LotNumberRule,
     ProductFile,
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
     PutawayRule,
+    ShelfLifePolicy,
     StockStatus,
     VendorCommunication,
 )
@@ -112,3 +114,18 @@ class InventoryReservationAdmin(admin.ModelAdmin):
                     "status", "reserved_by", "resolved_at")
     list_filter = ("tenant", "status", "purpose")
     search_fields = ("number", "reference", "item__sku", "item__name", "notes")
+
+@admin.register(LotNumberRule)
+class LotNumberRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "item", "kind", "prefix", "include_date",
+                    "sequence_padding", "is_active")
+    list_filter = ("tenant", "kind", "is_active")
+    search_fields = ("name", "prefix", "item__sku", "item__name")
+
+
+@admin.register(ShelfLifePolicy)
+class ShelfLifePolicyAdmin(admin.ModelAdmin):
+    list_display = ("item", "shelf_life_days", "min_remaining_days", "warning_days",
+                    "fefo_enforced")
+    list_filter = ("tenant", "fefo_enforced")
+    search_fields = ("item__sku", "item__name")
