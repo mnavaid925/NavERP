@@ -42,11 +42,11 @@
               <td>{% if w.carrier %}{{ w.carrier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>{% if w.ship_method %}{{ w.get_ship_method_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td>{% if w.planned_ship_date %}{{ w.planned_ship_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-              <td>{{ w.orders.count }}</td>
+              <td>{{ w.member_count }}</td>
               <td>
-                {% if w.pick_progress_pct is not None %}
-                  <div class="progress" style="min-width:90px;"><div class="progress-bar" style="width: {{ w.pick_progress_pct }}%;"></div></div>
-                  <div class="text-muted" style="font-size:12px;">{{ w.pick_progress_pct }}%</div>
+                {% if w.pick_pct is not None %}
+                  <div class="progress" style="min-width:90px;"><div class="progress-bar" style="width: {{ w.pick_pct }}%;"></div></div>
+                  <div class="text-muted" style="font-size:12px;">{{ w.pick_pct }}%</div>
                 {% else %}
                   <span class="text-muted" title="No picks reference this wave yet">—</span>
                 {% endif %}
