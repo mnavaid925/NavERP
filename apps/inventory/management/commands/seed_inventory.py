@@ -1070,7 +1070,9 @@ class Command(BaseCommand):
         for i, rma in enumerate(rmas):
             line = rma.lines.first()
             item = line.item if line else (items[0] if items else None)
-            qty = line.quantity_approved if line else Decimal("1.0000")
+            # Never seed 0: quantity_approved of 0 would violate MinValueValidator on any
+            # later edit-form save — fall back to one unit instead.
+            qty = (line.quantity_approved if line else None) or Decimal("1.0000")
             if not item:
                 continue
 
