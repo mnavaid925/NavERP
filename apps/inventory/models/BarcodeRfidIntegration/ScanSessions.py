@@ -97,20 +97,23 @@ def resolve_code(tenant, raw):
     """Resolve one raw scanned string against the tenant's spine:
     ``scm.Item.sku`` → ``scm.Location.code`` → ``scm.LotSerial.number`` → ``inventory.RfidTag.epc``.
     Returns ``(kind, obj|None)``. Tenant-scoped iexact everywhere; empty → ``("unknown", None)``.
-    RfidTag comparison upper-cases."""
+    RfidTag comparison upper-cases.
+
+    Duplicated numbers are possible on LotSerial (uniqueness is tenant+item+number), so every
+    multi-row lookup is ordered by ``id`` — the OLDEST master wins deterministically."""
     code = (raw or "").strip()
     if not code:
         return ("unknown", None)
 
-    item = Item.objects.filter(tenant=tenant, sku__iexact=code).first()
+    item = Item.objects.filter(tenant=tenant, sku__iexact=code).order_by("id").first()
     if item is not None:
         return ("item", item)
 
-    location = Location.objects.filter(tenant=tenant, code__iexact=code).first()
+    location = Location.objects.filter(tenant=tenant, code__iexact=code).order_by("id").first()
     if location is not None:
         return ("location", location)
 
-    lot_serial = LotSerial.objects.filter(tenant=tenant, number__iexact=code).first()
+    lot_serial = LotSerial.objects.filter(tenant=tenant, number__iexact=code).order_by("id").first()
     if lot_serial is not None:
         return ("lot", lot_serial)
 
@@ -118,7 +121,7 @@ def resolve_code(tenant, raw):
     # module-level import would be circular during the models package load.
     from .RfidTags import RfidTag
 
-    tag = RfidTag.objects.filter(tenant=tenant, epc=code.upper()).first()
+    tag = RfidTag.objects.filter(tenant=tenant, epc=code.upper()).order_by("id").first()
     if tag is not None:
         return ("rfid", tag)
 
