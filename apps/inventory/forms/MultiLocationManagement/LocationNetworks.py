@@ -39,7 +39,7 @@ class LocationNetworkForm(TenantUniqueMixin, TenantModelForm):
         whitespace-only codes are rejected outright with a field error."""
         code = (self.cleaned_data.get("code") or "").strip()
         if not code:
-            raise forms.ValidationError("Code cannot be blank or whitespace only.")
+            raise ValidationError("Code cannot be blank or whitespace only.")
         return code
 
     def clean(self):
