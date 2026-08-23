@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Transfer Governance{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge {{ status_css }}" style="vertical-align:middle;">{{ obj.get_status_display }}</span> <span class="badge {{ scope_css }}" style="vertical-align:middle;">{{ scope_label }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:transfer_board' %}">Transfers</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      <p class="text-muted">The governance panel: what moves, whether the source can cover it, who signed it off, and what the ledger has posted so far.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:transfer_board' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Board</a>
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'inventory:transfer_submit' obj.pk %}" onsubmit="return confirm('Submit this movement for approval?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Submit for Approval</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'scm:stocktransfer_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Open on SCM</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Movement</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>From</dt><dd><a href="{% url 'scm:location_detail' obj.from_location_id %}" class="fw-600">{{ obj.from_location.code }}</a> <span class="text-muted">{{ obj.from_location.name }}</span></dd></div>
+        <div class="detail-item"><dt>To</dt><dd><a href="{% url 'scm:location_detail' obj.to_location_id %}" class="fw-600">{{ obj.to_location.code }}</a> <span class="text-muted">{{ obj.to_location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Route</dt><dd>{% if obj.route %}<a href="{% url 'inventory:transferroute_detail' obj.route.pk %}">{{ obj.route.name }}</a> <span class="badge {{ obj.route.mode_css }}">{{ obj.route.get_mode_display }}</span>{% else %}<span class="text-muted">Not routed — pick one when submitting from the board</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Transfer date</dt><dd>{{ obj.transfer_date|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Total units</dt><dd class="fw-600">{{ units|floatformat:"-2" }}</dd></div>
+        {% if progress %}
+          <div class="detail-item"><dt>Approval rule</dt><dd>{% if progress.rule %}{{ progress.rule.name }}{% else %}<span class="text-muted">Default — {{ progress.required }} tier{{ progress.required|pluralize }}</span>{% endif %}</dd></div>
+          <div class="detail-item"><dt>Chain progress</dt><dd>{{ progress.cleared }}/{{ progress.required }} cleared</dd></div>
+        {% endif %}
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lines &amp; source coverage</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Lot / Serial</th><th>Qty</th><th>Available at source</th><th>Covered?</th></tr></thead>
+        <tbody>
+          {% for lr in line_rows %}
+            <tr>
+              <td>{{ lr.line.item.sku }} <span class="text-muted">{{ lr.line.item.name }}</span></td>
+              <td>{% if lr.line.lot_serial %}{{ lr.line.lot_serial.number }}{% else %}<span class="text-muted">Any lot</span>{% endif %}</td>
+              <td class="fw-600">{{ lr.line.quantity|floatformat:"-2" }}</td>
+              <td>{{ lr.available|floatformat:"-2" }}</td>
+              <td>{% if lr.available >= lr.line.quantity %}<span class="badge badge-green">Covered</span>{% else %}<span class="badge badge-red">Shortfall</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="package-open"></i><h3>No lines</h3><p>Add lines on the SCM page before submitting this movement.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Decision chain</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tier</th><th>Decision</th><th>Rule</th><th>Decided by</th><th>When</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for d in decisions %}
+            <tr>
+              <td>T{{ d.tier }}</td>
+              <td><span class="badge {{ d.decision_css }}">{{ d.get_decision_display }}</span></td>
+              <td>{% if d.rule %}{{ d.rule.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if d.decided_by %}{{ d.decided_by.get_username|default:d.decided_by.pk }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ d.decided_at|date:"M d, Y H:i" }}</td>
+              <td class="text-muted">{{ d.note|truncatechars:60 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="stamp"></i><h3>No decisions yet</h3><p>{% if obj.status == 'pending_approval' %}This movement is waiting in the approval queue.{% else %}Decisions appear here once a submitted movement is reviewed.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ledger legs posted</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Item</th><th>Location</th><th>Qty</th><th>Type</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in moves %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ m.item.sku }}</td>
+              <td>{{ m.location.code }}</td>
+              <td class="fw-600">{{ m.quantity|floatformat:"-2" }}</td>
+              <td><span class="badge badge-slate">{{ m.get_move_type_display }}</span></td>
+              <td class="text-muted">{{ m.reason }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="book"></i><h3>Nothing posted yet</h3><p>The paired StockMove legs appear when the movement is completed on its SCM page.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
