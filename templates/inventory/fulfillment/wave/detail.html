@@ -95,7 +95,7 @@
             <tr>
               <td><a href="{% url 'scm:salesorder_detail' m.sales_order.pk %}" class="fw-600 mono">{{ m.sales_order.number }}</a></td>
               <td>{{ m.sales_order.get_status_display }}</td>
-              <td>{{ m.added_at|date:"M d, Y H:i" }}</td>
+              <td>{{ m.created_at|date:"M d, Y H:i" }}</td>
               {% if is_admin and obj.is_editable %}
                 <td>
                   <div class="table-actions">
