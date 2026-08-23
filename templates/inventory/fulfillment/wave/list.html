@@ -55,7 +55,7 @@
                 <div class="table-actions">
                   <a href="{% url 'inventory:wave_detail' w.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% if is_admin %}
-                    <a href="{% url 'inventory:wave_edit' w.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    {% if w.is_editable %}<a href="{% url 'inventory:wave_edit' w.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
                     <form method="post" action="{% url 'inventory:wave_delete' w.pk %}" onsubmit="return confirm('Delete this wave?');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
