@@ -2,6 +2,7 @@
 from django.db import transaction
 from django.db.models import Q
 
+from apps.core.crud import as_db_int
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.forms import (
     ReturnInspectionChecklistFormSet,
@@ -68,12 +69,14 @@ def returninspection_list(request):
 def returninspection_create(request):
     """Create a new return inspection with inline checklist items."""
     initial = {}
-    rma_id = request.GET.get("rma", "").strip()
+    # as_db_int(): ?rma=abc / ?rma=999999999999999999999 must skip the lookup, not raise
+    # ValueError/driver errors from the address bar (L11).
+    rma_id = as_db_int(request.GET.get("rma"))
     if rma_id:
         rma = ReturnAuthorization.objects.filter(tenant=request.tenant, pk=rma_id).first()
         if rma:
             initial["return_authorization"] = rma
-            line_id = request.GET.get("line", "").strip()
+            line_id = as_db_int(request.GET.get("line"))
             if line_id:
                 line = rma.lines.filter(pk=line_id).first()
                 if line:
@@ -81,7 +84,7 @@ def returninspection_create(request):
                     initial["item"] = line.item
                     initial["quantity"] = line.quantity_approved
 
-    disp_id = request.GET.get("disp", "").strip()
+    disp_id = as_db_int(request.GET.get("disp"))
     if disp_id:
         disp = ReturnDisposition.objects.filter(tenant=request.tenant, pk=disp_id).first()
         if disp:
