@@ -203,7 +203,9 @@ def scan_console(request):
     )
     stats = {
         "today": agg["total"],
-        "ok_rate": (agg["ok"] / agg["total"]) if agg["total"] else None,
+        # Pre-scaled to a percent so the console renders the number verbatim ("87.5%"),
+        # not a raw 0-1 fraction wearing a % sign.
+        "ok_rate": round((agg["ok"] * 100 / agg["total"]), 1) if agg["total"] else None,
     }
 
     return render(
