@@ -1274,6 +1274,31 @@ LIVE_LINKS = {
         "Safety Stock Calculation":        "inventory:planning_board",       # bullet (same board - computed SS column + gated apply)
         "Seasonality Planning":            "inventory:stocklevelplan_list",  # bullet (SLP- seasonal targets applying SCM index curves)
     },
+    # 5.14 Barcode & RFID Integration. The IDENTIFIED THINGS are the spine's own masters -
+    # scm.Item.sku, scm.Location.code and scm.LotSerial.number are already the codes a scanner
+    # emits (L36 - resolve against them, never mint parallel identities). What inventory adds is
+    # the DEVICE layer: BarcodeLabel [LBL-] renders real Code39/Code128/EAN-13/QR SVG payloads
+    # for items/bins/pallet refs (python-barcode + qrcode, both pillow-free), ScanSession [SSN-]
+    # records handheld/wedge scans through one shared resolver (unknowns recorded, never dropped,
+    # single or pasted-batch mode), and RfidTag [TAG-] is the EPC registry (passive/active,
+    # assign/retire/lost lifecycle) whose bulk-read stamps last-seen snapshots. Zero stock writes.
+    "5.14": {
+        "Label Generation":                 "inventory:barcodelabel_list",  # bullet (LBL- label register + SVG render/print)
+        "Mobile/Handheld Scanner Integration": "inventory:scan_console",   # bullet (live resolver console recording SSN- events)
+        "RFID Tag Management":              "inventory:rfidtag_list",       # bullet (TAG- EPC registry + lifecycle verbs)
+        "Batch Scanning":                   "inventory:scan_console",       # bullet (?mode=batch paste-many on the same console)
+    },
+    # 5.12 Multi-Location Management. The SITE structure is 4.3's self-referential scm.Location
+    # tree and per-location rules largely exist elsewhere (safety stock = scm.ReorderRule,
+    # transfer lanes = 5.7 TransferRoute, pricing deliberately channel-scoped in 5.1 ItemPrice).
+    # What nothing records is the ORG tier above sites - company > region > DC/store grouping -
+    # so inventory adds LocationNetwork [LNW-] as a self-FK tree whose nodes attach spine
+    # warehouses, plus a computed global-stock page rolling the ledger UP that tree.
+    "5.12": {
+        "Location Hierarchy Setup":   "inventory:locationnetwork_list",  # bullet (org-tier tree CRUD over the location spine)
+        "Global Stock Visibility":    "inventory:global_stock",          # bullet (computed network rollup of the StockMove ledger)
+        "Location-Specific Rules":    "scm:reorderrule_list",            # bullet (per-item x per-location safety stock lives on 4.3 ReorderRule)
+    },
     # 5.9 Order Management & Fulfillment. The order DOCUMENT and its fulfilment lifecycle are
     # 4.5's scm.SalesOrder (credit checks, soft allocations, backorders) with 4.4 PickTask doing
     # the picking and 4.6 TMS owning carriers/shipments (L36 - point at them, never re-declare).
