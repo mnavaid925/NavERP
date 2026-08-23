@@ -64,7 +64,7 @@
               <dt class="text-muted" style="font-size:13px;">Category Pinning</dt>
               <dd class="mt-1">
                 {% if obj.category %}
-                  <a href="{% url 'scm:category_detail' obj.category.pk %}" class="fw-600 text-primary">{{ obj.category.name }}</a>
+                  <span class="fw-600">{{ obj.category.name }}</span>
                 {% else %}
                   <span class="text-muted">Any Category</span>
                 {% endif %}
