@@ -41,6 +41,9 @@ from apps.core.utils import write_audit_log
 from apps.inventory.models import (
     BinCapacity,
     CrossDockOrder,
+    DispositionRoutingRule,
+    FulfillmentWave,
+    FulfillmentWaveOrder,
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
@@ -50,6 +53,8 @@ from apps.inventory.models import (
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
     PutawayRule,
+    ReturnInspection,
+    ReturnInspectionChecklist,
     ShelfLifePolicy,
     StockStatus,
     TransferApproval,
@@ -66,10 +71,15 @@ from apps.scm.models import (
     PurchaseOrder,
     PurchaseOrderLine,
     PutawayTask,
+    SalesOrder,
+    ReturnAuthorization,
+    ReturnDisposition,
+    ReturnLine,
     StockMove,
     StockTransfer,
     StockTransferLine,
 )
+
 
 # Per-item attribute sets, cycled across the catalog. (name, value, unit)
 ATTRIBUTE_SETS = [
@@ -152,7 +162,13 @@ class Command(BaseCommand):
                          + TransferApprovalRule.objects.all().count()
                          + TransferRoute.objects.all().count()
                         + LotNumberRule.objects.all().count()
-                        + ShelfLifePolicy.objects.all().count())
+                        + ShelfLifePolicy.objects.all().count()
+                        + ReturnInspectionChecklist.objects.all().count()
+                        + ReturnInspection.objects.all().count()
+                        + DispositionRoutingRule.objects.all().count())
+            ReturnInspectionChecklist.objects.all().delete()
+            ReturnInspection.objects.all().delete()
+            DispositionRoutingRule.objects.all().delete()
             ItemAttribute.objects.all().delete()
             ItemPrice.objects.all().delete()
             ProductFile.objects.all().delete()
@@ -188,6 +204,9 @@ class Command(BaseCommand):
             self._seed_tracking(tenant, items)
             self._seed_transfers(tenant, items)
             self._seed_lot_tracking(tenant, items)
+            self._seed_returns_management(tenant, items)
+            self._seed_fulfillment_waves(tenant, items)
+
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -944,3 +963,212 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {len(summary)} governed transfers ({' / '.join(summary)})."))
+
+    # -- 5.10 Returns Management (RMA) ----------------------------------------------------------
+
+    def _seed_returns_management(self, tenant, items):
+        """5.10 Returns Management (RMA) — disposition routing rules, warehouse physical return
+        inspections, and quality checklist evaluations over 4.10's RMA documents.
+        """
+        locations = list(Location.objects.filter(tenant=tenant).order_by("id"))
+        restock_loc = locations[0] if locations else None
+        quarantine_loc = next((l for l in locations if "quarantine" in l.name.lower() or "hold" in l.name.lower()), restock_loc)
+
+        # 1. Seed Disposition Routing Rules
+        rules_created = 0
+        if DispositionRoutingRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: disposition routing rules already present, skipping.")
+        else:
+            DispositionRoutingRule.objects.create(
+                tenant=tenant,
+                name="Grade A Auto-Restock",
+                condition_grade="a",
+                suggested_disposition="restock",
+                destination_location=restock_loc,
+                priority=10,
+                is_active=True,
+                notes="Standard restock into sellable inventory for pristine returns.",
+            )
+            DispositionRoutingRule.objects.create(
+                tenant=tenant,
+                name="Grade B Refurbishment Routing",
+                condition_grade="b",
+                suggested_disposition="refurbish",
+                destination_location=restock_loc,
+                priority=20,
+                is_active=True,
+                notes="Route opened or lightly worn units to testing and repackaging.",
+            )
+            DispositionRoutingRule.objects.create(
+                tenant=tenant,
+                name="Grade C Secondary Liquidation",
+                condition_grade="c",
+                suggested_disposition="liquidate",
+                destination_location=quarantine_loc,
+                priority=30,
+                is_active=True,
+                notes="Route heavily worn units to secondary liquidation channel.",
+            )
+            DispositionRoutingRule.objects.create(
+                tenant=tenant,
+                name="Grade D Defective Quarantine Hold",
+                condition_grade="d",
+                suggested_disposition="quarantine",
+                destination_location=quarantine_loc,
+                priority=40,
+                requires_supervisor_approval=True,
+                is_active=True,
+                notes="Defective goods hold requiring supervisor sign-off before scrapping or RTV.",
+            )
+            if items:
+                DispositionRoutingRule.objects.create(
+                    tenant=tenant,
+                    name=f"Fast-Track Restock for {items[0].sku}",
+                    item=items[0],
+                    condition_grade="a",
+                    suggested_disposition="restock",
+                    destination_location=restock_loc,
+                    priority=5,
+                    is_active=True,
+                    notes=f"Priority restock rule for high-velocity item {items[0].sku}.",
+                )
+                rules_created += 1
+            rules_created += 4
+            self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {rules_created} disposition routing rules created."))
+
+        # 2. Seed Return Inspections & Checklists
+        if ReturnInspection.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: return inspections already present, skipping.")
+            return
+
+        rmas = list(ReturnAuthorization.objects.filter(tenant=tenant).prefetch_related("lines__item").order_by("id")[:3])
+        if not rmas:
+            self.stdout.write(f"  {tenant.name}: no RMAs found — run `seed_scm` first, skipping return inspections.")
+            return
+
+        inspections_created = 0
+        from apps.core.models import Party
+        inspector = Party.objects.filter(tenant=tenant, roles__role="employee").first() or Party.objects.filter(tenant=tenant).first()
+
+        inspection_configs = [
+            ("a", "intact", "complete", "pass", "new", True, True, Decimal("0.00"), "passed", "Pristine condition; all accessories sealed in original box."),
+            ("b", "opened", "missing_manual", "pass", "minor_wear", True, True, Decimal("10.00"), "passed", "Unit functional; minor wear on bezel, manual missing. Restockable with fee."),
+            ("d", "damaged", "missing_parts", "fail", "broken", False, False, Decimal("50.00"), "quarantined", "Defective internal board; serial tag torn. Placed on quarantine hold for supervisor review."),
+        ]
+
+        for i, rma in enumerate(rmas):
+            line = rma.lines.first()
+            item = line.item if line else (items[0] if items else None)
+            qty = line.quantity_approved if line else Decimal("1.0000")
+            if not item:
+                continue
+
+            config = inspection_configs[i % len(inspection_configs)]
+            grade, pack, comp, func, cosm, s_ver, restock, fee, stat, notes = config
+
+            disp = ReturnDisposition.objects.filter(tenant=tenant, return_line=line).first() if line else None
+
+            inspection = ReturnInspection(
+                tenant=tenant,
+                return_authorization=rma,
+                return_line=line,
+                return_disposition=disp,
+                item=item,
+                quantity=qty,
+                inspected_by=inspector,
+                inspected_at=timezone.now() - datetime.timedelta(days=i + 1, hours=2),
+                packaging_condition=pack,
+                completeness=comp,
+                functional_status=func,
+                cosmetic_condition=cosm,
+                condition_grade=grade,
+                serial_verified=s_ver,
+                is_restock_eligible=restock,
+                suggested_restock_fee_pct=fee,
+                findings=notes,
+                status=stat,
+            )
+            inspection.save()
+            inspections_created += 1
+
+            # Seed Checkpoints
+            ReturnInspectionChecklist.objects.create(
+                tenant=tenant,
+                inspection=inspection,
+                checkpoint="Packaging Integrity",
+                result="pass" if pack in ("intact", "opened") else "fail",
+                notes=f"Packaging verified as {pack}.",
+            )
+            ReturnInspectionChecklist.objects.create(
+                tenant=tenant,
+                inspection=inspection,
+                checkpoint="Accessories & Cables Check",
+                result="pass" if comp == "complete" else "fail",
+                notes=f"Completeness status: {comp}.",
+            )
+            ReturnInspectionChecklist.objects.create(
+                tenant=tenant,
+                inspection=inspection,
+                checkpoint="Power-on & Operational Testing",
+                result="pass" if func == "pass" else ("na" if func == "untested" else "fail"),
+                notes=f"Functional verdict: {func}.",
+            )
+            ReturnInspectionChecklist.objects.create(
+                tenant=tenant,
+                inspection=inspection,
+                checkpoint="Serial / IMEI Verification",
+                result="pass" if s_ver else "fail",
+                notes="Serial number verified against authorization ticket." if s_ver else "Serial mismatch or missing label.",
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {inspections_created} return inspections with checklists seeded."))
+
+
+    def _seed_fulfillment_waves(self, tenant, items):
+        """5.9 Order Management & Fulfillment — wave planning over the SCM sales-order spine.
+
+        One planned wave and one released wave per tenant, built from orders that already
+        exist in seed data (never inventing SOs), walked through the REAL release() verb so
+        the audit trail and timestamps are genuine. Zero writes into scm: membership rows
+        only point at the spine; fulfilment itself stays there.
+        """
+        if FulfillmentWave.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: fulfillment waves already present, skipping.")
+            return
+
+        open_orders = list(
+            SalesOrder.objects.filter(tenant=tenant)
+            .exclude(status__in=["cancelled", "closed"])
+            .select_related("customer")
+            .order_by("id")[:6]
+        )
+        if not open_orders:
+            self.stdout.write(
+                f"  {tenant.name}: no open sales orders — run `seed_scm` first, "
+                "skipping fulfillment waves.")
+            return
+
+        admin = (get_user_model().objects.filter(tenant=tenant, is_staff=True)
+                 .order_by("id").first())
+        half = max(1, len(open_orders) // 2)
+        created = 0
+        for status_flag, members in (("planned", open_orders[:half]),
+                                     ("released", open_orders[half:] or open_orders[:1])):
+            if not members:
+                continue
+            wave = FulfillmentWave(
+                tenant=tenant,
+                description="Seeded fulfillment wave — grouped by carrier cutoff.",
+                priority=100 - created * 10,
+                criteria_text="Orders sharing the afternoon carrier pickup.",
+                notes="Created by seed_inventory.",
+            )
+            wave.save()
+            for order in members:
+                FulfillmentWaveOrder.objects.create(
+                    tenant=tenant, wave=wave, sales_order=order, added_by=admin)
+            if status_flag == "released":
+                wave.release(admin)
+            created += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created} fulfillment waves over {len(open_orders)} sales orders."))
