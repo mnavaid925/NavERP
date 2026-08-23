@@ -43,7 +43,7 @@ def _event(tenant, status="draft", **kw):
                            scheduled_date=timezone.localdate(), **kw)
     ev.save()
     if status != "draft":
-        marker = ev.task_marker(ev.number)
+        marker = ev.task_marker()
         CycleCountTask.objects.create(tenant=tenant, location=wh,
                                       scheduled_date=timezone.localdate(),
                                       count_method="full", notes=marker)
