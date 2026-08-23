@@ -503,7 +503,8 @@ def customer_party_b(db, tenant_b):
 def rma_a(db, tenant_a, customer_party_a):
     from apps.scm.models import ReturnAuthorization
     return ReturnAuthorization.objects.create(
-        tenant=tenant_a, customer=customer_party_a, return_type="physical", status="received"
+        tenant=tenant_a, customer=customer_party_a, return_type="physical", status="received",
+        requested_on=timezone.localdate(),
     )
 
 
@@ -511,7 +512,8 @@ def rma_a(db, tenant_a, customer_party_a):
 def rma_b(db, tenant_b, customer_party_b):
     from apps.scm.models import ReturnAuthorization
     return ReturnAuthorization.objects.create(
-        tenant=tenant_b, customer=customer_party_b, return_type="physical", status="received"
+        tenant=tenant_b, customer=customer_party_b, return_type="physical", status="received",
+        requested_on=timezone.localdate(),
     )
 
 
@@ -756,4 +758,180 @@ def fulfillment_foreign_wave_b(db, tenant_b, fulfillment_loc_wave_b, fulfillment
         tenant=tenant_b, description="Globex outbound batch",
         location=fulfillment_loc_wave_b, carrier=fulfillment_carrier_b,
         ship_method="standard")
+
+
+# ---- 5.11 Stocktaking & Cycle Counting -----------------------------------------------------------
+#
+# FROZEN CONTRACT — every 5.11 test writer MUST use exactly these names and nothing else:
+#
+#   Model     : CountProgram [CTP-] (TenantNumbered) — name(64; unique_together tenant+name) /
+#               location (FK scm.Location PROTECT, NULL = whole-warehouse scope,
+#               related_name="count_programs") / abc_class(""|a|b|c) / frequency
+#               (daily|weekly|monthly, default "weekly") / weekday (0=Mon..6=Sun, nullable) /
+#               day_of_month (1-28, nullable) / count_method (zone|abc|full, default "zone") /
+#               is_active (default True) / last_run_date (system-set, editable=False) /
+#               notes(255). Cadence + verbs: is_due(today=None);
+#               generate_tasks(user, today=None) -> (task, created) — REFUSES a None scope
+#               with ValidationError and REUSES the same-day open sheet carrying the
+#               "Via count program {number}" notes marker instead of minting twice;
+#               clean() refuses a foreign-tenant location, weekly-without-weekday,
+#               monthly-without-day_of_month.
+#   Model     : PhysicalInventory [PHY-] (TenantNumbered) — warehouse (FK scm.Location
+#               PROTECT, related_name="physical_inventories") / scheduled_date /
+#               status (draft|counting|reconciled|cancelled, default "draft",
+#               editable=False) / is_frozen (default False, editable=False) / started_at +
+#               closed_at (system-set) / requested_by (SET_NULL) / notes. Status moves ONLY
+#               through the verbs: start(user) [draft->counting, sets is_frozen + spawns one
+#               CC- sheet per bin/zone under the warehouse stamped task_marker() ==
+#               "Physical inventory {number} #{pk}"], reconcile(user) [counting->reconciled,
+#               lifts the freeze, REFUSES while any spawned sheet is not reconciled/
+#               cancelled], cancel(user) [draft|counting->cancelled]. spawned_tasks();
+#               coverage -> (reconciled, total) or None when nothing was spawned.
+#   Form      : CountProgramForm.Meta.fields == ["name", "location", "abc_class", "frequency",
+#               "weekday", "day_of_month", "count_method", "is_active", "notes"] — exactly 9
+#               (location queryset excludes warehouses). PhysicalInventoryForm.Meta.fields ==
+#               ["warehouse", "scheduled_date", "notes"] — exactly 3 (warehouse queryset =
+#               warehouses only). Both take tenant= as the first kwarg.
+#   Urls      : inventory:countprogram_list          /inventory/count-programs/
+#               inventory:countprogram_create       /inventory/count-programs/add/
+#               inventory:countprogram_run          /inventory/count-programs/<pk>/run/     (POST)
+#               inventory:countprogram_detail       /inventory/count-programs/<pk>/
+#               inventory:countprogram_edit         /inventory/count-programs/<pk>/edit/
+#               inventory:countprogram_delete       /inventory/count-programs/<pk>/delete/  (POST)
+#               inventory:physicalinventory_list      /inventory/physical-inventory/
+#               inventory:physicalinventory_create    /inventory/physical-inventory/add/
+#               inventory:physicalinventory_start     /inventory/physical-inventory/<pk>/start/     (POST)
+#               inventory:physicalinventory_reconcile /inventory/physical-inventory/<pk>/reconcile/ (POST)
+#               inventory:physicalinventory_cancel    /inventory/physical-inventory/<pk>/cancel/    (POST)
+#               inventory:physicalinventory_detail    /inventory/physical-inventory/<pk>/
+#               inventory:physicalinventory_edit      /inventory/physical-inventory/<pk>/edit/
+#               inventory:physicalinventory_delete    /inventory/physical-inventory/<pk>/delete/    (POST)
+#               inventory:variance_report           /inventory/variance-report/?status=&q=
+#   Context   : countprogram_list       -> object_list/page_obj/q + frequency_choices +
+#                                due_count + today
+#               countprogram_detail     -> obj + recent_tasks (<=10) + is_due
+#               physicalinventory_list  -> object_list/page_obj/q + status_choices +
+#                                frozen_count
+#               physicalinventory_detail-> obj + sheets (<=25) + sheet_total +
+#                                sheet_reconciled
+#               variance_report         -> object_list = row DICTS {task, line_count,
+#                                counted_lines, variance_lines, net_variance, abs_variance}
+#                                + page_obj + q + status_choices(counted|reconciled|open) +
+#                                status
+#               CRUD forms              -> form + is_edit (+ obj when editing); every verb
+#                                (run/start/reconcile/cancel/delete) is redirect-only flash
+#                                traffic, no template of its own.
+#
+# Fixtures below build ONE scm.Location tree per tenant (warehouse › zone + bin) so start()
+# mints a KNOWN two-sheet set through the REAL path, plus an active cadence and a draft
+# event on both sides of the tenant fence.
+
+
+def _stocktake_sheet(tenant, location, *, status="scheduled", scheduled_date=None,
+                     count_method="full", notes=""):
+    """A spine CycleCountTask as the 5.11 pages see it.
+
+    Statuses are ordinary data on the SCM spine (only inventory-side documents are
+    verb-driven), so tests flip them by writing the row — e.g. mark a spawned sheet
+    ``status="reconciled"`` before calling PhysicalInventory.reconcile().
+    """
+    from apps.scm.models import CycleCountTask
+
+    return CycleCountTask.objects.create(
+        tenant=tenant, location=location,
+        scheduled_date=scheduled_date or timezone.localdate(),
+        count_method=count_method, status=status, notes=notes)
+
+
+def _stocktake_line(task, item, *, expected="10", counted=None):
+    """One blind-count line: expected snapshotted server-side, counted None until counted."""
+    from apps.scm.models import CycleCountTaskLine
+
+    return CycleCountTaskLine.objects.create(
+        cycle_count=task, item=item, expected_quantity=Decimal(expected),
+        counted_quantity=None if counted is None else Decimal(counted))
+
+
+@pytest.fixture
+def stocktake_warehouse_a(db, tenant_a):
+    """The Acme warehouse the whole 5.11 tree freezes and hangs its bins under."""
+    return _receiving_location(tenant_a, "SWH-A", location_type="warehouse")
+
+
+@pytest.fixture
+def stocktake_zone_a(db, tenant_a, stocktake_warehouse_a):
+    """A zone directly under SWH-A — one of the TWO locations start() spawns sheets for."""
+    return _receiving_location(
+        tenant_a, "SZ-A", location_type="zone", parent=stocktake_warehouse_a)
+
+
+@pytest.fixture
+def stocktake_bin_a(db, tenant_a, stocktake_warehouse_a):
+    """A bin directly under SWH-A — the second (and last) spawnable location, so a started
+    event owns EXACTLY two CC- sheets."""
+    return _receiving_location(
+        tenant_a, "SA-01", location_type="bin", parent=stocktake_warehouse_a)
+
+
+@pytest.fixture
+def stocktake_program_a(db, tenant_a, stocktake_zone_a):
+    """An ACTIVE weekly-Monday cadence scoped to SZ-A — due only on Mondays."""
+    from apps.inventory.models import CountProgram
+    return CountProgram.objects.create(
+        tenant=tenant_a, name="Weekly zone sweep", location=stocktake_zone_a,
+        frequency="weekly", weekday=0, count_method="zone",
+        notes="Monday morning cycle count")
+
+
+@pytest.fixture
+def stocktake_event_a(db, tenant_a, admin_user, stocktake_warehouse_a):
+    """A still-DRAFT full-count event over SWH-A — every verb still ahead of it."""
+    from apps.inventory.models import PhysicalInventory
+    return PhysicalInventory.objects.create(
+        tenant=tenant_a, warehouse=stocktake_warehouse_a,
+        scheduled_date=timezone.localdate(), requested_by=admin_user,
+        notes="Year-end wall-to-wall count")
+
+
+@pytest.fixture
+def stocktake_event_counting_a(db, tenant_a, admin_user, stocktake_warehouse_a):
+    """A REALLY started event — start() itself ran, so it is counting/frozen with its TWO
+    spawned CC- sheets living in SCM under the true #pk-stamped provenance marker."""
+    from apps.inventory.models import PhysicalInventory
+    event = PhysicalInventory.objects.create(
+        tenant=tenant_a, warehouse=stocktake_warehouse_a,
+        scheduled_date=timezone.localdate(), requested_by=admin_user,
+        notes="Mid-year freeze count")
+    return event.start(admin_user)
+
+
+@pytest.fixture
+def stocktake_warehouse_b(db, tenant_b):
+    """Globex's warehouse — foreign-workspace mirror of SWH-A."""
+    return _receiving_location(tenant_b, "SWH-B", location_type="warehouse")
+
+
+@pytest.fixture
+def stocktake_bin_b(db, tenant_b, stocktake_warehouse_b):
+    """Globex's bin under SWH-B — the cross-tenant rejection target."""
+    return _receiving_location(
+        tenant_b, "SB-01", location_type="bin", parent=stocktake_warehouse_b)
+
+
+@pytest.fixture
+def stocktake_program_b(db, tenant_b, stocktake_bin_b):
+    """Globex's own ACTIVE daily cadence — must never leak into acme pages."""
+    from apps.inventory.models import CountProgram
+    return CountProgram.objects.create(
+        tenant=tenant_b, name="Globex bin patrol", location=stocktake_bin_b,
+        frequency="daily", count_method="full")
+
+
+@pytest.fixture
+def stocktake_event_b(db, tenant_b, admin_b, stocktake_warehouse_b):
+    """Globex's own draft event — the foreign target for IDOR/guard lanes."""
+    from apps.inventory.models import PhysicalInventory
+    return PhysicalInventory.objects.create(
+        tenant=tenant_b, warehouse=stocktake_warehouse_b,
+        scheduled_date=timezone.localdate(), requested_by=admin_b)
 
