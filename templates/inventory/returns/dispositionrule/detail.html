@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Disposition Routing Rule Detail{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:returns_workbench' %}">Returns Management</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:dispositionrule_list' %}">Disposition Rules</a>
+        <span class="sep">›</span>
+        <span>{{ obj.name }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:dispositionrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to List</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:dispositionrule_edit' obj.pk %}" class="btn btn-primary"><i data-lucide="pencil"></i> Edit Rule</a>
+        <form method="post" action="{% url 'inventory:dispositionrule_delete' obj.pk %}" onsubmit="return confirm('Delete this routing rule?');" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-6">
+    <div class="col-span-2 space-y-6">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="card-title">Rule Configuration</h2>
+          <div>
+            {% if obj.is_active %}
+              <span class="badge badge-green">Active</span>
+            {% else %}
+              <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Rule Name</dt>
+              <dd class="mt-1 fw-600">{{ obj.name }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Evaluation Priority</dt>
+              <dd class="mt-1 mono fw-600">{{ obj.priority }} (Lower numbers evaluate first)</dd>
+            </div>
+
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Item Pinning</dt>
+              <dd class="mt-1">
+                {% if obj.item %}
+                  <a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600 text-primary">{{ obj.item.sku }}</a>
+                  <span class="text-muted">({{ obj.item.name }})</span>
+                {% else %}
+                  <span class="text-muted">Any Item (Not item-pinned)</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Category Pinning</dt>
+              <dd class="mt-1">
+                {% if obj.category %}
+                  <a href="{% url 'scm:category_detail' obj.category.pk %}" class="fw-600 text-primary">{{ obj.category.name }}</a>
+                {% else %}
+                  <span class="text-muted">Any Category</span>
+                {% endif %}
+              </dd>
+            </div>
+
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Condition Grade Criteria</dt>
+              <dd class="mt-1">
+                {% if obj.condition_grade == 'a' %}
+                  <span class="badge badge-green">Grade A — Like New</span>
+                {% elif obj.condition_grade == 'b' %}
+                  <span class="badge badge-info">Grade B — Minor Wear</span>
+                {% elif obj.condition_grade == 'c' %}
+                  <span class="badge badge-amber">Grade C — Heavy Wear</span>
+                {% elif obj.condition_grade == 'd' %}
+                  <span class="badge badge-red">Grade D — Defective</span>
+                {% else %}
+                  <span class="badge badge-slate">All Condition Grades</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Supervisor Approval Required</dt>
+              <dd class="mt-1">
+                {% if obj.requires_supervisor_approval %}
+                  <span class="badge badge-amber">Yes — Supervisor Sign-off Required</span>
+                {% else %}
+                  <span class="badge badge-green">No — Direct Execution Allowed</span>
+                {% endif %}
+              </dd>
+            </div>
+
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Suggested Disposition Action</dt>
+              <dd class="mt-1">
+                <span class="badge badge-info" style="font-size:13px; padding:4px 8px;">{{ obj.get_suggested_disposition_display }}</span>
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Target Destination Location</dt>
+              <dd class="mt-1">
+                {% if obj.destination_location %}
+                  <a href="{% url 'scm:location_detail' obj.destination_location.pk %}" class="mono fw-600 text-primary">
+                    {{ obj.destination_location.code }}
+                  </a>
+                  <span class="text-muted">({{ obj.destination_location.name }})</span>
+                {% else %}
+                  <span class="text-muted">Default Staging / Unassigned</span>
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      {% if obj.notes %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Operator Notes &amp; Guidelines</h2></div>
+          <div class="card-body">
+            <p>{{ obj.notes }}</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="space-y-6">
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Engine Information</h2></div>
+        <div class="card-body space-y-3 text-sm text-muted">
+          <p>
+            When a return is inspected or processed on the receiving bench, the disposition engine checks rules in order of specificity:
+          </p>
+          <ol class="list-decimal pl-4 space-y-1">
+            <li>Item SKU Match (Tier 3)</li>
+            <li>Item Category Match (Tier 2)</li>
+            <li>Workspace Catch-all (Tier 1)</li>
+          </ol>
+          <p>Within matching tiers, lower priority numbers fire first.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
