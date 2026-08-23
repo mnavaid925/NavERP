@@ -9,6 +9,8 @@ from .Catalog.ProductFiles import ProductFile
 from .FulfillmentOrchestration.FulfillmentWaves import FulfillmentWave, FulfillmentWaveOrder
 from .InventoryTrackingControl.InventoryReservations import InventoryReservation
 from .InventoryTrackingControl.StockStatuses import StockStatus
+from .StocktakingCycleCounting.CountPrograms import CountProgram
+from .StocktakingCycleCounting.PhysicalInventories import PhysicalInventory
 from .LotSerialTracking.LotNumberRules import LotNumberRule
 from .LotSerialTracking.ShelfLifePolicies import FLAG_CSS, ShelfLifePolicy, classify_lot
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
@@ -41,6 +43,7 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "BinCapacity", "CrossDockOrder",
            "StockStatus", "InventoryReservation",
            "LotNumberRule", "ShelfLifePolicy", "classify_lot", "FLAG_CSS",
+           "CountProgram", "PhysicalInventory",
            "TransferRoute", "TransferApprovalRule", "TransferApproval",
            "APPLIES_TO_CHOICES", "SCOPE_ALL", "SCOPE_INTER", "SCOPE_INTRA",
            "ReturnInspection", "ReturnInspectionChecklist",
