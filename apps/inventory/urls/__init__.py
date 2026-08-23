@@ -7,7 +7,8 @@ Django is first-match-wins: within each module the literal routes (`add/`) prece
 ``<int:pk>`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
 shadowing surface to reason about; the first segments (`""`, `attributes/`, `prices/`,
 `files/`, `putaway-rules/`, `putaway-suggestions/`, `vendor-communications/`,
-`bin-capacity/`, `cross-dock/`, `warehouse-map/`,
+`bin-capacity/`, `cross-dock/`, `warehouse-map/`, `lot-rules/`,
+`lot-generate/`, `shelf-life-policies/`, `fefo-board/`, `traceability/`,
 `tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
 distinct whole components and none can swallow another.
 """
@@ -18,6 +19,7 @@ from .Catalog.Overview import urlpatterns as _cat_overview
 from .InventoryTrackingControl.InventoryReservations import urlpatterns as _tc_reservations
 from .InventoryTrackingControl.StockLevels import urlpatterns as _tc_stocklevels
 from .InventoryTrackingControl.StockStatuses import urlpatterns as _tc_stockstatuses
+from .LotSerialTracking import urlpatterns as _lst_lotserial
 from .PurchaseOrderManagement.ApprovalRules import urlpatterns as _po_approvalrules
 from .PurchaseOrderManagement.Approvals import urlpatterns as _po_approvals
 from .PurchaseOrderManagement.Dispatches import urlpatterns as _po_dispatches
@@ -48,4 +50,5 @@ urlpatterns = [
     *_tc_stocklevels,      # InventoryTrackingControl/StockLevels (computed page)
     *_tc_stockstatuses,    # InventoryTrackingControl/StockStatuses (CRUD)
     *_tc_reservations,     # InventoryTrackingControl/InventoryReservations (CRUD + lifecycle verbs)
+    *_lst_lotserial,       # LotSerialTracking (rules/generate/policies CRUD + FEFO board + trace)
 ]
