@@ -140,9 +140,12 @@ def barcodelabel_void(request, pk):
     return redirect("inventory:barcodelabel_detail", pk=obj.pk)
 
 
-@login_required
+@tenant_admin_required
 def barcodelabel_print(request, pk):
-    """GET renders the printable label copies; POST stamps + flips the label to printed."""
+    """GET renders the printable label copies; POST stamps + flips the label to printed.
+
+    The whole surface is admin-gated: the GET page is a write-surface preview and the POST
+    mutates status/printed_at — both belong behind the same gate as every other label write."""
     obj = get_object_or_404(
         BarcodeLabel.objects.filter(tenant=request.tenant)
         .select_related("item", "location", "lot_serial"),
