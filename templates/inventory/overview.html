@@ -131,6 +131,17 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Lot &amp; Serial Tracking Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:lotrule_list' %}" class="btn btn-outline"><i data-lucide="layers"></i> Numbering Rules</a>
+      <a href="{% url 'inventory:lot_generate' %}" class="btn btn-outline"><i data-lucide="barcode"></i> Generate Batch</a>
+      <a href="{% url 'inventory:fefo_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> FEFO Board</a>
+      <a href="{% url 'inventory:traceability' %}" class="btn btn-outline"><i data-lucide="git-fork"></i> Traceability</a>
+      <a href="{% url 'scm:lotserial_list' %}" class="btn btn-outline"><i data-lucide="box"></i> Lot Master (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
