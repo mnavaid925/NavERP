@@ -103,7 +103,7 @@
           {% for obj in object_list %}
             <tr>
               <td>
-                <a href="{% url 'inventory:returninspection_detail' obj.pk %}" class="fw-600 mono text-primary">{{ obj.number }}</a>
+                <a href="{% url 'inventory:returninspection_detail' obj.pk %}" class="fw-600 mono text-brand">{{ obj.number }}</a>
                 <div class="text-muted" style="font-size:12px;">{{ obj.inspected_at|date:"Y-m-d H:i" }}</div>
               </td>
               <td>
