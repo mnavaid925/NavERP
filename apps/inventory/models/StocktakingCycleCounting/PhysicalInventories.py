@@ -70,17 +70,23 @@ class PhysicalInventory(TenantNumbered):
 
     # -- provenance -----------------------------------------------------------------------------
 
-    @classmethod
-    def task_marker(cls, number):
-        """The CycleCountTask.notes stamp linking spawned sheets back to this event."""
-        return f"Physical inventory {number}"
+    def task_marker(self):
+        """The CycleCountTask.notes stamp linking spawned sheets back to this event.
+
+        One canonical builder — every writer and every string-matching consumer goes
+        through this, so the stamp can't drift. The ``#pk`` component is what makes a
+        re-issued number safe: after a flush re-seed PHY numbering restarts while sheets
+        minted by the previous row generation may still live in SCM, and a number-only
+        stamp would let the new event adopt (and report) those stale sheets.
+        """
+        return f"Physical inventory {self.number} #{self.pk}"
 
     def spawned_tasks(self):
         from apps.scm.models import CycleCountTask
 
         return CycleCountTask.objects.filter(
             tenant_id=self.tenant_id,
-            notes__startswith=self.task_marker(self.number))
+            notes__startswith=self.task_marker())
 
     @property
     def coverage(self):
@@ -123,7 +129,7 @@ class PhysicalInventory(TenantNumbered):
                 raise ValidationError(
                     f"{obj.number} is {obj.get_status_display().lower()} and cannot be started.")
             today = timezone.localdate()
-            marker = obj.task_marker(obj.number)
+            marker = obj.task_marker()
             existing = set(obj.spawned_tasks()
                            .values_list("location_id", flat=True))
             made = 0
