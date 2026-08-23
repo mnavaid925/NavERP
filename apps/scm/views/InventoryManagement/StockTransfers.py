@@ -123,7 +123,10 @@ def stocktransfer_complete(request, pk):
             obj = get_object_or_404(
                 StockTransfer.objects.select_for_update().select_related("from_location", "to_location"),
                 pk=pk, tenant=request.tenant)
-            if obj.status not in ("draft", "in_transit"):
+            # 'approved' is 5.7's gate: a movement whose inventory.TransferApproval tier
+            # chain has fully cleared. A plain draft still completes ungoverned; a
+            # pending_approval one cannot be executed around its chain.
+            if obj.status not in ("draft", "approved", "in_transit"):
                 messages.info(request, "This transfer is already completed or cancelled.")
                 return redirect("scm:stocktransfer_detail", pk=pk)
             if not obj.lines.exists():
