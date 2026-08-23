@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Transfer Approval Queue{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Transfer Approval Queue</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:transfer_board' %}">Transfers</a><span class="sep">›</span><span>Approval Queue</span></div>
+      <p class="text-muted">Every movement awaiting approval, routed by scope and size band. Clearing the final tier marks the movement approved; a rejection returns it to draft for amendment.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:transfer_board' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Board</a>
+      <a href="{% url 'inventory:transferapprovalrule_list' %}" class="btn btn-outline"><i data-lucide="scale"></i> Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Pending movements</h2></div>
+    <div class="card-body">
+      {% for item in queue %}
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-body">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center;">
+              <div>
+                <a href="{% url 'inventory:transfer_panel' item.trf.pk %}" class="fw-600">{{ item.trf.number }}</a>
+                <span class="badge {{ item.scope_css }}">{{ item.scope_label }}</span>
+                <span class="text-muted">{{ item.trf.from_location.code }} → {{ item.trf.to_location.code }} · {{ item.units|floatformat:"-2" }} units</span>
+                {% if item.progress.rule %}
+                  <span class="badge badge-info">{{ item.progress.rule.name }}</span>
+                {% else %}
+                  <span class="badge badge-slate">Default · {{ default_tiers }} tier{{ default_tiers|pluralize }}</span>
+                {% endif %}
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                {% if is_admin %}
+                  {# Reachable mid-chain when a rule is edited or deactivated under a pending movement — the honest exit is an explicit human confirm, not a silent auto-finish. #}
+                  <form method="post" action="{% url 'inventory:transfer_tier_approve' item.trf.pk item.progress.next_tier %}">
+                    {% csrf_token %}
+                    <input type="text" name="note" class="form-input" style="min-width:140px;" placeholder="Note (optional)" aria-label="Decision note">
+                    <button class="btn btn-sm btn-primary" type="submit" formaction="{% url 'inventory:transfer_tier_approve' item.trf.pk item.progress.next_tier %}"><i data-lucide="check"></i> {% if item.progress.done %}Confirm &amp; approve{% else %}Approve tier {{ item.progress.next_tier }}{% endif %}</button>
+                    <button class="btn btn-sm btn-danger" type="submit" formaction="{% url 'inventory:transfer_tier_reject' item.trf.pk item.progress.next_tier %}" onclick="return confirm('Reject this movement? It returns to draft for amendment.');"><i data-lucide="x"></i> Reject</button>
+                  </form>
+                {% endif %}
+                <span class="text-muted">{{ item.progress.cleared }}/{{ item.progress.required }} tier{{ item.progress.required|pluralize }} cleared</span>
+              </div>
+            </div>
+            {% if item.progress.decisions %}
+              <div style="margin-top:8px;">
+                {% for d in item.progress.decisions %}
+                  <span class="badge {{ d.decision_css }}">T{{ d.tier }} {{ d.get_decision_display }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <div class="empty-state"><i data-lucide="clipboard-check"></i><h3>Nothing awaiting approval</h3><p>Submit a draft transfer from the board and it will appear here with its required tier chain.</p></div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent decisions</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tier</th><th>Movement</th><th>Rule</th><th>Decided by</th><th>When</th><th>Note</th></tr></thead>
+        <tbody>
+          {% for d in recent %}
+            <tr>
+              <td><span class="badge {{ d.decision_css }}">T{{ d.tier }} {{ d.get_decision_display }}</span></td>
+              <td><a href="{% url 'inventory:transfer_panel' d.transfer.pk %}" class="fw-600">{{ d.transfer.number }}</a></td>
+              <td>{% if d.rule %}{{ d.rule.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if d.decided_by %}{{ d.decided_by.get_username|default:d.decided_by.pk }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ d.decided_at|date:"M d, Y H:i" }}</td>
+              <td class="text-muted">{{ d.note|truncatechars:60 }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="history"></i><h3>No decisions recorded yet</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
