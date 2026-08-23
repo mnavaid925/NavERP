@@ -35,7 +35,7 @@
             <label class="form-label" for="session">Current Session *</label>
             <select name="session" id="session" aria-label="Scan Session" class="form-select">
               {% for s in sessions %}
-                <option value="{{ s.pk }}">{{ s.number }}{% if s.device_label %} · {{ s.device_label }}{% endif %}</option>
+                <option value="{{ s.pk }}" {% if s.pk == selected_id %}selected{% endif %}>{{ s.number }}{% if s.device_label %} · {{ s.device_label }}{% endif %}</option>
               {% endfor %}
             </select>
           </div>
