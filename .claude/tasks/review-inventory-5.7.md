@@ -13,28 +13,28 @@ DB-backed pytest was sandbox-killed during review; collect-only verified.
 | Tests | Gaps | I3, M6 |
 
 ## Critical
-- [ ] C1 Board scope filter dead: option values inter/intra vs view gate `scope_filter in SCOPE_CSS`
+- [x] fixed C1 Board scope filter dead: option values inter/intra vs view gate `scope_filter in SCOPE_CSS`
       (keys inter_warehouse/intra_warehouse) - Transfers.py:146-154 + board.html:26-27. Filter never
       applies while the option looks selected. Fix: alias map {inter: SCOPE_INTER, intra: SCOPE_INTRA}.
 
 ## Important
-- [ ] I1 Rule/Route CRUD writes not admin-gated (mirrored 5.3 gates them) - wrap create/edit/delete
+- [x] fixed I1 Rule/Route CRUD writes not admin-gated (mirrored 5.3 gates them) - wrap create/edit/delete
       of TransferRoutes + ApprovalRules views in @tenant_admin_required; pass is_admin to list/detail;
       gate Edit/Delete affordances in templates.
-- [ ] I2 Board Approval column always shows 0/N once pending: template reads row.progress.decision_count,
+- [x] fixed I2 Board Approval column always shows 0/N once pending: template reads row.progress.decision_count,
       _progress() has no such key. Fix: add decision_count to _progress dict.
-- [ ] I3 Test gaps: tautological OR assertion hides C1; missing covers()-refusal at submit; missing
+- [x] fixed I3 Test gaps: tautological OR assertion hides C1; missing covers()-refusal at submit; missing
       default-tier fallback case. Strengthen assertions single-sided + assert actual filtering.
 
 ## Minor
 - [ ] M1 No index supporting queue recent-decisions query (tenant, decided_at). DEFERRED - new
       inventory migration would collide with the concurrent 5.8 session numbering; schedule with it.
-- [ ] M2 Rule detail decisions query lacks explicit .filter(tenant=...) defense-in-depth (5.3 has it).
+- [x] fixed M2 Rule detail decisions query lacks explicit .filter(tenant=...) defense-in-depth (5.3 has it).
 - [~] M3 Clamp stored tier to required on Confirm-&-approve beyond-rule path - SKIPPED: deliberate
       human-confirm exit hatch; clamping would hide that a rule shrank mid-chain.
-- [ ] M4 transfer_submit not locked like decide/complete - wrap in atomic + select_for_update.
-- [ ] M5 Panel ledger badge shows raw move_type code; use get_move_type_display.
-- [ ] M6 Pin resolver tie-break determinism + covers() same-endpoint unit tests.
+- [x] fixed M4 transfer_submit not locked like decide/complete - wrap in atomic + select_for_update.
+- [x] fixed M5 Panel ledger badge shows raw move_type code; use get_move_type_display.
+- [x] fixed M6 Pin resolver tie-break determinism + covers() same-endpoint unit tests.
 
 ## Verified clean
 Tenant isolation everywhere; IDOR -> 404 tested; tier verbs admin-gated + POST-only; csrf on every
