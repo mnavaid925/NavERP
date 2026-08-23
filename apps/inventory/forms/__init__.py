@@ -15,6 +15,7 @@ from .LotSerialTracking.LotNumberRules import (
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRuleForm
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatchForm
 from .ReceivingPutaway.PutawayRules import PutawayRuleForm
+from .StockMovementTransfers import TransferApprovalRuleForm, TransferRouteForm
 from .VendorSupplierManagement.VendorCommunications import VendorCommunicationForm
 from .WarehousingBinManagement.BinCapacities import BinCapacityForm
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrderForm
@@ -24,4 +25,5 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "PutawayRuleForm",
            "BinCapacityForm", "CrossDockOrderForm",
            "StockStatusForm", "InventoryReservationForm",
-           "LotNumberRuleForm", "ShelfLifePolicyForm", "GenerateLotForm"]
+           "LotNumberRuleForm", "ShelfLifePolicyForm", "GenerateLotForm",
+           "TransferRouteForm", "TransferApprovalRuleForm"]
