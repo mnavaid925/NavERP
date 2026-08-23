@@ -130,16 +130,25 @@ class PhysicalInventory(TenantNumbered):
                     f"{obj.number} is {obj.get_status_display().lower()} and cannot be started.")
             today = timezone.localdate()
             marker = obj.task_marker()
-            existing = set(obj.spawned_tasks()
-                           .values_list("location_id", flat=True))
-            made = 0
-            for loc in obj._bin_locations():
-                if loc.pk in existing:
-                    continue
-                CycleCountTask.objects.create(
-                    tenant_id=obj.tenant_id, location=loc, scheduled_date=today,
+            covered = set(obj.spawned_tasks()
+                          .values_list("location_id", flat=True))
+            pending = [loc for loc in obj._bin_locations() if loc.pk not in covered]
+            # One numbered INSERT beats one-per-bin: a per-sheet create() runs
+            # next_number's max+1 SELECT inside this lock-holding transaction —
+            # thousands of serialized round trips on a wall-to-wall count. Read the
+            # tenant's highest CC number ONCE, pre-assign locally, insert all sheets
+            # in a single statement (same left-anchored max probe next_number uses).
+            last = (CycleCountTask.objects
+                    .filter(tenant_id=obj.tenant_id, number__startswith="CC-")
+                    .order_by("-number").first())
+            seq = int(last.number.split("-")[-1]) + 1 if last else 1
+            CycleCountTask.objects.bulk_create([
+                CycleCountTask(
+                    tenant_id=obj.tenant_id, location=loc,
+                    number=f"CC-{seq + offset:05d}", scheduled_date=today,
                     count_method="full", notes=marker)
-                made += 1
+                for offset, loc in enumerate(pending)])
+            made = len(pending)
             obj.status = "counting"
             obj.is_frozen = True
             obj.started_at = timezone.now()
