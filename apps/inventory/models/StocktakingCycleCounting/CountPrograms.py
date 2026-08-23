@@ -89,7 +89,11 @@ class CountProgram(TenantNumbered):
 
         One task per run (the scope lives on the task's location + method). Duplicate
         protection: the same (tenant, location, scheduled_date) open task with this
-        program's marker is reused instead of minted twice.
+        program's marker is reused instead of minted twice. The whole run is one
+        transaction with the program row re-read FOR UPDATE (mirroring
+        ``PhysicalInventory._locked``), so two near-simultaneous Run POSTs serialise:
+        the second sees the first's sheet through the prefix probe instead of minting
+        its own.
         """
         from apps.core.utils import write_audit_log
         from apps.scm.models import CycleCountTask
@@ -99,24 +103,27 @@ class CountProgram(TenantNumbered):
                 "This program has no counting scope — set its location first.")
         today = today or timezone.localdate()
 
-        marker = f"Via count program {self.number}"
-        existing = (CycleCountTask.objects
-                    .filter(tenant_id=self.tenant_id, location=self.location,
-                            scheduled_date=today, notes__startswith=marker)
-                    .exclude(status__in=("cancelled",)).first())
-        if existing is not None:
-            task = existing
-            created = False
-        else:
-            task = CycleCountTask.objects.create(
-                tenant_id=self.tenant_id, location=self.location,
-                scheduled_date=today, count_method=self.count_method,
-                notes=f"{marker} · {self.name}")
-            created = True
-        self.last_run_date = today
-        self.save(update_fields=["last_run_date", "updated_at"])
-        write_audit_log(user, self, "run" if created else "rerun",
-                        {"task": task.number})
+        with transaction.atomic():
+            program = type(self).objects.select_for_update().get(pk=self.pk)
+            marker = f"Via count program {program.number}"
+            existing = (CycleCountTask.objects
+                        .filter(tenant_id=program.tenant_id, location=program.location,
+                                scheduled_date=today, notes__startswith=marker)
+                        .exclude(status__in=("cancelled",)).first())
+            if existing is not None:
+                task = existing
+                created = False
+            else:
+                task = CycleCountTask.objects.create(
+                    tenant_id=program.tenant_id, location=program.location,
+                    scheduled_date=today, count_method=program.count_method,
+                    notes=f"{marker} · {program.name}")
+                created = True
+            program.last_run_date = today
+            program.save(update_fields=["last_run_date", "updated_at"])
+            write_audit_log(user, program, "run" if created else "rerun",
+                            {"task": task.number})
+        self.last_run_date = program.last_run_date  # keep the caller's instance honest
         return task, created
 
     @property
