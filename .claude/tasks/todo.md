@@ -26613,3 +26613,38 @@ app suite 618 passed + 12 foreign errors (sibling 5.10 conftest missing requeste
 **Adoption notes:** built while sibling lanes shipped/committed 5.10 and started 5.11 in the
 same checkout; migration 0014 deliberately bundles both apps' pending tables to claim the node;
 one-line 5.10 seeder typo fixed (disclosed in commit message).
+
+---
+
+## 5.10 Returns Management (RMA) - completed 2026-08-23 (resume close-out)
+
+**Resume context:** the original 5.10 session died mid-build after committing the integration
+layer (LIVE_LINKS 5.10, admin, package __init__ re-exports, seeder block, migration 0014) but
+BEFORE committing the four ReturnsManagement layer folders, the 7 templates and any tests. This
+session verified what landed, fixed it, committed the rest, and ran the full quality sequence.
+
+**Bugs found & fixed on resume:** RMA-line prefill read nonexistent `ReturnLine.quantity_authorized`
+(spine has quantity_requested/quantity_approved); stray `formset.save_m2m()` on an unsaved inline
+formset (AttributeError 500 on create); `write_audit_log` called with kwargs that do not exist;
+nonexistent `badge-purple` (x5) and `btn-xs` classes; workbench.html printed quantity_authorized.
+Spine-conformance fixes: `scm.ReturnLine` is TENANT-LESS with a required `reason` FK - model clean()
+and form `_reject_foreign` now guard lines through the parent RMA instead of a phantom tenant column.
+
+**Review wave:** all six lanes returned (one security retry after a network error). 20 findings
+(1C/6I/13M) -> `.claude/tasks/review-inventory-5.10.md`; code-fixer closed 19 + skipped M13 as
+not-a-defect (member users already come from seed_accounts). C1: dispositionrule detail linked
+`scm:category_detail`, which does not exist -> NoReverseMatch 500 on category-pinned rules.
+I1: return_disposition prefilled from ?disp= but never rendered -> bench "Pending QA" could never
+flip to "Inspected". Plus formset gate, as_db_int GET params, text-primary x12 -> text-brand,
+select_related customer N+1, grouped KPI counts, EXISTS search, dark-mode tints, stat-grid.
+
+**Tests:** test_returns_{models,forms,views,security}.py = 17/17 green under pytest after fixing
+the conftest fixtures (tenant-less ReturnLine kwargs, missing requested_on, member_client_a ->
+canonical member_client). FULL unfiltered apps/inventory suite: exit=0, zero failures. Sandbox
+caveat of record: DB-backed pytest was being killed by this shell ("ChildProcess.kill") for most
+of the session (orphaned children starving later runs per the 5.11 note); verification during that
+window used temp/run_returns_tests.py (16 assertions vs dev MySQL with SMOKETEST cleanup) +
+temp/smoke_returns.py (page sweep) - both left green.
+
+**Concurrency:** built alongside the sibling 5.11 session in this checkout; their commits and
+conftest block were left untouched throughout; review wave scoped to the 5.10 changeset only.
