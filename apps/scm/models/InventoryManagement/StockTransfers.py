@@ -13,8 +13,15 @@ class StockTransfer(TenantNumbered):
 
     NUMBER_PREFIX = "TRF"
 
+    # The two governed states are Module 5.7's (inventory.TransferApprovalRule /
+    # TransferApproval): a draft SUBMITTED for approval parks at pending_approval, and
+    # only a movement whose tier chain has fully cleared reaches approved. scm's own
+    # complete action accepts 'approved' alongside 'draft' so an ungoverned transfer
+    # needs no sign-off while a governed one cannot be executed around its chain.
     STATUS_CHOICES = [
         ("draft", "Draft"),
+        ("pending_approval", "Pending Approval"),
+        ("approved", "Approved"),
         ("in_transit", "In Transit"),
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
@@ -25,8 +32,16 @@ class StockTransfer(TenantNumbered):
                                       related_name="transfers_out")
     to_location = models.ForeignKey("scm.Location", on_delete=models.PROTECT,
                                     related_name="transfers_in")
+    # --- 5.7 Transfer Routing ---------------------------------------------------------------
+    # Same additive-on-the-spine move Location made for bin capacity and cold storage: the
+    # chosen route lives ON the movement rather than in a parallel mapping table, so it is
+    # readable wherever the document is. Nullable + SET_NULL — clearing a route from the
+    # catalog must never rewrite what actually carried a past movement.
+    route = models.ForeignKey("inventory.TransferRoute", on_delete=models.SET_NULL,
+                              null=True, blank=True, related_name="transfers",
+                              help_text="How this movement travels (5.7 Transfer Routing)")
     transfer_date = models.DateField()
-    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default="draft")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="draft")
     completed_at = models.DateTimeField(null=True, blank=True, editable=False)
     notes = models.TextField(blank=True)
 
