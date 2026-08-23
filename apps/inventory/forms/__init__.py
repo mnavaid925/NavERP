@@ -21,9 +21,15 @@ from .LotSerialTracking.LotNumberRules import (
     LotNumberRuleForm,
     ShelfLifePolicyForm,
 )
+from .MultiLocationManagement.LocationNetworks import LocationNetworkForm
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRuleForm
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatchForm
 from .ReceivingPutaway.PutawayRules import PutawayRuleForm
+from .BarcodeRfidIntegration import (
+    BarcodeLabelForm,
+    ScanSessionForm,
+    RfidTagForm,
+)
 from .ReturnsManagement import (
     DispositionRoutingRuleForm,
     ReturnInspectionChecklistForm,
@@ -42,9 +48,11 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "BinCapacityForm", "CrossDockOrderForm",
            "StockStatusForm", "InventoryReservationForm",
            "LotNumberRuleForm", "ShelfLifePolicyForm", "GenerateLotForm",
+           "LocationNetworkForm",
            "StockLevelPlanForm",
            "CountProgramForm", "PhysicalInventoryForm",
            "TransferRouteForm", "TransferApprovalRuleForm",
            "ReturnInspectionForm", "ReturnInspectionChecklistForm",
-           "ReturnInspectionChecklistFormSet", "DispositionRoutingRuleForm"]
+           "ReturnInspectionChecklistFormSet", "DispositionRoutingRuleForm",
+           "BarcodeLabelForm", "ScanSessionForm", "RfidTagForm"]
 
