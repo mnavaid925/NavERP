@@ -59,4 +59,17 @@ class FulfillmentWaveOrderForm(TenantUniqueMixin, TenantModelForm):
                 f"{self.instance.wave.number} is "
                 f"{self.instance.wave.get_status_display().lower()} — its membership can "
                 f"no longer be changed.")
+        # unique_together ("wave","sales_order") never form-validates — "wave" is not a
+        # form field, so validate_unique skips the constraint entirely and the second
+        # identical POST dies as an uncaught IntegrityError on save(). Check it here,
+        # where it renders as a readable form error instead of a 500.
+        sales_order = cleaned.get("sales_order")
+        if sales_order is not None and self.instance.wave_id:
+            dupes = FulfillmentWaveOrder.objects.filter(
+                wave_id=self.instance.wave_id, sales_order=sales_order)
+            if self.instance.pk:
+                dupes = dupes.exclude(pk=self.instance.pk)
+            if dupes.exists():
+                self.add_error("__all__",
+                               "That sales order is already in this wave.")
         return cleaned
