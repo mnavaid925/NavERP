@@ -86,6 +86,28 @@ from .ReceivingPutaway.PutawayRules import (
     putawayrule_edit,
     putawayrule_list,
 )
+from .StockMovementTransfers.ApprovalRules import (
+    transferapprovalrule_create,
+    transferapprovalrule_delete,
+    transferapprovalrule_detail,
+    transferapprovalrule_edit,
+    transferapprovalrule_list,
+)
+from .StockMovementTransfers.TransferRoutes import (
+    transferroute_create,
+    transferroute_delete,
+    transferroute_detail,
+    transferroute_edit,
+    transferroute_list,
+)
+from .StockMovementTransfers.Transfers import (
+    transfer_board,
+    transfer_detail_panel,
+    transfer_queue,
+    transfer_submit,
+    transfer_tier_approve,
+    transfer_tier_reject,
+)
 from .VendorSupplierManagement.VendorCommunications import (
     vendorcommunication_create,
     vendorcommunication_delete,
