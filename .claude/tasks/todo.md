@@ -26589,3 +26589,27 @@ twice (admin/seeder/__init__s/nav/overview); all recovered by idempotent re-patc
 smoke 16/16 incl. reconcile-refusal and cross-tenant IDOR, tests test_stocktake_{models,views}
 20/20. NOTE for next session: pytest runs on this box need long timeouts (full migration replay
 per session) - never kill mid-run; orphaned pytest children starve later runs.
+
+---
+
+## 5.9 Order Management & Fulfillment - built 2026-08-23 (close-out)
+
+**Scope ruling:** Sales Order Processing / Pick-Pack-Ship / Shipping Integration point AT
+scm:salesorder_list / scm:picktask_list / scm:carrier_list (L36). The genuine gap was Wave
+Planning: FulfillmentWave [WAV-#####] + membership rows over EXISTING scm.SalesOrders, verb
+ladder release/close/cancel under select_for_update with in-txn audit, ZERO SCM writes.
+Progress honesty: fulfilled counts only the frozen fulfilled-or-later rungs; pick pct rides
+PickTask.wave_ref==number (indexed convention) and answers None when SCM has not typed refs.
+
+**Review wave:** 3 agent lanes + inline contract checks (provider network errors killed one lane
+twice; its checklist ran in-session). 2 Critical burned down: duplicate-membership 500
+(validate_unique skips non-form wave field -> form-level check), ungated lifecycle verbs
+(privilege escalation -> tenant_admin_required). Plus list N+1 (annotate + grouped merge,
+~45->20 flat), --flush coverage, six Minors. All [x].
+
+**Tests:** test_fulfillment_{models,forms,views,security}.py - 82/82 green; full unfiltered
+app suite 618 passed + 12 foreign errors (sibling 5.10 conftest missing requested_on - their lane).
+
+**Adoption notes:** built while sibling lanes shipped/committed 5.10 and started 5.11 in the
+same checkout; migration 0014 deliberately bundles both apps' pending tables to claim the node;
+one-line 5.10 seeder typo fixed (disclosed in commit message).
