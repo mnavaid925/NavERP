@@ -102,7 +102,7 @@ def global_stock(request):
     # re-fetch its ancestors from the DB and break the frozen flat-4 budget at any
     # deeper tree. All tenant nodes are in the list, so the map answers every hop;
     # a parent pk missing from it just ends the walk (truncated label, no query).
-    by_pk = {n.pk: n}
+    by_pk = {n.pk: n for n in nodes}
 
     def path_label(node):
         parts, cur, seen = [], node, set()
