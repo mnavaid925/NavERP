@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Warehouse Returns Workbench — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Warehouse Returns Workbench</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Returns Management</span>
+        <span class="sep">›</span>
+        <span>Workbench</span>
+      </div>
+      <p class="text-muted">Real-time returns intake, physical inspection verification, and guided disposition routing across open RMAs and bench inventory.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:returninspection_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inspection</a>
+      <a href="{% url 'inventory:returninspection_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Inspection History</a>
+      <a href="{% url 'inventory:dispositionrule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Routing Rules</a>
+      <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline"><i data-lucide="external-link"></i> RMA Register (SCM)</a>
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="grid grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.active_rmas }}</div>
+        <div class="stat-label">Active RMAs</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="inbox"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.awaiting_bench }}</div>
+        <div class="stat-label">Items on Receiving Bench</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.inspections_passed }}</div>
+        <div class="stat-label">Passed Inspections</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-alert"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.quarantined }}</div>
+        <div class="stat-label">Quarantined Goods</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Filter -->
+  <div class="card mb-6">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:260px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Filter open returns by RMA #, Customer, or Item SKU…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Search</button>
+        <a href="{% url 'inventory:returns_workbench' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+  </div>
+
+  <!-- Section 1: Receiving Bench & Guided Disposition Routing -->
+  <div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+      <div>
+        <h2 class="card-title"><i data-lucide="package-search"></i> Returns Receiving Bench &amp; Guided Routing</h2>
+        <p class="text-muted" style="font-size:13px; margin-top:2px;">Returned goods received at dock awaiting inspection grading and disposition execution.</p>
+      </div>
+      <div>
+        <span class="badge badge-info">{{ bench_items|length }} items awaiting disposition</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>RMA Ticket</th>
+            <th>Item SKU</th>
+            <th>Qty on Bench</th>
+            <th>Found Grade</th>
+            <th>Inspection</th>
+            <th>Recommended Action</th>
+            <th>Target Bin</th>
+            <th>Routing Reason</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in bench_items %}
+            <tr>
+              <td>
+                {% if item.rma %}
+                  <a href="{% url 'scm:returnauthorization_detail' item.rma.pk %}" class="mono fw-600 text-primary">{{ item.rma.number }}</a>
+                  <div class="text-muted" style="font-size:12px;">{{ item.rma.customer.name }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.item %}
+                  <span class="fw-600">{{ item.item.sku }}</span>
+                  <div class="text-muted" style="font-size:12px;">{{ item.item.name }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="mono fw-600">{{ item.quantity }}</td>
+              <td>
+                {% if item.condition_grade == 'a' %}
+                  <span class="badge badge-green">Grade A</span>
+                {% elif item.condition_grade == 'b' %}
+                  <span class="badge badge-info">Grade B</span>
+                {% elif item.condition_grade == 'c' %}
+                  <span class="badge badge-amber">Grade C</span>
+                {% elif item.condition_grade == 'd' %}
+                  <span class="badge badge-red">Grade D</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ item.condition_grade|upper }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.has_inspection %}
+                  <span class="badge badge-green"><i data-lucide="check"></i> Inspected</span>
+                {% else %}
+                  <span class="badge badge-amber"><i data-lucide="clock"></i> Pending QA</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.suggested_disposition == 'restock' %}
+                  <span class="badge badge-green">Restock</span>
+                {% elif item.suggested_disposition == 'refurbish' %}
+                  <span class="badge badge-info">Refurbish</span>
+                {% elif item.suggested_disposition == 'quarantine' %}
+                  <span class="badge badge-slate">Quarantine</span>
+                {% elif item.suggested_disposition == 'scrap' %}
+                  <span class="badge badge-red">Scrap</span>
+                {% elif item.suggested_disposition == 'return_to_vendor' %}
+                  <span class="badge badge-amber">RTV</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ item.suggested_disposition|title }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if item.destination_location %}
+                  <span class="mono fw-600">{{ item.destination_location.code }}</span>
+                {% else %}
+                  <span class="text-muted">Standard Restock Bin</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="text-muted" style="font-size:12px;">{{ item.routing_reason }}</span>
+              </td>
+              <td>
+                <div class="table-actions">
+                  {% if item.rma and item.item %}
+                    <a href="{% url 'inventory:returninspection_create' %}?rma={{ item.rma.pk }}&amp;disp={{ item.disposition.pk }}" class="btn btn-outline btn-sm" title="Perform Physical Inspection">
+                      <i data-lucide="clipboard-check"></i> Inspect
+                    </a>
+                  {% endif %}
+                  {% if item.disposition %}
+                    <a href="{% url 'scm:returndisposition_detail' item.disposition.pk %}" class="btn btn-primary btn-sm" title="Execute Disposition in SCM">
+                      <i data-lucide="arrow-right"></i> Decide
+                    </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state py-6">
+                  <i data-lucide="check-circle"></i>
+                  <h3>Receiving Bench is Clear</h3>
+                  <p>No returned merchandise currently sitting pending disposition on the receiving bench.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Section 2: Active Return Authorizations (RMAs) -->
+  <div class="card">
+    <div class="card-header flex justify-between items-center">
+      <div>
+        <h2 class="card-title"><i data-lucide="list"></i> Active Return Authorizations (RMAs)</h2>
+        <p class="text-muted" style="font-size:13px; margin-top:2px;">All customer return tickets awaiting physical receipt or warehouse processing.</p>
+      </div>
+      <div>
+        <a href="{% url 'scm:returnauthorization_list' %}" class="btn btn-outline btn-sm"><i data-lucide="external-link"></i> Full SCM Register</a>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>RMA Number</th>
+            <th>Customer</th>
+            <th>Return Type</th>
+            <th>Status</th>
+            <th>Authorized Lines</th>
+            <th>Inspections Conducted</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rma in rmas %}
+            <tr>
+              <td>
+                <a href="{% url 'scm:returnauthorization_detail' rma.pk %}" class="mono fw-600 text-primary">{{ rma.number }}</a>
+                <div class="text-muted" style="font-size:12px;">{{ rma.created_at|date:"Y-m-d" }}</div>
+              </td>
+              <td>
+                <span class="fw-600">{{ rma.customer.name }}</span>
+              </td>
+              <td>
+                <span class="badge badge-slate">{{ rma.get_return_type_display }}</span>
+              </td>
+              <td>
+                {% if rma.status == 'approved' %}
+                  <span class="badge badge-info">Approved</span>
+                {% elif rma.status == 'awaiting_receipt' %}
+                  <span class="badge badge-amber">Awaiting Receipt</span>
+                {% elif rma.status == 'partially_received' %}
+                  <span class="badge badge-amber">Partially Received</span>
+                {% elif rma.status == 'received' %}
+                  <span class="badge badge-green">Received</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ rma.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="space-y-1">
+                  {% for line in rma.lines.all %}
+                    <div style="font-size:12px;">
+                      <span class="mono fw-600">{{ line.item.sku }}</span> × {{ line.quantity_approved }}
+                    </div>
+                  {% empty %}
+                    <span class="text-muted">No lines</span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td>
+                <div class="space-y-1">
+                  {% for insp in rma.inventory_inspections.all %}
+                    <div>
+                      <a href="{% url 'inventory:returninspection_detail' insp.pk %}" class="mono text-xs text-primary">{{ insp.number }}</a>
+                      <span class="badge badge-green" style="font-size:10px;">{{ insp.get_condition_grade_display }}</span>
+                    </div>
+                  {% empty %}
+                    <span class="text-muted" style="font-size:12px;">No inspections yet</span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:returninspection_create' %}?rma={{ rma.pk }}" class="btn btn-outline btn-sm" title="Inspect this RMA">
+                    <i data-lucide="plus"></i> Inspect
+                  </a>
+                  <a href="{% url 'scm:returnauthorization_detail' rma.pk %}" class="btn-icon" title="View RMA in SCM">
+                    <i data-lucide="external-link"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <h3>No active Return Authorizations found</h3>
+                  <p>All returns have been settled or no open tickets exist for this workspace.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
