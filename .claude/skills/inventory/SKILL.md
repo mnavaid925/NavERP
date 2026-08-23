@@ -28,10 +28,40 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 | 5.1 | `Catalog/` | ItemAttribute, ItemPrice, ProductFile | sidebar bullets "SKU Management"/"Product Categorization" point at `scm:item_list` / `scm:category_list` |
 | 5.2 | `VendorSupplierManagement/` | VendorCommunication [VC-] | directory/scorecard/contract bullets point at 4.2 SRM pages |
 | 5.3 | `PurchaseOrderManagement/` | PurchaseOrderApprovalRule, PurchaseOrderApproval, PurchaseOrderDispatch + `reorderdraft` computed page | creation/tracking point at spine PO pages |
+| 5.4 | `ReceivingPutaway/` | PutawayRule (+ module-level `resolve_putaway_suggestion` resolver) + `putaway_suggestions` computed page | GRN/Three-Way-Matching/QC bullets point at `scm:goodsreceipt_list` ×2 + `scm:qualityinspection_list`; ZERO writes into SCM |
 | 5.5 | `WarehousingBinManagement/` | BinCapacity, CrossDockOrder [XD-] (+ warehousemap computed page) | XD receive/ship/cancel posts real StockMove legs |
 | 5.6 | `InventoryTrackingControl/` | StockStatus, InventoryReservation [RSV-] (+ stocklevels computed page) | valuation bullet points at `scm:valuation_report` |
 | 5.7 | `StockMovementTransfers/` | TransferRoute, TransferApprovalRule, TransferApproval [TA-] (+ transfer_board / transfer_queue / transfer_panel pages) | movement documents stay `scm.StockTransfer`; spine grew pending_approval/approved statuses + nullable route FK (scm migration 0035) |
 | 5.8 | `LotSerialTracking/` | LotNumberRule, ShelfLifePolicy (+ `fefo_board` / `traceability` computed pages) | lot/serial ROWS stay `scm.LotSerial` (Serial Number Tracking bullet points at the spine master); classify_lot is THE shared expiry verdict |
+
+### 5.4 Receiving & Putaway — the directed-putaway slice
+
+- **One config table + one pure engine**: `PutawayRule` is a standing instruction (nullable
+  `item` / `category` / `source_location` FKs onto the spine, required `destination`,
+  `priority`, `is_active`, `notes`). Overlapping rules are LEGAL — no unique_together — because
+  the deterministic resolver decides: specificity tier DESC (item=3 > category=2 > catch-all=1)
+  → priority ASC → id ASC. A dual-pinned rule fires as item-tier ONLY; it never falls through
+  to its category leg.
+- **`resolve_putaway_suggestion(task, *, rules=None, by_pk=None, on_hand=None)`** returns
+  `(suggestion|None, reason, candidates)` — `candidates[0]` IS the suggestion when non-empty;
+  every refusal starts `"No Suggestion Found"` and never guesses a bin. Tier ladder after
+  rules: consolidation on bins already holding the SKU → storage-condition match against the
+  bin's own-or-inherited condition → walk-order fallback under the receipt's warehouse.
+  Shared disqualifiers in every tier: inactive location, full bin (declared `capacity` only —
+  blank = unlimited), owner_client conflict (4.17 semantics), candidate == staging location,
+  and a top guard refusing tasks whose own item is foreign (M11).
+- **The queue page** (`inventory:putaway_suggestions`) is a COMPUTED board over OPEN
+  `scm.PutawayTask`s — zero writes into SCM; overrides happen via `scm:putawaytask_edit`.
+  The view batch-preloads rules/locations/on-hand ONCE per request and passes them as kwargs
+  (~7 app queries flat regardless of backlog; bare resolver calls stay self-loading for tests).
+  Stats trio `{open_tasks, covered_by_rule, uncovered}` covers the FULL filtered set; rows carry
+  `{task, receipt, item, staging, candidates, suggestion, suggestion_reason}`.
+- **Writes are admin-gated** (`@tenant_admin_required` on create/edit/delete like 5.3's rules);
+  list/detail stay member-readable with `is_admin` hiding affordances. Rule forms reject all
+  four FK vectors cross-tenant via `_reject_foreign`; model `clean()` keys off `<name>_id` so an
+  unset required FK renders "required" instead of 500ing (review finding C1).
+- Tests: `test_receiving_{models,forms,views,security}.py` (78) + conftest fixtures
+  `receiving_loc_*`, `receiving_rule_*`, `receiving_task_a`.
 
 ### 5.7 Stock Movement & Transfers â€” the governance slice
 
@@ -155,13 +185,15 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 `app_name = "inventory"`; each entity module exposes `urlpatterns`, concatenated in
 `urls/__init__.py`. Names: `<entity>_list/_detail/_create/_edit/_delete` plus lifecycle verbs
 (`crossdockorder_receive/_ship/_cancel`, `reservation_release/_consume/_cancel`) and computed
-pages (`overview`, `reorderdraft`, `approval_queue`, `warehousemap`, `stocklevels`). Literal routes
+pages (`overview`, `reorderdraft`, `approval_queue`, `warehousemap`, `stocklevels`,
+`putaway_suggestions`). Literal routes
 always precede `<int:pk>` ones; no greedy `<str:â€¦>` converters exist in this app.
 
 ## Templates
 
-`templates/inventory/catalog|vendor|po|warehouse|tracking/â€¦` â€” entity triples `list/detail/form.html`
-plus page-only files (`map.html`, `reorderdraft.html`, `approvals.html`, `tracking/stocklevels.html`).
+`templates/inventory/catalog|vendor|po|warehouse|receiving|tracking/â€¦` â€” entity triples `list/detail/form.html`
+plus page-only files (`map.html`, `reorderdraft.html`, `approvals.html`, `tracking/stocklevels.html`,
+`receiving/putaway_suggestions.html`).
 Badges: colour-named ONLY (`badge-green/red/amber/info/muted/slate`; STATUS_CSS dicts decide per
 status). Filter forms reflect request.GET; pk selects compare with `|stringformat:"d"`; every list has
 Actions column (eye/pencil/trash-2), pagination partial, `.empty-state`.
@@ -171,7 +203,7 @@ Actions column (eye/pencil/trash-2), pagination partial, `.empty-state`.
 `python manage.py seed_inventory` (idempotent per-entity guards; `--flush` deletes all app rows).
 Per tenant it reuses seed_scm's items/parties/location tree: attribute sets, price ladder, file links
 (RFC 2606 placeholders), vendor communications, approval rules + dispatch + a pending_approval PO,
-bin capacities + four cross-docks walked through REAL actions, then 5.6: status classifications on
+four tier-demo putaway rules + one open putaway task off DOCK-1 (5.4), then bin capacities + four cross-docks walked through REAL actions, then 5.6: status classifications on
 actually-stocked spots (small slices), three RSV rows walked through release/cancel, then 5.7:
 three TransferRoutes + two approval rules + four governed spine transfers walked through the REAL
 transitions (pending mid-chain / approved / returned-to-draft / completed via scm's own
@@ -190,7 +222,7 @@ THIS module's tables â€” seed_scm already creates one plain transfer per te
 
 ## Sidebar wiring
 
-`LIVE_LINKS["5.1"â€¦"5.7"]` in `apps/core/navigation.py` map NavERP.md bullet names â†’ live routes,
+`LIVE_LINKS["5.1"â€¦"5.8"]` in `apps/core/navigation.py` map NavERP.md bullet names â†’ live routes,
 pointing master-data bullets at owning scm pages. Overview card groups per sub-module.
 
 ## Common tasks
