@@ -50,7 +50,7 @@
             <div>
               <dt class="text-muted" style="font-size:13px;">Return Authorization (RMA)</dt>
               <dd class="mt-1">
-                <a href="{% url 'scm:returnauthorization_detail' obj.return_authorization.pk %}" class="mono fw-600 text-primary">
+                <a href="{% url 'scm:returnauthorization_detail' obj.return_authorization.pk %}" class="mono fw-600 text-brand">
                   {{ obj.return_authorization.number }}
                 </a>
                 <span class="text-muted">({{ obj.return_authorization.customer.name }})</span>
@@ -59,7 +59,7 @@
             <div>
               <dt class="text-muted" style="font-size:13px;">Item SKU</dt>
               <dd class="mt-1">
-                <a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600 text-primary">{{ obj.item.sku }}</a>
+                <a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600 text-brand">{{ obj.item.sku }}</a>
                 <div class="text-muted" style="font-size:12px;">{{ obj.item.name }}</div>
               </dd>
             </div>
@@ -235,7 +235,7 @@
             <div class="text-muted" style="font-size:12px;">Suggested Destination Location</div>
             <div class="mt-1">
               {% if dest_loc %}
-                <a href="{% url 'scm:location_detail' dest_loc.pk %}" class="mono fw-600 text-primary">{{ dest_loc.code }}</a>
+                <a href="{% url 'scm:location_detail' dest_loc.pk %}" class="mono fw-600 text-brand">{{ dest_loc.code }}</a>
                 <div class="text-muted" style="font-size:12px;">{{ dest_loc.name }}</div>
               {% else %}
                 <span class="text-muted">Standard Returns Receiving Area</span>
@@ -248,7 +248,7 @@
             <div class="mt-1 text-sm bg-slate-50 p-2 rounded border border-slate-200">
               <p class="text-muted">{{ route_reason }}</p>
               {% if route_rule %}
-                <div class="mt-1 text-xs text-primary font-medium">Rule: {{ route_rule.name }} (Priority {{ route_rule.priority }})</div>
+                <div class="mt-1 text-xs text-brand font-medium">Rule: {{ route_rule.name }} (Priority {{ route_rule.priority }})</div>
               {% endif %}
             </div>
           </div>
