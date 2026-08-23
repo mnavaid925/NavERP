@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Barcode Label{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Label {{ obj.number }}{% else %}New Barcode Label{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:barcodelabel_list' %}">Barcode Labels</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Label Definition</h2>
+      </div>
+      <div class="card-body">
+        {% if form.non_field_errors %}
+          <div class="form-error mb-4">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.label_kind.id_for_label }}">Label Kind *</label>
+            {{ form.label_kind }}
+            {% if form.label_kind.errors %}<div class="form-error">{{ form.label_kind.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.symbology.id_for_label }}">Symbology *</label>
+            {{ form.symbology }}
+            {% if form.symbology.errors %}<div class="form-error">{{ form.symbology.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.payload.id_for_label }}">Encoded Payload *</label>
+            {{ form.payload }}
+            {% if form.payload.errors %}<div class="form-error">{{ form.payload.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.copies.id_for_label }}">Copies per Print Run *</label>
+            {{ form.copies }}
+            {% if form.copies.errors %}<div class="form-error">{{ form.copies.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.pallet_ref.id_for_label }}">Pallet Reference</label>
+            {{ form.pallet_ref }}
+            {% if form.pallet_ref.errors %}<div class="form-error">{{ form.pallet_ref.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Target Assignment</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.target_type.id_for_label }}">Target Type *</label>
+            {{ form.target_type }}
+            {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.item.id_for_label }}">Item (when kind = Item)</label>
+            {{ form.item }}
+            {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.location.id_for_label }}">Location (when kind = Location)</label>
+            {{ form.location }}
+            {% if form.location.errors %}<div class="form-error">{{ form.location.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.lot_serial.id_for_label }}">Lot / Serial (when kind = Lot)</label>
+            {{ form.lot_serial }}
+            {% if form.lot_serial.errors %}<div class="form-error">{{ form.lot_serial.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.target_ref.id_for_label }}">Free-form Target Reference</label>
+            {{ form.target_ref }}
+            {% if form.target_ref.errors %}<div class="form-error">{{ form.target_ref.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Label</button>
+      <a href="{% url 'inventory:barcodelabel_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
