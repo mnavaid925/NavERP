@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Scan Session Detail{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:scansession_list' %}">Scan Sessions</a>
+        <span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:scansession_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to List</a>
+      <a href="{% url 'inventory:scan_console' %}?session={{ obj.pk }}" class="btn btn-primary"><i data-lucide="scan-line"></i> Scan in Console</a>
+      {% if obj.status == 'open' %}
+        <form method="post" action="{% url 'inventory:scansession_close' obj.pk %}" onsubmit="return confirm('Close this scan session? No further scans can be resolved against it.');" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close Session</button>
+        </form>
+        <a href="{% url 'inventory:scansession_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+      {% if is_admin %}
+        <form method="post" action="{% url 'inventory:scansession_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete this scan session?');" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h2 class="card-title">Session Summary</h2>
+        <div>
+          {% if obj.status == 'open' %}
+            <span class="badge badge-info">Open</span>
+          {% elif obj.status == 'closed' %}
+            <span class="badge badge-slate">Closed</span>
+          {% else %}
+            <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Session Number</dt>
+            <dd class="mt-1 mono fw-600 text-brand">{{ obj.number }}</dd>
+          </div>
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Device Label</dt>
+            <dd class="mt-1">{% if obj.device_label %}{{ obj.device_label }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Mode</dt>
+            <dd class="mt-1"><span class="badge badge-slate">{{ obj.get_mode_display }}</span></dd>
+          </div>
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Started At</dt>
+            <dd class="mt-1">{% if obj.started_at %}{{ obj.started_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Ended At</dt>
+            <dd class="mt-1">{% if obj.ended_at %}{{ obj.ended_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">Session still open</span>{% endif %}</dd>
+          </div>
+          {% if obj.notes %}
+            <div class="col-span-2">
+              <dt class="text-muted" style="font-size:13px;">Notes</dt>
+              <dd class="mt-1 whitespace-pre-wrap">{{ obj.notes }}</dd>
+            </div>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header flex justify-between items-center">
+        <h2 class="card-title"><i data-lucide="history"></i> Resolved Scan Events</h2>
+        <a href="{% url 'inventory:scan_console' %}?session={{ obj.pk }}" class="btn btn-outline btn-sm"><i data-lucide="scan-line"></i> Add Scans in Console</a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Raw Code</th>
+              <th>Result</th>
+              <th>Resolved To</th>
+              <th>Scanned At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ev in events %}
+              <tr>
+                <td><span class="mono fw-600">{{ ev.raw_code|truncatechars:48 }}</span></td>
+                <td>
+                  {% if ev.ok %}
+                    <span class="badge badge-green">{{ ev.resolved_kind|title }}</span>
+                  {% elif ev.resolved_kind == 'unknown' %}
+                    <span class="badge badge-red">Unknown</span>
+                  {% else %}
+                    <span class="badge badge-muted">{{ ev.resolved_kind|title }}</span>
+                  {% endif %}
+                </td>
+                <td>{% if ev.resolved_label %}<span class="fw-600">{{ ev.resolved_label }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ ev.scanned_at|date:"H:i:s"|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4">
+                  <div class="empty-state py-6">
+                    <i data-lucide="scan-line"></i>
+                    <h3>No scan events recorded yet</h3>
+                    <p>Resolve raw codes against this session from the Scan Console to populate its event log.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}
