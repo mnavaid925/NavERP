@@ -70,7 +70,18 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 - **Disposition Routing Engine (`DispositionRoutingRule` & `resolve_disposition_routing`)**: Configurable rule engine mapping item SKU/category + condition grade to recommended disposition actions (restock, refurbish, scrap, donate, recycle, liquidate, return to vendor, quarantine) and suggested warehouse destination bins. Deterministic hierarchy: Specific Item (Tier 3) > Category (Tier 2) > Catch-all (Tier 1) → Grade Specificity → Priority ASC → ID ASC.
 - **Warehouse Returns Workbench (`inventory:returns_workbench`)**: Real-time computed operational dashboard providing visibility over open RMAs, bench inventory, and automated disposition recommendations with one-click inspection creation.
 - **Sidebar Wiring**: `LIVE_LINKS["5.10"]` maps RMA Ticket & Credit/Refund Processing to SCM 4.10 (`scm:returnauthorization_list` and `scm:refund_queue`), and Return Inspection & Disposition Routing to Inventory 5.10 (`inventory:returninspection_list` and `inventory:dispositionrule_list`).
+- **Completion fixes (resume session)**: RMA-line prefill reads `ReturnLine.quantity_approved`
+  (no `quantity_authorized` on the spine); inspection create drops the stray
+  `formset.save_m2m()` (unsaved inline formset has none, no m2m anyway); audit rows use the
+  `write_audit_log(user, obj, action, changes)` signature; templates carry only existing theme
+  classes (`badge-slate` not the nonexistent `badge-purple`, `btn-sm` not `btn-xs`).
+- Tests: `test_returns_{models,forms,views,security}.py` (16) + conftest fixtures
+  `return_reason_{a,b}`, `rma_{a,b}`, `rma_line_{a,b}`, `disposition_rule_{a,b}`, `inspection_{a,b}`.
+  Gotcha of record: `scm.ReturnLine` is TENANT-LESS with `quantity_requested`/`quantity_approved`
+  and a REQUIRED `reason` FK — fixtures must scope lines via `return_authorization__tenant`, never
+  pass `tenant=`/`quantity_authorized=`.
 
+### 5.4 Receiving & Putaway — the directed-putaway slice
 
 - **One config table + one pure engine**: `PutawayRule` is a standing instruction (nullable
   `item` / `category` / `source_location` FKs onto the spine, required `destination`,
