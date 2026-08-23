@@ -55,6 +55,7 @@ urlpatterns = [
     *_po_reorderdrafts,    # PurchaseOrderManagement/ReorderDrafts
     *_rp_putawayrules,     # ReceivingPutaway/PutawayRules (+ computed suggestions page)
     *_fo_waves,            # FulfillmentOrchestration/FulfillmentWaves (CRUD + verbs + board)
+    *_mlm_locationnetworks,  # MultiLocationManagement/LocationNetworks (CRUD + global stock page)
     *_rm_returns,          # ReturnsManagement (inspections, disposition rules, workbench)
     *_br_barcode,          # BarcodeRfidIntegration (labels, scan console/sessions, RFID tags)
     *_smt_transfers,       # StockMovementTransfers (board/queue/panel + verbs, routes, rules)
@@ -66,7 +67,6 @@ urlpatterns = [
     *_tc_stockstatuses,    # InventoryTrackingControl/StockStatuses (CRUD)
     *_tc_reservations,     # InventoryTrackingControl/InventoryReservations (CRUD + lifecycle verbs)
     *_lst_lotserial,       # LotSerialTracking (rules/generate/policies CRUD + FEFO board + trace)
-    *_mlm_locationnetworks,  # MultiLocationManagement/LocationNetworks (CRUD + global stock page)
     *_stk_stocktake,       # StocktakingCycleCounting (programs + physical inventory + variance report)
     *_fp_forecasting,      # ForecastingPlanning (seasonal plans CRUD + ROP/safety-stock board)
 ]
