@@ -32,6 +32,16 @@ class LocationNetworkForm(TenantUniqueMixin, TenantModelForm):
         fields = ["code", "name", "node_type", "parent", "warehouse",
                   "is_active", "notes"]
 
+    def clean_code(self):
+        """Trimmed here — at FIELD level — so the mixin's ("tenant","code") unique
+        check validates the value that will actually be stored (a " ABC " submission
+        must collide with an existing ABC, not slip past it and blow up on save);
+        whitespace-only codes are rejected outright with a field error."""
+        code = (self.cleaned_data.get("code") or "").strip()
+        if not code:
+            raise forms.ValidationError("Code cannot be blank or whitespace only.")
+        return code
+
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["parent", "warehouse"])
