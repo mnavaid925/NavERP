@@ -32,6 +32,7 @@ import re
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -42,11 +43,13 @@ from apps.inventory.models import (
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
+    LotNumberRule,
     ProductFile,
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
     PutawayRule,
+    ShelfLifePolicy,
     StockStatus,
     VendorCommunication,
 )
@@ -55,6 +58,7 @@ from apps.scm.models import (
     Item,
     ItemCategory,
     Location,
+    LotSerial,
     PurchaseOrder,
     PurchaseOrderLine,
     PutawayTask,
@@ -137,7 +141,9 @@ class Command(BaseCommand):
                        + BinCapacity.objects.all().count()
                        + CrossDockOrder.objects.all().count()
                        + StockStatus.objects.all().count()
-                       + InventoryReservation.objects.all().count())
+                       + InventoryReservation.objects.all().count()
+                        + LotNumberRule.objects.all().count()
+                        + ShelfLifePolicy.objects.all().count())
             ItemAttribute.objects.all().delete()
             ItemPrice.objects.all().delete()
             ProductFile.objects.all().delete()
@@ -150,6 +156,8 @@ class Command(BaseCommand):
             CrossDockOrder.objects.all().delete()
             StockStatus.objects.all().delete()
             InventoryReservation.objects.all().delete()
+            LotNumberRule.objects.all().delete()
+            ShelfLifePolicy.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -166,6 +174,7 @@ class Command(BaseCommand):
             self._seed_putaway_rules(tenant, items)
             self._seed_warehousing(tenant, items)
             self._seed_tracking(tenant, items)
+            self._seed_lot_tracking(tenant, items)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -668,3 +677,104 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {len(summary)} reservations ({' / '.join(summary)})."))
+
+    def _seed_lot_tracking(self, tenant, items):
+        """5.8 Lot & Serial Number Tracking — numbering rules, shelf-life policies,
+        and expiry-dated demo lots minted through the REAL generation path.
+
+        The tracked SKUs (WS-16 / MON-27, flipped to ``tracking='lot'`` by 4.9's
+        seeder) get one tenant-default rule plus an item-specific override so the
+        most-specific-wins resolution is demonstrable, a policy per item for the FEFO
+        board, and three batches per anchor item carrying an expired / warning-window
+        / healthy date — each minted via ``LotNumberRule.generate`` (the same code the
+        Generate button runs) and given REAL ledger stock through the same posting
+        shape ``seed_scm`` uses for its opening balances. Idempotent on the demo
+        marker in the lot notes, so user-minted numbers are never touched on re-runs.
+        """
+        from apps.inventory.models import classify_lot
+
+        # --- numbering rules ------------------------------------------------------------------
+        if LotNumberRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: lot-number rules already present, skipping.")
+        else:
+            rules_made = 1
+            LotNumberRule.objects.create(
+                tenant=tenant, name="Default batch numbering", item=None, kind="lot",
+                prefix="LOT", include_date=True, sequence_padding=5,
+                notes="Tenant-wide default; item rules override it.")
+            mon = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+            if mon is not None:
+                LotNumberRule.objects.create(
+                    tenant=tenant, name="Monitor line batches", item=mon, kind="lot",
+                    prefix="MONB", include_date=True, sequence_padding=4,
+                    notes="Item rule — outranks the tenant default for MON-27.")
+                rules_made += 1
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: {rules_made} lot-number rules."))
+
+        # --- shelf-life policies ---------------------------------------------------------------
+        if ShelfLifePolicy.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: shelf-life policies already present, skipping.")
+        else:
+            made = 0
+            for sku, life, gate, warn in (("WS-16", 180, 14, 45), ("MON-27", 365, 30, 60)):
+                item = Item.objects.filter(tenant=tenant, sku=sku).first()
+                if item is None:
+                    continue
+                _, created = ShelfLifePolicy.objects.get_or_create(
+                    tenant=tenant, item=item,
+                    defaults={"shelf_life_days": life, "min_remaining_days": gate,
+                              "warning_days": warn, "fefo_enforced": True})
+                if created:
+                    made += 1
+            self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {made} shelf-life policies."))
+
+        # --- demo batches through the real generate() path --------------------------------------
+        marker = "Seeded 5.8 demo batch"
+        if LotSerial.objects.filter(tenant=tenant, notes=marker).exists():
+            self.stdout.write(f"  {tenant.name}: 5.8 demo lots already present, skipping.")
+            return
+        user = get_user_model().objects.filter(tenant=tenant).order_by("pk").first()
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN",
+                                       location_type="warehouse").first()
+        ws16 = Item.objects.filter(tenant=tenant, sku="WS-16").first()
+        mon = Item.objects.filter(tenant=tenant, sku="MON-27").first()
+        if user is None or ws16 is None or mon is None:
+            self.stdout.write(
+                f"  {tenant.name}: no workspace user or tracked SKUs — run "
+                "`seed_accounts`/`seed_scm` first, skipping the 5.8 demo lots.")
+            return
+
+        today = timezone.localdate()
+        # (item, days offset) — expired, inside WS-16's amber window, healthy; then a
+        # MON-27 lot just inside its 30-day do-not-ship gate.
+        plan = [(ws16, -12), (ws16, 20), (ws16, 150), (mon, 21)]
+        minted = []
+        for item, offset in plan:
+            rule = LotNumberRule.resolve(tenant, item)
+            if rule is None:
+                continue
+            try:
+                lot = rule.generate(user, item,
+                                    expiry_date=today + datetime.timedelta(days=offset),
+                                    notes=marker)
+            except ValidationError:
+                continue
+            with transaction.atomic():
+                cost = item.standard_cost or Decimal("0")
+                qty = Decimal("8") if offset >= 0 else Decimal("5")
+                if main is not None:
+                    # apply_receipt rolls the spine's cached weighted average — the ONE
+                    # write outside 5.8's own tables, and it follows the exact posting
+                    # shape seed_scm uses for its opening balances (same cost in →
+                    # unchanged average, so re-runs stay stable).
+                    item.apply_receipt(qty, cost)
+                    StockMove.objects.create(
+                        tenant=tenant, item=item, location=main, lot_serial=lot,
+                        quantity=qty, unit_cost=cost, move_type="receipt",
+                        reference="OPENING-LOT", reason="Opening lot-tracked balance",
+                        moved_at=timezone.now())
+            minted.append(f"{lot.number} ({classify_lot(lot, None, today)[0]})")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {len(minted)} demo lots minted: {', '.join(minted)}."))
