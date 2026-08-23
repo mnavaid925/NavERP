@@ -162,12 +162,18 @@ def barcodelabel_print(request, pk):
         messages.success(request, f"Barcode Label {obj.number} printed ({obj.copies} copies).")
         return redirect("inventory:barcodelabel_detail", pk=obj.pk)
 
+    # Build once here purely to probe renderability — the page itself keeps ONE <img> on the
+    # render URL instead of N identical requests (cold-cache clients used to trigger one full
+    # request+regeneration cycle PER copy).
+    svg_available = _build_label_svg(obj) is not None
+
     return render(
         request,
         "inventory/barcode/barcodelabel/print.html",
         {
             "obj": obj,
             "copies_range": range(obj.copies),
+            "svg_available": svg_available,
             "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
         },
     )
@@ -175,6 +181,33 @@ def barcodelabel_print(request, pk):
 
 # WARNING: payload echoes into SVG text nodes — python-barcode/qrcode XML-escape their own
 # output, do NOT bypass them by hand-building SVG strings from payload.
+def _build_label_svg(obj):
+    """Encode ``obj.payload`` with the label's symbology into SVG bytes.
+
+    Returns ``None`` when the payload cannot be rendered (caller decides the fallback —
+    the render route serves its static error card, the print page degrades to text frames).
+    """
+    buf = BytesIO()
+
+    if obj.symbology == "qr":
+        img = qrcode.QRCode(box_size=6, border=2, image_factory=qrcode.image.svg.SvgPathImage)
+        img.add_data(obj.payload)
+        img.make(fit=True)
+        img.make_image().save(buf)
+        return buf.getvalue()
+
+    name_map = {"code39": "code39", "code128": "code128", "ean13": "ean13"}
+    try:
+        bc = barcode.get(name_map[obj.symbology], obj.payload, writer=SVGWriter())
+        bc.write(buf)
+        return buf.getvalue()
+    # NOTE: KeyError is caught deliberately — python-barcode's Code39 checksums the code
+    # BEFORE validating it, so an out-of-alphabet character surfaces as a bare KeyError,
+    # not as IllegalCharacterError.
+    except (NumberOfDigitsError, BarcodeError, KeyError):
+        return None
+
+
 @login_required
 def barcodelabel_render(request, pk):
     """Render the label's payload inline as an SVG barcode / QR image."""
@@ -186,37 +219,22 @@ def barcodelabel_render(request, pk):
     if obj.status == "void":
         raise Http404("Voided labels are not rendered.")
 
+    svg = _build_label_svg(obj)
+    if svg is not None:
+        return HttpResponse(svg, content_type="image/svg+xml")
+
+    # CHOSEN FALLBACK: a STATIC SVG error card (not a code128 re-render) — EAN-13 demands a
+    # 12/13-digit payload and Code 39 forbids lowercase, so we surface the problem to the
+    # operator instead of silently swapping symbologies on the scanner floor. The card text
+    # below is static; the payload is never echoed into it.
     buf = BytesIO()
-
-    if obj.symbology == "qr":
-        img = qrcode.QRCode(box_size=6, border=2, image_factory=qrcode.image.svg.SvgPathImage)
-        img.add_data(obj.payload)
-        img.make(fit=True)
-        img.make_image().save(buf)
-        return HttpResponse(buf.getvalue(), content_type="image/svg+xml")
-
-    name_map = {"code39": "code39", "code128": "code128", "ean13": "ean13"}
-    try:
-        bc = barcode.get(name_map[obj.symbology], obj.payload, writer=SVGWriter())
-        bc.write(buf)
-        svg = buf.getvalue()
-    # NOTE: KeyError is caught deliberately — python-barcode's Code39 checksums the code
-    # BEFORE validating it, so an out-of-alphabet character surfaces as a bare KeyError,
-    # not as IllegalCharacterError.
-    except (NumberOfDigitsError, BarcodeError, KeyError):
-        # CHOSEN FALLBACK: a STATIC SVG error card (not a code128 re-render) — EAN-13 demands a
-        # 12/13-digit payload and Code 39 forbids lowercase, so we surface the problem to the
-        # operator instead of silently swapping symbologies on the scanner floor. The card text
-        # below is static; the payload is never echoed into it.
-        buf.write(
-            b'<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64">'
-            b'<rect width="100%" height="100%" fill="#fef2f2" stroke="#dc2626"/>'
-            b'<text x="14" y="28" font-family="monospace" font-size="13" fill="#b91c1c">'
-            b'Payload not valid for this symbology</text>'
-            b'<text x="14" y="48" font-family="monospace" font-size="12" fill="#7f1d1d">'
-            b'(EAN-13 needs 12/13 digits)</text>'
-            b"</svg>"
-        )
-        svg = buf.getvalue()
-
-    return HttpResponse(svg, content_type="image/svg+xml")
+    buf.write(
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64">'
+        b'<rect width="100%" height="100%" fill="#fef2f2" stroke="#dc2626"/>'
+        b'<text x="14" y="28" font-family="monospace" font-size="13" fill="#b91c1c">'
+        b'Payload not valid for this symbology</text>'
+        b'<text x="14" y="48" font-family="monospace" font-size="12" fill="#7f1d1d">'
+        b'(EAN-13 needs 12/13 digits)</text>'
+        b"</svg>"
+    )
+    return HttpResponse(buf.getvalue(), content_type="image/svg+xml")
