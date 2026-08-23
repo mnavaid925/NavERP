@@ -173,10 +173,13 @@ class ScanEvent(TenantOwned):
     )
 
     class Meta:
-        ordering = ["-id"]
+        # Append-only ledger: (-scanned_at, -id) is exact recency AND rides the
+        # inv_scnev_tnt_scan_idx composite for the console's rolling-24h aggregate.
+        ordering = ["-scanned_at", "-id"]
         indexes = [
             models.Index(fields=["tenant", "session"], name="inv_scnev_tnt_sess_idx"),
             models.Index(fields=["tenant", "resolved_kind"], name="inv_scnev_tnt_kind_idx"),
+            models.Index(fields=["tenant", "scanned_at"], name="inv_scnev_tnt_scan_idx"),
         ]
 
     def __str__(self):
