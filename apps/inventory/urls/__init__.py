@@ -6,7 +6,8 @@ once and concatenates them.
 Django is first-match-wins: within each module the literal routes (`add/`) precede the
 ``<int:pk>`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
 shadowing surface to reason about; the first segments (`""`, `attributes/`, `prices/`,
-`files/`, `putaway-rules/`, `putaway-suggestions/`, `vendor-communications/`,
+`files/`, `putaway-rules/`, `putaway-suggestions/`, `waves/`, `waves-board/`,
+`vendor-communications/`,
 `bin-capacity/`, `cross-dock/`, `warehouse-map/`, `transfers/`, `lot-rules/`,
 `lot-generate/`, `shelf-life-policies/`, `fefo-board/`, `traceability/`,
 `tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
@@ -16,6 +17,7 @@ from .Catalog.ItemAttributes import urlpatterns as _cat_itemattributes
 from .Catalog.ItemPrices import urlpatterns as _cat_itemprices
 from .Catalog.ProductFiles import urlpatterns as _cat_productfiles
 from .Catalog.Overview import urlpatterns as _cat_overview
+from .FulfillmentOrchestration.FulfillmentWaves import urlpatterns as _fo_waves
 from .InventoryTrackingControl.InventoryReservations import urlpatterns as _tc_reservations
 from .InventoryTrackingControl.StockLevels import urlpatterns as _tc_stocklevels
 from .InventoryTrackingControl.StockStatuses import urlpatterns as _tc_stockstatuses
@@ -25,6 +27,7 @@ from .PurchaseOrderManagement.Approvals import urlpatterns as _po_approvals
 from .PurchaseOrderManagement.Dispatches import urlpatterns as _po_dispatches
 from .PurchaseOrderManagement.ReorderDrafts import urlpatterns as _po_reorderdrafts
 from .ReceivingPutaway.PutawayRules import urlpatterns as _rp_putawayrules
+from .ReturnsManagement import urlpatterns as _rm_returns
 from .StockMovementTransfers import urlpatterns as _smt_transfers
 from .VendorSupplierManagement.VendorCommunications import urlpatterns as _vsm_vendorcommunications
 from .WarehousingBinManagement.BinCapacities import urlpatterns as _wh_bincapacities
@@ -44,6 +47,8 @@ urlpatterns = [
     *_po_dispatches,       # PurchaseOrderManagement/Dispatches
     *_po_reorderdrafts,    # PurchaseOrderManagement/ReorderDrafts
     *_rp_putawayrules,     # ReceivingPutaway/PutawayRules (+ computed suggestions page)
+    *_fo_waves,            # FulfillmentOrchestration/FulfillmentWaves (CRUD + verbs + board)
+    *_rm_returns,          # ReturnsManagement (inspections, disposition rules, workbench)
     *_smt_transfers,       # StockMovementTransfers (board/queue/panel + verbs, routes, rules)
     *_vsm_vendorcommunications,  # VendorSupplierManagement/VendorCommunications
     *_wh_bincapacities,    # WarehousingBinManagement/BinCapacities
@@ -54,3 +59,4 @@ urlpatterns = [
     *_tc_reservations,     # InventoryTrackingControl/InventoryReservations (CRUD + lifecycle verbs)
     *_lst_lotserial,       # LotSerialTracking (rules/generate/policies CRUD + FEFO board + trace)
 ]
+
