@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Count Program{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="text-muted">· {{ obj.number }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:countprogram_list' %}">Count Programs</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:countprogram_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_due %}
+        <form method="post" action="{% url 'inventory:countprogram_run' obj.pk %}" onsubmit="return confirm('Run this program now?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Run today's count</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'inventory:countprogram_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:countprogram_delete' obj.pk %}" onsubmit="return confirm('Delete this program?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Cadence</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Scope</dt><dd>{% if obj.location %}<a href="{% url 'scm:location_detail' obj.location_id %}" class="fw-600">{{ obj.location.code }}</a> <span class="text-muted">{{ obj.location.name }}</span>{% else %}<span class="badge badge-muted">No scope set</span>{% endif %}{% if obj.abc_class %} <span class="badge badge-info">{{ obj.abc_class|upper }} items only</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Cadence</dt><dd>{{ obj.cadence_label }}</dd></div>
+        <div class="detail-item"><dt>Count method</dt><dd>{{ obj.get_count_method_display }}</dd></div>
+        <div class="detail-item"><dt>Last run</dt><dd>{{ obj.last_run_date|date:"M d, Y"|default:"never run" }}</dd></div>
+        <div class="detail-item"><dt>State</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% if is_due %} <span class="badge badge-amber">Due today</span>{% endif %}{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recently Minted Sheets (SCM)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Sheet</th><th>Location</th><th>Scheduled</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for task in recent_tasks %}
+            <tr>
+              <td><a href="{% url 'scm:cyclecounttask_detail' task.pk %}" class="fw-600">{{ task.number }}</a></td>
+              <td>{{ task.location.code }}</td>
+              <td>{{ task.scheduled_date|date:"M d, Y" }}</td>
+              <td>{{ task.get_status_display }}</td>
+              <td><a href="{% url 'scm:cyclecounttask_detail' task.pk %}" class="btn-icon" title="Open in SCM"><i data-lucide="eye"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="calendar-check"></i><h3>No sheets minted yet</h3><p>Run the program on its day — each run schedules one blind count sheet in SCM.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
