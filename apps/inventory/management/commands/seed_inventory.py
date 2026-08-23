@@ -43,11 +43,16 @@ from apps.inventory.models import (
     CountProgram,
     CrossDockOrder,
     DispositionRoutingRule,
+    BarcodeLabel,
+    ScanEvent,
+    ScanSession,
+    RfidTag,
     FulfillmentWave,
     FulfillmentWaveOrder,
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
+    LocationNetwork,
     LotNumberRule,
     ProductFile,
     PurchaseOrderApproval,
@@ -171,6 +176,7 @@ class Command(BaseCommand):
                         + DispositionRoutingRule.objects.all().count()
                          + FulfillmentWaveOrder.objects.all().count()
                          + FulfillmentWave.objects.all().count()
+                        + LocationNetwork.objects.all().count()
                         + CountProgram.objects.all().count()
                         + PhysicalInventory.objects.all().count())
             ReturnInspectionChecklist.objects.all().delete()
@@ -197,6 +203,7 @@ class Command(BaseCommand):
             PhysicalInventory.objects.all().delete()
             FulfillmentWaveOrder.objects.all().delete()  # membership rows before their wave headers
             FulfillmentWave.objects.all().delete()
+            LocationNetwork.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -219,6 +226,8 @@ class Command(BaseCommand):
             self._seed_fulfillment_waves(tenant, items)
             self._seed_stocktaking(tenant, items)
             self._seed_forecasting_planning(tenant, items)
+            self._seed_location_network(tenant, items)
+            self._seed_barcode_rfid(tenant, items)
 
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -1307,3 +1316,165 @@ class Command(BaseCommand):
             made += 1
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {made} stock level plans (1 active, 1 seasonal draft)."))
+
+    def _seed_location_network(self, tenant, items):
+        """5.12 Multi-Location Management — the org tier ABOVE the location spine.
+
+        One company node with two region children and a store-level grandchild, with
+        seed_scm's real warehouses attached where they exist (get_or_create on the spine's
+        (tenant, code) uniqueness, never inventing Locations). One site is deliberately
+        LEFT unattached so /inventory/global-stock/ shows its honest "Unassigned sites"
+        group; one node carries zero stock so aggregate zeros read as real zeros.
+        """
+        if LocationNetwork.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: location network already present, skipping.")
+            return
+
+        warehouses = list(Location.objects.filter(tenant=tenant, location_type="warehouse")
+                          .order_by("code"))
+        if not warehouses:
+            self.stdout.write(
+                f"  {tenant.name}: no seeded warehouse locations — run `seed_scm` first, "
+                "skipping the location network.")
+            return
+
+        created = 0
+        company = LocationNetwork.objects.create(
+            tenant=tenant, code="HQ", name="Head Office",
+            node_type="company",
+            notes="Network root — all sites roll up here.")
+        created += 1
+
+        regions = []
+        for code, name in (("R-EAST", "Eastern Region"), ("R-WEST", "Western Region")):
+            region = LocationNetwork.objects.create(
+                tenant=tenant, code=code, name=name, node_type="region", parent=company)
+            regions.append(region)
+            created += 1
+
+        store = LocationNetwork.objects.create(
+            tenant=tenant, code="ST-01", name="Flagship Store",
+            node_type="store", parent=regions[0])
+        created += 1
+
+        # Attach whatever warehouses seed data actually has: the first under the east
+        # region; any FURTHER warehouse stays deliberately unattached so
+        # /inventory/global-stock/ shows its honest "Unassigned sites" group.
+        regions[0].warehouse = warehouses[0]
+        regions[0].save()
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created} network nodes over {len(warehouses)} warehouse(s) "
+            f"({len(warehouses) - 1} left unassigned)."))
+
+    def _seed_barcode_rfid(self, tenant, items):
+        """5.14 Barcode & RFID Integration demo rows (independently guarded)."""
+        self._seed_barcode_labels_and_scans(tenant, items)
+        self._seed_rfid_tags(tenant, items)
+
+    def _seed_barcode_labels_and_scans(self, tenant, items):
+        """Labels over existing items/bins plus scan sessions walked through the REAL
+        resolver (one deliberate unknown), and one open batch session."""
+        if BarcodeLabel.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: barcode labels/scans already present, skipping.")
+            return
+        from apps.scm.models import Location, LotSerial
+
+        made = 0
+        item = items[0] if items else None
+        lot = LotSerial.objects.filter(tenant=tenant, item=item).order_by("id").first() if item else None
+        bin_loc = (Location.objects.filter(tenant=tenant, location_type="bin").order_by("code").first()
+                   or Location.objects.filter(tenant=tenant).order_by("id").first())
+
+        label_specs = [
+            ("product", "item", "code128", item.sku if item else "DEMO-SKU", {"item": item}),
+            ("bin", "location", "qr", bin_loc.code if bin_loc else "BIN-01", {"location": bin_loc}),
+            ("pallet", "free", "code39", "", {"target_ref": f"LP-{tenant.pk:04d}-0001",
+                                              "pallet_ref": f"LP-{tenant.pk:04d}-0001"}),
+        ]
+        for kind, ttype, sym, payload, extra in label_specs:
+            lbl = BarcodeLabel(
+                tenant=tenant,
+                target_type=ttype,
+                label_kind=kind,
+                symbology=sym,
+                payload=payload,
+                copies=4 if kind == "bin" else 1,
+                notes="Seed demo label.",
+                **extra,
+            )
+            lbl.save()
+            made += 1
+        ean = BarcodeLabel(tenant=tenant, target_type="free", label_kind="generic",
+                           symbology="ean13", payload="4006381333931", copies=2,
+                           notes="Seed demo EAN-13 retail carton label.")
+        ean.save()
+        BarcodeLabel.objects.filter(pk=ean.pk).update(status="printed")
+
+        operator = (Party.objects.filter(tenant=tenant, roles__role="employee").first()
+                    or Party.objects.filter(tenant=tenant).first())
+        session = ScanSession(tenant=tenant, device_label="Zebra TC22 handheld",
+                              mode="single", operator=operator,
+                              notes="Seed demo receiving-floor scans.")
+        session.save()
+        codes = [
+            item.sku if item else "NOPE",
+            bin_loc.code if bin_loc else "NOPE",
+            lot.number if lot else "NOPE",
+            f"UNKNOWN-{tenant.pk:04d}",
+        ]
+        ok = 0
+        for code in codes:
+            kind, obj = resolve_code(tenant, code)
+            ScanEvent.record(session, code, kind=kind, obj=obj)
+            ok += 1 if obj is not None else 0
+        session.close()
+        session.save(update_fields=["status", "ended_at", "updated_at"])
+
+        batch = ScanSession(tenant=tenant, device_label="Dock door 2 - wedge scanner",
+                            mode="batch", notes="Open seed batch - paste codes on the console.")
+        batch.save()
+        for code in [item.sku if item else "NOPE"] * 3:
+            kind, obj = resolve_code(tenant, code)
+            ScanEvent.record(batch, code, kind=kind, obj=obj)
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {made + 1} barcode labels, 2 scan sessions ({ok}/{len(codes)} resolved)."))
+
+    def _seed_rfid_tags(self, tenant, items):
+        """RFID tags exercised through the real lifecycle verbs + bulk_read path."""
+        if RfidTag.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: RFID tags already present, skipping.")
+            return
+        from apps.scm.models import Location, LotSerial
+
+        item = items[0] if items else None
+        bin_loc = Location.objects.filter(tenant=tenant, location_type="bin").order_by("code").first()
+        epc_base = f"{(tenant.pk or 0) % 16:X}A700"
+        tag_specs = [
+            (f"{epc_base}0001", "passive", "unassigned", None),
+            (f"{epc_base}0002", "passive", "active", item),
+            (f"{epc_base}0003", "active", "active", None),
+            (f"{epc_base}0004", "passive", "retired", None),
+            (f"{epc_base}0005", "passive", "lost", None),
+        ]
+        active_tags = []
+        for epc, kind, status_target, tgt in tag_specs:
+            tag = RfidTag(tenant=tenant, epc=epc, kind=kind,
+                          item=tgt, notes="Seed demo tag.")
+            tag.save()
+            if status_target == "active":
+                try:
+                    tag.activate()
+                    active_tags.append(tag.epc)
+                except ValidationError:
+                    pass
+            elif status_target == "retired":
+                try:
+                    tag.retire()
+                except ValidationError:
+                    pass
+            elif status_target == "lost":
+                tag.status = "lost"
+                tag.save(update_fields=["status", "updated_at"])
+        result = RfidTag.bulk_read(tenant, active_tags + ["FFFFFFFFFFFF"], location=bin_loc)
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {len(tag_specs)} RFID tags (bulk-read matched {result['matched']})."))
