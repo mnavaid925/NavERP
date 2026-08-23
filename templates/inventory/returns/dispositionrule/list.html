@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Disposition Routing Rules — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Disposition Routing Rules</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:returns_workbench' %}">Returns Management</a>
+        <span class="sep">›</span>
+        <span>Disposition Rules</span>
+      </div>
+      <p class="text-muted">Automated routing rules mapping condition grades and item categories to restock, refurbish, scrap, or quarantine warehouse locations.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:returns_workbench' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Returns Workbench</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:dispositionrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Routing Rule</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search rule name, item SKU, category or notes…">
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in is_active_choices %}
+              <option value="{{ val }}" {% if request.GET.is_active == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="condition_grade" aria-label="Grade" class="form-select">
+            <option value="">All Condition Grades</option>
+            {% for val, label in grade_choices %}
+              <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:dispositionrule_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Rule Name</th>
+            <th>Applies To</th>
+            <th>Condition Grade</th>
+            <th>Suggested Action</th>
+            <th>Destination Bin</th>
+            <th>Status</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="mono fw-600">{{ obj.priority }}</td>
+              <td>
+                <a href="{% url 'inventory:dispositionrule_detail' obj.pk %}" class="fw-600 text-primary">{{ obj.name }}</a>
+                {% if obj.requires_supervisor_approval %}
+                  <span class="badge badge-amber ml-2" style="font-size:11px;">Supervisor Sign-off</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.item %}
+                  <span class="fw-600">SKU: {{ obj.item.sku }}</span>
+                  <div class="text-muted" style="font-size:12px;">{{ obj.item.name }}</div>
+                {% elif obj.category %}
+                  <span class="fw-600">Category: {{ obj.category.name }}</span>
+                {% else %}
+                  <span class="text-muted">Workspace-wide (All Items)</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.condition_grade == 'a' %}
+                  <span class="badge badge-green">Grade A</span>
+                {% elif obj.condition_grade == 'b' %}
+                  <span class="badge badge-info">Grade B</span>
+                {% elif obj.condition_grade == 'c' %}
+                  <span class="badge badge-amber">Grade C</span>
+                {% elif obj.condition_grade == 'd' %}
+                  <span class="badge badge-red">Grade D</span>
+                {% else %}
+                  <span class="badge badge-slate">All Grades</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.suggested_disposition == 'restock' %}
+                  <span class="badge badge-green">Restock</span>
+                {% elif obj.suggested_disposition == 'refurbish' %}
+                  <span class="badge badge-info">Refurbish</span>
+                {% elif obj.suggested_disposition == 'quarantine' %}
+                  <span class="badge badge-slate">Quarantine</span>
+                {% elif obj.suggested_disposition == 'scrap' %}
+                  <span class="badge badge-red">Scrap</span>
+                {% elif obj.suggested_disposition == 'return_to_vendor' %}
+                  <span class="badge badge-amber">RTV</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ obj.get_suggested_disposition_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.destination_location %}
+                  <span class="mono fw-600">{{ obj.destination_location.code }}</span>
+                  <div class="text-muted" style="font-size:12px;">{{ obj.destination_location.name }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:dispositionrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:dispositionrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:dispositionrule_delete' obj.pk %}" onsubmit="return confirm('Delete this disposition routing rule?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="git-branch"></i>
+                  <h3>No disposition routing rules configured</h3>
+                  <p>Add rules so returned merchandise is automatically routed to the right warehouse locations based on condition grades.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
