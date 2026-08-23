@@ -95,6 +95,21 @@ def global_stock(request):
         else:
             children_map.setdefault(n.parent_id, []).append(n)
 
+    # Ancestry resolved over THIS in-memory map, never node.path(): select_related
+    # pre-joins exactly ONE parent level, so a depth-≥2 row's .parent.parent would
+    # re-fetch its ancestors from the DB and break the frozen flat-4 budget at any
+    # deeper tree. All tenant nodes are in the list, so the map answers every hop;
+    # a parent pk missing from it just ends the walk (truncated label, no query).
+    by_pk = {n.pk: n}
+
+    def path_label(node):
+        parts, cur, seen = [], node, set()
+        while cur is not None and cur.pk not in seen:
+            seen.add(cur.pk)
+            parts.append(cur.code)
+            cur = by_pk.get(cur.parent_id)
+        return " › ".join(reversed(parts))
+
     def subtree_warehouse_ids(node):
         """Warehouse pks under one node — iterative, seen-set, depth-capped, so a
         malformed self-parent row cannot loop the page (Locations.py:95 precedent).
@@ -123,7 +138,7 @@ def global_stock(request):
         own = [warehouses[node.warehouse_id]] if node.warehouse_id else []
         return {
             "node": node,
-            "path_label": node.path(),
+            "path_label": path_label(node),
             "depth": depth,
             "own_warehouses": own,
             "stock_total": qty,
