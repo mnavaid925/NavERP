@@ -78,6 +78,12 @@ def countprogram_delete(request, pk):
 def countprogram_run(request, pk):
     """Run the cadence now: mint (or reuse) today's spine sheet for this program."""
     obj = get_object_or_404(CountProgram, pk=pk, tenant=request.tenant)
+    if not obj.is_active:
+        # The hidden Run button is not the guard — a deactivated cadence must refuse a
+        # direct POST too, or an operator could mint sheets for a schedule the tenant
+        # switched off.
+        messages.error(request, f"{obj.number} is inactive — reactivate it before running.")
+        return redirect("inventory:countprogram_detail", pk=obj.pk)
     try:
         task, created = obj.generate_tasks(request.user)
     except ValidationError as exc:
