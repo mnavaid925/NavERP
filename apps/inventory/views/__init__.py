@@ -55,6 +55,25 @@ from .InventoryTrackingControl.StockStatuses import (
     stockstatus_edit,
     stockstatus_list,
 )
+from .StocktakingCycleCounting.CountPrograms import (
+    countprogram_create,
+    countprogram_delete,
+    countprogram_detail,
+    countprogram_edit,
+    countprogram_list,
+    countprogram_run,
+)
+from .StocktakingCycleCounting.PhysicalInventories import (
+    physicalinventory_cancel,
+    physicalinventory_create,
+    physicalinventory_delete,
+    physicalinventory_detail,
+    physicalinventory_edit,
+    physicalinventory_list,
+    physicalinventory_reconcile,
+    physicalinventory_start,
+)
+from .StocktakingCycleCounting.VarianceReport import variance_report
 from .LotSerialTracking.FefoBoard import fefo_board
 from .LotSerialTracking.LotNumberRules import (
     lot_generate,
@@ -195,6 +214,12 @@ __all__ = [
     "shelflifepolicy_list", "shelflifepolicy_detail", "shelflifepolicy_create",
     "shelflifepolicy_edit", "shelflifepolicy_delete",
     "fefo_board", "traceability",
+    "countprogram_list", "countprogram_detail", "countprogram_create",
+    "countprogram_edit", "countprogram_delete", "countprogram_run",
+    "physicalinventory_list", "physicalinventory_detail", "physicalinventory_create",
+    "physicalinventory_edit", "physicalinventory_delete",
+    "physicalinventory_start", "physicalinventory_reconcile", "physicalinventory_cancel",
+    "variance_report",
     "wave_list", "wave_detail", "wave_create", "wave_edit", "wave_delete",
     "wave_release", "wave_close", "wave_cancel",
     "waveorder_add", "waveorder_remove",
