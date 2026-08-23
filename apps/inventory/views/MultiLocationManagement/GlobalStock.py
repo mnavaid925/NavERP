@@ -19,13 +19,15 @@ from decimal import Decimal
 
 from django.db.models import F, Sum
 
-# Through the leaf module, not the package root: this file ships during the build
+# Through the leaf modules, not the package root: this file ships during the build
 # wave, before apps/inventory/models/__init__.py gains its 5.12 lines (integrate
 # phase) — attribute access through the not-yet-wired package would raise at import.
 from apps.inventory.models.MultiLocationManagement.LocationNetworks import (
     MAX_TREE_DEPTH,
     LocationNetwork,
 )
+# Same admin test as every other 5.12 view — ONE definition, kept in LocationNetworks.
+from apps.inventory.views.MultiLocationManagement.LocationNetworks import _is_admin
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.scm.models import Location, StockMove, StockTransferLine
 
@@ -202,4 +204,6 @@ def global_stock(request):
         "rows": flat,
         "stats": stats,
         "q": q,
+        # Gates the empty-state "Add Node" affordance — mirroring every sibling view.
+        "is_admin": _is_admin(request.user),
     })
