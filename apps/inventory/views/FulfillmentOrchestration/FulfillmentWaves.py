@@ -86,7 +86,12 @@ def wave_list(request):
         qs = qs.filter(status=status)
     q = request.GET.get("q", "").strip()
     qs = apply_search(qs, q, ["number", "description"])
-    page_obj = paginate(request, qs.annotate(member_count=Count("orders")), 15)
+    # annotate() clears Meta ordering under aggregation — restate it so pagination is
+    # deterministic.
+    page_obj = paginate(
+        request,
+        qs.annotate(member_count=Count("orders")).order_by("-created_at", "-id"),
+        15)
     waves = list(page_obj.object_list)
     pick_stats = _pick_stats_by_ref(request.tenant, waves)
     for w in waves:
