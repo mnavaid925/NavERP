@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Scan Console — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title flex items-center gap-2">Scan Console
+        <span class="badge badge-info">{{ request.GET.mode|default:"single"|title }} Mode</span>
+      </h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <span>Scan Console</span>
+      </div>
+      <p class="text-muted">Point, shoot, or paste raw codes against an open scan session and resolve them into items, locations and lots.</p>
+    </div>
+    <div class="page-actions">
+      <a href="?mode=single" class="btn {% if request.GET.mode == 'batch' %}btn-outline{% else %}btn-primary{% endif %}"><i data-lucide="crosshair"></i> Single Shot</a>
+      <a href="?mode=batch" class="btn {% if request.GET.mode == 'batch' %}btn-primary{% else %}btn-outline{% endif %}"><i data-lucide="layers"></i> Batch Paste</a>
+    </div>
+  </div>
+
+  <!-- Resolve Form -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="scan-line"></i> Resolve Scans</h2>
+      <a href="{% url 'inventory:scansession_list' %}" class="btn btn-outline btn-sm"><i data-lucide="list"></i> Manage Sessions</a>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'inventory:scan_console' %}">
+        {% csrf_token %}
+        <div class="grid grid-cols-3 gap-4 items-end">
+          <div class="form-group">
+            <label class="form-label" for="session">Current Session *</label>
+            <select name="session" id="session" aria-label="Scan Session" class="form-select">
+              {% for s in sessions %}
+                <option value="{{ s.pk }}">{{ s.number }}{% if s.device_label %} · {{ s.device_label }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label" for="codes">Scanned Codes *</label>
+            <textarea name="codes" id="codes" rows="6" class="form-textarea mono"
+                      placeholder="Point, shoot, or paste codes — one per line…"></textarea>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button type="submit" class="btn btn-primary"><i data-lucide="scan-line"></i> Resolve Scans</button>
+          <span class="text-muted" style="font-size:12px;">
+            Maximum <span class="fw-600">300 codes</span> per run. Unknown codes are recorded — never dropped.
+          </span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-6">
+    <!-- Recent Events -->
+    <div class="card mb-0">
+      <div class="card-header">
+        <h2 class="card-title"><i data-lucide="history"></i> Recent Events</h2>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Raw Code</th>
+              <th>Result</th>
+              <th>Resolved To</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ev in recent_events %}
+              <tr>
+                <td><span class="mono fw-600">{{ ev.raw_code|truncatechars:28 }}</span></td>
+                <td>
+                  {% if ev.ok %}
+                    {% if ev.resolved_kind == 'item' %}
+                      <span class="badge badge-green">Item</span>
+                    {% elif ev.resolved_kind == 'location' %}
+                      <span class="badge badge-info">Location</span>
+                    {% elif ev.resolved_kind == 'lot' %}
+                      <span class="badge badge-amber">Lot</span>
+                    {% elif ev.resolved_kind == 'rfid' %}
+                      <span class="badge badge-slate">RFID</span>
+                    {% else %}
+                      <span class="badge badge-muted">{{ ev.resolved_kind|title }}</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge badge-red">Unknown</span>
+                  {% endif %}
+                </td>
+                <td>{% if ev.resolved_label %}<span class="fw-600">{{ ev.resolved_label }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="3">
+                  <div class="empty-state py-6">
+                    <i data-lucide="scan-line"></i>
+                    <h3>No scans resolved yet</h3>
+                    <p>Codes you resolve above will appear here with their match verdict.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Throughput Mini-Strip -->
+    <div class="space-y-6">
+      <div class="card mb-0">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="activity"></i> Throughput</h2>
+        </div>
+        <div class="card-body">
+          <div class="stat-grid" style="margin-bottom:0;">
+            <div class="stat-card">
+              <div class="stat-icon blue"><i data-lucide="activity"></i></div>
+              <div>
+                <div class="stat-value">{{ stats.today }}</div>
+                <div class="stat-label">Scans (24h)</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon green"><i data-lucide="target"></i></div>
+              <div>
+                <div class="stat-value">{% if stats.ok_rate != None %}{{ stats.ok_rate }}%{% else %}<span class="text-muted">—</span>{% endif %}</div>
+                <div class="stat-label">OK Rate</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
