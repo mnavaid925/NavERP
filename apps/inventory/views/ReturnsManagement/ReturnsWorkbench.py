@@ -3,7 +3,7 @@
 Real-time operational dashboard for warehouse intake, inspection staging, and guided
 disposition routing across all open customer return requests and bench inventory.
 """
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 
 from apps.core.crud import paginate
 from apps.inventory.models import (
@@ -38,15 +38,19 @@ def returns_workbench(request):
         .order_by("-id")
     )
 
-    # Search filter
+    # Search filter — the item clauses run as a correlated EXISTS so matching an RMA's
+    # lines cannot fan out rows (which then needed a .distinct() whose cost landed on
+    # Paginator.count for every searched page). number/customer stay inline.
     q = request.GET.get("q", "").strip()
     if q:
+        line_item_matches = ReturnLine.objects.filter(
+            return_authorization=OuterRef("pk"),
+        ).filter(Q(item__sku__icontains=q) | Q(item__name__icontains=q))
         rma_qs = rma_qs.filter(
             Q(number__icontains=q)
             | Q(customer__name__icontains=q)
-            | Q(lines__item__sku__icontains=q)
-            | Q(lines__item__name__icontains=q)
-        ).distinct()
+            | Exists(line_item_matches)
+        )
 
     # Build actionable return items list
     bench_items = []
