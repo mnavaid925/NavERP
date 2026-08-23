@@ -48,8 +48,8 @@
     </div>
     <div class="stat-card">
       <div class="stat-icon orange"><i data-lucide="boxes"></i></div>
-      <div class="stat-value">{% if obj.pick_progress_pct is not None %}{{ obj.pick_progress_pct }}%{% else %}—{% endif %}</div>
-      <div class="stat-label">Pick progress{% if obj.pick_progress_pct is None %} — no picks reference this wave yet{% endif %}</div>
+      <div class="stat-value">{% if pick_pct is not None %}{{ pick_pct }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">Pick progress{% if pick_pct is None %} — no picks reference this wave yet{% endif %}</div>
     </div>
   </div>
 
