@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Approval Rule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:transfer_board' %}">Transfers</a><span class="sep">›</span><a href="{% url 'inventory:transferapprovalrule_list' %}">Approval Rules</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:transferapprovalrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}<a href="{% url 'inventory:transferapprovalrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rule</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Applies to</dt><dd>{{ obj.get_applies_to_display }}</dd></div>
+        <div class="detail-item"><dt>Unit band</dt><dd>{{ obj.min_units|floatformat:"-2" }}{% if obj.max_units %} – {{ obj.max_units|floatformat:"-2" }} (exclusive){% else %} and above{% endif %}</dd></div>
+        <div class="detail-item"><dt>Tiers required</dt><dd class="fw-600">{{ obj.tier_count }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Recent decisions under this rule</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Movement</th><th>Tier</th><th>Decision</th><th>Decided by</th><th>When</th></tr></thead>
+        <tbody>
+          {% for d in decisions %}
+            <tr>
+              <td><a href="{% url 'inventory:transfer_panel' d.transfer_id %}" class="fw-600">{{ d.transfer.number }}</a></td>
+              <td>T{{ d.tier }}</td>
+              <td><span class="badge {{ d.decision_css }}">{{ d.get_decision_display }}</span></td>
+              <td>{% if d.decided_by %}{{ d.decided_by.get_username|default:d.decided_by.pk }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ d.decided_at|date:"M d, Y H:i" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="stamp"></i><h3>No decisions recorded under this rule yet</h3></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
