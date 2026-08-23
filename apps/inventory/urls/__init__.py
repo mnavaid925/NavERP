@@ -10,6 +10,7 @@ shadowing surface to reason about; the first segments (`""`, `attributes/`, `pri
 `vendor-communications/`,
 `bin-capacity/`, `cross-dock/`, `warehouse-map/`, `transfers/`, `lot-rules/`,
 `lot-generate/`, `shelf-life-policies/`, `fefo-board/`, `traceability/`,
+`count-programs/`, `physical-inventory/`, `variance-report/`,
 `tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
 distinct whole components and none can swallow another.
 """
@@ -22,6 +23,7 @@ from .InventoryTrackingControl.InventoryReservations import urlpatterns as _tc_r
 from .InventoryTrackingControl.StockLevels import urlpatterns as _tc_stocklevels
 from .InventoryTrackingControl.StockStatuses import urlpatterns as _tc_stockstatuses
 from .LotSerialTracking import urlpatterns as _lst_lotserial
+from .StocktakingCycleCounting import urlpatterns as _stk_stocktake
 from .PurchaseOrderManagement.ApprovalRules import urlpatterns as _po_approvalrules
 from .PurchaseOrderManagement.Approvals import urlpatterns as _po_approvals
 from .PurchaseOrderManagement.Dispatches import urlpatterns as _po_dispatches
@@ -58,5 +60,6 @@ urlpatterns = [
     *_tc_stockstatuses,    # InventoryTrackingControl/StockStatuses (CRUD)
     *_tc_reservations,     # InventoryTrackingControl/InventoryReservations (CRUD + lifecycle verbs)
     *_lst_lotserial,       # LotSerialTracking (rules/generate/policies CRUD + FEFO board + trace)
+    *_stk_stocktake,       # StocktakingCycleCounting (programs + physical inventory + variance report)
 ]
 
