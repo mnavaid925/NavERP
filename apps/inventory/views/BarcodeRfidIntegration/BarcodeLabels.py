@@ -123,6 +123,23 @@ def barcodelabel_delete(request, pk):
     )
 
 
+@tenant_admin_required
+@require_POST
+def barcodelabel_void(request, pk):
+    """Pull a label out of circulation — mirrors the RFID tag lifecycle actions."""
+    obj = get_object_or_404(
+        BarcodeLabel.objects.filter(tenant=request.tenant), pk=pk
+    )
+    try:
+        obj.void()
+    except ValidationError as e:
+        messages.error(request, "; ".join(e.messages))
+        return redirect("inventory:barcodelabel_detail", pk=obj.pk)
+    write_audit_log(request.user, obj, "update", {"action": "void"})
+    messages.success(request, f"Barcode Label {obj.number} voided.")
+    return redirect("inventory:barcodelabel_detail", pk=obj.pk)
+
+
 @login_required
 def barcodelabel_print(request, pk):
     """GET renders the printable label copies; POST stamps + flips the label to printed."""
