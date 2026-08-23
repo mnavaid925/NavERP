@@ -169,7 +169,12 @@ class TestTransferApprovalChain:
         assert TransferApproval.cleared_tier_count(decisions) == 0
         TransferApproval.objects.create(
             tenant=tenant_a, transfer=chain_transfer, tier=1, decision="approved")
-        decisions = list(TransferApproval.objects.filter(transfer=chain_transfer))
+        # Replay CHRONOLOGICALLY like every production caller does (_chain_map/_decide
+        # order by decided_at, id) — the model's Meta.ordering is by tier, which would
+        # interleave two resubmission runs and read the stale rejection last.
+        decisions = list(TransferApproval.objects
+                         .filter(transfer=chain_transfer)
+                         .order_by("decided_at", "id"))
         assert TransferApproval.cleared_tier_count(decisions) == 1
 
     def test_plain_strings_replay_too(self):
