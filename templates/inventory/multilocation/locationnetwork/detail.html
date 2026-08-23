@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.code }} — Network Node{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.code }}</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Multi-Location Management</span><span class="sep">›</span><span>{{ obj.code }}</span></div>
+      <p class="text-muted">{{ obj.name }} · <span class="mono">{{ obj.number }}</span></p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:locationnetwork_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Nodes</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:locationnetwork_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:locationnetwork_delete' obj.pk %}" onsubmit="return confirm('Delete this node? Any child nodes re-parent to the top level.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Hierarchy Position</h2></div>
+    <div class="card-body">
+      {% if path_label %}
+        <span class="mono fw-600">{{ path_label }}</span>
+      {% else %}
+        {% if obj.parent.parent.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.parent.parent.pk %}" class="mono">{{ obj.parent.parent.parent.code }}</a> <span class="text-muted">›</span> {% endif %}
+        {% if obj.parent.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.parent.pk %}" class="mono">{{ obj.parent.parent.code }}</a> <span class="text-muted">›</span> {% endif %}
+        {% if obj.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.pk %}" class="mono">{{ obj.parent.code }}</a> <span class="text-muted">›</span> {% endif %}
+        <span class="mono fw-600">{{ obj.code }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Node</h2><span class="badge {{ obj.node_css }}">{{ obj.get_node_type_display }}</span></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd><span class="mono fw-600">{{ obj.number }}</span></dd></div>
+        <div class="detail-item"><dt>Code</dt><dd><span class="mono fw-600">{{ obj.code }}</span></dd></div>
+        <div class="detail-item"><dt>Name</dt><dd>{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Type</dt><dd><span class="badge {{ obj.node_css }}">{{ obj.get_node_type_display }}</span></dd></div>
+        <div class="detail-item"><dt>Parent</dt><dd>{% if obj.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.pk %}" class="mono">{{ obj.parent.code }}</a> {{ obj.parent.name }}{% else %}<span class="text-muted">— top level</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Active</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Notes</dt><dd>{% if obj.notes %}<span style="white-space:pre-line;">{{ obj.notes }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Attached Warehouse</h2></div>
+    <div class="card-body">
+      {% if obj.warehouse %}
+        <p style="margin-bottom:.25rem;"><a href="{% url 'scm:location_detail' obj.warehouse.pk %}" class="mono fw-600">{{ obj.warehouse.code }}</a> {{ obj.warehouse.name }}</p>
+        <p class="text-muted" style="margin-bottom:0;">Stock for this node's own site lives at this SCM location — on-hand and in-transit roll up through it on the Global Stock page.</p>
+      {% else %}
+        <p class="text-muted" style="margin-bottom:0;">No warehouse attached — this is a pure grouping node. Its totals come entirely from child nodes.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Child Nodes</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Attached Warehouse</th><th>Active</th><th class="th-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for c in children %}
+            <tr>
+              <td><a href="{% url 'inventory:locationnetwork_detail' c.pk %}" class="fw-600 mono">{{ c.code }}</a></td>
+              <td>{{ c.name }}</td>
+              <td><span class="badge {{ c.node_css }}">{{ c.get_node_type_display }}</span></td>
+              <td>
+                {% if c.warehouse %}
+                  <a href="{% url 'scm:location_detail' c.warehouse.pk %}" class="mono">{{ c.warehouse.code }}</a>
+                  <div class="text-muted" style="font-size:12px;">{{ c.warehouse.name }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{% if c.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-slate">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:locationnetwork_detail' c.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:locationnetwork_edit' c.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:locationnetwork_delete' c.pk %}" onsubmit="return confirm('Delete this node? Its own children re-parent to the top level.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-fork"></i><h3>No child nodes yet</h3><p>Add child nodes and set this one as their parent to build out the tier below.{% if not is_admin %} Ask a workspace admin to create them.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
