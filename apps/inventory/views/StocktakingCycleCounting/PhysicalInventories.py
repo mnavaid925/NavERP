@@ -5,6 +5,7 @@ locking and guards; these views own the HTTP contract: POST-only verbs whose ref
 are expected traffic and land as flash messages on the detail page.
 """
 from django.core.exceptions import ValidationError
+from django.db.models import Count, Q
 
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.forms import PhysicalInventoryForm
@@ -36,13 +37,14 @@ def physicalinventory_detail(request, pk):
     obj = get_object_or_404(_scoped(request.tenant), pk=pk)
     sheets = (obj.spawned_tasks().select_related("location")
               .order_by("status", "scheduled_date"))
-    total = sheets.count()
-    reconciled = sheets.filter(status="reconciled").count()
+    # One COUNT round trip, not two — total and reconciled share the same scan.
+    counts = sheets.aggregate(total=Count("id"),
+                              reconciled=Count("id", filter=Q(status="reconciled")))
     return render(request, "inventory/stocktake/physicalinventory/detail.html", {
         "obj": obj,
         "sheets": sheets[:25],
-        "sheet_total": total,
-        "sheet_reconciled": reconciled,
+        "sheet_total": counts["total"],
+        "sheet_reconciled": counts["reconciled"],
     })
 
 
