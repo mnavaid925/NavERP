@@ -53,7 +53,7 @@
               <td>
                 <div class="table-actions">
                   <a href="{% url 'inventory:countprogram_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <form method="post" action="{% url 'inventory:countprogram_run' obj.pk %}" onsubmit="return confirm('Run this program now and schedule today&apos;s count sheet?');">
+                  <form method="post" action="{% url 'inventory:countprogram_run' obj.pk %}" onsubmit="return confirm('Run this program now and schedule today\'s count sheet?');">
                     {% csrf_token %}<button class="btn-icon" type="submit" title="Run now"><i data-lucide="play"></i></button>
                   </form>
                   <a href="{% url 'inventory:countprogram_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
