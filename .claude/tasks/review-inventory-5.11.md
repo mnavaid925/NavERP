@@ -35,21 +35,21 @@ is dirty with THEIR changes: never revert, rewrite or commit it. Only additive s
 - **Lesson:** L33
 - **Problem:** Line-item status badge uses semantic classes `badge-success` / `badge-danger`, which do not exist in static/css/theme.css, so counted/variance statuses render as unstyled plain text.
 - **Fix:** Colour-named modifiers only — `badge-green` for counted/matched, `badge-red` for variance/out-of-tolerance, `badge-amber` for pending recount; verify each branch against `CycleCountTask.STATUS_CHOICES` exact values and keep a `{% else %}` fallback (`{{ sheet.get_status_display }}`). Grep theme.css before using any modifier class.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 C1 spawned-sheet status badges use theme.css colour-named modifiers
 
 ### I1 — `apps/inventory/models/StocktakingCycleCounting/CountPrograms.py:105`
 
 - **Found by:** security-reviewer, qa-smoke-tester, explorer
 - **Problem:** Same-day duplicate-run guard filters `notes=marker` (exact match) but `generate_tasks` persists sheets as `notes=f"{marker} · {self.name}"`, so the reuse lookup can never match its own prior sheet — every Run mints duplicate same-day blind count tasks (QA confirmed live: two consecutive POSTs produced CC-00035 + CC-00036 instead of reusing).
 - **Fix:** Filter with `notes__startswith=marker` (mirroring the provenance query at views/StocktakingCycleCounting/CountPrograms.py:42), so the reuse branch is actually reachable again.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 same-day reuse must prefix-match the provenance marker
 
 ### I2 — `apps/inventory/views/StocktakingCycleCounting/CountPrograms.py:78`
 
 - **Found by:** security-reviewer
 - **Problem:** `countprogram_run` has no view-level or model-level `is_active` guard — a direct POST on a deactivated program mints count sheets for a program the tenant switched off (the hidden-button state is bypassable).
 - **Fix:** Refuse in the view (flash message + redirect, or raise ValidationError surfaced like the PhysicalInventory verbs do) when `not obj.is_active`; also acceptable inside `generate_tasks()`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 I2 countprogram_run refuses deactivated programs at the view
 
 ### I3 — `templates/inventory/stocktake/physicalinventory/detail.html:12`
 
@@ -57,14 +57,14 @@ is dirty with THEIR changes: never revert, rewrite or commit it. Only additive s
 - **Lesson:** L42
 - **Problem:** Start & Freeze button interpolates user-editable free text (`scm.Location.code`) into `onsubmit="return confirm('Freeze {{ obj.warehouse.code }} …')"` — HTML entities decode before the JS engine parses the attribute, so autoescaping cannot save it (`X');alert(document.cookie)//` executes; a benign `O'BRIEN` breaks the handler and freeze submits without confirmation).
 - **Fix:** Remove Location-field interpolation from confirm() per L42 rule 1 — use a static message (optionally the system-assigned `{{ obj.number }}` in button label text), never a mutable field inside `confirm('…')`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 I3 drop Location code interpolation from the freeze confirm()
 
 ### I4 — `templates/inventory/stocktake/countprogram/form.html:61`
 
 - **Found by:** frontend-reviewer
 - **Problem:** `<label for="id_frequency">` has no matching control id — the rendered select/input lacks an explicit id, so screen readers don't associate label with control.
 - **Fix:** Verify what Django actually renders for that field first; if the widget is hand-written, add `id="id_frequency"` to the control so it pairs with the existing `for=`. If the label/control already pair correctly (reviewer's own note was uncertain), mark skipped as not-a-defect with evidence.
-- **Status:** [ ] open
+- **Status:** [~] skipped — not a defect: labels render with for="{{ field.id_for_label }}" against Django-generated widget ids so every pair matches; reviewer note itself was uncertain
 
 ### I5 — `templates/inventory/stocktake/variance.html:34`
 
@@ -72,28 +72,28 @@ is dirty with THEIR changes: never revert, rewrite or commit it. Only additive s
 - **Lesson:** L33
 - **Problem:** Variance direction badge branches test only `> 0` / `< 0`; a perfectly matched zero-variance line falls into `{% else %}` rendering a red "Variance" badge — false status shown to users.
 - **Fix:** Branch positive → red "Over", negative → amber "Under", and make `{% else %}` render green "Matched" (exact-zero case).
-- **Status:** [ ] open
+- **Status:** [~] skipped — not a defect: shipped variance.html has no per-line variance_value badge branches; row-level logic at line 43 already renders the zero case as {% else %} badge-green clean, and git log shows the file untouched since its original commit
 
 ### I6 — `apps/inventory/models/StocktakingCycleCounting/PhysicalInventories.py:127`
 
 - **Found by:** code-reviewer
 - **Problem:** `start()`'s already-covered skip keys on notes prefix `"Physical inventory {number}"`, but `next_number()` restarts at PHY-00001 after a `--flush` re-seed while old spawned `scm.CycleCountTask`s survive — the re-seeded event adopts the previous generation's sheets (possibly all reconciled/cancelled), mints zero sheets and reports their statuses as its own coverage.
 - **Fix:** Make the provenance marker unique to the row (e.g. include the event pk alongside the number) so a re-issued number can't collide across generations.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 I6 task_marker becomes the one canonical instance builder stamped with #pk (+ fixture/test consumers)
 
 ### I7 — `apps/inventory/models/StocktakingCycleCounting/CountPrograms.py:111`
 
 - **Found by:** code-reviewer
 - **Problem:** `generate_tasks()` performs three writes (mint CycleCountTask(s), stamp `last_run_date`, audit log) with no `transaction.atomic()` and no `select_for_update` — unlike every verb in sibling PhysicalInventories.py; two near-simultaneous Run POSTs both see no existing sheet and mint duplicates, defeating the reuse guarantee.
 - **Fix:** Wrap the body in `with transaction.atomic():` and re-read the program row via `select_for_update()` (mirror `_locked()` in PhysicalInventories.py:100) before the existence probe.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 I7 generate_tasks runs inside transaction.atomic with the program row re-read select_for_update
 
 ### I8 — `apps/inventory/models/StocktakingCycleCounting/PhysicalInventories.py:133`
 
 - **Found by:** performance-reviewer
 - **Problem:** `start()` mints one `CycleCountTask.objects.create()` per bin/zone, each save running next_number's max+1 SELECT + INSERT while the event sits under `select_for_update` — a wall-to-wall count (hundreds–thousands of bins) serializes thousands of round trips inside one lock-holding transaction.
 - **Fix:** Read the tenant's current max `CC-#####` number once, pre-assign numbers to local instances, insert all sheets with one `CycleCountTask.objects.bulk_create(...)`; keep the provenance marker identical so I6/I1 lookups still match bulk-created rows.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 I8 start() mints every sheet in ONE bulk_create with locally pre-assigned CC numbers
 
 ### M1 — `templates/inventory/stocktake/countprogram/list.html:56`
 
@@ -101,21 +101,21 @@ is dirty with THEIR changes: never revert, rewrite or commit it. Only additive s
 - **Lesson:** L42
 - **Problem:** Static apostrophe written as `today&apos;s` inside the Run-now `onsubmit` — HTML-decodes back to a bare `'` terminating the JS string literal, throwing on every click so the form submits with NO confirmation dialog.
 - **Fix:** Escape for JS, not HTML: `today\'s`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M1 Run-now confirm escapes the apostrophe for JS not HTML
 
 ### M2 — `apps/inventory/management/commands/seed_inventory.py:1257`
 
 - **Found by:** qa-smoke-tester, explorer
 - **Problem:** Seeder success message hardcodes "{done.number} reconciled." though the seeded demo walk ends `cancelled` (start→cancel), and prints "counting" for `live` even if its `start()` raised ValidationError.
 - **Fix:** Print real statuses derived from the objects, e.g. `f"{done.number} {done.get_status_display().lower()}"`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M2 stocktaking seeder prints derived statuses, not hardcoded ones
 
 ### M3 — `apps/inventory/models/StocktakingCycleCounting/CountPrograms.py:40`
 
 - **Found by:** code-reviewer
 - **Problem:** Dead code: `STATUS_CSS` dict on both models (also PhysicalInventories.py:43) has no `status_css` property consuming it; templates hard-code the Active/Inactive badges instead.
 - **Fix:** Delete both unused dicts, or add the conventional `status_css` property and use it in list/detail templates like crossdockorder/reservation do (pick one style, don't do both).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M3 drop dead STATUS_CSS from CountProgram and PhysicalInventory
 
 ### M4 — `templates/inventory/stocktake/countprogram/list.html:12`
 
@@ -123,35 +123,35 @@ is dirty with THEIR changes: never revert, rewrite or commit it. Only additive s
 - **Lesson:** L2
 - **Problem:** Claimed multi-line `{# #}` comment block leaking raw `{#` text into rendered HTML above the table header (Django single-line comments don't span newlines). NOTE: qa-smoke-tester's rendered-HTML sweep found ZERO `{#` leaks on this page — verify against actual rendered output before changing anything; if the sweep is right, mark skipped as not-a-defect with that evidence.
 - **Fix:** If confirmed: convert to per-line single-line comments or `{% comment %}…{% endcomment %}`.
-- **Status:** [ ] open
+- **Status:** [~] skipped — not a defect: rendered-HTML sweep found zero leak markers on this page and lines 10-16 contain no comment block; qa sweep concurs
 
 ### M5 — `templates/inventory/stocktake/physicalinventory/list.html:29`
 
 - **Found by:** frontend-reviewer
 - **Problem:** Empty-state block shows only "No physical inventories found." with no call-to-action link to the create form, unlike the countprogram list.
 - **Fix:** Append an anchor to `inventory:physicalinventory_create` inside the empty-state div, matching the countprogram pattern.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M5 physical inventory empty state gains a New Event call-to-action
 
 ### M6 — `apps/inventory/views/StocktakingCycleCounting/PhysicalInventories.py:39`
 
 - **Found by:** performance-reviewer
 - **Problem:** Detail view issues two separate COUNT queries over the same spawned-sheets queryset (`sheets.count()` then filtered count).
 - **Fix:** Collapse to one query: `sheets.aggregate(total=Count("id"), reconciled=Count("id", filter=Q(status="reconciled")))`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M6 detail view counts sheet_total + sheet_reconciled in ONE aggregate
 
 ### M7 — `apps/inventory/models/StocktakingCycleCounting/PhysicalInventories.py:67`
 
 - **Found by:** performance-reviewer
 - **Problem:** Default ordering `["-scheduled_date", "-id"]` but migration 0015 ships only `(tenant, status)` index — every paginated list render filesorts the tenant's rows.
 - **Fix:** Add `models.Index(fields=["tenant", "-scheduled_date"], name="inv_phy_tnt_sched_idx")` to Meta.indexes + matching incremental migration (agree the number with any concurrent session before generating — check `ls apps/inventory/migrations/` first).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M7 PhysicalInventory gains (tenant, -scheduled_date) index inv_phy_tnt_sched_idx + migration 0016
 
 ### M8 — `apps/inventory/models/StocktakingCycleCounting/PhysicalInventories.py:81`
 
 - **Found by:** performance-reviewer
 - **Problem:** Provenance lookups (`spawned_tasks()`, the generate_tasks duplicate check, countprogram_detail recent-tasks filter) do left-anchored `notes__startswith` against `scm.CycleCountTask.notes`, an unindexed TextField — full-scans on every detail render / program run.
 - **Fix:** Prefer bounding the scan with a date/window condition inside inventory's own query over touching the spine's schema; if schema change chosen instead, `db_index=True` on `scm.CycleCountTask.notes` needs an scm migration (coordinate with concurrent sessions).
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(inventory): 5.11 M8 spawned_tasks bounds the notes prefix scan with the spine indexed window
 
 ## Notes — app-wide / pre-existing (NOT in the fix queue)
 
