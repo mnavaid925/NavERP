@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Shelf-Life Policies{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Shelf-Life Policies</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Lot &amp; Serial Tracking</span><span class="sep">›</span><span>Shelf-Life Policies</span></div>
+      <p class="text-muted">{{ policy_count }} regime{{ policy_count|pluralize }} armed — the amber warning window and the red do-not-ship gate the FEFO board applies to every lot on the shelf.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:fefo_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> FEFO Board</a>
+      <a href="{% url 'inventory:shelflifepolicy_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Policy</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU, item or notes…">
+        </div>
+        <div class="form-group">
+          <select name="fefo" aria-label="FEFO" class="form-select">
+            <option value="">All pick orders</option>
+            <option value="True" {% if request.GET.fefo == "True" %}selected{% endif %}>FEFO enforced</option>
+            <option value="False" {% if request.GET.fefo == "False" %}selected{% endif %}>Advisory only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:shelflifepolicy_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Shelf life</th><th>Warning window</th><th>Do-not-ship gate</th><th>FEFO</th><th>Notes</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:shelflifepolicy_detail' obj.pk %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></td>
+              <td>{{ obj.shelf_life_days|default:"—" }}{% if obj.shelf_life_days %} days{% endif %}</td>
+              <td>{{ obj.warning_days }} days before expiry</td>
+              <td>{% if obj.min_remaining_days > 0 %}<span class="badge badge-red">&lt; {{ obj.min_remaining_days }} days left</span>{% else %}<span class="badge badge-muted">No gate</span>{% endif %}</td>
+              <td>{% if obj.fefo_enforced %}<span class="badge badge-green">Enforced</span>{% else %}<span class="badge badge-muted">Advisory</span>{% endif %}</td>
+              <td>{{ obj.notes|default:"—"|truncatechars:40 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:shelflifepolicy_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:shelflifepolicy_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  <form method="post" action="{% url 'inventory:shelflifepolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this shelf-life policy?');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="calendar-clock"></i><h3>No shelf-life policies yet</h3><p>Without a policy every dated lot reads as simply OK or Expired — add one per perishable SKU to arm the amber window and the do-not-ship gate.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Expiry dates live on each lot in the SCM master; the policy decides what those dates MEAN for picking. The warning window must start at or beyond the do-not-ship gate, so the amber band is always visible before the red line fires.</p>
+{% endblock %}
