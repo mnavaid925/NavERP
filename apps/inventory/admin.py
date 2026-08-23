@@ -7,6 +7,7 @@ from django.contrib import admin
 
 from apps.inventory.models import (
     BinCapacity,
+    CountProgram,
     CrossDockOrder,
     FulfillmentWave,
     FulfillmentWaveOrder,
@@ -18,6 +19,7 @@ from apps.inventory.models import (
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
+    PhysicalInventory,
     PutawayRule,
     ReturnInspection,
     ReturnInspectionChecklist,
@@ -160,6 +162,22 @@ class TransferApprovalAdmin(admin.ModelAdmin):
                     "decided_at")
     list_filter = ("tenant", "decision")
     search_fields = ("number", "transfer__number")
+
+
+@admin.register(CountProgram)
+class CountProgramAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "location", "frequency", "abc_class",
+                    "count_method", "is_active", "last_run_date")
+    list_filter = ("tenant", "frequency", "is_active")
+    search_fields = ("number", "name")
+
+
+@admin.register(PhysicalInventory)
+class PhysicalInventoryAdmin(admin.ModelAdmin):
+    list_display = ("number", "warehouse", "scheduled_date", "status",
+                    "is_frozen", "requested_by")
+    list_filter = ("tenant", "status", "is_frozen")
+    search_fields = ("number", "warehouse__code")
 
 
 @admin.register(LotNumberRule)
