@@ -214,40 +214,46 @@ def transfer_submit(request, pk):
     """Park a draft at ``pending_approval``, optionally choosing its route.
 
     Login-gated, not admin-gated: requesting a movement is everyone's job — AUTHORIZING
-    one is the queue's, and execution stays tenant-admin gated on the spine."""
-    trf = get_object_or_404(_scoped(request.tenant), pk=pk)
-    if trf.status != "draft":
-        messages.info(request, f"{trf.number} is already {trf.get_status_display().lower()}.")
-        return redirect("inventory:transfer_board")
-    if not trf.lines.exists():
-        messages.error(request, f"Add at least one line to {trf.number} before submitting it.")
-        return redirect("inventory:transfer_board")
-
-    route_id = as_db_int(request.POST.get("route"))
-    if route_id is not None:
-        route = _route_choices(request.tenant).filter(pk=route_id).first()
-        if route is None or not route.covers(trf.from_location_id, trf.to_location_id):
-            messages.error(request, "That route cannot carry this movement.")
+    one is the queue's, and execution stays tenant-admin gated on the spine. Like
+    :func:`_decide`, the whole read-guard-write runs under ``select_for_update`` on the
+    TRANSFER row: a submit racing an approval decision (or a second submit) re-reads
+    the status the winner just written instead of clobbering it from a stale copy.
+    """
+    with transaction.atomic():
+        trf = get_object_or_404(
+            StockTransfer.objects.select_for_update(), pk=pk, tenant=request.tenant)
+        if trf.status != "draft":
+            messages.info(request, f"{trf.number} is already {trf.get_status_display().lower()}.")
             return redirect("inventory:transfer_board")
-        trf.route = route
+        if not trf.lines.exists():
+            messages.error(request, f"Add at least one line to {trf.number} before submitting it.")
+            return redirect("inventory:transfer_board")
 
-    roots = _warehouse_roots(request.tenant)
-    scope = classify(trf.from_location_id, trf.to_location_id, roots)
-    units = _units_map(request.tenant, [trf.pk]).get(trf.pk, ZERO)
-    rule = TransferApprovalRule.resolve(request.tenant, units, scope)
+        route_id = as_db_int(request.POST.get("route"))
+        if route_id is not None:
+            route = _route_choices(request.tenant).filter(pk=route_id).first()
+            if route is None or not route.covers(trf.from_location_id, trf.to_location_id):
+                messages.error(request, "That route cannot carry this movement.")
+                return redirect("inventory:transfer_board")
+            trf.route = route
 
-    trf.status = "pending_approval"
-    trf.save(update_fields=["status", "route", "updated_at"])
-    write_audit_log(request.user, trf, "update", {
-        "action": "submit_for_approval", "scope": scope,
-        "units": str(units), "rule": rule.name if rule else None,
-        "required_tiers": rule.tier_count if rule else DEFAULT_TIER_COUNT,
-    })
-    messages.success(
-        request,
-        f"{trf.number} submitted — "
-        f"{rule.tier_count if rule else DEFAULT_TIER_COUNT} approval tier(s) required.")
-    return redirect("inventory:transfer_board")
+        roots = _warehouse_roots(request.tenant)
+        scope = classify(trf.from_location_id, trf.to_location_id, roots)
+        units = _units_map(request.tenant, [trf.pk]).get(trf.pk, ZERO)
+        rule = TransferApprovalRule.resolve(request.tenant, units, scope)
+
+        trf.status = "pending_approval"
+        trf.save(update_fields=["status", "route", "updated_at"])
+        write_audit_log(request.user, trf, "update", {
+            "action": "submit_for_approval", "scope": scope,
+            "units": str(units), "rule": rule.name if rule else None,
+            "required_tiers": rule.tier_count if rule else DEFAULT_TIER_COUNT,
+        })
+        messages.success(
+            request,
+            f"{trf.number} submitted — "
+            f"{rule.tier_count if rule else DEFAULT_TIER_COUNT} approval tier(s) required.")
+        return redirect("inventory:transfer_board")
 
 
 # -- the queue ---------------------------------------------------------------------------------
