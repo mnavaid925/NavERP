@@ -26357,3 +26357,29 @@ idempotent, manage.py check green, 32-check HTTP smoke (all pages 200/302, conte
 cross-tenant IDOR 404s, mint flow end-to-end), 46 new tests green; full app suite run - the
 only failures are files owned by other sessions (test_receiving_forms from a prior pass,
 test_stockmovementtransfers_* mid-flight in the concurrent 5.7 session).
+
+---
+
+## 5.4 Receiving & Putaway - built 2026-08-22 (close-out)
+
+**Scope ruling:** three of four NavERP bullets are SCM-owned (GRN document, three-way match,
+receipt QC) - sidebar points AT `scm:goodsreceipt_list` x2 + `scm:qualityinspection_list`. The
+genuine gap was Putaway Logic: `PutawayTask.strategy="directed"` had a label but no engine.
+ONE new table (`PutawayRule`, plain TenantOwned, no numbering - overlapping rules legal, resolver
+order decides) + ONE computed page (`putaway_suggestions`: zero-write queue over OPEN
+scm.PutawayTasks; deterministic tier ladder item>category>catch-all -> consolidation ->
+storage-condition -> walk-order fallback; every answer carries a codes-only reason string;
+refusals start "No Suggestion Found"; disqualifiers = inactive/full-by-declared-capacity/
+owner_client-conflict/staging-self). Batch-preloaded context keeps the page ~7 app queries flat.
+
+**Review wave:** 6 lanes, no dead lanes. Burned down C1 (unset-FK 500 in clean() - id-keyed
+guards) + I1 admin gating + I2 batch preloader + I3 sub-package __init__s + M1-M12. All [x];
+queries went 3N+4 -> flat 14 total (7 app-controlled) vs labor_board's 17 measured.
+
+**Tests:** test_receiving_{models,forms,views,security}.py - 78/78 green within the full
+unfiltered app suite (503 collected). 9 foreign failures in sibling stockmovementtransfers
+tests belong to the parallel 5.7 lane.
+
+**Adoption note:** this session ran while sibling sessions shipped 5.5/5.6/5.7/5.8 in the same
+checkout; migration numbering moved 0005->0008 mid-flight (claimed twice, re-claimed cleanly);
+shared files were edited only after quiescence polls confirmed each sibling had committed.
