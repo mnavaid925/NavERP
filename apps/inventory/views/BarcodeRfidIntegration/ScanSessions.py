@@ -172,7 +172,7 @@ def scan_console(request):
         with transaction.atomic():
             for code in codes:
                 _kind, obj = resolve_code(request.tenant, code)
-                event = ScanEvent.record(session=session, raw_code=code, obj=obj)
+                event = ScanEvent.record(session=session, raw_code=code, kind=_kind, obj=obj)
                 if event is not None and event.ok:
                     ok_count += 1
 
