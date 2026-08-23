@@ -40,13 +40,13 @@ def test_dispositionrule_edit_idor_isolated(client_a, disposition_rule_b):
     assert resp.status_code == 404
 
 
-def test_dispositionrule_write_requires_admin(member_client_a, disposition_rule_a):
+def test_dispositionrule_write_requires_admin(member_client, disposition_rule_a):
     """Regular member cannot access disposition rule write views (403)."""
     create_url = reverse("inventory:dispositionrule_create")
-    assert member_client_a.get(create_url).status_code == 403
+    assert member_client.get(create_url).status_code == 403
 
     edit_url = reverse("inventory:dispositionrule_edit", kwargs={"pk": disposition_rule_a.pk})
-    assert member_client_a.get(edit_url).status_code == 403
+    assert member_client.get(edit_url).status_code == 403
 
     delete_url = reverse("inventory:dispositionrule_delete", kwargs={"pk": disposition_rule_a.pk})
-    assert member_client_a.post(delete_url).status_code == 403
+    assert member_client.post(delete_url).status_code == 403
