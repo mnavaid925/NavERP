@@ -26648,3 +26648,43 @@ temp/smoke_returns.py (page sweep) - both left green.
 
 **Concurrency:** built alongside the sibling 5.11 session in this checkout; their commits and
 conftest block were left untouched throughout; review wave scoped to the 5.10 changeset only.
+
+---
+
+## 5.14 Barcode & RFID Integration (build plan)
+
+Research: .claude/tasks/research-inventory-5.14.md (committed d2b53971). Migration claimed: 0017.
+Deps: python-barcode==0.16.1 + qrcode==8.2 installed into venv (SVG, no pillow); requirements.txt to gain both lines.
+
+- [ ] models/BarcodeRfidIntegration/BarcodeLabels.py - BarcodeLabel [LBL-] TenantNumbered:
+      target_type(item/location/lot/free), nullable item/location/lot_serial FKs + target_ref +
+      pallet_ref (L28 stand-in), label_kind(product/bin/pallet/generic), symbology(code39/code128/
+      ean13/qr), payload (auto-default per target on save when blank), copies 1..500,
+      status draft->printed->void with print(user) verb stamping printed_at/by; clean() tenant guards
+- [ ] models/BarcodeRfidIntegration/ScanSessions.py - ScanSession [SSN-] (device_label, mode single/
+      batch, status open/closed, close() verb) + append-only ScanEvent child (raw_code<=120,
+      resolved_kind item/location/lot/rfid/unknown, resolved_id, ok bool, scanned_at)
+- [ ] models/BarcodeRfidIntegration/RfidTags.py - RfidTag [TAG-] TenantNumbered? NO - TenantOwned with
+      epc unique (tenant, epc) after strip+upper hex-ish validation, kind passive/active, nullable
+      target FKs + target_ref/pallet_ref, status unassigned->active->retired | lost via guarded verbs,
+      last_seen_at + last_seen_location snapshot
+- [ ] resolve_code(tenant, raw) shared resolver: Item.sku -> Location.code -> LotSerial.number ->
+      RfidTag.epc (tenant-scoped, strip+case handling), returns (kind, obj|None)
+- [ ] forms x3 (+ ScanEvent inline formset NOT needed - events are server-created only)
+- [ ] views: CRUD triples for labels/tags/sessions (label writes admin-gated like 5.4 rules; sessions
+      member-open) + label render endpoint image/svg+xml (python-barcode SVGWriter / qrcode SvgPathImage;
+      404 for void/draft? render any non-void) + print page (N copy frames) + scan_console GET page and
+      POST batch-resolve (cap 300 codes) recording ScanEvents + rfidtag_bulkread POST (EPC list ->
+      last_seen stamps; unknown counted)
+- [ ] urls/BarcodeRfidIntegration/*.py: barcodelabel_{list,detail,create,edit,delete}, barcodelabel_render,
+      barcodelabel_print, scansession_{list,detail,create,edit,delete}, scansession_close, scan_console,
+      rfidtag_{list,detail,create,edit,delete}, rfidtag_bulkread
+- [ ] templates/inventory/barcode/: barcodelabel/{list,detail,form,print}.html, scansession/{list,detail,
+      form}.html, rfidtag/{list,detail,form}.html, page-only console.html
+- [ ] admin registration (3 models, ScanEvent inline)
+- [ ] seed_inventory _seed_barcode_rfid block: label templates over existing items/bins, one session with
+      resolved+unknown events walked through REAL resolver, tags through assign->active->bulk-read
+- [ ] LIVE_LINKS["5.14"]: Label Generation -> inventory:barcodelabel_list; Mobile/Handheld Scanner
+      Integration -> inventory:scan_console; RFID Tag Management -> inventory:rfidtag_list; Batch Scanning
+      -> inventory:scan_console (?mode=batch anchor or the same console)
+- [ ] migrate 0017 + seed x2 + check + smoke sweep
