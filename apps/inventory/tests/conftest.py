@@ -479,3 +479,257 @@ def location_b(db, tenant_b):
     loc, _ = Location.objects.get_or_create(
         tenant=tenant_b, code="BDOCK", defaults={"name": "Globex dock"})
     return loc
+
+
+# ---- 5.10 Returns Management (RMA) -----------------------------------------------------------
+
+@pytest.fixture
+def customer_party_a(db, tenant_a):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_a, name="Acme Customer Corp", kind="organization")
+    PartyRole.objects.create(tenant=tenant_a, party=party, role="customer")
+    return party
+
+
+@pytest.fixture
+def customer_party_b(db, tenant_b):
+    from apps.core.models import Party, PartyRole
+    party = Party.objects.create(tenant=tenant_b, name="Globex Customer LLC", kind="organization")
+    PartyRole.objects.create(tenant=tenant_b, party=party, role="customer")
+    return party
+
+
+@pytest.fixture
+def rma_a(db, tenant_a, customer_party_a):
+    from apps.scm.models import ReturnAuthorization
+    return ReturnAuthorization.objects.create(
+        tenant=tenant_a, customer=customer_party_a, return_type="physical", status="received"
+    )
+
+
+@pytest.fixture
+def rma_b(db, tenant_b, customer_party_b):
+    from apps.scm.models import ReturnAuthorization
+    return ReturnAuthorization.objects.create(
+        tenant=tenant_b, customer=customer_party_b, return_type="physical", status="received"
+    )
+
+
+@pytest.fixture
+def rma_line_a(db, tenant_a, rma_a, item_a):
+    from apps.scm.models import ReturnLine
+    return ReturnLine.objects.create(
+        tenant=tenant_a, return_authorization=rma_a, item=item_a, quantity_authorized=Decimal("2.0000"),
+        quantity_received=Decimal("2.0000"), unit_price=Decimal("12.00"), unit_cost=Decimal("8.00")
+    )
+
+
+@pytest.fixture
+def rma_line_b(db, tenant_b, rma_b, item_b):
+    from apps.scm.models import ReturnLine
+    return ReturnLine.objects.create(
+        tenant=tenant_b, return_authorization=rma_b, item=item_b, quantity_authorized=Decimal("1.0000"),
+        quantity_received=Decimal("1.0000"), unit_price=Decimal("9.00"), unit_cost=Decimal("5.00")
+    )
+
+
+@pytest.fixture
+def disposition_rule_a(db, tenant_a, item_a, location_a):
+    from apps.inventory.models import DispositionRoutingRule
+    return DispositionRoutingRule.objects.create(
+        tenant=tenant_a, name="Acme Grade A Restock", item=item_a, condition_grade="a",
+        suggested_disposition="restock", destination_location=location_a, priority=10, is_active=True
+    )
+
+
+@pytest.fixture
+def disposition_rule_b(db, tenant_b, item_b, location_b):
+    from apps.inventory.models import DispositionRoutingRule
+    return DispositionRoutingRule.objects.create(
+        tenant=tenant_b, name="Globex Grade A Restock", item=item_b, condition_grade="a",
+        suggested_disposition="restock", destination_location=location_b, priority=10, is_active=True
+    )
+
+
+@pytest.fixture
+def inspection_a(db, tenant_a, rma_a, rma_line_a, item_a):
+    from apps.inventory.models import ReturnInspection
+    return ReturnInspection.objects.create(
+        tenant=tenant_a, return_authorization=rma_a, return_line=rma_line_a, item=item_a,
+        quantity=Decimal("2.0000"), packaging_condition="intact", completeness="complete",
+        functional_status="pass", cosmetic_condition="new", condition_grade="a",
+        is_restock_eligible=True, status="passed"
+    )
+
+
+@pytest.fixture
+def inspection_b(db, tenant_b, rma_b, rma_line_b, item_b):
+    from apps.inventory.models import ReturnInspection
+    return ReturnInspection.objects.create(
+        tenant=tenant_b, return_authorization=rma_b, return_line=rma_line_b, item=item_b,
+        quantity=Decimal("1.0000"), packaging_condition="opened", completeness="complete",
+        functional_status="pass", cosmetic_condition="minor_wear", condition_grade="b",
+        is_restock_eligible=True, status="passed"
+    )
+
+
+# ---- 5.9 Order Management & Fulfillment (Waves) --------------------------------------------------
+#
+# FROZEN CONTRACT — every 5.9 test writer MUST use exactly these names and nothing else:
+#
+#   Model     : FulfillmentWave [WAV-] (TenantNumbered) — status planned/released/closed/
+#               cancelled (default "planned", editable=False). Lifecycle moves ONLY through
+#               the verbs release(user) [planned->released, refuses zero-member waves],
+#               close(user) [released->closed] and cancel(user) [planned|released->
+#               cancelled]; all three are tenant-admin-only at the VIEW layer
+#               (@tenant_admin_required, @require_POST). Header fields: description /
+#               location (FK scm.Location, related_name="inventory_waves") / carrier
+#               (FK scm.Carrier) / ship_method (economy|standard|expedited) /
+#               planned_ship_date / cutoff_at / priority / criteria_text / notes;
+#               released_at + closed_at are system-set by the verbs.
+#               FULFILLED_STATUSES = ("partially_fulfilled", "fulfilled", "invoiced",
+#               "closed") — frozen from scm.SalesOrder.STATUS_CHOICES; "cancelled" is
+#               deliberately NOT progress. orders_fulfilled_count reads members through it.
+#               Pick linkage is a TEXT CONVENTION: scm.PickTask.wave_ref == wave.number
+#               (case-sensitive), PICK_DONE_STATUSES = ("picked", "packed");
+#               pick_progress_pct answers None (never a flattering 0%) when no picks match;
+#               linked_picks() -> newest-first queryset over the matched tasks.
+#   Child     : FulfillmentWaveOrder — tenant / wave (related_name="orders") /
+#               sales_order (PROTECT, related_name="inventory_wave_orders") / added_by /
+#               created_at; unique_together ("wave", "sales_order"). Membership LOCKS once
+#               the wave leaves "planned" (model clean() raises on "__all__" — non-form
+#               writers included). The FORM rejects a duplicate member with an "__all__"
+#               error ("That sales order is already in this wave.") because validate_unique
+#               skips constraints whose fields are not on the form ("wave" never is).
+#   Urls      : inventory:wave_list         /inventory/waves/
+#               inventory:wave_create      /inventory/waves/add/
+#               inventory:wave_detail      /inventory/waves/<pk>/
+#               inventory:wave_edit        /inventory/waves/<pk>/edit/
+#               inventory:wave_delete      /inventory/waves/<pk>/delete/    (POST)
+#               inventory:wave_release     /inventory/waves/<pk>/release/   (POST)
+#               inventory:wave_close       /inventory/waves/<pk>/close/     (POST)
+#               inventory:wave_cancel      /inventory/waves/<pk>/cancel/    (POST)
+#               inventory:waveorder_add    /inventory/waves/<pk>/orders/add/  (POST)
+#               inventory:waveorder_remove /inventory/waves/<pk>/orders/remove/<member pk>/ (POST)
+#               inventory:wave_board       /inventory/waves-board/
+#   Context   : wave_list   -> object_list (waves annotated member_count; each row also
+#                              carries a precomputed .pick_pct) + page_obj + q +
+#                              status_choices + status + is_admin.
+#               wave_detail -> obj + members + linked_picks + add_form (None unless admin
+#                              AND wave still planned) + is_admin + pick_pct.
+#               wave_board  -> object_list = row DICTS {wave, members, fulfilled,
+#                              pick_pct} + page_obj + stats{open_waves, released_today,
+#                              unassigned_orders} + status_choices + status + locations +
+#                              location + q + is_admin.
+#
+# Fixtures below give every lane an owned PLANNED wave with a member, a REAL-released wave
+# (release() actually ran, so released_at is stamped), open sales orders to wave, and a
+# foreign-workspace mirror.
+
+
+def _fulfillment_carrier(tenant, name):
+    """A minimal ACTIVE scm.Carrier on a get_or_create'd vendor-role core.Party (4.6 shape:
+    a carrier is a TMS profile on a Party, never a standalone company row)."""
+    from apps.core.models import Party, PartyRole
+    from apps.scm.models import Carrier
+    party, _created = Party.objects.get_or_create(
+        tenant=tenant, name=name, defaults={"kind": "organization"})
+    PartyRole.objects.get_or_create(tenant=tenant, party=party, role="vendor")
+    carrier, _created = Carrier.objects.get_or_create(tenant=tenant, party=party)
+    return carrier
+
+
+def _fulfillment_sales_order(customer, item):
+    """An OPEN (submitted) scm.SalesOrder with one line; totals derived via recalc_totals()."""
+    from apps.scm.models import SalesOrder, SalesOrderLine
+    order = SalesOrder.objects.create(
+        tenant=customer.tenant, customer=customer, status="submitted",
+        source_channel="manual", order_date=datetime.date(2026, 8, 21))
+    SalesOrderLine.objects.create(
+        sales_order=order, item=item, quantity_ordered=Decimal("4"),
+        unit_price=Decimal("15.00"))
+    order.recalc_totals()
+    return order
+
+
+@pytest.fixture
+def fulfillment_loc_wave_a(db, tenant_a):
+    """The warehouse wave_a ships from (get_or_create-safe by the spine's (tenant, code))."""
+    return _receiving_location(tenant_a, "FWH-A", location_type="warehouse")
+
+
+@pytest.fixture
+def fulfillment_loc_wave_b(db, tenant_b):
+    """Globex's warehouse — foreign-workspace mirror of FWH-A."""
+    return _receiving_location(tenant_b, "FWH-B", location_type="warehouse")
+
+
+@pytest.fixture
+def fulfillment_carrier_a(db, tenant_a):
+    """Minimal active truckload carrier, tenant_a."""
+    return _fulfillment_carrier(tenant_a, "Acme Wave Freight")
+
+
+@pytest.fixture
+def fulfillment_carrier_b(db, tenant_b):
+    """Minimal active truckload carrier, tenant_b — the cross-tenant rejection target."""
+    return _fulfillment_carrier(tenant_b, "Globex Wave Freight")
+
+
+@pytest.fixture
+def fulfillment_so_open_a(db, tenant_a, customer_party_a, item_a):
+    """First open (submitted) sales order — waveable stock for the planned wave."""
+    return _fulfillment_sales_order(customer_party_a, item_a)
+
+
+@pytest.fixture
+def fulfillment_so_second_a(db, tenant_a, customer_party_a, item_a):
+    """Second open sales order — the released wave's member."""
+    return _fulfillment_sales_order(customer_party_a, item_a)
+
+
+@pytest.fixture
+def fulfillment_wave_planned_a(db, tenant_a, fulfillment_loc_wave_a, fulfillment_carrier_a):
+    """A still-PLANNED Acme wave — membership open, verbs pending, description set."""
+    from apps.inventory.models import FulfillmentWave
+    return FulfillmentWave.objects.create(
+        tenant=tenant_a, description="August backlog wave",
+        location=fulfillment_loc_wave_a, carrier=fulfillment_carrier_a,
+        ship_method="standard", priority=50,
+        criteria_text="All submitted Midwest orders under 20 kg")
+
+
+@pytest.fixture
+def fulfillment_member_a(db, tenant_a, admin_user, fulfillment_wave_planned_a,
+                         fulfillment_so_open_a):
+    """so_open travelling in the planned wave — the detail page's owned membership row."""
+    from apps.inventory.models import FulfillmentWaveOrder
+    return FulfillmentWaveOrder.objects.create(
+        tenant=tenant_a, wave=fulfillment_wave_planned_a,
+        sales_order=fulfillment_so_open_a, added_by=admin_user)
+
+
+@pytest.fixture
+def fulfillment_wave_released_a(db, tenant_a, admin_user, fulfillment_loc_wave_a,
+                                fulfillment_carrier_a, fulfillment_so_second_a):
+    """A REALLY released wave — release() itself ran (refuses empty waves, hence the
+    member), so released_at is stamped and today's board stat counts it."""
+    from apps.inventory.models import FulfillmentWave, FulfillmentWaveOrder
+    wave = FulfillmentWave.objects.create(
+        tenant=tenant_a, description="Friday parcel sweep",
+        location=fulfillment_loc_wave_a, carrier=fulfillment_carrier_a,
+        ship_method="expedited", priority=100)
+    FulfillmentWaveOrder.objects.create(
+        tenant=tenant_a, wave=wave, sales_order=fulfillment_so_second_a, added_by=admin_user)
+    return wave.release(admin_user)
+
+
+@pytest.fixture
+def fulfillment_foreign_wave_b(db, tenant_b, fulfillment_loc_wave_b, fulfillment_carrier_b):
+    """Globex's own planned wave — the foreign-workspace control for IDOR/guard lanes."""
+    from apps.inventory.models import FulfillmentWave
+    return FulfillmentWave.objects.create(
+        tenant=tenant_b, description="Globex outbound batch",
+        location=fulfillment_loc_wave_b, carrier=fulfillment_carrier_b,
+        ship_method="standard")
+
