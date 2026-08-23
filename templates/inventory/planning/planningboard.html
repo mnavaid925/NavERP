@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Planning Board — ROP &amp; Safety Stock{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Planning Board <span class="text-muted">· ROP &amp; safety stock</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Forecasting &amp; Planning</span><span class="sep">›</span><span>Planning Board</span></div>
+      <p class="text-muted">Every reorder rule's live parameters against the spine's computed recommendation — stale ones flagged, apply promotes them through SCM's own gated writer.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:demandforecast_list' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Demand Forecasts (SCM)</a>
+      <a href="{% url 'scm:safety_stock_report' %}" class="btn btn-outline"><i data-lucide="calculator"></i> SS Calculator (SCM)</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div class="stat-value">{{ stats.stale }}</div>
+      <div class="stat-label">Stale (computed ≠ live)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="arrow-down"></i></div>
+      <div class="stat-value">{{ stats.below_rop }}</div>
+      <div class="stat-label">Below reorder point</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ stats.ok }}</div>
+      <div class="stat-label">Healthy rules</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU, item or location…">
+        </div>
+        <div class="form-group">
+          <select name="view" aria-label="View" class="form-select">
+            <option value="">All rules</option>
+            <option value="stale" {% if view == "stale" %}selected{% endif %}>Stale only</option>
+            <option value="below" {% if view == "below" %}selected{% endif %}>Below ROP only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:planning_board' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>On hand</th><th>Live SS / ROP</th><th>Computed SS / ROP</th><th>Verdict</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.rule.item_id %}" class="fw-600">{{ row.rule.item.sku }}</a> <span class="text-muted">{{ row.rule.item.name|truncatechars:24 }}</span></td>
+              <td>{{ row.rule.location.code }}</td>
+              <td class="fw-600">{{ row.on_hand|floatformat:"-2" }}{% if row.below %} <span class="badge badge-red">&lt; ROP</span>{% endif %}</td>
+              <td>{{ row.rule.safety_stock|floatformat:"-2" }} / {{ row.rule.reorder_point|floatformat:"-2" }}</td>
+              <td>{{ row.rule.computed_safety_stock|floatformat:"-2" }} / {{ row.rule.computed_reorder_point|floatformat:"-2" }}</td>
+              <td><span class="badge {{ row.css }}">{% if row.flag == "stale" %}Stale{% elif row.flag == "watch" %}Below ROP{% else %}OK{% endif %}</span></td>
+              <td>
+                <div class="table-actions">
+                  {% if row.stale and request.user.is_staff %}
+                    <form method="post" action="{% url 'inventory:planning_apply_computed' row.rule.pk %}" onsubmit="return confirm('Promote the computed safety stock & reorder point into live parameters?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Apply computed to live"><i data-lucide="upload"></i></button>
+                    </form>
+                  {% endif %}
+                  <a href="{% url 'scm:reorderrule_detail' row.rule.pk %}" class="btn-icon" title="Rule in SCM"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="target"></i><h3>No reorder rules match</h3><p>Rules come from SCM 4.3 (reorder points per item × location) — run their calculator there, then review the gap here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">On-hand is one grouped ledger aggregate. The computed columns belong to SCM 4.7's calculator; Apply is tenant-admin-only because these two numbers drive purchasing alerts.</p>
+{% endblock %}
