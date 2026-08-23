@@ -935,3 +935,108 @@ def stocktake_event_b(db, tenant_b, admin_b, stocktake_warehouse_b):
         tenant=tenant_b, warehouse=stocktake_warehouse_b,
         scheduled_date=timezone.localdate(), requested_by=admin_b)
 
+
+# ---- 5.12 Multi-Location Management (Location Network + Global Stock) -----------------------------
+#
+# FROZEN CONTRACT — every 5.12 test writer MUST use exactly these names and nothing else:
+#
+#   Model     : LocationNetwork [LNW-] (TenantNumbered, prefix LNW) — code(32, strip-
+#               cleaned) / name(120) / node_type(company|region|dc|store, default
+#               "store") / parent (self FK SET_NULL, null/blank, related_name=
+#               "children"; blank = root) / warehouse (FK scm.Location PROTECT,
+#               null/blank, related_name="network_nodes", UNIQUE per tenant, warehouse-
+#               typed sites ONLY and attachable at ANY tier — a stocking DC node IS its
+#               warehouse; leaf-only enforcement deliberately not done) / is_active
+#               (default True) / notes(blank). unique_together (tenant,number) +
+#               (tenant,code) + (tenant,warehouse); index inv_lnw_tnt_type_idx.
+#               Guards in clean() (non-form writers included): self-parentage refused,
+#               cross-tenant parent/warehouse refused ("That record belongs to another
+#               workspace."), non-warehouse-typed site refused, and any parent chain
+#               looping or deeper than MAX_TREE_DEPTH=8 refused via a bounded seen-set
+#               walk (_cycle_through_parent). path() -> "CO › REG › DC" ancestry label;
+#               NODE_CSS colour-named badges {company: badge-slate, region: badge-info,
+#               dc: badge-amber, store: badge-green} surfaced as .node_css.
+#   Urls      : inventory:locationnetwork_list      /inventory/networks/
+#               inventory:locationnetwork_create   /inventory/networks/add/
+#               inventory:locationnetwork_detail   /inventory/networks/<pk>/
+#               inventory:locationnetwork_edit     /inventory/networks/<pk>/edit/
+#               inventory:locationnetwork_delete   /inventory/networks/<pk>/delete/  (POST)
+#               inventory:global_stock             /inventory/global-stock/
+#   Context   : locationnetwork_list  -> object_list (+select_related parent/warehouse) +
+#               page_obj + q + node_type_choices + is_active_choices([active|inactive]) +
+#               node_type + is_active + is_admin.
+#               locationnetwork_detail-> obj + path_label + children (+select_related
+#               warehouse, code-ordered) + is_admin.
+#               create/edit          -> form + is_edit (+ obj when editing); writes are
+#               tenant-admin gated (@tenant_admin_required), delete POST-only.
+#               global_stock         -> rows = row DICTS emitted pre-order {node (None on
+#               the pseudo-row), path_label, depth, own_warehouses[], stock_total,
+#               stock_value, in_transit_in, in_transit_out} + stats{sites_attached,
+#               sites_unassigned, network_stock_total, in_transit_total} + q + is_admin.
+#               "Unassigned sites" pseudo-row appears ONLY when unattached warehouses
+#               exist AND no ?q= filter ran. Exactly FOUR view queries: all tenant nodes
+#               once, all tenant warehouses once, ONE grouped StockMove sum by location
+#               (qty AND qty×unit_cost together), ONE grouped StockTransferLine sum by
+#               source+destination where transfer__status == "in_transit" ONLY. Zeros
+#               are real zeros; read-only page; NO pagination (trees are small by
+#               construction, MAX_TREE_DEPTH-capped).
+#
+# Fixtures below build ONE org-tier tree per tenant — company › region › (dc ATTACHED to
+# its stocked site) plus a bare store leaf — over get_or_create-safe scm.Location
+# warehouses, plus a foreign-workspace mirror node, so every lane has an owned target
+# and a foreign one.
+
+
+def _network_node(tenant, code, **fields):
+    """get_or_create-safe by the model's (tenant, code) uniqueness."""
+    from apps.inventory.models import LocationNetwork
+    node, _created = LocationNetwork.objects.get_or_create(
+        tenant=tenant, code=code, defaults=fields)
+    return node
+
+
+@pytest.fixture
+def multiloc_wh_a(db, tenant_a):
+    """Acme's stocked site on the SCM spine — the DC node attaches here."""
+    return _receiving_location(tenant_a, "MWH-A", location_type="warehouse")
+
+
+@pytest.fixture
+def multiloc_wh_b(db, tenant_b):
+    """Globex's stocked site — the foreign-workspace mirror of MWH-A."""
+    return _receiving_location(tenant_b, "MWH-B", location_type="warehouse")
+
+
+@pytest.fixture
+def multiloc_company_a(db, tenant_a):
+    """The Acme network ROOT: one company-tier node."""
+    return _network_node(tenant_a, "NW-CO-A", name="Acme Holding Co", node_type="company")
+
+
+@pytest.fixture
+def multiloc_region_a(db, tenant_a, multiloc_company_a):
+    """A region node under the company root — mid-tree roll-up level."""
+    return _network_node(tenant_a, "NW-RG-A", name="North Region",
+                         node_type="region", parent=multiloc_company_a)
+
+
+@pytest.fixture
+def multiloc_dc_a(db, tenant_a, multiloc_region_a, multiloc_wh_a):
+    """A STOCKING DC under the region, attached to multiloc_wh_a — exercises the
+    any-tier warehouse ruling (a DC node IS its warehouse)."""
+    return _network_node(tenant_a, "NW-DC-A", name="North DC",
+                         node_type="dc", parent=multiloc_region_a, warehouse=multiloc_wh_a)
+
+
+@pytest.fixture
+def multiloc_store_a(db, tenant_a, multiloc_region_a):
+    """A bare-leaf store node — grouping only, no warehouse attached."""
+    return _network_node(tenant_a, "NW-ST-A", name="Downtown Store",
+                         node_type="store", parent=multiloc_region_a)
+
+
+@pytest.fixture
+def multiloc_foreign_node_b(db, tenant_b):
+    """Globex's own company-tier node — the foreign control for IDOR/guard lanes."""
+    return _network_node(tenant_b, "NW-B", name="Globex Holding Co", node_type="company")
+
