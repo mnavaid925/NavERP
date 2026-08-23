@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.inventory.models import TransferApproval, TransferApprovalRule, TransferRoute
-from apps.scm.models import Location, StockTransfer, StockTransferLine
+from apps.scm.models import Item, Location, StockTransfer, StockTransferLine
 
 pytestmark = pytest.mark.django_db
 
@@ -36,7 +36,11 @@ def make_transfer(tenant, source, destination, with_line=True):
         tenant=tenant, from_location=source, to_location=destination,
         transfer_date=timezone.now().date())
     if with_line:
-        StockTransferLine.objects.create(transfer=trf, quantity=5)
+        # TransferLine.item is NOT NULL — one reusable stock SKU per workspace.
+        item, _ = Item.objects.get_or_create(
+            tenant=tenant, sku="TRF-ITEM",
+            defaults={"name": "Transfer Test Widget"})
+        StockTransferLine.objects.create(transfer=trf, item=item, quantity=5)
     return trf
 
 
@@ -44,12 +48,12 @@ def make_transfer(tenant, source, destination, with_line=True):
 
 
 class TestBoard:
-    def test_renders_with_scope_and_status_filters(self, client_a, two_warehouses):
+    def test_renders_with_scope_and_status_filters(self, client_a, tenant_a, two_warehouses):
         wh1, _, bin1, bin2 = two_warehouses
         bin_same_root = Location.objects.create(
-            tenant=client_a.user.tenant, code="WH1-B9", name="Bin", parent=wh1)
-        inter = make_transfer(client_a.user.tenant, bin1, bin2)  # WH1 -> WH2: inter
-        intra = make_transfer(client_a.user.tenant, bin1, bin_same_root)  # WH1 -> WH1: intra
+            tenant=tenant_a, code="WH1-B9", name="Bin", parent=wh1)
+        inter = make_transfer(tenant_a, bin1, bin2)  # WH1 -> WH2: inter
+        intra = make_transfer(tenant_a, bin1, bin_same_root)  # WH1 -> WH1: intra
 
         html = client_a.get(
             reverse("inventory:transfer_board") + "?scope=inter").content.decode()
@@ -61,12 +65,12 @@ class TestBoard:
         assert intra.number in html
         assert inter.number not in html
 
-    def test_inter_vs_intra_classification(self, client_a, two_warehouses):
+    def test_inter_vs_intra_classification(self, client_a, tenant_a, two_warehouses):
         _, _, bin1, bin2 = two_warehouses
         same_root = Location.objects.create(
-            tenant=client_a.user.tenant, code="WH1-B2", name="Bin", parent_id=bin1.parent_id)
-        make_transfer(client_a.user.tenant, bin1, bin2)   # WH1 -> WH2: inter
-        make_transfer(client_a.user.tenant, bin1, same_root)  # WH1 -> WH1: intra
+            tenant=tenant_a, code="WH1-B2", name="Bin", parent_id=bin1.parent_id)
+        make_transfer(tenant_a, bin1, bin2)   # WH1 -> WH2: inter
+        make_transfer(tenant_a, bin1, same_root)  # WH1 -> WH1: intra
         html = client_a.get(reverse("inventory:transfer_board")).content.decode()
         assert "Inter-Warehouse" in html and "Intra-Warehouse" in html
 
@@ -86,10 +90,10 @@ class TestGovernanceFlow:
             tenant=tenant_a, name="Two tiers for all", applies_to="all",
             min_units=0, tier_count=2)
 
-    def test_submit_parks_at_pending_approval(self, client_a, rule, two_warehouses):
+    def test_submit_parks_at_pending_approval(self, client_a, rule, tenant_a, two_warehouses):
         _, _, src, dst = two_warehouses
-        route = TransferRoute.objects.create(tenant=client_a.user.tenant, name="R")
-        trf = make_transfer(client_a.user.tenant, src, dst)
+        route = TransferRoute.objects.create(tenant=tenant_a, name="R")
+        trf = make_transfer(tenant_a, src, dst)
         response = client_a.post(reverse("inventory:transfer_submit", args=[trf.pk]),
                                  {"route": str(route.pk)})
         assert response.status_code == 302
@@ -97,40 +101,40 @@ class TestGovernanceFlow:
         assert trf.status == "pending_approval"
         assert trf.route == route
 
-    def test_submit_without_lines_is_refused(self, client_a, rule, two_warehouses):
+    def test_submit_without_lines_is_refused(self, client_a, rule, tenant_a, two_warehouses):
         _, _, src, dst = two_warehouses
-        trf = make_transfer(client_a.user.tenant, src, dst, with_line=False)
+        trf = make_transfer(tenant_a, src, dst, with_line=False)
         client_a.post(reverse("inventory:transfer_submit", args=[trf.pk]), {})
         trf.refresh_from_db()
         assert trf.status == "draft"
 
-    def test_bogus_route_is_refused(self, client_a, rule, two_warehouses):
+    def test_bogus_route_is_refused(self, client_a, rule, tenant_a, two_warehouses):
         _, _, src, dst = two_warehouses
-        trf = make_transfer(client_a.user.tenant, src, dst)
+        trf = make_transfer(tenant_a, src, dst)
         client_a.post(reverse("inventory:transfer_submit", args=[trf.pk]),
                       {"route": "999999"})
         trf.refresh_from_db()
         assert trf.status == "draft"
 
-    def test_route_pinned_to_wrong_origin_is_refused(self, client_a, rule,
+    def test_route_pinned_to_wrong_origin_is_refused(self, client_a, rule, tenant_a,
                                                      two_warehouses):
         """A route pinned at the wrong end must not carry the movement — covers()
         refuses it and the draft keeps both its status and its empty route."""
         _, _, src, dst = two_warehouses
         backwards = TransferRoute.objects.create(
-            tenant=client_a.user.tenant, name="Backwards", origin_location=dst)
-        trf = make_transfer(client_a.user.tenant, src, dst)
+            tenant=tenant_a, name="Backwards", origin_location=dst)
+        trf = make_transfer(tenant_a, src, dst)
         client_a.post(reverse("inventory:transfer_submit", args=[trf.pk]),
                       {"route": str(backwards.pk)})
         trf.refresh_from_db()
         assert trf.status == "draft"
         assert trf.route is None
 
-    def test_no_rules_falls_back_to_one_default_tier(self, client_a, two_warehouses):
+    def test_no_rules_falls_back_to_one_default_tier(self, client_a, tenant_a, two_warehouses):
         """With zero matching rules the fallback is ONE signature — never a bypass:
         a single approve clears the implicit tier and flips the spine to approved."""
         _, _, src, dst = two_warehouses
-        trf = make_transfer(client_a.user.tenant, src, dst)
+        trf = make_transfer(tenant_a, src, dst)
         client_a.post(reverse("inventory:transfer_submit", args=[trf.pk]), {})
         trf.refresh_from_db()
         assert trf.status == "pending_approval"
@@ -139,10 +143,10 @@ class TestGovernanceFlow:
         assert trf.status == "approved"
         assert trf.approval_decisions.count() == 1
 
-    def test_full_chain_approves_then_reject_returns_to_draft(self, client_a, rule,
+    def test_full_chain_approves_then_reject_returns_to_draft(self, client_a, rule, tenant_a,
                                                               two_warehouses):
         _, _, src, dst = two_warehouses
-        trf = make_transfer(client_a.user.tenant, src, dst)
+        trf = make_transfer(tenant_a, src, dst)
         client_a.post(reverse("inventory:transfer_submit", args=[trf.pk]), {})
         # Out-of-order first decision must be refused.
         client_a.post(reverse("inventory:transfer_tier_approve", args=[trf.pk, 2]))
@@ -155,16 +159,16 @@ class TestGovernanceFlow:
         assert trf.status == "approved"
 
         # A fresh movement rejected at tier 1 returns to draft with history intact.
-        other = make_transfer(client_a.user.tenant, src, dst)
+        other = make_transfer(tenant_a, src, dst)
         client_a.post(reverse("inventory:transfer_submit", args=[other.pk]), {})
         client_a.post(reverse("inventory:transfer_tier_reject", args=[other.pk, 1]))
         other.refresh_from_db()
         assert other.status == "draft"
         assert other.approval_decisions.filter(decision="rejected").exists()
 
-    def test_tier_decisions_are_admin_gated(self, member_client, rule, two_warehouses):
+    def test_tier_decisions_are_admin_gated(self, member_client, tenant_a, rule, two_warehouses):
         _, _, src, dst = two_warehouses
-        trf = make_transfer(member_client.user.tenant, src, dst)
+        trf = make_transfer(tenant_a, src, dst)
         member_client.post(reverse("inventory:transfer_submit", args=[trf.pk]), {})
         response = member_client.post(
             reverse("inventory:transfer_tier_approve", args=[trf.pk, 1]))
@@ -192,3 +196,4 @@ class TestTenantIsolation:
             reverse("inventory:transfer_submit", args=[trf.pk]), {}).status_code == 404
         assert client_a.post(
             reverse("inventory:transfer_tier_approve", args=[trf.pk, 1])).status_code == 404
+
