@@ -20,6 +20,9 @@ from apps.inventory.models import (
     ShelfLifePolicy,
     StockStatus,
     VendorCommunication,
+    TransferApproval,
+    TransferApprovalRule,
+    TransferRoute,
 )
 
 
@@ -114,6 +117,30 @@ class InventoryReservationAdmin(admin.ModelAdmin):
                     "status", "reserved_by", "resolved_at")
     list_filter = ("tenant", "status", "purpose")
     search_fields = ("number", "reference", "item__sku", "item__name", "notes")
+
+
+@admin.register(TransferRoute)
+class TransferRouteAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "mode", "origin_location", "destination_location",
+                    "default_transit_days", "is_active")
+    list_filter = ("tenant", "mode", "is_active")
+    search_fields = ("name", "code")
+
+
+@admin.register(TransferApprovalRule)
+class TransferApprovalRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "applies_to", "min_units", "max_units", "tier_count", "is_active")
+    list_filter = ("tenant", "applies_to", "is_active")
+    search_fields = ("name",)
+
+
+@admin.register(TransferApproval)
+class TransferApprovalAdmin(admin.ModelAdmin):
+    list_display = ("number", "transfer", "tier", "decision", "rule", "decided_by",
+                    "decided_at")
+    list_filter = ("tenant", "decision")
+    search_fields = ("number", "transfer__number")
+
 
 @admin.register(LotNumberRule)
 class LotNumberRuleAdmin(admin.ModelAdmin):
