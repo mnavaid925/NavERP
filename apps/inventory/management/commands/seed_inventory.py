@@ -37,6 +37,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from apps.core.models import OrgUnit, Tenant
+from apps.core.utils import write_audit_log
 from apps.inventory.models import (
     BinCapacity,
     CrossDockOrder,
@@ -51,6 +52,9 @@ from apps.inventory.models import (
     PutawayRule,
     ShelfLifePolicy,
     StockStatus,
+    TransferApproval,
+    TransferApprovalRule,
+    TransferRoute,
     VendorCommunication,
 )
 from apps.inventory.forms._common import _vendor_parties
@@ -63,6 +67,8 @@ from apps.scm.models import (
     PurchaseOrderLine,
     PutawayTask,
     StockMove,
+    StockTransfer,
+    StockTransferLine,
 )
 
 # Per-item attribute sets, cycled across the catalog. (name, value, unit)
@@ -141,7 +147,10 @@ class Command(BaseCommand):
                        + BinCapacity.objects.all().count()
                        + CrossDockOrder.objects.all().count()
                        + StockStatus.objects.all().count()
-                       + InventoryReservation.objects.all().count()
+                         + InventoryReservation.objects.all().count()
+                         + TransferApproval.objects.all().count()
+                         + TransferApprovalRule.objects.all().count()
+                         + TransferRoute.objects.all().count()
                         + LotNumberRule.objects.all().count()
                         + ShelfLifePolicy.objects.all().count())
             ItemAttribute.objects.all().delete()
@@ -156,6 +165,9 @@ class Command(BaseCommand):
             CrossDockOrder.objects.all().delete()
             StockStatus.objects.all().delete()
             InventoryReservation.objects.all().delete()
+            TransferApproval.objects.all().delete()
+            TransferApprovalRule.objects.all().delete()
+            TransferRoute.objects.all().delete()
             LotNumberRule.objects.all().delete()
             ShelfLifePolicy.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
@@ -174,6 +186,7 @@ class Command(BaseCommand):
             self._seed_putaway_rules(tenant, items)
             self._seed_warehousing(tenant, items)
             self._seed_tracking(tenant, items)
+            self._seed_transfers(tenant, items)
             self._seed_lot_tracking(tenant, items)
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -778,3 +791,156 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {len(minted)} demo lots minted: {', '.join(minted)}."))
+
+    # -- 5.7 Stock Movement & Transfers ---------------------------------------------------------
+
+    def _seed_transfers(self, tenant, items):
+        """5.7 Stock Movement & Transfers - routing catalog, approval policy, and demo
+        movements walked through the REAL governance states over 4.3's spine.
+
+        seed_scm already creates one plain completed transfer per tenant, so the guard
+        here is marker-based on THIS module's own tables. The movement documents are
+        spine ``scm.StockTransfer`` rows created fresh (never user data); each is walked
+        through what the board/queue actions write - status transitions, TA- decision
+        rows with audit trails - and the fully approved ones are completed via scm's OWN
+        posting service so their ledger legs are genuine StockMove pairs.
+        """
+        locations = list(Location.objects.filter(tenant=tenant).select_related("parent"))
+        if len(locations) < 2:
+            self.stdout.write(
+                f"  {tenant.name}: fewer than two locations - run `seed_scm` first, "
+                "skipping transfer seeding.")
+            return
+
+        # --- routing catalog -------------------------------------------------------------------
+        if TransferRoute.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: transfer routes already present, skipping.")
+        else:
+            def root_of(loc):
+                node, seen = loc, set()
+                while node.parent_id and node.parent_id not in seen:
+                    seen.add(node.pk)
+                    node = node.parent
+                return node
+            warehouses = [loc for loc in locations if loc.parent_id is None]
+            wh_a = warehouses[0] if warehouses else locations[0]
+            wh_b = next((w for w in warehouses if w.pk != wh_a.pk), wh_a)
+            TransferRoute.objects.create(
+                tenant=tenant, name="Warehouse Direct Run", code="RT-DIRECT",
+                mode="direct", origin_location=wh_a, destination_location=wh_b,
+                default_transit_days=1,
+                notes="Seeded lane between the two top-level warehouses.")
+            TransferRoute.objects.create(
+                tenant=tenant, name="Zone Shuttle", code="RT-SHUTTLE",
+                mode="shuttle", default_transit_days=1,
+                notes="Seeded intra-warehouse shuttle; open ends, any bin to any bin.")
+            TransferRoute.objects.create(
+                tenant=tenant, name="Regional Freight", code="RT-FREIGHT",
+                mode="freight", default_transit_days=3,
+                notes="Seeded carrier lane; open both ends.")
+            self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: 3 transfer routes."))
+
+        # --- approval policy -------------------------------------------------------------------
+        if TransferApprovalRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: transfer approval rules already present, skipping.")
+        else:
+            TransferApprovalRule.objects.create(
+                tenant=tenant, name="Cross-warehouse moves need two signatures",
+                applies_to="inter_warehouse", min_units=Decimal("0"), tier_count=2)
+            TransferApprovalRule.objects.create(
+                tenant=tenant, name="Bulk moves (50+ units) need one extra tier",
+                applies_to="all", min_units=Decimal("50"), tier_count=1)
+            self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: 2 transfer approval rules."))
+
+        if TransferApproval.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: transfer approvals already present, skipping.")
+            return
+        User = get_user_model()
+        user = User.objects.filter(tenant=tenant).order_by("pk").first()
+        spots = self._stocked_spots(tenant)
+        if not spots:
+            self.stdout.write(
+                f"  {tenant.name}: no stocked locations yet - run `seed_scm` first, "
+                "skipping transfer documents.")
+            return
+
+        routes = {r.code: r for r in TransferRoute.objects.filter(tenant=tenant)}
+
+        def make_transfer(source, destination, spot_qty):
+            """One fresh draft spine transfer carrying a SMALL slice of a real balance."""
+            item = Item.objects.get(pk=spot_qty["item_id"])
+            quantity = min(Decimal("4"), spot_qty["qty"])
+            trf = StockTransfer.objects.create(
+                tenant=tenant, from_location=source, to_location=destination,
+                transfer_date=timezone.now().date(),
+                notes="Seeded movement exercised through the 5.7 governance flow.")
+            StockTransferLine.objects.create(transfer=trf, item=item, quantity=quantity)
+            return trf
+
+        def submit(trf, route=None):
+            trf.route = route
+            trf.status = "pending_approval"
+            trf.save(update_fields=["status", "route", "updated_at"])
+            write_audit_log(user, trf, "update", {"action": "submit_for_approval"})
+
+        def decide(trf, tier, decision):
+            row = TransferApproval.objects.create(
+                tenant=tenant, transfer=trf, tier=tier, decision=decision,
+                decided_by=user, note="Seeded decision.")
+            write_audit_log(user, row, "create",
+                            {"action": f"tier_{decision}", "tier": tier})
+            return decision == "approved"
+
+        summary = []
+        first, second = spots[0], (spots[1] if len(spots) > 1 else spots[0])
+        src_loc = Location.objects.get(pk=first["location_id"])
+        dst_loc = next((loc for loc in locations if loc.pk != src_loc.pk), src_loc)
+
+        # Mid-chain: inter-warehouse, tier 1 of 2 cleared.
+        mid_chain = make_transfer(src_loc, dst_loc, first)
+        submit(mid_chain, route=routes.get("RT-DIRECT"))
+        decide(mid_chain, 1, "approved")
+        summary.append(f"{mid_chain.number} pending (tier 1/2)")
+
+        # Approved: full chain cleared, awaiting execution on its SCM page.
+        approved = make_transfer(src_loc, dst_loc, second)
+        submit(approved, route=routes.get("RT-FREIGHT"))
+        decide(approved, 1, "approved")
+        decide(approved, 2, "approved")
+        approved.status = "approved"
+        approved.save(update_fields=["status", "updated_at"])
+        write_audit_log(user, approved, "update", {"action": "approve"})
+        summary.append(f"{approved.number} approved")
+
+        # Returned to draft: rejected at tier 1, history intact on the TA rows.
+        rejected = make_transfer(dst_loc, src_loc, second)
+        submit(rejected)
+        decide(rejected, 1, "rejected")
+        rejected.status = "draft"
+        rejected.save(update_fields=["status", "updated_at"])
+        write_audit_log(user, rejected, "update", {"action": "reject"})
+        summary.append(f"{rejected.number} returned to draft")
+
+        # Completed: an approved movement executed through scm's OWN posting service,
+        # so its ledger legs are genuine paired StockMoves (value-neutral at avg cost).
+        from apps.scm.views._helpers import _post_transfer
+        completed = make_transfer(src_loc, dst_loc, first)
+        submit(completed, route=routes.get("RT-SHUTTLE"))
+        decide(completed, 1, "approved")
+        try:
+            with transaction.atomic():
+                _post_transfer(completed, None)
+                completed.status = "completed"
+                completed.completed_at = timezone.now()
+                completed.save(update_fields=["status", "completed_at", "updated_at"])
+            write_audit_log(user, completed, "update", {"action": "complete"})
+            summary.append(f"{completed.number} completed")
+        except ValidationError:
+            # Source could not cover it after all (concurrent seed data) - leave the
+            # honest draft rather than fabricate ledger legs.
+            completed.status = "draft"
+            completed.save(update_fields=["status", "updated_at"])
+            summary.append(f"{completed.number} left as draft (no coverage)")
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {len(summary)} governed transfers ({' / '.join(summary)})."))
