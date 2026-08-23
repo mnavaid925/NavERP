@@ -97,7 +97,7 @@
             <tr>
               <td>
                 {% if item.rma %}
-                  <a href="{% url 'scm:returnauthorization_detail' item.rma.pk %}" class="mono fw-600 text-primary">{{ item.rma.number }}</a>
+                  <a href="{% url 'scm:returnauthorization_detail' item.rma.pk %}" class="mono fw-600 text-brand">{{ item.rma.number }}</a>
                   <div class="text-muted" style="font-size:12px;">{{ item.rma.customer.name }}</div>
                 {% else %}
                   <span class="text-muted">—</span>
@@ -216,7 +216,7 @@
           {% for rma in rmas %}
             <tr>
               <td>
-                <a href="{% url 'scm:returnauthorization_detail' rma.pk %}" class="mono fw-600 text-primary">{{ rma.number }}</a>
+                <a href="{% url 'scm:returnauthorization_detail' rma.pk %}" class="mono fw-600 text-brand">{{ rma.number }}</a>
                 <div class="text-muted" style="font-size:12px;">{{ rma.created_at|date:"Y-m-d" }}</div>
               </td>
               <td>
@@ -253,7 +253,7 @@
                 <div class="space-y-1">
                   {% for insp in rma.inventory_inspections.all %}
                     <div>
-                      <a href="{% url 'inventory:returninspection_detail' insp.pk %}" class="mono text-xs text-primary">{{ insp.number }}</a>
+                      <a href="{% url 'inventory:returninspection_detail' insp.pk %}" class="mono text-xs text-brand">{{ insp.number }}</a>
                       <span class="badge badge-green" style="font-size:10px;">{{ insp.get_condition_grade_display }}</span>
                     </div>
                   {% empty %}
