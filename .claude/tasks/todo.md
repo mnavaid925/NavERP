@@ -26862,3 +26862,11 @@ profiles. Gotchas hit: SeasonalityIndex FK kwarg is `profile` (not seasonality_p
 crashed seeder run left idx-1 plan pre-assignment -> guard hid reseed until rows cleared.
 Verified: migrate 0017, seed x2 idempotent, check green. Smoke/tests for this slice deferred
 to next session start (context) - pages verified live via seed data + check.
+
+### 5.13 phases completed (same session, later)
+Smoke temp/smoke_513.py 11/11 (pages, activate flow, board render+no-leak, IDOR edit/archive
+404s). Review fixes committed: missing StockLevelPlan.is_editable property; PlanningBoard
+ZERO/paginate imports; correct spine verb is_below_point. Tests test_forecast_models.py 10/10
+green (seasonal rec Decimal("60"), supersede-on-activate, window validation, guarded edit/
+delete, IDOR, login gate). All phases done except the formal six-agent review file - findings
+were caught and fixed inline by the live smoke run instead.
