@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Route{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }} <span class="badge {{ obj.mode_css }}" style="vertical-align:middle;">{{ obj.get_mode_display }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:transfer_board' %}">Transfers</a><span class="sep">›</span><a href="{% url 'inventory:transferroute_list' %}">Routes</a><span class="sep">›</span><span>{{ obj.name }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:transferroute_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}<a href="{% url 'inventory:transferroute_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Route</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Name</dt><dd class="fw-600">{{ obj.name }}</dd></div>
+        <div class="detail-item"><dt>Code</dt><dd>{% if obj.code %}{{ obj.code }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Mode</dt><dd>{{ obj.get_mode_display }}</dd></div>
+        <div class="detail-item"><dt>Origin</dt><dd>{% if obj.origin_location %}<a href="{% url 'scm:location_detail' obj.origin_location_id %}">{{ obj.origin_location.code }}</a> <span class="text-muted">{{ obj.origin_location.name }}</span>{% else %}<span class="text-muted">Open — any start</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Destination</dt><dd>{% if obj.destination_location %}<a href="{% url 'scm:location_detail' obj.destination_location_id %}">{{ obj.destination_location.code }}</a> <span class="text-muted">{{ obj.destination_location.name }}</span>{% else %}<span class="text-muted">Open — any end</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Expected transit</dt><dd>{{ obj.default_transit_days }} day{{ obj.default_transit_days|pluralize }}</dd></div>
+        <div class="detail-item"><dt>Status</dt><dd>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Retired</span>{% endif %}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Movements using this route</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Lane</th><th>Date</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for trf in transfers %}
+            <tr>
+              <td><a href="{% url 'inventory:transfer_panel' trf.pk %}" class="fw-600">{{ trf.number }}</a></td>
+              <td>{{ trf.from_location.code }} <span class="text-muted">→</span> {{ trf.to_location.code }}</td>
+              <td>{{ trf.transfer_date|date:"M d, Y" }}</td>
+              <td>{{ trf.get_status_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="package"></i><h3>No movements routed this way yet</h3><p>Pick this route when submitting a draft transfer from the board.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
