@@ -133,19 +133,19 @@ def wave_delete(request, pk):
                        success_url="inventory:wave_list")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def wave_release(request, pk):
     return _run_action(request, pk, "release")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def wave_close(request, pk):
     return _run_action(request, pk, "close")
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def wave_cancel(request, pk):
     return _run_action(request, pk, "cancel")
