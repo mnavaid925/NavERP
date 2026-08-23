@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{% if obj %}Trace {{ obj.number }}{% else %}Traceability &amp; Genealogy{% endif %}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if obj %}Trace: {{ obj.number }}{% else %}Traceability &amp; Genealogy{% endif %}</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Lot &amp; Serial Tracking</span><span class="sep">›</span><span>{% if obj %}Trace {{ obj.number }}{% else %}Traceability{% endif %}</span></div>
+      {% if obj %}
+        <p class="text-muted">Full recall trace read off the append-only ledger — where this lot came from, where it went, and which batches share its transformation history.</p>
+      {% else %}
+        <p class="text-muted">Pick a lot or serial to walk its full history — backward to sources, forward to every destination, plus parent/child links across work orders. Built for recalls.</p>
+      {% endif %}
+    </div>
+    <div class="page-actions">
+      {% if obj %}
+        <a href="{% url 'inventory:traceability' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Pick another lot</a>
+        <a href="{% url 'scm:lotserial_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="box"></i> Lot Master</a>
+      {% else %}
+        <a href="{% url 'inventory:fefo_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> FEFO Board</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not obj %}
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:220px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search lot number, SKU or item…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Search</button>
+        <a href="{% url 'inventory:traceability' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Lot / Serial</th><th>Item</th><th>Status</th><th>Expiry</th><th>On hand (ledger)</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in lots %}
+            <tr>
+              <td><a href="{% url 'inventory:traceability' %}?lot={{ row.lot.pk }}" class="fw-600">{{ row.lot.number }}</a></td>
+              <td>{{ row.lot.item.sku }} <span class="text-muted">{{ row.lot.item.name|truncatechars:30 }}</span></td>
+              <td><span class="badge badge-info">{{ row.lot.get_status_display }}</span></td>
+              <td>{{ row.lot.expiry_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{% if row.on_hand > 0 %}<span class="fw-600">{{ row.on_hand|floatformat:"-2" }}</span>{% else %}<span class="badge badge-slate">depleted</span>{% endif %}</td>
+              <td><a href="{% url 'inventory:traceability' %}?lot={{ row.lot.pk }}" class="btn btn-outline btn-sm"><i data-lucide="git-fork"></i> Trace</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-fork"></i><h3>No tracked lots found</h3><p>Lots and serials appear here once the SCM master has tracked rows — search adjusts the list.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <p class="text-muted">Showing up to the 25 most recently touched tracked lots — refine the search to narrow a large catalog.</p>
+    </div>
+  </div>
+  {% else %}
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ on_hand|floatformat:"-2" }}</div>
+      <div class="stat-label">On hand across all locations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="arrow-down-left"></i></div>
+      <div class="stat-value">{{ inbound|length }}</div>
+      <div class="stat-label">Inbound legs (sources)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="arrow-up-right"></i></div>
+      <div class="stat-value">{{ outbound|length }}</div>
+      <div class="stat-label">Outbound legs (recall scope)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="git-fork"></i></div>
+      <div class="stat-value">{{ parents|length }} / {{ children|length }}</div>
+      <div class="stat-label">Parent lots / child lots</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lot Identity</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Number</dt><dd><span class="fw-600">{{ obj.number }}</span> <span class="badge badge-info">{{ obj.get_kind_display }}</span></dd></div>
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Master status</dt><dd><span class="badge badge-info">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Expiry verdict today</dt><dd>{% if policy %}<span class="badge {{ css }}">{{ label }}</span>{% if policy.fefo_enforced %} <span class="badge badge-info">FEFO enforced</span>{% endif %}{% else %}<span class="badge {{ css }}">{{ label }}</span> <span class="text-muted">(no shelf-life policy)</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Genealogy — Shared Transformation References</h2></div>
+    <div class="card-body form-grid">
+      <div>
+        <label class="form-label">Parent lots — inputs drawn under the orders that PRODUCED this lot</label>
+        {% for m in parents %}
+          <a href="{% url 'inventory:traceability' %}?lot={{ m.lot_serial_id }}" class="badge badge-info" style="margin:2px;">{{ m.lot_serial.number }} · {{ m.item.sku }} ×{{ m.abs_qty|floatformat:"-2" }} · {{ m.reference }}</a>
+        {% empty %}<p class="text-muted">None — this lot was received directly, not produced.</p>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label">Child lots — outputs produced by the orders that CONSUMED this lot</label>
+        {% for m in children %}
+          <a href="{% url 'inventory:traceability' %}?lot={{ m.lot_serial_id }}" class="badge badge-amber" style="margin:2px;">{{ m.lot_serial.number }} · {{ m.item.sku }} ×{{ m.abs_qty|floatformat:"-2" }} · {{ m.reference }}</a>
+        {% empty %}<p class="text-muted">None yet — this lot has not been drawn into any production run.</p>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Backward Trace — Where This Lot Came From</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Type</th><th>Location</th><th>Qty in</th><th>Unit cost</th><th>Reference</th></tr></thead>
+        <tbody>
+          {% for m in inbound %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ m.get_move_type_display }}</td>
+              <td>{{ m.location.code }}</td>
+              <td><span class="badge badge-green">+{{ m.quantity|floatformat:"-2" }}</span></td>
+              <td>{{ m.unit_cost|floatformat:"-4" }}</td>
+              <td>{{ m.reference|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="package-open"></i><h3>No inbound legs</h3><p>The ledger shows nothing ever entered stock against this number.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Forward Trace — Where It Went (Recall Scope)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Type</th><th>Location</th><th>Qty out</th><th>Reference</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for m in outbound %}
+            <tr>
+              <td>{{ m.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ m.get_move_type_display }}</td>
+              <td>{{ m.location.code }}</td>
+              <td><span class="badge badge-red">{{ m.quantity|floatformat:"-2" }}</span></td>
+              <td>{{ m.reference|default:"—" }}</td>
+              <td>{{ m.reason|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="shield-check"></i><h3>Nothing has left stock</h3><p>No customer shipments, draws or write-offs reference this lot — a recall would only touch what is still on the shelf.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
