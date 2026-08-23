@@ -17,6 +17,19 @@ from .Catalog.ItemPrices import (
     itemprice_list,
 )
 from .Catalog.Overview import overview
+from .FulfillmentOrchestration.FulfillmentWaves import (
+    wave_board,
+    wave_cancel,
+    wave_close,
+    wave_create,
+    wave_delete,
+    wave_detail,
+    wave_edit,
+    wave_list,
+    wave_release,
+    waveorder_add,
+    waveorder_remove,
+)
 from .Catalog.ProductFiles import (
     productfile_create,
     productfile_delete,
@@ -85,6 +98,19 @@ from .ReceivingPutaway.PutawayRules import (
     putawayrule_detail,
     putawayrule_edit,
     putawayrule_list,
+)
+from .ReturnsManagement import (
+    dispositionrule_create,
+    dispositionrule_delete,
+    dispositionrule_detail,
+    dispositionrule_edit,
+    dispositionrule_list,
+    returninspection_create,
+    returninspection_delete,
+    returninspection_detail,
+    returninspection_edit,
+    returninspection_list,
+    returns_workbench,
 )
 from .StockMovementTransfers.ApprovalRules import (
     transferapprovalrule_create,
@@ -169,4 +195,14 @@ __all__ = [
     "shelflifepolicy_list", "shelflifepolicy_detail", "shelflifepolicy_create",
     "shelflifepolicy_edit", "shelflifepolicy_delete",
     "fefo_board", "traceability",
+    "wave_list", "wave_detail", "wave_create", "wave_edit", "wave_delete",
+    "wave_release", "wave_close", "wave_cancel",
+    "waveorder_add", "waveorder_remove",
+    "wave_board",
+    "returninspection_list", "returninspection_detail", "returninspection_create",
+    "returninspection_edit", "returninspection_delete",
+    "dispositionrule_list", "dispositionrule_detail", "dispositionrule_create",
+    "dispositionrule_edit", "dispositionrule_delete",
+    "returns_workbench",
 ]
+
