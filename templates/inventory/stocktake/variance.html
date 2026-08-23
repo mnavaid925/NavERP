@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Variance Analysis — Cycle Counts{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Variance Analysis &amp; Adjustments</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Stocktaking &amp; Cycle Counting</span><span class="sep">›</span><span>Variance</span></div>
+      <p class="text-muted">What the blind counts found: lines that disagreed, by how much, and which adjustment carried the correction.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:cyclecounttask_list' %}" class="btn btn-outline"><i data-lucide="clipboard-list"></i> Count Sheets (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search sheet, location or notes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All counted work</option>
+            {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:variance_report' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Sheet</th><th>Location</th><th>Counted</th><th>Lines</th><th>Variance lines</th><th>Net variance</th><th>Adjustment posted</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:cyclecounttask_detail' row.task.pk %}" class="fw-600">{{ row.task.number }}</a> <span class="text-muted">{{ row.task.scheduled_date|date:"M d, Y" }}</span></td>
+              <td>{{ row.task.location.code }}</td>
+              <td>{{ row.task.counted_at|date:"M d, Y"|default:"—" }}</td>
+              <td>{{ row.counted_lines }}/{{ row.line_count }}</td>
+              <td>{% if row.variance_lines > 0 %}<span class="badge badge-amber">{{ row.variance_lines }} disagreeing</span>{% else %}<span class="badge badge-green">clean</span>{% endif %}</td>
+              <td class="fw-600">{{ row.net_variance|floatformat:"-2" }}</td>
+              <td>{% if row.task.adjustment_id %}<a href="{% url 'scm:stockadjustment_detail' row.task.adjustment_id %}">{{ row.task.adjustment.number }}</a>{% elif row.task.status == "counted" %}<span class="badge badge-amber">awaiting reconciliation</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="scale"></i><h3>No counted sheets yet</h3><p>Run a count program or start a physical inventory event — variance appears here once counters submit sheets in SCM.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Expected quantities are snapshotted server-side at count start (blind), so every disagreement here is physical reality against the ledger as it stood — and the correction is always the spine's own reason-coded adjustment, linked per sheet.</p>
+{% endblock %}
