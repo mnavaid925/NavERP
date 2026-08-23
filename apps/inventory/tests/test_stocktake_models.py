@@ -135,7 +135,7 @@ def test_event_reconcile_refused_while_sheets_open_then_ok(tenant_a, admin_user)
     with pytest.raises(ValidationError):
         ev.reconcile(admin_user)                 # freeze cannot hide uncounted bins
     CycleCountTask.objects.filter(
-        notes__startswith=ev.task_marker(ev.number)).update(status="reconciled")
+        notes__startswith=ev.task_marker()).update(status="reconciled")
     ev.reconcile(admin_user)
     fresh = PhysicalInventory.objects.get(pk=ev.pk)
     assert fresh.status == "reconciled" and fresh.is_frozen is False
