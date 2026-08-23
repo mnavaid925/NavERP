@@ -7,6 +7,11 @@ from .Catalog.ItemPrices import ItemPriceForm
 from .Catalog.ProductFiles import ProductFileForm
 from .InventoryTrackingControl.InventoryReservations import InventoryReservationForm
 from .InventoryTrackingControl.StockStatuses import StockStatusForm
+from .LotSerialTracking.LotNumberRules import (
+    GenerateLotForm,
+    LotNumberRuleForm,
+    ShelfLifePolicyForm,
+)
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRuleForm
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatchForm
 from .ReceivingPutaway.PutawayRules import PutawayRuleForm
@@ -18,4 +23,5 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "PurchaseOrderApprovalRuleForm", "PurchaseOrderDispatchForm",
            "PutawayRuleForm",
            "BinCapacityForm", "CrossDockOrderForm",
-           "StockStatusForm", "InventoryReservationForm"]
+           "StockStatusForm", "InventoryReservationForm",
+           "LotNumberRuleForm", "ShelfLifePolicyForm", "GenerateLotForm"]
