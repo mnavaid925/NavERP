@@ -1,0 +1,129 @@
+"""Inventory 5.10 Returns Management — Warehouse Returns Workbench (Computed Board).
+
+Real-time operational dashboard for warehouse intake, inspection staging, and guided
+disposition routing across all open customer return requests and bench inventory.
+"""
+from django.db.models import Count, Q
+
+from apps.core.crud import paginate
+from apps.inventory.models import (
+    DispositionRoutingRule,
+    ReturnInspection,
+    resolve_disposition_routing,
+)
+from apps.inventory.views._common import *  # noqa: F401,F403
+from apps.scm.models import ReturnAuthorization, ReturnDisposition, ReturnLine
+
+
+@login_required
+def returns_workbench(request):
+    """Warehouse operations board for receiving, inspecting and routing returns."""
+    tenant = request.tenant
+
+    # Preload all active disposition routing rules once to avoid N+1 queries during resolution
+    rules = list(
+        DispositionRoutingRule.objects.filter(tenant=tenant, is_active=True)
+        .select_related("item", "category", "destination_location")
+        .order_by("priority", "id")
+    )
+
+    # 1. Open Return Authorizations requiring warehouse action
+    rma_qs = (
+        ReturnAuthorization.objects.filter(
+            tenant=tenant,
+            status__in=["approved", "awaiting_receipt", "partially_received", "received"],
+        )
+        .select_related("customer")
+        .prefetch_related("lines__item", "lines__item__category", "lines__dispositions")
+        .order_by("-id")
+    )
+
+    # Search filter
+    q = request.GET.get("q", "").strip()
+    if q:
+        rma_qs = rma_qs.filter(
+            Q(number__icontains=q)
+            | Q(customer__name__icontains=q)
+            | Q(lines__item__sku__icontains=q)
+            | Q(lines__item__name__icontains=q)
+        ).distinct()
+
+    # Build actionable return items list
+    bench_items = []
+    # Query pending dispositions on bench
+    pending_disps = list(
+        ReturnDisposition.objects.filter(tenant=tenant, disposition="received_pending")
+        .select_related(
+            "return_line",
+            "return_line__return_authorization",
+            "return_line__return_authorization__customer",
+            "return_line__item",
+            "return_line__item__category",
+            "location",
+            "lot_serial",
+        )
+        .order_by("-received_on", "-id")
+    )
+
+    # Attach live inspection and routing suggestions to bench items
+    for disp in pending_disps:
+        item = disp.return_line.item if disp.return_line else None
+        rule, suggested_disp, dest_loc, reason = resolve_disposition_routing(
+            item, condition_grade=disp.condition_grade, rules=rules, tenant=tenant
+        )
+        # Check if an inspection already exists for this disposition or line
+        has_inspection = ReturnInspection.objects.filter(
+            tenant=tenant,
+            return_disposition=disp,
+        ).exists()
+
+        bench_items.append({
+            "disposition": disp,
+            "rma": disp.return_line.return_authorization if disp.return_line else None,
+            "line": disp.return_line,
+            "item": item,
+            "quantity": disp.quantity,
+            "condition_grade": disp.condition_grade,
+            "suggested_disposition": suggested_disp or disp.disposition,
+            "destination_location": dest_loc,
+            "routing_reason": reason,
+            "has_inspection": has_inspection,
+        })
+
+    # Stats strip
+    total_active_rmas = ReturnAuthorization.objects.filter(
+        tenant=tenant,
+        status__in=["approved", "awaiting_receipt", "partially_received", "received"],
+    ).count()
+    awaiting_bench_count = len(pending_disps)
+    completed_inspections_count = ReturnInspection.objects.filter(
+        tenant=tenant,
+        status="passed",
+    ).count()
+    quarantined_count = ReturnInspection.objects.filter(
+        tenant=tenant,
+        status="quarantined",
+    ).count()
+
+    stats = {
+        "active_rmas": total_active_rmas,
+        "awaiting_bench": awaiting_bench_count,
+        "inspections_passed": completed_inspections_count,
+        "quarantined": quarantined_count,
+    }
+
+    # Paginate open RMAs
+    page_obj = paginate(request, rma_qs, per_page=15)
+
+    return render(
+        request,
+        "inventory/returns/workbench.html",
+        {
+            "page_obj": page_obj,
+            "rmas": page_obj.object_list,
+            "bench_items": bench_items[:20],
+            "stats": stats,
+            "q": q,
+            "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
+        },
+    )
