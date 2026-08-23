@@ -26688,3 +26688,177 @@ Deps: python-barcode==0.16.1 + qrcode==8.2 installed into venv (SVG, no pillow);
       Integration -> inventory:scan_console; RFID Tag Management -> inventory:rfidtag_list; Batch Scanning
       -> inventory:scan_console (?mode=batch anchor or the same console)
 - [ ] migrate 0017 + seed x2 + check + smoke sweep
+
+## 5.12 Multi-Location Management
+Inputs: `.claude/tasks/research-inventory-5.12.md` (verbatim) + 5.9 house style. ONE config model
+(verb-less, no status machine) + one computed page. **Migration claim: 0018** — research's "0017"
+is STALE: `0017_stocklevelplan.py` already landed (5.13 lane). Re-check `apps/inventory/migrations/`
+immediately before generating; a sibling session may take 0018 too.
+
+### Contract (frozen names)
+- [ ] FROZEN folder `MultiLocationManagement/` in all four layers; entity file `LocationNetworks.py`;
+      computed-page view file `GlobalStock.py` (5.5 WarehouseMap / 5.11 VarianceReport precedent).
+      Templates `templates/inventory/multilocation/locationnetwork/{list,detail,form}.html` +
+      page-only `templates/inventory/multilocation/global_stock.html`.
+- [ ] Model `LocationNetwork(TenantNumbered)`, `NUMBER_PREFIX = "LNW"` (number auto via base save();
+      research heading says [LNW-]; its code-sketch's TenantOwned comment is OVERRIDEN — number wins).
+      Fields EXACT: `code` CharField(32); `name` CharField(120) [org-tier labels are curated short
+      names — deliberately tighter than scm.Location's 255]; `node_type` CharField(10) default "store"
+      with NODE_TYPE_CHOICES FROZEN `[("company","Company"),("region","Region"),
+      ("dc","Distribution Center"),("store","Store / Site")]`; `parent` self-FK SET_NULL null blank
+      related_name="children"; `warehouse` FK "scm.Location" PROTECT null blank
+      related_name="network_nodes" (help_text: stocked site this node maps to; blank = pure grouping);
+      `is_active` BooleanField default True; `notes` TextField blank.
+      `NODE_CSS = {"company": "badge-slate", "region": "badge-info", "dc": "badge-amber",
+      "store": "badge-green"}` (colour-named only, L33). Property `node_css`.
+- [ ] Meta: `ordering = ["code"]`; `unique_together = (("tenant","number"), ("tenant","code"),
+      ("tenant","warehouse"))` — three constraints total (number joins because TenantNumbered rows
+      re-pin it, FulfillmentWave precedent; NULL warehouse excluded by SQL semantics so grouping
+      nodes coexist); `indexes = [Index(fields=["tenant","node_type"], name="inv_lnw_tnt_type_idx")]`.
+- [ ] `clean()`: per-field cross-tenant errors keyed on `parent_id`/`warehouse_id` (crafted-POST +
+      admin/seeder paths, 5.9 C1 pattern); refuse `parent_id == self.pk` ("a node cannot be its own
+      parent"); refuse `warehouse.location_type != "warehouse"` (a bin is not a store);
+      parent-chain cycle guard bounded walk (~8 hops, seen-set, Location.path() precedent at
+      Locations.py:95). `path()` mirroring Location.path() → "HOLD-CO › REG-NORTH".
+      `__str__` = "{code} · {name}".
+- [ ] LEAF RULE DECIDED: warehouse attachable at ANY level, not leaves only. Why simplest+correct:
+      leaf-only needs a children-walk on every save (extra query + race window) for zero honesty
+      gain, and a stocking DC is a real shape (the DC node IS the warehouse). Documented in the
+      field help_text.
+- [ ] Computed page `global_stock(request)` — custom @login_required render, NOT crud helpers,
+      ZERO writes. Query budget ~5 frozen, ACTUAL 4 (dropped #5: no FK dropdown filter needed on a
+      tree page): (1) all tenant nodes once `.select_related("parent","warehouse")`; (2) all tenant
+      warehouses `{pk: loc}` over `Location.objects.filter(tenant=…, location_type="warehouse")`;
+      (3) ONE grouped StockMove sum per location over ALL those warehouse pks —
+      `values("location_id").annotate(qty=Sum("quantity"), val=Sum(F("quantity")*F("unit_cost")))`
+      WITH the tenant predicate so `scm_move_tnt_item_loc_idx` applies; (4) ONE grouped in-transit
+      sum per from/to over `StockTransferLine.objects.filter(transfer__tenant=request.tenant,
+      transfer__status="in_transit")` (`StockTransferLine` has NO tenant column — always through
+      `transfer__tenant`, 5.7 gotcha). STATUS PINNED: goods-in-flight = `status="in_transit"` ONLY —
+      draft/pending_approval/approved are paperwork whose units still truthfully sit at source;
+      completed/cancelled have no flight. Module constant `IN_FLIGHT_STATUSES = ("in_transit",)`.
+- [ ] global_stock rollup: subtree warehouse-id sets built ONCE in Python (iterative, seen-set,
+      depth-capped 8 — malformed self-parent row must not hang the page). Rows = top-level roots
+      recursively expanded, each dict `{node, path_label, depth, own_warehouses[], stock_total,
+      stock_value, in_transit_in, in_transit_out}`; warehouses attached to NO node surface under an
+      explicit "Unassigned sites" group (orphan-honest, 5.5 precedent). ZEROS PINNED (orchestrator
+      ruling, supersedes research §2 None-rule): aggregate sums render REAL zeros when empty;
+      drill-down links only where data exists. In-transit NEVER subtracted from on-hand (legs post
+      atomically at completion — additive info only; stated on the page).
+- [ ] global_stock context keys EXHAUSTIVE: `rows`, `stats{sites_attached, sites_unassigned,
+      network_stock_total, in_transit_total}`, `q`. `locations` DROPPED (no dropdown — q is the only
+      filter, applied to node code/name pre-render). NO pagination: tree pages are small, depth is
+      capped at 8, and Paginator cannot order a hierarchy meaningfully — noted in view docstring.
+- [ ] CRUD views via crud helpers in views/MultiLocationManagement/LocationNetworks.py:
+      `locationnetwork_{list,detail,create,edit,delete}`; writes `@tenant_admin_required`
+      (+ delete also `@require_POST`), reads member-visible with `is_admin` flag hiding affordances.
+      list: qs `.select_related("parent","warehouse")`, `search_fields=["number","code","name"]`,
+      pre-crud filters `?node_type=` (choices-checked) + `?is_active=` ("true/false/1/0" mapped),
+      extra_context `{node_type_choices, node_type, is_active, is_admin}`. detail extra_context:
+      `{children, path_label, is_admin}` (children = obj.children ordered by code; breadcrumb from
+      path()). create/edit success_url inventory:locationnetwork_list; template form.html both modes.
+- [ ] URLs urls/MultiLocationManagement/LocationNetworks.py — literals before `<int:pk>`, exact:
+      `path("global-stock/", views.global_stock, name="global_stock")` FIRST, then
+      `networks/`, `networks/add/`, `networks/<int:pk>/`, `networks/<int:pk>/edit/`,
+      `networks/<int:pk>/delete/` named `locationnetwork_list/_create/_detail/_edit/_delete`.
+      Import the view module directly (leaf-module import, 5.9 docstring reason).
+- [ ] Form `LocationNetworkForm(TenantUniqueMixin, TenantModelForm)` fields EXACTLY
+      `["code","name","node_type","parent","warehouse","is_active","notes"]` (number excluded —
+      auto). `_reject_foreign(self, cleaned, ["parent", "warehouse"])`: parent is SELF-FK but
+      _reject_foreign compares `chosen.tenant_id` vs `form.tenant.pk`, which holds for any tenant-
+      carrying model incl. self; instance.tenant stamped pre-validation by the mixin, so model
+      clean()'s guards see it on create. No queryset narrowing beyond that (house rule).
+      ("tenant","code") and ("tenant","warehouse") validate at the form via TenantUniqueMixin.
+- [ ] Wiring (exact lines, integrate phase): models/__init__.py +=
+      `from .MultiLocationManagement.LocationNetworks import LocationNetwork` (+ __all__);
+      forms/__init__.py += `... import LocationNetworkForm` (+ __all__); views/__init__.py +=
+      imports of the five view functions + global_stock (+ __all__); urls/__init__.py +=
+      `from .MultiLocationManagement.LocationNetworks import urlpatterns as _ml_networks` after the
+      `_fo_waves` import, concat entry `*_ml_networks,` immediately AFTER the `*_fo_waves,` line.
+- [ ] Admin FROZEN: `@admin.register(LocationNetwork)` list_display
+      ("number","code","name","node_type","parent","warehouse","is_active"); list_filter
+      ("tenant","node_type","is_active"); search_fields ("number","code","name").
+- [ ] Seeder `_seed_location_network(self, tenant, items)` guard-first
+      (`if LocationNetwork.objects.filter(tenant=tenant).exists(): skip`). Tree over EXISTING
+      seed_scm data (verified: WH-MAIN Main Warehouse + WH-STORE Retail Store, both
+      location_type="warehouse", seed_scm.py:364-367 — no new Locations invented, CR-01 get_or_create
+      precedent NOT needed): HOLD-CO company → REG-NORTH region → DC-MAIN dc attached WH-MAIN;
+      HOLD-CO → DIV-RETAIL region → ST-DT store attached WH-STORE. sites_unassigned honestly 0 —
+      the Unassigned group renders only when non-empty. handle() call inserted AFTER
+      `self._seed_fulfillment_waves(tenant, items)`. --flush block += LocationNetwork count +
+      `LocationNetwork.objects.all().delete()`. OPTIONAL (only if trivial): extend _seed_transfers
+      trio with one more governed transfer parked at status="in_transit" to light the in-transit
+      columns — skip if it risks the 5.7 guard semantics.
+- [ ] LIVE_LINKS["5.12"] after the "5.11" entry, comment-style per neighbours, verbatim titles:
+      "Location Hierarchy Setup" -> inventory:locationnetwork_list (NEW org-tier node table [LNW-]);
+      "Global Stock Visibility" -> inventory:global_stock (NEW computed ledger roll-up);
+      "Location-Specific Rules" -> `scm:reorderrule_list` — BULLET-3 ROUTE FROZEN with comment:
+      safety stock on scm.ReorderRule is the one rule family with TRUE per-(item×location) grain
+      today; TransferRoute endpoints are optional/open-ended lanes, ItemPrice has NO location column
+      BY DESIGN (research contradiction #1 — market prices by channel/subsidiary, never stocking
+      site). Templates cross-link the other two homes in headers.
+- [ ] Migration claim 0018 (see preamble), dependency 0017_stocklevelplan.
+
+### Build-wave checklist (two parallel lanes, disjoint files)
+Lane A — backend agent owns ALL of:
+- [ ] apps/inventory/models/MultiLocationManagement/__init__.py + LocationNetworks.py
+- [ ] apps/inventory/forms/MultiLocationManagement/__init__.py + LocationNetworks.py
+- [ ] apps/inventory/views/MultiLocationManagement/__init__.py + LocationNetworks.py + GlobalStock.py
+- [ ] apps/inventory/urls/MultiLocationManagement/__init__.py + LocationNetworks.py
+(no shared file touched: package-root __init__s, admin.py, seeder, navigation.py off-limits)
+Lane B — template agent owns ALL of:
+- [ ] templates/inventory/multilocation/locationnetwork/list.html (search + node_type/is_active chip
+      filters reflecting GET, Actions column eye/pencil/trash gated by is_admin, .empty-state)
+- [ ] templates/inventory/multilocation/locationnetwork/detail.html (breadcrumb path(), children
+      table, own warehouse card, audit-free read panel)
+- [ ] templates/inventory/multilocation/locationnetwork/form.html (is_edit aware)
+- [ ] templates/inventory/multilocation/global_stock.html (stats strip; indented tree rows with
+      NODE_CSS badges; Unassigned sites group; drill-down links ONLY where data exists; header
+      cross-links to scm:reorderrule_list / inventory:transferroute_list / inventory:itemprice_list;
+      "operational visibility — not valuation, not ATP" scope line)
+
+### Integrate checklist (solo, single writer, only DB writer)
+- [ ] Verify every expected Lane A/B file actually landed BEFORE wiring anything
+- [ ] Re-export blocks: models/forms/views package-root __init__.py (surgical Edit) + urls concat
+      entry positioned after *_fo_waves
+- [ ] admin.py registration block (surgical append)
+- [ ] seed_inventory.py: import LocationNetwork; _seed_location_network def; handle() call after
+      _seed_fulfillment_waves; --flush count/delete lines
+- [ ] navigation.py LIVE_LINKS["5.12"] entry (one surgical insert after "5.11")
+- [ ] makemigrations inventory → expect 0018_locationnetwork (re-check dir first); migrate
+- [ ] seed_inventory x2 — second run must skip cleanly; manage.py check clean
+- [ ] Commits: one file per commit, PowerShell `;` separators, explicit paths
+
+### Verify checklist (smoke, content asserts not just 200)
+- [ ] Five routes 200 as admin_acme: networks list/add/detail/edit + global-stock; pages assert real
+      seeded content (HOLD-CO row, rolled-up totals present)
+- [ ] global_stock numbers match ORM recomputation (Σ StockMove per attached warehouse rolled up the
+      tree; stats.sites_attached == 2; network_stock_total equals the grouped-query total)
+- [ ] Junk params harmless: ?q=<script>, ?node_type=bogus, ?is_active=abc, ?page=999 → filters skip,
+      200
+- [ ] Cross-tenant IDOR: globex session fetching acme LNW pk on detail/edit/delete → 404
+- [ ] Superuser (tenant=None) → empty-but-200 on list + global-stock
+- [ ] Writes gated: member POST to add/edit/delete → 403; admin create→edit→delete round-trip works;
+      deleting a node with children reparents them to roots (SET_NULL flash note)
+- [ ] PROTECT proof: deleting attached scm.Location elsewhere raises ProtectedError (admin), node
+      survives; no {# scaffold leaks, no unpinned context vars rendering blank regions
+
+### Close-out checklist
+- [ ] Review wave → .claude/tasks/review-inventory-5.12.md committed
+- [ ] code-fixer burn-down: every finding [x] fixed / [~] skipped-with-reason; manage.py check clean
+- [ ] Tests: tests/test_multiloc_{models,forms,views,security}.py, every test named test_multiloc_*,
+      conftest fixtures multiloc_* owned by the solo contract step; full unfiltered inventory suite
+      green (no -k filter)
+- [ ] SKILL.md as-built row + 5.12 section; README module row; build_state finish
+
+### 5.13 Inventory Forecasting & Planning (this session)
+Demand Forecasting -> scm:demandforecast_list pointer (4.7 owns prediction). Inventory adds:
+Planning Board (computed; per ReorderRule live-vs-computed SS/ROP gap, one grouped ledger
+on-hand query, stale/below filters, tenant-admin Apply delegating to spine apply_computed)
+and StockLevelPlan [SLP-] (per-SKU base target + optional SCM SeasonalityProfile; recommended
+qty DERIVED via profile.apply_to each render - never stored; activate supersedes prior active
+to archived under lock). Seeder: 1 flat active + 1 seasonal draft per tenant over spine
+profiles. Gotchas hit: SeasonalityIndex FK kwarg is `profile` (not seasonality_profile);
+crashed seeder run left idx-1 plan pre-assignment -> guard hid reseed until rows cleared.
+Verified: migrate 0017, seed x2 idempotent, check green. Smoke/tests for this slice deferred
+to next session start (context) - pages verified live via seed data + check.
