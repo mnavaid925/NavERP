@@ -122,7 +122,7 @@
                 {% elif item.condition_grade == 'd' %}
                   <span class="badge badge-red">Grade D</span>
                 {% else %}
-                  <span class="badge badge-slate">{{ item.condition_grade|upper }}</span>
+                  <span class="badge badge-slate">{{ item.condition_grade_display }}</span>
                 {% endif %}
               </td>
               <td>
@@ -144,7 +144,7 @@
                 {% elif item.suggested_disposition == 'return_to_vendor' %}
                   <span class="badge badge-amber">RTV</span>
                 {% else %}
-                  <span class="badge badge-slate">{{ item.suggested_disposition|title }}</span>
+                  <span class="badge badge-slate">{{ item.suggested_disposition_display }}</span>
                 {% endif %}
               </td>
               <td>
