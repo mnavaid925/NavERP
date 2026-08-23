@@ -14,6 +14,7 @@ from .StocktakingCycleCounting.PhysicalInventories import PhysicalInventory
 from .ForecastingPlanning.StockLevelPlans import StockLevelPlan
 from .LotSerialTracking.LotNumberRules import LotNumberRule
 from .LotSerialTracking.ShelfLifePolicies import FLAG_CSS, ShelfLifePolicy, classify_lot
+from .MultiLocationManagement.LocationNetworks import LocationNetwork
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
 from .PurchaseOrderManagement.Approvals import PurchaseOrderApproval
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatch
@@ -36,6 +37,13 @@ from .StockMovementTransfers import (
 from .VendorSupplierManagement.VendorCommunications import VendorCommunication
 from .WarehousingBinManagement.BinCapacities import BinCapacity
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrder
+from .BarcodeRfidIntegration import (
+    BarcodeLabel,
+    ScanSession,
+    ScanEvent,
+    resolve_code,
+    RfidTag,
+)
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "FulfillmentWave", "FulfillmentWaveOrder",
@@ -44,10 +52,12 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "BinCapacity", "CrossDockOrder",
            "StockStatus", "InventoryReservation",
            "LotNumberRule", "ShelfLifePolicy", "classify_lot", "FLAG_CSS",
+           "LocationNetwork",
            "StockLevelPlan",
            "CountProgram", "PhysicalInventory",
            "TransferRoute", "TransferApprovalRule", "TransferApproval",
            "APPLIES_TO_CHOICES", "SCOPE_ALL", "SCOPE_INTER", "SCOPE_INTRA",
            "ReturnInspection", "ReturnInspectionChecklist",
-           "DispositionRoutingRule", "resolve_disposition_routing"]
+           "DispositionRoutingRule", "resolve_disposition_routing",
+           "BarcodeLabel", "ScanSession", "ScanEvent", "resolve_code", "RfidTag"]
 
