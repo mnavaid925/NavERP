@@ -125,6 +125,7 @@ def _progress(trf, units, scope, active_rules, decisions):
     return {
         "rule": rule, "required": required, "cleared": cleared,
         "next_tier": cleared + 1, "done": cleared >= required, "decisions": decisions,
+        "decision_count": len(decisions),
     }
 
 
