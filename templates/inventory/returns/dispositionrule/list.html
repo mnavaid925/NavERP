@@ -66,7 +66,7 @@
             <tr>
               <td class="mono fw-600">{{ obj.priority }}</td>
               <td>
-                <a href="{% url 'inventory:dispositionrule_detail' obj.pk %}" class="fw-600 text-primary">{{ obj.name }}</a>
+                <a href="{% url 'inventory:dispositionrule_detail' obj.pk %}" class="fw-600 text-brand">{{ obj.name }}</a>
                 {% if obj.requires_supervisor_approval %}
                   <span class="badge badge-amber ml-2" style="font-size:11px;">Supervisor Sign-off</span>
                 {% endif %}
