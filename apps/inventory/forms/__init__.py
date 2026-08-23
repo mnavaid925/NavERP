@@ -11,6 +11,10 @@ from .FulfillmentOrchestration.FulfillmentWaves import (
 )
 from .InventoryTrackingControl.InventoryReservations import InventoryReservationForm
 from .InventoryTrackingControl.StockStatuses import StockStatusForm
+from .StocktakingCycleCounting.CountPrograms import (
+    CountProgramForm,
+    PhysicalInventoryForm,
+)
 from .LotSerialTracking.LotNumberRules import (
     GenerateLotForm,
     LotNumberRuleForm,
@@ -37,6 +41,7 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "BinCapacityForm", "CrossDockOrderForm",
            "StockStatusForm", "InventoryReservationForm",
            "LotNumberRuleForm", "ShelfLifePolicyForm", "GenerateLotForm",
+           "CountProgramForm", "PhysicalInventoryForm",
            "TransferRouteForm", "TransferApprovalRuleForm",
            "ReturnInspectionForm", "ReturnInspectionChecklistForm",
            "ReturnInspectionChecklistFormSet", "DispositionRoutingRuleForm"]
