@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Return Inspections — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Return Inspections</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:returns_workbench' %}">Returns Management</a>
+        <span class="sep">›</span>
+        <span>Inspections</span>
+      </div>
+      <p class="text-muted">Physical warehouse receiving inspection, component completeness, and condition grading for returned merchandise.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:returns_workbench' %}" class="btn btn-outline"><i data-lucide="layout-dashboard"></i> Returns Workbench</a>
+      <a href="{% url 'inventory:returninspection_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Inspection</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-4 gap-4 mb-4">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Inspections</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.passed }}</div>
+        <div class="stat-label">Passed / Restockable</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.failed }}</div>
+        <div class="stat-label">Failed / Defective</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="shield-alert"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.quarantined }}</div>
+        <div class="stat-label">Quarantined</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search inspection #, RMA #, item SKU or name…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="condition_grade" aria-label="Grade" class="form-select">
+            <option value="">All Grades</option>
+            {% for val, label in grade_choices %}
+              <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="functional_status" aria-label="Functional" class="form-select">
+            <option value="">All Functional States</option>
+            {% for val, label in functional_choices %}
+              <option value="{{ val }}" {% if request.GET.functional_status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:returninspection_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Inspection #</th>
+            <th>RMA Ticket</th>
+            <th>Item SKU</th>
+            <th>Quantity</th>
+            <th>Grade</th>
+            <th>Functional</th>
+            <th>Restockable</th>
+            <th>Status</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:returninspection_detail' obj.pk %}" class="fw-600 mono text-primary">{{ obj.number }}</a>
+                <div class="text-muted" style="font-size:12px;">{{ obj.inspected_at|date:"Y-m-d H:i" }}</div>
+              </td>
+              <td>
+                {% if obj.return_authorization %}
+                  <a href="{% url 'scm:returnauthorization_detail' obj.return_authorization.pk %}" class="mono fw-600">{{ obj.return_authorization.number }}</a>
+                  <div class="text-muted" style="font-size:12px;">{{ obj.return_authorization.customer.name }}</div>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="fw-600">{{ obj.item.sku }}</span>
+                <div class="text-muted" style="font-size:12px;">{{ obj.item.name }}</div>
+              </td>
+              <td class="mono">{{ obj.quantity }}</td>
+              <td>
+                {% if obj.condition_grade == 'a' %}
+                  <span class="badge badge-green">Grade A</span>
+                {% elif obj.condition_grade == 'b' %}
+                  <span class="badge badge-info">Grade B</span>
+                {% elif obj.condition_grade == 'c' %}
+                  <span class="badge badge-amber">Grade C</span>
+                {% else %}
+                  <span class="badge badge-red">Grade D</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.functional_status == 'pass' %}
+                  <span class="badge badge-green">Pass</span>
+                {% elif obj.functional_status == 'partial' %}
+                  <span class="badge badge-amber">Partial</span>
+                {% elif obj.functional_status == 'fail' %}
+                  <span class="badge badge-red">Fail</span>
+                {% else %}
+                  <span class="badge badge-muted">Untested</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.is_restock_eligible %}
+                  <span class="badge badge-green">Yes</span>
+                {% else %}
+                  <span class="badge badge-red">No</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'passed' %}
+                  <span class="badge badge-green">Passed</span>
+                {% elif obj.status == 'in_progress' %}
+                  <span class="badge badge-info">In Progress</span>
+                {% elif obj.status == 'quarantined' %}
+                  <span class="badge badge-slate">Quarantined</span>
+                {% elif obj.status == 'failed' %}
+                  <span class="badge badge-red">Failed</span>
+                {% else %}
+                  <span class="badge badge-muted">Pending</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:returninspection_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:returninspection_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if is_admin %}
+                    <form method="post" action="{% url 'inventory:returninspection_delete' obj.pk %}" onsubmit="return confirm('Delete this inspection record?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="clipboard-check"></i>
+                  <h3>No return inspections found</h3>
+                  <p>Create an inspection record to evaluate physical condition and verify return merchandise.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
