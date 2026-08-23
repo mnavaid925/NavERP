@@ -72,7 +72,8 @@ def locationnetwork_detail(request, pk):
     return render(request, "inventory/multilocation/locationnetwork/detail.html", {
         "obj": obj,
         "path_label": obj.path(),
-        "children": obj.children.all().order_by("code"),
+        "children": (obj.children.all().order_by("code")
+                     .select_related("warehouse")),
         "is_admin": admin,
     })
 
