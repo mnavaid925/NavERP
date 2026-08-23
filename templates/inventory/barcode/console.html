@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title flex items-center gap-2">Scan Console
-        <span class="badge badge-info">{{ request.GET.mode|default:"single"|title }} Mode</span>
+        <span class="badge badge-info">{% if mode == 'batch' %}Batch{% else %}Single{% endif %} Mode</span>
       </h1>
       <div class="breadcrumb">
         <a href="{% url 'inventory:overview' %}">Inventory</a>
