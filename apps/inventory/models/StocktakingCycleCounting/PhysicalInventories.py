@@ -19,6 +19,8 @@ Lifecycle (verb-driven, status editable=False)::
 quietly dropped with bins uncounted. Every verb re-reads its row FOR UPDATE inside the
 atomic block, mirroring the reservation lifecycle.
 """
+import datetime
+
 from django.conf import settings
 from django.utils import timezone
 
@@ -90,9 +92,21 @@ class PhysicalInventory(TenantNumbered):
     def spawned_tasks(self):
         from apps.scm.models import CycleCountTask
 
-        return CycleCountTask.objects.filter(
+        # notes is an unindexed TextField on the spine, so a bare left-anchored
+        # prefix match full-scans the tenant's sheets on every detail render / verb.
+        # start() mints every sheet with scheduled_date == the day it ran — recorded
+        # as started_at — so bounding the scan to that day (±1 for a midnight
+        # crossing) lets the spine's own indexed (tenant, scheduled_date) pair narrow
+        # the candidate rows first. Draft events (started_at None) own no sheets yet,
+        # so they stay unbounded without harm. No scm schema change needed.
+        qs = CycleCountTask.objects.filter(
             tenant_id=self.tenant_id,
             notes__startswith=self.task_marker())
+        if self.started_at:
+            day = timezone.localdate(self.started_at)
+            qs = qs.filter(scheduled_date__gte=day - datetime.timedelta(days=1),
+                           scheduled_date__lte=day + datetime.timedelta(days=1))
+        return qs
 
     @property
     def coverage(self):
