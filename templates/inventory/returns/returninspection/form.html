@@ -18,6 +18,8 @@
 
   <form method="post" class="space-y-6">
     {% csrf_token %}
+    {# The disposition is prefilled from the bench (?disp=) but deliberately has no visible picker — carry it through the POST or "Pending QA" can never flip to "Inspected". #}
+    <input type="hidden" name="return_disposition" value="{{ form.return_disposition.value|default:'' }}">
     <div class="card">
       <div class="card-header">
         <h2 class="card-title">Inspection Information</h2>
