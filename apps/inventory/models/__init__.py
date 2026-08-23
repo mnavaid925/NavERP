@@ -8,6 +8,8 @@ from .Catalog.ItemPrices import ItemPrice
 from .Catalog.ProductFiles import ProductFile
 from .InventoryTrackingControl.InventoryReservations import InventoryReservation
 from .InventoryTrackingControl.StockStatuses import StockStatus
+from .LotSerialTracking.LotNumberRules import LotNumberRule
+from .LotSerialTracking.ShelfLifePolicies import FLAG_CSS, ShelfLifePolicy, classify_lot
 from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
 from .PurchaseOrderManagement.Approvals import PurchaseOrderApproval
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatch
@@ -20,4 +22,5 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "PurchaseOrderApprovalRule", "PurchaseOrderApproval", "PurchaseOrderDispatch",
            "PutawayRule", "resolve_putaway_suggestion",
            "BinCapacity", "CrossDockOrder",
-           "StockStatus", "InventoryReservation"]
+           "StockStatus", "InventoryReservation",
+           "LotNumberRule", "ShelfLifePolicy", "classify_lot", "FLAG_CSS"]
