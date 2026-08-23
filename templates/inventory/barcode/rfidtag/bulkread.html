@@ -22,11 +22,6 @@
     <div class="col-span-2">
       <form method="post">
         {% csrf_token %}
-        {% if form.non_field_errors %}
-          <div class="form-error mb-4">
-            {{ form.non_field_errors }}
-          </div>
-        {% endif %}
         <div class="card">
           <div class="card-header flex justify-between items-center">
             <h2 class="card-title"><i data-lucide="radio"></i> Reader Dump</h2>
@@ -38,7 +33,6 @@
               <textarea name="epcs" id="epcs" rows="10" class="form-textarea mono"
                         placeholder="E280-6894-0000-0000-0000-0001&#10;3000A1B2C3D4E5F6&#10;&#10;One EPC per line…"></textarea>
               <div class="form-help">One EPC per line, up to 500 reads. Blank lines and whitespace are ignored.</div>
-              {% if form.epcs.errors %}<div class="form-error">{{ form.epcs.errors }}</div>{% endif %}
             </div>
 
             <div class="form-group">
