@@ -143,6 +143,11 @@ def resolve_disposition_routing(item, condition_grade="a", category=None, *, rul
             .select_related("item", "category", "destination_location")
             .order_by("priority", "id")
         )
+    elif effective_tenant is not None:
+        # A caller-supplied list is trusted for ORDER, never for TENANCY — filter it here
+        # so a future unfiltered caller cannot leak another workspace's routing rules.
+        tenant_pk = getattr(effective_tenant, "pk", None)
+        rules = [r for r in rules if r.tenant_id == tenant_pk]
 
     item_id = getattr(item, "pk", item)
     cat_id = getattr(category, "pk", getattr(item, "category_id", None))
