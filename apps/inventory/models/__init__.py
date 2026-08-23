@@ -14,6 +14,15 @@ from .PurchaseOrderManagement.ApprovalRules import PurchaseOrderApprovalRule
 from .PurchaseOrderManagement.Approvals import PurchaseOrderApproval
 from .PurchaseOrderManagement.Dispatches import PurchaseOrderDispatch
 from .ReceivingPutaway.PutawayRules import PutawayRule, resolve_putaway_suggestion
+from .StockMovementTransfers import (
+    APPLIES_TO_CHOICES,
+    SCOPE_ALL,
+    SCOPE_INTER,
+    SCOPE_INTRA,
+    TransferApproval,
+    TransferApprovalRule,
+    TransferRoute,
+)
 from .VendorSupplierManagement.VendorCommunications import VendorCommunication
 from .WarehousingBinManagement.BinCapacities import BinCapacity
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrder
@@ -23,4 +32,6 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "PutawayRule", "resolve_putaway_suggestion",
            "BinCapacity", "CrossDockOrder",
            "StockStatus", "InventoryReservation",
-           "LotNumberRule", "ShelfLifePolicy", "classify_lot", "FLAG_CSS"]
+           "LotNumberRule", "ShelfLifePolicy", "classify_lot", "FLAG_CSS",
+           "TransferRoute", "TransferApprovalRule", "TransferApproval",
+           "APPLIES_TO_CHOICES", "SCOPE_ALL", "SCOPE_INTER", "SCOPE_INTRA"]
