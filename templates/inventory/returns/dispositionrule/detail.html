@@ -53,7 +53,7 @@
               <dt class="text-muted" style="font-size:13px;">Item Pinning</dt>
               <dd class="mt-1">
                 {% if obj.item %}
-                  <a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600 text-primary">{{ obj.item.sku }}</a>
+                  <a href="{% url 'scm:item_detail' obj.item.pk %}" class="fw-600 text-brand">{{ obj.item.sku }}</a>
                   <span class="text-muted">({{ obj.item.name }})</span>
                 {% else %}
                   <span class="text-muted">Any Item (Not item-pinned)</span>
@@ -108,7 +108,7 @@
               <dt class="text-muted" style="font-size:13px;">Target Destination Location</dt>
               <dd class="mt-1">
                 {% if obj.destination_location %}
-                  <a href="{% url 'scm:location_detail' obj.destination_location.pk %}" class="mono fw-600 text-primary">
+                  <a href="{% url 'scm:location_detail' obj.destination_location.pk %}" class="mono fw-600 text-brand">
                     {{ obj.destination_location.code }}
                   </a>
                   <span class="text-muted">({{ obj.destination_location.name }})</span>
