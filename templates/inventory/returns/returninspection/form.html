@@ -151,7 +151,7 @@
         {{ formset.management_form }}
         <div class="space-y-4">
           {% for ck_form in formset %}
-            <div class="grid grid-cols-12 gap-3 items-center border-b border-slate-100 pb-3">
+            <div class="grid grid-cols-12 gap-3 items-center pb-3" style="border-bottom:1px solid var(--border);">
               {{ ck_form.id }}
               <div class="col-span-5">
                 <label class="form-label" style="font-size:12px;" for="{{ ck_form.checkpoint.id_for_label }}">Checkpoint</label>
