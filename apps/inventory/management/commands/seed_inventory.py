@@ -1252,6 +1252,6 @@ class Command(BaseCommand):
         except ValidationError:
             pass
         self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: {live.number} counting "
+            f"  {tenant.name}: {live.number} {live.get_status_display().lower()} "
             f"({live.spawned_tasks().count()} sheets spawned); "
-            f"{done.number} reconciled."))
+            f"{done.number} {done.get_status_display().lower()}."))
