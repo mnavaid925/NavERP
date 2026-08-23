@@ -66,7 +66,13 @@ class PhysicalInventory(TenantNumbered):
     class Meta:
         ordering = ["-scheduled_date", "-id"]
         unique_together = ("tenant", "number")
-        indexes = [models.Index(fields=["tenant", "status"], name="inv_phy_tnt_status_idx")]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="inv_phy_tnt_status_idx"),
+            # The default ordering is -scheduled_date: without this every paginated
+            # list render filesorts the tenant's rows.
+            models.Index(fields=["tenant", "-scheduled_date"],
+                         name="inv_phy_tnt_sched_idx"),
+        ]
 
     # -- provenance -----------------------------------------------------------------------------
 
