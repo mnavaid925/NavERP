@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Global Stock Visibility{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Global Stock Visibility</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Multi-Location Management</span><span class="sep">›</span><span>Global Stock Visibility</span></div>
+      <p class="text-muted">Operational visibility across the network tree — not valuation, not ATP. On-hand rolls up from each attached warehouse's ledger; in-transit counts are additive information only, never subtracted from on-hand (transfer legs post atomically at completion).</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:locationnetwork_list' %}" class="btn btn-outline"><i data-lucide="git-fork"></i> Manage Nodes</a>
+      <a href="{% url 'scm:reorderrule_list' %}" class="btn btn-outline"><i data-lucide="sliders-horizontal"></i> Reorder Rules</a>
+      <a href="{% url 'inventory:transferroute_list' %}" class="btn btn-outline"><i data-lucide="arrow-left-right"></i> Transfer Routes</a>
+      <a href="{% url 'inventory:itemprice_list' %}" class="btn btn-outline"><i data-lucide="tag"></i> Item Prices</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="warehouse"></i></div>
+      <div class="stat-value">{{ stats.sites_attached }}</div>
+      <div class="stat-label">Sites attached to nodes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="map-pin"></i></div>
+      <div class="stat-value">{{ stats.sites_unassigned }}</div>
+      <div class="stat-label">Sites unassigned</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{{ stats.network_stock_total|floatformat:"-2"|default:"0" }}</div>
+      <div class="stat-label">Network on-hand units</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{{ stats.in_transit_total|floatformat:"-2"|default:"0" }}</div>
+      <div class="stat-label">Units in transit</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Filter by node code or name…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:global_stock' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Node</th><th>Warehouses</th><th style="text-align:right;">On Hand</th><th style="text-align:right;">Stock Value</th><th style="text-align:right;">In Transit — In</th><th style="text-align:right;">In Transit — Out</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            {% if not row.node %}
+              <tr>
+                <td>
+                  <span class="text-muted" style="font-style:italic; padding-left:{% if row.depth %}{{ row.depth }}{% else %}0{% endif %}rem; display:inline-block;">{% if row.path_label %}{{ row.path_label }}{% else %}Unassigned sites{% endif %}</span>
+                </td>
+                <td>
+                  {% if row.own_warehouses %}
+                    <span class="badge badge-info">{{ row.own_warehouses|length }}</span>
+                    <div style="margin-top:.25rem;">
+                      {% for wh in row.own_warehouses %}<a href="{% url 'scm:location_detail' wh.pk %}" class="mono" style="font-size:12px; margin-right:.5rem;">{{ wh.code }}</a>{% endfor %}
+                    </div>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td style="text-align:right;" class="mono">{{ row.stock_total|floatformat:"-2"|default:"0" }}</td>
+                <td style="text-align:right;" class="mono">{% if row.stock_value or row.stock_value == 0 %}{{ row.stock_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td style="text-align:right;" class="mono">{{ row.in_transit_in|floatformat:"-2"|default:"0" }}</td>
+                <td style="text-align:right;" class="mono">{{ row.in_transit_out|floatformat:"-2"|default:"0" }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td>
+                  <div style="padding-left:{% if row.depth %}{{ row.depth }}{% else %}0{% endif %}rem;">
+                    <span class="badge {{ row.node.node_css }}">{{ row.node.get_node_type_display }}</span>
+                    <a href="{% url 'inventory:locationnetwork_detail' row.node.pk %}" class="mono fw-600" style="margin-left:.35rem;">{{ row.path_label }}</a>
+                    {% if row.node.name %}<div class="text-muted" style="font-size:12px;">{{ row.node.name }}</div>{% endif %}
+                  </div>
+                </td>
+                <td>
+                  {% if row.own_warehouses %}
+                    <span class="badge badge-info">{{ row.own_warehouses|length }}</span>
+                    <div style="margin-top:.25rem;">
+                      {% for wh in row.own_warehouses %}<a href="{% url 'scm:location_detail' wh.pk %}" class="mono" style="font-size:12px; margin-right:.5rem;">{{ wh.code }}</a>{% endfor %}
+                    </div>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td style="text-align:right;" class="mono">{{ row.stock_total|floatformat:"-2"|default:"0" }}</td>
+                <td style="text-align:right;" class="mono">{% if row.stock_value or row.stock_value == 0 %}{{ row.stock_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td style="text-align:right;" class="mono">{{ row.in_transit_in|floatformat:"-2"|default:"0" }}</td>
+                <td style="text-align:right;" class="mono">{{ row.in_transit_out|floatformat:"-2"|default:"0" }}</td>
+              </tr>
+            {% endif %}
+          {% empty %}
+            <tr>
+              <td colspan="6">
+                <div class="empty-state">
+                  <i data-lucide="globe"></i>
+                  {% if q %}
+                    <h3>No nodes match your search</h3>
+                    <p>No node code or name contains "{{ q }}" — clear the filter to see the full network tree.</p>
+                  {% else %}
+                    <h3>No network nodes yet</h3>
+                    <p>Build the location hierarchy first and this roll-up computes itself over it.</p>
+                    {% if is_admin %}<a href="{% url 'inventory:locationnetwork_create' %}" class="btn btn-primary" style="margin-top:.5rem;"><i data-lucide="plus"></i> Add Node</a>{% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
