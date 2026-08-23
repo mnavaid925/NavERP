@@ -201,9 +201,10 @@ def _build_label_svg(obj):
         bc = barcode.get(name_map[obj.symbology], obj.payload, writer=SVGWriter())
         bc.write(buf)
         return buf.getvalue()
-    # NOTE: KeyError is caught deliberately — python-barcode's Code39 checksums the code
-    # BEFORE validating it, so an out-of-alphabet character surfaces as a bare KeyError,
-    # not as IllegalCharacterError.
+    # NOTE: KeyError stays in this tuple deliberately — python-barcode upper-cases the code
+    # BEFORE anything else (lowercase payloads normalize and render fine), but Code39 then
+    # checksums via a character-map index BEFORE check_code() validates the alphabet, so an
+    # out-of-alphabet character still escapes as a bare KeyError, not IllegalCharacterError.
     except (NumberOfDigitsError, BarcodeError, KeyError):
         return None
 
@@ -224,9 +225,10 @@ def barcodelabel_render(request, pk):
         return HttpResponse(svg, content_type="image/svg+xml")
 
     # CHOSEN FALLBACK: a STATIC SVG error card (not a code128 re-render) — EAN-13 demands a
-    # 12/13-digit payload and Code 39 forbids lowercase, so we surface the problem to the
-    # operator instead of silently swapping symbologies on the scanner floor. The card text
-    # below is static; the payload is never echoed into it.
+    # 12/13-digit payload and Code 39 rejects out-of-alphabet characters (it upper-cases
+    # first, so lowercase is fine), so we surface the problem to the operator instead of
+    # silently swapping symbologies on the scanner floor. The card text below is static; the
+    # payload is never echoed into it.
     buf = BytesIO()
     buf.write(
         b'<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64">'
