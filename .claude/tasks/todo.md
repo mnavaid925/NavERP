@@ -26322,3 +26322,38 @@ request.tenant_id (middleware never sets it) so every DELETE POST 500'd — fixe
 - [x] Four files per the parallel test wave: test_reqmgmt_{models(19),forms(15+fixes),views(18+tz-pin),security(16)}.py — every function `test_reqmgmt_*`, shared fixtures added to apps/procurement/tests/conftest.py (requisition_approved_a/pending_a on the scm spine, template_with_lines_a, amendment_pending_a).
 - [x] Full unfiltered app suite GREEN via junitxml: **158 passed / 0 failed / 0 errors / 0 skipped** (pytest-django, --no-migrations SQLite in-memory; runner kills long shells under concurrent-session load, so the XML report is the source of truth).
 - [x] Fixes surfaced BY the wave: midnight-boundary flake (test pinned to timezone.now() like the view); duplicate-target twin-deleted assertion matched Django's dropped-forms behavior; helper default type mismatch.
+
+
+## 5.7 Stock Movement & Transfers (inventory) � built 2026-08-23
+
+Governance layer over SCM 4.3's StockTransfer spine (L36): TransferRoute (routing catalog),
+TransferApprovalRule (scope + half-open unit band -> tier count, most-specific-wins, one
+default tier when nothing matches), TransferApproval [TA-] per-tier decision rows with
+rejection-replay semantics. The board classifies every spine movement LIVE into inter- vs
+intra-warehouse by a warehouse-root walk (no scope column), submit parks drafts at the new
+spine `pending_approval` state optionally choosing a route, and the queue's tier decisions
+run under select_for_update on the spine row; clearing the final tier performs the spine's
+own transition to `approved`, which scm's complete action now accepts alongside draft.
+Spine evolution was additive-only (scm 0035: two statuses + nullable route FK). Verified:
+migrate clean, seeder x2 idempotent, manage.py check green, full HTTP smoke (all pages 200,
+content assertions, cross-tenant IDOR 404s, refusal paths flash not 500). NOTE: pytest-django
+DB-backed runs are killed by this session's sandbox (plain pytest runs fine); the two new
+test files collect cleanly (23 tests) but need a normal shell to execute.
+
+### 5.8 Lot & Serial Number Tracking (this session)
+Two models around the SCM LotSerial master: LotNumberRule (most-specific-wins batch-number
+patterns; generate() mints spine rows with a collision-retried sequence, refuses untracked/
+foreign/kind-mismatched items, stamps past-dated expiries straight to expired) and
+ShelfLifePolicy (per-SKU amber window + red do-not-ship gate; clean() forbids an amber window
+narrower than the gate). Two computed pages: fefo_board (one grouped ledger query per lot;
+pick order honours policy - enforced sorts true FEFO, advisory keeps item/number order so the
+badge tells the truth) and traceability (?lot= recall trace over the ledger with parent/child
+links matched through shared consumption/production references; unlotted legs excluded from
+genealogy rather than invented). Sidebar 5.8 wired: generation -> rule list, serial tracking ->
+scm master pointer, shelf-life -> FEFO board (+ policies linked from header), genealogy ->
+trace page. seed_inventory seeds rules/policies and mints four expiry-dated demo lots through
+the REAL generate path with genuine opening receipts. Verified: migrate 0013 clean, seeder x2
+idempotent, manage.py check green, 32-check HTTP smoke (all pages 200/302, content asserts,
+cross-tenant IDOR 404s, mint flow end-to-end), 46 new tests green; full app suite run - the
+only failures are files owned by other sessions (test_receiving_forms from a prior pass,
+test_stockmovementtransfers_* mid-flight in the concurrent 5.7 session).
