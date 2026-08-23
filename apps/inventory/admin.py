@@ -8,6 +8,8 @@ from django.contrib import admin
 from apps.inventory.models import (
     BinCapacity,
     CrossDockOrder,
+    FulfillmentWave,
+    FulfillmentWaveOrder,
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
@@ -17,6 +19,9 @@ from apps.inventory.models import (
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
     PutawayRule,
+    ReturnInspection,
+    ReturnInspectionChecklist,
+    DispositionRoutingRule,
     ShelfLifePolicy,
     StockStatus,
     VendorCommunication,
@@ -104,6 +109,21 @@ class PutawayRuleAdmin(admin.ModelAdmin):
     search_fields = ("item__sku", "item__name", "destination__code")
 
 
+@admin.register(FulfillmentWave)
+class FulfillmentWaveAdmin(admin.ModelAdmin):
+    list_display = ("number", "status", "location", "carrier", "ship_method",
+                    "planned_ship_date", "priority")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "description", "criteria_text")
+
+
+@admin.register(FulfillmentWaveOrder)
+class FulfillmentWaveOrderAdmin(admin.ModelAdmin):
+    list_display = ("wave", "sales_order", "added_by", "created_at")
+    list_filter = ("tenant",)
+    search_fields = ("wave__number", "sales_order__number")
+
+
 @admin.register(StockStatus)
 class StockStatusAdmin(admin.ModelAdmin):
     list_display = ("item", "location", "lot_serial", "status", "quantity", "effective_at")
@@ -156,3 +176,25 @@ class ShelfLifePolicyAdmin(admin.ModelAdmin):
                     "fefo_enforced")
     list_filter = ("tenant", "fefo_enforced")
     search_fields = ("item__sku", "item__name")
+
+
+class ReturnInspectionChecklistInline(admin.TabularInline):
+    model = ReturnInspectionChecklist
+    extra = 1
+
+
+@admin.register(ReturnInspection)
+class ReturnInspectionAdmin(admin.ModelAdmin):
+    list_display = ("number", "return_authorization", "item", "quantity", "condition_grade",
+                    "functional_status", "status", "inspected_at")
+    list_filter = ("tenant", "status", "condition_grade", "functional_status")
+    search_fields = ("number", "return_authorization__number", "item__sku", "item__name", "findings")
+    inlines = [ReturnInspectionChecklistInline]
+
+
+@admin.register(DispositionRoutingRule)
+class DispositionRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "item", "category", "condition_grade", "suggested_disposition",
+                    "destination_location", "priority", "is_active")
+    list_filter = ("tenant", "is_active", "condition_grade", "suggested_disposition")
+    search_fields = ("name", "item__sku", "item__name", "notes")
