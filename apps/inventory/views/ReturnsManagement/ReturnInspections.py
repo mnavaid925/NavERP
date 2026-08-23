@@ -28,16 +28,27 @@ def returninspection_list(request):
         )
     )
 
-    # Search & filters
+    # Search & filters — junk GET values (status=zzz, emoji grades) fall back to ""
+    # instead of echoing back into context and rendering a silently empty register.
+    valid_statuses = dict(ReturnInspection.STATUS_CHOICES)
+    valid_grades = dict(ReturnInspection.GRADE_CHOICES)
+    valid_functional = dict(ReturnInspection.FUNCTIONAL_CHOICES)
+
     status = request.GET.get("status", "").strip()
+    if status and status not in valid_statuses:
+        status = ""
     if status:
         qs = qs.filter(status=status)
 
     condition_grade = request.GET.get("condition_grade", "").strip()
+    if condition_grade and condition_grade not in valid_grades:
+        condition_grade = ""
     if condition_grade:
         qs = qs.filter(condition_grade=condition_grade)
 
     functional_status = request.GET.get("functional_status", "").strip()
+    if functional_status and functional_status not in valid_functional:
+        functional_status = ""
     if functional_status:
         qs = qs.filter(functional_status=functional_status)
 
