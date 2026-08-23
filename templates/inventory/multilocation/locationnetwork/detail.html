@@ -21,14 +21,7 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Hierarchy Position</h2></div>
     <div class="card-body">
-      {% if path_label %}
-        <span class="mono fw-600">{{ path_label }}</span>
-      {% else %}
-        {% if obj.parent.parent.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.parent.parent.pk %}" class="mono">{{ obj.parent.parent.parent.code }}</a> <span class="text-muted">›</span> {% endif %}
-        {% if obj.parent.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.parent.pk %}" class="mono">{{ obj.parent.parent.code }}</a> <span class="text-muted">›</span> {% endif %}
-        {% if obj.parent %}<a href="{% url 'inventory:locationnetwork_detail' obj.parent.pk %}" class="mono">{{ obj.parent.code }}</a> <span class="text-muted">›</span> {% endif %}
-        <span class="mono fw-600">{{ obj.code }}</span>
-      {% endif %}
+      {% if path_label %}<span class="mono fw-600">{{ path_label }}</span>{% endif %}
     </div>
   </div>
 
