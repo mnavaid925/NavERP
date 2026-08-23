@@ -101,26 +101,27 @@ def returns_workbench(request):
             "has_inspection": disp.id in inspected_disp_ids,
         })
 
-    # Stats strip
-    total_active_rmas = ReturnAuthorization.objects.filter(
-        tenant=tenant,
-        status__in=["approved", "awaiting_receipt", "partially_received", "received"],
-    ).count()
-    awaiting_bench_count = len(pending_disps)
-    completed_inspections_count = ReturnInspection.objects.filter(
-        tenant=tenant,
-        status="passed",
-    ).count()
-    quarantined_count = ReturnInspection.objects.filter(
-        tenant=tenant,
-        status="quarantined",
-    ).count()
+    # Stats strip — grouped counts, not repeated COUNT(*) scans (house pattern)
+    open_statuses = ["approved", "awaiting_receipt", "partially_received", "received"]
+    rma_status_counts = {
+        row["status"]: row["n"]
+        for row in ReturnAuthorization.objects.filter(tenant=tenant)
+        .filter(status__in=open_statuses)
+        .values("status")
+        .annotate(n=Count("id"))
+    }
+    inspection_status_counts = {
+        row["status"]: row["n"]
+        for row in ReturnInspection.objects.filter(tenant=tenant)
+        .values("status")
+        .annotate(n=Count("id"))
+    }
 
     stats = {
-        "active_rmas": total_active_rmas,
-        "awaiting_bench": awaiting_bench_count,
-        "inspections_passed": completed_inspections_count,
-        "quarantined": quarantined_count,
+        "active_rmas": sum(rma_status_counts.values()),
+        "awaiting_bench": len(pending_disps),
+        "inspections_passed": inspection_status_counts.get("passed", 0),
+        "quarantined": inspection_status_counts.get("quarantined", 0),
     }
 
     # Paginate open RMAs
