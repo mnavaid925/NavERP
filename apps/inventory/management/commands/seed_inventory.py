@@ -40,6 +40,7 @@ from apps.core.models import OrgUnit, Tenant
 from apps.core.utils import write_audit_log
 from apps.inventory.models import (
     BinCapacity,
+    CountProgram,
     CrossDockOrder,
     DispositionRoutingRule,
     FulfillmentWave,
@@ -52,6 +53,7 @@ from apps.inventory.models import (
     PurchaseOrderApproval,
     PurchaseOrderApprovalRule,
     PurchaseOrderDispatch,
+    PhysicalInventory,
     PutawayRule,
     ReturnInspection,
     ReturnInspectionChecklist,
@@ -167,7 +169,9 @@ class Command(BaseCommand):
                         + ReturnInspection.objects.all().count()
                         + DispositionRoutingRule.objects.all().count()
                          + FulfillmentWaveOrder.objects.all().count()
-                         + FulfillmentWave.objects.all().count())
+                         + FulfillmentWave.objects.all().count()
+                        + CountProgram.objects.all().count()
+                        + PhysicalInventory.objects.all().count())
             ReturnInspectionChecklist.objects.all().delete()
             ReturnInspection.objects.all().delete()
             DispositionRoutingRule.objects.all().delete()
@@ -188,6 +192,8 @@ class Command(BaseCommand):
             TransferRoute.objects.all().delete()
             LotNumberRule.objects.all().delete()
             ShelfLifePolicy.objects.all().delete()
+            CountProgram.objects.all().delete()
+            PhysicalInventory.objects.all().delete()
             FulfillmentWaveOrder.objects.all().delete()  # membership rows before their wave headers
             FulfillmentWave.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
@@ -210,6 +216,7 @@ class Command(BaseCommand):
             self._seed_lot_tracking(tenant, items)
             self._seed_returns_management(tenant, items)
             self._seed_fulfillment_waves(tenant, items)
+            self._seed_stocktaking(tenant, items)
 
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -1183,3 +1190,68 @@ class Command(BaseCommand):
             created += 1
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {created} fulfillment waves over {len(open_orders)} sales orders."))
+
+    def _seed_stocktaking(self, tenant, items):
+        """5.11 Stocktaking & Cycle Counting - a recurring program and a walked
+        freeze event over the seeded WH-MAIN tree. Sheets are NEVER minted here as
+        rows alone: the event goes through the REAL start()/reconcile() verbs so its
+        spawned CycleCountTasks carry genuine provenance markers and honest statuses;
+        the program's first run is left for the demo user to click."""
+        from apps.scm.models import Location
+
+        if CountProgram.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"  {tenant.name}: stocktaking programs already present, skipping.")
+        else:
+            zone = Location.objects.filter(tenant=tenant, code="WH-MAIN-ZA").first()
+            target = zone or Location.objects.filter(
+                tenant=tenant, code="WH-MAIN", location_type="warehouse").first()
+            if target is None:
+                self.stdout.write(
+                    f"  {tenant.name}: no WH-MAIN tree - run `seed_scm` first, "
+                    "skipping the count program.")
+            else:
+                CountProgram.objects.create(
+                    tenant=tenant, name="Weekly Zone A cycle", location=target,
+                    abc_class="", frequency="weekly", weekday=0, count_method="zone",
+                    notes="Every Monday morning, before picking starts.")
+                self.stdout.write(self.style.SUCCESS("  1 count program (Zone A weekly)."))
+
+        if PhysicalInventory.objects.filter(tenant=tenant).exists():
+            self.stdout.write(
+                f"  {tenant.name}: physical inventories already present, skipping.")
+            return
+        User = get_user_model()
+        user = User.objects.filter(tenant=tenant).order_by("pk").first()
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN",
+                                       location_type="warehouse").first()
+        if user is None or main is None:
+            self.stdout.write(
+                f"  {tenant.name}: no workspace user or WH-MAIN - run `seed_accounts`/"
+                "`seed_scm` first, skipping the physical inventory.")
+            return
+
+        today = timezone.localdate()
+        done = PhysicalInventory.objects.create(
+            tenant=tenant, warehouse=main,
+            scheduled_date=today - datetime.timedelta(days=30),
+            requested_by=user, notes="Seeded half-year wall-to-wall - already closed.")
+        try:
+            done.start(user)
+            done.reconcile(user)
+        except ValidationError:
+            pass  # spine state moved on; leave the honest status rather than fake it
+
+        live = PhysicalInventory(
+            tenant=tenant, warehouse=main, scheduled_date=today,
+            requested_by=user,
+            notes="Seeded annual count - frozen, sheets awaiting counters.")
+        live.save()
+        try:
+            live.start(user)
+        except ValidationError:
+            pass
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {live.number} counting "
+            f"({live.spawned_tasks().count()} sheets spawned); "
+            f"{done.number} reconciled."))
