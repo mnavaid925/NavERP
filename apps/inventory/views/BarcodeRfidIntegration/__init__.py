@@ -7,6 +7,7 @@ from .BarcodeLabels import (
     barcodelabel_list,
     barcodelabel_print,
     barcodelabel_render,
+    barcodelabel_void,
 )
 from .RfidTags import (
     rfidtag_activate,
@@ -37,6 +38,7 @@ __all__ = [
     "barcodelabel_delete",
     "barcodelabel_print",
     "barcodelabel_render",
+    "barcodelabel_void",
     "scan_console",
     "scansession_list",
     "scansession_detail",
