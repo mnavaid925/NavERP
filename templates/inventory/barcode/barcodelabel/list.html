@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Barcode Labels — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Barcode Labels</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <span>Barcode Labels</span>
+      </div>
+      <p class="text-muted">Design, print and retire barcode labels for items, locations, lots and free-form payloads.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:scan_console' %}" class="btn btn-outline"><i data-lucide="scan-line"></i> Scan Console</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:barcodelabel_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Label</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="barcode"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Labels</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="file-text"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.draft }}</div>
+        <div class="stat-label">Drafts</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="printer"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.printed }}</div>
+        <div class="stat-label">Printed</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ban"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.void }}</div>
+        <div class="stat-label">Voided</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by label number, payload or target reference…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="label_kind" aria-label="Label Kind" class="form-select">
+            <option value="">All Kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.label_kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:barcodelabel_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Label Number</th>
+            <th>Payload</th>
+            <th>Symbology</th>
+            <th>Kind</th>
+            <th>Target</th>
+            <th>Pallet Ref</th>
+            <th>Copies</th>
+            <th>Status</th>
+            <th>Printed At</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:barcodelabel_detail' obj.pk %}" class="mono fw-600 text-brand">{{ obj.number }}</a>
+              </td>
+              <td><span class="mono">{{ obj.payload|truncatechars:32 }}</span></td>
+              <td><span class="badge badge-slate">{{ obj.get_symbology_display }}</span></td>
+              <td><span class="badge badge-info">{{ obj.get_label_kind_display }}</span></td>
+              <td>
+                {% if obj.target_type == 'item' and obj.item %}
+                  <span class="fw-600">{{ obj.item.sku }}</span>
+                {% elif obj.target_type == 'location' and obj.location %}
+                  <span class="mono fw-600">{{ obj.location.code }}</span>
+                {% elif obj.target_type == 'lot' and obj.lot_serial %}
+                  <span class="mono fw-600">{{ obj.lot_serial.number }}</span>
+                {% else %}
+                  <span class="text-muted">Free-form{{ obj.target_ref|default:'' }}</span>
+                {% endif %}
+              </td>
+              <td class="mono">{{ obj.pallet_ref|default:"—" }}</td>
+              <td class="mono fw-600">{{ obj.copies }}</td>
+              <td>
+                {% if obj.status == 'draft' %}
+                  <span class="badge badge-muted">Draft</span>
+                {% elif obj.status == 'printed' %}
+                  <span class="badge badge-green">Printed</span>
+                {% elif obj.status == 'void' %}
+                  <span class="badge badge-red">Void</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>{{ obj.printed_at|date:"Y-m-d H:i"|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:barcodelabel_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:barcodelabel_print' obj.pk %}" class="btn-icon" title="Print Run"><i data-lucide="printer"></i></a>
+                  <a href="{% url 'inventory:barcodelabel_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if is_admin %}
+                    <form method="post" action="{% url 'inventory:barcodelabel_delete' obj.pk %}" onsubmit="return confirm('Delete this barcode label?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="barcode"></i>
+                  <h3>No barcode labels found</h3>
+                  <p>Create a label to start encoding items, locations or lots into scannable symbologies.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
