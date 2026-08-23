@@ -1247,6 +1247,20 @@ LIVE_LINKS = {
         "Shelf-Life & Expiry Management": "inventory:fefo_board",     # bullet (FEFO pick order + policies linked from its header)
         "Traceability & Genealogy":       "inventory:traceability",   # bullet (computed recall trace over StockMove)
     },
+    # 5.11 Stocktaking & Cycle Counting. The count EXECUTION spine is 4.4's
+    # scm.CycleCountTask (+lines): blind server-side expected snapshots and
+    # reconciliation into exactly one StockAdjustment (L36 - point at it, never
+    # re-declare it), so the Blind Counts bullet maps straight at that master.
+    # What nothing else provides is the recurring CALENDAR (programs minting spine
+    # sheets on a daily/weekly/monthly cadence over zones or ABC classes), the
+    # warehouse-wide FREEZE event that spawns one sheet per bin and holds until
+    # every sheet closes, and the analysis lens over counted-vs-expected variance.
+    "5.11": {
+        "Full Physical Inventory":         "inventory:physicalinventory_list",  # bullet (PHY- freeze event orchestrating spine sheets)
+        "Cycle Count Scheduling":          "inventory:countprogram_list",       # bullet (CTP- recurring cadence minting spine sheets)
+        "Blind Counts":                    "scm:cyclecounttask_list",           # bullet (4.4 execution master owns blind counting)
+        "Variance Analysis & Adjustments": "inventory:variance_report",         # bullet (computed page - no table of its own)
+    },
     # 5.9 Order Management & Fulfillment. The order DOCUMENT and its fulfilment lifecycle are
     # 4.5's scm.SalesOrder (credit checks, soft allocations, backorders) with 4.4 PickTask doing
     # the picking and 4.6 TMS owning carriers/shipments (L36 - point at them, never re-declare).
