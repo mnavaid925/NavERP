@@ -516,20 +516,44 @@ def rma_b(db, tenant_b, customer_party_b):
 
 
 @pytest.fixture
-def rma_line_a(db, tenant_a, rma_a, item_a):
-    from apps.scm.models import ReturnLine
-    return ReturnLine.objects.create(
-        tenant=tenant_a, return_authorization=rma_a, item=item_a, quantity_authorized=Decimal("2.0000"),
-        quantity_received=Decimal("2.0000"), unit_price=Decimal("12.00"), unit_cost=Decimal("8.00")
+def return_reason_a(db, tenant_a):
+    """A customer-fault reason that permits a restock (mirrors scm's own fixture)."""
+    from apps.scm.models import ReturnReason
+    return ReturnReason.objects.create(
+        tenant=tenant_a, code="WRONG-SIZE", name="Wrong size ordered", fault_party="customer",
+        allows_refund=True, allows_store_credit=True, allows_exchange=True,
+        suggested_disposition="restock", sort_order=10,
     )
 
 
 @pytest.fixture
-def rma_line_b(db, tenant_b, rma_b, item_b):
+def return_reason_b(db, tenant_b):
+    from apps.scm.models import ReturnReason
+    return ReturnReason.objects.create(
+        tenant=tenant_b, code="WRONG-SIZE", name="Wrong size ordered", fault_party="customer",
+        allows_refund=True, allows_store_credit=True, allows_exchange=True,
+        suggested_disposition="restock", sort_order=10,
+    )
+
+
+@pytest.fixture
+def rma_line_a(db, rma_a, item_a, return_reason_a):
+    """ReturnLine is tenant-less — reached only through its authorisation."""
     from apps.scm.models import ReturnLine
     return ReturnLine.objects.create(
-        tenant=tenant_b, return_authorization=rma_b, item=item_b, quantity_authorized=Decimal("1.0000"),
-        quantity_received=Decimal("1.0000"), unit_price=Decimal("9.00"), unit_cost=Decimal("5.00")
+        return_authorization=rma_a, item=item_a, quantity_requested=Decimal("2.0000"),
+        quantity_approved=Decimal("2.0000"), reason=return_reason_a,
+        unit_price=Decimal("12.00"), unit_cost=Decimal("8.00")
+    )
+
+
+@pytest.fixture
+def rma_line_b(db, rma_b, item_b, return_reason_b):
+    from apps.scm.models import ReturnLine
+    return ReturnLine.objects.create(
+        return_authorization=rma_b, item=item_b, quantity_requested=Decimal("1.0000"),
+        quantity_approved=Decimal("1.0000"), reason=return_reason_b,
+        unit_price=Decimal("9.00"), unit_cost=Decimal("5.00")
     )
 
 
