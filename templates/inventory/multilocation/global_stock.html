@@ -67,7 +67,7 @@
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td style="text-align:right;" class="mono">{{ row.stock_total|floatformat:"-2"|default:"0" }}</td>
-                <td style="text-align:right;" class="mono">{% if row.stock_value or row.stock_value == 0 %}{{ row.stock_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td style="text-align:right;" class="mono">{{ row.stock_value|floatformat:2 }}</td>
                 <td style="text-align:right;" class="mono">{{ row.in_transit_in|floatformat:"-2"|default:"0" }}</td>
                 <td style="text-align:right;" class="mono">{{ row.in_transit_out|floatformat:"-2"|default:"0" }}</td>
               </tr>
@@ -89,7 +89,7 @@
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td style="text-align:right;" class="mono">{{ row.stock_total|floatformat:"-2"|default:"0" }}</td>
-                <td style="text-align:right;" class="mono">{% if row.stock_value or row.stock_value == 0 %}{{ row.stock_value|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td style="text-align:right;" class="mono">{{ row.stock_value|floatformat:2 }}</td>
                 <td style="text-align:right;" class="mono">{{ row.in_transit_in|floatformat:"-2"|default:"0" }}</td>
                 <td style="text-align:right;" class="mono">{{ row.in_transit_out|floatformat:"-2"|default:"0" }}</td>
               </tr>
