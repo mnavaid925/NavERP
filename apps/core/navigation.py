@@ -1247,7 +1247,31 @@ LIVE_LINKS = {
         "Shelf-Life & Expiry Management": "inventory:fefo_board",     # bullet (FEFO pick order + policies linked from its header)
         "Traceability & Genealogy":       "inventory:traceability",   # bullet (computed recall trace over StockMove)
     },
+    # 5.9 Order Management & Fulfillment. The order DOCUMENT and its fulfilment lifecycle are
+    # 4.5's scm.SalesOrder (credit checks, soft allocations, backorders) with 4.4 PickTask doing
+    # the picking and 4.6 TMS owning carriers/shipments (L36 - point at them, never re-declare).
+    # What nothing else records is Wave Planning: grouping orders into picker-efficient waves -
+    # inventory adds FulfillmentWave [WAV-] + membership rows pointing AT spine orders, a
+    # computed board, and zero SCM writes (release/close/cancel are wave-side bookkeeping only).
+    "5.9": {
+        "Sales Order Processing":   "scm:salesorder_list",   # bullet (4.5's order spine + full lifecycle)
+        "Pick, Pack, Ship Workflow": "scm:picktask_list",    # bullet (4.4 guided picks + packing data; 4.6 dispatch)
+        "Wave Planning":            "inventory:wave_board",  # bullet (computed wave board; wave CRUD linked from it)
+        "Shipping Integration":     "scm:carrier_list",      # bullet (4.6 carrier master + rate cards; label APIs deferred)
+    },
+    # 5.10 Returns Management (RMA). The primary RMA document and financial/ledger postings
+    # belong to SCM 4.10 (ReturnAuthorization, ReturnDisposition, refund settlement queue) per L36:
+    # point RMA and Credit/Refund bullets at the spine. What 5.10 adds is the warehouse floor
+    # receiving inspection layer (checklists, condition grading, restock eligibility) and the
+    # automated disposition routing engine directing returned items to warehouse locations.
+    "5.10": {
+        "Return Merchandise Authorization": "scm:returnauthorization_list",        # bullet (4.10 spine master)
+        "Return Inspection":                "inventory:returninspection_list",     # bullet (warehouse inspection records & checklists)
+        "Disposition Routing":             "inventory:dispositionrule_list",       # bullet (routing rules + suggested destination bins)
+        "Credit/Refund Processing":         "scm:refund_queue",                    # bullet (4.10 settlement queue into accounting)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
+
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
     # 4.1's `scm.PurchaseRequisition` / `scm.PurchaseOrder` (L36: extend the spine, never
     # re-declare it) — the Quick Requisition Entry bullet lands on the fast-track form that drafts
