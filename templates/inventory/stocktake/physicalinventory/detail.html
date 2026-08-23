@@ -50,7 +50,7 @@
               <td><a href="{% url 'scm:cyclecounttask_detail' sheet.pk %}" class="fw-600">{{ sheet.number }}</a></td>
               <td>{{ sheet.location.code }}</td>
               <td>{{ sheet.scheduled_date|date:"M d, Y" }}</td>
-              <td>{{ sheet.get_status_display }}</td>
+              <td>{% if sheet.status == "scheduled" %}<span class="badge badge-muted">{{ sheet.get_status_display }}</span>{% elif sheet.status == "in_progress" %}<span class="badge badge-amber">{{ sheet.get_status_display }}</span>{% elif sheet.status == "counted" %}<span class="badge badge-info">{{ sheet.get_status_display }}</span>{% elif sheet.status == "reconciled" %}<span class="badge badge-green">{{ sheet.get_status_display }}</span>{% elif sheet.status == "cancelled" %}<span class="badge badge-slate">{{ sheet.get_status_display }}</span>{% else %}{{ sheet.get_status_display }}{% endif %}</td>
               <td>{% if sheet.adjustment_id %}<a href="{% url 'scm:stockadjustment_detail' sheet.adjustment_id %}">{{ sheet.adjustment.number }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td><a href="{% url 'scm:cyclecounttask_detail' sheet.pk %}" class="btn-icon" title="Open in SCM"><i data-lucide="eye"></i></a></td>
             </tr>
