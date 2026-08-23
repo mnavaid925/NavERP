@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.item.sku }} — Shelf-Life Policy{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.item.sku }} <span class="text-muted">· shelf life</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:shelflifepolicy_list' %}">Shelf-Life Policies</a><span class="sep">›</span><span>{{ obj.item.sku }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:shelflifepolicy_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      <a href="{% url 'inventory:fefo_board' %}?item={{ obj.item_id }}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> FEFO Board</a>
+      <a href="{% url 'inventory:shelflifepolicy_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      <form method="post" action="{% url 'inventory:shelflifepolicy_delete' obj.pk %}" onsubmit="return confirm('Delete this shelf-life policy?');">
+        {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Regime</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Total shelf life</dt><dd>{{ obj.shelf_life_days|default:"—" }}{% if obj.shelf_life_days %} days{% endif %}</dd></div>
+        <div class="detail-item"><dt>Amber window</dt><dd>{{ obj.warning_days }} days before expiry</dd></div>
+        <div class="detail-item"><dt>Do-not-ship gate</dt><dd>{% if obj.min_remaining_days > 0 %}<span class="badge badge-red">&lt; {{ obj.min_remaining_days }} days left</span>{% else %}<span class="badge badge-muted">No gate</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Pick order</dt><dd>{% if obj.fefo_enforced %}<span class="badge badge-green">FEFO enforced</span>{% else %}<span class="badge badge-muted">Advisory only</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Last updated</dt><dd>{{ obj.updated_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Lots Currently Governed by This Regime</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Lot / Serial</th><th>Status</th><th>Expiry</th><th>Verdict today</th></tr></thead>
+        <tbody>
+          {% for row in lot_rows %}
+            <tr>
+              <td><a href="{% url 'scm:lotserial_detail' row.lot.pk %}" class="fw-600">{{ row.lot.number }}</a></td>
+              <td><span class="badge badge-info">{{ row.lot.get_status_display }}</span></td>
+              <td>{{ row.lot.expiry_date|date:"M d, Y"|default:"—" }}</td>
+              <td><span class="badge {{ row.css }}">{{ row.label }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="package-open"></i><h3>No lots for this SKU</h3><p>Mint a batch from the numbering-rule page at receiving time — it will appear here with its verdict immediately.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
