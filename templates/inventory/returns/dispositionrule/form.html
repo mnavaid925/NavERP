@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.name }}{% else %}New Disposition Routing Rule{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Routing Rule{% else %}New Disposition Routing Rule{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:returns_workbench' %}">Returns Management</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:dispositionrule_list' %}">Disposition Rules</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Rule Definition</h2>
+      </div>
+      <div class="card-body">
+        {% if form.non_field_errors %}
+          <div class="form-error mb-4">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.name.id_for_label }}">Rule Name *</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.item.id_for_label }}">Specific Item SKU (Optional)</label>
+            {{ form.item }}
+            <p class="text-muted" style="font-size:12px; margin-top:4px;">Leave blank if rule applies to an entire category or all items.</p>
+            {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.category.id_for_label }}">Item Category (Optional)</label>
+            {{ form.category }}
+            <p class="text-muted" style="font-size:12px; margin-top:4px;">Leave blank if rule applies to all categories.</p>
+            {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.condition_grade.id_for_label }}">Condition Grade Matching *</label>
+            {{ form.condition_grade }}
+            {% if form.condition_grade.errors %}<div class="form-error">{{ form.condition_grade.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.priority.id_for_label }}">Priority (Order) *</label>
+            {{ form.priority }}
+            <p class="text-muted" style="font-size:12px; margin-top:4px;">Lower numbers evaluate before higher numbers.</p>
+            {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.suggested_disposition.id_for_label }}">Suggested Disposition Action *</label>
+            {{ form.suggested_disposition }}
+            {% if form.suggested_disposition.errors %}<div class="form-error">{{ form.suggested_disposition.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.destination_location.id_for_label }}">Target Destination Location</label>
+            {{ form.destination_location }}
+            <p class="text-muted" style="font-size:12px; margin-top:4px;">Recommended destination bin or staging zone.</p>
+            {% if form.destination_location.errors %}<div class="form-error">{{ form.destination_location.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="flex items-center gap-2 cursor-pointer mt-6">
+              {{ form.is_active }}
+              <span class="form-label mb-0">Rule is Active</span>
+            </label>
+            {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="flex items-center gap-2 cursor-pointer mt-6">
+              {{ form.requires_supervisor_approval }}
+              <span class="form-label mb-0">Requires Supervisor Approval</span>
+            </label>
+            {% if form.requires_supervisor_approval.errors %}<div class="form-error">{{ form.requires_supervisor_approval.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes / Routing Instructions</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Rule</button>
+      <a href="{% url 'inventory:dispositionrule_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
