@@ -20,44 +20,48 @@ No lane without result — the failed lane's scope was covered inline (C1–C3, 
 
 ### Important
 
-- [ ] **C1** — views/MultiLocationManagement/LocationNetworks.py — `global_stock` lives inside
+- [x] fixed **C1** — views/MultiLocationManagement/LocationNetworks.py — `global_stock` lives inside
       LocationNetworks.py but the frozen contract names a separate `GlobalStock.py` entity module
       (WarehouseMap precedent). **Fix:** split view + IN_FLIGHT_STATUSES into
       `views/MultiLocationManagement/GlobalStock.py`; keep package __init__ re-export resolving
       (`from .GlobalStock import global_stock`); urls import keeps resolving. New file gets its
       own commit.
-- [ ] **C2** — seed_inventory `_seed_location_network` deviates from the frozen tree: contract
+- [x] fixed **C2** — seed_inventory `_seed_location_network` deviates from the frozen tree: contract
       pins HOLD-CO → REG-NORTH → DC-MAIN(dc)+WH-MAIN and HOLD-CO → DIV-RETAIL → ST-DT+WH-STORE
       with `sites_unassigned == 0`; code builds HQ/R-EAST/R-WEST/ST-01, never demos the `dc`
       badge, attaches only warehouses[0], and its docstring claims get_or_create it doesn't do.
       **Fix:** rebuild per contract codes/tiers (company/region/dc/store all demoed), attach BOTH
       seeded warehouses (sites_unassigned 0), drop the deliberate-unassigned gimmick, fix the
       docstring (plain create, honest about what exists). Keep guard-first idempotency.
-- [ ] **C3** — global_stock measured 5 queries not the frozen 4: depth-≥2 nodes escape
+- [x] fixed **C3** — global_stock measured 5 queries not the frozen 4: depth-≥2 nodes escape
       select_related and re-fetch ancestors in `path()`. **Fix:** build `by_pk` node map once and
       resolve `path_label` iteratively over the map (no `.parent` DB hits), restoring flat-4 at
       any depth. Verify with CaptureQueriesContext.
 
 ### Minor
 
-- [ ] **M1** — urls/__init__: rename alias to contract-pinned `_mlm_locationnetworks` IS current;
+- [x] fixed **M1** — urls/__init__: rename alias to contract-pinned `_mlm_locationnetworks` IS current;
       move concat entry directly under `*_fo_waves` per todo placement note (cosmetic, first-match
       unaffected).
-- [ ] **M2** — `?is_active=` uses active/inactive while todo pinned true/false — ACCEPT the
+- [x] fixed **M2** — `?is_active=` uses active/inactive while todo pinned true/false — ACCEPT the
       implemented vocabulary and annotate the todo line accordingly (self-consistent template+view).
-- [ ] **M3** — global_stock.html gates empty-state Add Node on undefined `is_admin` (never renders);
+- [x] fixed **M3** — global_stock.html gates empty-state Add Node on undefined `is_admin` (never renders);
       view passes only {rows,stats,q}. **Fix:** pass `is_admin` in global_stock context.
-- [ ] **M4** — detail.html dead manual-breadcrumb else-block (path_label always present) — delete.
-- [ ] **M5** — global_stock.html `{% if row.stock_value or row.stock_value == 0 %}` always true —
+- [x] fixed **M4** — detail.html dead manual-breadcrumb else-block (path_label always present) — delete.
+- [x] fixed **M5** — global_stock.html `{% if row.stock_value or row.stock_value == 0 %}` always true —
       simplify to unconditional floatformat rendering.
-- [ ] **M6** — unassigned pseudo-row appended even when `q` matches nothing, hiding the honest
+- [x] fixed **M6** — unassigned pseudo-row appended even when `q` matches nothing, hiding the honest
       no-match empty state. **Fix:** append pseudo-row only when `not q`.
-- [ ] **M7** — whitespace-only `code` accepted ("   "). **Fix:** strip in form clean (and reject
+- [x] fixed **M7** — whitespace-only `code` accepted ("   "). **Fix:** strip in form clean (and reject
       empty after strip with field error).
-- [ ] **M8** — detail children queryset missing select_related("warehouse") though template derefs
+- [x] fixed **M8** — detail children queryset missing select_related("warehouse") though template derefs
       warehouse per child row. **Fix:** add select_related.
-- [ ] **M9** — seeder `admin` lookup is staff-only; tenant without staff user passes None into
-      release(). Broaden fallback to any tenant user (sibling line ~769 pattern).
+- [~] skipped — already implemented: the wave-release actor lookup (seed_inventory.py:1177-1181)
+      already reads staff-first else ANY tenant user, with an explicit None guard before
+      wave.release(admin) — that is exactly the prescribed pattern (landed with 5.9's dcb7bd00
+      fix; the review read a stale hunk). The reservations release() path uses any-user with a
+      skip guard too (lines 667-673, 714-721). No staff-only `release()` actor remains anywhere
+      in seed_inventory.py; verified by grep at fix time.
 
 ### Accepted-as-is
 
