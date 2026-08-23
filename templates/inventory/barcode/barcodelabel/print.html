@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Print Run {{ obj.number }} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Print Run — {{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:barcodelabel_list' %}">Barcode Labels</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:barcodelabel_detail' obj.pk %}">{{ obj.number }}</a>
+        <span class="sep">›</span>
+        <span>Print</span>
+      </div>
+      <p class="text-muted">
+        Payload <span class="mono fw-600">{{ obj.payload }}</span>
+        &nbsp;<span class="badge badge-slate">{{ obj.get_symbology_display }}</span>
+      </p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:barcodelabel_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Label</a>
+      <form method="post" action="{% url 'inventory:barcodelabel_print' obj.pk %}" style="display:inline;">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit"><i data-lucide="printer"></i> Confirm Print Run</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-6">
+    <div class="card-body flex items-center gap-2">
+      <span class="badge badge-info"><i data-lucide="info"></i> Browser tip</span>
+      <span class="text-muted" style="font-size:13px;">
+        Use your browser's print dialog on this page — it will output
+        <span class="fw-600">{{ copies_range|length }} cop{{ copies_range|length|pluralize:"y,ies" }}</span>
+        of label {{ obj.number }} onto your loaded label stock.
+      </span>
+    </div>
+  </div>
+
+  <!-- Label Frames -->
+  <div class="grid grid-cols-2 gap-4">
+    {% for _ in copies_range %}
+      <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
+        <img src="{% url 'inventory:barcodelabel_render' obj.pk %}" alt="barcode label {{ obj.number }}" style="max-width:100%; height:auto;">
+        <div class="mono fw-600" style="margin-top:8px; color:#1f2933; word-break:break-all;">{{ obj.payload }}</div>
+        <div class="mono text-muted" style="font-size:12px; margin-top:4px;">{{ obj.number }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}
