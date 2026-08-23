@@ -174,11 +174,12 @@ def global_stock(request):
             row["_keep"] = hit
         flat = [row for row in flat if row.pop("_keep")]
 
-    # Orphan honesty LAST: stocked sites no node claims surface under one pseudo-row
-    # (node=None tells the template it isn't a real tier).
+    # Orphan honesty LAST — but only on the unfiltered page: appending the
+    # pseudo-row while ?q= matched nothing would mask the honest no-match empty
+    # state. (node=None tells the template this isn't a real tier.)
     attached_ids = {n.warehouse_id for n in nodes if n.warehouse_id}
     unassigned = [loc for pk, loc in warehouses.items() if pk not in attached_ids]
-    if unassigned:
+    if unassigned and not q:
         un_ids = [loc.pk for loc in unassigned]
         qty, val = totals_for(un_ids)
         flat.append({
