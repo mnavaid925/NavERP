@@ -189,6 +189,12 @@ def scan_console(request):
     sessions = ScanSession.objects.filter(tenant=request.tenant, status="open")[:10]
     recent_events = ScanEvent.objects.filter(tenant=request.tenant)[:25]
 
+    # Deep-link support: list/detail pages append ?session={pk}; validate it against this
+    # tenant's OPEN sessions so a foreign/closed id falls back to no preselection.
+    selected_id = as_db_int(request.GET.get("session"))
+    if selected_id is not None and not any(s.pk == selected_id for s in sessions):
+        selected_id = None
+
     # Rolling-24h capture health — one aggregate over the tenant's events.
     cutoff = timezone.now() - timedelta(days=1)
     agg = ScanEvent.objects.filter(tenant=request.tenant, scanned_at__gte=cutoff).aggregate(
@@ -206,6 +212,7 @@ def scan_console(request):
         {
             "mode": mode,
             "sessions": sessions,
+            "selected_id": selected_id,
             "recent_events": recent_events,
             "stats": stats,
             "is_admin": _is_admin(request.user),
