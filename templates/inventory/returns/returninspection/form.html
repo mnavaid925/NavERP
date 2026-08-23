@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Return Inspection{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Inspection {{ obj.number }}{% else %}New Return Inspection{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:returns_workbench' %}">Returns Management</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:returninspection_list' %}">Inspections</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Inspection Information</h2>
+      </div>
+      <div class="card-body">
+        {% if form.non_field_errors %}
+          <div class="form-error mb-4">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.return_authorization.id_for_label }}">Return Authorization (RMA) *</label>
+            {{ form.return_authorization }}
+            {% if form.return_authorization.errors %}<div class="form-error">{{ form.return_authorization.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.return_line.id_for_label }}">Return Line (Optional)</label>
+            {{ form.return_line }}
+            {% if form.return_line.errors %}<div class="form-error">{{ form.return_line.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.item.id_for_label }}">Item SKU *</label>
+            {{ form.item }}
+            {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.quantity.id_for_label }}">Quantity *</label>
+            {{ form.quantity }}
+            {% if form.quantity.errors %}<div class="form-error">{{ form.quantity.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.lot_serial.id_for_label }}">Lot / Serial Number</label>
+            {{ form.lot_serial }}
+            {% if form.lot_serial.errors %}<div class="form-error">{{ form.lot_serial.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.inspected_by.id_for_label }}">Inspector Party</label>
+            {{ form.inspected_by }}
+            {% if form.inspected_by.errors %}<div class="form-error">{{ form.inspected_by.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.inspected_at.id_for_label }}">Inspected Date &amp; Time</label>
+            {{ form.inspected_at }}
+            {% if form.inspected_at.errors %}<div class="form-error">{{ form.inspected_at.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.status.id_for_label }}">Inspection Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Condition Grading &amp; Testing Criteria</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.packaging_condition.id_for_label }}">Packaging Condition</label>
+            {{ form.packaging_condition }}
+            {% if form.packaging_condition.errors %}<div class="form-error">{{ form.packaging_condition.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.completeness.id_for_label }}">Parts &amp; Accessories Completeness</label>
+            {{ form.completeness }}
+            {% if form.completeness.errors %}<div class="form-error">{{ form.completeness.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.functional_status.id_for_label }}">Functional Test Verdict</label>
+            {{ form.functional_status }}
+            {% if form.functional_status.errors %}<div class="form-error">{{ form.functional_status.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.cosmetic_condition.id_for_label }}">Cosmetic Condition</label>
+            {{ form.cosmetic_condition }}
+            {% if form.cosmetic_condition.errors %}<div class="form-error">{{ form.cosmetic_condition.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.condition_grade.id_for_label }}">Assigned Condition Grade</label>
+            {{ form.condition_grade }}
+            {% if form.condition_grade.errors %}<div class="form-error">{{ form.condition_grade.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.suggested_restock_fee_pct.id_for_label }}">Suggested Restocking Fee %</label>
+            {{ form.suggested_restock_fee_pct }}
+            {% if form.suggested_restock_fee_pct.errors %}<div class="form-error">{{ form.suggested_restock_fee_pct.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="flex items-center gap-2 cursor-pointer mt-6">
+              {{ form.serial_verified }}
+              <span class="form-label mb-0">Serial Number Verified Matching RMA</span>
+            </label>
+            {% if form.serial_verified.errors %}<div class="form-error">{{ form.serial_verified.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="flex items-center gap-2 cursor-pointer mt-6">
+              {{ form.is_restock_eligible }}
+              <span class="form-label mb-0">Eligible for Restocking into Inventory</span>
+            </label>
+            {% if form.is_restock_eligible.errors %}<div class="form-error">{{ form.is_restock_eligible.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.findings.id_for_label }}">Inspector Findings / Notes</label>
+            {{ form.findings }}
+            {% if form.findings.errors %}<div class="form-error">{{ form.findings.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checkpoints FormSet -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Inspection Checkpoints</h2>
+      </div>
+      <div class="card-body">
+        {{ formset.management_form }}
+        <div class="space-y-4">
+          {% for ck_form in formset %}
+            <div class="grid grid-cols-12 gap-3 items-center border-b border-slate-100 pb-3">
+              {{ ck_form.id }}
+              <div class="col-span-5">
+                <label class="form-label" style="font-size:12px;">Checkpoint</label>
+                {{ ck_form.checkpoint }}
+                {% if ck_form.checkpoint.errors %}<div class="form-error">{{ ck_form.checkpoint.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-3">
+                <label class="form-label" style="font-size:12px;">Result</label>
+                {{ ck_form.result }}
+                {% if ck_form.result.errors %}<div class="form-error">{{ ck_form.result.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-3">
+                <label class="form-label" style="font-size:12px;">Notes</label>
+                {{ ck_form.notes }}
+                {% if ck_form.notes.errors %}<div class="form-error">{{ ck_form.notes.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-1 pt-6 text-center">
+                {% if ck_form.DELETE %}
+                  <label class="text-xs text-danger" title="Check to delete">
+                    {{ ck_form.DELETE }} Del
+                  </label>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Inspection</button>
+      <a href="{% url 'inventory:returninspection_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
