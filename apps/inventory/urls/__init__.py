@@ -7,6 +7,7 @@ Django is first-match-wins: within each module the literal routes (`add/`) prece
 ``<int:pk>`` ones. The app introduces NO greedy ``<str:…>`` converter, so there is no cross-module
 shadowing surface to reason about; the first segments (`""`, `attributes/`, `prices/`,
 `files/`, `putaway-rules/`, `putaway-suggestions/`, `waves/`, `waves-board/`,
+`networks/`, `global-stock/`,
 `vendor-communications/`,
 `bin-capacity/`, `cross-dock/`, `warehouse-map/`, `transfers/`, `lot-rules/`,
 `lot-generate/`, `shelf-life-policies/`, `fefo-board/`, `traceability/`,
@@ -18,6 +19,7 @@ distinct whole components and none can swallow another.
 from .Catalog.ItemAttributes import urlpatterns as _cat_itemattributes
 from .Catalog.ItemPrices import urlpatterns as _cat_itemprices
 from .Catalog.ProductFiles import urlpatterns as _cat_productfiles
+from .BarcodeRfidIntegration import urlpatterns as _br_barcode
 from .Catalog.Overview import urlpatterns as _cat_overview
 from .FulfillmentOrchestration.FulfillmentWaves import urlpatterns as _fo_waves
 from .InventoryTrackingControl.InventoryReservations import urlpatterns as _tc_reservations
@@ -25,6 +27,7 @@ from .InventoryTrackingControl.StockLevels import urlpatterns as _tc_stocklevels
 from .InventoryTrackingControl.StockStatuses import urlpatterns as _tc_stockstatuses
 from .ForecastingPlanning import urlpatterns as _fp_forecasting
 from .LotSerialTracking import urlpatterns as _lst_lotserial
+from .MultiLocationManagement.LocationNetworks import urlpatterns as _mlm_locationnetworks
 from .StocktakingCycleCounting import urlpatterns as _stk_stocktake
 from .PurchaseOrderManagement.ApprovalRules import urlpatterns as _po_approvalrules
 from .PurchaseOrderManagement.Approvals import urlpatterns as _po_approvals
@@ -53,6 +56,7 @@ urlpatterns = [
     *_rp_putawayrules,     # ReceivingPutaway/PutawayRules (+ computed suggestions page)
     *_fo_waves,            # FulfillmentOrchestration/FulfillmentWaves (CRUD + verbs + board)
     *_rm_returns,          # ReturnsManagement (inspections, disposition rules, workbench)
+    *_br_barcode,          # BarcodeRfidIntegration (labels, scan console/sessions, RFID tags)
     *_smt_transfers,       # StockMovementTransfers (board/queue/panel + verbs, routes, rules)
     *_vsm_vendorcommunications,  # VendorSupplierManagement/VendorCommunications
     *_wh_bincapacities,    # WarehousingBinManagement/BinCapacities
@@ -62,6 +66,7 @@ urlpatterns = [
     *_tc_stockstatuses,    # InventoryTrackingControl/StockStatuses (CRUD)
     *_tc_reservations,     # InventoryTrackingControl/InventoryReservations (CRUD + lifecycle verbs)
     *_lst_lotserial,       # LotSerialTracking (rules/generate/policies CRUD + FEFO board + trace)
+    *_mlm_locationnetworks,  # MultiLocationManagement/LocationNetworks (CRUD + global stock page)
     *_stk_stocktake,       # StocktakingCycleCounting (programs + physical inventory + variance report)
     *_fp_forecasting,      # ForecastingPlanning (seasonal plans CRUD + ROP/safety-stock board)
 ]
