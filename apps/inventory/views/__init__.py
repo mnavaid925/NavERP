@@ -19,6 +19,7 @@ from .Catalog.ItemPrices import (
 from .BarcodeRfidIntegration import (
     barcodelabel_list, barcodelabel_detail, barcodelabel_create,
     barcodelabel_edit, barcodelabel_delete, barcodelabel_print, barcodelabel_render,
+    barcodelabel_void,
     scan_console, scansession_list, scansession_detail, scansession_create,
     scansession_edit, scansession_close, scansession_delete,
     rfidtag_list, rfidtag_detail, rfidtag_create, rfidtag_edit, rfidtag_delete,
@@ -264,6 +265,7 @@ __all__ = [
     "returns_workbench",
     "barcodelabel_list", "barcodelabel_detail", "barcodelabel_create",
     "barcodelabel_edit", "barcodelabel_delete", "barcodelabel_print", "barcodelabel_render",
+    "barcodelabel_void",
     "scan_console", "scansession_list", "scansession_detail", "scansession_create",
     "scansession_edit", "scansession_close", "scansession_delete",
     "rfidtag_list", "rfidtag_detail", "rfidtag_create", "rfidtag_edit", "rfidtag_delete",
