@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit RFID Tag{% else %}New RFID Tag{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit RFID Tag{% else %}New RFID Tag{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:rfidtag_list' %}">RFID Tags</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="form-error mb-4">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Tag Identity</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.epc.id_for_label }}">EPC (Electronic Product Code) *</label>
+            {{ form.epc }}
+            {% if form.epc.errors %}
+              <div class="form-error">{{ form.epc.errors }}</div>
+            {% else %}
+              <div class="form-help">Hexadecimal identifier — 8 to 64 hex characters (0-9, A-F). Once issued, an EPC is never reused.</div>
+            {% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.kind.id_for_label }}">Tag Kind *</label>
+            {{ form.kind }}
+            {% if form.kind.errors %}<div class="form-error">{{ form.kind.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.item.id_for_label }}">Item</label>
+            {{ form.item }}
+            {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.location.id_for_label }}">Home Location</label>
+            {{ form.location }}
+            {% if form.location.errors %}<div class="form-error">{{ form.location.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.lot_serial.id_for_label }}">Lot / Serial Number</label>
+            {{ form.lot_serial }}
+            {% if form.lot_serial.errors %}<div class="form-error">{{ form.lot_serial.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.target_ref.id_for_label }}">Free-form Target Reference</label>
+            {{ form.target_ref }}
+            {% if form.target_ref.errors %}<div class="form-error">{{ form.target_ref.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.pallet_ref.id_for_label }}">Pallet Reference</label>
+            {{ form.pallet_ref }}
+            {% if form.pallet_ref.errors %}<div class="form-error">{{ form.pallet_ref.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Tag</button>
+      <a href="{% url 'inventory:rfidtag_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
