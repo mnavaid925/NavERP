@@ -21,7 +21,11 @@ def returninspection_list(request):
     """List warehouse return inspections with search, filtering and KPI strip."""
     qs = (
         ReturnInspection.objects.filter(tenant=request.tenant)
-        .select_related("return_authorization", "return_line", "item", "inspected_by")
+        .select_related(
+            "return_authorization",
+            "return_authorization__customer",
+            "return_line", "item", "inspected_by",
+        )
     )
 
     # Search & filters
