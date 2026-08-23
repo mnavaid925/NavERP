@@ -26324,7 +26324,7 @@ request.tenant_id (middleware never sets it) so every DELETE POST 500'd — fixe
 - [x] Fixes surfaced BY the wave: midnight-boundary flake (test pinned to timezone.now() like the view); duplicate-target twin-deleted assertion matched Django's dropped-forms behavior; helper default type mismatch.
 
 
-## 5.7 Stock Movement & Transfers (inventory) � built 2026-08-23
+## 5.7 Stock Movement & Transfers (inventory) � built 2026-08-23
 
 Governance layer over SCM 4.3's StockTransfer spine (L36): TransferRoute (routing catalog),
 TransferApprovalRule (scope + half-open unit band -> tier count, most-specific-wins, one
@@ -26383,3 +26383,192 @@ tests belong to the parallel 5.7 lane.
 **Adoption note:** this session ran while sibling sessions shipped 5.5/5.6/5.7/5.8 in the same
 checkout; migration numbering moved 0005->0008 mid-flight (claimed twice, re-claimed cleanly);
 shared files were edited only after quiescence polls confirmed each sibling had committed.
+
+---
+
+## 5.9 Order Management & Fulfillment (plan — build next)
+
+Research verdict implemented verbatim: bullets 1/2/4 are SCM-owned (4.5 SalesOrder spine, 4.4
+PickTask pick/pack/dispatch, 4.6 Carrier master + rate cards) → LIVE_LINKS pointers only, ZERO
+new tables for them. The one structural gap is the WAVE: `scm.PickTask.wave_ref` is free text
+(`scm_pik_tnt_wave_idx`), no Wave master exists anywhere. Build ONE header + child:
+`FulfillmentWave` [WAV-] + `FulfillmentWaveOrder`. Zero writes into scm — release/cancel/close
+flip only the wave's own status; linking picks stays scm's side (`wave_ref = WAV-#####` typed in
+`scm:picktask_edit`). Progress is DERIVED and None-honest; the order→pick link is a documented
+TEXT CONVENTION (`wave_ref == number`, case-sensitive), never an invented FK (that would be a
+scm migration).
+
+### Contract (frozen names — writers copy verbatim)
+
+**PRIMARY UX [FROZEN]: BOARD PAGE.** "Wave Planning" targets `inventory:wave_board`
+(`waves-board/`) — it satisfies the at-a-glance multi-wave need and carries the derived progress
+columns. The per-wave detail page still renders a small progress panel from the same model
+properties (zero extra cost) but is secondary. Both exist; the board is primary.
+
+- Backend packages `apps/inventory/{models,forms,views,urls}/FulfillmentOrchestration/FulfillmentWaves.py`
+  (+ four sub-package `__init__.py` with docstrings; the models copy re-exports both models,
+  mirroring `ReceivingPutaway/__init__.py`). Sub-module folder FROZEN as `FulfillmentOrchestration`.
+- Templates `templates/inventory/fulfillment/wave/{list,detail,form}.html` +
+  standalone computed page `templates/inventory/fulfillment/wave_board.html`.
+- Model `FulfillmentWave(TenantNumbered)` NUMBER_PREFIX="WAV"; STATUS_CHOICES planned/released/
+  closed/cancelled; EDITABLE_STATUSES=("planned",); ACTIVE_STATUSES=("planned","released").
+  Fields: status CharField(12, default="planned", editable=False); description CharField(255 blank);
+  location FK "scm.Location" SET_NULL null blank related_name="inventory_waves"; carrier FK
+  "scm.Carrier" SET_NULL null blank related_name="inventory_waves"; ship_method CharField(12,
+  choices=SERVICE_LEVEL_CHOICES imported from `apps.scm.models.Carriers`, blank, default="");
+  planned_ship_date DateField(null blank); cutoff_at DateTimeField(null blank); priority
+  PositiveIntegerField(default=100); criteria_text TextField(blank); released_at + closed_at
+  DateTimeField(null blank, editable=False); notes TextField(blank).
+  Meta: ordering ["-created_at","-id"] (created_at confirmed in `_base.TenantOwned`);
+  unique_together ("tenant","number"); indexes [Index(tenant,status,name="inv_wav_tnt_status_idx")].
+  STATUS_CSS frozen: planned=badge-slate, released=badge-info, closed=badge-green,
+  cancelled=badge-red. clean(): per-field cross-tenant guards on location/carrier keyed on
+  `<name>_id` (5.4 C1 pattern). Verbs mirror CrossDockOrder exactly — `_locked()` re-read under
+  `select_for_update()` inside `transaction.atomic()`, audit written INSIDE:
+  - `release(user)`: planned→released; refuses a zero-member wave; stamps released_at.
+  - `close(user)`: released→closed; stamps closed_at.
+  - `cancel(user)`: planned|released→cancelled; stamps closed_at.
+- Derived properties ON FulfillmentWave (None-honest, never stored):
+  - `member_order_count` — len of member rows.
+  - `orders_fulfilled_count` — members whose sales_order.status is in the FROZEN fulfilled-or-later
+    set ("partially_fulfilled", "fulfilled", "invoiced", "closed") pinned from
+    `scm.SalesOrders.STATUS_CHOICES` (cancelled deliberately NOT counted as progress).
+  - `pick_progress_pct` — returns None unless BOTH (a) ≥1 linked `scm.PickTask` matched by the
+    wave_ref==number text convention AND (b) that total >0; else picked+packed / non-cancelled
+    matched ×100 int. Docstring documents the L28-convention linkage honestly.
+- Child `FulfillmentWaveOrder`: tenant FK "core.Tenant" CASCADE related_name="fulfillment_wave_orders"
+  (explicit column — StockTransferLine lesson); wave FK "inventory.FulfillmentWave" CASCADE
+  related_name="orders"; sales_order FK "scm.SalesOrder" PROTECT related_name="inventory_wave_orders";
+  added_by FK settings.AUTH_USER_MODEL SET_NULL null blank related_name="+"; created_at auto_now_add.
+  unique_together ("wave","sales_order"). clean(): cross-tenant sales_order guard.
+  __str__ "{wave.number} · {so.number}".
+- Form `FulfillmentWaveForm(TenantUniqueMixin, TenantModelForm)` Meta.fields EXACTLY
+  [description, location, carrier, ship_method, planned_ship_date, cutoff_at, priority,
+  criteria_text, notes] (status/released_at/closed_at excluded). clean(): `_reject_foreign(self,
+  cleaned, ["location", "carrier"])`. NO custom __init__ [FROZEN]: both scm targets carry their own
+  tenant so TenantModelForm already scopes them (verified 5.4 PutawayRuleForm precedent — no
+  narrowing beyond _reject_foreign exists there either).
+  Second form `FulfillmentWaveOrderForm(TenantUniqueMixin, TenantModelForm)` Meta.fields =
+  ["sales_order"] only + `_reject_foreign(self, cleaned, ["sales_order"])`. Membership is added via
+  dedicated POST routes on the detail page — NO standalone child CRUD pages [FROZEN].
+- Views in views/FulfillmentOrchestration/FulfillmentWaves.py (writes @tenant_admin_required +
+  @require_POST like 5.4 I1; list/detail/board readable with `is_admin` context flag):
+  `wave_list`, `wave_detail`, `wave_create`, `wave_edit`, `wave_delete` over crud helpers;
+  POST verbs `wave_release`/`wave_close`/`wave_cancel`; membership POST verbs `waveorder_add`
+  (invalid input → messages.error + redirect back to detail), `waveorder_remove(request, pk,
+  order_pk)`; computed `wave_board`. Membership add/remove refused once status != "planned"
+  (Odoo lock-after-release lesson; enforced form+view+model.clean).
+  Context keys PINNED EXHAUSTIVELY:
+  - wave_list: object_list, page_obj, q, status_choices, status, is_admin
+  - wave_detail: obj, members (obj.orders.select_related("sales_order","added_by").order_by("created_at")),
+    linked_picks (scm.PickTask tenant-filtered wave_ref==obj.number newest first), add_form
+    (FulfillmentWaveOrderForm when admin AND editable else None), is_admin
+  - wave_create/wave_edit: form, is_edit (crud helpers' own contract)
+  - wave_board: object_list (dict rows), page_obj, stats {open_waves, released_today,
+    unassigned_orders}, status_choices, status, locations (tenant warehouses for filter),
+    location, is_admin
+  - Board row dict keys FROZEN: {wave, members, fulfilled, pick_pct} — counts precomputed via two
+    grouped queries (child rows; PickTask by wave_ref) merged in Python, no per-row N+1;
+    unassigned_orders = tenant SOs with status in SalesOrder.ALLOCATABLE_STATUSES
+    ("submitted","allocated","partially_fulfilled") not present in any FulfillmentWaveOrder row.
+- URLs urls/FulfillmentOrchestration/FulfillmentWaves.py (literals before <int:pk>):
+  waves-board/ → wave_board; waves/ → wave_list; waves/add/ → wave_create; waves/<int:pk>/ →
+  wave_detail; waves/<int:pk>/edit/ → wave_edit; waves/<int:pk>/delete/ → wave_delete;
+  waves/<int:pk>/release/ → wave_release; waves/<int:pk>/close/ → wave_close;
+  waves/<int:pk>/cancel/ → wave_cancel; waves/<int:pk>/orders/add/ → waveorder_add;
+  waves/<int:pk>/orders/remove/<int:order_pk>/ → waveorder_remove.
+- Templates: LIST columns frozen Wave # | Status badge | Location | Carrier | Ship method |
+  Planned ship | Orders count | Progress (None renders "—", never 0%) | Actions (eye/pencil/trash).
+  DETAIL: header dl + STATUS_CSS badge + members table (SO number links scm:salesorder_detail,
+  scm-vocab status badge, added_at, remove button admin-only while planned) + add-member inline
+  form (admin-only, planned-only) + action buttons release/close/cancel conditional on status +
+  progress panel (member_order_count / orders_fulfilled_count / pick_progress_pct, "—" when None)
+  + linked_picks table linking scm:picktask_detail. FORM: plain triple form. BOARD: stat strip
+  ({open_waves, released_today, unassigned_orders}) + filter bar (?status=&?location=) + table
+  (same columns as list minus Actions).
+- Package wiring (exact statements):
+  - models/__init__.py: `from .FulfillmentOrchestration.FulfillmentWaves import (FulfillmentWave, FulfillmentWaveOrder)` + both into `__all__`
+  - forms/__init__.py: `from .FulfillmentOrchestration.FulfillmentWaves import (FulfillmentWaveForm, FulfillmentWaveOrderForm)`
+  - views/__init__.py: `from .FulfillmentOrchestration.FulfillmentWaves import (wave_board, wave_cancel, wave_close, wave_create, wave_delete, wave_detail, wave_edit, wave_list, wave_release, waveorder_add, waveorder_remove)`
+  - urls/__init__.py: `from .FulfillmentOrchestration.FulfillmentWaves import urlpatterns as _fo_fulfillmentwaves`; concat entry placed AFTER the `*_rp_putawayrules` line.
+  - admin.py: FulfillmentWaveAdmin list_display ("number","status","location","carrier",
+    "ship_method","planned_ship_date","priority"), list_filter ("status",), search_fields
+    ("number","description"); FulfillmentWaveOrderAdmin list_display ("wave","sales_order",
+    "added_by","created_at"), search_fields ("wave__number","sales_order__number").
+- Seeder `_seed_fulfillment_waves(self, tenant, items)` in seed_inventory.py: guard FIRST
+  (`if FulfillmentWave.objects.filter(tenant=tenant).exists(): skip`). Reuses seed_scm's existing
+  SOs (guard-confirmed they exist there): first ~3 open orders (submitted/allocated) → demo A,
+  walked through the REAL release(); next ~2 → demo B stays planned with criteria_text narrative
+  + carrier + cutoff_at tomorrow. NO PickTask creation here [FROZEN — picks are scm documents;
+  until an operator types wave_ref, pick_pct honestly renders "—"]; skip gracefully with a stdout
+  note when the tenant has no open SOs. --flush block: count + delete FulfillmentWaveOrder rows
+  BEFORE FulfillmentWave rows (children first). handle() call site immediately after
+  `self._seed_putaway_rules(tenant, items)`.
+- LIVE_LINKS["5.9"] in apps/core/navigation.py — titles VERBATIM from NavERP.md L920-923:
+  ```python
+  # 5.9 Order Management & Fulfillment. Orders/picks/dispatch are SCM documents (4.5/4.4/4.6):
+  # point at them, never re-declare. What nothing else provides is the WAVE master grouping
+  # released-to-floor orders, with criteria, cutoffs and derived progress over members + picks.
+  "5.9": {
+      "Sales Order Processing":   "scm:salesorder_list",
+      "Pick, Pack, Ship Workflow": "scm:picktask_list",
+      "Wave Planning":            "inventory:wave_board",
+      "Shipping Integration":     "scm:carrier_list",
+  },
+  ```
+- Migration claim: **0014** (re-verified this session — latest on disk is
+  0013_shelflifepolicy_lotnumberrule; expected name 0014_fulfillmentwave_fulfillmentwaveorder).
+
+### Build-wave checklist (two parallel lanes, disjoint files)
+
+- [ ] Backend lane: ONLY `apps/inventory/models/FulfillmentOrchestration/FulfillmentWaves.py`,
+      `forms/…/FulfillmentWaves.py`, `views/…/FulfillmentWaves.py`, `urls/…/FulfillmentWaves.py`
+      + the four NEW `models/forms/views/urls/FulfillmentOrchestration/__init__.py` (docstrings;
+      models copy re-exports). Nothing else.
+- [ ] Template lane: ONLY `templates/inventory/fulfillment/wave/list.html`, `detail.html`,
+      `form.html`, `templates/inventory/fulfillment/wave_board.html`. Nothing else.
+- Shared files OFF-LIMITS to both lanes: package-root `__init__.py` x4, admin.py, seeder,
+  navigation.py, migrations, settings/urls root.
+
+### Integrate checklist (solo, single writer)
+
+- [ ] Verify all eight lane files landed BEFORE wiring anything.
+- [ ] Add the four re-export blocks above (surgical Edit, never rewrite).
+- [ ] Register both models in admin.py (spec above).
+- [ ] Seeder `_seed_fulfillment_waves` + handle() call site after `_seed_putaway_rules` + --flush entries (children first).
+- [ ] LIVE_LINKS["5.9"] + comment block.
+- [ ] Confirm `apps/inventory/migrations/` still tops out at 0013, then makemigrations inventory → expect **0014_fulfillmentwave_fulfillmentwaveorder**; migrate.
+- [ ] `seed_inventory` twice → second run idempotent (guard skips).
+- [ ] `manage.py check` clean.
+
+### Verify checklist (smoke, as admin_acme unless noted)
+
+- [ ] ≥6 routes 200 with content asserts: waves/, waves/add/, waves/<pk>/, waves/<pk>/edit/,
+      waves-board/, plus detail shows members table + board stat strip values.
+- [ ] Board lists seeded WAV rows; released wave shows member progress; pick_pct renders "—" (no fake 0%).
+- [ ] POST flow end-to-end: create planned wave → add member (waveorder_add) → release() flips badge to Released → close() flips Closed; zero-member release refused with message.
+- [ ] Junk params harmless: ?status=junk&location=abc&page=999&warehouse=² on board + list.
+- [ ] Cross-tenant: globex pk on detail/edit/delete/verbs → 404.
+- [ ] Superuser (no tenant): pages render empty-but-200.
+- [ ] No `{#` template-comment artifacts or unpinned context vars rendering blank.
+
+### Close-out checklist
+
+- [ ] Review wave (6 parallel lanes) → `.claude/tasks/review-inventory-5.9.md`; fixer burns findings down in ID order, one commit per file.
+- [ ] Tests `tests/test_fulfillment_{models,forms,views,security}.py` — every test fn `test_fulfillment_*`;
+      new conftest fixtures only if genuinely shared (owned by solo contract step).
+- [ ] Full unfiltered inventory app suite green (pytest apps/inventory/tests).
+- [ ] SKILL.md: 5.9 row in as-built table + short section (ownership ruling: three bullets point at scm; wave is the new table).
+- [ ] README.md module-progress row updated (9 of 20). One commit per file throughout; never push.
+
+
+### 5.7 test wave executed (2026-08-23, follow-up session)
+
+pytest-django now runs in the shell. Full inventory suite: ALL GREEN (~507 tests, includes the
+27 new 5.7 tests after two repairs - replay ordering must be chronological like production
+callers, and transfer lines need their NOT NULL item). SCM core models/views/security green;
+2 pre-existing failures in test_forms.py::TestAssetManagementFormsMassAssignmentExclusions are
+byte-identical to BASE (4.13/4.14 asset-form mass-assignment assertions, untouched by 5.7 whose
+entire scm footprint is migration 0035 + StockTransfer model/view). Shared files co-edited with
+the finished 5.8 session were committed cleanly; a third session building 5.10 Returns Management
+landed mid-run and its models re-export is in place.
