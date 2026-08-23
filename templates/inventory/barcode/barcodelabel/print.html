@@ -33,20 +33,40 @@
     <div class="card-body flex items-center gap-2">
       <span class="badge badge-info"><i data-lucide="info"></i> Browser tip</span>
       <span class="text-muted" style="font-size:13px;">
-        Use your browser's print dialog on this page — it will output
+        Use your browser's print dialog on this page — it prints
         <span class="fw-600">{{ copies_range|length }} cop{{ copies_range|length|pluralize:"y,ies" }}</span>
-        of label {{ obj.number }} onto your loaded label stock.
+        of this sheet (one label frame per copy) onto your loaded label stock.
       </span>
     </div>
   </div>
 
-  <!-- Label Frames -->
+  <!-- Single live render — fetched ONCE, not once per copy -->
+  <div class="card mb-6">
+    <div class="card-header">
+      <h2 class="card-title"><i data-lucide="scan-line"></i> Label Render</h2>
+    </div>
+    <div class="card-body">
+      {% if svg_available %}
+        <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid var(--border); text-align:center;">
+          <img src="{% url 'inventory:barcodelabel_render' obj.pk %}" alt="barcode label {{ obj.number }}" style="max-width:100%; height:auto;">
+          <div class="mono fw-600" style="margin-top:8px; color:#1f2933; word-break:break-all;">{{ obj.payload }}</div>
+        </div>
+      {% else %}
+        <div class="text-muted" style="font-size:13px;">
+          Payload cannot be rendered as {{ obj.get_symbology_display }} — check it below and fix it on the label before printing.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Copy Frames — lightweight previews; the physical copies come from the print dialog -->
   <div class="grid grid-cols-2 gap-4">
     {% for _ in copies_range %}
-      <div style="background:#fff; border:1px solid var(--border); border-radius:8px; padding:16px; text-align:center;">
-        <img src="{% url 'inventory:barcodelabel_render' obj.pk %}" alt="barcode label {{ obj.number }}" style="max-width:100%; height:auto;">
-        <div class="mono fw-600" style="margin-top:8px; color:#1f2933; word-break:break-all;">{{ obj.payload }}</div>
-        <div class="mono text-muted" style="font-size:12px; margin-top:4px;">{{ obj.number }}</div>
+      <div style="background:#fff; border:1px dashed var(--border); border-radius:8px; padding:16px; text-align:center;">
+        <div class="mono fw-600" style="color:#1f2933; word-break:break-all;">{{ obj.payload }}</div>
+        <div class="mono text-muted" style="font-size:12px; margin-top:4px;">
+          {{ obj.number }}{% if not forloop.first %} · copy {{ forloop.counter }}{% endif %}
+        </div>
       </div>
     {% endfor %}
   </div>
