@@ -2,18 +2,20 @@
 ``global-stock/``). Literals before ``<int:pk>``, per the house first-match rule;
 the computed stock page is a literal too and goes FIRST.
 
-Imports the view module DIRECTLY rather than through the package-root re-export:
-this file ships during the build wave, before ``apps/inventory/views/__init__.py``
-gains its 5.9-style wiring lines (integrate phase), and attribute access through
-the not-yet-wired package would raise at import time. After integration either
-spelling resolves to the same function objects.
+Imports the view modules DIRECTLY rather than through the package-root re-export:
+this file shipped during the build wave, before ``apps/inventory/views/__init__.py``
+gained its 5.9-style wiring lines (integrate phase), and attribute access through
+the not-yet-wired package would have raised at import time. After integration either
+spelling resolves to the same function objects. CRUD comes from ``LocationNetworks``,
+the computed page from its own ``GlobalStock`` module (C1 split).
 """
 from django.urls import path
 
+from apps.inventory.views.MultiLocationManagement import GlobalStock as gs_views
 from apps.inventory.views.MultiLocationManagement import LocationNetworks as views
 
 urlpatterns = [
-    path("global-stock/", views.global_stock, name="global_stock"),
+    path("global-stock/", gs_views.global_stock, name="global_stock"),
     path("networks/", views.locationnetwork_list, name="locationnetwork_list"),
     path("networks/add/", views.locationnetwork_create, name="locationnetwork_create"),
     path("networks/<int:pk>/", views.locationnetwork_detail, name="locationnetwork_detail"),
