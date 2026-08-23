@@ -24,7 +24,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from apps.core.crud import as_db_int, paginate
+from apps.core.crud import as_db_int, paginate, apply_search
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.forms.FulfillmentOrchestration.FulfillmentWaves import (
     FulfillmentWaveForm,
@@ -53,27 +53,55 @@ def _scoped(tenant):
             .select_related("location", "carrier"))
 
 
+def _pick_stats_by_ref(tenant, waves):
+    """ONE grouped PickTask query over a page of waves -> {wave_ref: (total, done, active)}.
+
+    The shared merge behind the board and the list page: pick progress is read from scm
+    through the wave_ref==number text convention, so it must be grouped per page rather
+    than paid per row (the list page's N+1 was exactly that)."""
+    numbers = [w.number for w in waves if w.number]
+    if not numbers:
+        return {}
+    return {
+        ref: (total, done, active)
+        for ref, total, done, active in (
+            PickTask.objects.filter(tenant=tenant, wave_ref__in=numbers)
+            .values("wave_ref")
+            .annotate(total=Count("id"),
+                      done=Count("id", filter=Q(status__in=FulfillmentWave.PICK_DONE_STATUSES)),
+                      active=Count("id", filter=~Q(status="cancelled")))
+            .values_list("wave_ref", "total", "done", "active"))
+    }
+
+
 @login_required
 def wave_list(request):
+    # Same shape as crud_list (search + status chip BEFORE pagination) but paginated
+    # here so the pick-progress merge below can run ONCE per page: member_count comes
+    # off a query annotation and each row's pct from the grouped dict — no per-row
+    # orders.count / pick_progress_pct queries while rendering.
     qs = _scoped(request.tenant)
-    # The status chip maps to a CHOICE value BEFORE crud_list runs (house filter rule:
-    # parse GET, shape the queryset, THEN let the helper paginate/render it). A junk or
-    # unknown ?status= skips the filter instead of obeying it — junk ignored beats an
-    # silently-empty page.
     status = request.GET.get("status", "").strip()
     if status in dict(FulfillmentWave.STATUS_CHOICES):
         qs = qs.filter(status=status)
-    return crud_list(
-        request, qs, "inventory/fulfillment/wave/list.html",
-        search_fields=["number", "description"],
-        filters=(),
-        extra_context={
-            "status_choices": FulfillmentWave.STATUS_CHOICES,
-            "status": status,
-            # Writes are tenant-admin gated server-side; hide the affordances to match.
-            "is_admin": _is_admin(request.user),
-        },
-    )
+    q = request.GET.get("q", "").strip()
+    qs = apply_search(qs, q, ["number", "description"])
+    page_obj = paginate(request, qs.annotate(member_count=Count("orders")), 15)
+    waves = list(page_obj.object_list)
+    pick_stats = _pick_stats_by_ref(request.tenant, waves)
+    for w in waves:
+        total, done, active = pick_stats.get(w.number, (0, 0, 0))
+        # None when no picks match yet — rendered as "—", never a fake 0%.
+        w.pick_pct = pick_progress_pct_from(done, active) if total else None
+    return render(request, "inventory/fulfillment/wave/list.html", {
+        "object_list": page_obj.object_list,
+        "page_obj": page_obj,
+        "q": q,
+        "status_choices": FulfillmentWave.STATUS_CHOICES,
+        "status": status,
+        # Writes are tenant-admin gated server-side; hide the affordances to match.
+        "is_admin": _is_admin(request.user),
+    })
 
 
 @login_required
@@ -249,16 +277,7 @@ def wave_board(request):
                 wave_id__in=wave_ids,
                 sales_order__status__in=FulfillmentWave.FULFILLED_STATUSES)
             .values("wave").annotate(n=Count("id")).values_list("wave", "n"))
-        numbers = [w.number for w in waves if w.number]
-        if numbers:
-            for ref, total, done, active in (
-                    PickTask.objects.filter(tenant=request.tenant, wave_ref__in=numbers)
-                    .values("wave_ref")
-                    .annotate(total=Count("id"),
-                              done=Count("id", filter=Q(status__in=FulfillmentWave.PICK_DONE_STATUSES)),
-                              active=Count("id", filter=~Q(status="cancelled")))
-                    .values_list("wave_ref", "total", "done", "active")):
-                pick_stats[ref] = (total, done, active)
+        pick_stats = _pick_stats_by_ref(request.tenant, waves)
 
     rows = []
     for wave in waves:
