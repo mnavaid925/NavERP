@@ -288,6 +288,8 @@ class FulfillmentWaveOrder(models.Model):
         writers too — admin, seeder), not just in the form/view layer."""
         super().clean()
         errors = {}
+        if self.wave_id and self.wave.tenant_id != self.tenant_id:
+            errors["wave"] = "That record belongs to another workspace."
         if self.sales_order_id and self.sales_order.tenant_id != self.tenant_id:
             errors["sales_order"] = "That record belongs to another workspace."
         if self.wave_id and self.wave.status != "planned":
