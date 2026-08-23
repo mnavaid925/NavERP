@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ obj.number }}{% else %}New Scan Session{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Session {{ obj.number }}{% else %}New Scan Session{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:scansession_list' %}">Scan Sessions</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="form-error mb-4">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Session Setup</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.device_label.id_for_label }}">Device Label *</label>
+            {{ form.device_label }}
+            {% if form.device_label.errors %}<div class="form-error">{{ form.device_label.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.mode.id_for_label }}">Scanning Mode *</label>
+            {{ form.mode }}
+            {% if form.mode.errors %}<div class="form-error">{{ form.mode.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Session</button>
+      <a href="{% url 'inventory:scansession_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
