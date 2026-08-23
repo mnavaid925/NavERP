@@ -141,8 +141,8 @@ class Command(BaseCommand):
             "--flush", action="store_true",
             help=("Delete ALL inventory rows (attributes, prices, files, vendor communications, "
                   "PO approval rules/dispatches, putaway rules, bin capacities, cross-dock "
-                  "orders, stock statuses, reservations) for ALL tenants before seeding — "
-                  "not just seeder-created ones."))
+                  "orders, stock statuses, reservations, fulfillment waves) for ALL tenants "
+                  "before seeding — not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
@@ -165,7 +165,9 @@ class Command(BaseCommand):
                         + ShelfLifePolicy.objects.all().count()
                         + ReturnInspectionChecklist.objects.all().count()
                         + ReturnInspection.objects.all().count()
-                        + DispositionRoutingRule.objects.all().count())
+                        + DispositionRoutingRule.objects.all().count()
+                         + FulfillmentWaveOrder.objects.all().count()
+                         + FulfillmentWave.objects.all().count())
             ReturnInspectionChecklist.objects.all().delete()
             ReturnInspection.objects.all().delete()
             DispositionRoutingRule.objects.all().delete()
@@ -186,6 +188,8 @@ class Command(BaseCommand):
             TransferRoute.objects.all().delete()
             LotNumberRule.objects.all().delete()
             ShelfLifePolicy.objects.all().delete()
+            FulfillmentWaveOrder.objects.all().delete()  # membership rows before their wave headers
+            FulfillmentWave.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
 
         for tenant in Tenant.objects.order_by("name"):
