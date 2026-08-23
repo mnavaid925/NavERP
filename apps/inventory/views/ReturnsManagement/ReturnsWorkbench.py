@@ -73,12 +73,18 @@ def returns_workbench(request):
         ).values_list("return_disposition_id", flat=True)
     )
 
+    # Display strings for the dict-rows are computed HERE, in the view — the template's
+    # {% else %} branches print these instead of raw codes like "received_pending".
+    disposition_labels = dict(ReturnDisposition.DISPOSITION_CHOICES)
+    grade_labels = dict(ReturnDisposition.GRADE_CHOICES)
+
     # Attach live inspection and routing suggestions to bench items
     for disp in pending_disps:
         item = disp.return_line.item if disp.return_line else None
         rule, suggested_disp, dest_loc, reason = resolve_disposition_routing(
             item, condition_grade=disp.condition_grade, rules=rules, tenant=tenant
         )
+        suggested_value = suggested_disp or disp.disposition
 
         bench_items.append({
             "disposition": disp,
@@ -87,7 +93,9 @@ def returns_workbench(request):
             "item": item,
             "quantity": disp.quantity,
             "condition_grade": disp.condition_grade,
-            "suggested_disposition": suggested_disp or disp.disposition,
+            "condition_grade_display": grade_labels.get(disp.condition_grade, disp.condition_grade),
+            "suggested_disposition": suggested_value,
+            "suggested_disposition_display": disposition_labels.get(suggested_value, suggested_value),
             "destination_location": dest_loc,
             "routing_reason": reason,
             "has_inspection": disp.id in inspected_disp_ids,
