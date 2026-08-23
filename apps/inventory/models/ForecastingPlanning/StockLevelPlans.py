@@ -77,6 +77,10 @@ class StockLevelPlan(TenantNumbered):
 
     # -- derived planning figures ----------------------------------------------------------------
 
+    @property
+    def is_editable(self):
+        return self.status in self.EDITABLE_STATUSES
+
     def is_in_effect(self, today=None):
         today = today or timezone.localdate()
         if self.status != "active":

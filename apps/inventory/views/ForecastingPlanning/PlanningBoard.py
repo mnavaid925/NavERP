@@ -12,11 +12,16 @@ delegates to the spine's own method inside its transaction.
 Demand Forecasting itself stays SCM's (L36): the board links out to
 ``scm:demandforecast_list`` rather than re-predicting anything.
 """
+from decimal import Decimal
+
 from django.db.models import Sum
 
+from apps.core.crud import paginate
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.scm.models import ReorderRule
+
+ZERO = Decimal("0")
 
 
 @login_required
@@ -53,7 +58,7 @@ def planning_board(request):
         live_ss, live_rop = r.safety_stock or ZERO, r.reorder_point or ZERO
         comp_ss, comp_rop = r.computed_safety_stock or ZERO, r.computed_reorder_point or ZERO
         stale = has_computed and (live_ss != comp_ss or live_rop != comp_rop)
-        below = r.is_below_reorder_point(qty)
+        below = r.is_below_point(qty)
         flag, css = ("stale", "badge-amber") if stale else (
             ("watch", "badge-info") if below else ("ok", "badge-green"))
         if stale:
