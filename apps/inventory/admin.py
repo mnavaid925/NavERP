@@ -6,6 +6,7 @@ works because apps/inventory/models/__init__.py re-exports everything.
 from django.contrib import admin
 
 from apps.inventory.models import (
+    BarcodeLabel,
     BinCapacity,
     StockLevelPlan,
     CountProgram,
@@ -15,6 +16,7 @@ from apps.inventory.models import (
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
+    LocationNetwork,
     LotNumberRule,
     ProductFile,
     PurchaseOrderApproval,
@@ -28,6 +30,9 @@ from apps.inventory.models import (
     ShelfLifePolicy,
     StockStatus,
     VendorCommunication,
+    ScanEvent,
+    ScanSession,
+    RfidTag,
     TransferApproval,
     TransferApprovalRule,
     TransferRoute,
@@ -125,6 +130,13 @@ class FulfillmentWaveOrderAdmin(admin.ModelAdmin):
     list_display = ("wave", "sales_order", "added_by", "created_at")
     list_filter = ("tenant",)
     search_fields = ("wave__number", "sales_order__number")
+
+
+@admin.register(LocationNetwork)
+class LocationNetworkAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "node_type", "parent", "warehouse", "is_active")
+    list_filter = ("tenant", "node_type", "is_active")
+    search_fields = ("number", "code", "name")
 
 
 @admin.register(StockStatus)
@@ -225,3 +237,33 @@ class DispositionRoutingRuleAdmin(admin.ModelAdmin):
                     "destination_location", "priority", "is_active")
     list_filter = ("tenant", "is_active", "condition_grade", "suggested_disposition")
     search_fields = ("name", "item__sku", "item__name", "notes")
+
+
+class ScanEventInline(admin.TabularInline):
+    model = ScanEvent
+    extra = 0
+    can_delete = False
+
+
+@admin.register(BarcodeLabel)
+class BarcodeLabelAdmin(admin.ModelAdmin):
+    list_display = ('number', 'label_kind', 'target_type', 'payload', 'symbology',
+                    'copies', 'status', 'printed_at')
+    list_filter = ('tenant', 'status', 'symbology', 'label_kind')
+    search_fields = ('number', 'payload', 'target_ref', 'pallet_ref', 'item__sku')
+
+
+@admin.register(ScanSession)
+class ScanSessionAdmin(admin.ModelAdmin):
+    list_display = ('number', 'device_label', 'mode', 'status', 'started_at', 'ended_at')
+    list_filter = ('tenant', 'status', 'mode')
+    search_fields = ('number', 'device_label', 'notes')
+    inlines = [ScanEventInline]
+
+
+@admin.register(RfidTag)
+class RfidTagAdmin(admin.ModelAdmin):
+    list_display = ('epc', 'kind', 'status', 'item', 'location', 'lot_serial',
+                    'last_seen_at', 'last_seen_location')
+    list_filter = ('tenant', 'status', 'kind')
+    search_fields = ('epc', 'target_ref', 'pallet_ref', 'item__sku')
