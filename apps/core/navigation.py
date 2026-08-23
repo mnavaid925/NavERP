@@ -1221,6 +1221,19 @@ LIVE_LINKS = {
         "Inventory Valuation":      "scm:valuation_report",        # bullet (4.3's FIFO/LIFO/WAC cost-layer walk owns this)
         "Inventory Reservations":   "inventory:reservation_list",  # bullet (RSV- soft claims vs SO/job/project)
     },
+    # 5.8 Lot & Serial Number Tracking. The lot/serial ROWS are 4.3's scm.LotSerial
+    # (L36 - point at it, never re-declare it), so Serial Number Tracking maps straight
+    # at that master. What nothing else provides is the management layer around it:
+    # pattern-based batch NUMBER generation (the spine's create form is free-typed), an
+    # expiry/FEFO board that turns per-SKU shelf-life policy into a do-not-ship line
+    # over the ledger, and recall tracing that walks the append-only book backward and
+    # forward through transformation references.
+    "5.8": {
+        "Lot/Batch Generation":           "inventory:lotrule_list",   # bullet (rules CRUD + one-click mint into scm.LotSerial)
+        "Serial Number Tracking":         "scm:lotserial_list",       # bullet (4.3's lot/serial master owns the rows)
+        "Shelf-Life & Expiry Management": "inventory:fefo_board",     # bullet (FEFO pick order + policies linked from its header)
+        "Traceability & Genealogy":       "inventory:traceability",   # bullet (computed recall trace over StockMove)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
     # 4.1's `scm.PurchaseRequisition` / `scm.PurchaseOrder` (L36: extend the spine, never
