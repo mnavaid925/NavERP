@@ -105,7 +105,7 @@
                 {% elif obj.functional_status == 'fail' %}
                   <span class="badge badge-red">Fail — Defective</span>
                 {% else %}
-                  <span class="badge badge-muted">Untested</span>
+                  <span class="badge badge-muted">{{ obj.get_functional_status_display }}</span>
                 {% endif %}
               </dd>
             </div>
@@ -179,7 +179,7 @@
                     {% elif ck.result == 'fail' %}
                       <span class="badge badge-red">Fail</span>
                     {% else %}
-                      <span class="badge badge-muted">N/A</span>
+                      <span class="badge badge-muted">{{ ck.get_result_display }}</span>
                     {% endif %}
                   </td>
                   <td>{{ ck.notes|default:"—" }}</td>
