@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Generate Next Batch Number{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Generate Next Lot / Serial Number</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:lotrule_list' %}">Numbering Rules</a><span class="sep">›</span><span>Generate</span></div>
+      <p class="text-muted">Pick a tracked item — the most specific active rule mints the next number straight into the SCM lot/serial master.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:lotrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Mint a Number</h2></div>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <div class="card-body">
+        {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+        <div class="form-grid">
+          {% for field in form %}
+            <div class="form-group">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+              {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions" style="margin-top:16px;">
+          <button class="btn btn-primary" type="submit"><i data-lucide="barcode"></i> Generate</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Active Rules &amp; Their Next Samples</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Rule</th><th>Scope</th><th>Mints</th><th>Sample</th></tr></thead>
+        <tbody>
+          {% for rule, sample in preview %}
+            <tr>
+              <td><a href="{% url 'inventory:lotrule_detail' rule.pk %}" class="fw-600">{{ rule.name }}</a></td>
+              <td>{% if rule.item %}<span class="badge badge-info">{{ rule.item.sku }}</span>{% else %}<span class="badge badge-muted">Tenant default</span>{% endif %}</td>
+              <td>{{ rule.get_kind_display }}</td>
+              <td><code>{{ sample }}</code></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4"><div class="empty-state"><i data-lucide="layers"></i><h3>No active rules</h3><p>Generation is refused until at least one active numbering rule exists — create the tenant default first.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Minting claims no stock: the receipt or work-order document that receives against this batch posts its own ledger moves. For serial-tracked items, generate one number per unit.</p>
+{% endblock %}
