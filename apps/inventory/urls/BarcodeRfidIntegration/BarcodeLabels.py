@@ -10,5 +10,6 @@ urlpatterns = [
     path("labels/<int:pk>/edit/", views.barcodelabel_edit, name="barcodelabel_edit"),
     path("labels/<int:pk>/delete/", views.barcodelabel_delete, name="barcodelabel_delete"),
     path("labels/<int:pk>/print/", views.barcodelabel_print, name="barcodelabel_print"),
+    path("labels/<int:pk>/void/", views.barcodelabel_void, name="barcodelabel_void"),
     path("labels/<int:pk>/render.", views.barcodelabel_render, name="barcodelabel_render"),
 ]
