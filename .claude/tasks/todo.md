@@ -26572,3 +26572,20 @@ byte-identical to BASE (4.13/4.14 asset-form mass-assignment assertions, untouch
 entire scm footprint is migration 0035 + StockTransfer model/view). Shared files co-edited with
 the finished 5.8 session were committed cleanly; a third session building 5.10 Returns Management
 landed mid-run and its models re-export is in place.
+
+### 5.11 Stocktaking & Cycle Counting (this session)
+Two models around 4.4's blind count spine: CountProgram [CTP-] (recurring cadence; run verb
+mints a notes-marked CycleCountTask with same-day reuse + last_run stamp) and PhysicalInventory
+[PHY-] (freeze event; start() spawns one full sheet per bin/zone under the warehouse via real
+verbs under select_for_update; reconcile() REFUSES while spawned sheets are open so a freeze
+cannot skip bins; cancel() lifts honestly). Variance Analysis = computed page over counted
+sheets with posted-adjustment links. Sidebar 5.11 wired: physical inventory, programs, blind
+counts -> scm master pointer, variance report. Seeder: Zone A weekly program + one event walked
+through REAL start/cancel and one left live frozen with sheets awaiting counters (reconcile
+demo intentionally refused - the guard is the feature). INCIDENT of record: the concurrent
+5.10 session stash-restored shared files mid-build, wiping this session's uncommitted wiring
+twice (admin/seeder/__init__s/nav/overview); all recovered by idempotent re-patch scripts
+(temp/rewire_511.py) and re-committed. Verified: migrate 0015, seed x2 idempotent, check green,
+smoke 16/16 incl. reconcile-refusal and cross-tenant IDOR, tests test_stocktake_{models,views}
+20/20. NOTE for next session: pytest runs on this box need long timeouts (full migration replay
+per session) - never kill mid-run; orphaned pytest children starve later runs.
