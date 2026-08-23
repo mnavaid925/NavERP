@@ -37,8 +37,6 @@ class CountProgram(TenantNumbered):
         ("c", "C only"),
     ]
 
-    STATUS_CSS = {"is_active": "badge-green", "is_inactive": "badge-muted"}
-
     name = models.CharField(max_length=64)
     # The section this program counts. Null = whole-warehouse scope (tasks then land on
     # the location itself; a zone/bin scope lands there directly).
