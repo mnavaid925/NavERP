@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Wave Planning{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Wave Planning</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Order Management &amp; Fulfillment</span><span class="sep">›</span><span>Board</span></div>
+      <p class="text-muted">Every fulfillment wave at a glance — member counts, fulfilled orders and derived pick progress. Progress reads SCM picks through the wave number, so a dash means no signal yet, never zero work.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:wave_list' %}" class="btn btn-outline"><i data-lucide="list-plus"></i> Manage Waves</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+      <div class="stat-value">{{ stats.open_waves }}</div>
+      <div class="stat-label">Open (planned) waves</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="truck"></i></div>
+      <div class="stat-value">{{ stats.released_today }}</div>
+      <div class="stat-label">Released today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="package"></i></div>
+      <div class="stat-value">{{ stats.unassigned_orders }}</div>
+      <div class="stat-label">Orders not yet waved</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Warehouse" class="form-select">
+            <option value="">All warehouses</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }} — {{ loc.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:wave_board' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Wave #</th><th>Status</th><th>Location</th><th>Carrier</th><th>Planned Ship</th><th>Members</th><th>Fulfilled</th><th>Pick Progress</th><th class="th-actions">View</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:wave_detail' row.wave.pk %}" class="fw-600 mono">{{ row.wave.number }}</a>{% if row.wave.description %}<div class="text-muted" style="font-size:12px;">{{ row.wave.description|truncatechars:60 }}</div>{% endif %}</td>
+              <td><span class="badge {{ row.wave.status_css }}">{{ row.wave.get_status_display }}</span></td>
+              <td>{% if row.wave.location %}<span class="mono">{{ row.wave.location.code }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.wave.carrier %}{{ row.wave.carrier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.wave.planned_ship_date %}{{ row.wave.planned_ship_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ row.members }}</td>
+              <td>{{ row.fulfilled }}</td>
+              <td>
+                {% if row.pick_pct is not None %}
+                  <div style="min-width:110px;">
+                    <div class="progress"><div class="progress-bar" style="width: {{ row.pick_pct }}%;"></div></div>
+                    <div class="text-muted" style="font-size:12px;">{{ row.pick_pct }}%</div>
+                  </div>
+                {% else %}
+                  <span class="text-muted" title="No picks reference this wave yet">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:wave_detail' row.wave.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="layers"></i><h3>No waves match these filters</h3><p>Plan a wave to group open sales orders into one released-to-floor picking batch, or clear the filters above.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
