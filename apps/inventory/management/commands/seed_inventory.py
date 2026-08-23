@@ -1320,11 +1320,14 @@ class Command(BaseCommand):
     def _seed_location_network(self, tenant, items):
         """5.12 Multi-Location Management — the org tier ABOVE the location spine.
 
-        One company node with two region children and a store-level grandchild, with
-        seed_scm's real warehouses attached where they exist (get_or_create on the spine's
-        (tenant, code) uniqueness, never inventing Locations). One site is deliberately
-        LEFT unattached so /inventory/global-stock/ shows its honest "Unassigned sites"
-        group; one node carries zero stock so aggregate zeros read as real zeros.
+        Builds the FROZEN demo tree with plain ``create()`` calls (the guard above is
+        the whole idempotency story — nothing here is get_or_create): one company,
+        two regions under it, a dc grandchild on one branch and a store grandchild
+        on the other. seed_scm's real warehouses are attached where they exist
+        (never inventing Locations): WH-MAIN under the dc node, WH-STORE — when the
+        tenant has a second warehouse — under the store node. With both present the
+        network covers every stocked site honestly (sites_unassigned 0); with only
+        one warehouse the store stays bare rather than faking an attachment.
         """
         if LocationNetwork.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: location network already present, skipping.")
@@ -1338,33 +1341,28 @@ class Command(BaseCommand):
                 "skipping the location network.")
             return
 
-        created = 0
         company = LocationNetwork.objects.create(
-            tenant=tenant, code="HQ", name="Head Office",
+            tenant=tenant, code="HOLD-CO", name="Holding Company",
             node_type="company",
             notes="Network root — all sites roll up here.")
-        created += 1
-
-        regions = []
-        for code, name in (("R-EAST", "Eastern Region"), ("R-WEST", "Western Region")):
-            region = LocationNetwork.objects.create(
-                tenant=tenant, code=code, name=name, node_type="region", parent=company)
-            regions.append(region)
-            created += 1
-
-        store = LocationNetwork.objects.create(
-            tenant=tenant, code="ST-01", name="Flagship Store",
-            node_type="store", parent=regions[0])
-        created += 1
-
-        # Attach whatever warehouses seed data actually has: the first under the east
-        # region; any FURTHER warehouse stays deliberately unattached so
-        # /inventory/global-stock/ shows its honest "Unassigned sites" group.
-        regions[0].warehouse = warehouses[0]
-        regions[0].save()
+        reg_north = LocationNetwork.objects.create(
+            tenant=tenant, code="REG-NORTH", name="Northern Region",
+            node_type="region", parent=company)
+        LocationNetwork.objects.create(
+            tenant=tenant, code="DC-MAIN", name="Main Distribution Center",
+            node_type="dc", parent=reg_north, warehouse=warehouses[0],
+            notes="The stocking DC node IS its warehouse (leaf-rule ruling).")
+        div_retail = LocationNetwork.objects.create(
+            tenant=tenant, code="DIV-RETAIL", name="Retail Division",
+            node_type="region", parent=company)
+        store_kwargs = {"warehouse": warehouses[1]} if len(warehouses) > 1 else {}
+        LocationNetwork.objects.create(
+            tenant=tenant, code="ST-DT", name="Downtown Store",
+            node_type="store", parent=div_retail, **store_kwargs)
+        left_unassigned = max(0, len(warehouses) - 2)
         self.stdout.write(self.style.SUCCESS(
-            f"  {tenant.name}: {created} network nodes over {len(warehouses)} warehouse(s) "
-            f"({len(warehouses) - 1} left unassigned)."))
+            f"  {tenant.name}: 5 network nodes over {min(len(warehouses), 2)} of "
+            f"{len(warehouses)} warehouse(s) ({left_unassigned} left unassigned)."))
 
     def _seed_barcode_rfid(self, tenant, items):
         """5.14 Barcode & RFID Integration demo rows (independently guarded)."""
