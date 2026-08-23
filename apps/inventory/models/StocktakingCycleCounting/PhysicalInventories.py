@@ -42,13 +42,6 @@ class PhysicalInventory(TenantNumbered):
     #: Statuses start() accepts; reconcile()/cancel() guard their own sources below.
     EDITABLE_STATUSES = ("draft",)
 
-    STATUS_CSS = {
-        "draft": "badge-muted",
-        "counting": "badge-amber",
-        "reconciled": "badge-green",
-        "cancelled": "badge-slate",
-    }
-
     warehouse = models.ForeignKey(
         "scm.Location", on_delete=models.PROTECT, related_name="physical_inventories",
         help_text="The warehouse being frozen for a full count")
