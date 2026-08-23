@@ -116,6 +116,9 @@ def wave_detail(request, pk):
         add_form.instance.wave = obj
     return render(request, "inventory/fulfillment/wave/detail.html", {
         "obj": obj,
+        # Computed ONCE here: the property fires the same scm aggregate every time a
+        # template touches obj.pick_progress_pct, so the page binds this value instead.
+        "pick_pct": obj.pick_progress_pct,
         "members": (obj.orders.select_related("sales_order", "added_by")
                     .order_by("created_at")),
         # Picks matched through the wave_ref==number text convention — newest first.
