@@ -34,7 +34,7 @@ def returns_workbench(request):
             status__in=["approved", "awaiting_receipt", "partially_received", "received"],
         )
         .select_related("customer")
-        .prefetch_related("lines__item", "lines__item__category", "lines__dispositions")
+        .prefetch_related("lines__item", "inventory_inspections")
         .order_by("-id")
     )
 
@@ -65,17 +65,20 @@ def returns_workbench(request):
         .order_by("-received_on", "-id")
     )
 
+    # One query for the whole bench, not one .exists() per pending disposition
+    inspected_disp_ids = set(
+        ReturnInspection.objects.filter(
+            tenant=tenant,
+            return_disposition_id__in=[disp.id for disp in pending_disps],
+        ).values_list("return_disposition_id", flat=True)
+    )
+
     # Attach live inspection and routing suggestions to bench items
     for disp in pending_disps:
         item = disp.return_line.item if disp.return_line else None
         rule, suggested_disp, dest_loc, reason = resolve_disposition_routing(
             item, condition_grade=disp.condition_grade, rules=rules, tenant=tenant
         )
-        # Check if an inspection already exists for this disposition or line
-        has_inspection = ReturnInspection.objects.filter(
-            tenant=tenant,
-            return_disposition=disp,
-        ).exists()
 
         bench_items.append({
             "disposition": disp,
@@ -87,7 +90,7 @@ def returns_workbench(request):
             "suggested_disposition": suggested_disp or disp.disposition,
             "destination_location": dest_loc,
             "routing_reason": reason,
-            "has_inspection": has_inspection,
+            "has_inspection": disp.id in inspected_disp_ids,
         })
 
     # Stats strip
