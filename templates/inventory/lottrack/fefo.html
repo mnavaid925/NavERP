@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}FEFO Board — Shelf-Life &amp; Expiry{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">FEFO Board <span class="text-muted">· First Expired, First Out</span></h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Lot &amp; Serial Tracking</span><span class="sep">›</span><span>Shelf-Life &amp; Expiry</span></div>
+      <p class="text-muted">Every dated lot on the shelf in pick order — earliest expiry first, never-expiring last. Red lots are past date or inside their do-not-ship gate.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:shelflifepolicy_list' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Policies</a>
+      <a href="{% url 'scm:lotserial_list' %}" class="btn btn-outline"><i data-lucide="box"></i> Lot Master (SCM)</a>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="calendar-x"></i></div>
+      <div class="stat-value">{{ counts.expired|default:0 }}</div>
+      <div class="stat-label">Expired lots</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="ban"></i></div>
+      <div class="stat-value">{{ counts.blocked|default:0 }}</div>
+      <div class="stat-label">Do-not-ship (gate)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="alarm-clock"></i></div>
+      <div class="stat-value">{{ counts.warning|default:0 }}</div>
+      <div class="stat-label">Expiring soon</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div class="stat-value">{{ counts.ok|default:0 }}</div>
+      <div class="stat-label">Healthy</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="clock"></i></div>
+      <div class="stat-value">{{ counts.none|default:0 }}</div>
+      <div class="stat-label">No expiry recorded</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU, item or lot number…">
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for it in items %}
+              <option value="{{ it.pk }}" {% if request.GET.item == it.pk|stringformat:"d" %}selected{% endif %}>{{ it.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="flag" aria-label="Verdict" class="form-select">
+            <option value="">All verdicts</option>
+            {% for value, label in flag_choices %}
+              <option value="{{ value }}" {% if request.GET.flag == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:fefo_board' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Pick order</th><th>Item</th><th>Lot / Serial</th><th>On hand</th><th>Expiry</th><th>Remaining</th><th>Verdict</th><th>Policy</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td class="text-muted">{{ forloop.counter0|add:page_obj.start_index }}</td>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> <span class="text-muted">{{ row.item.name|truncatechars:30 }}</span></td>
+              <td><a href="{% url 'inventory:traceability' %}?lot={{ row.lot.pk }}" class="fw-600">{{ row.lot.number }}</a></td>
+              <td class="fw-600">{{ row.on_hand|floatformat:"-2" }}</td>
+              <td>{{ row.lot.expiry_date|date:"M d, Y"|default:"—" }}</td>
+              <td>{% if row.remaining is None %}<span class="text-muted">—</span>{% else %}{{ row.remaining }} d{% endif %}</td>
+              <td><span class="badge {{ row.css }}">{{ row.label }}</span></td>
+              <td>{% if row.policy %}{% if row.policy.fefo_enforced %}<span class="badge badge-info">FEFO</span>{% else %}<span class="badge badge-muted">Advisory</span>{% endif %}{% else %}<span class="badge badge-muted">No policy</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="calendar-clock"></i><h3>No tracked stock on the shelf</h3><p>Lots appear here once a receipt or production run posts ledger moves against them — mint batches from the numbering-rule page at receiving time.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">On-hand per lot is the append-only ledger aggregate — nothing here stores a quantity. The verdicts come from each item's shelf-life policy through one shared classifier, so this board and the policy pages always agree.</p>
+{% endblock %}
