@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ obj }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Order Management &amp; Fulfillment</span><span class="sep">›</span><span>{{ obj.number }}</span></div>
+      {% if obj.description %}<p class="text-muted">{{ obj.description }}</p>{% endif %}
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:wave_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Waves</a>
+      {% if is_admin %}
+        {% if obj.status == "planned" %}
+          <form method="post" action="{% url 'inventory:wave_release' obj.pk %}" onsubmit="return confirm('Release this wave to the floor? Membership locks at release.');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Release</button>
+          </form>
+        {% endif %}
+        {% if obj.status == "released" %}
+          <form method="post" action="{% url 'inventory:wave_close' obj.pk %}" onsubmit="return confirm('Close this wave?');">
+            {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-check"></i> Close</button>
+          </form>
+        {% endif %}
+        {% if obj.status == "planned" or obj.status == "released" %}
+          <form method="post" action="{% url 'inventory:wave_cancel' obj.pk %}" onsubmit="return confirm('Cancel this wave?');">
+            {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel Wave</button>
+          </form>
+        {% endif %}
+        {% if obj.is_editable %}
+          <a href="{% url 'inventory:wave_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        {% endif %}
+        <form method="post" action="{% url 'inventory:wave_delete' obj.pk %}" onsubmit="return confirm('Delete this wave?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+      <div class="stat-value">{{ obj.member_order_count }}</div>
+      <div class="stat-label">Orders in wave</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="package-check"></i></div>
+      <div class="stat-value">{{ obj.orders_fulfilled_count }}</div>
+      <div class="stat-label">Fulfilled</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="boxes"></i></div>
+      <div class="stat-value">{% if obj.pick_progress_pct is not None %}{{ obj.pick_progress_pct }}%{% else %}—{% endif %}</div>
+      <div class="stat-label">Pick progress{% if obj.pick_progress_pct is None %} — no picks reference this wave yet{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Wave</h2>
+      <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Wave #</dt><dd><span class="mono fw-600">{{ obj.number }}</span></dd></div>
+        <div class="detail-item"><dt>Status</dt><dd><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></dd></div>
+        <div class="detail-item"><dt>Location</dt><dd>{% if obj.location %}<span class="mono">{{ obj.location.code }}</span> {{ obj.location.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Carrier</dt><dd>{% if obj.carrier %}{{ obj.carrier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Ship Method</dt><dd>{% if obj.ship_method %}{{ obj.get_ship_method_display }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Planned Ship Date</dt><dd>{% if obj.planned_ship_date %}{{ obj.planned_ship_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Cutoff</dt><dd>{% if obj.cutoff_at %}{{ obj.cutoff_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Priority</dt><dd>{{ obj.priority }} <span class="text-muted" style="font-size:12px;">lower runs first</span></dd></div>
+        <div class="detail-item"><dt>Released At</dt><dd>{% if obj.released_at %}{{ obj.released_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Closed At</dt><dd>{% if obj.closed_at %}{{ obj.closed_at|date:"M d, Y H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Membership Criteria</h2>
+    </div>
+    <div class="card-body">
+      {% if obj.criteria_text %}<p style="white-space:pre-line;">{{ obj.criteria_text }}</p>{% else %}<p class="text-muted">No membership criteria recorded for this wave.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Orders in This Wave</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Sales Order</th><th>SO Status (SCM)</th><th>Added At</th>{% if is_admin and obj.is_editable %}<th class="th-actions">Actions</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for m in members %}
+            <tr>
+              <td><a href="{% url 'scm:salesorder_detail' m.sales_order.pk %}" class="fw-600 mono">{{ m.sales_order.number }}</a></td>
+              <td>{{ m.sales_order.get_status_display }}</td>
+              <td>{{ m.added_at|date:"M d, Y H:i" }}</td>
+              {% if is_admin and obj.is_editable %}
+                <td>
+                  <div class="table-actions">
+                    <form method="post" action="{% url 'inventory:waveorder_remove' obj.pk m.pk %}" onsubmit="return confirm('Remove this sales order from the wave?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove from wave"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  </div>
+                </td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="{% if is_admin and obj.is_editable %}4{% else %}3{% endif %}"><div class="empty-state"><i data-lucide="clipboard-list"></i><h3>No orders in this wave yet</h3><p>Add sales orders below while the wave is still planned.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body">
+      {% if add_form %}
+        <form method="post" action="{% url 'inventory:waveorder_add' obj.pk %}" class="filter-bar">
+          {% csrf_token %}
+          <div class="form-group" style="flex:1; min-width:240px;">
+            <label class="form-label" for="{{ add_form.sales_order.id_for_label }}">Add sales order{% if add_form.sales_order.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ add_form.sales_order }}
+            {% for e in add_form.sales_order.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+          <button class="btn btn-primary" type="submit"><i data-lucide="plus"></i> Add Order</button>
+        </form>
+      {% elif is_admin and not obj.is_editable %}
+        <p class="text-muted" style="margin-bottom:0;">Membership locked — orders can only be added or removed while the wave is Planned.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Linked Picks</h2>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Pick #</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for p in linked_picks %}
+            <tr>
+              <td><a href="{% url 'scm:picktask_detail' p.pk %}" class="fw-600 mono">{{ p.number }}</a></td>
+              <td>{{ p.get_status_display }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2"><div class="empty-state"><i data-lucide="package-open"></i><h3>No picks reference this wave yet</h3><p>Picks live in SCM — a pick links to this wave when its wave reference equals {{ obj.number }}.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Notes</h2></div>
+    <div class="card-body">
+      {% if obj.notes %}<p style="white-space:pre-line;">{{ obj.notes }}</p>{% else %}<p class="text-muted">No notes recorded for this wave.</p>{% endif %}
+    </div>
+  </div>
+{% endblock %}
