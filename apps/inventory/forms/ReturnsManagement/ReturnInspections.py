@@ -91,6 +91,14 @@ class ReturnInspectionForm(TenantUniqueMixin, TenantModelForm):
         if line and item and line.item_id != item.id:
             self.add_error("item", "The selected item SKU does not match the item on the return line.")
 
+        # A same-tenant disposition from a DIFFERENT RMA's line must not be attachable
+        disp = cleaned.get("return_disposition")
+        if line is not None and disp is not None and disp.return_line_id is not None and disp.return_line_id != line.id:
+            self.add_error(
+                "return_disposition",
+                "The selected disposition belongs to a different return line.",
+            )
+
         return cleaned
 
 
