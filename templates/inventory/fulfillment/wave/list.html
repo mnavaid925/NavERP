@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Waves{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Waves</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Order Management &amp; Fulfillment</span></div>
+      <p class="text-muted">Release groups of sales orders to the floor as one planned batch — membership locks at release, picks stay SCM documents linked by the wave number, and progress is derived honestly.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:wave_board' %}" class="btn btn-outline"><i data-lucide="layers"></i> Wave Planning Board</a>
+      {% if is_admin %}<a href="{% url 'inventory:wave_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Wave</a>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search wave number or description…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:wave_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Wave #</th><th>Status</th><th>Location</th><th>Carrier</th><th>Ship Method</th><th>Planned Ship</th><th>Orders</th><th>Pick Progress</th><th class="th-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for w in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:wave_detail' w.pk %}" class="fw-600 mono">{{ w.number }}</a>{% if w.description %}<div class="text-muted" style="font-size:12px;">{{ w.description|truncatechars:60 }}</div>{% endif %}</td>
+              <td><span class="badge {{ w.status_css }}">{{ w.get_status_display }}</span></td>
+              <td>{% if w.location %}<span class="mono">{{ w.location.code }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if w.carrier %}{{ w.carrier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if w.ship_method %}{{ w.get_ship_method_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if w.planned_ship_date %}{{ w.planned_ship_date|date:"M d, Y" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ w.orders.count }}</td>
+              <td>
+                {% if w.pick_progress_pct is not None %}
+                  <div class="progress" style="min-width:90px;"><div class="progress-bar" style="width: {{ w.pick_progress_pct }}%;"></div></div>
+                  <div class="text-muted" style="font-size:12px;">{{ w.pick_progress_pct }}%</div>
+                {% else %}
+                  <span class="text-muted" title="No picks reference this wave yet">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:wave_detail' w.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:wave_edit' w.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:wave_delete' w.pk %}" onsubmit="return confirm('Delete this wave?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9"><div class="empty-state"><i data-lucide="layers"></i><h3>No waves yet</h3><p>Plan a wave to group open sales orders into one released-to-floor picking batch.{% if not is_admin %} Ask a workspace admin to create the first wave.{% endif %}</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
