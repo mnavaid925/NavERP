@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Transfer Approval Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Transfer Approval Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:transfer_board' %}">Transfers</a><span class="sep">›</span><span>Approval Rules</span></div>
+      <p class="text-muted">Which movements need sign-off, and how many signatures they need — routed by scope (inter- vs intra-warehouse) and total units. Most-specific rule wins; with no match, one default tier still applies.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:transfer_queue' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> Approval Queue</a>
+      {% if is_admin %}<a href="{% url 'inventory:transferapprovalrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search name…">
+        </div>
+        <div class="form-group">
+          <select name="applies_to" aria-label="Scope" class="form-select">
+            <option value="">All scopes</option>
+            {% for value, label in applies_to_choices %}
+              <option value="{{ value }}" {% if request.GET.applies_to == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="Active" class="form-select">
+            <option value="">All</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:transferapprovalrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Scope</th><th>Unit band</th><th>Tiers</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:transferapprovalrule_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>{{ obj.get_applies_to_display }}</td>
+              <td>{{ obj.min_units|floatformat:"-2" }}{% if obj.max_units %} – {{ obj.max_units|floatformat:"-2" }}{% else %}+{% endif %}</td>
+              <td class="fw-600">{{ obj.tier_count }}</td>
+              <td>{% if obj.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-muted">Inactive</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:transferapprovalrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:transferapprovalrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:transferapprovalrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule? Past decisions keep the snapshot of what governed them.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="scale"></i><h3>No rules yet</h3><p>Without a matching rule every submitted movement needs one approval tier — write a rule to demand more for bigger or cross-warehouse moves.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Bands are half-open (min included, max excluded) so adjacent rules never both match at their shared boundary. Deleting a rule never rewrites decisions already recorded under it.</p>
+{% endblock %}
