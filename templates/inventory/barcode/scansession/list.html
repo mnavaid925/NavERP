@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Scan Sessions — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Scan Sessions</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <span>Scan Sessions</span>
+      </div>
+      <p class="text-muted">Group handheld scans into device sessions, then resolve raw codes into items, locations and lots.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:scan_console' %}" class="btn btn-outline"><i data-lucide="scan-line"></i> Scan Console</a>
+      <a href="{% url 'inventory:scansession_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Session</a>
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="scan-line"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Sessions</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="radio"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.open }}</div>
+        <div class="stat-label">Open Sessions</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="archive"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.closed }}</div>
+        <div class="stat-label">Closed Sessions</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by session number or device label…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:scansession_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Session #</th>
+            <th>Device</th>
+            <th>Mode</th>
+            <th>Status</th>
+            <th>Started At</th>
+            <th>Ended At</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:scansession_detail' obj.pk %}" class="mono fw-600 text-brand">{{ obj.number }}</a>
+              </td>
+              <td><span class="fw-600">{{ obj.device_label|default:"—" }}</span></td>
+              <td><span class="badge badge-slate">{{ obj.get_mode_display }}</span></td>
+              <td>
+                {% if obj.status == 'open' %}
+                  <span class="badge badge-info">Open</span>
+                {% elif obj.status == 'closed' %}
+                  <span class="badge badge-slate">Closed</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>{{ obj.started_at|date:"Y-m-d H:i"|default:"—" }}</td>
+              <td>{% if obj.ended_at %}{{ obj.ended_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:scansession_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'inventory:scan_console' %}?session={{ obj.pk }}" class="btn btn-outline btn-sm" title="Open in Scan Console">
+                    <i data-lucide="scan-line"></i> Console
+                  </a>
+                  <a href="{% url 'inventory:scansession_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                  {% if is_admin %}
+                    <form method="post" action="{% url 'inventory:scansession_delete' obj.pk %}" onsubmit="return confirm('Delete this scan session?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="scan-line"></i>
+                  <h3>No scan sessions found</h3>
+                  <p>Start a session to collect handheld scans from a device, then resolve them from the Scan Console.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
