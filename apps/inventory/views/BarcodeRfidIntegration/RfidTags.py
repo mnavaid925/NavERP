@@ -1,4 +1,5 @@
 """Inventory 5.14 Barcode & RFID Integration — RfidTag CRUD, lifecycle and bulk-read views."""
+from django.core.exceptions import ValidationError
 from django.db.models import Count
 
 from apps.core.crud import as_db_int
