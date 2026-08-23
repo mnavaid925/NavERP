@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Bulk RFID Read Ingest — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Bulk RFID Read Ingest</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Barcode &amp; RFID Integration</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:rfidtag_list' %}">RFID Tags</a>
+        <span class="sep">›</span>
+        <span>Bulk Read Ingest</span>
+      </div>
+      <p class="text-muted">Paste a fixed-reader or handheld RFID dump to stamp last-seen time and location onto matching tags.</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Ingest Form -->
+    <div class="col-span-2">
+      <form method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="form-error mb-4">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+        <div class="card">
+          <div class="card-header flex justify-between items-center">
+            <h2 class="card-title"><i data-lucide="radio"></i> Reader Dump</h2>
+            <span class="badge badge-slate">Max 500 EPCs per ingest</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label" for="epcs">EPC Reads *</label>
+              <textarea name="epcs" id="epcs" rows="10" class="form-textarea mono"
+                        placeholder="E280-6894-0000-0000-0000-0001&#10;3000A1B2C3D4E5F6&#10;&#10;One EPC per line…"></textarea>
+              <div class="form-help">One EPC per line, up to 500 reads. Blank lines and whitespace are ignored.</div>
+              {% if form.epcs.errors %}<div class="form-error">{{ form.epcs.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="location">Reader Location (optional)</label>
+              <select name="location" id="location" aria-label="Reader Location" class="form-select">
+                <option value="">— not recorded —</option>
+                {% for loc in locations %}
+                  <option value="{{ loc.pk }}">{{ loc.code }}{% if loc.name %} — {{ loc.name }}{% endif %}</option>
+                {% endfor %}
+              </select>
+              <div class="form-help">When provided, every matched tag's last-seen location is set to this warehouse location.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button type="submit" class="btn btn-primary"><i data-lucide="upload"></i> Ingest Reads</button>
+          <a href="{% url 'inventory:rfidtag_list' %}" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- Right Col: What Happens -->
+    <div class="space-y-6">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="info"></i> What Happens on Ingest</h2>
+        </div>
+        <div class="card-body space-y-3">
+          <p class="text-muted" style="font-size:13px;">Each submitted EPC is matched against the tag registry:</p>
+          <div class="space-y-2">
+            <div><span class="badge badge-green">Matched</span> <span class="text-muted" style="font-size:12px;">Tag's last-seen timestamp is stamped now; reader location is recorded when one was selected.</span></div>
+            <div><span class="badge badge-red">Unknown EPC</span> <span class="text-muted" style="font-size:12px;">Counted in the ingest result — never dropped or failed — so you can spot unregistered tags in the field.</span></div>
+          </div>
+          <hr>
+          <p class="text-muted" style="font-size:12px;">Ingesting a dump does not move stock, create lots, or alter tag lifecycle status. It only refreshes last-seen telemetry.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="alert-triangle"></i> Warnings</h2>
+        </div>
+        <div class="card-body space-y-2">
+          <p class="text-muted" style="font-size:13px;">Retired and lost tags are still matched — their last-seen data updates even though they are out of service.</p>
+          <p class="text-muted" style="font-size:13px;">Duplicate EPCs within one dump are collapsed to a single read.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
