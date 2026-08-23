@@ -26754,7 +26754,9 @@ immediately before generating; a sibling session may take 0018 too.
       (+ delete also `@require_POST`), reads member-visible with `is_admin` flag hiding affordances.
       list: qs `.select_related("parent","warehouse")`, `search_fields=["number","code","name"]`,
       pre-crud filters `?node_type=` (choices-checked) + `?is_active=` ("true/false/1/0" mapped),
-      extra_context `{node_type_choices, node_type, is_active, is_admin}`. detail extra_context:
+      extra_context `{node_type_choices, node_type, is_active, is_admin}`. REVIEW M2 (accepted
+      as-is): implemented vocabulary is `active`/`inactive` — supersedes this true/false pin;
+      template dropdown and view mapping are self-consistent, no code change. detail extra_context:
       `{children, path_label, is_admin}` (children = obj.children ordered by code; breadcrumb from
       path()). create/edit success_url inventory:locationnetwork_list; template form.html both modes.
 - [ ] URLs urls/MultiLocationManagement/LocationNetworks.py — literals before `<int:pk>`, exact:
