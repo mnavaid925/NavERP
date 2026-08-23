@@ -1152,8 +1152,11 @@ class Command(BaseCommand):
                 "skipping fulfillment waves.")
             return
 
-        admin = (get_user_model().objects.filter(tenant=tenant, is_staff=True)
-                 .order_by("id").first())
+        # Staff first (the audit trail's natural author), else ANY workspace user — a
+        # tenant with no staff user must not hand None into wave.release(None).
+        admin = ((get_user_model().objects.filter(tenant=tenant, is_staff=True)
+                  .order_by("id").first())
+                 or get_user_model().objects.filter(tenant=tenant).order_by("id").first())
         half = max(1, len(open_orders) // 2)
         created = 0
         for status_flag, members in (("planned", open_orders[:half]),
@@ -1172,7 +1175,11 @@ class Command(BaseCommand):
                 FulfillmentWaveOrder.objects.create(
                     tenant=tenant, wave=wave, sales_order=order, added_by=admin)
             if status_flag == "released":
-                wave.release(admin)
+                if admin is None:
+                    self.stdout.write(self.style.WARNING(
+                        f"  {tenant.name}: no workspace user — {wave.number} left planned."))
+                else:
+                    wave.release(admin)
             created += 1
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {created} fulfillment waves over {len(open_orders)} sales orders."))
