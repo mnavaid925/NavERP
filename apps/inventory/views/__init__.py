@@ -109,8 +109,8 @@ from .LotSerialTracking.ShelfLifePolicies import (
     shelflifepolicy_list,
 )
 from .LotSerialTracking.Traceability import traceability
+from .MultiLocationManagement.GlobalStock import global_stock
 from .MultiLocationManagement.LocationNetworks import (
-    global_stock,
     locationnetwork_create,
     locationnetwork_delete,
     locationnetwork_detail,
