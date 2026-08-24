@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Defect Reports — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Defect Reports</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Quality Control</span>
+        <span class="sep">›</span>
+        <span>Defects &amp; Scrap</span>
+      </div>
+      <p class="text-muted">Floor-level defect captures with photo evidence; write-offs post a negative adjustment to the stock ledger.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:defectreport_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Report Defect</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, SKU or description…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">All Severities</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:defectreport_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Defect Type</th>
+            <th>Found During</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:defectreport_detail' obj.pk %}" class="fw-600 text-brand mono">{{ obj.number }}</a></td>
+              <td>
+                <span class="fw-600">{{ obj.item.sku }}</span>
+                <div class="text-muted" style="font-size:12px;">{{ obj.item.name }}</div>
+              </td>
+              <td class="mono fw-600">{{ obj.quantity|floatformat:"-4" }}</td>
+              <td>{{ obj.get_defect_type_display }}</td>
+              <td>{{ obj.get_discovered_during_display }}</td>
+              <td>
+                {% if obj.severity == 'critical' %}
+                  <span class="badge badge-red">Critical</span>
+                {% elif obj.severity == 'major' %}
+                  <span class="badge badge-amber">Major</span>
+                {% else %}
+                  <span class="badge badge-slate">Minor</span>
+                {% endif %}
+              </td>
+              <td><span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:defectreport_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}
+                    <a href="{% url 'inventory:defectreport_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:defectreport_delete' obj.pk %}" onsubmit="return confirm('Delete this defect report?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="bug"></i>
+                  <h3>No defect reports</h3>
+                  <p>Log defective units as they are found — with a photo and a one-click write-off when they are condemned.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
