@@ -103,7 +103,53 @@ def resolve_code(tenant, raw):
     multi-row lookup is ordered by ``id`` — the OLDEST master wins deterministically."""
     code = (raw or "").strip()
     if not code:
-        return ("unknown", None)
+    return ("unknown", None)
+
+
+def resolve_codes(tenant, raw_codes):
+    """Batch variant of :func:`resolve_code` for console paste-runs: resolves a whole submit
+    with FOUR grouped ``__in`` queries (item/location/lot/rfid) instead of ~4 lookups per
+    code inside the write transaction. Returns ``{stripped_code: (kind, obj|None)}``, where
+    unmatched codes map to ``("unknown", None)``.
+
+    Precedence is IDENTICAL to resolve_code — item beats location beats lot beats rfid when
+    one string matches masters of more than one kind — and each grouped query is ordered by
+    ``id`` so a duplicated number resolves to the OLDEST row, exactly like the single scan."""
+    codes = []
+    for raw in raw_codes:
+        stripped = (raw or "").strip()
+        if stripped and stripped not in codes:
+            codes.append(stripped)
+
+    resolved = {c: ("unknown", None) for c in codes}
+    if not codes:
+        return resolved
+
+    # Join keys are compared upper-cased on BOTH sides, mirroring iexact under the app's
+    # case-insensitive collations without N round-trips.
+    origin_of_upper = {c.upper(): c for c in codes}
+    matched = set()
+
+    def _assign(kind, rows, attr):
+        for row in rows:
+            original = origin_of_upper.get(str(getattr(row, attr)).upper())
+            if original is not None and original not in matched:
+                matched.add(original)
+                resolved[original] = (kind, row)
+
+    _assign("item", Item.objects.filter(tenant=tenant, sku__in=codes).order_by("id"), "sku")
+    _assign("location", Location.objects.filter(tenant=tenant, code__in=codes).order_by("id"), "code")
+    _assign("lot", LotSerial.objects.filter(tenant=tenant, number__in=codes).order_by("id"), "number")
+
+    # Lazy sibling import — see resolve_code above for why this cannot be module-level.
+    from .RfidTags import RfidTag
+
+    _assign(
+        "rfid",
+        RfidTag.objects.filter(tenant=tenant, epc__in=list(origin_of_upper)).order_by("id"),
+        "epc",
+    )
+    return resolved
 
     item = Item.objects.filter(tenant=tenant, sku__iexact=code).order_by("id").first()
     if item is not None:
