@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Quarantine{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:quarantineorder_list' %}">Quarantine</a>
+        <span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:quarantineorder_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'inventory:quarantineorder_quarantine' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="shield-ban"></i> Move to Quarantine</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'quarantined' and is_admin %}
+        <form method="post" action="{% url 'inventory:quarantineorder_release' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="check-circle-2"></i> Release to Stock</button>
+        </form>
+        <form method="post" action="{% url 'inventory:quarantineorder_scrap' obj.pk %}" onsubmit="return confirm('Write off these units from the QC zone? A negative adjustment move will be posted.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Scrap</button>
+        </form>
+        <form method="post" action="{% url 'inventory:quarantineorder_cancel' obj.pk %}" onsubmit="return confirm('Cancel this hold? The held goods will be returned to their source location.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="ban"></i> Cancel Hold</button>
+        </form>
+      {% endif %}
+      {% if obj.is_editable %}
+        <a href="{% url 'inventory:quarantineorder_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:quarantineorder_delete' obj.pk %}" onsubmit="return confirm('Delete this draft order?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Hold</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}{{ obj.lot_serial.number }}{% else %}<span class="text-muted">Not tracked</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Quantity</dt><dd class="fw-600">{{ obj.quantity|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Held from</dt><dd><a href="{% url 'scm:location_detail' obj.source_location_id %}" class="mono">{{ obj.source_location.code }}</a> <span class="text-muted">{{ obj.source_location.name }}</span></dd></div>
+        <div class="detail-item"><dt>QC zone</dt><dd><a href="{% url 'scm:location_detail' obj.quarantine_location_id %}" class="mono">{{ obj.quarantine_location.code }}</a> <span class="text-muted">{{ obj.quarantine_location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Reason</dt><dd>{{ obj.get_reason_display }}</dd></div>
+        <div class="detail-item"><dt>Reference</dt><dd>{{ obj.reference|default:"—" }}</dd></div>
+        <div class="detail-item"><dt>Quarantined at</dt><dd>{{ obj.quarantined_at|date:"M d, Y H:i"|default_if_none:"—" }}</dd></div>
+        <div class="detail-item"><dt>Resolved</dt><dd>{{ obj.resolved_at|date:"M d, Y H:i"|default_if_none:"—" }}</dd></div>
+        <div class="detail-item"><dt>Created</dt><dd>{{ obj.created_at|date:"M d, Y H:i" }}</dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>
+      {% else %}<p class="text-muted" style="margin-top:12px;">No notes recorded.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ledger Moves — {{ obj.number }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Type</th><th>Location</th><th>Qty</th><th>Unit Cost</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for move in moves %}
+            <tr>
+              <td>{{ move.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ move.get_move_type_display }}</td>
+              <td>{{ move.location.code }}</td>
+              <td class="fw-600">{% if move.quantity < 0 %}<span class="badge badge-red">{{ move.quantity|floatformat:"-4" }}</span>{% else %}<span class="badge badge-green">+{{ move.quantity|floatformat:"-4" }}</span>{% endif %}</td>
+              <td>{{ move.unit_cost|floatformat:"-4" }}</td>
+              <td>{{ move.reason }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-commit-horizontal"></i><h3>No ledger moves yet</h3><p>The transfer pair posts when the hold is executed; release, scrap or cancel post their own compensating legs.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
