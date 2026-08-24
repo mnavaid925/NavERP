@@ -54,4 +54,20 @@ class BarcodeLabelForm(TenantUniqueMixin, TenantModelForm):
             cleaned,
             ["item", "location", "lot_serial"],
         )
+
+        # Target/FK consistency: when target_type names exactly one FK field, that field is
+        # REQUIRED — otherwise save() derives an empty payload (item.sku of None → "") and a
+        # label prints with nothing encoded. Free-form needs at least one raw reference.
+        target_type = cleaned.get("target_type")
+        required_fk = {"item": "item", "location": "location", "lot": "lot_serial"}.get(target_type)
+        if required_fk is not None:
+            if not cleaned.get(required_fk):
+                self.add_error(
+                    required_fk,
+                    "Select the record this label points at for the chosen target type.",
+                )
+        elif target_type == "free":
+            if not (cleaned.get("target_ref") or "").strip() and not (cleaned.get("pallet_ref") or "").strip():
+                self.add_error("target_ref", "Provide a free-form reference code for this label.")
+
         return cleaned
