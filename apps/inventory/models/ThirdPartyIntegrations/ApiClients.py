@@ -83,7 +83,7 @@ class ApiClient(TenantNumbered):
         ordering = ["name", "id"]
         unique_together = (("tenant", "number"), ("tenant", "name"))
         indexes = [
-            Index(fields=["tenant", "status"], name="inv_apc_tnt_status_idx"),
+            models.Index(fields=["tenant", "status"], name="inv_apc_tnt_status_idx"),
         ]
 
     @staticmethod
