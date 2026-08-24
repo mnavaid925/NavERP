@@ -78,18 +78,27 @@ def f2(value):
 
 
 def clamp_window(raw, default=DEFAULT_WINDOW_DAYS):
-    """Parse a ?days= query value into a sane positive int, else the default."""
+    """Parse a ?days= query value into a sane positive int, else the default.
+
+    The length guard is not cosmetic: a 4301-digit ``isdecimal()`` string passes
+    the check and then blows Python's int→str conversion limit inside ``int()``.
+    """
     raw = (raw or "").strip()
-    if not raw.isdecimal():
+    if not raw.isdecimal() or len(raw) > 4:
         return default
     return max(1, min(int(raw), MAX_WINDOW_DAYS))
 
 
 class Ledger:
-    """One chronological fetch of the tenant's moves, indexed for all four reports."""
+    """One chronological fetch of the tenant's moves, indexed for all four reports.
+
+    Stocked items only: every report in this sub-module values physical stock,
+    so service/expensed item legs are excluded at the DB, not per row later.
+    """
 
     def __init__(self, tenant, location=None):
-        qs = StockMove.objects.filter(tenant=tenant).order_by("moved_at", "id")
+        qs = (StockMove.objects.filter(tenant=tenant, item__item_type="stock")
+              .order_by("moved_at", "id"))
         if location is not None:
             qs = qs.filter(location=location)
         self.moves = list(qs.only("item_id", "location_id", "quantity", "unit_cost",
@@ -191,6 +200,7 @@ def turnover_rows(tenant, days, ledger=None, location=None):
     items = ledger.items(tenant)
     now = timezone.now()
     start = now - timedelta(days=days)
+    days_dec = Decimal(days)
     rows = []
     total_cogs = ZERO
     for item_id, moves in ledger.by_item.items():
@@ -203,9 +213,15 @@ def turnover_rows(tenant, days, ledger=None, location=None):
                           if m.move_type in DEMAND_TYPES and start <= m.moved_at <= now), ZERO)
         end_on_hand, end_value = _value_walk(item, moves)
         _start_hand, start_value = _value_at(item, moves, start)
-        avg_value = (start_value + end_value) / 2
+        # Average of the window endpoints; when both endpoints are stockless but
+        # demand provably existed inside the window (received-and-sold-through),
+        # fall back to whichever book value exists so a trading SKU never reads
+        # "dead" — the same fallback SCM's inv_turnover KPI applies.
+        avg_value = (start_value + end_value) * _HALF
+        if avg_value <= ZERO:
+            avg_value = end_value or start_value
         turns = (cogs / avg_value) if avg_value > ZERO else None
-        doh = (Decimal(days) / turns) if turns is not None and turns > ZERO else None
+        doh = (days_dec / turns) if turns is not None and turns > ZERO else None
         total_cogs += cogs
         rows.append({
             "item": item,
@@ -226,17 +242,25 @@ def turnover_rows(tenant, days, ledger=None, location=None):
 
 
 def _velocity(cogs, turns):
+    """Velocity verdict for one item-window.
+
+    No demand at all reads dead. Demand WITH a measurable average stock reads
+    off the turns bands. Demand with NO measurable stock at either endpoint
+    (received-and-sold-through inside the window) is the FASTEST possible
+    mover, not a dead one — it never got a chance to rest.
+    """
     if cogs <= ZERO:
         return "dead"
     if turns is None:
-        return "dead"
+        return "fast"
     if turns >= 2:
         return "fast"
-    if turns >= Decimal("0.5"):
+    if turns >= _HALF:
         return "medium"
     return "slow"
 
 
+_HALF = Decimal("0.5")
 VELOCITY_CSS = {"fast": "badge-green", "medium": "badge-info",
                 "slow": "badge-amber", "dead": "badge-red"}
 VELOCITY_CHOICES = [("fast", "Fast"), ("medium", "Medium"), ("slow", "Slow"), ("dead", "Dead")]
@@ -369,15 +393,17 @@ ABC_CLASS_CSS = {"A": "badge-green", "B": "badge-info", "C": "badge-muted"}
 SNAPSHOT_TOP_ROWS = 15
 
 
-def build_summary(report_type, tenant, location=None, window_days=None):
+def build_summary(report_type, tenant, location=None, window_days=None, ledger=None):
     """Run one report exactly as its live page would and distil scalar-only JSON.
 
     This is THE freeze path: the snapshot generator (view and seeder alike)
     stores what this returns, so an IRS- row can never disagree with the page
     it froze. Every value must be float/int/str/bool/None — no Decimals, dates
-    or model instances (the ``scm.KpiSnapshot`` contract).
+    or model instances (the ``scm.KpiSnapshot`` contract). Callers freezing
+    several reports in one pass (the seeder) may thread one ``ledger`` through
+    to avoid re-fetching it per call.
     """
-    ledger = Ledger(tenant, location=location)
+    ledger = ledger or Ledger(tenant, location=location)
     if report_type == "valuation":
         rows, totals = valuation_rows(tenant, ledger=ledger)
         return {
