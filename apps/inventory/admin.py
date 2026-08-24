@@ -48,6 +48,10 @@ from apps.inventory.models import (
     QuarantineOrder,
     DefectReport,
     InventoryReportSnapshot,
+    ApiClient,
+    ChannelListingMap,
+    IntegrationChannel,
+    StockSyncRun,
 )
 
 
@@ -374,3 +378,41 @@ class JournalSyncLogAdmin(admin.ModelAdmin):
                     "moves_count", "total_value", "journal_entry", "posted_at")
     list_filter = ("tenant", "source_kind", "posted_at")
     readonly_fields = ("number", "journal_entry", "posted_by", "posted_at")
+
+
+@admin.register(IntegrationChannel)
+class IntegrationChannelAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "kind", "platform", "environment", "status",
+                    "direction", "is_active")
+    list_filter = ("tenant", "kind", "status", "environment", "is_active")
+    search_fields = ("number", "name", "external_account_ref", "notes")
+    readonly_fields = ("number", "api_key_prefix", "api_key_hash",
+                       "last_sync_at", "last_run_status")
+
+
+@admin.register(ChannelListingMap)
+class ChannelListingMapAdmin(admin.ModelAdmin):
+    list_display = ("channel", "item", "external_sku", "external_variant_id",
+                    "location", "sync_enabled", "last_pushed_at")
+    list_filter = ("tenant", "channel", "sync_enabled")
+    search_fields = ("external_sku", "external_product_id", "external_variant_id",
+                     "item__sku", "channel__name")
+    readonly_fields = ("last_pushed_qty", "last_pushed_at")
+
+
+@admin.register(StockSyncRun)
+class StockSyncRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "channel", "direction", "trigger_mode", "status",
+                    "records_total", "records_ok", "records_failed", "started_at")
+    list_filter = ("tenant", "status", "channel", "trigger_mode")
+    search_fields = ("number", "error_code")
+    readonly_fields = ("number", "started_at")
+
+
+@admin.register(ApiClient)
+class ApiClientAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "protocol", "status", "revoked_at", "last_used_at")
+    list_filter = ("tenant", "protocol", "status")
+    search_fields = ("number", "name", "scopes")
+    readonly_fields = ("number", "api_token_prefix", "api_token_hash",
+                       "revoked_at", "last_used_at")
