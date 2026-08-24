@@ -44,6 +44,24 @@ from .BarcodeRfidIntegration import (
     resolve_code,
     RfidTag,
 )
+from .AlertsNotifications import AlertRule, InventoryAlert, NotificationDelivery
+from .AccountingFinancialIntegration import (
+    GLPostRule,
+    JournalSyncLog,
+    TaxRule,
+    post_adjustment_to_gl,
+    post_cogs_batch,
+    resolve_tax_rule,
+)
+from .QualityControl import (
+    DefectReport,
+    QcChecklist,
+    QcChecklistItem,
+    QcRoutingRule,
+    QuarantineOrder,
+    resolve_qc_routing,
+)
+from .ReportingAnalytics.ReportSnapshots import InventoryReportSnapshot
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "FulfillmentWave", "FulfillmentWaveOrder",
@@ -59,5 +77,11 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "APPLIES_TO_CHOICES", "SCOPE_ALL", "SCOPE_INTER", "SCOPE_INTRA",
            "ReturnInspection", "ReturnInspectionChecklist",
            "DispositionRoutingRule", "resolve_disposition_routing",
-           "BarcodeLabel", "ScanSession", "ScanEvent", "resolve_code", "RfidTag"]
+           "BarcodeLabel", "ScanSession", "ScanEvent", "resolve_code", "RfidTag",
+           "AlertRule", "InventoryAlert", "NotificationDelivery",
+           "TaxRule", "resolve_tax_rule", "GLPostRule", "JournalSyncLog",
+           "post_adjustment_to_gl", "post_cogs_batch",
+           "QcChecklist", "QcChecklistItem", "QcRoutingRule", "QuarantineOrder",
+           "DefectReport", "resolve_qc_routing",
+           "InventoryReportSnapshot"]
 
