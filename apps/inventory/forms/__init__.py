@@ -75,5 +75,6 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "TaxRuleForm", "GLPostRuleForm",
            "QcChecklistForm", "QcChecklistItemForm", "QcChecklistItemFormSet",
            "QcRoutingRuleForm", "QuarantineOrderForm", "DefectReportForm",
-           "ReportSnapshotForm"]
+           "ReportSnapshotForm",
+           "IntegrationChannelForm", "ChannelListingMapForm", "ApiClientForm"]
 
