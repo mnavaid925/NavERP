@@ -38,8 +38,11 @@
       <span class="badge badge-info"><i data-lucide="info"></i> Browser tip</span>
       <span class="text-muted" style="font-size:13px;">
         Use your browser's print dialog on this page — it prints
-        <span class="fw-600">{{ copies_range|length }} cop{{ copies_range|length|pluralize:"y,ies" }}</span>
+        <span class="fw-600">{{ copies_total }} cop{{ copies_total|pluralize:"y,ies" }}</span>
         of this sheet (one label frame per copy) onto your loaded label stock.
+        {% if preview_capped %}
+          Showing the first {{ preview_cap }} preview frames only.
+        {% endif %}
       </span>
     </div>
   </div>
