@@ -37,7 +37,6 @@ def snapshot_list(request):
         "page_obj": page_obj,
         "object_list": page_obj.object_list,
         "type_choices": InventoryReportSnapshot.REPORT_TYPES,
-        "type_css": InventoryReportSnapshot.TYPE_CSS,
         "report_type": report_type,
         "q": q,
     })
@@ -47,10 +46,18 @@ def snapshot_list(request):
 def snapshot_generate(request):
     """GET renders the form; POST computes the chosen report LIVE and freezes it.
 
-    The summary comes from ``_engine.build_summary`` — the exact function the
-    seeder freezes through — never from a view-local re-implementation.
+    The form is built with ``tenant=`` like every sibling custom-form view:
+    without it TenantModelForm cannot scope the location queryset (foreign
+    locations would render in the dropdown) and ``_reject_foreign`` would
+    reject even this workspace's own locations. The ``?type=`` deep-link the
+    four report pages send pre-selects the report type on GET.
     """
-    form = ReportSnapshotForm(request.POST or None)
+    initial = None
+    if request.method == "GET":
+        wanted = request.GET.get("type", "")
+        if any(wanted == value for value, _label in InventoryReportSnapshot.REPORT_TYPES):
+            initial = {"report_type": wanted}
+    form = ReportSnapshotForm(request.POST or None, initial=initial, tenant=request.tenant)
     if request.method == "POST" and form.is_valid():
         obj = form.save(commit=False)
         obj.tenant = request.tenant
@@ -73,10 +80,7 @@ def snapshot_generate(request):
 @login_required
 def snapshot_detail(request, pk):
     obj = get_object_or_404(InventoryReportSnapshot, pk=pk, tenant=request.tenant)
-    return render(request, "inventory/reports/snapshot/detail.html", {
-        "object": obj,
-        "type_css": InventoryReportSnapshot.TYPE_CSS.get(obj.report_type, "badge-muted"),
-    })
+    return render(request, "inventory/reports/snapshot/detail.html", {"object": obj})
 
 
 @tenant_admin_required
