@@ -8,6 +8,7 @@ hiding affordances.
 """
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Count
 
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.forms import QcChecklistForm, QcChecklistItemFormSet
@@ -16,9 +17,11 @@ from apps.inventory.views._common import *  # noqa: F401,F403
 
 
 def _scoped(tenant):
-    """Tenant-scoped queryset with the joins every list page renders."""
+    """Tenant-scoped queryset with the joins every list page renders, plus the
+    checkpoint count the list column shows (annotated: no COUNT per row)."""
     return (QcChecklist.objects.filter(tenant=tenant)
-            .select_related("item", "vendor"))
+            .select_related("item", "vendor")
+            .annotate(n_items=Count("checklist_items")))
 
 
 @login_required
