@@ -100,7 +100,8 @@ class QuarantineOrder(TenantNumbered):
         help_text="Source document number, e.g. GRN-00012 / RMA-00004 / NCR-00002")
     notes = models.TextField(blank=True)
 
-    status = models.CharField(max_length=11, choices=STATUS_CHOICES, default="draft")
+    status = models.CharField(max_length=11, choices=STATUS_CHOICES, default="draft",
+                              editable=False)
     quarantined_at = models.DateTimeField(null=True, blank=True, editable=False)
     resolved_at = models.DateTimeField(null=True, blank=True, editable=False,
                                        help_text="Release / scrap / cancel moment")
