@@ -75,7 +75,7 @@
               {% endif %}
             </tr>
           {% empty %}
-            <tr><td colspan="6"><div class="empty-state"><i data-lucide="camera-off"></i><h3>No rows captured</h3><p>The freeze found nothing to record — the ledger may have been empty in this scope.</p></div></td></tr>
+            <tr><td colspan="{% if object.report_type == "turnover" or object.report_type == "abc" %}5{% else %}6{% endif %}"><div class="empty-state"><i data-lucide="camera-off"></i><h3>No rows captured</h3><p>The freeze found nothing to record — the ledger may have been empty in this scope.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
