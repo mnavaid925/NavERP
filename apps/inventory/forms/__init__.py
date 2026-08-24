@@ -30,6 +30,16 @@ from .BarcodeRfidIntegration import (
     ScanSessionForm,
     RfidTagForm,
 )
+from .AlertsNotifications import AlertRuleForm
+from .AccountingFinancialIntegration import GLPostRuleForm, TaxRuleForm
+from .QualityControl import (
+    DefectReportForm,
+    QcChecklistForm,
+    QcChecklistItemForm,
+    QcChecklistItemFormSet,
+    QcRoutingRuleForm,
+    QuarantineOrderForm,
+)
 from .ReturnsManagement import (
     DispositionRoutingRuleForm,
     ReturnInspectionChecklistForm,
@@ -40,6 +50,7 @@ from .StockMovementTransfers import TransferApprovalRuleForm, TransferRouteForm
 from .VendorSupplierManagement.VendorCommunications import VendorCommunicationForm
 from .WarehousingBinManagement.BinCapacities import BinCapacityForm
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrderForm
+from .ReportingAnalytics.ReportSnapshots import ReportSnapshotForm
 
 __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommunicationForm",
            "FulfillmentWaveForm", "FulfillmentWaveOrderForm",
@@ -54,5 +65,10 @@ __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommu
            "TransferRouteForm", "TransferApprovalRuleForm",
            "ReturnInspectionForm", "ReturnInspectionChecklistForm",
            "ReturnInspectionChecklistFormSet", "DispositionRoutingRuleForm",
-           "BarcodeLabelForm", "ScanSessionForm", "RfidTagForm"]
+           "BarcodeLabelForm", "ScanSessionForm", "RfidTagForm",
+           "AlertRuleForm",
+           "TaxRuleForm", "GLPostRuleForm",
+           "QcChecklistForm", "QcChecklistItemForm", "QcChecklistItemFormSet",
+           "QcRoutingRuleForm", "QuarantineOrderForm", "DefectReportForm",
+           "ReportSnapshotForm"]
 
