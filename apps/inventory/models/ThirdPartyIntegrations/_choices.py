@@ -111,8 +111,10 @@ RUN_STATUS_CHOICES = [
     ("simulated", "Simulated"),
 ]
 
-#: Svix-style retry ladder adopted verbatim (same posture as scm DELIVERY_BACKOFF_SECONDS);
-#: indexed by ``attempt_no``, repeated tail marks the schedule spent.
+#: Svix-style retry ladder adopted verbatim (same posture as scm DELIVERY_BACKOFF_SECONDS).
+#: Slot 0 is the immediate first attempt; attempt N has consumed slot N-1, so the NEXT wait is
+#: read at index ``attempt_no`` — a lookup past the end (or below zero) means the schedule is
+#: spent and the row is marked exhausted instead of being scheduled.
 SYNC_BACKOFF_SECONDS = (0, 5, 300, 1800, 7200, 18000, 36000, 36000)
 
 #: Protocols of the REST/GraphQL surface keys are issued FOR (bullet 4).
