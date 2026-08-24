@@ -37,6 +37,31 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 | 5.11 | `StocktakingCycleCounting/` | CountProgram [CTP-], PhysicalInventory [PHY-] (+ variance_report computed page) | count EXECUTION stays `scm.CycleCountTask`; Blind Counts bullet points at the spine master; reconcile() refuses while spawned sheets are open |
 | 5.13 | \ForecastingPlanning/\ | StockLevelPlan [SLP-] (+ planning_board computed page) | forecasts/ROP math stay SCM 4.7; board apply delegates to spine apply_computed; recommended qty derived via profile.apply_to each render |
 | 5.10 | `ReturnsManagement/` | ReturnInspection [RMI-], ReturnInspectionChecklist, DispositionRoutingRule (+ `returns_workbench` computed board) | Primary RMA documents and ledger postings stay in SCM 4.10 (L36/L29); 5.10 adds warehouse physical inspection grading checklists and automated disposition routing engine |
+| 5.12 | `MultiLocationManagement/` | LocationNetwork [LNW-] (+ `global_stock` computed page in its own GlobalStock.py view module) | org tier ABOVE the location spine: company>region>dc/store self-FK tree whose nodes attach `scm.Location` warehouses; global stock rolls the StockMove ledger UP that tree (4 flat queries); Location-Specific Rules bullet points at `scm:reorderrule_list` |
+
+### 5.12 Multi-Location Management — the org-tier slice
+
+- **One tree, zero spine writes**: `LocationNetwork` [LNW-#####] is a self-FK org hierarchy
+  (company > region > dc > store) whose nodes optionally ATTACH an existing `scm.Location`
+  warehouse (PROTECT, unique per tenant — one site joins one node, at ANY tier: a stocking DC
+  node IS its warehouse). clean() carries cycle + depth-8 seen-set guards mirroring
+  Location.path(); NODE_CSS is colour-named {company slate, region info, dc amber, store green}.
+- **Global Stock Visibility** ships as a computed page (`inventory:global_stock`, view in its
+  own GlobalStock.py): exactly FOUR flat queries (nodes select_related'd; warehouses dict; ONE
+  grouped StockMove sum of quantity AND quantity×unit_cost; ONE grouped StockTransferLine
+  in-transit-only sum by source+destination) rolled UP the pre-order tree via an in-memory
+  by_pk map — path_label resolution never touches the DB. In-transit columns are SYNTHESIZED
+  from open transfers (never subtracted from on-hand); unattached warehouses surface under an
+  honest "Unassigned sites" pseudo-row ONLY when no ?q= filter hides it. Grouped maps read via
+  .get(pk, ZERO) so move-less sites render real zeros, never KeyError (C4).
+- **Bullet 3 ruling**: per-location safety stock already lives on `scm.ReorderRule`
+  (per-item×location grain), transfer lanes on 5.7 TransferRoute — the sidebar bullet points at
+  `scm:reorderrule_list`; ItemPrice stays channel-scoped by design.
+- **Gating/hygiene**: writes @tenant_admin_required with is_admin flags; code strip-cleaned
+  (M7); duplicate code / double warehouse attach surface as form errors, not IntegrityErrors;
+  global_stock read-only for everyone.
+- Tests: `test_multiloc_{models,forms,views,security}.py` (73) + conftest fixtures
+  `multiloc_{wh_a,wh_b,company_a,region_a,dc_a,store_a,foreign_node_b}`.
 
 ### 5.9 Order Management & Fulfillment — the wave-planning slice
 
@@ -324,7 +349,7 @@ THIS module's tables â€” seed_scm already creates one plain transfer per te
 
 ## Sidebar wiring
 
-`LIVE_LINKS["5.1"…"5.11"]` in `apps/core/navigation.py` map NavERP.md bullet names â†’ live routes,
+`LIVE_LINKS["5.1"…"5.14"]` in `apps/core/navigation.py` map NavERP.md bullet names â†’ live routes,
 pointing master-data bullets at owning scm pages. Overview card groups per sub-module.
 
 ## Common tasks
