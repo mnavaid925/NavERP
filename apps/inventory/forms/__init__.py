@@ -51,6 +51,11 @@ from .VendorSupplierManagement.VendorCommunications import VendorCommunicationFo
 from .WarehousingBinManagement.BinCapacities import BinCapacityForm
 from .WarehousingBinManagement.CrossDockOrders import CrossDockOrderForm
 from .ReportingAnalytics.ReportSnapshots import ReportSnapshotForm
+from .ThirdPartyIntegrations import (
+    ApiClientForm,
+    ChannelListingMapForm,
+    IntegrationChannelForm,
+)
 
 __all__ = ["ItemAttributeForm", "ItemPriceForm", "ProductFileForm", "VendorCommunicationForm",
            "FulfillmentWaveForm", "FulfillmentWaveOrderForm",
