@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Stock Sync Run — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Sync Run {{ obj.number }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:stocksyncrun_list' %}">Sync Runs</a>
+        <span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}
+        <form method="post" action="{% url 'inventory:stocksyncrun_retry' obj.pk %}" onsubmit="return confirm('Queue another attempt for {{ obj.number }}? Nothing will be sent — this only stamps the retry schedule.');">
+          {% csrf_token %}
+          <button class="btn btn-primary" type="submit"><i data-lucide="rotate-ccw"></i> Queue Retry</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'inventory:stocksyncrun_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Runs</a>
+    </div>
+  </div>
+
+  {% if obj.error_code or obj.error_message %}
+    <div class="card mb-6" style="border-left:3px solid var(--bad, #dc2626);">
+      <div class="card-body flex items-start gap-3">
+        <i data-lucide="alert-triangle"></i>
+        <div>
+          <strong>Error{% if obj.error_code %} <span class="mono">{{ obj.error_code }}</span>{% endif %}</strong>
+          {% if obj.error_message %}<p class="text-muted" style="margin:4px 0 0;">{{ obj.error_message }}</p>{% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-3 gap-6">
+    <div class="col-span-2">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="card-title">Run Record</h2>
+          <span class="flex items-center gap-2">
+            {% if obj.status == 'success' %}<span class="badge badge-green">Success</span>
+            {% elif obj.status == 'partial' %}<span class="badge badge-amber">Partial</span>
+            {% elif obj.status == 'failed' %}<span class="badge badge-red">Failed</span>
+            {% elif obj.status == 'exhausted' %}<span class="badge badge-slate">Exhausted</span>
+            {% elif obj.status == 'pending' %}<span class="badge badge-muted">Pending</span>
+            {% elif obj.status == 'simulated' %}<span class="badge badge-info">Simulated</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+            {% if obj.direction == 'outbound_push' %}<span class="badge badge-info">Outbound Push</span>
+            {% elif obj.direction == 'inbound_pull' %}<span class="badge badge-slate">Inbound Pull</span>
+            {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+          </span>
+        </div>
+        <div class="card-body">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Channel</dt>
+              <dd class="mt-1">
+                {% if obj.channel %}
+                  <a href="{% url 'inventory:integrationchannel_detail' obj.channel.pk %}" class="fw-600">{{ obj.channel.name }}</a>
+                  <span class="mono text-muted" style="font-size:12px;">{{ obj.channel.number }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Trigger Mode</dt>
+              <dd class="mt-1">{{ obj.get_trigger_mode_display|default:"—" }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Records OK / Total</dt>
+              <dd class="mt-1 mono">{{ obj.records_ok }} / {{ obj.records_total }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Records Failed</dt>
+              <dd class="mt-1 mono">{{ obj.records_failed }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Attempt</dt>
+              <dd class="mt-1">Attempt {{ obj.attempt_no }} of {{ max_attempts }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Next Retry At</dt>
+              <dd class="mt-1">{{ obj.next_retry_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Next Backoff</dt>
+              <dd class="mt-1">
+                {% if obj.next_backoff_seconds != None %}
+                  <span class="badge badge-info">{{ obj.next_backoff_seconds }}s</span>
+                {% else %}
+                  <span class="badge badge-muted">Schedule spent</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Started At</dt>
+              <dd class="mt-1">{{ obj.started_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Finished At</dt>
+              <dd class="mt-1">{{ obj.finished_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+            </div>
+          </dl>
+          <p class="text-muted mt-4" style="font-size:13px;">
+            This register is append-only — a run records what a sync batch did and is never edited or deleted.
+          </p>
+        </div>
+      </div>
+
+      {% if obj.payload_excerpt %}
+        <div class="card mt-6">
+          <div class="card-header"><h2 class="card-title">Payload Excerpt</h2></div>
+          <div class="card-body">
+            {# TRUNCATED excerpt only — may contain buyer PII; a full body is never stored. #}
+            <pre class="mono" style="white-space:pre-wrap; word-break:break-word; font-size:12px; margin:0;">{{ obj.payload_excerpt|truncatechars:2000 }}</pre>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Retry Schedule</h2></div>
+        <div class="card-body space-y-3">
+          <div>
+            <div class="text-muted" style="font-size:13px;">Attempt</div>
+            <div>{{ obj.attempt_no }} of {{ max_attempts }}</div>
+          </div>
+          <div>
+            <div class="text-muted" style="font-size:13px;">Next wait</div>
+            <div>
+              {% if obj.next_backoff_seconds != None %}
+                <span class="badge badge-info">{{ obj.next_backoff_seconds }}s</span>
+              {% else %}
+                <span class="badge badge-muted">Schedule spent</span>
+              {% endif %}
+            </div>
+          </div>
+          <div>
+            <div class="text-muted" style="font-size:13px;">Queued for</div>
+            <div>{{ obj.next_retry_at|date:"Y-m-d H:i"|default:"—" }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="card mt-6">
+        <div class="card-body flex items-start gap-3">
+          <i data-lucide="info"></i>
+          <p class="text-muted" style="font-size:13px; margin:0;">
+            Outbound transport is deferred — <strong>Queue Retry stamps the schedule, it sends nothing</strong>, and no scheduler acts on the stamp.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
