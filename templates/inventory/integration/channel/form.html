@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit {{ form.name.value|default:"Channel" }}{% else %}New Integration Channel{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Integration Channel{% else %}New Integration Channel{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:integrationchannel_list' %}">Channels</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="form-error mb-4">
+        {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Identity</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.name.id_for_label }}">Name *</label>
+            {{ form.name }}
+            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.kind.id_for_label }}">Kind *</label>
+            {{ form.kind }}
+            {% if form.kind.errors %}<div class="form-error">{{ form.kind.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.platform.id_for_label }}">Platform</label>
+            {{ form.platform }}
+            {% if form.platform.errors %}<div class="form-error">{{ form.platform.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.direction.id_for_label }}">Sync Direction</label>
+            {{ form.direction }}
+            {% if form.direction.errors %}<div class="form-error">{{ form.direction.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.external_account_ref.id_for_label }}">External Account Ref</label>
+            {{ form.external_account_ref }}
+            {% if form.external_account_ref.errors %}<div class="form-error">{{ form.external_account_ref.errors }}</div>{% endif %}
+            <div class="form-help">Shop domain / seller id / realm / company id at the platform.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-header">
+        <h2 class="card-title">Connection &amp; Auth</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.auth_method.id_for_label }}">Auth Method</label>
+            {{ form.auth_method }}
+            {% if form.auth_method.errors %}<div class="form-error">{{ form.auth_method.errors }}</div>{% endif %}
+            <div class="form-help">Records intent only — OAuth 2.0 stores no tokens; the key itself is issued via “Rotate key”.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.base_url.id_for_label }}">Base URL</label>
+            {{ form.base_url }}
+            {% if form.base_url.errors %}<div class="form-error">{{ form.base_url.errors }}</div>{% endif %}
+            <div class="form-help">Recorded configuration only — nothing dials it in this build.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.environment.id_for_label }}">Environment</label>
+            {{ form.environment }}
+            {% if form.environment.errors %}<div class="form-error">{{ form.environment.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+            {{ form.status }}
+            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            <div class="form-help">Human-maintained marker — nothing observes the connection automatically.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-6">
+      <div class="card-header">
+        <h2 class="card-title">Sync Intent</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.trigger_mode.id_for_label }}">Trigger Mode</label>
+            {{ form.trigger_mode }}
+            {% if form.trigger_mode.errors %}<div class="form-error">{{ form.trigger_mode.errors }}</div>{% endif %}
+            <div class="form-help">Intent only — no scheduler exists in this build.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.schedule_note.id_for_label }}">Schedule Note</label>
+            {{ form.schedule_note }}
+            {% if form.schedule_note.errors %}<div class="form-error">{{ form.schedule_note.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.rate_limit_note.id_for_label }}">Rate-Limit Note</label>
+            {{ form.rate_limit_note }}
+            {% if form.rate_limit_note.errors %}<div class="form-error">{{ form.rate_limit_note.errors }}</div>{% endif %}
+            <div class="form-help">Prose humans read, never enforced — e.g. “QBO: 429 w/ Retry-After, ~10 concurrent”.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.default_location.id_for_label }}">Default Location</label>
+            {{ form.default_location }}
+            {% if form.default_location.errors %}<div class="form-error">{{ form.default_location.errors }}</div>{% endif %}
+            <div class="form-help">Which stocking location backs this channel's availability.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.is_active.id_for_label }}">Active</label>
+            {{ form.is_active }}
+            {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 mt-6">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> {% if is_edit %}Save Changes{% else %}Create Channel{% endif %}</button>
+      <a href="{% url 'inventory:integrationchannel_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
