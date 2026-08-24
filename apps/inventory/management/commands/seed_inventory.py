@@ -1454,7 +1454,8 @@ class Command(BaseCommand):
             (f"{epc_base}0002", "passive", "active", item, {}),
             (f"{epc_base}0003", "active", "active", None, {"location": bin_loc}),
             (f"{epc_base}0004", "passive", "retired", None, {}),
-            (f"{epc_base}0005", "passive", "lost", None, {}),
+            (f"{epc_base}0005", "passive", "lost", None,
+             {"target_ref": f"FLOOR-{tenant.pk:04d}"}),
         ]
         active_tags = []
         for epc, kind, status_target, tgt, anchor in tag_specs:
