@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Integration Channels — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Integration Channels</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <span>Channels</span>
+      </div>
+      <p class="text-muted">Connection register for e-commerce, ERP and accounting platforms — recorded intent and credentials only; nothing is dialed by this build.</p>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}
+        <a href="{% url 'inventory:integrationchannel_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Channel</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="plug-zap"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Channels</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.connected }}</div>
+        <div class="stat-label">Connected</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.error }}</div>
+        <div class="stat-label">Error</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="pause-circle"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.disabled }}</div>
+        <div class="stat-label">Disabled</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by name, account ref, platform or location code…">
+        </div>
+        <div class="form-group">
+          <select name="kind" aria-label="Kind" class="form-select">
+            <option value="">All Kinds</option>
+            {% for val, label in kind_choices %}
+              <option value="{{ val }}" {% if request.GET.kind == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="platform" aria-label="Platform" class="form-select">
+            <option value="">All Platforms</option>
+            {% for val, label in platform_choices %}
+              <option value="{{ val }}" {% if request.GET.platform == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:integrationchannel_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Name</th>
+            <th>Kind</th>
+            <th>Platform</th>
+            <th>Environment</th>
+            <th>Status</th>
+            <th>API Key</th>
+            <th>Location</th>
+            <th>Last Run</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="mono fw-600">{{ obj.number }}</span></td>
+              <td><a href="{% url 'inventory:integrationchannel_detail' obj.pk %}" class="fw-600">{{ obj.name }}</a></td>
+              <td>
+                {% if obj.kind == 'ecommerce' %}
+                  <span class="badge badge-info">E-commerce</span>
+                {% elif obj.kind == 'erp' %}
+                  <span class="badge badge-amber">ERP</span>
+                {% elif obj.kind == 'accounting' %}
+                  <span class="badge badge-green">Accounting</span>
+                {% elif obj.kind == 'custom' %}
+                  <span class="badge badge-muted">Custom</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_kind_display }}</span>
+                {% endif %}
+              </td>
+              <td>{{ obj.get_platform_display|default:"—" }}</td>
+              <td>
+                {% if obj.environment == 'production' %}
+                  <span class="badge badge-slate">Production</span>
+                {% elif obj.environment == 'sandbox' %}
+                  <span class="badge badge-info">Sandbox</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_environment_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'connected' %}
+                  <span class="badge badge-green">Connected</span>
+                {% elif obj.status == 'disconnected' %}
+                  <span class="badge badge-muted">Disconnected</span>
+                {% elif obj.status == 'error' %}
+                  <span class="badge badge-red">Error</span>
+                {% elif obj.status == 'disabled' %}
+                  <span class="badge badge-slate">Disabled</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td><span class="mono">{% if obj.masked %}{{ obj.masked }}{% else %}<span class="text-muted">no key</span>{% endif %}</span></td>
+              <td>
+                {% if obj.default_location %}
+                  <span class="mono">{{ obj.default_location.code }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.last_run_status %}
+                  <span class="badge badge-muted">{{ obj.last_run_status }}</span>
+                {% else %}
+                  <span class="text-muted">never</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:integrationchannel_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:integrationchannel_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:integrationchannel_sync' obj.pk %}" onsubmit="return confirm('Record a simulated stock-sync run for this channel?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Sync now"><i data-lucide="refresh-cw"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'inventory:integrationchannel_rotate_key' obj.pk %}" onsubmit="return confirm('Generate a new API key for this channel? The old key stops being shown.');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Rotate key"><i data-lucide="key-round"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'inventory:integrationchannel_delete' obj.pk %}" onsubmit="return confirm('Delete this integration channel?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="10">
+                <div class="empty-state">
+                  <i data-lucide="plug-zap"></i>
+                  <h3>No integration channels found</h3>
+                  <p>Register your Shopify, Amazon, SAP or QuickBooks connections here — availability pushes stay simulated until a transport pass lands.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
