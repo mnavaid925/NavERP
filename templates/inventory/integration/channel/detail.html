@@ -146,7 +146,10 @@
       <div class="card">
         <div class="card-header flex justify-between items-center">
           <h2 class="card-title"><i data-lucide="list"></i> Listing Map</h2>
-          <span class="badge badge-muted">{{ listings|length }} mapped</span>
+          <div class="flex items-center gap-2">
+            <span class="badge badge-muted">{{ listings_total }} mapped</span>
+            <a href="{% url 'inventory:listingmap_list' %}?channel={{ obj.pk }}" class="btn btn-outline" style="font-size:13px; padding:4px 10px;"><i data-lucide="external-link"></i> Manage listings</a>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="table">
@@ -158,6 +161,7 @@
                 <th>External IDs</th>
                 <th>Sync</th>
                 <th>Last Pushed</th>
+                <th class="th-actions">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -199,10 +203,16 @@
                       <span class="text-muted">never</span>
                     {% endif %}
                   </td>
+                  <td>
+                    <div class="table-actions">
+                      <a href="{% url 'inventory:listingmap_detail' m.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                      <a href="{% url 'inventory:listingmap_edit' m.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    </div>
+                  </td>
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="6">
+                  <td colspan="7">
                     <div class="empty-state">
                       <i data-lucide="list"></i>
                       <h3>No listing maps yet</h3>
@@ -214,6 +224,12 @@
             </tbody>
           </table>
         </div>
+        {% if listings_total > 25 %}
+          <div class="card-body text-muted" style="font-size:12px;">
+            Showing the first 25 of {{ listings_total }} mappings —
+            <a href="{% url 'inventory:listingmap_list' %}?channel={{ obj.pk }}">view all in Listing Maps</a>.
+          </div>
+        {% endif %}
       </div>
     </div>
 
