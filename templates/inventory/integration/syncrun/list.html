@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Stock Sync Runs — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Sync Runs</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <span>Sync Runs</span>
+      </div>
+      <p class="text-muted">Append-only push/pull batch log — one row per stock-sync batch per channel, written through the sync verb. Nothing here is edited or deleted.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:integrationchannel_list' %}" class="btn btn-outline"><i data-lucide="plug"></i> Channels</a>
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="refresh-cw"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Runs</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.success }}</div>
+        <div class="stat-label">Success</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="alert-circle"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.partial }}</div>
+        <div class="stat-label">Partial</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="x-circle"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.failed }}</div>
+        <div class="stat-label">Failed</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="flask-conical"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.simulated }}</div>
+        <div class="stat-label">Simulated</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by run number or error code…">
+        </div>
+        <div class="form-group">
+          <select name="channel" aria-label="Channel" class="form-select">
+            <option value="">All Channels</option>
+            {% for val, label in channel_choices %}
+              <option value="{{ val }}" {% if request.GET.channel == val|stringformat:"d" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:stocksyncrun_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Channel</th>
+            <th>Direction</th>
+            <th>Status</th>
+            <th>Records OK / Total</th>
+            <th>Started At</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:stocksyncrun_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a></td>
+              <td>
+                {% if obj.channel %}
+                  <a href="{% url 'inventory:integrationchannel_detail' obj.channel.pk %}" class="fw-600">{{ obj.channel.name }}</a>
+                  <span class="mono text-muted" style="font-size:12px;">{{ obj.channel.number }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.direction == 'outbound_push' %}<span class="badge badge-info">Outbound Push</span>
+                {% elif obj.direction == 'inbound_pull' %}<span class="badge badge-slate">Inbound Pull</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_direction_display }}</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'success' %}<span class="badge badge-green">Success</span>
+                {% elif obj.status == 'partial' %}<span class="badge badge-amber">Partial</span>
+                {% elif obj.status == 'failed' %}<span class="badge badge-red">Failed</span>
+                {% elif obj.status == 'exhausted' %}<span class="badge badge-slate">Exhausted</span>
+                {% elif obj.status == 'pending' %}<span class="badge badge-muted">Pending</span>
+                {% elif obj.status == 'simulated' %}<span class="badge badge-info">Simulated</span>
+                {% else %}<span class="badge badge-muted">{{ obj.get_status_display }}</span>{% endif %}
+              </td>
+              <td class="mono">{{ obj.records_ok }} / {{ obj.records_total }}</td>
+              <td>{{ obj.started_at|date:"Y-m-d H:i"|default:"—" }}</td>
+              <td>
+                {# Append-only register — VIEW ONLY. No edit/delete affordances anywhere (NotificationDelivery precedent). #}
+                <div class="table-actions">
+                  <a href="{% url 'inventory:stocksyncrun_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="refresh-cw"></i>
+                  <h3>No sync runs recorded yet</h3>
+                  <p>Runs are appended when a channel is synced from its detail page — they are never created, edited or deleted by hand.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
