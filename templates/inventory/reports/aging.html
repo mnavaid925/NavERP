@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Aging Analysis{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Aging Analysis</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Reporting &amp; Analytics</span><span class="sep">›</span><span>Aging</span></div>
+      <p class="text-muted">How long today's stock has physically sat at each spot — FIFO age buckets over the ledger, with slow/dead flags from the last outbound draw.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:fefo_board' %}" class="btn btn-outline"><i data-lucide="calendar-clock"></i> FEFO / Expiry</a>
+      <a href="{% url 'inventory:snapshot_generate' %}?type=aging" class="btn btn-primary"><i data-lucide="camera"></i> Freeze snapshot</a>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px;">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="warehouse"></i></div>
+      <div><div class="stat-value">{{ totals.total_value|floatformat:"-2" }}</div><div class="stat-label">Stock Value on Hand</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="skull"></i></div>
+      <div><div class="stat-value">{{ totals.dead_value|floatformat:"-2" }}</div><div class="stat-label">Dead-Stock Value (no draw 91d+)</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="map-pin"></i></div>
+      <div><div class="stat-value">{{ totals.spots }}</div><div class="stat-label">Stocked Spots</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU or item name…">
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="health" aria-label="Health" class="form-select">
+            <option value="">Any health</option>
+            {% for value, label in health_choices %}
+              <option value="{{ value }}" {% if health == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="bucket" aria-label="Age bucket" class="form-select">
+            <option value="">Any age bucket</option>
+            {% for key, label, lo, hi in bucket_defs %}
+              <option value="{{ key }}" {% if bucket == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:report_aging' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Item</th><th>Location</th><th>On Hand</th>{% for key, label, lo, hi in bucket_defs %}<th>{{ label }}</th>{% endfor %}<th>Oldest</th><th>Last Draw</th><th>Health</th></tr>
+        </thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> <span class="text-muted">{{ row.item.name }}</span></td>
+              <td>{% if row.location %}{{ row.location.code }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ row.on_hand|floatformat:"-2" }}</td>
+              {% for cell in row.bucket_rows %}
+                <td>{% if cell.qty > 0 %}{{ cell.qty|floatformat:"-2" }}{% else %}<span class="text-muted">·</span>{% endif %}</td>
+              {% endfor %}
+              <td>{{ row.oldest_days }} d</td>
+              <td>{% if row.last_draw_at %}{{ row.days_since_draw }} d ago{% else %}<span class="badge badge-red">never</span>{% endif %}</td>
+              <td>{% if row.health == "healthy" %}<span class="badge badge-green">Healthy</span>{% elif row.health == "slow" %}<span class="badge badge-amber">Slow</span>{% else %}<span class="badge badge-red">Dead</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="11"><div class="empty-state"><i data-lucide="hourglass"></i><h3>No stock to age</h3><p>Ages appear once moves are posted — receive goods on the SCM goods-receipt pages to start the ledger.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Bucket cells show the quantity sitting in each age band at that spot; every unit on hand lands in exactly one bucket — each inbound leg (transfer arrivals included) ages from its own posting date. This is the physical view; the accounting-method value lives on the <a href="{% url 'inventory:report_valuation' %}">valuation report</a>.</p>
+{% endblock %}
