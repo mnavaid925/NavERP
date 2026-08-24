@@ -13,6 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from apps.core.crud import paginate
+from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.views.ReportingAnalytics._engine import Ledger, q2, valuation_rows
 
 
@@ -21,6 +22,12 @@ def report_valuation(request):
     tenant = request.tenant
     ledger = Ledger(tenant)
     rows, totals = valuation_rows(tenant, ledger=ledger)
+
+    # Dropdown sources come from the FULL row set (StockLevels rule): a filter
+    # narrows the table, never its own pickers.
+    all_items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
+    all_locations = sorted({r["location"] for r in rows if r["location"] is not None},
+                           key=lambda obj: obj.code)
 
     # --- filters BEFORE pagination (dict rows — repo rule) ---------------------
     q = request.GET.get("q", "").strip().lower()
@@ -37,18 +44,14 @@ def report_valuation(request):
     if method:
         rows = [r for r in rows if r["item"].costing_method == method]
 
-    items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
-    locations = sorted({r["location"] for r in rows if r["location"] is not None},
-                       key=lambda obj: obj.code)
-
     page_obj = paginate(request, rows, per_page=25)
     return render(request, "inventory/reports/valuation.html", {
         "page_obj": page_obj,
         "object_list": page_obj.object_list,
         "spots": totals["spots"],
         "q": request.GET.get("q", ""),
-        "items": items,
-        "locations": locations,
+        "items": all_items,
+        "locations": all_locations,
         "method": method,
         "method_choices": [("weighted_avg", "Weighted Avg"), ("fifo", "FIFO"), ("lifo", "LIFO")],
         # The grand total stays FULL-SET on purpose: filtering narrows the table,
