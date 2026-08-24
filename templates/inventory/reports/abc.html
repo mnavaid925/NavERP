@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}ABC Analysis{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">ABC Analysis</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Reporting &amp; Analytics</span><span class="sep">›</span><span>ABC</span></div>
+      <p class="text-muted">Items ranked by consumption value over the window — A carries ~80% of issued cost, B the next 15%, C the tail — with a velocity overlay.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:report_turnover' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Turnover detail</a>
+      <a href="{% url 'inventory:snapshot_generate' %}?type=abc" class="btn btn-primary"><i data-lucide="camera"></i> Freeze snapshot</a>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:16px;">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="a-arrow-up"></i></div>
+      <div><div class="stat-value">{{ stats.a_items }}</div><div class="stat-label">A items ({{ stats.a_share_pct }}% of issued cost)</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="equal"></i></div>
+      <div><div class="stat-value">{{ stats.b_items }}</div><div class="stat-label">B items</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon slate"><i data-lucide="list"></i></div>
+      <div><div class="stat-value">{{ stats.c_items }}</div><div class="stat-label">C items (incl. no demand in window)</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU or item name…">
+        </div>
+        <div class="form-group">
+          <select name="days" aria-label="Window" class="form-select">
+            <option value="">Window: {{ days }} days</option>
+            {% for value, label in window_choices %}
+              <option value="{{ value }}" {% if days|stringformat:"s" == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="class" aria-label="Class" class="form-select">
+            <option value="">Any class</option>
+            <option value="A" {% if abc_class == "A" %}selected{% endif %}>A only</option>
+            <option value="B" {% if abc_class == "B" %}selected{% endif %}>B only</option>
+            <option value="C" {% if abc_class == "C" %}selected{% endif %}>C only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="velocity" aria-label="Velocity" class="form-select">
+            <option value="">Any velocity</option>
+            {% for value, label in velocity_choices %}
+              <option value="{{ value }}" {% if velocity == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'inventory:report_abc' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Item</th><th>Issued Cost</th><th>Cumulative Share</th><th>Class</th><th>Velocity</th><th>On-Hand Value</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td class="text-muted">{{ forloop.counter }}.</td>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> <span class="text-muted">{{ row.item.name }}</span></td>
+              <td>{{ row.cogs|floatformat:"-2" }}</td>
+              <td>{% if row.cum_share != None %}{{ row.cum_share|floatformat:"-1" }}%{% else %}<span class="text-muted">no usage</span>{% endif %}</td>
+              <td>{% if row.abc_class == "A" %}<span class="badge badge-green">A</span>{% elif row.abc_class == "B" %}<span class="badge badge-info">B</span>{% else %}<span class="badge badge-muted">C</span>{% endif %}</td>
+              <td>{% if row.velocity == "fast" %}<span class="badge badge-green">Fast</span>{% elif row.velocity == "medium" %}<span class="badge badge-info">Medium</span>{% elif row.velocity == "slow" %}<span class="badge badge-amber">Slow</span>{% else %}<span class="badge badge-red">Dead</span>{% endif %}</td>
+              <td>{{ row.end_value|floatformat:"-2" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>Nothing to classify</h3><p>Classification appears once customer issues are posted to the ledger inside the window.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Classes are computed live over the ledger and are deliberately NOT written back to SCM's reorder rules — 4.7's stored ``abc_class`` is planning configuration, this page is analysis. An A-class item flagged Dead is carrying high historical value but no current demand: check its reorder rule before buying more.</p>
+{% endblock %}
