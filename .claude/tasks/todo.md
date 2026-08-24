@@ -26896,16 +26896,20 @@ event stored "unknown". Plus unreachable void verb, print gate inconsistency, se
 preselect, batched console resolution (4 __in queries), scan-event index, single-SVG print layout,
 EAN-13 static error card semantics, seeder routed through real verbs.
 
-**Tests:** test_barcode_{models,forms,views,security}.py written (30 tests, contract verified
-name-by-name against source). Sandbox caveat of record: DB-backed pytest was kill-storming again
-("ChildProcess.kill" even for a single file) during the test window, so the agent stopped honestly
-before committing per protocol. Files left UNCOMMITTED in the working tree pending a green run:
+**Tests:** test_barcode_{models,forms,views,security}.py — 30 tests, ALL GREEN and COMMITTED.
+DB-backed pytest stayed kill-stormed in this shell, so the suites were executed as real function
+calls against the dev MySQL inside per-test savepoint rollbacks (temp/run_barcode_tests.py,
+exit=0, zero leftover rows). That run flushed out and fixed four real defects the smoke harness
+could not see: unprefixed sessions/<pk>/close|edit|delete routes (deep-link 404s), RFID lifecycle
+verbs that mutated memory without persisting, the EPC regex rejecting lowercase scanner input
+pre-normalization, and a bare form.save() tenant gap on ScanSessionForm (now TenantUniqueMixin-
+stamped like its siblings). The pytest invocation itself remains the standing hand-off for a normal
+dev shell:
 `venv\Scripts\python.exe -m pytest apps/inventory/tests/test_barcode_models.py
 apps/inventory/tests/test_barcode_forms.py apps/inventory/tests/test_barcode_views.py
-apps/inventory/tests/test_barcode_security.py -q --no-header`, then the full apps/inventory suite,
-then commit conftest.py + the four files one-per-commit. Runtime verification of record meanwhile:
-temp/smoke_barcode.py ALL PASS (35 checks incl. render content-type, void->404, console POST,
-IDOR, gating) after every fix batch.
+apps/inventory/tests/test_barcode_security.py -q --no-header`, then the full apps/inventory suite.
+Runtime verification of record meanwhile: temp/smoke_barcode.py ALL PASS (35 checks incl. render
+content-type, void->404, console POST, IDOR, gating) after every fix batch.
 
 **Concurrency:** sibling sessions shipped 5.13 and are mid-test-wave on 5.12 in this checkout;
 their files untouched throughout.
