@@ -26942,3 +26942,28 @@ landed the 20 orphaned files (one commit each), ran the full quality sequence, a
 - **Gotchas of record**: pytest first DB creation takes ~8 silent minutes on SQLite (timeout 900s+,
   cmd /c when the harness kills direct runs); shared conftest.py is append-only while sibling
   sessions live in the tree.
+
+---
+
+## 5.12 Multi-Location Management - built 2026-08-24 (close-out)
+
+**Scope ruling:** Location-Specific Rules already live elsewhere (safety stock = scm.ReorderRule,
+transfer lanes = 5.7 TransferRoute; ItemPrice deliberately channel-scoped) - bullet points at
+scm:reorderrule_list. The genuine gap: the ORG tier above sites. LocationNetwork [LNW-#####]
+self-FK tree (company>region>dc>store) attaches spine warehouses at any tier; computed
+global_stock page rolls the ledger UP the tree in exactly FOUR flat queries with in-memory
+path resolution; in-transit synthesized from open transfers, never subtracted from on-hand;
+unassigned sites honest; move-less sites real zeros (.get fix C4).
+
+**Review wave:** 2 combined agent lanes + inline coverage of the twice-network-failed lane.
+11 findings burned down: C1 GlobalStock.py file split per contract, C2 seeder rebuilt to the
+frozen HOLD-CO tree, C3 flat-4 restored via by_pk map, M1-M9 hygiene (strip-cleaned code,
+is_admin ctx, dead branches, pseudo-row under q). Test-wave addendum C4: move-less warehouse
+KeyError -> honest zero. All [x] except M9 skipped-as-already-implemented.
+
+**Tests:** test_multiloc_{models,forms,views,security}.py - 73/73 green; full unfiltered app
+suite 806 passed + 1 foreign failure (sibling 5.14 barcode test, their lane).
+
+**Adoption notes:** shared migration node 0018 carries sibling 5.14 barcode tables + this
+model (disclosed); shared-file wiring commits deferred until the 5.14 lane quiets; sibling
+lanes for 5.13/5.14 ran concurrently throughout.
