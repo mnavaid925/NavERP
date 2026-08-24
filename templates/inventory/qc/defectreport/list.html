@@ -84,9 +84,11 @@
                   <a href="{% url 'inventory:defectreport_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
                   {% if obj.is_editable %}
                     <a href="{% url 'inventory:defectreport_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
-                    <form method="post" action="{% url 'inventory:defectreport_delete' obj.pk %}" onsubmit="return confirm('Delete this defect report?');">
-                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
-                    </form>
+                    {% if is_admin %}
+                      <form method="post" action="{% url 'inventory:defectreport_delete' obj.pk %}" onsubmit="return confirm('Delete this defect report?');">
+                        {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      </form>
+                    {% endif %}
                   {% endif %}
                 </div>
               </td>
