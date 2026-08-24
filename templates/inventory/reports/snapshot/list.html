@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Report Snapshots{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Report Snapshots</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Reporting &amp; Analytics</span><span class="sep">›</span><span>Snapshots</span></div>
+      <p class="text-muted">Point-in-time freezes of the four inventory reports — immutable evidence of what the live pages said.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:snapshot_generate' %}" class="btn btn-primary"><i data-lucide="camera"></i> Generate snapshot</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or title…">
+        </div>
+        <div class="form-group">
+          <select name="type" aria-label="Report type" class="form-select">
+            <option value="">All types</option>
+            {% for value, label in type_choices %}
+              <option value="{{ value }}" {% if report_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:snapshot_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Report</th><th>Title</th><th>Scope</th><th>Generated</th><th>By</th><th class="text-right">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{% if obj.report_type == "valuation" %}<span class="badge badge-info">{{ obj.get_report_type_display }}</span>{% elif obj.report_type == "turnover" %}<span class="badge badge-green">{{ obj.get_report_type_display }}</span>{% elif obj.report_type == "aging" %}<span class="badge badge-amber">{{ obj.get_report_type_display }}</span>{% else %}<span class="badge badge-slate">{{ obj.get_report_type_display }}</span>{% endif %}</td>
+              <td>{{ obj.title|default:"—" }}</td>
+              <td>{{ obj.location.code|default:"All locations" }}{% if obj.window_days %} · {{ obj.window_days }}d{% endif %}</td>
+              <td>{{ obj.created_at|date:"d M Y H:i" }}</td>
+              <td>{{ obj.generated_by.get_short_name|default:obj.generated_by.username|default:"—" }}</td>
+              <td class="table-actions">
+                <a href="{% url 'inventory:snapshot_detail' obj.pk %}" class="btn btn-icon btn-outline" title="View"><i data-lucide="eye"></i></a>
+                {% if request.user.is_tenant_admin or request.user.is_superuser %}
+                <form method="post" action="{% url 'inventory:snapshot_delete' obj.pk %}" onsubmit="return confirm('Delete snapshot {{ obj.number }}? This rewrites the freeze history.');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2"></i></button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="camera"></i><h3>No snapshots yet</h3><p>Freeze a month-end copy from any of the four reports, or generate one directly.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
