@@ -14,9 +14,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from apps.core.crud import paginate
+from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.views.ReportingAnalytics._engine import (
-    ABC_CLASS_CSS, WINDOW_CHOICES, Ledger, VELOCITY_CHOICES, VELOCITY_CSS,
-    abc_rows, clamp_window, f2,
+    WINDOW_CHOICES, Ledger, VELOCITY_CHOICES, abc_rows, clamp_window, f2,
 )
 
 
@@ -26,6 +26,8 @@ def report_abc(request):
     days = clamp_window(request.GET.get("days"))
     ledger = Ledger(tenant)
     rows, stats = abc_rows(tenant, days, ledger=ledger)
+
+    all_items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
 
     q = request.GET.get("q", "").strip().lower()
     if q:
@@ -37,8 +39,6 @@ def report_abc(request):
     if velocity:
         rows = [r for r in rows if r["velocity"] == velocity]
 
-    items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
-
     page_obj = paginate(request, rows, per_page=25)
     return render(request, "inventory/reports/abc.html", {
         "page_obj": page_obj,
@@ -46,11 +46,9 @@ def report_abc(request):
         "days": days,
         "window_choices": WINDOW_CHOICES,
         "q": request.GET.get("q", ""),
-        "items": items,
+        "items": all_items,
         "abc_class": abc_class,
-        "abc_css": ABC_CLASS_CSS,
         "velocity": velocity,
         "velocity_choices": VELOCITY_CHOICES,
-        "velocity_css": VELOCITY_CSS,
         "stats": {k: (f2(v) if k == "a_share_pct" else v) for k, v in stats.items()},
     })
