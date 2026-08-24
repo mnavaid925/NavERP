@@ -43,4 +43,10 @@ class ChannelListingMapForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         _reject_foreign(self, cleaned, ["channel", "item", "location"])
+        # A BLANK variant id must persist as NULL, never '': MariaDB coalesces NULLs inside
+        # (tenant, channel, external_variant_id), so any number of local-only rows can share a
+        # channel — while a second '' row would still collide exactly as before the column went
+        # nullable. CharField cleans to '', so this is the step that makes null=True real.
+        if not cleaned.get("external_variant_id"):
+            cleaned["external_variant_id"] = None
         return cleaned
