@@ -5,7 +5,7 @@ the flash message — only prefix+hash persist) and ``sync`` (records a SIMULATE
 StockSyncRun through ``StockSyncRun.record`` — nothing leaves the process and NO stock,
 ``last_sync_at`` or accounting row is ever touched).
 """
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.core.decorators import tenant_admin_required
@@ -15,7 +15,6 @@ from apps.inventory.models.ThirdPartyIntegrations._choices import (
     CHANNEL_PLATFORM_CHOICES,
     CHANNEL_STATUS_CHOICES,
 )
-from apps.inventory.models.ThirdPartyIntegrations.ChannelListingMaps import ChannelListingMap
 from apps.inventory.models.ThirdPartyIntegrations.IntegrationChannels import IntegrationChannel
 from apps.inventory.models.ThirdPartyIntegrations.StockSyncRuns import StockSyncRun
 from apps.inventory.views._common import *  # noqa: F401,F403
@@ -87,27 +86,27 @@ def integrationchannel_list(request):
 def integrationchannel_detail(request, pk):
     """View a connection: config, masked credential chip, listing map and recent sync runs.
 
-    crud_detail owns the tenant-scoped fetch (obj); the panels are keyed on the same
-    tenant-scoped ``channel=pk`` so their context keys exist exactly as contracted even
-    though extra_context is evaluated before obj is resolved.
+    Hand-rolled render rather than crud_detail (the scm ``webhookdelivery_detail`` shape): the
+    panels hang off the PINNED ``obj.listings`` / ``obj.runs`` related managers, so they can only
+    be built AFTER the object is fetched — evaluating them as ``extra_context`` ahead of a
+    possible 404 spent queries on every miss. Same tenant-scoped fetch, same context keys.
     """
-    return crud_detail(
-        request,
-        model=IntegrationChannel,
+    obj = get_object_or_404(
+        IntegrationChannel.objects.filter(tenant=request.tenant).select_related("default_location"),
         pk=pk,
-        template="inventory/integration/channel/detail.html",
-        select_related=("default_location",),
-        extra_context={
-            "listings": (
-                ChannelListingMap.objects.filter(tenant=request.tenant, channel_id=pk)
-                .select_related("item", "location")
-                .order_by("external_sku", "id")
-            ),
-            "runs": (
-                StockSyncRun.objects.filter(tenant=request.tenant, channel_id=pk)
-                .order_by("-started_at", "-id")[:10]
-            ),
-            "run_stats": _run_stats(request.tenant, pk),
+    )
+    # Rows are high-volume BY DESIGN: the panel renders a capped slice and the header chip reads a
+    # cheap count() instead of materializing the whole queryset through |length.
+    listings = obj.listings.select_related("item", "location").order_by("external_sku", "id")
+    return render(
+        request,
+        "inventory/integration/channel/detail.html",
+        {
+            "obj": obj,
+            "listings": listings[:25],
+            "listings_total": listings.count(),
+            "runs": obj.runs.order_by("-started_at", "-id")[:10],
+            "run_stats": _run_stats(obj),
             "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
         },
     )
@@ -197,7 +196,14 @@ def integrationchannel_sync(request, pk):
     return redirect("inventory:stocksyncrun_detail", pk=run.pk)
 
 
-def _run_stats(tenant, channel_id):
-    """{total, failed} over one channel's runs — powers the failed-runs deep-link chip."""
-    qs = StockSyncRun.objects.filter(tenant=tenant, channel_id=channel_id)
-    return {"total": qs.count(), "failed": qs.filter(status="failed").count()}
+def _run_stats(channel):
+    """{total, failed} over one channel's runs — powers the failed-runs deep-link chip.
+
+    ONE grouped aggregate on the channel's own related manager (house style), never two COUNT
+    round-trips.
+    """
+    row = channel.runs.aggregate(
+        total=Count("id"),
+        failed=Count("id", filter=Q(status="failed")),
+    )
+    return {key: value or 0 for key, value in row.items()}
