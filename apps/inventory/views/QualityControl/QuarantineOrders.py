@@ -43,6 +43,7 @@ def quarantineorder_list(request):
         extra_context={
             "status_choices": QuarantineOrder.STATUS_CHOICES,
             "status": status,
+            "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
         },
     )
 
@@ -70,20 +71,23 @@ def quarantineorder_create(request):
 
 @login_required
 def quarantineorder_edit(request, pk):
-    # Server-side status guard: the template hides Edit on non-drafts, but a crafted
-    # POST must not re-open item/quantity beneath already-posted StockMove legs
-    # (CrossDockOrder precedent). crud_edit cannot know EDITABLE_STATUSES.
-    obj = get_object_or_404(_scoped(request.tenant), pk=pk)
-    if not obj.is_editable:
-        messages.error(
-            request,
-            f"{obj.number} has posted ledger moves and can no longer be edited.")
-        return redirect("inventory:quarantineorder_detail", pk=obj.pk)
-    return crud_edit(
-        request, model=QuarantineOrder, pk=pk, form_class=QuarantineOrderForm,
-        template="inventory/qc/quarantineorder/form.html",
-        success_url="inventory:quarantineorder_list",
-    )
+    # Server-side status guard, held UNDER the row lock across the whole request: a
+    # concurrent quarantine() committing between our check and crud_edit's save must be
+    # impossible, because its action takes the same lock (review I2). The template hides
+    # Edit on non-drafts; this is the crafted-POST backstop.
+    with transaction.atomic():
+        obj = get_object_or_404(QuarantineOrder.objects.select_for_update(),
+                                pk=pk, tenant=request.tenant)
+        if not obj.is_editable:
+            messages.error(
+                request,
+                f"{obj.number} has posted ledger moves and can no longer be edited.")
+            return redirect("inventory:quarantineorder_detail", pk=obj.pk)
+        return crud_edit(
+            request, model=QuarantineOrder, pk=pk, form_class=QuarantineOrderForm,
+            template="inventory/qc/quarantineorder/form.html",
+            success_url="inventory:quarantineorder_list",
+        )
 
 
 @tenant_admin_required
