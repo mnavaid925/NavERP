@@ -20,7 +20,7 @@
     {% csrf_token %}
     {% if form.non_field_errors %}
       <div class="form-error mb-4">
-        {{ form.non_field_errors }}
+        {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
       </div>
     {% endif %}
 
