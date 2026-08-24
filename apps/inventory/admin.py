@@ -13,9 +13,11 @@ from apps.inventory.models import (
     CrossDockOrder,
     FulfillmentWave,
     FulfillmentWaveOrder,
+    GLPostRule,
     InventoryReservation,
     ItemAttribute,
     ItemPrice,
+    JournalSyncLog,
     LocationNetwork,
     LotNumberRule,
     ProductFile,
@@ -28,6 +30,7 @@ from apps.inventory.models import (
     ReturnInspectionChecklist,
     DispositionRoutingRule,
     ShelfLifePolicy,
+    TaxRule,
     StockStatus,
     VendorCommunication,
     ScanEvent,
@@ -36,6 +39,15 @@ from apps.inventory.models import (
     TransferApproval,
     TransferApprovalRule,
     TransferRoute,
+    AlertRule,
+    InventoryAlert,
+    NotificationDelivery,
+    QcChecklist,
+    QcChecklistItem,
+    QcRoutingRule,
+    QuarantineOrder,
+    DefectReport,
+    InventoryReportSnapshot,
 )
 
 
@@ -267,3 +279,98 @@ class RfidTagAdmin(admin.ModelAdmin):
                     'last_seen_at', 'last_seen_location')
     list_filter = ('tenant', 'status', 'kind')
     search_fields = ('epc', 'target_ref', 'pallet_ref', 'item__sku')
+
+
+@admin.register(AlertRule)
+class AlertRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "alert_type", "severity", "item", "location",
+                    "cooldown_days", "is_active")
+    list_filter = ("tenant", "alert_type", "severity", "is_active")
+    search_fields = ("number", "name", "email_recipients", "item__sku", "location__code")
+
+
+@admin.register(InventoryAlert)
+class InventoryAlertAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "alert_type", "severity", "status",
+                    "metric_value", "raised_at")
+    list_filter = ("tenant", "status", "severity", "alert_type")
+    search_fields = ("number", "title", "message", "dedup_key")
+
+
+@admin.register(NotificationDelivery)
+class NotificationDeliveryAdmin(admin.ModelAdmin):
+    list_display = ("alert", "channel", "recipient", "status", "created_at")
+    list_filter = ("tenant", "channel", "status")
+    search_fields = ("recipient", "detail", "alert__number")
+
+
+@admin.register(QcChecklist)
+class QcChecklistAdmin(admin.ModelAdmin):
+    list_display = ("name", "item", "vendor", "is_active", "created_at")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("name", "item__sku", "vendor__name")
+
+
+@admin.register(QcChecklistItem)
+class QcChecklistItemAdmin(admin.ModelAdmin):
+    list_display = ("checklist", "label", "kind", "is_mandatory", "sequence")
+    list_filter = ("tenant", "kind", "is_mandatory")
+    search_fields = ("label", "checklist__name")
+
+
+@admin.register(QcRoutingRule)
+class QcRoutingRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "item", "category", "vendor", "verdict",
+                    "qc_location", "priority", "is_active")
+    list_filter = ("tenant", "verdict", "is_active")
+    search_fields = ("name", "notes", "item__sku")
+
+
+@admin.register(QuarantineOrder)
+class QuarantineOrderAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "quantity", "source_location",
+                    "quarantine_location", "reason", "status")
+    list_filter = ("tenant", "status", "reason")
+    search_fields = ("number", "reference", "item__sku")
+    readonly_fields = ("number", "quarantined_at", "resolved_at")
+
+
+@admin.register(DefectReport)
+class DefectReportAdmin(admin.ModelAdmin):
+    list_display = ("number", "item", "quantity", "defect_type", "severity",
+                    "discovered_during", "reported_on", "status")
+    list_filter = ("tenant", "status", "severity", "defect_type")
+    search_fields = ("number", "description", "item__sku")
+    readonly_fields = ("number", "resolved_at")
+
+
+@admin.register(InventoryReportSnapshot)
+class InventoryReportSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("number", "report_type", "title", "location",
+                    "window_days", "generated_by", "created_at")
+    list_filter = ("tenant", "report_type", "created_at")
+    search_fields = ("number", "title", "notes")
+    readonly_fields = ("number", "summary")
+
+
+@admin.register(TaxRule)
+class TaxRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "item", "category", "country",
+                    "tax_code", "priority", "is_active")
+    list_filter = ("tenant", "is_active", "tax_code")
+    search_fields = ("name", "country", "notes", "item__sku", "category__name")
+
+
+@admin.register(GLPostRule)
+class GLPostRuleAdmin(admin.ModelAdmin):
+    list_display = ("name", "event_type", "inventory_account", "offset_account", "is_active")
+    list_filter = ("tenant", "event_type", "is_active")
+    search_fields = ("name", "notes")
+
+
+@admin.register(JournalSyncLog)
+class JournalSyncLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "source_kind", "stock_adjustment", "date_from", "date_to",
+                    "moves_count", "total_value", "journal_entry", "posted_at")
+    list_filter = ("tenant", "source_kind", "posted_at")
+    readonly_fields = ("number", "journal_entry", "posted_by", "posted_at")
