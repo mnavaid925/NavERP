@@ -12,7 +12,7 @@ shadowing surface to reason about; the first segments (`""`, `attributes/`, `pri
 `bin-capacity/`, `cross-dock/`, `warehouse-map/`, `transfers/`, `lot-rules/`,
 `lot-generate/`, `shelf-life-policies/`, `fefo-board/`, `traceability/`,
 `count-programs/`, `physical-inventory/`, `variance-report/`,
-`stock-level-plans/`, `planning-board/`,
+`stock-level-plans/`, `planning-board/`, `labels/`, `sessions/`, `console/`, `tags/`,
 `tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
 distinct whole components and none can swallow another.
 """
