@@ -41,7 +41,7 @@
   <div class="card">
     <div class="card-header"><h2 class="card-title">Live Resolution Preview</h2></div>
     <div class="card-body">
-      <p class="text-muted">Run this rule's matcher against one item exactly as the receiving flow would — a more specific rival rule would still win in production, so the reason line says which rule actually fired.</p>
+      <p class="text-muted">Run the full routing engine against one item exactly as the receiving flow would — the badge says which rule actually fired, so a more specific rival is never a surprise.</p>
       <form method="get" class="filter-bar">
         <div class="form-group">
           <select name="item" aria-label="Item" class="form-select">
@@ -60,7 +60,10 @@
               <span class="badge badge-amber">Inspect via {{ preview.qc_location.code }}</span>
             {% elif preview.verdict == 'bypass' %}
               <span class="badge badge-green">Straight to storage</span>
+            {% else %}
+              <span class="badge badge-muted">No rule matched</span>
             {% endif %}
+            {% if not preview.is_this_rule %}<span class="badge badge-info">Another rule wins</span>{% endif %}
           </p>
           <p class="text-muted">{{ preview.reason }}</p>
         </div>
