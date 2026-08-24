@@ -62,7 +62,7 @@
             <tr>
               <td><a href="{% url 'inventory:qcchecklist_detail' obj.pk %}" class="fw-600 text-brand">{{ obj.name }}</a></td>
               <td>{{ obj.applies_to }}</td>
-              <td>{{ obj.checklist_items.count }}</td>
+              <td>{{ obj.n_items }}</td>
               <td>
                 {% if obj.is_active %}
                   <span class="badge badge-green">Active</span>
