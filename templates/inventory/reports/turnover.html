@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Stock Turnover Ratio{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Stock Turnover Ratio</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Reporting &amp; Analytics</span><span class="sep">›</span><span>Turnover</span></div>
+      <p class="text-muted">How quickly each item sells and replaces over the trailing window — COGS ÷ average inventory value.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:report_aging' %}" class="btn btn-outline"><i data-lucide="hourglass"></i> Aging Analysis</a>
+      <a href="{% url 'inventory:snapshot_generate' %}?type=turnover" class="btn btn-primary"><i data-lucide="camera"></i> Freeze snapshot</a>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px;">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="trending-up"></i></div>
+      <div><div class="stat-value">{{ totals.total_cogs|floatformat:"-2" }}</div><div class="stat-label">Issued Cost, last {{ totals.window_days }} days</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="packages"></i></div>
+      <div><div class="stat-value">{{ totals.items }}</div><div class="stat-label">Items with ledger history</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU or item name…">
+        </div>
+        <div class="form-group">
+          <select name="days" aria-label="Window" class="form-select">
+            <option value="">Window: {{ days }} days</option>
+            {% for value, label in window_choices %}
+              <option value="{{ value }}" {% if days|stringformat:"s" == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="velocity" aria-label="Velocity" class="form-select">
+            <option value="">Any velocity</option>
+            {% for value, label in velocity_choices %}
+              <option value="{{ value }}" {% if velocity == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'inventory:report_turnover' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Sold Units</th><th>Issued Cost</th><th>Avg Inv. Value</th><th>Turns</th><th>Days on Hand</th><th>Velocity</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> <span class="text-muted">{{ row.item.name }}</span></td>
+              <td>{{ row.sold_units|floatformat:"-2" }}</td>
+              <td>{{ row.cogs|floatformat:"-2" }}</td>
+              <td>{{ row.avg_value|floatformat:"-2" }}</td>
+              <td class="fw-600">{% if row.turns != None %}{{ row.turns|floatformat:"-2" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.days_on_hand != None %}{{ row.days_on_hand }}{% else %}<span class="text-muted">∞</span>{% endif %}</td>
+              <td>{% if row.velocity == "fast" %}<span class="badge badge-green">Fast</span>{% elif row.velocity == "medium" %}<span class="badge badge-info">Medium</span>{% elif row.velocity == "slow" %}<span class="badge badge-amber">Slow</span>{% else %}<span class="badge badge-red">Dead</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="trending-up"></i><h3>No movement in this window</h3><p>Turnover appears once customer issues are posted to the ledger — widen the window or check the stock levels page.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Only customer issues (move_type “issue”) count as demand — internal draws (consumption/maintenance) are excluded, matching SCM's demand-series convention. Days on hand reads ∞ when the window had no demand; it never guesses a rate from zero.</p>
+{% endblock %}
