@@ -26,6 +26,7 @@
       <div class="card-header"><h2 class="card-title">Checkpoints</h2></div>
       <div class="card-body">
         {{ formset.management_form }}
+        {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
         <div class="space-y-4">
           {% for item_form in formset %}
             <div class="grid grid-cols-12 gap-3 items-center pb-3" style="border-bottom:1px solid var(--border);">
