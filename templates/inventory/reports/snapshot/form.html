@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Generate Report Snapshot{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Generate Report Snapshot</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:snapshot_list' %}">Snapshots</a><span class="sep">›</span><span>Generate</span></div>
+      <p class="text-muted">Freezes the chosen report exactly as its page would render right now — stored once, never recomputed.</p>
+    </div>
+  </div>
+
+  <div class="card" style="max-width:640px;">
+    <div class="card-body">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="text-muted" style="font-size:.85rem; margin-top:4px;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="form-error">{{ error }}</p>{% endfor %}
+          </div>
+        {% endfor %}
+        {% if form.non_field_errors %}{% for error in form.non_field_errors %}<p class="form-error">{{ error }}</p>{% endfor %}{% endif %}
+        <div class="page-actions" style="margin-top:16px;">
+          <button type="submit" class="btn btn-primary"><i data-lucide="camera"></i> Generate</button>
+          <a href="{% url 'inventory:snapshot_list' %}" class="btn btn-outline">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
