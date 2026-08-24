@@ -16,7 +16,8 @@ shadowing surface to reason about; the first segments (`""`, `attributes/`, `pri
 `alerts/`, `alerts/rules/`, `alerts/deliveries/`,
 `reports/valuation/`, `reports/turnover/`, `reports/aging/`, `reports/abc/`,
 `snapshots/`,
-`tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`) are
+`tracking/stock-levels/`, `tracking/stock-status/`, `tracking/reservations/`,
+`channels/`, `listings/`, `runs/`, `api-clients/`) are
 distinct whole components and none can swallow another.
 """
 from .Catalog.ItemAttributes import urlpatterns as _cat_itemattributes
@@ -47,6 +48,7 @@ from .WarehousingBinManagement.CrossDockOrders import urlpatterns as _wh_crossdo
 from .WarehousingBinManagement.WarehouseMap import urlpatterns as _wh_warehousemap
 from .QualityControl import urlpatterns as _qc_qualitycontrol
 from .ReportingAnalytics import urlpatterns as _ra_reportinganalytics
+from .ThirdPartyIntegrations import urlpatterns as _tpi_integrations
 
 
 app_name = "inventory"
@@ -80,5 +82,6 @@ urlpatterns = [
     *_qc_qualitycontrol,   # QualityControl (checklists, routing rules, quarantine, defects)
     *_ra_reportinganalytics,  # ReportingAnalytics (4 computed reports + IRS- snapshots)
     *_fin_finint,          # AccountingFinancialIntegration (AP/AR sync, JE automation, tax & GL rules)
+    *_tpi_integrations,    # ThirdPartyIntegrations (channels, listing maps, sync runs, API clients)
 ]
 
