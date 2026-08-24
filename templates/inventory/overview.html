@@ -148,6 +148,42 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Alerts &amp; Notifications</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:alert_list' %}" class="btn btn-outline"><i data-lucide="bell-ring"></i> Alert Inbox</a>
+      <a href="{% url 'inventory:alert_list' %}?type=low_stock" class="btn btn-outline"><i data-lucide="trending-down"></i> Low / Out of Stock</a>
+      <a href="{% url 'inventory:alert_list' %}?type=overstock" class="btn btn-outline"><i data-lucide="package-plus"></i> Overstock</a>
+      <a href="{% url 'inventory:alert_list' %}?type=expiry" class="btn btn-outline"><i data-lucide="calendar-clock"></i> Expiry</a>
+      <a href="{% url 'inventory:alert_list' %}?type=po_approval_pending" class="btn btn-outline"><i data-lucide="file-clock"></i> Workflow Triggers</a>
+      <a href="{% url 'inventory:alertrule_list' %}" class="btn btn-outline"><i data-lucide="settings-2"></i> Rules</a>
+      <a href="{% url 'inventory:delivery_list' %}" class="btn btn-outline"><i data-lucide="send"></i> Deliveries</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Quality Control Pages</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:qcchecklist_list' %}" class="btn btn-outline"><i data-lucide="clipboard-check"></i> QC Checklists</a>
+      <a href="{% url 'inventory:qcroutingrule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Inspection Routing</a>
+      <a href="{% url 'inventory:quarantineorder_list' %}" class="btn btn-outline"><i data-lucide="shield-ban"></i> Quarantine Orders</a>
+      <a href="{% url 'inventory:defectreport_list' %}" class="btn btn-outline"><i data-lucide="bug"></i> Defect &amp; Scrap Reports</a>
+      <a href="{% url 'scm:qualityinspection_list' %}" class="btn btn-outline"><i data-lucide="flask-conical"></i> Inspections (SCM)</a>
+      <a href="{% url 'scm:nonconformance_list' %}" class="btn btn-outline"><i data-lucide="file-warning"></i> NCR Register (SCM)</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Reporting &amp; Analytics</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:report_valuation' %}" class="btn btn-outline"><i data-lucide="banknote"></i> Valuation Report</a>
+      <a href="{% url 'inventory:report_turnover' %}" class="btn btn-outline"><i data-lucide="trending-up"></i> Stock Turnover</a>
+      <a href="{% url 'inventory:report_aging' %}" class="btn btn-outline"><i data-lucide="hourglass"></i> Aging Analysis</a>
+      <a href="{% url 'inventory:report_abc' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> ABC Analysis</a>
+      <a href="{% url 'inventory:snapshot_list' %}" class="btn btn-outline"><i data-lucide="camera"></i> Report Snapshots</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
