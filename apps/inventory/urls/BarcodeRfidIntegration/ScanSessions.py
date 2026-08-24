@@ -16,7 +16,7 @@ urlpatterns = [
     path("sessions/add/", views.scansession_create, name="scansession_create"),
     path("console/", views.scan_console, name="scan_console"),
     path("sessions/<int:pk>/", views.scansession_detail, name="scansession_detail"),
-    path("<int:pk>/edit/", views.scansession_edit, name="scansession_edit"),
-    path("<int:pk>/close/", views.scansession_close, name="scansession_close"),
-    path("<int:pk>/delete/", views.scansession_delete, name="scansession_delete"),
+    path("sessions/<int:pk>/edit/", views.scansession_edit, name="scansession_edit"),
+    path("sessions/<int:pk>/close/", views.scansession_close, name="scansession_close"),
+    path("sessions/<int:pk>/delete/", views.scansession_delete, name="scansession_delete"),
 ]
