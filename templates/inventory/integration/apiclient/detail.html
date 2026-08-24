@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} {{ obj.name }} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><span class="mono">{{ obj.number }}</span> — {{ obj.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:apiclient_list' %}">API Clients</a>
+        <span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:apiclient_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to List</a>
+      <a href="{% url 'inventory:apiclient_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% if is_admin %}
+        <form method="post" action="{% url 'inventory:apiclient_delete' obj.pk %}" onsubmit="return confirm('Are you sure you want to delete this API client?');" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Registration & Access -->
+    <div class="col-span-2 space-y-6">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="card-title">Client Registration</h2>
+          <div>
+            {% if obj.status == 'active' %}
+              <span class="badge badge-green">Active</span>
+            {% elif obj.status == 'revoked' %}
+              <span class="badge badge-red">Revoked</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+            {% endif %}
+            {% if obj.protocol == 'rest' %}
+              <span class="badge badge-info">REST</span>
+            {% elif obj.protocol == 'graphql' %}
+              <span class="badge badge-amber">GraphQL</span>
+            {% else %}
+              <span class="badge badge-muted">{{ obj.get_protocol_display }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div class="col-span-2">
+              <dt class="text-muted" style="font-size:13px;">Description</dt>
+              <dd class="mt-1 whitespace-pre-wrap">{% if obj.description %}{{ obj.description }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Scopes (recorded intent)</dt>
+              <dd class="mt-1">{% if obj.scopes %}<span class="mono">{{ obj.scopes }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Allowed IPs (recorded, not enforced)</dt>
+              <dd class="mt-1">{% if obj.allowed_ips %}<span class="mono">{{ obj.allowed_ips }}</span>{% else %}<span class="text-muted">Any</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Rate Limit Note</dt>
+              <dd class="mt-1">{% if obj.rate_limit_note %}{{ obj.rate_limit_note }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Created</dt>
+              <dd class="mt-1">{{ obj.created_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="key-round"></i> Access Token</h2>
+        </div>
+        <div class="card-body space-y-4">
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Current Token</dt>
+            <dd class="mt-1">
+              {% if obj.masked %}
+                <span class="badge badge-slate mono" style="font-size:13px; padding:6px 10px;">{{ obj.masked }}</span>
+              {% else %}
+                <span class="text-muted">No token issued yet — use the button on the right.</span>
+              {% endif %}
+            </dd>
+            <p class="text-muted mt-2" style="font-size:12px;">Only the prefix + SHA-256 hash is stored. The full token was shown once when issued and cannot be retrieved — rotating invalidates the previous value.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Col: Lifecycle -->
+    <div class="space-y-6">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><i data-lucide="life-buoy"></i> Lifecycle</h2>
+        </div>
+        <div class="card-body space-y-4">
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Status</dt>
+            <dd class="mt-1">
+              {% if obj.status == 'active' %}
+                <span class="badge badge-green">Active</span>
+              {% elif obj.status == 'revoked' %}
+                <span class="badge badge-red">Revoked</span>
+              {% else %}
+                <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+              {% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Revoked At</dt>
+            <dd class="mt-1">{% if obj.revoked_at %}{{ obj.revoked_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+          </div>
+          <div>
+            <dt class="text-muted" style="font-size:13px;">Last Used At</dt>
+            <dd class="mt-1">{% if obj.last_used_at %}{{ obj.last_used_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">Never used</span>{% endif %}</dd>
+            <p class="text-muted mt-1" style="font-size:12px;">Stamped by a future gateway pass — nothing in this build writes it.</p>
+          </div>
+          {% if is_admin %}
+            <hr>
+            <form method="post" action="{% url 'inventory:apiclient_issue_token' obj.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-primary w-full justify-center" type="submit"><i data-lucide="key-round"></i> {% if obj.api_token_hash %}Rotate Token{% else %}Issue Token{% endif %}</button>
+            </form>
+            <p class="text-muted" style="font-size:12px;">The new token is shown ONCE in a message after issuing — copy it immediately.</p>
+            {% if obj.status == 'active' %}
+              <form method="post" action="{% url 'inventory:apiclient_revoke' obj.pk %}" onsubmit="return confirm('Revoke this API client? Its token will no longer represent access.');">
+                {% csrf_token %}
+                <button class="btn btn-outline w-full justify-center" type="submit"><i data-lucide="ban"></i> Revoke Client</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <p class="text-muted" style="font-size:12px;">Token issuance and revocation are restricted to tenant administrators.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
