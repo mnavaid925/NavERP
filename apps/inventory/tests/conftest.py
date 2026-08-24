@@ -1040,3 +1040,62 @@ def multiloc_foreign_node_b(db, tenant_b):
     """Globex's own company-tier node — the foreign control for IDOR/guard lanes."""
     return _network_node(tenant_b, "NW-B", name="Globex Holding Co", node_type="company")
 
+
+# ---- 5.14 Barcode & RFID Integration --------------------------------------------------------------
+#
+# Fixtures give every lane an owned DRAFT label, an OPEN scan session with one resolved-ok
+# capture, and an ACTIVE RFID tag — plus foreign-workspace mirrors (label_b / tag_b) so the
+# IDOR/security files have both sides of the tenant fence. The L36 spine rows reuse the
+# existing item_a/item_b/location_a/location_b fixtures; nothing here re-declares them.
+
+@pytest.fixture
+def barcode_label_a(db, tenant_a, item_a):
+    """A DRAFT product label pointing at item_a (code128) — payload derived on save."""
+    from apps.inventory.models import BarcodeLabel
+    return BarcodeLabel.objects.create(
+        tenant=tenant_a, target_type="item", item=item_a,
+        label_kind="product", symbology="code128", copies=1)
+
+
+@pytest.fixture
+def barcode_label_b(db, tenant_b, item_b):
+    """Globex's own draft label on item_b — the foreign-workspace control for IDOR lanes."""
+    from apps.inventory.models import BarcodeLabel
+    return BarcodeLabel.objects.create(
+        tenant=tenant_b, target_type="item", item=item_b,
+        label_kind="product", symbology="code128", copies=2)
+
+
+@pytest.fixture
+def scan_session_open_a(db, tenant_a):
+    """An OPEN batch session on a handheld device, tenant_a."""
+    from apps.inventory.models import ScanSession
+    return ScanSession.objects.create(
+        tenant=tenant_a, device_label="Zebra TC22 - Dock 3", mode="batch",
+        notes="Inbound receiving sweep")
+
+
+@pytest.fixture
+def scan_event_a(db, scan_session_open_a, item_a):
+    """One resolved-ok capture inside the open session — record() snapshotted item_a."""
+    from apps.inventory.models import ScanEvent
+    return ScanEvent.record(scan_session_open_a, "CAT-1", kind="item", obj=item_a)
+
+
+@pytest.fixture
+def rfid_tag_active_a(db, tenant_a, item_a):
+    """An ACTIVE passive tag anchored to item_a — activate() itself ran."""
+    from apps.inventory.models import RfidTag
+    tag = RfidTag.objects.create(
+        tenant=tenant_a, epc="E280-689E-0000-0001", kind="passive", item=item_a)
+    tag.activate()
+    tag.save(update_fields=["status", "updated_at"])
+    return tag
+
+
+@pytest.fixture
+def rfid_tag_b(db, tenant_b):
+    """Globex's own unassigned tag — the foreign control for IDOR/guard lanes."""
+    from apps.inventory.models import RfidTag
+    return RfidTag.objects.create(tenant=tenant_b, epc="E280-689E-0000-000B")
+
