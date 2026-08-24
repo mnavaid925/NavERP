@@ -31,7 +31,7 @@ class RfidTag(TenantOwned):
 
     epc = models.CharField(
         max_length=64,
-        validators=[RegexValidator(r"^[0-9A-F\-]{8,64}$", message="EPC must be 8-64 hex characters (hyphens allowed).")],
+        validators=[RegexValidator(r"^[0-9A-Fa-f\-]{8,64}$", message="EPC must be 8-64 hex characters (hyphens allowed).")],
         help_text="Electronic Product Code — uppercase hex, hyphens allowed; unique per workspace",
     )
     kind = models.CharField(
@@ -147,16 +147,19 @@ class RfidTag(TenantOwned):
         if not self.has_target():
             raise ValidationError("Attach the tag to an item, bin, lot or reference before activating.")
         self.status = "active"
+        self.save(update_fields=["status", "updated_at"])
 
     def retire(self):
         if self.status not in ("active", "unassigned"):
             raise ValidationError(f"A {self.get_status_display()} tag cannot be retired.")
         self.status = "retired"
+        self.save(update_fields=["status", "updated_at"])
 
     def mark_lost(self):
         if self.status != "active":
             raise ValidationError("Only an active tag can be marked lost.")
         self.status = "lost"
+        self.save(update_fields=["status", "updated_at"])
 
     @classmethod
     def bulk_read(cls, tenant, epcs, location=None, at=None):
