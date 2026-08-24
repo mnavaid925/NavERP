@@ -14,8 +14,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from apps.core.crud import paginate
+from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.views.ReportingAnalytics._engine import (
-    WINDOW_CHOICES, Ledger, VELOCITY_CHOICES, VELOCITY_CSS, clamp_window, q2, turnover_rows,
+    WINDOW_CHOICES, Ledger, VELOCITY_CHOICES, clamp_window, q2, turnover_rows,
 )
 
 
@@ -26,14 +27,14 @@ def report_turnover(request):
     ledger = Ledger(tenant)
     rows, totals = turnover_rows(tenant, days, ledger=ledger)
 
+    all_items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
+
     q = request.GET.get("q", "").strip().lower()
     if q:
         rows = [r for r in rows if q in r["item"].sku.lower() or q in r["item"].name.lower()]
     velocity = request.GET.get("velocity", "").strip()
     if velocity:
         rows = [r for r in rows if r["velocity"] == velocity]
-
-    items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
 
     page_obj = paginate(request, rows, per_page=25)
     return render(request, "inventory/reports/turnover.html", {
@@ -42,10 +43,9 @@ def report_turnover(request):
         "days": days,
         "window_choices": WINDOW_CHOICES,
         "q": request.GET.get("q", ""),
-        "items": items,
+        "items": all_items,
         "velocity": velocity,
         "velocity_choices": VELOCITY_CHOICES,
-        "velocity_css": VELOCITY_CSS,
         "totals": {"total_cogs": q2(totals["total_cogs"]),
                    "window_days": totals["window_days"], "items": totals["items"]},
     })
