@@ -25,6 +25,12 @@ from apps.inventory.models.ThirdPartyIntegrations._choices import (
 )
 from apps.inventory.views._common import *  # noqa: F401,F403
 
+#: The statuses :func:`stocksyncrun_retry` will act on — same shape as scm's
+#: ``webhookdelivery_retry`` tuple, so a hidden button and a refused POST can never disagree about
+#: which rows are retryable. ``success`` is done; ``partial`` / ``simulated`` recorded an OUTCOME a
+#: retry must not rewrite; ``exhausted`` re-checks the spent schedule and stays exhausted.
+RETRYABLE_STATUSES = ("failed", "pending", "exhausted")
+
 
 def _is_admin(user):
     """The one admin flag every 5.19 template receives — same test as the decorator."""
@@ -48,9 +54,18 @@ def stocksyncrun_list(request):
     if status:
         qs = qs.filter(status=status)
 
+    # FK filter parsed via as_db_int and validated against THIS tenant's channels, so a junk or
+    # foreign pk falls back to unfiltered with no echoed selection instead of a silently empty
+    # list (the sibling listingmap_list posture, mirrored verbatim).
+    channel_choices = [
+        (c.pk, str(c))
+        for c in IntegrationChannel.objects.filter(tenant=request.tenant).order_by("name", "id")
+    ]
+    channel = ""
     channel_id = as_db_int(request.GET.get("channel"))
-    if channel_id is not None:
+    if channel_id is not None and any(pk == channel_id for pk, _label in channel_choices):
         qs = qs.filter(channel_id=channel_id)
+        channel = str(channel_id)
 
     # KPIs across the tenant's full register — one grouped query, not five COUNTs.
     status_counts = {
@@ -83,7 +98,7 @@ def stocksyncrun_list(request):
             "status_choices": RUN_STATUS_CHOICES,
             "status": status,
             "channel_choices": channel_choices,
-            "channel": request.GET.get("channel", ""),
+            "channel": channel,
             "is_admin": _is_admin(request.user),
         },
     )
@@ -117,19 +132,31 @@ def stocksyncrun_retry(request, pk):
     # scheduler reads next_retry_at on a clock. The button says "Retry" and stamps intent only.
 
     The NEXT wait is computed from the CURRENT attempt state via the model property
-    (attempt N sits on schedule slot N-1), then persisted: attempt_no advances exactly once and
-    ``next_retry_at`` takes now + that wait. When the property answers ``None`` the published
-    schedule is spent — the row is marked ``exhausted`` with ``next_retry_at`` cleared instead of
-    being given an attempt the schedule does not describe.
+    (retry N waits schedule slot N — attempt N has already consumed slot N-1), then persisted:
+    attempt_no advances exactly once and ``next_retry_at`` takes now + that wait. When the
+    property answers ``None`` the published schedule is spent — the row is marked ``exhausted``
+    with ``next_retry_at`` cleared instead of being given an attempt the schedule does not
+    describe.
+
+    The status guard lives HERE, not only in the template — hiding a button has never stopped a
+    direct POST. Only :data:`RETRYABLE_STATUSES` rows may be re-queued: re-running a ``success``,
+    ``partial`` or ``simulated`` row would rewrite a recorded outcome behind a button press.
+    Evaluated inside ``transaction.atomic()`` on a row taken FOR UPDATE, so a double-click cannot
+    burn two schedule slots on one press.
 
     Recorded OUTCOME columns (counts / error_code / error_message / payload_excerpt / timestamps)
     are never touched: ``save(update_fields=...)`` is narrow on purpose so this verb cannot
-    rewrite history even by accident. Evaluated inside ``transaction.atomic()`` on a row taken
-    FOR UPDATE, so a double-click cannot burn two schedule slots on one press.
+    rewrite history even by accident.
     """
     with transaction.atomic():
         obj = get_object_or_404(StockSyncRun.objects.select_for_update(), pk=pk,
                                 tenant=request.tenant)
+
+        if obj.status not in RETRYABLE_STATUSES:
+            messages.error(
+                request,
+                f"This run cannot be retried — it is {obj.get_status_display().lower()}.")
+            return redirect("inventory:stocksyncrun_detail", pk=pk)
 
         wait_seconds = obj.next_backoff_seconds
         if wait_seconds is None:
