@@ -26967,3 +26967,73 @@ suite 806 passed + 1 foreign failure (sibling 5.14 barcode test, their lane).
 **Adoption notes:** shared migration node 0018 carries sibling 5.14 barcode tables + this
 model (disclosed); shared-file wiring commits deferred until the 5.14 lane quiets; sibling
 lanes for 5.13/5.14 ran concurrently throughout.
+
+---
+
+## 5.16 Alerts & Notifications - built 2026-08-25
+
+**Scope:** one engine-raised inbox wearing the four bullet lenses (`?type=` deep-links,
+5.7 pattern). AlertRule [ARL-] = watch catalog (type/severity, optional item/location
+scope, expiry-days & overstock-% knobs, in-app/email/sms/push + comma recipients, email
+requires >=1 recipient via clean(), cooldown_days); InventoryAlert [ALT-] = snapshot row
+(type/severity/message/metric frozen at raise) with open->acknowledged->resolved triage;
+NotificationDelivery [NDL-] = append-only dispatch log (no edit/delete), rows honestly
+`queued` because no SMTP/SMS/push gateway exists - in-app inbox is the live surface.
+
+**Engine:** run_detection() deterministic/explainable, reads ONLY spine state:
+ReorderRule x one grouped StockMove aggregate (low/out-of-stock), BinCapacity
+quantity_utilisation (overstock; no declared limit = nothing to breach), LotSerial
+expiry windows (negative days = expired message), PO pending_approval + past-due
+undelivered Shipments (workflow triggers). Suppression: one-open-alert-per-dedup-key
+(engine guard, MariaDB can't express partial unique - 4.15 precedent) + cooldown.
+Whole run inside transaction.atomic(); summary dict rendered by the view.
+
+**Gating:** rule CRUD + run-detection tenant-admin; acknowledge/resolve plain staff
+(procurement alert-center precedent). IDOR verified cross-tenant 404 on all three models.
+
+**Verification:** makemigrations 0020 (rides incidental pre-existing rfidtag.epc
+help_text drift), migrate OK, seed x2 idempotent (Acme 9 alerts/11 deliveries, Globex
+10/13 from real spine data), manage.py check clean, smoke temp/smoke_516.py ALL PASS
+(31 checks incl. dedup re-run equality, lifecycle verbs, email-without-recipients
+rejection, ARL- auto-number, sidebar lens links).
+
+**Gotchas of record:** `{% url %}` cannot carry a query string - overview links use
+`{% url %}?type=...`; elif-after-for syntax slip in the engine caught by import; class
+attr `number = None` would have shadowed TenantNumbered's field - removed before migrate.
+
+---
+
+## 5.15 Quality Control (QC) & Inspection — built 2026-08-25
+
+**Scope ruling:** SCM 4.9 owns the quality-ENGINEERING layer (InspectionPlan,
+QualityInspection, NonConformance + MRB). 5.15 is the warehouse-FLOOR gate AROUND it
+(L36/L29/L37) - four bullets, four new tables, zero re-declared spine entities.
+
+**Models (apps/inventory/models/QualityControl/):**
+- QcChecklist + QcChecklistItem: mandatory pre-acceptance checks pinned to item OR vendor
+  party OR workspace-wide; checkpoints inline via formset on parent create/edit (5.10 pattern);
+  applies_to property for scope display.
+- QcRoutingRule + resolve_qc_routing(): inspect/bypass verdict per receipt; specificity tiers
+  item(3)>category(2)>catch-all(1), vendor-pin adds specificity and never fires blind;
+  priority ASC then id ASC. Detail page has a LIVE ?item= resolution preview.
+- QuarantineOrder [QRD-]: draft->quarantined->released|scrapped|cancelled; quarantine() posts
+  REAL transfer pair (source out / QC-HOLD in) at average cost; release()/_reverse_pair returns;
+  scrap() posts negative adjustment FROM the zone (NCR's shape, scoped to this order's units);
+  cancel reverses when held. _locked()+_stock_lock() FOR UPDATE, shortfall guards both ends.
+- DefectReport [DEF-]: floor capture (defect type aligned with NCR taxonomy, discovered_during,
+  photo file-or-url image allowlist, ncr escalation pointer); writeoff() = guarded negative
+  adjustment at the report's location; close() = no-ledger resolution; posts_stock executable rule.
+
+**Gating:** checklist/rule writes tenant_admin_required; quarantine verb login-gated (operator
+work), release/scrap/cancel admin (stock fate); defect edit/delete open-only server-guarded;
+writeoff/close admin. IDOR verified cross-tenant 404 on all four models.
+
+**Verification:** migration 0023, migrate OK, seed x2 idempotent (3 checklists / 3 rules /
+QRD-00001 quarantined+QRD-00002 released+draft / DEF-00002 really written off), manage.py
+check clean, smoke ALL PASS (lists+filters+detail/create/edit, IDOR 404s, leak markers,
+quarantine POST verb -> 302 + exactly two legs).
+
+**Gotchas of record:** bare "" list routes collide with the app-root overview route
+(first-match-wins) - every entity module needs its own literal prefix; as_db_int lives in
+apps.core.crud not utils; parallel-session integration means shared __init__ snapshots may
+carry sibling sub-module import blocks - committed only on green-check windows.
