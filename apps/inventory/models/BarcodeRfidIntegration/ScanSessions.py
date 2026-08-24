@@ -91,6 +91,7 @@ class ScanSession(TenantNumbered):
             raise ValidationError("This scan session is already closed.")
         self.status = "closed"
         self.ended_at = timezone.now()
+        self.save(update_fields=["status", "ended_at", "updated_at"])
 
 
 def resolve_code(tenant, raw):
