@@ -75,3 +75,10 @@ After each code finding `manage.py check` clean; final gates: `temp/smoke_multil
 (update it if the seeder shape changes assertions), QA probes from the lane script re-run clean,
 global_stock CaptureQueriesContext == 4 view queries reported. Commits one file per commit; docs
 commit closes the checkboxes.
+
+### Test-wave addendum
+
+- [x] **C4** (found by security lane during Phase 6) - GlobalStock.totals_for indexed the
+      grouped maps with [pk]; a move-less attached warehouse raised KeyError -> 500 for any
+      member GET of Global Stock. Fixed: .get(pk, ZERO) honest-zero reads; check clean;
+      smoke re-run green.
