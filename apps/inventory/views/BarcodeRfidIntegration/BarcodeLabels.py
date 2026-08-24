@@ -15,6 +15,10 @@ from apps.inventory.forms import BarcodeLabelForm
 from apps.inventory.models import BarcodeLabel
 from apps.inventory.views._common import *  # noqa: F401,F403
 
+#: Defense-in-depth for the inline SVG responses: if a future writer-version ever regressed
+#: its XML escaping, this stops any injected markup from loading scripts or foreign frames.
+SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'"
+
 
 @login_required
 def barcodelabel_list(request):
@@ -222,7 +226,7 @@ def barcodelabel_render(request, pk):
 
     svg = _build_label_svg(obj)
     if svg is not None:
-        return HttpResponse(svg, content_type="image/svg+xml")
+        return HttpResponse(svg, content_type="image/svg+xml", headers={"Content-Security-Policy": SVG_CSP})
 
     # CHOSEN FALLBACK: a STATIC SVG error card (not a code128 re-render) — EAN-13 demands a
     # 12/13-digit payload and Code 39 rejects out-of-alphabet characters (it upper-cases
@@ -239,4 +243,4 @@ def barcodelabel_render(request, pk):
         b'(EAN-13 needs 12/13 digits)</text>'
         b"</svg>"
     )
-    return HttpResponse(buf.getvalue(), content_type="image/svg+xml")
+    return HttpResponse(buf.getvalue(), content_type="image/svg+xml", headers={"Content-Security-Policy": SVG_CSP})
