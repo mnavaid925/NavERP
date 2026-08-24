@@ -63,6 +63,8 @@ from apps.inventory.models.ThirdPartyIntegrations._choices import (
 class StockSyncRun(TenantNumbered):
     """One stock-sync batch against one channel. Append-only register row."""
 
+    NUMBER_PREFIX = "SYN"
+
     #: Re-checked in :meth:`clean` against this row's own tenant. No ModelForm exists in front of
     #: this table (docstring §1), so there is no narrowed ``<select>`` and no ``_reject_foreign``
     #: behind it — the guard below is the WHOLE boundary for shell/admin/seeder writers.
