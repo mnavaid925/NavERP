@@ -6,9 +6,9 @@ close(): edit refuses closed sessions with a flash on the detail page (the 403-s
 via message is house-acceptable), and the close verb is POST-only because it mutates state.
 
 ``scan_console`` is the PRIMARY UX: a GET+POST surface that resolves pasted/held-scanned
-strings through the shared ``resolve_code`` spine walk and appends one immutable ScanEvent
-per code inside a single transaction, capped at 300 codes per submit BEFORE the loop so a
-paste-bomb cannot hold the request open.
+strings through the shared resolver spine walk (batched via ``resolve_codes``) and appends
+one immutable ScanEvent per code inside a single transaction, capped at 300 codes per
+submit BEFORE the loop so a paste-bomb cannot hold the request open.
 """
 from datetime import timedelta
 
@@ -23,7 +23,7 @@ from apps.inventory.forms.BarcodeRfidIntegration.ScanSessions import ScanSession
 from apps.inventory.models.BarcodeRfidIntegration.ScanSessions import (
     ScanEvent,
     ScanSession,
-    resolve_code,
+    resolve_codes,
 )
 from apps.inventory.views._common import *  # noqa: F401,F403
 
@@ -169,9 +169,12 @@ def scan_console(request):
             return redirect("inventory:scan_console")
 
         ok_count = 0
+        # One batched resolution pass BEFORE the write transaction: four grouped __in
+        # queries total, exact resolve_code precedence, then plain dict lookups per code.
+        resolved = resolve_codes(request.tenant, codes)
         with transaction.atomic():
             for code in codes:
-                _kind, obj = resolve_code(request.tenant, code)
+                _kind, obj = resolved.get(code, ("unknown", None))
                 event = ScanEvent.record(session=session, raw_code=code, kind=_kind, obj=obj)
                 if event is not None and event.ok:
                     ok_count += 1
