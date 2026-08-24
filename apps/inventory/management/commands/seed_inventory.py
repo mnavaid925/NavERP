@@ -1406,7 +1406,8 @@ class Command(BaseCommand):
                            symbology="ean13", payload="4006381333931", copies=2,
                            notes="Seed demo EAN-13 retail carton label.")
         ean.save()
-        BarcodeLabel.objects.filter(pk=ean.pk).update(status="printed")
+        # Through the REAL verb — stamps printed_at alongside the status flip.
+        ean.print()
 
         operator = (Party.objects.filter(tenant=tenant, roles__role="employee").first()
                     or Party.objects.filter(tenant=tenant).first())
@@ -1448,16 +1449,17 @@ class Command(BaseCommand):
         bin_loc = Location.objects.filter(tenant=tenant, location_type="bin").order_by("code").first()
         epc_base = f"{(tenant.pk or 0) % 16:X}A700"
         tag_specs = [
-            (f"{epc_base}0001", "passive", "unassigned", None),
-            (f"{epc_base}0002", "passive", "active", item),
-            (f"{epc_base}0003", "active", "active", None),
-            (f"{epc_base}0004", "passive", "retired", None),
-            (f"{epc_base}0005", "passive", "lost", None),
+            # (epc, kind, status_target, item, extra target anchors)
+            (f"{epc_base}0001", "passive", "unassigned", None, {}),
+            (f"{epc_base}0002", "passive", "active", item, {}),
+            (f"{epc_base}0003", "active", "active", None, {"location": bin_loc}),
+            (f"{epc_base}0004", "passive", "retired", None, {}),
+            (f"{epc_base}0005", "passive", "lost", None, {}),
         ]
         active_tags = []
-        for epc, kind, status_target, tgt in tag_specs:
+        for epc, kind, status_target, tgt, anchor in tag_specs:
             tag = RfidTag(tenant=tenant, epc=epc, kind=kind,
-                          item=tgt, notes="Seed demo tag.")
+                          item=tgt, notes="Seed demo tag.", **anchor)
             tag.save()
             if status_target == "active":
                 try:
@@ -1471,8 +1473,13 @@ class Command(BaseCommand):
                 except ValidationError:
                     pass
             elif status_target == "lost":
-                tag.status = "lost"
-                tag.save(update_fields=["status", "updated_at"])
+                # Through the REAL verbs: activate() then mark_lost() — a force-written
+                # status would bypass the lifecycle the UI enforces.
+                try:
+                    tag.activate()
+                    tag.mark_lost()
+                except ValidationError:
+                    pass
         result = RfidTag.bulk_read(tenant, active_tags + ["FFFFFFFFFFFF"], location=bin_loc)
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {len(tag_specs)} RFID tags (bulk-read matched {result['matched']})."))
