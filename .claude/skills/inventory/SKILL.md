@@ -303,3 +303,41 @@ pointing master-data bullets at owning scm pages. Overview card groups per sub-m
   blocks to each package `__init__.py`, register admin, extend seeder, add templates triple.
 - **Add a filter**: parse GET in the view BEFORE crud_list/paginate; pass choices/querysets via
   extra_context; guard ints with `as_db_int`.
+
+### 5.14 Barcode & RFID Integration - the device slice
+
+- **The identified things are the spine's own codes**: resolve_code(tenant, raw) walks
+  scm.Item.sku -> scm.Location.code -> scm.LotSerial.number -> inventory.RfidTag.epc,
+  iexact + id-ordered, tenant-scoped; precedence decides when a code matches several masters.
+  No parallel identity table anywhere; pallet_ref free-text is the L28 stand-in (no pallet/HU master).
+- **BarcodeLabel [LBL-]** (TenantNumbered): target_type item/location/lot/free + nullable FKs +
+  target_ref/pallet_ref; symbology code39/code128/ean13/qr; BLANK payload auto-derives from the
+  target in save() (form field deliberately optional); copies 1..500; draft->printed via print()
+  (re-print allowed, refreshes stamp), void refuses further prints; render endpoint serves
+  image/svg+xml from python-barcode SVGWriter / qrcode SvgPathImage (both pillow-free; CSP header;
+  invalid-payload symbologies get a STATIC error card - payload never echoed into it; Code39
+  upper-cases before validating, KeyError kept in the except-tuple because checksum precedes alphabet
+  validation); print page shows clamped preview frames (PRINT_PREVIEW_CAP) + confirm-run POST.
+- **ScanSession [SSN-] + ScanEvent** (TenantNumbered/TenantOwned): handheld/wedge capture sessions
+  (single|batch) closed via close(); events are append-only snapshots (raw_code, resolved_kind,
+  resolved_label, ok) created ONLY through ScanEvent.record or the console - no event form exists.
+  Scan Console (`inventory:scan_console`) resolves typed/pasted codes live (?mode=single|batch,
+  ?session= preselects); POST caps at 300 BEFORE the loop inside one atomic block; batch path uses
+  the grouped resolve_codes helper (4 __in queries, same precedence); unknowns recorded ok=False.
+- **RfidTag [TAG-]** (TenantOwned, epc IS the identifier): hex regex ^[0-9A-F\\-]{8,64}$ normalised
+  strip+upper in save()/clean(), unique (tenant, epc); unassigned->active->retired|lost verbs all
+  guarded (activate REQUIRES an anchor: item/location/lot_serial/target_ref/pallet_ref);
+  bulk_read(tenant, epcs, location) stamps last_seen_at/last_seen_location in ONE .update() and
+  reports unmatched EPCs (cap 500).
+- Writes admin-gated (@tenant_admin_required on label CRUD/print/void, tag CRUD/verbs/bulk-read);
+  sessions + console member-open BY DESIGN ("everyone scans"); edit refused once a session closes.
+- Sidebar 5.14: Label Generation -> barcodelabel_list; Scanner Integration -> scan_console;
+  RFID Tag Management -> rfidtag_list; Batch Scanning -> scan_console (?mode=batch).
+- Templates: templates/inventory/barcode/ - barcodelabel/{list,detail,form,print}.html,
+  scansession/{list,detail,form}.html, rfidtag/{list,detail,form,bulkread}.html, page-only console.html.
+- Seeder _seed_barcode_rfid -> independently-guarded _seed_barcode_labels_and_scans (labels over demo
+  items/bins incl. one EAN-13, one session walked through the REAL resolver with a deliberate unknown,
+  one open batch) + _seed_rfid_tags (five tags through real verbs, bulk_read stamps last-seen).
+- Deps: python-barcode==0.16.1 + qrcode==8.2 pinned in requirements.txt (SVG factories need no Pillow).
+- Tests: test_barcode_{models,forms,views,security}.py (30) + conftest fixtures barcode_label_{a,b},
+  scan_session_open_a, scan_event_a, rfid_tag_active_a, rfid_tag_b.
