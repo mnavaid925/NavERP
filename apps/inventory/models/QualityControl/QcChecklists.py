@@ -97,4 +97,4 @@ class QcChecklistItem(TenantOwned):
         indexes = [models.Index(fields=["tenant", "checklist"], name="inv_qci_tnt_chk_idx")]
 
     def __str__(self):
-        return f"{self.checklist_id and self.checklist.name} · {self.label}"
+        return f"{self.checklist} · {self.label}"
