@@ -19,6 +19,10 @@ from apps.inventory.views._common import *  # noqa: F401,F403
 #: its XML escaping, this stops any injected markup from loading scripts or foreign frames.
 SVG_CSP = "default-src 'none'; style-src 'unsafe-inline'"
 
+#: Model caps copies at 500, but a 500-frame loop is absurd UI — the page previews the first
+#: 50 frames and says so; the physical copy count comes from obj.copies via the print dialog.
+PRINT_PREVIEW_CAP = 50
+
 
 @login_required
 def barcodelabel_list(request):
@@ -176,7 +180,10 @@ def barcodelabel_print(request, pk):
         "inventory/barcode/barcodelabel/print.html",
         {
             "obj": obj,
-            "copies_range": range(obj.copies),
+            "copies_range": range(min(obj.copies, PRINT_PREVIEW_CAP)),
+            "copies_total": obj.copies,
+            "preview_capped": obj.copies > PRINT_PREVIEW_CAP,
+            "preview_cap": PRINT_PREVIEW_CAP,
             "svg_available": svg_available,
             "is_admin": bool(request.user.is_superuser or getattr(request.user, "is_tenant_admin", False)),
         },
