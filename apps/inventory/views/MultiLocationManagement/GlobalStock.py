@@ -130,8 +130,10 @@ def global_stock(request):
         return ids
 
     def totals_for(ids):
-        qty = sum((stock_qty[pk] for pk in ids), ZERO)
-        val = sum((stock_val[pk] for pk in ids), ZERO)
+        # .get, not [pk]: the grouped maps are keyed by MOVED locations only — a
+        # move-less site must read as an honest zero, not KeyError the whole page.
+        qty = sum((stock_qty.get(pk, ZERO) for pk in ids), ZERO)
+        val = sum((stock_val.get(pk, ZERO) for pk in ids), ZERO)
         return qty, val
 
     def make_row(node, depth):
