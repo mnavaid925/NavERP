@@ -159,9 +159,23 @@ class BarcodeLabel(TenantNumbered):
             return self.target_ref.strip()
         return ""
 
+    TARGET_FIELDS = ("target_type", "item_id", "location_id", "lot_serial_id", "target_ref")
+
     def save(self, *args, **kwargs):
         if not self.payload:
             self.payload = self.default_payload() or self.target_ref.strip()
+        elif self.pk is not None:
+            # Retarget guard: editing the label to point at a DIFFERENT master must not keep a
+            # stale derived payload. Re-derive only when (a) some target field actually changed
+            # and (b) the stored payload is still the OLD default — i.e. it was auto-derived,
+            # never hand-customized. One bounded SELECT on the update path, no extra state.
+            old = BarcodeLabel.objects.filter(pk=self.pk).only(*self.TARGET_FIELDS).first()
+            if (
+                old is not None
+                and any(getattr(self, f) != getattr(old, f) for f in self.TARGET_FIELDS)
+                and self.payload == (old.default_payload() or old.target_ref.strip())
+            ):
+                self.payload = self.default_payload() or self.target_ref.strip()
         super().save(*args, **kwargs)
 
     def clean(self):
