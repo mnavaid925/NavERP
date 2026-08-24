@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Inventory Valuation Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Inventory Valuation Report</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><span>Reporting &amp; Analytics</span><span class="sep">›</span><span>Valuation</span></div>
+      <p class="text-muted">Per item × location stock value under each item's costing method — a live read over the append-only ledger.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'scm:valuation_report' %}" class="btn btn-outline"><i data-lucide="external-link"></i> SCM per-item view</a>
+      <a href="{% url 'inventory:snapshot_generate' %}?type=valuation" class="btn btn-primary"><i data-lucide="camera"></i> Freeze snapshot</a>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px;">
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="banknote"></i></div>
+      <div><div class="stat-value">{{ grand_total|floatformat:"-2" }}</div><div class="stat-label">Total Stock Value (all locations)</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="map-pin"></i></div>
+      <div><div class="stat-value">{{ spots }}</div><div class="stat-label">Stocked Spots (item × location)</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search SKU or item name…">
+        </div>
+        <div class="form-group">
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">All items</option>
+            {% for it in items %}
+              <option value="{{ it.pk }}" {% if request.GET.item == it.pk|stringformat:"d" %}selected{% endif %}>{{ it.sku }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="location" aria-label="Location" class="form-select">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+              <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="method" aria-label="Costing method" class="form-select">
+            <option value="">Any method</option>
+            {% for value, label in method_choices %}
+              <option value="{{ value }}" {% if method == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:report_valuation' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Item</th><th>Location</th><th>On Hand</th><th>Avg Unit Value</th><th>Stock Value</th><th>Method</th></tr></thead>
+        <tbody>
+          {% for row in object_list %}
+            <tr>
+              <td><a href="{% url 'scm:item_detail' row.item.pk %}" class="fw-600">{{ row.item.sku }}</a> <span class="text-muted">{{ row.item.name }}</span></td>
+              <td>{% if row.location %}{{ row.location.code }} <span class="text-muted">{{ row.location.name }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ row.on_hand|floatformat:"-2" }}</td>
+              <td>{{ row.unit_value|floatformat:"-2" }}</td>
+              <td class="fw-600">{{ row.value|floatformat:"-2" }}</td>
+              <td><span class="badge badge-slate">{{ row.method }}</span></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="scale"></i><h3>Nothing to value yet</h3><p>Stock value appears once moves are posted — receive goods on the SCM goods-receipt pages to start the ledger.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Weighted-avg items value at their cached average cost; FIFO/LIFO items walk their inbound cost layers (transfer legs excluded, as in the accounting-grade view). The total above is page furniture — the ledger of record is SCM's <a href="{% url 'scm:valuation_report' %}">Stock Valuation report</a>.</p>
+{% endblock %}
