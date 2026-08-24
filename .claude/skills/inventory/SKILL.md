@@ -1,6 +1,6 @@
 ---
 name: inventory
-description: Work on the Inventory Management System module (Module 5 â€” 5.1 Product & Catalog, 5.2 Vendor/Supplier Management, 5.3 Purchase Order Management, 5.5 Warehousing & Bins, 5.6 Inventory Tracking & Control, 5.7 Stock Movement & Transfers, 5.8 Lot & Serial Number Tracking, 5.11 Stocktaking & Cycle Counting; 5.4 Receiving and 5.10 Returns landed in a shared checkout). Extends apps/inventory around the SCM 4.3 item/location/StockMove spines (L36 â€” never re-declares them). Use when the user asks to add/change/debug anything under apps/inventory or templates/inventory, extend the seed_inventory seeder, touch inventory sidebar wiring (LIVE_LINKS 5.x), or invokes /inventory.
+description: Work on the Inventory Management System module (Module 5 â€” 5.1 Product & Catalog, 5.2 Vendor/Supplier Management, 5.3 Purchase Order Management, 5.5 Warehousing & Bins, 5.6 Inventory Tracking & Control, 5.7 Stock Movement & Transfers, 5.8 Lot & Serial Number Tracking, 5.13 Forecasting & Planning, 5.11 Stocktaking & Cycle Counting; 5.4 Receiving and 5.10 Returns landed in a shared checkout). Extends apps/inventory around the SCM 4.3 item/location/StockMove spines (L36 â€” never re-declares them). Use when the user asks to add/change/debug anything under apps/inventory or templates/inventory, extend the seed_inventory seeder, touch inventory sidebar wiring (LIVE_LINKS 5.x), or invokes /inventory.
 ---
 
 # Inventory Management System (Module 5)
@@ -35,6 +35,7 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 | 5.8 | `LotSerialTracking/` | LotNumberRule, ShelfLifePolicy (+ `fefo_board` / `traceability` computed pages) | lot/serial ROWS stay `scm.LotSerial` (Serial Number Tracking bullet points at the spine master); classify_lot is THE shared expiry verdict |
 | 5.9 | `FulfillmentOrchestration/` | FulfillmentWave [WAV-], FulfillmentWaveOrder (+ `wave_board` computed page) | order/pick/ship/shipping bullets point at `scm:salesorder_list` / `scm:picktask_list` / `scm:carrier_list`; zero writes into SCM |
 | 5.11 | `StocktakingCycleCounting/` | CountProgram [CTP-], PhysicalInventory [PHY-] (+ variance_report computed page) | count EXECUTION stays `scm.CycleCountTask`; Blind Counts bullet points at the spine master; reconcile() refuses while spawned sheets are open |
+| 5.13 | \ForecastingPlanning/\ | StockLevelPlan [SLP-] (+ planning_board computed page) | forecasts/ROP math stay SCM 4.7; board apply delegates to spine apply_computed; recommended qty derived via profile.apply_to each render |
 | 5.10 | `ReturnsManagement/` | ReturnInspection [RMI-], ReturnInspectionChecklist, DispositionRoutingRule (+ `returns_workbench` computed board) | Primary RMA documents and ledger postings stay in SCM 4.10 (L36/L29); 5.10 adds warehouse physical inspection grading checklists and automated disposition routing engine |
 
 ### 5.9 Order Management & Fulfillment — the wave-planning slice
@@ -141,6 +142,21 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
   collect-only worked); they must run green in a normal dev shell.
 
 
+
+
+### 5.13 Inventory Forecasting & Planning - the decision slice
+
+- **Demand Forecasting** -> scm:demandforecast_list pointer (4.7 owns prediction).
+- **Planning Board** -> inventory:planning_board (computed): per ReorderRule, live vs
+  computed SS/ROP gap from ONE grouped ledger on-hand query; stale/below filters;
+  planning_apply_computed is tenant_admin_required and calls the SPINE's own
+  apply_computed() - never re-implements the math. Spine verb: r.is_below_point(qty).
+- **Seasonality Planning** -> StockLevelPlan [SLP-]: per-SKU base target + optional
+  scm.SeasonalityProfile; recommended_qty() DERIVED via profile.apply_to every render
+  (never stored); activate() supersedes prior active to archived under lock; drafts-only
+  edit/delete. Templates templates/inventory/planning/. Seeder _seed_forecasting_planning:
+  flat active plan + seasonal draft over a real spine profile per tenant.
+  Gotcha: SeasonalityIndex FK kwarg is \profile\. Tests test_forecast_models.py (10).
 
 ### 5.11 Stocktaking & Cycle Counting - the scheduling/freeze slice
 
