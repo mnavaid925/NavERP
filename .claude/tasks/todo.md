@@ -26872,3 +26872,40 @@ ZERO/paginate imports; correct spine verb is_below_point. Tests test_forecast_mo
 green (seasonal rec Decimal("60"), supersede-on-activate, window validation, guarded edit/
 delete, IDOR, login gate). All phases done except the formal six-agent review file - findings
 were caught and fixed inline by the live smoke run instead.
+
+---
+
+## 5.14 Barcode & RFID Integration - built 2026-08-24 (close-out)
+
+**Scope ruling:** scanners emit the spine's own codes (scm.Item.sku / scm.Location.code /
+scm.LotSerial.number), so one shared resolve_code resolver maps raw scans against those masters
+tenant-scoped - no parallel identity table. pallet_ref free-text is the L28 stand-in (no pallet/HU
+master anywhere). Zero stock writes (L37).
+
+**As-built:** BarcodeLabel [LBL-] with blank-payload-derives-from-target + real SVG rendering
+(python-barcode SVGWriter / qrcode SvgPathImage, both pillow-free; deps pinned in requirements.txt);
+ScanSession [SSN-] + append-only ScanEvent through Scan Console (?mode single/batch, 300 cap,
+unknowns recorded ok=False); RfidTag [TAG-] EPC registry with guarded assign/retire/lost verbs and
+one-update bulk_read (cap 500). Migrations 0018 (bundled the concurrent 5.12 session's pending
+LocationNetwork - same-checkout precedent) + 0019 (tenant,scanned_at index).
+
+**Review wave:** all six lanes returned. 23 findings (1C/6I/16M) -> review-inventory-5.14.md;
+code-fixer closed ALL 23. C1: RfidTags views missing ValidationError import -> every lifecycle
+refusal was a NameError 500 (reproduced by QA probe). I1: console dropped resolved kind -> every
+event stored "unknown". Plus unreachable void verb, print gate inconsistency, session deep-link
+preselect, batched console resolution (4 __in queries), scan-event index, single-SVG print layout,
+EAN-13 static error card semantics, seeder routed through real verbs.
+
+**Tests:** test_barcode_{models,forms,views,security}.py written (30 tests, contract verified
+name-by-name against source). Sandbox caveat of record: DB-backed pytest was kill-storming again
+("ChildProcess.kill" even for a single file) during the test window, so the agent stopped honestly
+before committing per protocol. Files left UNCOMMITTED in the working tree pending a green run:
+`venv\Scripts\python.exe -m pytest apps/inventory/tests/test_barcode_models.py
+apps/inventory/tests/test_barcode_forms.py apps/inventory/tests/test_barcode_views.py
+apps/inventory/tests/test_barcode_security.py -q --no-header`, then the full apps/inventory suite,
+then commit conftest.py + the four files one-per-commit. Runtime verification of record meanwhile:
+temp/smoke_barcode.py ALL PASS (35 checks incl. render content-type, void->404, console POST,
+IDOR, gating) after every fix batch.
+
+**Concurrency:** sibling sessions shipped 5.13 and are mid-test-wave on 5.12 in this checkout;
+their files untouched throughout.
