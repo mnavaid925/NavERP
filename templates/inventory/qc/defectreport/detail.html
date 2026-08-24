@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} — Defect Report{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} <span class="badge {{ obj.status_css }}">{{ obj.get_status_display }}</span></h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:defectreport_list' %}">Defects &amp; Scrap</a>
+        <span class="sep">›</span>
+        <span>{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:defectreport_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if obj.status == 'open' and is_admin %}
+        <form method="post" action="{% url 'inventory:defectreport_writeoff' obj.pk %}" onsubmit="return confirm('Write off {{ obj.quantity }} units at {{ obj.location.code }}? A negative adjustment move will be posted.');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Write Off</button>
+        </form>
+        <form method="post" action="{% url 'inventory:defectreport_close' obj.pk %}">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Close (no write-off)</button>
+        </form>
+      {% endif %}
+      {% if obj.is_editable %}
+        <a href="{% url 'inventory:defectreport_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Defect</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Item</dt><dd><a href="{% url 'scm:item_detail' obj.item_id %}" class="fw-600">{{ obj.item.sku }}</a> <span class="text-muted">{{ obj.item.name }}</span></dd></div>
+        <div class="detail-item"><dt>Lot / Serial</dt><dd>{% if obj.lot_serial %}{{ obj.lot_serial.number }}{% else %}<span class="text-muted">Not tracked</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Location</dt><dd><a href="{% url 'scm:location_detail' obj.location_id %}" class="mono">{{ obj.location.code }}</a> <span class="text-muted">{{ obj.location.name }}</span></dd></div>
+        <div class="detail-item"><dt>Quantity affected</dt><dd class="fw-600">{{ obj.quantity|floatformat:"-4" }}</dd></div>
+        <div class="detail-item"><dt>Defect type</dt><dd>{{ obj.get_defect_type_display }}</dd></div>
+        <div class="detail-item"><dt>Severity</dt><dd>{% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>{% elif obj.severity == 'major' %}<span class="badge badge-amber">Major</span>{% else %}<span class="badge badge-slate">Minor</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Discovered during</dt><dd>{{ obj.get_discovered_during_display }}</dd></div>
+        <div class="detail-item"><dt>Reported by</dt><dd>{% if obj.reported_by %}{{ obj.reported_by.name }}{% else %}<span class="text-muted">—</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Reported on</dt><dd>{{ obj.reported_on|date:"M d, Y" }}</dd></div>
+        <div class="detail-item"><dt>Escalated NCR</dt><dd>{% if obj.ncr %}<a href="{% url 'scm:nonconformance_detail' obj.ncr_id %}" class="mono fw-600">{{ obj.ncr.number }}</a>{% else %}<span class="text-muted">Not escalated</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Evidence</dt><dd>{% if obj.photo_href %}<a href="{{ obj.photo_href }}" target="_blank" rel="noopener" class="text-brand fw-600">{% if obj.photo %}View uploaded photo{% else %}Open linked photo{% endif %}</a>{% else %}<span class="text-muted">No photo attached</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Resolved</dt><dd>{{ obj.resolved_at|date:"M d, Y H:i"|default_if_none:"—" }}</dd></div>
+      </dl>
+      {% if obj.description %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.description }}</p>
+      {% else %}<p class="text-muted" style="margin-top:12px;">No description recorded.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Ledger Moves — {{ obj.number }}</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>When</th><th>Type</th><th>Location</th><th>Qty</th><th>Unit Cost</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for move in moves %}
+            <tr>
+              <td>{{ move.moved_at|date:"M d, Y H:i" }}</td>
+              <td>{{ move.get_move_type_display }}</td>
+              <td>{{ move.location.code }}</td>
+              <td class="fw-600">{% if move.quantity < 0 %}<span class="badge badge-red">{{ move.quantity|floatformat:"-4" }}</span>{% else %}<span class="badge badge-green">+{{ move.quantity|floatformat:"-4" }}</span>{% endif %}</td>
+              <td>{{ move.unit_cost|floatformat:"-4" }}</td>
+              <td>{{ move.reason }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-commit-horizontal"></i><h3>No ledger moves yet</h3><p>A write-off posts its negative adjustment leg here; closing without write-off never touches the ledger.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
