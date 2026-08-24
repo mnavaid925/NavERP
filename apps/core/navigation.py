@@ -1378,6 +1378,20 @@ LIVE_LINKS = {
         "Tax Management":                      "inventory:taxrule_list",    # bullet (product × geography → TaxCode catalog)
         "GL Posting Rules":                    "inventory:glpostrule_list", # extra (the account map; linked from JE Automation's header)
     },
+    # 5.19 Third-Party Integrations & API. scm 4.19 owns the generic gateway/webhook tables and
+    # inventory 5.18 owns the internal GL/JE automation; what this sub-module adds is the
+    # commerce-stock layer around them: the external channel register (e-commerce platforms /
+    # ERP suites / accounting software), SKU-to-channel listing maps, the append-only
+    # stock-sync run log, and the INBOUND half of API Management (clients we issue keys to).
+    # No transport exists yet — runs record themselves as `simulated`, credentials persist
+    # only prefix + SHA-256 hash, and nothing ever dials base_url (SSRF-guarded for the
+    # future pass).
+    "5.19": {
+        "E-commerce Integration":          "inventory:integrationchannel_list?kind=ecommerce",
+        "ERP Integration":                 "inventory:integrationchannel_list?kind=erp",
+        "Accounting Software Integration": "inventory:integrationchannel_list?kind=accounting",
+        "API Management":                  "inventory:apiclient_list",
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
 
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
