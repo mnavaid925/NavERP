@@ -103,6 +103,28 @@ def resolve_code(tenant, raw):
     multi-row lookup is ordered by ``id`` — the OLDEST master wins deterministically."""
     code = (raw or "").strip()
     if not code:
+        return ("unknown", None)
+
+    item = Item.objects.filter(tenant=tenant, sku__iexact=code).order_by("id").first()
+    if item is not None:
+        return ("item", item)
+
+    location = Location.objects.filter(tenant=tenant, code__iexact=code).order_by("id").first()
+    if location is not None:
+        return ("location", location)
+
+    lot_serial = LotSerial.objects.filter(tenant=tenant, number__iexact=code).order_by("id").first()
+    if lot_serial is not None:
+        return ("lot", lot_serial)
+
+    # Lazy sibling import: RfidTags lives in this package and imports back into it, so a
+    # module-level import would be circular during the models package load.
+    from .RfidTags import RfidTag
+
+    tag = RfidTag.objects.filter(tenant=tenant, epc=code.upper()).order_by("id").first()
+    if tag is not None:
+        return ("rfid", tag)
+
     return ("unknown", None)
 
 
@@ -150,28 +172,6 @@ def resolve_codes(tenant, raw_codes):
         "epc",
     )
     return resolved
-
-    item = Item.objects.filter(tenant=tenant, sku__iexact=code).order_by("id").first()
-    if item is not None:
-        return ("item", item)
-
-    location = Location.objects.filter(tenant=tenant, code__iexact=code).order_by("id").first()
-    if location is not None:
-        return ("location", location)
-
-    lot_serial = LotSerial.objects.filter(tenant=tenant, number__iexact=code).order_by("id").first()
-    if lot_serial is not None:
-        return ("lot", lot_serial)
-
-    # Lazy sibling import: RfidTags lives in this package and imports back into it, so a
-    # module-level import would be circular during the models package load.
-    from .RfidTags import RfidTag
-
-    tag = RfidTag.objects.filter(tenant=tenant, epc=code.upper()).order_by("id").first()
-    if tag is not None:
-        return ("rfid", tag)
-
-    return ("unknown", None)
 
 
 class ScanEvent(TenantOwned):
