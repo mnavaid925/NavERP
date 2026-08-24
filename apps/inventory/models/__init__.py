@@ -62,6 +62,12 @@ from .QualityControl import (
     resolve_qc_routing,
 )
 from .ReportingAnalytics.ReportSnapshots import InventoryReportSnapshot
+from .ThirdPartyIntegrations import (
+    ApiClient,
+    ChannelListingMap,
+    IntegrationChannel,
+    StockSyncRun,
+)
 
 __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "FulfillmentWave", "FulfillmentWaveOrder",
@@ -83,5 +89,6 @@ __all__ = ["ItemAttribute", "ItemPrice", "ProductFile", "VendorCommunication",
            "post_adjustment_to_gl", "post_cogs_batch",
            "QcChecklist", "QcChecklistItem", "QcRoutingRule", "QuarantineOrder",
            "DefectReport", "resolve_qc_routing",
-           "InventoryReportSnapshot"]
+           "InventoryReportSnapshot",
+           "IntegrationChannel", "ChannelListingMap", "StockSyncRun", "ApiClient"]
 
