@@ -131,7 +131,6 @@ def scansession_close(request, pk):
     except ValidationError:
         messages.error(request, f"{obj.number} is already closed.")
         return redirect("inventory:scansession_detail", pk=pk)
-    obj.save()
     write_audit_log(request.user, obj, "update", {"action": "close"})
     messages.success(request, f"Scan Session {obj.number} closed.")
     return redirect("inventory:scansession_detail", pk=pk)
