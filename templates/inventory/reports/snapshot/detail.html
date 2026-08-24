@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ object.display_title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ object.display_title }}</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:snapshot_list' %}">Snapshots</a><span class="sep">›</span><span>{{ object.number }}</span></div>
+      <p>
+        {% if object.report_type == "valuation" %}<span class="badge badge-info">{{ object.get_report_type_display }}</span>
+        {% elif object.report_type == "turnover" %}<span class="badge badge-green">{{ object.get_report_type_display }}</span>
+        {% elif object.report_type == "aging" %}<span class="badge badge-amber">{{ object.get_report_type_display }}</span>
+        {% else %}<span class="badge badge-slate">{{ object.get_report_type_display }}</span>{% endif %}
+      </p>
+    </div>
+    <div class="page-actions">
+      {% if request.user.is_tenant_admin or request.user.is_superuser %}
+      <form method="post" action="{% url 'inventory:snapshot_delete' object.pk %}" onsubmit="return confirm('Delete snapshot {{ object.number }}? This rewrites the freeze history.');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px;">
+    {% if object.report_type == "valuation" %}
+      <div class="stat-card"><div class="stat-icon green"><i data-lucide="banknote"></i></div><div><div class="stat-value">{{ object.summary.total_value|floatformat:"-2" }}</div><div class="stat-label">Total Stock Value at Freeze</div></div></div>
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="map-pin"></i></div><div><div class="stat-value">{{ object.summary.spots }}</div><div class="stat-label">Stocked Spots</div></div></div>
+    {% elif object.report_type == "turnover" %}
+      <div class="stat-card"><div class="stat-icon green"><i data-lucide="trending-up"></i></div><div><div class="stat-value">{{ object.summary.total_cogs|floatformat:"-2" }}</div><div class="stat-label">Issued Cost ({{ object.summary.window_days }}d)</div></div></div>
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="packages"></i></div><div><div class="stat-value">{{ object.summary.items }}</div><div class="stat-label">Items</div></div></div>
+    {% elif object.report_type == "aging" %}
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="warehouse"></i></div><div><div class="stat-value">{{ object.summary.total_value|floatformat:"-2" }}</div><div class="stat-label">Stock Value on Hand</div></div></div>
+      <div class="stat-card"><div class="stat-icon red"><i data-lucide="skull"></i></div><div><div class="stat-value">{{ object.summary.dead_value|floatformat:"-2" }}</div><div class="stat-label">Dead-Stock Value ({{ object.summary.dead_spots }} spots)</div></div></div>
+    {% else %}
+      <div class="stat-card"><div class="stat-icon green"><i data-lucide="a-arrow-up"></i></div><div><div class="stat-value">{{ object.summary.a_items }}</div><div class="stat-label">A items ({{ object.summary.a_share_pct }}% of cost)</div></div></div>
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="equal"></i></div><div><div class="stat-value">{{ object.summary.b_items }}</div><div class="stat-label">B items</div></div></div>
+      <div class="stat-card"><div class="stat-icon slate"><i data-lucide="list"></i></div><div><div class="stat-value">{{ object.summary.c_items }}</div><div class="stat-label">C items</div></div></div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><h2 class="card-title">Freeze Details</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <tbody>
+          <tr><th style="width:200px;">Number</th><td class="fw-600">{{ object.number }}</td></tr>
+          <tr><th>Generated</th><td>{{ object.created_at|date:"d M Y H:i" }}</td></tr>
+          <tr><th>By</th><td>{{ object.generated_by.get_short_name|default:object.generated_by.username|default:"—" }}</td></tr>
+          <tr><th>Scope</th><td>{{ object.location.code|default:"All locations" }}</td></tr>
+          {% if object.window_days %}<tr><th>Window</th><td>{{ object.window_days }} days</td></tr>{% endif %}
+          {% if object.notes %}<tr><th>Notes</th><td>{{ object.notes }}</td></tr>{% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Top Rows at Freeze Time</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>SKU</th>{% if object.report_type == "valuation" %}<th>Name</th><th>Location</th><th>On Hand</th><th>Value</th><th>Method</th>{% elif object.report_type == "turnover" %}<th>Issued Cost</th><th>Turns</th><th>Velocity</th><th>Days on Hand</th>{% elif object.report_type == "aging" %}<th>Location</th><th>On Hand</th><th>Value</th><th>Oldest</th><th>Health</th>{% else %}<th>Cum. Share</th><th>Issued Cost</th><th>Class</th><th>Velocity</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for row in object.summary.top_rows %}
+            <tr>
+              <td class="fw-600">{{ row.sku }}</td>
+              {% if object.report_type == "valuation" %}
+                <td>{{ row.name }}</td><td>{{ row.location|default:"—" }}</td><td>{{ row.on_hand|floatformat:"-2" }}</td><td>{{ row.value|floatformat:"-2" }}</td><td><span class="badge badge-slate">{{ row.method }}</span></td>
+              {% elif object.report_type == "turnover" %}
+                <td>{{ row.cogs|floatformat:"-2" }}</td><td>{{ row.turns|default:"—" }}</td><td>{{ row.velocity|capfirst }}</td><td>{{ row.days_on_hand|default:"∞" }}</td>
+              {% elif object.report_type == "aging" %}
+                <td>{{ row.location|default:"—" }}</td><td>{{ row.on_hand|floatformat:"-2" }}</td><td>{{ row.value|floatformat:"-2" }}</td><td>{{ row.oldest_days }} d</td><td>{{ row.health|capfirst }}</td>
+              {% else %}
+                <td>{{ row.cum_share|default:"—" }}</td><td>{{ row.cogs|floatformat:"-2" }}</td><td><span class="badge badge-info">{{ row.abc_class }}</span></td><td>{{ row.velocity|capfirst }}</td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="camera-off"></i><h3>No rows captured</h3><p>The freeze found nothing to record — the ledger may have been empty in this scope.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">Snapshots are immutable: this page renders stored JSON from freeze time and will never recompute. Live figures:
+    {% if object.report_type == "valuation" %}<a href="{% url 'inventory:report_valuation' %}">open today's valuation</a>
+    {% elif object.report_type == "turnover" %}<a href="{% url 'inventory:report_turnover' %}">open today's turnover</a>
+    {% elif object.report_type == "aging" %}<a href="{% url 'inventory:report_aging' %}">open today's aging</a>
+    {% else %}<a href="{% url 'inventory:report_abc' %}">open today's ABC analysis</a>{% endif %}.
+  </p>
+{% endblock %}
