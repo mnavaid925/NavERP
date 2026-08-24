@@ -16,8 +16,9 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from apps.core.crud import paginate
+from apps.inventory.views._common import *  # noqa: F401,F403
 from apps.inventory.views.ReportingAnalytics._engine import (
-    AGING_BUCKETS, BUCKET_LABELS, HEALTH_CHOICES, HEALTH_CSS, Ledger, aging_rows, q2,
+    AGING_BUCKETS, BUCKET_LABELS, HEALTH_CHOICES, Ledger, aging_rows, q2,
 )
 
 
@@ -26,6 +27,10 @@ def report_aging(request):
     tenant = request.tenant
     ledger = Ledger(tenant)
     rows, totals = aging_rows(tenant, ledger=ledger)
+
+    all_items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
+    all_locations = sorted({r["location"] for r in rows if r["location"] is not None},
+                           key=lambda obj: obj.code)
 
     q = request.GET.get("q", "").strip().lower()
     if q:
@@ -41,25 +46,17 @@ def report_aging(request):
     if bucket in BUCKET_LABELS:
         rows = [r for r in rows if r["buckets"][bucket]["qty"] > 0]
 
-    items = sorted({r["item"] for r in rows}, key=lambda obj: obj.sku)
-    locations = sorted({r["location"] for r in rows if r["location"] is not None},
-                       key=lambda obj: obj.code)
-    counts = {h: sum(1 for r in rows if r["health"] == h) for h, _label in HEALTH_CHOICES}
-
     page_obj = paginate(request, rows, per_page=25)
     return render(request, "inventory/reports/aging.html", {
         "page_obj": page_obj,
         "object_list": page_obj.object_list,
-        "bucket_labels": BUCKET_LABELS,
         "bucket_defs": AGING_BUCKETS,
         "q": request.GET.get("q", ""),
-        "items": items,
-        "locations": locations,
+        "items": all_items,
+        "locations": all_locations,
         "health": health,
-        "health_css": HEALTH_CSS,
         "health_choices": HEALTH_CHOICES,
         "bucket": bucket,
-        "counts": counts,
         # Full-set totals regardless of filters (month-end truth, as on valuation).
         "totals": {"total_value": q2(totals["total_value"]),
                    "dead_value": q2(totals["dead_value"]),
