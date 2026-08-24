@@ -55,8 +55,9 @@ def qcroutingrule_detail(request, pk):
 
     obj = get_object_or_404(_scoped(request.tenant), pk=pk)
 
-    # Live resolution preview: ?item=<pk> runs the engine exactly as the receiving flow
-    # would, so the operator sees whether THIS rule (or a more specific rival) wins.
+    # Live resolution preview: ?item=<pk> runs the FULL engine exactly as the receiving
+    # flow would, so the operator sees whether THIS rule or a more specific rival wins —
+    # and an inactive rule honestly shows as never firing (the engine filters it).
     preview_item = None
     preview = None
     item_id = as_db_int(request.GET.get("item"))
@@ -64,9 +65,10 @@ def qcroutingrule_detail(request, pk):
         preview_item = (Item.objects.filter(tenant=request.tenant)
                         .filter(pk=item_id).first())
     if preview_item is not None:
-        _, verdict, qc_location, reason = resolve_qc_routing(preview_item, rules=[obj])
+        winner, verdict, qc_location, reason = resolve_qc_routing(preview_item)
         preview = {"item": preview_item, "verdict": verdict,
-                   "qc_location": qc_location, "reason": reason}
+                   "qc_location": qc_location, "reason": reason,
+                   "is_this_rule": winner is not None and winner.pk == obj.pk}
     return render(request, "inventory/qc/qcroutingrule/detail.html", {
         "obj": obj,
         "preview": preview,
