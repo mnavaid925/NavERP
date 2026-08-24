@@ -140,11 +140,10 @@ def rfidtag_mark_lost(request, pk):
 
 
 def _lifecycle_action(request, pk, verb):
-    """Shared body of the activate/retire/mark-lost POST actions."""
+    """Shared body of the activate/retire/mark-lost POST actions (the verbs persist)."""
     tag = get_object_or_404(RfidTag, pk=pk, tenant=request.tenant)
     try:
         getattr(tag, verb)()
-        tag.save(update_fields=["status", "updated_at"])
     except ValidationError as exc:
         messages.error(request, "; ".join(exc.messages))
         return redirect("inventory:rfidtag_detail", pk=tag.pk)
