@@ -53,6 +53,11 @@ class ChannelListingMap(TenantOwned):
     )
     external_variant_id = models.CharField(
         max_length=80,
+        # NULL, never '', for a local-only row: MariaDB coalesces NULLs inside the
+        # unique_together below, so any number of local-only rows can share one channel while two
+        # rows CLAIMING the same external variant id still cannot both exist. A '' default would
+        # collide on the second local-only row (raw IntegrityError outside forms).
+        null=True,
         blank=True,
         help_text="Shopify variant gid / Amazon ASIN-SKU / Woo variation id",
     )
@@ -94,8 +99,10 @@ class ChannelListingMap(TenantOwned):
         indexes = [
             models.Index(fields=["tenant", "item"], name="inv_clm_tnt_item_idx"),
         ]
-        # MariaDB allows duplicate NULLs in a unique column, so local-only rows (blank variant id)
-        # coexist without constraint drama — research-verified.
+        # MariaDB coalesces NULLs in a unique column, so local-only rows (variant id NULL) never
+        # collide no matter how many one channel carries, while two rows CLAIMING the same
+        # external variant id still cannot both exist — which is the constraint's actual job.
+        # Research-verified; the column MUST be null=True for this to hold ('' does not coalesce).
 
     def __str__(self):
         return (
