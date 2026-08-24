@@ -1322,6 +1322,62 @@ LIVE_LINKS = {
         "Disposition Routing":             "inventory:dispositionrule_list",       # bullet (routing rules + suggested destination bins)
         "Credit/Refund Processing":         "scm:refund_queue",                    # bullet (4.10 settlement queue into accounting)
     },
+    # 5.16 Alerts & Notifications. Every bullet is a LENS over ONE engine-raised inbox
+    # (the 5.7 board-lens pattern): low/out-of-stock evaluates the spine's own ReorderRules
+    # against the StockMove ledger, overstock reads 5.5's BinCapacity envelopes, expiry reads
+    # scm.LotSerial.expiry_date, and workflow triggers watch scm.PurchaseOrder pending
+    # approval and overdue scm.Shipments - so the sub-module declares no second copy of any
+    # threshold. AlertRule [ARL-] is the watch catalog, InventoryAlert [ALT-] the deduped
+    # snapshot row, NotificationDelivery [NDL-] the append-only dispatch log (gateways
+    # honestly deferred; the in-app inbox is the live surface).
+    "5.16": {
+        "Low Stock & Out-of-Stock Alerts": "inventory:alert_list?type=low_stock",       # bullet (inbox lens; out_of_stock shares it)
+        "Overstock Alerts":                "inventory:alert_list?type=overstock",      # bullet (bin envelopes breached)
+        "Expiry Alerts":                   "inventory:alert_list?type=expiry",         # bullet (lots inside their window)
+        "Workflow Triggers":               "inventory:alert_list",                     # bullet (whole inbox - delayed shipments share the po_approval lens' type axis)
+    },
+    # 5.15 Quality Control (QC) & Inspection. The quality-ENGINEERING layer is SCM 4.9's
+    # (InspectionPlan, QualityInspection, NonConformance - L36: point at it, never re-declare
+    # it). What inventory adds is the warehouse-FLOOR gate around that spine: QcChecklist is
+    # the mandatory pre-acceptance check set per product/vendor (the dock operator's tick-list,
+    # not a metrology plan), QcRoutingRule decides whether an inbound receipt detours through
+    # a QC zone before putaway, QuarantineOrder [QRD-] physically segregates suspect stock by
+    # posting REAL transfer legs into 4.3's ledger (SCM's own NCR ruling names that move), and
+    # DefectReport [DEF-] is the floor defect log with photo evidence whose write-off posts
+    # the same negative-adjustment shape NCR scrap does.
+    "5.15": {
+        "QC Checklists":          "inventory:qcchecklist_list",      # bullet (per-product / per-vendor mandatory checks)
+        "Inspection Routing":     "inventory:qcroutingrule_list",    # bullet (route via QC zone before main inventory)
+        "Quarantine Management":  "inventory:quarantineorder_list",  # bullet (QRD- segregation orders with real legs)
+        "Defect & Scrap Reporting": "inventory:defectreport_list",   # bullet (DEF- floor log + write-off posting)
+    },
+    # 5.17 Reporting & Analytics. All four bullets are LENSES over SCM 4.3's append-only
+    # StockMove ledger — computed pages, no rival totals: the accounting-grade valuation stays
+    # scm:valuation_report and the single-number KPI tiles stay 4.11. What 5.17 adds is the
+    # DRILL-DOWN slice (per item x location, filtered windows) plus the IRS- point-in-time
+    # freeze, so a month-end reader can prove what the live pages said.
+    "5.17": {
+        "Inventory Valuation Report": "inventory:report_valuation",  # bullet (per-spot costing-method value + grand total)
+        "Stock Turnover Ratio":       "inventory:report_turnover",   # bullet (COGS / avg inventory value over ?days window)
+        "Aging Analysis":             "inventory:report_aging",      # bullet (physical FIFO age buckets + slow/dead flags)
+        "ABC Analysis":               "inventory:report_abc",        # bullet (consumption-value Pareto A/B/C + velocity overlay)
+    },
+    # 5.18 Accounting & Financial Integration. The ledger stays Module 2's (L29) and the
+    # purchasing/sales documents stay 4.x's (L36); what this sub-module adds is the SYNC
+    # ENGINE between them — the one capability nothing else provides. 4.18's AP/AR pages
+    # are READ-ONLY registers over pointers that already exist; here the queues actually
+    # DRAFT the accounting documents (bill from a received GRN at PO prices, invoice from
+    # a delivered shipment's order lines), the JE automation turns posted stock events
+    # into balanced posted JournalEntries (SCM deliberately posts none), and TaxRule is
+    # product x geography → accounting.TaxCode (4.18's DutyTariff answers HS x origin
+    # import duty — a different question).
+    "5.18": {
+        "Accounts Payable (AP) Integration":   "inventory:ap_sync",         # bullet (received-GRN queue → draft accounting.Bill + synced register)
+        "Accounts Receivable (AR) Integration": "inventory:ar_sync",        # bullet (delivered-shipment queue → draft accounting.Invoice)
+        "Journal Entry Automation":            "inventory:je_automation",   # bullet (pending adjustments + COGS batch runner over GLPostRule map)
+        "Tax Management":                      "inventory:taxrule_list",    # bullet (product × geography → TaxCode catalog)
+        "GL Posting Rules":                    "inventory:glpostrule_list", # extra (the account map; linked from JE Automation's header)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
 
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
