@@ -122,8 +122,17 @@ def apiclient_issue_token(request, pk):
     prefix + SHA-256 digest via a narrow ``update_fields`` save. The plaintext goes into the flash
     message once — it is never stored and can never be retrieved again. The audit row records that
     an issue happened, NEVER the plaintext or the hash.
+
+    A REVOKED client is refused outright: minting fresh credentials for it would quietly resurrect
+    an identity its owner (or an admin) retired, and once a gateway honors the hashes that token
+    is access again. Revocation is one-way by design — register a new client instead. The refusal
+    happens BEFORE any credential change, so nothing is overwritten, no plaintext is revealed and
+    no success audit row is written.
     """
     obj = get_object_or_404(ApiClient, pk=pk, tenant=request.tenant)
+    if obj.status != "active":
+        messages.error(request, "Client is revoked — issue a new client instead.")
+        return redirect("inventory:apiclient_detail", pk=obj.pk)
     secret = ApiClient.generate_api_token()
     obj.set_api_token(secret)
     obj.save(update_fields=["api_token_prefix", "api_token_hash", "updated_at"])
