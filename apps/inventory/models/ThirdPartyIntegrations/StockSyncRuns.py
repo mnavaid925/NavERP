@@ -103,8 +103,10 @@ class StockSyncRun(TenantNumbered):
     error_code = models.CharField(max_length=40, blank=True)
     error_message = models.TextField(blank=True)
 
-    #: 1-based ATTEMPT counter, not a raw schedule index: attempt 1 has consumed slot 0 of
-    #: SYNC_BACKOFF_SECONDS, which is why :meth:`next_backoff_seconds` indexes ``attempt_no - 1``.
+    #: 1-based ATTEMPT counter. Attempt N has consumed slot N-1 of SYNC_BACKOFF_SECONDS (attempt 1
+    #: runs immediately at slot 0), so the wait BEFORE the next attempt lives at index
+    #: ``attempt_no`` — which is exactly what :meth:`next_backoff_seconds` reads, the contract
+    #: scheme scm's WebhookDelivery uses verbatim.
     attempt_no = models.PositiveSmallIntegerField(default=1)
 
     #: A STAMP, not a trigger (docstring §3). Nothing reads this on a clock — there is no scheduler
@@ -132,6 +134,10 @@ class StockSyncRun(TenantNumbered):
             # The ?status= filter plus newest-first ordering (status, then started_at) so the
             # common "failed runs, latest first" lens is index-served.
             models.Index(fields=["tenant", "status", "started_at"], name="inv_syn_tnt_status_idx"),
+            # The register's default landing order is -started_at over an unbounded append-only
+            # table: a leading (tenant, started_at) index serves the bare newest-first page 1
+            # without a file-sort.
+            models.Index(fields=["tenant", "started_at"], name="inv_syn_tnt_started_idx"),
         ]
 
     def __str__(self):
@@ -156,22 +162,20 @@ class StockSyncRun(TenantNumbered):
     def next_backoff_seconds(self):
         """Seconds the NEXT retry would wait, or ``None`` once the schedule is spent.
 
-        Attempt N occupies schedule slot N-1 (attempt 1 ran immediately at slot 0), so the wait a
-        retry from the CURRENT state would incur is read at index ``attempt_no - 1``. The schedule
-        is spent when ``attempt_no >= len(SYNC_BACKOFF_SECONDS)``: there is no slot left to offer,
-        and the retry verb marks the row ``exhausted`` instead of scheduling an attempt the
-        published schedule does not describe. Returning ``None`` — rather than raising or clamping
-        to the last slot — is the signal both callers agree on: the detail page renders *"schedule
-        spent"* and ``stocksyncrun_retry`` flips the status.
-
-        The lower bound is checked too: ``attempt_no`` is a PositiveSmallIntegerField a raw import
-        could set to 0, and a negative index would silently read the LAST tuple slot rather than
-        fail.
+        The frozen contract scheme, identical to scm's ``WebhookDelivery``: attempt N occupies
+        slot N-1 (attempt 1 ran immediately at slot 0), so the wait a retry from the CURRENT state
+        would incur is read at index ``attempt_no``. Both bounds are checked BEFORE indexing —
+        ``attempt_no`` is a PositiveSmallIntegerField a raw import could set to 0, and an unguarded
+        read would either negative-index silently onto the LAST tuple slot (0) or run off the end.
+        The schedule is spent when ``attempt_no >= len(SYNC_BACKOFF_SECONDS)``: there is no slot
+        left to offer, and the retry verb marks the row ``exhausted`` instead of scheduling an
+        attempt the published schedule does not describe. Returning ``None`` — rather than raising
+        or clamping to the last slot — is the signal both callers agree on: the detail page renders
+        *"schedule spent"* and ``stocksyncrun_retry`` flips the status.
         """
-        index = self.attempt_no - 1
-        if 0 <= self.attempt_no < len(SYNC_BACKOFF_SECONDS):
-            return SYNC_BACKOFF_SECONDS[index]
-        return None
+        if not 0 <= self.attempt_no < len(SYNC_BACKOFF_SECONDS):
+            return None
+        return SYNC_BACKOFF_SECONDS[self.attempt_no]
 
     def clean(self):
         """The cross-tenant FK guard. This model has no form, so this is the whole boundary.
