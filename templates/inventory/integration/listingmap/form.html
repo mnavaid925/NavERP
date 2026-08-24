@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit Listing Map{% else %}New Channel Listing Map{% endif %} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{% if is_edit %}Edit Listing Map{% else %}New Channel Listing Map{% endif %}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:listingmap_list' %}">Listing Maps</a>
+        <span class="sep">›</span>
+        <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Channel &amp; Local Target</h2>
+      </div>
+      <div class="card-body">
+        {% if form.non_field_errors %}
+          <div class="form-error mb-4">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.channel.id_for_label }}">Channel *</label>
+            {{ form.channel }}
+            {% if form.channel.errors %}<div class="form-error">{{ form.channel.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.item.id_for_label }}">Item (blank = channel-wide)</label>
+            {{ form.item }}
+            {% if form.item.errors %}<div class="form-error">{{ form.item.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.location.id_for_label }}">Location (blank = every location)</label>
+            {{ form.location }}
+            {% if form.location.errors %}<div class="form-error">{{ form.location.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.price_override.id_for_label }}">Price Override</label>
+            {{ form.price_override }}
+            {% if form.price_override.errors %}<div class="form-error">{{ form.price_override.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">External Identifiers</h2>
+      </div>
+      <div class="card-body">
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-group">
+            <label class="form-label" for="{{ form.external_product_id.id_for_label }}">External Product ID</label>
+            {{ form.external_product_id }}
+            {% if form.external_product_id.errors %}<div class="form-error">{{ form.external_product_id.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.external_variant_id.id_for_label }}">External Variant ID</label>
+            {{ form.external_variant_id }}
+            {% if form.external_variant_id.errors %}<div class="form-error">{{ form.external_variant_id.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="{{ form.external_sku.id_for_label }}">External SKU</label>
+            {{ form.external_sku }}
+            {% if form.external_sku.errors %}<div class="form-error">{{ form.external_sku.errors }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="{{ form.sync_enabled.id_for_label }}">Sync Enabled</label>
+            <div class="mt-1">
+              {{ form.sync_enabled }}
+              <span class="text-muted" style="font-size:12px;">Uncheck to pause this row in stock pushes.</span>
+            </div>
+            {% if form.sync_enabled.errors %}<div class="form-error">{{ form.sync_enabled.errors }}</div>{% endif %}
+          </div>
+
+          <div class="form-group col-span-2">
+            <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+            {{ form.notes }}
+            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary"><i data-lucide="check"></i> Save Mapping</button>
+      <a href="{% url 'inventory:listingmap_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
