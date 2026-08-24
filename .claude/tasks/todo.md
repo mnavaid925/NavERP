@@ -26909,3 +26909,32 @@ IDOR, gating) after every fix batch.
 
 **Concurrency:** sibling sessions shipped 5.13 and are mid-test-wave on 5.12 in this checkout;
 their files untouched throughout.
+
+---
+
+## 5.11 Stocktaking & Cycle Counting — resume close-out (2026-08-24)
+
+Prior session built the slice then died at window expiry with entity files untracked. This session
+landed the 20 orphaned files (one commit each), ran the full quality sequence, and closed the build.
+
+- **Build**: CountProgram [CTP-] (cadence scheduling; generate_tasks mints blind spine sheets with
+  same-day reuse) + PhysicalInventory [PHY-] (freeze event; start bulk-mints one sheet per bin/zone;
+  reconcile refuses while sheets are open) + variance_report computed page + LIVE_LINKS["5.11"];
+  migration 0015 (+0016 list index from review).
+- **Review wave** (6 lanes over 094635e2...HEAD): 17 deduped findings (1C/8I/8M) in
+  `.claude/tasks/review-inventory-5.11.md`. Fix wave: 15 fixed (dead same-day-reuse probe
+  notes=→startswith, atomic+select_for_update on generate_tasks, #pk-stamped task_marker killing a
+  flush re-seed collision, single bulk_create start, inactive-run view guard, confirm() XSS/JS-quote
+  fixes per L42, badge-success/danger→colour-named per L33, aggregate counts, index+windowed scan),
+  I4/I5/M4 skipped as not-a-defect with evidence.
+- **Test wave**: contract pinned (fixtures had landed inside the sibling session's conftest commit);
+  four writers → test_stocktake_{models(30),forms(18),views(28),security(20)}.py = 96 green.
+  Full unfiltered apps/inventory suite: 779 passed / 8 failed — every failure traced to the
+  concurrent 5.13 barcode + 5.12 multiloc sessions' untracked WIP (their own files, self-healing);
+  committed tree fully green.
+- **Docs**: README row 5 test count corrected; SKILL.md 5.11 section rewritten for the fix/test waves
+  incl. the fixture-order gotcha (request zone/bin BEFORE stocktake_event_counting_a — start() runs
+  at setup) and verb-return semantics (capture the FOR-UPDATE re-read row).
+- **Gotchas of record**: pytest first DB creation takes ~8 silent minutes on SQLite (timeout 900s+,
+  cmd /c when the harness kills direct runs); shared conftest.py is append-only while sibling
+  sessions live in the tree.
