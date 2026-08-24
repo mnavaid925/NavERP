@@ -1,6 +1,8 @@
-"""Seed Inventory Management (Module 5) demo data — 5.1 Product & Catalog Management,
+﻿"""Seed Inventory Management (Module 5) demo data â€” 5.1 Product & Catalog Management,
 5.2 Vendor / Supplier Management, 5.3 Purchase Order (PO) Management,
-5.5 Warehousing & Bin Management and 5.6 Inventory Tracking & Control.
+5.5 Warehousing & Bin Management, 5.6 Inventory Tracking & Control,
+5.16 Alerts & Notifications, 5.15 Quality Control (QC) & Inspection and
+5.18 Accounting & Financial Integration.
 
 Creates, per tenant, the catalog layer AROUND the item spine that SCM 4.3 already seeds: typed
 product attributes, sell-side price rows (retail / wholesale / a dated promotional window) and
@@ -8,8 +10,8 @@ imagery & documents. 5.2 adds the vendor communication log over the supplier Par
 ``seed_scm``/``seed_core`` create. 5.3 adds the PO management layer around 4.1's purchase-order
 spine: approval routing rules by value band (+ department), one email dispatch row against an
 already-sent spine order, and a freshly submitted order sitting in the multi-tier approval
-queue — this command deliberately does NOT create items or parties: ``scm.Item`` is owned by
-4.3 and the vendor ``core.Party`` roles by core/SCM (L36) — so run ``seed_scm`` first; a
+queue â€” this command deliberately does NOT create items or parties: ``scm.Item`` is owned by
+4.3 and the vendor ``core.Party`` roles by core/SCM (L36) â€” so run ``seed_scm`` first; a
 workspace with no items (or no supplier-role parties) is skipped with a notice rather than
 seeded with a parallel master. 5.5 adds bin capacity envelopes over the ``seed_scm``
 location tree and four cross-dock orders whose lifecycle is walked through the REAL
@@ -69,6 +71,19 @@ from apps.inventory.models import (
     TransferApprovalRule,
     TransferRoute,
     VendorCommunication,
+    AlertRule,
+    InventoryAlert,
+    NotificationDelivery,
+    GLPostRule,
+    JournalSyncLog,
+    TaxRule,
+    post_adjustment_to_gl,
+    DefectReport,
+    QcChecklist,
+    QcChecklistItem,
+    QcRoutingRule,
+    QuarantineOrder,
+    InventoryReportSnapshot,
 )
 from apps.inventory.forms._common import _vendor_parties
 from apps.scm.models import (
@@ -76,6 +91,8 @@ from apps.scm.models import (
     ItemCategory,
     Location,
     LotSerial,
+    GoodsReceiptNote,
+    GoodsReceiptLine,
     PurchaseOrder,
     PurchaseOrderLine,
     PutawayTask,
@@ -83,6 +100,8 @@ from apps.scm.models import (
     ReturnAuthorization,
     ReturnDisposition,
     ReturnLine,
+    Shipment,
+    StockAdjustment,
     StockMove,
     StockTransfer,
     StockTransferLine,
@@ -110,19 +129,19 @@ PRICE_LADDER = [
 # Status-classification scripts cycled across the spots that hold stock. Small quantities
 # only, so every classified spot keeps a visible remainder and availability stays honest.
 STATUS_SCRIPTS = [
-    ("damaged", "Fork puncture — case split while unloading."),
+    ("damaged", "Fork puncture â€” case split while unloading."),
     ("on_hold", "Held pending QC disposition after a customer complaint."),
-    ("expired", "Past shelf life — awaiting write-off approval."),
+    ("expired", "Past shelf life â€” awaiting write-off approval."),
 ]
 
 # Vendor-interaction scripts cycled across the supplier parties. (channel, direction, subject,
-# body, follow_up_offset_days — None = no follow-up; negative = already overdue.)
+# body, follow_up_offset_days â€” None = no follow-up; negative = already overdue.)
 INTERACTION_SCRIPTS = [
     ("call", "outbound", "Quarterly capacity check",
      "Confirmed they can hold the Q4 volume; asked for a revised lead-time commitment in writing.",
      7),
     ("email", "inbound", "Revised price list for next quarter",
-     "Their 3% increase lands in January — flagged for the contract renewal discussion.",
+     "Their 3% increase lands in January â€” flagged for the contract renewal discussion.",
      None),
     ("meeting", "outbound", "Annual supplier review",
      "Walked the scorecard together. Delivery reliability is the improvement area for this year.",
@@ -131,7 +150,7 @@ INTERACTION_SCRIPTS = [
      "New inspection station installed. Two minor findings, both closed on site.",
      None),
     ("note", "inbound", "Payment terms query",
-     "Accounts team asked to move from Net 30 to Net 45 — needs the AP owner's decision.",
+     "Accounts team asked to move from Net 30 to Net 45 â€” needs the AP owner's decision.",
      -3),
     ("email", "outbound", "Packaging specification change request",
      "Requested the recycled-content variant from March; awaiting their engineering sign-off.",
@@ -141,7 +160,7 @@ INTERACTION_SCRIPTS = [
 
 class Command(BaseCommand):
     help = ("Seed Inventory Module 5 demo data (catalog, vendor log, PO management, "
-            "warehousing, tracking & control) around the SCM spines — idempotent (skips a "
+            "warehousing, tracking & control) around the SCM spines â€” idempotent (skips a "
             "tenant that already has the rows each pass creates).")
 
     def add_arguments(self, parser):
@@ -150,7 +169,7 @@ class Command(BaseCommand):
             help=("Delete ALL inventory rows (attributes, prices, files, vendor communications, "
                   "PO approval rules/dispatches, putaway rules, bin capacities, cross-dock "
                   "orders, stock statuses, reservations, fulfillment waves) for ALL tenants "
-                  "before seeding — not just seeder-created ones."))
+                  "before seeding â€” not just seeder-created ones."))
 
     def handle(self, *args, **options):
         if options["flush"]:
@@ -178,7 +197,19 @@ class Command(BaseCommand):
                          + FulfillmentWave.objects.all().count()
                         + LocationNetwork.objects.all().count()
                         + CountProgram.objects.all().count()
-                        + PhysicalInventory.objects.all().count())
+                        + PhysicalInventory.objects.all().count()
+                        + NotificationDelivery.objects.all().count()
+                        + InventoryAlert.objects.all().count()
+                        + AlertRule.objects.all().count()
+                        + JournalSyncLog.objects.all().count()
+                        + GLPostRule.objects.all().count()
+                        + TaxRule.objects.all().count()
+                         + QcChecklistItem.objects.all().count()
+                         + QcChecklist.objects.all().count()
+                         + QcRoutingRule.objects.all().count()
+                         + QuarantineOrder.objects.all().count()
+                         + DefectReport.objects.all().count()
+                        + InventoryReportSnapshot.objects.all().count())
             ReturnInspectionChecklist.objects.all().delete()
             ReturnInspection.objects.all().delete()
             DispositionRoutingRule.objects.all().delete()
@@ -203,13 +234,25 @@ class Command(BaseCommand):
             PhysicalInventory.objects.all().delete()
             FulfillmentWaveOrder.objects.all().delete()  # membership rows before their wave headers
             FulfillmentWave.objects.all().delete()
+            NotificationDelivery.objects.all().delete()  # dispatch rows before their alerts
+            InventoryAlert.objects.all().delete()
+            AlertRule.objects.all().delete()
+            JournalSyncLog.objects.all().delete()  # sync rows before their rule catalog
+            GLPostRule.objects.all().delete()
+            TaxRule.objects.all().delete()
+            QcChecklistItem.objects.all().delete()  # checkpoints before their checklists
+            QcChecklist.objects.all().delete()
+            QcRoutingRule.objects.all().delete()
+            QuarantineOrder.objects.all().delete()
+            DefectReport.objects.all().delete()
+            InventoryReportSnapshot.objects.all().delete()
             LocationNetwork.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
 
         for tenant in Tenant.objects.order_by("name"):
             items = list(Item.objects.filter(tenant=tenant).order_by("sku"))
             if not items:
-                self.stdout.write(f"  {tenant.name}: no scm.Items — run `seed_scm` first, skipping.")
+                self.stdout.write(f"  {tenant.name}: no scm.Items â€” run `seed_scm` first, skipping.")
                 continue
 
             self._seed_attributes(tenant, items)
@@ -228,6 +271,10 @@ class Command(BaseCommand):
             self._seed_forecasting_planning(tenant, items)
             self._seed_location_network(tenant, items)
             self._seed_barcode_rfid(tenant, items)
+            self._seed_alerts(tenant, items)
+            self._seed_quality_control(tenant, items)
+            self._seed_reporting_analytics(tenant, items)
+            self._seed_finint(tenant, items)
 
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -253,7 +300,7 @@ class Command(BaseCommand):
         for index, item in enumerate(items[:8]):
             cost = item.standard_cost or Decimal("0")
             if cost <= Decimal("0"):
-                continue  # no cost basis — a price row off it would fake a margin
+                continue  # no cost basis â€” a price row off it would fake a margin
             for price_type, multiplier, min_quantity in PRICE_LADDER:
                 ItemPrice.objects.create(
                     tenant=tenant, item=item, price_type=price_type,
@@ -266,7 +313,7 @@ class Command(BaseCommand):
                     tenant=tenant, item=item, price_type="promotional",
                     unit_price=(cost * Decimal("1.30")).quantize(Decimal("0.01")),
                     min_quantity=Decimal("1"), is_active=True,
-                    notes="Seasonal promo — auto-seeded")
+                    notes="Seasonal promo â€” auto-seeded")
                 created += 1
         self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {created} price rows."))
 
@@ -287,7 +334,7 @@ class Command(BaseCommand):
                 title=f"{item.sku} datasheet",
                 url=f"https://files.example.com/catalog/{slug}/datasheet.pdf")
             created += 2
-            # Safety sheets only where they plausibly exist — every third physical SKU.
+            # Safety sheets only where they plausibly exist â€” every third physical SKU.
             if index % 3 == 0 and item.item_type != "service":
                 ProductFile.objects.create(
                     tenant=tenant, item=item, kind="safety_sheet",
@@ -303,7 +350,7 @@ class Command(BaseCommand):
         vendors = list(_vendor_parties(tenant).order_by("name")[:6])
         if not vendors:
             self.stdout.write(
-                f"  {tenant.name}: no supplier/vendor-role parties — run `seed_core`/`seed_scm` "
+                f"  {tenant.name}: no supplier/vendor-role parties â€” run `seed_core`/`seed_scm` "
                 "first, skipping the communication log.")
             return
         created = 0
@@ -321,12 +368,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {created} vendor communications."))
 
     def _seed_purchase_orders(self, tenant, items):
-        """5.3 Purchase Order (PO) Management — the layer AROUND 4.1's order spine.
+        """5.3 Purchase Order (PO) Management â€” the layer AROUND 4.1's order spine.
 
         Three routing rules (value bands, one department-scoped), one dispatch row against an
         already-transmitted spine order, and one freshly submitted order parked in the
         multi-tier approval queue. The PO document itself is NEVER invented here beyond that
-        one demo order — the spine belongs to 4.1/``seed_scm``.
+        one demo order â€” the spine belongs to 4.1/``seed_scm``.
         """
         if PurchaseOrderApprovalRule.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: purchase-order management rows already present, skipping.")
@@ -354,11 +401,11 @@ class Command(BaseCommand):
         if not vendors:
             self.stdout.write(
                 f"  {tenant.name}: {created} approval rules; no supplier/vendor-role parties "
-                "for the queue/dispatch demos — run `seed_core`/`seed_scm` first.")
+                "for the queue/dispatch demos â€” run `seed_core`/`seed_scm` first.")
             return
 
         # One dispatch row against a spine order already past approval (the 4.1 seeded order
-        # ends partially received). Recipient is an RFC 2606 placeholder — no real mail is sent.
+        # ends partially received). Recipient is an RFC 2606 placeholder â€” no real mail is sent.
         dispatched_po = (PurchaseOrder.objects.filter(tenant=tenant)
                          .exclude(status__in=["draft", "pending_approval", "cancelled", "closed"])
                          .select_related("vendor").order_by("-id").first())
@@ -377,7 +424,7 @@ class Command(BaseCommand):
         po = PurchaseOrder(
             tenant=tenant, vendor=vendors[0], order_date=timezone.localdate(),
             status="draft",
-            notes="Seeded reorder replenishment — awaiting multi-tier approval.",
+            notes="Seeded reorder replenishment â€” awaiting multi-tier approval.",
         )
         po.save()
         item = items[0]
@@ -398,11 +445,11 @@ class Command(BaseCommand):
             f"(rules/dispatch/{po.number} pending approval)."))
 
     def _seed_putaway_rules(self, tenant, items):
-        """5.4 Receiving & Putaway — the directed-putaway RULES behind the suggestion engine.
+        """5.4 Receiving & Putaway â€” the directed-putaway RULES behind the suggestion engine.
 
         Four standing instructions over the seeded location tree, chosen so every resolver
         tier shows on one suggestions page: an item rule (MON-27) that beats its own
-        category rule (IT Equipment) beats the catch-all — plus a guarded cold-chain row
+        category rule (IT Equipment) beats the catch-all â€” plus a guarded cold-chain row
         for when a chilled item ever exists. Also guarantees exactly ONE open putaway
         task off DOCK-1 so /inventory/putaway-suggestions/ renders with real candidates.
         Items and the core location tree come from seed_scm; the one row this block may
@@ -418,7 +465,7 @@ class Command(BaseCommand):
         bin_a1 = Location.objects.filter(tenant=tenant, code="WH-MAIN-A1").first()
         if not (warehouse and dock and bin_a1):
             self.stdout.write(
-                f"  {tenant.name}: WH-MAIN/DOCK-1/WH-MAIN-A1 missing — run `seed_scm` "
+                f"  {tenant.name}: WH-MAIN/DOCK-1/WH-MAIN-A1 missing â€” run `seed_scm` "
                 "first, skipping putaway rules.")
             return
 
@@ -427,7 +474,7 @@ class Command(BaseCommand):
         def sku(s):
             return Item.objects.filter(tenant=tenant, sku=s).first()
 
-        # 1. Item-specific cold-chain rule — seeded only when such an item exists at all;
+        # 1. Item-specific cold-chain rule â€” seeded only when such an item exists at all;
         #    an absent cold chain must not invent one.
         vac = sku("VAC-10")
         if vac is not None:
@@ -478,10 +525,10 @@ class Command(BaseCommand):
             + (" (+1 open putaway task)." if task_created else ".")))
 
     def _seed_warehousing(self, tenant, items):
-        """5.5 Warehousing & Bin Management — capacity envelopes + cross-dock flows.
+        """5.5 Warehousing & Bin Management â€” capacity envelopes + cross-dock flows.
 
         Extends the location tree ``seed_scm`` created (WH-MAIN / DOCK-1 / WH-MAIN-A1)
-        with one zone, two more bins and a second dock — get_or_create, so re-runs and
+        with one zone, two more bins and a second dock â€” get_or_create, so re-runs and
         partially-built trees are safe. The four cross-dock orders are walked through the
         REAL ``receive``/``ship``/``cancel`` actions rather than hand-stamped statuses, so
         every stage on the list page has the genuine StockMove legs behind it and the
@@ -490,14 +537,14 @@ class Command(BaseCommand):
         main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
         if main is None:
             self.stdout.write(
-                f"  {tenant.name}: no WH-MAIN location — run `seed_scm` first, skipping "
+                f"  {tenant.name}: no WH-MAIN location â€” run `seed_scm` first, skipping "
                 "the warehousing seed.")
             return
 
         # --- structure: a zone and two more bins under the seeded warehouse -----------------
         # WH-MAIN-A1 is NOT created here under the zone on purpose: seed_scm already owns
         # that code as a bin directly under WH-MAIN, so this module only adds Zone A (which
-        # holds A2) and B1 — get_or_create defaults never re-parent an existing row.
+        # holds A2) and B1 â€” get_or_create defaults never re-parent an existing row.
         zone, _ = Location.objects.get_or_create(
             tenant=tenant, code="WH-MAIN-ZA",
             defaults={"name": "Zone A", "location_type": "zone", "parent": main})
@@ -532,7 +579,7 @@ class Command(BaseCommand):
                 # five rows all reading a flattering single-digit percent.
                 (dock1, None, None, Decimal("8"), "Overflow cap while a trailer is being worked."),
                 (bin_a1, Decimal("750.00"), Decimal("3.500"), Decimal("500"),
-                 "Fast-mover pick face — full envelope declared."),
+                 "Fast-mover pick face â€” full envelope declared."),
                 (bin_a2, None, None, Decimal("240"), ""),
                 (bin_b1, Decimal("2000.00"), None, None,
                  "Bulk rack limited by floor loading, not count."),
@@ -552,12 +599,12 @@ class Command(BaseCommand):
         if user is None:
             self.stdout.write(self.style.WARNING(
                 f"  {tenant.name}: no workspace user to attribute the cross-dock actions "
-                "to — skipping that seed."))
+                "to â€” skipping that seed."))
             return
         today = timezone.localdate()
 
         # Next SAFE sequence across BOTH tables that carry an XD- number: orders live in
-        # CrossDockOrder.number while their posted legs persist as StockMove.reference —
+        # CrossDockOrder.number while their posted legs persist as StockMove.reference â€”
         # and --flush deletes only the former (the ledger is append-only). Restarting at
         # XD-00001 would make reseeded orders adopt the PREVIOUS generation's legs via
         # the reference match, so the base is the highest number either table holds.
@@ -603,14 +650,14 @@ class Command(BaseCommand):
                 try:
                     order.cancel(user)
                 except ValidationError:
-                    pass  # stock moved on since planning — leave it received rather than fake it
+                    pass  # stock moved on since planning â€” leave it received rather than fake it
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: 4 cross-dock orders (draft/received/shipped/cancelled) with "
             "real ledger legs."))
 
     def _stocked_spots(self, tenant):
         """(item_id, location_id, qty) for every spot the ledger says actually holds stock,
-        positive totals only — the honest pool the 5.6 classifications draw from."""
+        positive totals only â€” the honest pool the 5.6 classifications draw from."""
         return [
             combo for combo in (StockMove.objects.filter(tenant=tenant)
                                 .values("item_id", "location_id")
@@ -619,7 +666,7 @@ class Command(BaseCommand):
         ]
 
     def _seed_tracking(self, tenant, items):
-        """5.6 Inventory Tracking & Control — status classifications + reservations.
+        """5.6 Inventory Tracking & Control â€” status classifications + reservations.
 
         Classifications land only on spots the ledger shows holding stock (read live via
         ``_stocked_spots``), each for a SMALL slice of that spot so a visible remainder
@@ -640,7 +687,7 @@ class Command(BaseCommand):
             self.stdout.write(f"  {tenant.name}: stock statuses already present, skipping.")
         elif not spots:
             self.stdout.write(
-                f"  {tenant.name}: no stocked locations yet — run `seed_scm` first, "
+                f"  {tenant.name}: no stocked locations yet â€” run `seed_scm` first, "
                 "skipping stock-status classifications.")
         else:
             created = 0
@@ -668,7 +715,7 @@ class Command(BaseCommand):
         user = User.objects.filter(tenant=tenant).order_by("pk").first()
         if user is None:
             self.stdout.write(self.style.WARNING(
-                f"  {tenant.name}: no workspace user to attribute reservations to — "
+                f"  {tenant.name}: no workspace user to attribute reservations to â€” "
                 "skipping that seed."))
             return
 
@@ -682,11 +729,11 @@ class Command(BaseCommand):
             demo_location = Location.objects.filter(tenant=tenant).first()
         if demo_location is None:
             self.stdout.write(
-                f"  {tenant.name}: no locations — run `seed_scm` first, skipping reservations.")
+                f"  {tenant.name}: no locations â€” run `seed_scm` first, skipping reservations.")
             return
 
         # Demo claims are capped at the anchor spot's REAL headroom: ledger balance minus
-        # what classifications already hold back — the same available figure the Real-Time
+        # what classifications already hold back â€” the same available figure the Real-Time
         # Stock Levels page derives. Direct model creation bypasses the form's ATP check
         # (that guard is for user input), so the cap here is what keeps a modest spot from
         # being seeded into permanently negative availability; a claim with no room left
@@ -720,7 +767,7 @@ class Command(BaseCommand):
             released.release(user)
             summary.append(f"{released.number} released")
 
-        # Cancelled holds nothing back — it seeds unconditionally as the lifecycle demo.
+        # Cancelled holds nothing back â€” it seeds unconditionally as the lifecycle demo.
         cancelled = InventoryReservation(
             tenant=tenant, item=demo_item, location=demo_location,
             purpose="project", reference="PRJ-2026-Q3", quantity=Decimal("2"),
@@ -733,14 +780,14 @@ class Command(BaseCommand):
             f"  {tenant.name}: {len(summary)} reservations ({' / '.join(summary)})."))
 
     def _seed_lot_tracking(self, tenant, items):
-        """5.8 Lot & Serial Number Tracking — numbering rules, shelf-life policies,
+        """5.8 Lot & Serial Number Tracking â€” numbering rules, shelf-life policies,
         and expiry-dated demo lots minted through the REAL generation path.
 
         The tracked SKUs (WS-16 / MON-27, flipped to ``tracking='lot'`` by 4.9's
         seeder) get one tenant-default rule plus an item-specific override so the
         most-specific-wins resolution is demonstrable, a policy per item for the FEFO
         board, and three batches per anchor item carrying an expired / warning-window
-        / healthy date — each minted via ``LotNumberRule.generate`` (the same code the
+        / healthy date â€” each minted via ``LotNumberRule.generate`` (the same code the
         Generate button runs) and given REAL ledger stock through the same posting
         shape ``seed_scm`` uses for its opening balances. Idempotent on the demo
         marker in the lot notes, so user-minted numbers are never touched on re-runs.
@@ -761,7 +808,7 @@ class Command(BaseCommand):
                 LotNumberRule.objects.create(
                     tenant=tenant, name="Monitor line batches", item=mon, kind="lot",
                     prefix="MONB", include_date=True, sequence_padding=4,
-                    notes="Item rule — outranks the tenant default for MON-27.")
+                    notes="Item rule â€” outranks the tenant default for MON-27.")
                 rules_made += 1
             self.stdout.write(self.style.SUCCESS(
                 f"  {tenant.name}: {rules_made} lot-number rules."))
@@ -795,12 +842,12 @@ class Command(BaseCommand):
         mon = Item.objects.filter(tenant=tenant, sku="MON-27").first()
         if user is None or ws16 is None or mon is None:
             self.stdout.write(
-                f"  {tenant.name}: no workspace user or tracked SKUs — run "
+                f"  {tenant.name}: no workspace user or tracked SKUs â€” run "
                 "`seed_accounts`/`seed_scm` first, skipping the 5.8 demo lots.")
             return
 
         today = timezone.localdate()
-        # (item, days offset) — expired, inside WS-16's amber window, healthy; then a
+        # (item, days offset) â€” expired, inside WS-16's amber window, healthy; then a
         # MON-27 lot just inside its 30-day do-not-ship gate.
         plan = [(ws16, -12), (ws16, 20), (ws16, 150), (mon, 21)]
         minted = []
@@ -818,9 +865,9 @@ class Command(BaseCommand):
                 cost = item.standard_cost or Decimal("0")
                 qty = Decimal("8") if offset >= 0 else Decimal("5")
                 if main is not None:
-                    # apply_receipt rolls the spine's cached weighted average — the ONE
+                    # apply_receipt rolls the spine's cached weighted average â€” the ONE
                     # write outside 5.8's own tables, and it follows the exact posting
-                    # shape seed_scm uses for its opening balances (same cost in →
+                    # shape seed_scm uses for its opening balances (same cost in â†’
                     # unchanged average, so re-runs stay stable).
                     item.apply_receipt(qty, cost)
                     StockMove.objects.create(
@@ -989,7 +1036,7 @@ class Command(BaseCommand):
     # -- 5.10 Returns Management (RMA) ----------------------------------------------------------
 
     def _seed_returns_management(self, tenant, items):
-        """5.10 Returns Management (RMA) — disposition routing rules, warehouse physical return
+        """5.10 Returns Management (RMA) â€” disposition routing rules, warehouse physical return
         inspections, and quality checklist evaluations over 4.10's RMA documents.
         """
         locations = list(Location.objects.filter(tenant=tenant).order_by("id"))
@@ -1065,7 +1112,7 @@ class Command(BaseCommand):
 
         rmas = list(ReturnAuthorization.objects.filter(tenant=tenant).prefetch_related("lines__item").order_by("id")[:3])
         if not rmas:
-            self.stdout.write(f"  {tenant.name}: no RMAs found — run `seed_scm` first, skipping return inspections.")
+            self.stdout.write(f"  {tenant.name}: no RMAs found â€” run `seed_scm` first, skipping return inspections.")
             return
 
         inspections_created = 0
@@ -1082,7 +1129,7 @@ class Command(BaseCommand):
             line = rma.lines.first()
             item = line.item if line else (items[0] if items else None)
             # Never seed 0: quantity_approved of 0 would violate MinValueValidator on any
-            # later edit-form save — fall back to one unit instead.
+            # later edit-form save â€” fall back to one unit instead.
             qty = (line.quantity_approved if line else None) or Decimal("1.0000")
             if not item:
                 continue
@@ -1149,7 +1196,7 @@ class Command(BaseCommand):
 
 
     def _seed_fulfillment_waves(self, tenant, items):
-        """5.9 Order Management & Fulfillment — wave planning over the SCM sales-order spine.
+        """5.9 Order Management & Fulfillment â€” wave planning over the SCM sales-order spine.
 
         One planned wave and one released wave per tenant, built from orders that already
         exist in seed data (never inventing SOs), walked through the REAL release() verb so
@@ -1168,11 +1215,11 @@ class Command(BaseCommand):
         )
         if not open_orders:
             self.stdout.write(
-                f"  {tenant.name}: no open sales orders — run `seed_scm` first, "
+                f"  {tenant.name}: no open sales orders â€” run `seed_scm` first, "
                 "skipping fulfillment waves.")
             return
 
-        # Staff first (the audit trail's natural author), else ANY workspace user — a
+        # Staff first (the audit trail's natural author), else ANY workspace user â€” a
         # tenant with no staff user must not hand None into wave.release(None).
         admin = ((get_user_model().objects.filter(tenant=tenant, is_staff=True)
                   .order_by("id").first())
@@ -1185,7 +1232,7 @@ class Command(BaseCommand):
                 continue
             wave = FulfillmentWave(
                 tenant=tenant,
-                description="Seeded fulfillment wave — grouped by carrier cutoff.",
+                description="Seeded fulfillment wave â€” grouped by carrier cutoff.",
                 priority=100 - created * 10,
                 criteria_text="Orders sharing the afternoon carrier pickup.",
                 notes="Created by seed_inventory.",
@@ -1197,7 +1244,7 @@ class Command(BaseCommand):
             if status_flag == "released":
                 if admin is None:
                     self.stdout.write(self.style.WARNING(
-                        f"  {tenant.name}: no workspace user — {wave.number} left planned."))
+                        f"  {tenant.name}: no workspace user â€” {wave.number} left planned."))
                 else:
                     wave.release(admin)
             created += 1
@@ -1318,14 +1365,14 @@ class Command(BaseCommand):
             f"  {tenant.name}: {made} stock level plans (1 active, 1 seasonal draft)."))
 
     def _seed_location_network(self, tenant, items):
-        """5.12 Multi-Location Management — the org tier ABOVE the location spine.
+        """5.12 Multi-Location Management â€” the org tier ABOVE the location spine.
 
         Builds the FROZEN demo tree with plain ``create()`` calls (the guard above is
-        the whole idempotency story — nothing here is get_or_create): one company,
+        the whole idempotency story â€” nothing here is get_or_create): one company,
         two regions under it, a dc grandchild on one branch and a store grandchild
         on the other. seed_scm's real warehouses are attached where they exist
-        (never inventing Locations): WH-MAIN under the dc node, WH-STORE — when the
-        tenant has a second warehouse — under the store node. With both present the
+        (never inventing Locations): WH-MAIN under the dc node, WH-STORE â€” when the
+        tenant has a second warehouse â€” under the store node. With both present the
         network covers every stocked site honestly (sites_unassigned 0); with only
         one warehouse the store stays bare rather than faking an attachment.
         """
@@ -1337,14 +1384,14 @@ class Command(BaseCommand):
                           .order_by("code"))
         if not warehouses:
             self.stdout.write(
-                f"  {tenant.name}: no seeded warehouse locations — run `seed_scm` first, "
+                f"  {tenant.name}: no seeded warehouse locations â€” run `seed_scm` first, "
                 "skipping the location network.")
             return
 
         company = LocationNetwork.objects.create(
             tenant=tenant, code="HOLD-CO", name="Holding Company",
             node_type="company",
-            notes="Network root — all sites roll up here.")
+            notes="Network root â€” all sites roll up here.")
         reg_north = LocationNetwork.objects.create(
             tenant=tenant, code="REG-NORTH", name="Northern Region",
             node_type="region", parent=company)
@@ -1406,7 +1453,7 @@ class Command(BaseCommand):
                            symbology="ean13", payload="4006381333931", copies=2,
                            notes="Seed demo EAN-13 retail carton label.")
         ean.save()
-        # Through the REAL verb — stamps printed_at alongside the status flip.
+        # Through the REAL verb â€” stamps printed_at alongside the status flip.
         ean.print()
 
         operator = (Party.objects.filter(tenant=tenant, roles__role="employee").first()
@@ -1474,7 +1521,7 @@ class Command(BaseCommand):
                 except ValidationError:
                     pass
             elif status_target == "lost":
-                # Through the REAL verbs: activate() then mark_lost() — a force-written
+                # Through the REAL verbs: activate() then mark_lost() â€” a force-written
                 # status would bypass the lifecycle the UI enforces.
                 try:
                     tag.activate()
@@ -1484,3 +1531,415 @@ class Command(BaseCommand):
         result = RfidTag.bulk_read(tenant, active_tags + ["FFFFFFFFFFFF"], location=bin_loc)
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {len(tag_specs)} RFID tags (bulk-read matched {result['matched']})."))
+
+    def _seed_alerts(self, tenant, items):
+        """5.16 Alerts & Notifications â€” the watch-rule catalog + one real detection run.
+
+        Rules are plain catalog rows; the alerts themselves are NOT hand-written demo rows â€”
+        they come from ``InventoryAlert.run_detection()`` evaluating those rules against
+        whatever the spine actually holds (ledger on-hand vs reorder points, bin envelopes,
+        lot expiries, the pending-approval PO the 5.3 section leaves in its queue), so every
+        alert on screen is a genuine derived fact with a dedup key and a dispatch log.
+        """
+        if AlertRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: alert rules already present, skipping.")
+            return
+
+        warehouse = (Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+                     or Location.objects.filter(tenant=tenant).order_by("code").first())
+        AlertRule.objects.create(
+            tenant=tenant, name="Critical stock-outs", alert_type="out_of_stock",
+            severity="critical", notify_inapp=True, notify_email=True,
+            email_recipients=f"ops@{tenant.slug or 'workspace'}.example.com",
+            cooldown_days=3, notes="Page ops the moment any watched SKU hits zero.")
+        AlertRule.objects.create(
+            tenant=tenant, name="Low stock watch", alert_type="low_stock",
+            severity="warning", notify_inapp=True, cooldown_days=7,
+            location=warehouse,
+            notes="Reorder-point breaches at the main warehouse only.")
+        AlertRule.objects.create(
+            tenant=tenant, name="Expiry radar", alert_type="expiry",
+            severity="warning", expiry_days=45, notify_inapp=True, cooldown_days=14)
+        AlertRule.objects.create(
+            tenant=tenant, name="Overstock guard", alert_type="overstock",
+            severity="info", overstock_pct=Decimal("95"), notify_inapp=True)
+        AlertRule.objects.create(
+            tenant=tenant, name="Stuck PO approvals", alert_type="po_approval_pending",
+            severity="warning", notify_inapp=True, notify_email=True,
+            email_recipients=f"buyer@{tenant.slug or 'workspace'}.example.com",
+            cooldown_days=2)
+        created_rules = 5
+
+        # Shipments: seed one overdue inbound shipment ONLY if none exists yet â€” the alert
+        # must point at a real spine row without inventing a second shipment master.
+        delayed_seeded = False
+        if not Shipment.objects.filter(tenant=tenant).exists():
+            carrier = None
+            from apps.scm.models import Carrier  # local import: keeps module import order stable
+            carrier = Carrier.objects.filter(tenant=tenant).first()
+            po = (PurchaseOrder.objects.filter(tenant=tenant)
+                  .exclude(status__in=["draft", "cancelled"]).first())
+            if carrier is not None:
+                Shipment.objects.create(
+                    tenant=tenant, number="SHP-SEED01", direction="inbound",
+                    carrier=carrier, purchase_order=po,
+                    planned_pickup_date=timezone.localdate() - datetime.timedelta(days=6),
+                    planned_delivery_date=timezone.localdate() - datetime.timedelta(days=2),
+                    origin_text="Supplier dock", destination_text=(warehouse.code if warehouse else ""),
+                )
+                delayed_seeded = True
+
+        summary = InventoryAlert.run_detection(tenant)
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created_rules} alert rules; detection raised "
+            f"{len(summary['raised'])} alert(s) ({summary['skipped_open']} already open, "
+            f"{summary['skipped_cooldown']} cooling down, {summary['deliveries']} deliveries queued)"
+            + ("; seeded 1 overdue shipment." if delayed_seeded else "") + "."))
+
+    # -- 5.15 Quality Control (QC) & Inspection --------------------------------------------------
+
+    def _seed_quality_control(self, tenant, items):
+        """5.15 QC & Inspection â€” floor checklists, inspection routing rules, and
+        quarantine/defect documents whose lifecycle legs are REAL: the quarantine hold
+        is walked through ``quarantine()`` (genuine transfer pair into QC-HOLD) and one
+        defect report through ``writeoff()`` (genuine negative adjustment)."""
+        # The restricted zone every quarantine order segregates INTO. seed_scm's tree has
+        # no QC hold, so create it additively under the main warehouse.
+        main = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+        qc_zone, _ = Location.objects.get_or_create(
+            tenant=tenant, code="QC-HOLD",
+            defaults=dict(name="QC Hold Zone", location_type="zone", parent=main))
+
+        vendors = list(_vendor_parties(tenant).order_by("name")[:3])
+        from apps.core.models import Party
+        inspector = Party.objects.filter(tenant=tenant, roles__role="employee").first()
+
+        # --- checklists --------------------------------------------------------------------------
+        if QcChecklist.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: QC checklists already present, skipping.")
+        else:
+            default_list = QcChecklist.objects.create(
+                tenant=tenant, name="Dock Receiving Check",
+                description="Run for every inbound pallet before it may reach storage. "
+                            "A failed mandatory checkpoint blocks acceptance.")
+            for seq, (label, kind, expected, mandatory) in enumerate([
+                ("Carton seal intact", "visual", "Seal unbroken", True),
+                ("Delivery note matches PO", "documentation", "Line count agrees", True),
+                ("Pallet labels scannable", "documentation", "", False),
+                ("Unit count matches note", "quantity", "", True),
+                ("Power-on sample test", "functional", "Boots to home screen", False),
+            ], start=10):
+                QcChecklistItem.objects.create(
+                    tenant=tenant, checklist=default_list, label=label, kind=kind,
+                    expected_result=expected, is_mandatory=mandatory, sequence=seq)
+
+            if items:
+                item_list = QcChecklist.objects.create(
+                    tenant=tenant, name=f"Electronics Incoming Check â€” {items[0].sku}",
+                    item=items[0],
+                    description="Product-specific gate: serials recorded and firmware "
+                                "verified before this SKU is accepted.")
+                for seq, (label, kind, expected) in enumerate([
+                    ("Serial number recorded", "documentation", "Matches carton"),
+                    ("Firmware version verified", "functional", "Current release"),
+                    ("Accessory kit complete", "visual", "", ),
+                ], start=10):
+                    QcChecklistItem.objects.create(
+                        tenant=tenant, checklist=item_list, label=label, kind=kind,
+                        expected_result=expected, is_mandatory=True, sequence=seq)
+
+            if vendors:
+                vendor_list = QcChecklist.objects.create(
+                    tenant=tenant, name=f"Enhanced Incoming Check â€” {vendors[0].name}",
+                    vendor=vendors[0],
+                    description="Stricter gate for this supplier while their corrective "
+                                "action is open.")
+                for seq, (label, kind) in enumerate([
+                    ("Batch certificate present", "documentation"),
+                    ("Random sample opened", "visual"),
+                ], start=10):
+                    QcChecklistItem.objects.create(
+                        tenant=tenant, checklist=vendor_list, label=label, kind=kind,
+                        is_mandatory=True, sequence=seq)
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: QC checklists seeded "
+                f"({QcChecklist.objects.filter(tenant=tenant).count()} lists)."))
+
+        # --- inspection routing rules ------------------------------------------------------------
+        if QcRoutingRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: QC routing rules already present, skipping.")
+        else:
+            created = 0
+            QcRoutingRule.objects.create(
+                tenant=tenant, name="Catch-all â€” inspect before putaway",
+                verdict="inspect", qc_location=qc_zone, priority=100,
+                notes="Default gate: every unmatched receipt detours through QC-HOLD.")
+            created += 1
+            if items and items[0].category_id:
+                QcRoutingRule.objects.create(
+                    tenant=tenant, name=f"Trusted category bypass â€” {items[0].category.name}",
+                    category=items[0].category, verdict="bypass", priority=20,
+                    notes="Category tier beats the catch-all: proven suppliers skip the zone.")
+                created += 1
+            if len(items) > 1:
+                QcRoutingRule.objects.create(
+                    tenant=tenant, name=f"Inspect first receipts of {items[1].sku}",
+                    item=items[1], vendor=(vendors[0] if vendors else None),
+                    verdict="inspect", qc_location=qc_zone, priority=5,
+                    notes="Item tier + vendor pin: strictest possible match.")
+                created += 1
+            self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {created} QC routing rules."))
+
+        # --- quarantine orders -------------------------------------------------------------------
+        if QuarantineOrder.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: quarantine orders already present, skipping.")
+        else:
+            spot = None
+            if main is not None:
+                spot = (StockMove.objects.filter(tenant=tenant, location=main)
+                        .values("item").annotate(q=Sum("quantity")).filter(q__gt=0)
+                        .order_by("-q").first())
+            summary = []
+            if spot is not None:
+                spot_item = Item.objects.filter(tenant=tenant, pk=spot["item"]).first()
+                spot_qty = spot["q"]
+                held = QuarantineOrder.objects.create(
+                    tenant=tenant, item=spot_item,
+                    source_location=main, quarantine_location=qc_zone,
+                    quantity=min(Decimal("3"), spot_qty),
+                    reason="suspected_defect",
+                    reference="GRN-SEED01",
+                    notes="Carton arrived crushed on one corner â€” held pending inspection.")
+                released = QuarantineOrder.objects.create(
+                    tenant=tenant, item=spot_item,
+                    source_location=main, quarantine_location=qc_zone,
+                    quantity=min(Decimal("1"), spot_qty / 4),
+                    reason="qc_hold",
+                    reference="GRN-SEED01",
+                    notes="Sample pull cleared by quality the same day.")
+                draft = QuarantineOrder.objects.create(
+                    tenant=tenant, item=spot_item,
+                    source_location=main, quarantine_location=qc_zone,
+                    quantity=min(Decimal("2"), spot_qty / 2),
+                    reason="damage_found",
+                    notes="Draft â€” operator still counting the affected units.")
+                try:
+                    held.quarantine(None)
+                    summary.append(f"{held.number} quarantined")
+                except ValidationError:
+                    summary.append(f"{held.number} left as draft (no coverage)")
+                try:
+                    released.quarantine(None)
+                    released.release(None)
+                    summary.append(f"{released.number} released")
+                except ValidationError:
+                    summary.append(f"{released.number} left as draft (no coverage)")
+                summary.append(f"{draft.number} draft")
+            else:
+                summary.append("none (no stocked spot found)")
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: quarantine orders ({'; '.join(summary)})."))
+
+        # --- defect reports ----------------------------------------------------------------------
+        if DefectReport.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: defect reports already present, skipping.")
+        else:
+            spot = None
+            if main is not None:
+                spot = (StockMove.objects.filter(tenant=tenant, location=main)
+                        .values("item").annotate(q=Sum("quantity")).filter(q__gt=3)
+                        .order_by("-q").first())
+            if spot is None or inspector is None:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: defect reports skipped (no stocked spot or employee party)."))
+                return
+            spot_item = Item.objects.filter(tenant=tenant, pk=spot["item"]).first()
+            qty_open = min(Decimal("4"), spot["q"] / 4)
+            qty_wo = min(Decimal("2"), spot["q"] / 8)
+            DefectReport.objects.create(
+                tenant=tenant, item=spot_item, location=main,
+                quantity=qty_open, defect_type="packaging", severity="major",
+                discovered_during="putaway",
+                description="Six outer cartons wet-stained; inner units unverified.",
+                photo_url="https://files.example.com/defects/stained-cartons.jpg",
+                reported_by=inspector)
+            written_off = DefectReport.objects.create(
+                tenant=tenant, item=spot_item, location=main,
+                quantity=qty_wo, defect_type="functional", severity="critical",
+                discovered_during="receiving",
+                description="Units fail power-on at the dock bench.",
+                photo_url="https://files.example.com/defects/poweron-fail.jpg",
+                reported_by=inspector)
+            try:
+                written_off.writeoff(None)
+                outcome = f"{written_off.number} written off"
+            except ValidationError:
+                outcome = f"{written_off.number} left open (no coverage)"
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: 2 defect reports ({outcome}; DEF-00001 open)."))
+
+    def _seed_reporting_analytics(self, tenant, items):
+        """5.17 Reporting & Analytics: freeze two report snapshots through the REAL
+        engine compute path (the same ``build_summary`` the generate view runs), so a
+        snapshot's stored JSON is genuinely what the page said at that instant."""
+        if InventoryReportSnapshot.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: report snapshots already present, skipping.")
+            return
+
+        admin = (get_user_model().objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or get_user_model().objects.filter(username="admin").first())
+
+        from apps.inventory.views.ReportingAnalytics._engine import build_summary
+
+        specs = [
+            # (report_type, window_days, notes)
+            ("valuation", None, "Month-end stock value freeze (seed demo)."),
+            ("aging", None, "Dead-stock review baseline (seed demo)."),
+            ("abc", 90, "Quarterly ABC review window (seed demo)."),
+        ]
+        made = 0
+        for report_type, window, note in specs:
+            snap = InventoryReportSnapshot(
+                tenant=tenant, report_type=report_type, window_days=window,
+                notes=note, generated_by=admin,
+                summary=build_summary(report_type, tenant, location=None, window_days=window),
+            )
+            snap.save()
+            made += 1
+        self.stdout.write(self.style.SUCCESS(f"  {tenant.name}: {made} report snapshots [IRS-]."))
+
+    def _seed_finint(self, tenant, items):
+        """5.18 Accounting & Financial Integration — tax rules, the GL account map, and one
+        demo of each sync walked through the REAL service paths.
+
+        The AP demo creates its own small approved PO + received GRN (booked through scm's
+        own ``_post_grn_receipt`` so the inbound legs are genuine ledger rows) and leaves
+        it UNBILLED — that is exactly the queue state the AP Sync page exists to act on.
+        The AR demo advances seed_scm's outbound shipment to delivered via a real
+        TrackingEvent; its order is uninvoiced, which is the AR queue's row. The JE demo
+        posts seed_scm's cycle-count adjustment through ``post_adjustment_to_gl`` —
+        skipped gracefully when Accounting has no open fiscal period yet.
+        """
+        from apps.accounting.models import GLAccount, TaxCode
+
+        if TaxRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: finance-integration rows already present, skipping.")
+            return
+
+        admin = (get_user_model().objects.filter(tenant=tenant, is_tenant_admin=True).first()
+                 or get_user_model().objects.filter(tenant=tenant).first())
+        created = 0
+
+        # -- Tax Management: catch-all + a category pin, over accounting's seeded codes ------
+        sales_tax = (TaxCode.objects.filter(tenant=tenant, is_active=True)
+                     .order_by("id").first())
+        vat = (TaxCode.objects.filter(tenant=tenant, is_active=True)
+               .exclude(pk=sales_tax.pk if sales_tax else None).first()) or sales_tax
+        if sales_tax is not None:
+            category = ItemCategory.objects.filter(tenant=tenant).order_by("id").first()
+            TaxRule.objects.create(
+                tenant=tenant, name="Default sales tax",
+                country="", tax_code=sales_tax, priority=900,
+                notes="Catch-all — every product, any geography.")
+            created += 1
+            if category is not None and vat is not None:
+                TaxRule.objects.create(
+                    tenant=tenant, name=f"{category.name} VAT", category=category,
+                    country="", tax_code=vat, priority=100,
+                    notes="Category pin beats the catch-all in the resolver.")
+                created += 1
+
+        # -- GL Posting Rules: the account map off accounting's chart of accounts -------------
+        inventory_acct = (GLAccount.objects.filter(tenant=tenant, name__iexact="Inventory")
+                          .order_by("code").first())
+        cogs_acct = (GLAccount.objects.filter(tenant=tenant, name__icontains="Cost of Goods")
+                     .order_by("code").first())
+        expense_acct = (GLAccount.objects.filter(tenant=tenant, account_type="expense")
+                        .exclude(pk=cogs_acct.pk if cogs_acct else None)
+                        .order_by("code").first())
+        offset_for_adjustment = expense_acct or cogs_acct
+        if inventory_acct is not None and offset_for_adjustment is not None:
+            GLPostRule.objects.create(
+                tenant=tenant, event_type="adjustment", name="Stock adjustments",
+                inventory_account=inventory_acct, offset_account=offset_for_adjustment,
+                notes="Found stock credits the gain; write-offs debit it.")
+            created += 1
+        if inventory_acct is not None and cogs_acct is not None:
+            GLPostRule.objects.create(
+                tenant=tenant, event_type="cogs", name="Customer issues COGS",
+                inventory_account=inventory_acct, offset_account=cogs_acct,
+                notes="One balanced batch entry per date window.")
+            created += 1
+
+        # -- AP demo: an approved PO + a received-but-unbilled GRN ----------------------------
+        vendors = list(_vendor_parties(tenant).order_by("name"))
+        grn_made = False
+        if vendors:
+            po = PurchaseOrder(
+                tenant=tenant, vendor=vendors[0], order_date=timezone.localdate(),
+                status="approved", notes="Finance-integration demo order (received, awaiting bill).")
+            po.save()
+            line_items = items[:2]
+            for item in line_items:
+                PurchaseOrderLine.objects.create(
+                    purchase_order=po, item_description=item.name, sku_hint=item.sku,
+                    uom_hint=item.uom.code if item.uom_id else "",
+                    quantity=Decimal("6"), unit_price=item.standard_cost or Decimal("25"))
+            po.recalc_totals()
+
+            warehouse = Location.objects.filter(tenant=tenant, code="WH-MAIN").first()
+            if warehouse is not None:
+                grn = GoodsReceiptNote(
+                    tenant=tenant, purchase_order=po, receipt_date=timezone.localdate(),
+                    status="draft", delivery_note_ref="DN-90418",
+                    received_by=admin, notes="Finance-integration demo receipt.")
+                grn.save()
+                for item in line_items:
+                    GoodsReceiptLine.objects.create(
+                        goods_receipt=grn, po_line=po.lines.get(sku_hint=item.sku),
+                        quantity_received=Decimal("6"), quantity_rejected=Decimal("0"))
+                # Book through SCM's own posting helper so the receipt carries REAL
+                # inbound StockMoves (the same path the UI's receive verb uses).
+                try:
+                    from apps.scm.views._helpers import _post_grn_receipt
+                    with transaction.atomic():
+                        _post_grn_receipt(grn, admin)
+                        grn.status = "received"
+                        grn.save(update_fields=["status", "updated_at"])
+                    grn_made = True
+                except ValidationError as exc:
+                    self.stdout.write(self.style.WARNING(
+                        f"  {tenant.name}: AP demo receipt refused ({'; '.join(exc.messages)}) — "
+                        "the queue will simply stay empty."))
+
+        # -- AR demo: deliver seed_scm's outbound shipment through its REAL event path --------
+        shipped = False
+        shipment = (Shipment.objects.filter(tenant=tenant, direction="outbound",
+                                            status="in_transit")
+                    .exclude(sales_order=None).select_related("sales_order").first())
+        if shipment is not None and shipment.sales_order.invoice_id is None:
+            from apps.scm.models import TrackingEvent
+            ev = TrackingEvent(shipment=shipment, event_type="delivered",
+                               event_at=timezone.now(), location_text="Fabrikam RDC",
+                               source="seed_finint")
+            ev.save()
+            shipment.apply_tracking_event(ev)
+            shipped = True
+
+        # -- JE demo: post the seeded cycle-count adjustment through the REAL path -------------
+        je_made = False
+        pending_adj = (StockAdjustment.objects.filter(tenant=tenant, status="posted")
+                       .order_by("-posted_at").first())
+        if pending_adj is not None:
+            try:
+                log, _je = post_adjustment_to_gl(tenant, admin, pending_adj)
+                je_made = True
+            except ValidationError as exc:
+                self.stdout.write(self.style.WARNING(
+                    f"  {tenant.name}: JE demo skipped ({'; '.join(exc.messages)})."))
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created} finance-integration config rows"
+            f"{', AP queue row' if grn_made else ''}"
+            f"{', AR queue row' if shipped else ''}"
+            f"{', 1 JE posted [JSY-]' if je_made else ''}."))
