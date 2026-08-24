@@ -71,19 +71,22 @@ def defectreport_create(request):
 
 @login_required
 def defectreport_edit(request, pk):
-    # Server-side status guard: a resolved report's facts must not change beneath its
-    # ledger leg (CrossDockOrder precedent — crud_edit cannot know EDITABLE_STATUSES).
-    obj = get_object_or_404(_scoped(request.tenant), pk=pk)
-    if not obj.is_editable:
-        messages.error(
-            request,
-            f"{obj.number} has been resolved and can no longer be edited.")
-        return redirect("inventory:defectreport_detail", pk=obj.pk)
-    return crud_edit(
-        request, model=DefectReport, pk=pk, form_class=DefectReportForm,
-        template="inventory/qc/defectreport/form.html",
-        success_url="inventory:defectreport_list",
-    )
+    # Server-side status guard held UNDER the row lock across the whole request — a
+    # concurrent writeoff()/close() cannot slip between our check and crud_edit's save
+    # (review I2; its verbs take the same lock). crud_edit cannot know EDITABLE_STATUSES.
+    with transaction.atomic():
+        obj = get_object_or_404(DefectReport.objects.select_for_update(),
+                                pk=pk, tenant=request.tenant)
+        if not obj.is_editable:
+            messages.error(
+                request,
+                f"{obj.number} has been resolved and can no longer be edited.")
+            return redirect("inventory:defectreport_detail", pk=obj.pk)
+        return crud_edit(
+            request, model=DefectReport, pk=pk, form_class=DefectReportForm,
+            template="inventory/qc/defectreport/form.html",
+            success_url="inventory:defectreport_list",
+        )
 
 
 @tenant_admin_required
