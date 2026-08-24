@@ -146,23 +146,38 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 
 - **Cycle Count Scheduling** -> CountProgram [CTP-]: cadence (daily / weekday / day-of-month
   1-28) over a zone-or-bin location + optional ABC class; is_due(today) honours last_run_date;
-  generate_tasks(user) mints today's marked CycleCountTask (notes 'Via count program CTP-...')
-  with same-day REUSE, stamps last_run, audits run/rerun. Run verb: POST-only.
+  generate_tasks(user) runs inside transaction.atomic with the program row re-read
+  select_for_update, mints today's marked CycleCountTask (provenance marker, same-day REUSE via a
+  notes__startswith probe so the name-suffixed stamp matches), stamps last_run, audits run/rerun.
+  Run verb: POST-only; refuses inactive programs at the view (flash) AND the mint honours is_active.
 - **Full Physical Inventory** -> PhysicalInventory [PHY-] over a warehouse: start() freezes
-  (is_frozen marker; advisory to ops, surfaced on the board) and spawns ONE full-method sheet
-  per bin/zone under the warehouse (provenance via task_marker notes prefix); reconcile()
-  REFUSES while any spawned sheet is outside reconciled/cancelled - naming the first three -
-  then lifts the freeze; cancel() lifts from draft/counting. All verbs select_for_update,
-  status editable=False. Delete guarded to unfrozen drafts without spawned sheets.
+  (is_frozen marker; advisory to ops, surfaced on the board) and bulk-creates ONE full-method sheet
+  per bin/zone under the warehouse (numbers pre-assigned in one pass - no per-bin max+1 round trips
+  inside the lock); provenance goes through the ONE canonical task_marker() builder,
+  "Physical inventory {number} #{pk}" - pk-stamped so a --flush re-seed that reissues PHY numbers
+  can never adopt the previous generation's sheets. reconcile() REFUSES while any spawned sheet is
+  outside reconciled/cancelled - naming the first three - then lifts the freeze; cancel() lifts from
+  draft/counting. All verbs select_for_update, status editable=False; spawned_tasks bounds its notes
+  scan with the spine's indexed (tenant, scheduled_date) window. Delete guarded to unfrozen drafts
+  without spawned sheets. Migration 0016 adds the (tenant, -scheduled_date) list index.
 - **Variance Analysis & Adjustments** -> inventory:variance_report (computed page): per counted
-  sheet - lines counted/total, disagreeing count, net variance, posted adjustment link. Filters
-  q/status before pagination; rows ranked by absolute variance within the page.
+  sheet - lines counted/total, disagreeing count (amber badge, zero = green "clean"), net variance,
+  posted adjustment link. Filters q/status before pagination; rows ranked by absolute variance
+  within the page; location+adjustment select_related up front (zero N+1).
 - **Blind Counts** -> scm:cyclecounttask_list pointer (the spine owns server-side expected
   snapshots and single-adjustment reconciliation).
 - Templates: templates/inventory/stocktake/ - countprogram/physicalinventory triples plus
-  page-only variance.html. Seeder _seed_stocktaking: Zone A weekly program + one event walked
+  page-only variance.html. Badges colour-named only; confirm() strings carry NO interpolated
+  location fields (L42). Seeder _seed_stocktaking: Zone A weekly program + one event walked
   through REAL start/cancel and one left live frozen with sheets awaiting counters (the
-  refused reconcile IS the demo). Tests: test_stocktake_{models,views}.py (20).
+  refused reconcile IS the demo).
+- Tests: test_stocktake_{models,forms,views,security}.py (96) + conftest fixtures
+  stocktake_{warehouse,zone,bin}_{a,b}, stocktake_program_{a,b}, stocktake_event_a,
+  stocktake_event_counting_a, _stocktake_sheet/_stocktake_line helpers. GOTCHA of record:
+  stocktake_event_counting_a runs REAL start() at fixture setup - always request
+  stocktake_zone_a/stocktake_bin_a BEFORE it in a test signature, or start() finds a bin-less
+  tree and spawns zero sheets. Verb methods return the FOR-UPDATE re-read row - capture the
+  return value, the caller's instance is not refreshed in place.
 
 ### 5.8 Lot & Serial Number Tracking - the traceability slice
 
