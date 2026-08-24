@@ -38,6 +38,16 @@ from .AccountingFinancialIntegration import (
     glpostrule_list, glpostrule_detail, glpostrule_create,
     glpostrule_edit, glpostrule_delete,
 )
+from .ThirdPartyIntegrations import (
+    integrationchannel_list, integrationchannel_detail, integrationchannel_create,
+    integrationchannel_edit, integrationchannel_delete, integrationchannel_rotate_key,
+    integrationchannel_sync,
+    listingmap_list, listingmap_detail, listingmap_create, listingmap_edit,
+    listingmap_delete,
+    stocksyncrun_list, stocksyncrun_detail, stocksyncrun_retry,
+    apiclient_list, apiclient_detail, apiclient_create, apiclient_edit,
+    apiclient_delete, apiclient_issue_token, apiclient_revoke,
+)
 from .Catalog.Overview import overview
 from .FulfillmentOrchestration.FulfillmentWaves import (
     wave_board,
@@ -338,5 +348,13 @@ __all__ = [
     "taxrule_list", "taxrule_detail", "taxrule_create", "taxrule_edit", "taxrule_delete",
     "glpostrule_list", "glpostrule_detail", "glpostrule_create",
     "glpostrule_edit", "glpostrule_delete",
+    "integrationchannel_list", "integrationchannel_detail", "integrationchannel_create",
+    "integrationchannel_edit", "integrationchannel_delete", "integrationchannel_rotate_key",
+    "integrationchannel_sync",
+    "listingmap_list", "listingmap_detail", "listingmap_create", "listingmap_edit",
+    "listingmap_delete",
+    "stocksyncrun_list", "stocksyncrun_detail", "stocksyncrun_retry",
+    "apiclient_list", "apiclient_detail", "apiclient_create", "apiclient_edit",
+    "apiclient_delete", "apiclient_issue_token", "apiclient_revoke",
 ]
 
