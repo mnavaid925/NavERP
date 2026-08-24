@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}New{% endif %} QC Checklist{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Edit{% else %}New{% endif %} QC Checklist</h1>
+    <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:qcchecklist_list' %}">QC Checklists</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="card"><div class="card-header"><h2 class="card-title">Checklist</h2></div><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Checkpoints</h2></div>
+      <div class="card-body">
+        {{ formset.management_form }}
+        <div class="space-y-4">
+          {% for item_form in formset %}
+            <div class="grid grid-cols-12 gap-3 items-center pb-3" style="border-bottom:1px solid var(--border);">
+              {{ item_form.id }}
+              <div class="col-span-4">
+                <label class="form-label" style="font-size:12px;" for="{{ item_form.label.id_for_label }}">Checkpoint</label>
+                {{ item_form.label }}
+                {% if item_form.label.errors %}<div class="form-error">{{ item_form.label.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-2">
+                <label class="form-label" style="font-size:12px;" for="{{ item_form.kind.id_for_label }}">Kind</label>
+                {{ item_form.kind }}
+                {% if item_form.kind.errors %}<div class="form-error">{{ item_form.kind.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-2">
+                <label class="form-label" style="font-size:12px;" for="{{ item_form.expected_result.id_for_label }}">Expected</label>
+                {{ item_form.expected_result }}
+                {% if item_form.expected_result.errors %}<div class="form-error">{{ item_form.expected_result.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-1">
+                <label class="form-label" style="font-size:12px;" for="{{ item_form.sequence.id_for_label }}">Order</label>
+                {{ item_form.sequence }}
+                {% if item_form.sequence.errors %}<div class="form-error">{{ item_form.sequence.errors }}</div>{% endif %}
+              </div>
+              <div class="col-span-2">
+                <label class="form-label" style="font-size:12px;" for="{{ item_form.is_mandatory.id_for_label }}">Mandatory?</label>
+                {{ item_form.is_mandatory }}
+              </div>
+              <div class="col-span-1 pt-6 text-center">
+                {% if item_form.DELETE %}
+                  <label class="text-xs text-danger" title="Check to delete">{{ item_form.DELETE }} Del</label>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        <p class="text-muted" style="margin-top:8px;">Leave a row blank to ignore it. Tick <em>Del</em> on an existing row to remove that checkpoint.</p>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% url 'inventory:qcchecklist_list' %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
