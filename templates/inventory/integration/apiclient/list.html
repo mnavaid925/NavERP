@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}API Clients — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">API Clients</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Third-Party Integrations &amp; API</span>
+        <span class="sep">›</span>
+        <span>API Management</span>
+      </div>
+      <p class="text-muted">Access keys issued to third parties calling our REST/GraphQL surface — token stored as prefix + hash only, plaintext shown exactly once on issue.</p>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}
+        <a href="{% url 'inventory:apiclient_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New API Client</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="key-round"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Clients</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.active }}</div>
+        <div class="stat-label">Active</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i data-lucide="ban"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.revoked }}</div>
+        <div class="stat-label">Revoked</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by name or scopes…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="protocol" aria-label="Protocol" class="form-select">
+            <option value="">All Protocols</option>
+            {% for val, label in protocol_choices %}
+              <option value="{{ val }}" {% if request.GET.protocol == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:apiclient_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Name</th>
+            <th>Protocol</th>
+            <th>Scopes</th>
+            <th>Status</th>
+            <th>Last Used At</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><a href="{% url 'inventory:apiclient_detail' obj.pk %}" class="mono fw-600">{{ obj.number }}</a></td>
+              <td><span class="fw-600">{{ obj.name }}</span></td>
+              <td>
+                {% if obj.protocol == 'rest' %}
+                  <span class="badge badge-info">REST</span>
+                {% elif obj.protocol == 'graphql' %}
+                  <span class="badge badge-amber">GraphQL</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_protocol_display }}</span>
+                {% endif %}
+              </td>
+              <td>{% if obj.scopes %}<span class="mono" title="{{ obj.scopes }}">{{ obj.scopes|truncatechars:32 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                {% if obj.status == 'active' %}
+                  <span class="badge badge-green">Active</span>
+                {% elif obj.status == 'revoked' %}
+                  <span class="badge badge-red">Revoked</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ obj.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td>{{ obj.last_used_at|date:"Y-m-d H:i"|default:"—" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:apiclient_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:apiclient_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:apiclient_delete' obj.pk %}" onsubmit="return confirm('Delete this API client?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="key-round"></i>
+                  <h3>No API clients found</h3>
+                  <p>Register a third-party caller to issue it an access key against our REST/GraphQL surface.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
