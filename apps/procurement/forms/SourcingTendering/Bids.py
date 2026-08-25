@@ -51,8 +51,15 @@ class SourcingBidForm(TenantModelForm):
         event = cleaned.get("event")
         # A NEW bid may only target an event still accepting submissions; an EXISTING draft is
         # left alone here (its event may have closed after drafting — submitting will refuse).
-        if event is not None and self.instance.pk is None and not event.bids_allowed:
-            self.add_error("event", "That sourcing event is not open for bids.")
+        if event is not None:
+            # NEW bids only into open events; an EXISTING draft may be re-pointed, but only
+            # to an event still accepting submissions — otherwise it strands as a draft
+            # submit() will always refuse (review M7).
+            changed_event = (self.instance.pk is not None
+                             and event.pk != self.instance.event_id)
+            if not event.bids_allowed and (
+                    self.instance.pk is None or changed_event):
+                self.add_error("event", "That sourcing event is not open for bids.")
         if not cleaned.get("is_compliant") and not cleaned.get("compliance_note"):
             self.add_error("compliance_note",
                            "Say what is missing when the bid is marked not compliant.")
