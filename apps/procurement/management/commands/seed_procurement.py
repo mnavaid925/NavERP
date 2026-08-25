@@ -1,5 +1,5 @@
 """Seed Procurement Management (Module 6) demo data — 6.1 portal baseline + 6.2 Requisition
-Management.
+Management + 6.3 Approval Workflow Engine + 6.4 Vendor Management.
 
 6.1 creates, per tenant, the Task & Alert Center baseline: a handful of alerts across every kind,
 severity and lifecycle state, assigned to the workspace's members. The overview's other widgets
@@ -11,6 +11,14 @@ run ``seed_scm`` first if you want the approval/spend widgets populated.
 (with lines) ready to apply, and — when ``seed_scm`` has left at least one pending/approved
 requisition to work with — one PENDING AMENDMENT so the decision queue is not empty. Both blocks
 reuse existing rows rather than inventing parallel ones.
+
+6.3 seeds the governance layer: routing rules (catch-all + two more-specific), the escalation
+policy singleton, a leave-cover DOA grant and one real tier-1 signature on an existing pending
+requisition when its resolved chain has 2+ tiers.
+
+6.4 adds vendor-management rows over scm 4.2's approved suppliers: portal access bindings,
+a suspension register covering every lifecycle state, and supplier-filed invoice submissions.
+Like every block here it REUSES existing parties/orders rather than inventing parallel masters.
 
 Each seeded alert also writes one ``core.AuditLog`` row (user=None → rendered as "System"), which
 gives the Recent Activity Feed an honest baseline instead of an empty page on a fresh workspace.
@@ -26,7 +34,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import OrgUnit, Tenant
+from apps.core.models import OrgUnit, Party, PartyRole, Tenant
 from apps.core.utils import write_audit_log
 from apps.procurement.models import (
     ApprovalDelegation,
@@ -38,8 +46,15 @@ from apps.procurement.models import (
     RequisitionApproval,
     RequisitionTemplate,
     RequisitionTemplateLine,
+    RfxAnswer,
+    RfxEvent,
+    RfxQuestion,
+    RfxResponse,
+    VendorInvoiceSubmission,
+    VendorPortalAccess,
+    VendorSuspension,
 )
-from apps.scm.models import PurchaseRequisition
+from apps.scm.models import PurchaseRequisition, SupplierProfile
 
 User = get_user_model()
 
@@ -79,8 +94,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL procurement workflow rows for ALL tenants before seeding "
-                  "(alerts, approval-engine tables, templates, amendments) - not just "
-                  "seeder-created ones."))
+                  "(alerts, approval-engine tables, templates, amendments, vendor-management "
+                  "registers) - not just seeder-created ones."))
 
     def handle(self, *args, **options):
         global NOW
@@ -88,12 +103,19 @@ class Command(BaseCommand):
         if options["flush"]:
             deleted = ProcurementAlert.objects.all().count()
             # Children first: signatures reference their DOA grant (SET_NULL, but cleanest
-            # in order), grants/rules/policy are standalone config.
+            # in order), grants/rules/policy are standalone config. Vendor-management
+            # registers are standalone rows (submissions point at POs SET_NULL) so order
+            # barely matters — delete them children-last anyway.
             RequisitionApproval.objects.all().delete()
             ApprovalDelegation.objects.all().delete()
             ApprovalRoutingRule.objects.all().delete()
             EscalationPolicy.objects.all().delete()
             ProcurementAlert.objects.all().delete()
+            RfxResponse.objects.all().delete()
+            RfxEvent.objects.all().delete()
+            VendorPortalAccess.objects.all().delete()
+            VendorSuspension.objects.all().delete()
+            VendorInvoiceSubmission.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
         for tenant in Tenant.objects.order_by("name"):
@@ -101,6 +123,8 @@ class Command(BaseCommand):
             self._seed_templates(tenant)
             self._seed_amendment(tenant)
             self._seed_approval_engine(tenant)
+            self._seed_vendor_management(tenant)
+            self._seed_rfx(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -314,3 +338,190 @@ class Command(BaseCommand):
             f"({made_rules} routing rules, policy {policy.idle_hours}h, "
             f"{'DOA grant' if admin is not None and delegate is not None else 'no DOA pair'}, "
             f"{f'chain {signed.number} at tier 1/{signed.tier_count}' if signed else 'no multi-tier pending requisition to sign'})."))
+
+    # -- 6.4 Vendor Management -------------------------------------------------------------------
+
+    def _seed_vendor_management(self, tenant):
+        """6.4 Vendor Management — portal access, suspension register, invoice submissions.
+
+        Everything hangs off scm 4.2's APPROVED suppliers (L36: never a parallel vendor
+        master); with none seeded the block reports and skips. Lifecycle coverage: one
+        active access row (plus one unlinked spare), suspensions in requested/active/
+        lifted states, and invoice submissions in submitted/accepted states — the accepted
+        one linked to a real PO for that supplier when seed_scm left any.
+        """
+        suppliers = list(SupplierProfile.objects
+                         .filter(tenant=tenant, onboarding_status="approved")
+                         .select_related("party").order_by("id"))
+        if not suppliers:
+            self.stdout.write(f"  {tenant.name}: no approved suppliers (run seed_scm first), "
+                              f"skipping vendor management.")
+            return
+
+        admin = (User.objects.filter(tenant=tenant, is_tenant_admin=True, is_active=True)
+                 .order_by("id").first())
+
+        # -- portal access bindings ---------------------------------------------------------------
+        if not VendorPortalAccess.objects.filter(tenant=tenant).exists():
+            VendorPortalAccess.objects.create(
+                tenant=tenant, supplier=suppliers[0].party, invited_by=admin,
+                note="Demo binding — assign a portal user to walk the gated pages.")
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: vendor portal access for {suppliers[0].party.name}."))
+
+        # -- suspension register --------------------------------------------------------------------
+        if not VendorSuspension.objects.filter(tenant=tenant).exists():
+            VendorSuspension.objects.create(
+                tenant=tenant, supplier=suppliers[0].party,
+                kind="suspension", reason_category="delivery",
+                reason="Two consecutive orders arrived outside the agreed window; suspend "
+                       "while the delivery process is re-agreed.",
+                status="requested", starts_on=NOW.date())
+            blocked = suppliers[1] if len(suppliers) > 1 else suppliers[0]
+            VendorSuspension.objects.create(
+                tenant=tenant, supplier=blocked.party,
+                kind="blacklist", reason_category="compliance",
+                reason="Compliance certificates lapsed and were not renewed after two "
+                       "chases — blocked from new POs.",
+                status="active", starts_on=NOW.date() - timedelta(days=10),
+                decided_at=NOW - timedelta(days=9),
+                decision_note="Seeded in force (System) — lift it to demo unblocking.")
+            VendorSuspension.objects.create(
+                tenant=tenant, supplier=suppliers[0].party,
+                kind="suspension", reason_category="quality",
+                reason="Batch rejected at GRN inspection; suspended pending corrective action.",
+                status="lifted", starts_on=NOW.date() - timedelta(days=60),
+                ends_on=NOW.date() - timedelta(days=30),
+                decided_at=NOW - timedelta(days=58),
+                decision_note="In force until the CAPA closed.",
+                lifted_at=NOW - timedelta(days=30),
+                lift_note="CAPA verified effective; supply resumed.")
+            write_audit_log(None, blocked, "seed")
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: suspension register ready "
+                f"(1 requested / 1 active / 1 lifted)."))
+
+        # -- invoice submissions ----------------------------------------------------------------------
+        if not VendorInvoiceSubmission.objects.filter(tenant=tenant).exists():
+            from apps.scm.models import PurchaseOrder
+            po = PurchaseOrder.objects.filter(
+                tenant=tenant, vendor=suppliers[0].party).order_by("-order_date", "-id").first()
+            VendorInvoiceSubmission.objects.create(
+                tenant=tenant, supplier=suppliers[0].party, purchase_order=po,
+                invoice_ref="INV-2026-0041", invoice_date=(NOW - timedelta(days=3)).date(),
+                amount=Decimal("1840.00"),
+                note="Paper goods as delivered against the standing order.",
+                status="accepted", reviewed_at=NOW - timedelta(days=2),
+                review_note="Matched to GRN; keyed into AP as BILL-1024.")
+            VendorInvoiceSubmission.objects.create(
+                tenant=tenant, supplier=suppliers[1].party if len(suppliers) > 1 else suppliers[0].party,
+                invoice_ref="INV-77312", invoice_date=NOW.date(),
+                amount=Decimal("412.50"),
+                note="Monthly consumables top-up.",
+                status="submitted")
+            self.stdout.write(self.style.SUCCESS(
+                f"  {tenant.name}: invoice submission register ready (1 accepted / 1 submitted)."))
+
+    # -- 6.6 RFx Management ---------------------------------------------------------------------
+
+    #: (section, prompt, answer_type, options, weight, scored)
+    _RFI_TEMPLATE_QUESTIONS = [
+        ("Company profile", "How many years has your company operated in this market?",
+         "number", "", "1.00", True),
+        ("Company profile", "List the certifications relevant to this category.",
+         "longtext", "", "2.00", True),
+        ("Capability", "Describe your production capacity per month.",
+         "longtext", "", "2.00", True),
+        ("Capability", "Do you offer nationwide delivery?",
+         "choice", "Yes\nNo\nPartial", "1.00", True),
+        ("Compliance", "Confirm you accept our standard payment terms.",
+         "choice", "Yes\nNo", "0", False),
+    ]
+
+    def _seed_rfx(self, tenant):
+        """6.6 RFx Management - one Template-Library RFI blueprint plus a live issued RFP with
+        two supplier responses (one fully scored, one partial) so the comparison matrix, the
+        scoring leaderboard and the evaluation states are populated on a fresh workspace.
+        Suppliers reuse seed_scm's core.Party rows by name (get-or-create, never duplicate).
+        Guarded per tenant like every other block."""
+        if RfxEvent.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: RFx events already present, skipping.")
+            return
+
+        def _supplier(name):
+            party = Party.objects.filter(tenant=tenant, name=name).first()
+            if party is None:
+                party = Party.objects.create(tenant=tenant, kind="organization", name=name)
+            PartyRole.objects.get_or_create(
+                tenant=tenant, party=party, role="supplier",
+                defaults={"status": "active", "start_date": timezone.localdate()})
+            return party
+
+        made = 0
+        with transaction.atomic():
+            library = RfxEvent.objects.create(
+                tenant=tenant, is_template=True, rfx_type="rfi",
+                title="Standard supplier capability RFI",
+                description="Baseline questionnaire for qualifying a new supplier: company "
+                            "profile, capability and compliance basics.",
+            )
+            for i, row in enumerate(self._RFI_TEMPLATE_QUESTIONS):
+                section, prompt, qtype, options, weight, scored = row
+                RfxQuestion.objects.create(
+                    event=library, section=section, prompt=prompt, answer_type=qtype,
+                    options=options, weight=Decimal(weight), is_scored=scored, order=i + 1)
+            write_audit_log(None, library, "create")
+            made += 1
+
+            requisition = (PurchaseRequisition.objects.filter(tenant=tenant)
+                           .order_by("-created_at").first())
+            rfp = RfxEvent.objects.create(
+                tenant=tenant, rfx_type="rfp",
+                title="Managed print services RFP",
+                description="Proposal request covering devices, service levels and "
+                            "consumables pricing for a three-year term.",
+                requisition=requisition, status="issued",
+                issued_at=NOW - timedelta(days=2),
+                response_due=NOW + timedelta(days=5))
+            for i, (section, prompt, qtype, options, weight, scored) in enumerate([
+                ("Technical", "Describe your managed-print platform and reporting.",
+                 "longtext", "", "2.00", True),
+                ("Commercial", "State your cost-per-page for mono and colour.",
+                 "number", "", "3.00", True),
+                ("Service", "What is your guaranteed on-site response time?",
+                 "choice", "4 hours\nNext business day\n2 business days", "1.00", True),
+            ]):
+                RfxQuestion.objects.create(
+                    event=rfp, section=section, prompt=prompt, answer_type=qtype,
+                    options=options, weight=Decimal(weight), is_scored=scored, order=i + 1)
+            write_audit_log(None, rfp, "create")
+            write_audit_log(None, rfp, "issue")
+            made += 1
+
+            questions = list(rfp.questions.order_by("order"))
+            plans = [
+                ("Northwind Industrial Supply",
+                 ["8", None, "7"],
+                 "Strong platform proposal; pricing mid-field.",
+                 "under_review"),
+                ("Cascade Components Ltd",
+                 ["6", None, "5"],
+                 "Competitive service terms; commercial answer outstanding.",
+                 "submitted"),
+            ]
+            for name, scores, note, status in plans:
+                response = RfxResponse.objects.create(
+                    tenant=tenant, event=rfp, supplier=_supplier(name), notes=note)
+                for question, score in zip(questions, scores):
+                    RfxAnswer.objects.create(
+                        response=response, question=question,
+                        answer_text="Detailed in the attached proposal." if score else "",
+                        score=Decimal(score) if score else None)
+                if not response.submit():
+                    raise RuntimeError(f"seed: could not submit seeded response {response.pk}")
+                if status == "under_review" and not response.transition("under_review"):
+                    raise RuntimeError(f"seed: could not advance seeded response {response.pk}")
+                write_audit_log(None, response, "create")
+                made += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: RFx ready ({made} events/responses)."))
