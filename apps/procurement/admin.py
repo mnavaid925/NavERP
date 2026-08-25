@@ -182,6 +182,25 @@ class RfxQuestionInline(admin.TabularInline):
     model = RfxQuestion
     extra = 0
 
+    @staticmethod
+    def _frozen(obj):
+        # Questions are a DRAFT-stage activity (is_editable): an issued event's questionnaire is
+        # the frozen artifact every response is compared against, so the admin may look at it on
+        # issued events but never rewrite it.
+        return obj is not None and not obj.is_editable
+
+    def get_readonly_fields(self, request, obj=None):
+        if self._frozen(obj):
+            return ("section", "prompt", "help_text", "answer_type", "options",
+                    "weight", "is_scored", "order")
+        return ("order",)
+
+    def has_add_permission(self, request, obj=None):
+        return not self._frozen(obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return not self._frozen(obj)
+
 
 @admin.register(RfxEvent)
 class RfxEventAdmin(admin.ModelAdmin):
@@ -189,7 +208,9 @@ class RfxEventAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status", "rfx_type", "is_template")
     search_fields = ("number", "title", "description")
     raw_id_fields = ("requisition", "created_by")
-    readonly_fields = ("number", "issued_at", "closed_at", "created_by",
+    # status moves only through the issue/close/cancel views so each transition lands with its
+    # audit row — the admin may look, never flip the state machine (SourcingEventAdmin posture).
+    readonly_fields = ("number", "status", "issued_at", "closed_at", "created_by",
                        "created_at", "updated_at")
     inlines = [RfxQuestionInline]
 
@@ -198,6 +219,21 @@ class RfxAnswerInline(admin.TabularInline):
     model = RfxAnswer
     extra = 0
 
+    @staticmethod
+    def _frozen(obj):
+        # A disqualified response — or any response of a cancelled event — is frozen everywhere,
+        # admin included: scores must never be rewritten outside the guarded views.
+        return obj is not None and (obj.is_locked or obj.event.status == "cancelled")
+
+    def get_readonly_fields(self, request, obj=None):
+        return ("answer_text", "score") if self._frozen(obj) else ()
+
+    def has_add_permission(self, request, obj=None):
+        return not self._frozen(obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return not self._frozen(obj)
+
 
 @admin.register(RfxResponse)
 class RfxResponseAdmin(admin.ModelAdmin):
@@ -205,7 +241,10 @@ class RfxResponseAdmin(admin.ModelAdmin):
     list_filter = ("tenant", "status")
     search_fields = ("number", "notes", "supplier__name")
     raw_id_fields = ("event", "supplier", "recorded_by")
-    readonly_fields = ("number", "submitted_at", "recorded_by", "created_at", "updated_at")
+    # status moves only through rfx_response_set_status's STATUS_FLOW guard — a hand-flipped
+    # admin status would bypass the transition rules entirely, so the admin may look, never flip.
+    readonly_fields = ("number", "status", "submitted_at", "recorded_by",
+                       "created_at", "updated_at")
     inlines = [RfxAnswerInline]
 
 
