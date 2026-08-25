@@ -61,9 +61,9 @@
         </tbody>
         <tfoot>
           <tr>
-            <th colspan="3" class="fw-600">Total — earned of {{ obj.event.possible_points|floatformat:1 }} possible</th>
-            <th class="fw-600">{{ obj.earned_points|floatformat:2 }}</th>
-            <th colspan="2" class="fw-600">{% if obj.score_percent is not None %}{{ obj.score_percent }}%{% else %}—{% endif %}</th>
+            <th colspan="3" class="fw-600">Total — earned of {{ score_possible|floatformat:1 }} possible</th>
+            <th class="fw-600">{{ score_earned|floatformat:2 }}</th>
+            <th colspan="2" class="fw-600">{% if score_pct is not None %}{{ score_pct }}%{% else %}—{% endif %}</th>
           </tr>
         </tfoot>
       </table>
