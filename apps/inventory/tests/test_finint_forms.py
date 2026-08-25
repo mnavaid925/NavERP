@@ -25,7 +25,8 @@ def foreign_item(db, tenant_b):
 
 def test_finint_taxrule_form_creates_numbered_rule(tenant_a, finint_tax_code, db):
     form = TaxRuleForm({"name": "Default", "country": "", "priority": "100",
-                        "is_active": "on"}, tenant=tenant_a)
+                        "tax_code": finint_tax_code.pk, "is_active": "on"},
+                       tenant=tenant_a)
     assert form.is_valid(), form.errors
     obj = form.save(commit=False)
     obj.tenant = tenant_a  # crud_create assigns tenant before save; mirror that here
