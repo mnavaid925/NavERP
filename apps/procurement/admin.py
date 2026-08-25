@@ -13,6 +13,9 @@ from .models import (
     RequisitionApproval,
     RequisitionTemplate,
     RequisitionTemplateLine,
+    EaucBid,
+    EaucInvite,
+    Eauction,
     RfxAnswer,
     RfxEvent,
     RfxQuestion,
@@ -292,4 +295,47 @@ class SourcingBidAdmin(admin.ModelAdmin):
                        "created_at", "updated_at")
 
     def has_add_permission(self, request):
+        return False
+
+
+# -- 6.7 E-Auction Management ---------------------------------------------------------
+
+
+class EaucInviteInline(admin.TabularInline):
+    model = EaucInvite
+    extra = 0
+    raw_id_fields = ("supplier",)
+
+
+@admin.register(Eauction)
+class EauctionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "auction_type", "status", "opens_at",
+                    "closes_at", "extensions_used", "awarded_supplier")
+    list_filter = ("tenant", "status", "auction_type")
+    search_fields = ("number", "title")
+    raw_id_fields = ("currency", "requisition", "created_by", "awarded_supplier")
+    # The award decision is written ONCE through the view (which validates leader-only);
+    # status/extensions_used/awarded_amount/awarded_at are state-machine outputs, never inputs.
+    readonly_fields = ("number", "extensions_used", "status", "awarded_supplier",
+                       "awarded_amount", "awarded_at", "created_by", "created_at", "updated_at")
+    inlines = [EaucInviteInline]
+
+
+@admin.register(EaucBid)
+class EaucBidAdmin(admin.ModelAdmin):
+    # READ-ONLY BID LOG: bids are append-only auction history - rewriting one would corrupt
+    # rankings and savings. The log may be inspected here, never altered.
+    list_display = ("number", "auction", "supplier", "amount", "placed_at", "placed_by")
+    list_select_related = ("auction", "supplier", "placed_by")
+    list_filter = ("tenant",)
+    search_fields = ("number", "supplier__name", "note")
+    readonly_fields = [f.name for f in EaucBid._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
