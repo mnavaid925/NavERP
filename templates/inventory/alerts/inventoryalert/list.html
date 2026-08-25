@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Alert Inbox — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Alert Inbox</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">â€º</span>
+        <span>Alerts &amp; Notifications</span>
+      </div>
+      <p class="text-muted">Raised watch conditions — low stock, overstock, expiry and workflow triggers — with a snapshot of what the engine saw.</p>
+    </div>
+    <div class="page-actions">
+      {% if is_admin %}
+        <form method="post" action="{% url 'inventory:alert_run_detection' %}" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="radar"></i> Run Checks Now</button>
+        </form>
+      {% endif %}
+      <a href="{% url 'inventory:alertrule_list' %}" class="btn btn-outline"><i data-lucide="settings-2"></i> Rules</a>
+      <a href="{% url 'inventory:delivery_list' %}" class="btn btn-primary"><i data-lucide="send"></i> Deliveries</a>
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="bell-ring"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.open }}</div>
+        <div class="stat-label">Open Alerts</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="siren"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.open_critical }}</div>
+        <div class="stat-label">Critical &amp; Open</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="eye"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.acknowledged }}</div>
+        <div class="stat-label">Acknowledged</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+      <div>
+        <div class="stat-value">{{ stats.resolved }}</div>
+        <div class="stat-label">Resolved</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by number, title, SKU, PO or shipmentâ€¦">
+        </div>
+        <div class="form-group">
+          <select name="type" aria-label="Type" class="form-select">
+            <option value="">All Types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="severity" aria-label="Severity" class="form-select">
+            <option value="">All Severities</option>
+            {% for val, label in severity_choices %}
+              <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:alert_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Alert</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Target</th>
+            <th>Observed</th>
+            <th>Raised</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:alert_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.title|truncatechars:52 }}</div>
+              </td>
+              <td><span class="badge badge-info">{{ obj.get_alert_type_display }}</span></td>
+              <td>
+                {% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>
+                {% elif obj.severity == 'warning' %}<span class="badge badge-amber">Warning</span>
+                {% else %}<span class="badge badge-info">Info</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.status == 'open' %}<span class="badge badge-amber">Open</span>
+                {% elif obj.status == 'acknowledged' %}<span class="badge badge-info">Acknowledged</span>
+                {% else %}<span class="badge badge-green">Resolved</span>{% endif %}
+              </td>
+              <td>
+                {% if obj.item %}
+                  <span class="fw-600">{{ obj.item.sku }}</span>{% if obj.location %} <span class="mono text-muted">@ {{ obj.location.code }}</span>{% endif %}
+                {% elif obj.lot_serial %}
+                  <span class="mono">{{ obj.lot_serial.number }}</span>{% if obj.item %} <span class="text-muted">({{ obj.item.sku }})</span>{% endif %}
+                {% elif obj.purchase_order %}
+                  <span class="mono">{{ obj.purchase_order.number }}</span>
+                {% elif obj.shipment %}
+                  <span class="mono">{{ obj.shipment.number }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="mono">{% if obj.metric_value is not None %}{{ obj.metric_value }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.raised_at|date:"Y-m-d H:i" }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:alert_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.status == 'open' %}
+                    <form method="post" action="{% url 'inventory:alert_acknowledge' obj.pk %}" onsubmit="return confirm('Acknowledge this alert?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Acknowledge"><i data-lucide="check"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <i data-lucide="inbox"></i>
+                  <h3>No alerts here</h3>
+                  <p>{% if is_admin %}Nothing matches this lens — run detection from the header, or widen the filters.{% else %}Nothing matches this lens.{% endif %}</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
+
