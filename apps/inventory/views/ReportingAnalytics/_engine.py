@@ -80,11 +80,12 @@ def f2(value):
 def clamp_window(raw, default=DEFAULT_WINDOW_DAYS):
     """Parse a ?days= query value into a sane positive int, else the default.
 
-    The length guard is not cosmetic: a 4301-digit ``isdecimal()`` string passes
-    the check and then blows Python's int→str conversion limit inside ``int()``.
+    The length guard is not cosmetic: Python's int→str conversion limit makes
+    ``int()`` raise on absurd digit strings, so anything longer than nine
+    digits is treated as junk; genuine big numbers still clamp to MAX.
     """
     raw = (raw or "").strip()
-    if not raw.isdecimal() or len(raw) > 4:
+    if not raw.isdecimal() or len(raw) > 9:
         return default
     return max(1, min(int(raw), MAX_WINDOW_DAYS))
 
