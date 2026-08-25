@@ -153,9 +153,9 @@ class Command(BaseCommand):
             self._seed_approval_engine(tenant)
             self._seed_sourcing(tenant)
             self._seed_vendor_management(tenant)
-        self._seed_rfx(tenant)
-        self._seed_eauction(tenant)
-        self._seed_contracts(tenant)
+            self._seed_rfx(tenant)
+            self._seed_eauction(tenant)
+            self._seed_contracts(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
