@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.name }} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.name }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alert_list' %}">Alerts &amp; Notifications</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alertrule_list' %}">Rules</a>
+        <span class="sep">›</span>
+        <span class="mono">{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:alertrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Rules</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:alertrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'inventory:alertrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule? Alerts already raised are kept.');" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-6">
+    <div class="col-span-2 space-y-6">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="card-title">Watch Condition</h2>
+          {% if obj.is_active %}
+            <span class="badge badge-green">Active</span>
+          {% else %}
+            <span class="badge badge-slate">Inactive</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Rule</dt>
+              <dd class="mt-1 mono fw-600">{{ obj.number }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Type</dt>
+              <dd class="mt-1"><span class="badge badge-info">{{ obj.get_alert_type_display }}</span></dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Severity</dt>
+              <dd class="mt-1">
+                {% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>
+                {% elif obj.severity == 'warning' %}<span class="badge badge-amber">Warning</span>
+                {% else %}<span class="badge badge-info">Info</span>{% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Cooldown</dt>
+              <dd class="mt-1">{{ obj.cooldown_days }} days between re-raises</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Item Scope</dt>
+              <dd class="mt-1">{% if obj.item %}<span class="fw-600">{{ obj.item.sku }}</span>{% else %}<span class="text-muted">All items</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Location Scope</dt>
+              <dd class="mt-1">{% if obj.location %}<span class="mono">{{ obj.location.code }}</span>{% else %}<span class="text-muted">All locations</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Expiry Window</dt>
+              <dd class="mt-1">{% if obj.alert_type == 'expiry' %}{{ obj.expiry_days }} days ahead{% else %}<span class="text-muted">not used by this type</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Overstock Threshold</dt>
+              <dd class="mt-1">{% if obj.alert_type == 'overstock' %}&gt; {{ obj.overstock_pct }}% of declared bin max{% else %}<span class="text-muted">not used by this type</span>{% endif %}</dd>
+            </div>
+            {% if obj.notes %}
+              <div class="col-span-2">
+                <dt class="text-muted" style="font-size:13px;">Notes</dt>
+                <dd class="mt-1">{{ obj.notes|linebreaksbr }}</dd>
+              </div>
+            {% endif %}
+          </dl>
+          <p class="text-muted mt-4" style="font-size:13px;">
+            Stock thresholds are not stored here: low/out-of-stock read the item's reorder points on the SCM spine, overstock reads 5.5's bin capacity envelopes.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Alerts Raised by This Rule</h2></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Alert</th><th>Severity</th><th>Status</th><th>Raised</th></tr>
+            </thead>
+            <tbody>
+              {% for a in recent_alerts %}
+                <tr>
+                  <td><a href="{% url 'inventory:alert_detail' a.pk %}" class="fw-600 mono">{{ a.number }}</a> <span class="text-muted">{{ a.title|truncatechars:48 }}</span></td>
+                  <td>
+                    {% if a.severity == 'critical' %}<span class="badge badge-red">Critical</span>
+                    {% elif a.severity == 'warning' %}<span class="badge badge-amber">Warning</span>
+                    {% else %}<span class="badge badge-info">Info</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if a.status == 'open' %}<span class="badge badge-amber">Open</span>
+                    {% elif a.status == 'acknowledged' %}<span class="badge badge-info">Acknowledged</span>
+                    {% else %}<span class="badge badge-green">Resolved</span>{% endif %}
+                  </td>
+                  <td>{{ a.raised_at|date:"Y-m-d H:i" }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4"><div class="empty-state"><i data-lucide="inbox"></i><p>This rule has not raised any alert yet — run detection from the inbox.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Delivery Channels</h2></div>
+        <div class="card-body space-y-3">
+          <div class="flex justify-between items-center">
+            <span>In-App Inbox</span>
+            {% if obj.notify_inapp %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-slate">Off</span>{% endif %}
+          </div>
+          <div class="flex justify-between items-center">
+            <span>Email</span>
+            {% if obj.notify_email %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-slate">Off</span>{% endif %}
+          </div>
+          <div class="flex justify-between items-center">
+            <span>SMS</span>
+            {% if obj.notify_sms %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-slate">Off</span>{% endif %}
+          </div>
+          <div class="flex justify-between items-center">
+            <span>Push</span>
+            {% if obj.notify_push %}<span class="badge badge-green">On</span>{% else %}<span class="badge badge-slate">Off</span>{% endif %}
+          </div>
+          {% if obj.email_recipients %}
+            <div class="pt-2" style="border-top:1px solid var(--border);">
+              <div class="text-muted" style="font-size:13px;">Email recipients</div>
+              <div class="mono" style="font-size:13px; word-break:break-all;">{{ obj.email_recipients }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Record</h2></div>
+        <div class="card-body">
+          <dl class="space-y-3">
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Created</dt>
+              <dd>{{ obj.created_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Last Updated</dt>
+              <dd>{{ obj.updated_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
