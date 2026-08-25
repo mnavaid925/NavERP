@@ -40,7 +40,7 @@
       <div class="detail-item"><dt>Sourcing requisition</dt><dd>{% if obj.requisition %}<a href="{% url 'procurement:req_detail' obj.requisition.pk %}">{{ obj.requisition.number }}</a>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Responses due</dt><dd>{% if obj.response_due %}{{ obj.response_due|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Issued / closed</dt><dd>{{ obj.issued_at|date:"M d, Y H:i"|default:"—" }} / {{ obj.closed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
-      <div class="detail-item"><dt>Scoreable maximum</dt><dd>{{ obj.possible_points|floatformat:1 }} pts (weight total {{ obj.total_weight|floatformat:2 }})</dd></div>
+      <div class="detail-item"><dt>Scoreable maximum</dt><dd>{{ possible_points|floatformat:1 }} pts (weight total {{ obj.total_weight|floatformat:2 }})</dd></div>
       <div class="detail-item"><dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y" }}</dd></div>
       <div class="detail-item"><dt>Instructions to suppliers</dt><dd>{{ obj.description|default:"—" }}</dd></div>
     </dl>
@@ -114,7 +114,7 @@
         </tbody>
       </table>
     </div>
-    <div class="card-body text-muted">Weighted score = earned points as a percentage of this event's scoreable maximum ({{ obj.possible_points|floatformat:1 }} pts).</div>
+    <div class="card-body text-muted">Weighted score = earned points as a percentage of this event's scoreable maximum ({{ possible_points|floatformat:1 }} pts).</div>
   </div>
 
   <div class="form-actions">
