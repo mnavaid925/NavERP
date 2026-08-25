@@ -1,5 +1,5 @@
 """Seed Procurement Management (Module 6) demo data — 6.1 portal baseline + 6.2 Requisition
-Management + 6.3 Approval Workflow Engine + 6.4 Vendor Management.
+Management + 6.3 Approval Workflow Engine + 6.4 Vendor Management + 6.5 Sourcing & Tendering.
 
 6.1 creates, per tenant, the Task & Alert Center baseline: a handful of alerts across every kind,
 severity and lifecycle state, assigned to the workspace's members. The overview's other widgets
@@ -39,7 +39,9 @@ from apps.core.utils import write_audit_log
 from apps.procurement.models import (
     ApprovalDelegation,
     ApprovalRoutingRule,
+    BidScore,
     EscalationPolicy,
+    EventCriterion,
     ProcurementAlert,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -50,6 +52,8 @@ from apps.procurement.models import (
     RfxEvent,
     RfxQuestion,
     RfxResponse,
+    SourcingBid,
+    SourcingEvent,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -95,7 +99,7 @@ class Command(BaseCommand):
             "--flush", action="store_true",
             help=("Delete ALL procurement workflow rows for ALL tenants before seeding "
                   "(alerts, approval-engine tables, templates, amendments, vendor-management "
-                  "registers) - not just seeder-created ones."))
+                  "registers, sourcing events) - not just seeder-created ones."))
 
     def handle(self, *args, **options):
         global NOW
@@ -113,6 +117,11 @@ class Command(BaseCommand):
             ProcurementAlert.objects.all().delete()
             RfxResponse.objects.all().delete()
             RfxEvent.objects.all().delete()
+            # 6.5 sourcing rows: scores/criteria are event children and vanish with them.
+            BidScore.objects.all().delete()
+            EventCriterion.objects.all().delete()
+            SourcingBid.objects.all().delete()
+            SourcingEvent.objects.all().delete()
             VendorPortalAccess.objects.all().delete()
             VendorSuspension.objects.all().delete()
             VendorInvoiceSubmission.objects.all().delete()
@@ -123,6 +132,7 @@ class Command(BaseCommand):
             self._seed_templates(tenant)
             self._seed_amendment(tenant)
             self._seed_approval_engine(tenant)
+            self._seed_sourcing(tenant)
             self._seed_vendor_management(tenant)
             self._seed_rfx(tenant)
 
@@ -338,6 +348,133 @@ class Command(BaseCommand):
             f"({made_rules} routing rules, policy {policy.idle_hours}h, "
             f"{'DOA grant' if admin is not None and delegate is not None else 'no DOA pair'}, "
             f"{f'chain {signed.number} at tier 1/{signed.tier_count}' if signed else 'no multi-tier pending requisition to sign'})."))
+
+    # -- 6.5 Sourcing & Tendering -----------------------------------------------------------------
+
+    def _seed_sourcing(self, tenant):
+        """6.5 Sourcing & Tendering — one awarded tender (scored matrix), one open RFP with
+        bids arriving, one cancelled RFQ. Suppliers come from scm 4.2's APPROVED parties
+        (L36: never a parallel vendor master); with none seeded the block reports and skips.
+        Guarded per tenant on the event block like every other section here.
+        """
+        if SourcingEvent.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: sourcing events already present, skipping.")
+            return
+        suppliers = [sp.party for sp in SupplierProfile.objects
+                     .filter(tenant=tenant, onboarding_status="approved")
+                     .select_related("party").order_by("id")]
+        if not suppliers:
+            self.stdout.write(f"  {tenant.name}: no approved suppliers (run seed_scm first), "
+                              f"skipping sourcing.")
+            return
+
+        def _supplier(index):
+            return suppliers[index % len(suppliers)]
+
+        created = 0
+        # -- event A: awarded tender, full evaluation trail --------------------------------------
+        with transaction.atomic():
+            awarded_event = SourcingEvent.objects.create(
+                tenant=tenant,
+                title="Annual packaging materials supply",
+                description="Two-year frame agreement for corrugated boxes, stretch wrap and "
+                            "tape across the distribution centre.",
+                event_type="tender", status="awarded",
+                currency=None, budget_estimate=Decimal("48000.00"),
+                opens_at=NOW - timedelta(days=30), closes_at=NOW - timedelta(days=16),
+                rules="Bids are evaluated on total cost (40%), delivery reliability (30%) and "
+                      "quality certifications (30%). Non-compliant bids are excluded.",
+                opened_at=NOW - timedelta(days=30), closed_at=NOW - timedelta(days=16),
+                awarded_at=NOW - timedelta(days=14),
+            )
+            cost = EventCriterion.objects.create(event=awarded_event, name="Total cost",
+                                                 weight_pct=Decimal("40"), max_score=10)
+            delivery = EventCriterion.objects.create(event=awarded_event, name="Delivery reliability",
+                                                     weight_pct=Decimal("30"), max_score=10)
+            quality = EventCriterion.objects.create(event=awarded_event, name="Quality & certifications",
+                                                    weight_pct=Decimal("30"), max_score=10)
+            bid_rows = [
+                (_supplier(0), "9450.00", 12, True, "won",
+                 {"cost": Decimal("8.5"), "delivery": Decimal("9"), "quality": Decimal("9")}),
+                (_supplier(1), "10200.00", 18, True, "lost",
+                 {"cost": Decimal("7"), "delivery": Decimal("7.5"), "quality": Decimal("8")}),
+                (_supplier(2) if len(suppliers) > 2 else _supplier(1), "8900.00", 25, False, "disqualified",
+                 {}),
+            ]
+            for index, (party, price, lead_days, compliant, status, scores) in enumerate(bid_rows):
+                bid = SourcingBid.objects.create(
+                    tenant=tenant, event=awarded_event, supplier=party,
+                    status=status, total_price=Decimal(price),
+                    lead_time_days=lead_days, is_compliant=compliant,
+                    compliance_note="" if compliant else "Food-safety certificate expired.",
+                    summary="Frame-agreement pricing attached; see reference for validity.",
+                    contact_ref=f"bids@supplier{index + 1}.example",
+                )
+                if status == "won":
+                    bid.submitted_at = NOW - timedelta(days=27)
+                    bid.save(update_fields=["submitted_at", "updated_at"])
+                for criterion, raw in (
+                        (cost, scores.get("cost")),
+                        (delivery, scores.get("delivery")),
+                        (quality, scores.get("quality"))):
+                    if raw is not None:
+                        BidScore.objects.create(bid=bid, criterion=criterion, score=raw)
+                write_audit_log(None, bid, "create", {"event": awarded_event.number})
+            write_audit_log(None, awarded_event, "create")
+        created += 1
+
+        # -- event B: open RFP taking bids ---------------------------------------------------------
+        with transaction.atomic():
+            open_event = SourcingEvent.objects.create(
+                tenant=tenant,
+                title="Fleet telematics platform RFP",
+                description="GPS tracking and driver-behaviour analytics for the delivery fleet.",
+                event_type="rfp", status="open",
+                budget_estimate=Decimal("15000.00"),
+                opens_at=NOW - timedelta(days=3),
+                closes_at=NOW + timedelta(days=11),
+                rules="Submit a whole-package price including hardware, install and two years "
+                      "of service.",
+                opened_at=NOW - timedelta(days=3),
+            )
+            criteria = [
+                EventCriterion.objects.create(event=open_event, name=name, weight_pct=weight,
+                                              max_score=10)
+                for name, weight in (("Package price", Decimal("50")),
+                                     ("Coverage & support", Decimal("30")),
+                                     ("Implementation effort", Decimal("20")))
+            ]
+            submitted = SourcingBid.objects.create(
+                tenant=tenant, event=open_event, supplier=_supplier(1),
+                status="submitted", total_price=Decimal("14200.00"), lead_time_days=21,
+                summary="Includes on-site installation for all 24 vehicles.",
+                contact_ref="telematics@vendor.example",
+            )
+            submitted.submit(None)  # System-submitted demo row
+            write_audit_log(None, submitted, "submit", {"event": open_event.number})
+            SourcingBid.objects.create(
+                tenant=tenant, event=open_event, supplier=_supplier(0),
+                status="draft", total_price=Decimal("13900.00"),
+                summary="Draft — awaiting the service-level appendix before submitting.",
+            )
+            write_audit_log(None, open_event, "create")
+        created += 1
+
+        # -- event C: cancelled RFQ ------------------------------------------------------------------
+        cancelled = SourcingEvent.objects.create(
+            tenant=tenant,
+            title="Office refurbishment RFQ (cancelled)",
+            description="Partitioning and cabling for the second floor — pulled when the "
+                        "lease decision changed.",
+            event_type="rfq", status="cancelled",
+            opens_at=NOW - timedelta(days=45), closes_at=NOW - timedelta(days=38),
+            opened_at=NOW - timedelta(days=45),
+        )
+        write_audit_log(None, cancelled, "create")
+        created += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created} sourcing events ready "
+            f"(1 awarded w/ scored matrix, 1 open RFP, 1 cancelled)."))
 
     # -- 6.4 Vendor Management -------------------------------------------------------------------
 
