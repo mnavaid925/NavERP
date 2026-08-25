@@ -38,7 +38,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from apps.core.models import OrgUnit, Tenant
+from apps.core.models import OrgUnit, Party, Tenant
 from apps.core.utils import write_audit_log
 from apps.inventory.models import (
     BinCapacity,
@@ -1779,18 +1779,20 @@ class Command(BaseCommand):
                 f"  {tenant.name}: 2 defect reports ({outcome}; DEF-00001 open)."))
 
     def _seed_reporting_analytics(self, tenant, items):
-        """5.17 Reporting & Analytics: freeze two report snapshots through the REAL
+        """5.17 Reporting & Analytics: freeze three report snapshots through the REAL
         engine compute path (the same ``build_summary`` the generate view runs), so a
-        snapshot's stored JSON is genuinely what the page said at that instant."""
+        snapshot's stored JSON is genuinely what the page said at that instant. One
+        ledger is threaded through all three freezes rather than re-fetched per spec."""
         if InventoryReportSnapshot.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: report snapshots already present, skipping.")
             return
 
         admin = (get_user_model().objects.filter(tenant=tenant, is_tenant_admin=True).first()
-                 or get_user_model().objects.filter(username="admin").first())
+                 or get_user_model().objects.filter(tenant=tenant).order_by("pk").first())
 
-        from apps.inventory.views.ReportingAnalytics._engine import build_summary
+        from apps.inventory.views.ReportingAnalytics._engine import Ledger, build_summary
 
+        ledger = Ledger(tenant)
         specs = [
             # (report_type, window_days, notes)
             ("valuation", None, "Month-end stock value freeze (seed demo)."),
@@ -1802,7 +1804,8 @@ class Command(BaseCommand):
             snap = InventoryReportSnapshot(
                 tenant=tenant, report_type=report_type, window_days=window,
                 notes=note, generated_by=admin,
-                summary=build_summary(report_type, tenant, location=None, window_days=window),
+                summary=build_summary(report_type, tenant, location=None,
+                                      window_days=window, ledger=ledger),
             )
             snap.save()
             made += 1
@@ -1822,7 +1825,7 @@ class Command(BaseCommand):
         """
         from apps.accounting.models import GLAccount, TaxCode
 
-        if TaxRule.objects.filter(tenant=tenant).exists():
+        if TaxRule.objects.filter(tenant=tenant).exists() and GLPostRule.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"  {tenant.name}: finance-integration rows already present, skipping.")
             return
 
@@ -1831,23 +1834,24 @@ class Command(BaseCommand):
         created = 0
 
         # -- Tax Management: catch-all + a category pin, over accounting's seeded codes ------
-        sales_tax = (TaxCode.objects.filter(tenant=tenant, is_active=True)
-                     .order_by("id").first())
-        vat = (TaxCode.objects.filter(tenant=tenant, is_active=True)
-               .exclude(pk=sales_tax.pk if sales_tax else None).first()) or sales_tax
-        if sales_tax is not None:
-            category = ItemCategory.objects.filter(tenant=tenant).order_by("id").first()
-            TaxRule.objects.create(
-                tenant=tenant, name="Default sales tax",
-                country="", tax_code=sales_tax, priority=900,
-                notes="Catch-all — every product, any geography.")
-            created += 1
-            if category is not None and vat is not None:
+        if not TaxRule.objects.filter(tenant=tenant).exists():
+            sales_tax = (TaxCode.objects.filter(tenant=tenant, is_active=True)
+                         .order_by("id").first())
+            vat = (TaxCode.objects.filter(tenant=tenant, is_active=True)
+                   .exclude(pk=sales_tax.pk if sales_tax else None).first()) or sales_tax
+            if sales_tax is not None:
+                category = ItemCategory.objects.filter(tenant=tenant).order_by("id").first()
                 TaxRule.objects.create(
-                    tenant=tenant, name=f"{category.name} VAT", category=category,
-                    country="", tax_code=vat, priority=100,
-                    notes="Category pin beats the catch-all in the resolver.")
+                    tenant=tenant, name="Default sales tax",
+                    country="", tax_code=sales_tax, priority=900,
+                    notes="Catch-all — every product, any geography.")
                 created += 1
+                if category is not None and vat is not None:
+                    TaxRule.objects.create(
+                        tenant=tenant, name=f"{category.name} VAT", category=category,
+                        country="", tax_code=vat, priority=100,
+                        notes="Category pin beats the catch-all in the resolver.")
+                    created += 1
 
         # -- GL Posting Rules: the account map off accounting's chart of accounts -------------
         inventory_acct = (GLAccount.objects.filter(tenant=tenant, name__iexact="Inventory")
@@ -1859,22 +1863,28 @@ class Command(BaseCommand):
                         .order_by("code").first())
         offset_for_adjustment = expense_acct or cogs_acct
         if inventory_acct is not None and offset_for_adjustment is not None:
-            GLPostRule.objects.create(
-                tenant=tenant, event_type="adjustment", name="Stock adjustments",
-                inventory_account=inventory_acct, offset_account=offset_for_adjustment,
-                notes="Found stock credits the gain; write-offs debit it.")
-            created += 1
+            _, made = GLPostRule.objects.get_or_create(
+                tenant=tenant, event_type="adjustment",
+                defaults={"name": "Stock adjustments",
+                          "inventory_account": inventory_acct,
+                          "offset_account": offset_for_adjustment,
+                          "notes": "Found stock credits the gain; write-offs debit it."})
+            created += 1 if made else 0
         if inventory_acct is not None and cogs_acct is not None:
-            GLPostRule.objects.create(
-                tenant=tenant, event_type="cogs", name="Customer issues COGS",
-                inventory_account=inventory_acct, offset_account=cogs_acct,
-                notes="One balanced batch entry per date window.")
-            created += 1
+            _, made = GLPostRule.objects.get_or_create(
+                tenant=tenant, event_type="cogs",
+                defaults={"name": "Customer issues COGS",
+                          "inventory_account": inventory_acct,
+                          "offset_account": cogs_acct,
+                          "notes": "One balanced batch entry per date window."})
+            created += 1 if made else 0
 
         # -- AP demo: an approved PO + a received-but-unbilled GRN ----------------------------
         vendors = list(_vendor_parties(tenant).order_by("name"))
         grn_made = False
-        if vendors:
+        demo_po_exists = PurchaseOrder.objects.filter(
+            tenant=tenant, notes__startswith="Finance-integration demo order").exists()
+        if vendors and not demo_po_exists:
             po = PurchaseOrder(
                 tenant=tenant, vendor=vendors[0], order_date=timezone.localdate(),
                 status="approved", notes="Finance-integration demo order (received, awaiting bill).")
@@ -1913,6 +1923,7 @@ class Command(BaseCommand):
                         "the queue will simply stay empty."))
 
         # -- AR demo: deliver seed_scm's outbound shipment through its REAL event path --------
+        # Idempotent by state: once the shipment is delivered it no longer matches this filter.
         shipped = False
         shipment = (Shipment.objects.filter(tenant=tenant, direction="outbound",
                                             status="in_transit")
@@ -1928,7 +1939,10 @@ class Command(BaseCommand):
 
         # -- JE demo: post the seeded cycle-count adjustment through the REAL path -------------
         je_made = False
+        already_logged = JournalSyncLog.objects.filter(
+            tenant=tenant, stock_adjustment__isnull=False).values("stock_adjustment_id")
         pending_adj = (StockAdjustment.objects.filter(tenant=tenant, status="posted")
+                       .exclude(pk__in=already_logged)
                        .order_by("-posted_at").first())
         if pending_adj is not None:
             try:
