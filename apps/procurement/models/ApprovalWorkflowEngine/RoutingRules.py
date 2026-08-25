@@ -19,9 +19,11 @@ from decimal import Decimal
 
 from apps.procurement.models._base import *  # noqa: F401,F403
 
-#: Band edges for open ends — ordering sentinels, never stored.
+#: Band edges for open ends — ordering sentinels, never stored. The ceiling mirrors
+#: what a DecimalField(18, 2) can hold so even the largest legal requisition falls
+#: INSIDE an open-ended band rather than silently outside every one.
 _BAND_FLOOR = Decimal("-1")
-_BAND_CEILING = Decimal("999999999999")
+_BAND_CEILING = Decimal("99999999999999.98")
 
 
 class ApprovalRoutingRule(TenantOwned):
@@ -93,18 +95,22 @@ class ApprovalRoutingRule(TenantOwned):
         """Human reading of the band, e.g. ``[1,000 – 10,000)`` or ``[any – open)``."""
         return _band_label(self)
 
-    def matches_commodity(self, requisition):
+    def matches_commodity(self, requisition, lines=None):
         """True when the rule names no commodity, or any line's free text carries it.
 
         Case-insensitive substring over ``sku_hint`` AND ``item_description`` — the
         honest reach of an L28 text stand-in, never pretended into a real join.
+        Pass ``lines`` (the requisition's already-fetched line rows) so a page-level
+        resolver never pays one query per candidate rule.
         """
         if not self.commodity:
             return True
         keyword = self.commodity.strip().lower()
         if not keyword:
             return True
-        for line in requisition.lines.all():
+        if lines is None:
+            lines = list(requisition.lines.all())
+        for line in lines:
             haystacks = (line.sku_hint or "", line.item_description or "")
             if any(keyword in h.lower() for h in haystacks):
                 return True
@@ -130,17 +136,21 @@ def _band_label(rule):
     return f"[{lo} – {hi})"
 
 
-def resolve_routing(requisition, *, rules=None):
+def resolve_routing(requisition, *, rules=None, lines_by_req=None):
     """The ONE rule governing this requisition — ``(rule | None, reason)``.
 
     Deterministic ladder: specificity DESC → narrowest band → lowest id. ``None``
     is a legitimate answer meaning ONE default tier (never zero) and the reason says
-    exactly that. Pass ``rules`` to reuse a batch preloaded once per request.
+    exactly that. Pass ``rules`` (and ``lines_by_req``, a ``{requisition_pk: [rows]}``
+    index) to reuse batch-preloaded state so a whole page resolves flat.
     """
     total = requisition.estimated_total or ZERO
     if rules is None:
         rules = ApprovalRoutingRule.objects.filter(
             tenant_id=requisition.tenant_id, is_active=True)
+    lines = None
+    if lines_by_req is not None:
+        lines = lines_by_req.get(requisition.pk)
     candidates = []
     for rule in rules:
         lo = rule.min_total if rule.min_total is not None else _BAND_FLOOR
@@ -149,7 +159,7 @@ def resolve_routing(requisition, *, rules=None):
             continue
         if rule.org_unit_id and rule.org_unit_id != requisition.org_unit_id:
             continue
-        if not rule.matches_commodity(requisition):
+        if not rule.matches_commodity(requisition, lines=lines):
             continue
         candidates.append(rule)
     if not candidates:
