@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Award Recommendations{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Award Board</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:event_list' %}">Sourcing &amp; Tendering</a><span class="sep">›</span><span>Award board</span></div>
+      <p class="text-muted">Closed events awaiting a decision — compliant bids ranked by weighted score, then price. The recommendation is computed fresh on every load; recording it is the part that sticks.</p>
+    </div>
+    <div class="page-actions"><a href="{% url 'procurement:sourcing_analytics' %}" class="btn btn-outline"><i data-lucide="bar-chart-3"></i> Analytics</a></div>
+  </div>
+
+  {% for row in rows %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title"><a href="{% url 'procurement:event_detail' row.event.pk %}">{{ row.event.number }}</a> · {{ row.event.title }}</h2>
+        <span class="badge badge-amber">{{ row.event.get_status_display }}</span>
+        {% if row.event.currency %}<span class="badge badge-slate">{{ row.event.currency.code }}</span>{% endif %}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Rank</th><th>Bid</th><th>Supplier</th><th>Score /100</th><th>Total price</th><th></th></tr></thead>
+          <tbody>
+            {% for cand in row.candidates %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                <td class="fw-600">{{ cand.bid.number }}</td>
+                <td>{{ cand.bid.supplier.name }}</td>
+                <td>{% if cand.score is not None %}{{ cand.score|floatformat:1 }}{% else %}<span class="text-muted">unscored</span>{% endif %}</td>
+                <td>{{ cand.bid.total_price|floatformat:2 }}</td>
+                <td>
+                  {% if request.user.is_tenant_admin or request.user.is_superuser %}
+                    <form method="post" action="{% url 'procurement:event_award' row.event.pk %}" onsubmit="return confirm('Award to {{ cand.bid.supplier.name }} at {{ cand.bid.total_price }}? Other live bids become lost.');">
+                      {% csrf_token %}<input type="hidden" name="bid" value="{{ cand.bid.pk }}">
+                      <button class="btn btn-primary" type="submit"><i data-lucide="award"></i> Award</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6"><div class="empty-state"><i data-lucide="user-x"></i><p>No compliant live bids — this event cannot be awarded as-is.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if row.recommended %}
+        <div class="card-body text-muted">Recommendation: <span class="fw-600">{{ row.recommended.bid.number }} · {{ row.recommended.bid.supplier.name }}</span> at {{ row.recommended.bid.total_price|floatformat:2 }}.</div>
+      {% endif %}
+    </div>
+  {% empty %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="trophy"></i><h3>No events waiting for an award</h3><p>Close an open sourcing event and its scenarios appear here automatically.</p></div>
+    </div></div>
+  {% endfor %}
+{% endblock %}
