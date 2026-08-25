@@ -62,7 +62,8 @@ def sourcing_analytics(request):
         savings_rows.append(row)
 
     def _mean(values):
-        return (sum(values) / len(values)).quantize(Decimal("0.1")) if values else None
+        # sum()/len() on ints yields a FLOAT — quantize needs a Decimal.
+        return (Decimal(sum(values)) / len(values)).quantize(Decimal("0.1")) if values else None
 
     total_savings = (total_budget - total_awarded_price) if has_budget else None
 
