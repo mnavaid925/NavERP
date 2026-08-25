@@ -37,6 +37,8 @@ PROCUREMENT_CONTENT_MODELS = (
     "vendorinvoicesubmission",
     "sourcingevent",
     "sourcingbid",
+    "rfxevent",
+    "rfxresponse",
 )
 
 #: Printed on both feed surfaces. One constant so the two cannot explain the trail differently.
