@@ -27639,3 +27639,26 @@ per §9.
 - **Concurrency of record**: a sibling session built 5.15 QC fixes + 5.16 + 5.17 + 5.18 in this
   checkout throughout; shared files were edited only after their hunks committed; my detached-pytest
   runs co-existed with theirs on the loaded box.
+
+### 5.20 Units of Measure (UOM) close-out (2026-08-25)
+
+- **Built + wired**: ONE config model `UomConversion` (TenantOwned, no numbering -
+  PutawayRule posture; two-tier scope item-pinned > tenant-default, most-specific-wins;
+  explicit clean() duplicate probe covering the MariaDB NULL-item gap the composite
+  unique cannot see) + module-level engine (`find_conversion_path` BFS with
+  MAX_PATH_DEPTH 5, per-edge tier override so chains may mix tiers across hops;
+  `convert_quantity` quantizes once at the end; unreachable pairs return None and are
+  SAID so). CRUD quintet under `UnitsOfMeasure/` x4 layers (writes tenant-admin gated),
+  read-only Conversion Calculator computed page, 4 templates under
+  `templates/inventory/uom/`, overview card, LIVE_LINKS["5.20"] (bullet + calculator
+  extra leaf), migration 0028, seeder `_seed_uom_conversions` (get_or_creates CASE/PLT
+  beside seed_scm's EA/BOX, seeds the NavERP.md ladder verbatim + one double-case item
+  override; guarded per tenant).
+- **Ownership ruling of record**: scm.UOM master stays SCM 4.3's; 5.20 is exactly the
+  "full N:N conversion matrix (deferred)" its docstring names. Zero spine writes -
+  converting units on paper posts no StockMove.
+- **Smoke verification**: all pages 200 as admin_acme incl. search/scope/active lenses;
+  engine math proven live (direct 3 CASE=36 EA; chained 1 PLT=480 EA via CASE;
+  mixed-tier chain PLT->CASE default + CASE->EA item rule = 960 with the item rule on
+  hop 2; identity; bad qty honest error; EA->PLT honestly None); IDOR detail/edit/delete
+  all blocked (404); member list 200 / member create 403. seed x2 idempotent; check green.
