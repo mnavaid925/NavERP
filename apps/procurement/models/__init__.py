@@ -16,6 +16,7 @@ from .DashboardPortal.ProcurementAlerts import ProcurementAlert
 from .DashboardPortal.WidgetPreferences import WidgetPreference
 from .RequisitionManagement.Amendments import RequisitionAmendment, RequisitionAmendmentLine
 from .RequisitionManagement.Templates import RequisitionTemplate, RequisitionTemplateLine
+from .EAuctionManagement import EaucBid, EaucInvite, Eauction
 from .RfxManagement.Events import RfxEvent, RfxQuestion
 from .RfxManagement.Responses import (
     RfxAnswer,
@@ -32,6 +33,9 @@ from .VendorManagement import (
 )
 
 __all__ = [
+    "EaucBid",
+    "EaucInvite",
+    "Eauction",
     "ApprovalRoutingRule",
     "RequisitionApproval",
     "ApprovalDelegation",
