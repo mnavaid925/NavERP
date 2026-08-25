@@ -27793,3 +27793,27 @@ frozen docs (matches RfxEventAdmin sibling posture).
 - **Deferred**: exhaustive forms/views test files beyond the consolidated suite (the smoke script covers
   the same contracts against real data); review wave as a formal six-lane workflow was replaced by inline
   self-review + live verification this session.
+
+## 6.7 E-Auction Management close-out (2026-08-26)
+
+- **Built + wired**: Eauction [EAUC-] (reverse-only; draft->scheduled->closed->awarded /
+  cancelled; live DERIVED from the window; anti-snipe trio + extensions_used counter;
+  award once-guard with refusal_leader stamp) + EaucInvite (unique auction x supplier) +
+  EaucBid [EBID-] append-only log whose next_floor()/clean() enforces invitee-only, start
+  ceiling, own-pace decrement (Min-aggregate), strict global improvement. Views: register
+  (?state=live/closed deep-links), setup CRUD, lifecycle verbs, invites, floor (paginated pks
+  + one grouped aggregate), rules reference, console + HTMX board fragment (_board_ctx shared),
+  bid screen (staff pick / VPA-pinned supplier), results + leader-only row-locked award.
+  staff_required gates every view except eauc_bid (vendor-portal logins stay pinned there).
+- **Review wave**: six lanes -> review-procurement-6.7.md (20 consolidated rows). Fixed all:
+  Critical auth gap (portal users had buyer powers), floor N+1, pace-rule slice bug,
+  equal-bid tie hole, award race, forward-type scope cut, context gaps on first paint,
+  endless polling, seeder flush/docstring, template nits.
+- **Concurrent-session notes**: 6.8 Contracts landed mid-run - their unmigrated models were
+  stripped from my 0010 (one owner per migration); I completed two idempotent pieces of their
+  wiring to unblock check (amendable_contracts re-export, ProtectedError import path) and
+  fixed a real dedent bug that ran _seed_rfx/_seed_eauction/_seed_contracts for the LAST
+  tenant only. Their vendormgmt test failure remains theirs (1 failed / 464 passed).
+- **Verification**: smoke_67.py GET matrix + IDOR + leak scan green; smoke67_post.py full
+  write-flow green (it caught the missing tenant stamp on bids); test_eauction_
+  {models,forms,views,security}.py = 85 tests green; full procurement suite 464 passed.
