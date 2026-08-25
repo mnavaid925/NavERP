@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.title }}</h1>
+    <nav class="breadcrumb">Procurement / <a href="{% url 'procurement:clause_list' %}">Clause Library</a> / {{ obj.title }}</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'procurement:clause_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+    <form method="post" action="{% url 'procurement:clause_delete' obj.pk %}" onsubmit="return confirm('Delete clause {{ obj.title }}?');">{% csrf_token %}
+      <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="scale"></i></div>
+    <div><div class="stat-value">{{ obj.get_category_display }}</div><div class="stat-label">Category</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i data-lucide="badge-check"></i></div>
+    <div><div class="stat-value">{{ obj.version|default:"—" }}</div><div class="stat-label">{{ obj.is_pre_approved|yesno:"Pre-approved,Needs sign-off" }} · {{ obj.is_active|yesno:"Active,Retired" }}</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple"><i data-lucide="file-signature"></i></div>
+    <div><div class="stat-value">{{ used_by|length }}</div><div class="stat-label">Agreements drafting this clause</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Standard wording</h2></div>
+  <div class="card-body">
+    <pre style="white-space:pre-wrap;border:1px solid var(--border);padding:1rem;border-radius:.5rem;">{{ obj.body }}</pre>
+    {% if obj.notes %}<p class="text-muted">{{ obj.notes }}</p>{% endif %}
+  </div>
+</div>
+
+{% if used_by %}
+<div class="card">
+  <div class="card-header"><h2>Drafted into</h2></div>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Agreement</th><th>§</th><th>Negotiated?</th></tr></thead>
+        <tbody>
+          {% for link in used_by %}
+          <tr>
+            <td><a href="{% url 'procurement:contract_detail' link.contract_id %}">{{ link.contract.number }} · {{ link.contract.title }}</a></td>
+            <td>{{ link.section_order }}</td>
+            <td>{% if link.custom_text %}<span class="badge badge-amber">Negotiated override</span>{% else %}<span class="badge badge-muted">Standard</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
