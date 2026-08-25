@@ -84,6 +84,7 @@ from apps.inventory.models import (
     QcRoutingRule,
     QuarantineOrder,
     InventoryReportSnapshot,
+    UomConversion,
 )
 from apps.inventory.forms._common import _vendor_parties
 from apps.scm.models import (
@@ -105,6 +106,7 @@ from apps.scm.models import (
     StockMove,
     StockTransfer,
     StockTransferLine,
+    UOM,
 )
 
 
@@ -254,6 +256,7 @@ class Command(BaseCommand):
             ChannelListingMap.objects.all().delete()   # children before their channel
             StockSyncRun.objects.all().delete()        # run log before its channel
             IntegrationChannel.objects.all().delete()
+            UomConversion.objects.all().delete()
             LocationNetwork.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
 
@@ -284,6 +287,7 @@ class Command(BaseCommand):
             self._seed_reporting_analytics(tenant, items)
             self._seed_finint(tenant, items)
             self._seed_integrations(tenant, items)
+            self._seed_uom_conversions(tenant, items)
 
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -2077,3 +2081,44 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {created} integration rows "
             f"(3 channels, {made_maps} listing maps, run {run.number}, 2 API clients)."))
+
+    def _seed_uom_conversions(self, tenant, items):
+        """5.20 Units of Measure — the packaging ladder over SCM's unit master.
+
+        Ensures the units the examples name exist (EA/BOX come from seed_scm; CASE and
+        PLT are get_or_create'd here), then seeds tenant-wide defaults (1 Case = 12
+        Units, 1 Pallet = 40 Cases, 1 Box = 12 Units) plus an item-pinned override so
+        the calculator can show most-specific-wins. Guarded per tenant.
+        """
+        if UomConversion.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: UOM conversions already present, skipping.")
+            return
+        each, _ = UOM.objects.get_or_create(
+            tenant=tenant, code="EA", defaults={"name": "Each", "factor": Decimal("1")})
+        case, _ = UOM.objects.get_or_create(
+            tenant=tenant, code="CASE", defaults={"name": "Case", "factor": Decimal("12")})
+        pallet, _ = UOM.objects.get_or_create(
+            tenant=tenant, code="PLT", defaults={"name": "Pallet", "factor": Decimal("480")})
+        box = UOM.objects.filter(tenant=tenant, code="BOX").first()
+
+        UomConversion.objects.create(
+            tenant=tenant, item=None, from_uom=case, to_uom=each,
+            factor=Decimal("12"),
+            notes="Tenant default: every case holds twelve units.")
+        UomConversion.objects.create(
+            tenant=tenant, item=None, from_uom=pallet, to_uom=case,
+            factor=Decimal("40"),
+            notes="Tenant default: standard pallet = 40 cases.")
+        if box is not None:
+            UomConversion.objects.create(
+                tenant=tenant, item=None, from_uom=box, to_uom=each,
+                factor=Decimal("12"), notes="Seed_scm's box-of-twelve, as a rule.")
+        # One item-pinned override: this SKU ships in cases of 24, not twelve.
+        if items:
+            UomConversion.objects.create(
+                tenant=tenant, item=items[0], from_uom=case, to_uom=each,
+                factor=Decimal("24"),
+                notes=f"{items[0].sku} ships in double cases — overrides the default.")
+        count = UomConversion.objects.filter(tenant=tenant).count()
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {count} UOM conversion rules over EA/CASE/PLT."))
