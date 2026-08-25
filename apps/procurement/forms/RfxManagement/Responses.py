@@ -137,8 +137,9 @@ class BaseRfxAnswerFormSet(forms.BaseInlineFormSet):
             if question is None or not hasattr(form, "cleaned_data"):
                 continue
             value = form.cleaned_data.get("answer_text")
-            # Choice answers must be one of the question's declared options — a hand-POSTed
-            # off-list value would corrupt the side-by-side comparison's like-for-like premise.
+            # Belt-and-braces defence: the ChoiceField normally rejects off-list values already;
+            # this re-check survives a future field swap silently weakening that guarantee. Cheap,
+            # and the side-by-side comparison's like-for-like premise depends on it.
             if value and question.answer_type == "choice" \
                     and value not in question.ordered_options():
                 form.add_error("answer_text",
@@ -149,4 +150,7 @@ RfxAnswerFormSet = inlineformset_factory(
     RfxResponse, RfxAnswer, form=RfxAnswerForm,
     formset=BaseRfxAnswerFormSet,
     extra=0, can_delete=False,
+    # TOTAL_FORMS is client-supplied: without a cap a crafted POST makes Django validate
+    # thousands of empty forms (CPU amplification) and spray unattached-row IntegrityErrors.
+    max_num=60, validate_max=True,
 )
