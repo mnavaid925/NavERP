@@ -763,7 +763,8 @@ class Command(BaseCommand):
             # window, which has already closed for this finished auction - the seeded
             # ladder complies with every pace rule anyway.
             for supplier, amount, minutes_ago in ladder:
-                bid = EaucBid(auction=done, supplier=supplier, amount=Decimal(amount),
+                bid = EaucBid(tenant=tenant, auction=done, supplier=supplier,
+                              amount=Decimal(amount),
                               placed_at=NOW - timedelta(minutes=minutes_ago))
                 bid.save()
                 write_audit_log(None, bid, "create")
@@ -794,7 +795,8 @@ class Command(BaseCommand):
                 (cascade, "10900.00", 2),
             ]
             for supplier, amount, minutes_ago in live_bids:
-                bid = EaucBid(auction=live, supplier=supplier, amount=Decimal(amount),
+                bid = EaucBid(tenant=tenant, auction=live, supplier=supplier,
+                              amount=Decimal(amount),
                               placed_at=NOW - timedelta(minutes=minutes_ago))
                 bid.save()
                 write_audit_log(None, bid, "create")
