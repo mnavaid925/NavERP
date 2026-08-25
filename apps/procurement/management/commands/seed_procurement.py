@@ -50,6 +50,9 @@ from apps.procurement.models import (
     ApprovalDelegation,
     ApprovalRoutingRule,
     BidScore,
+    EaucBid,
+    EaucInvite,
+    Eauction,
     EscalationPolicy,
     EventCriterion,
     ProcurementAlert,
@@ -146,6 +149,7 @@ class Command(BaseCommand):
             self._seed_sourcing(tenant)
             self._seed_vendor_management(tenant)
             self._seed_rfx(tenant)
+            self._seed_eauction(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -699,3 +703,98 @@ class Command(BaseCommand):
                 made += 1
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: RFx ready ({made} events/responses)."))
+
+    # -- 6.7 E-Auction Management ----------------------------------------------------------------
+
+    def _eauc_supplier(self, tenant, name):
+        """Same get-or-create-by-name contract as _seed_rfx's helper — one supplier identity
+        per name per tenant, never a duplicate Party."""
+        party = Party.objects.filter(tenant=tenant, name=name).first()
+        if party is None:
+            party = Party.objects.create(tenant=tenant, kind="organization", name=name)
+        PartyRole.objects.get_or_create(
+            tenant=tenant, party=party, role="supplier",
+            defaults={"status": "active", "start_date": timezone.localdate()})
+        return party
+
+    def _seed_eauction(self, tenant):
+        """6.7 E-Auction Management - one AWARDED auction with a complete bid history (so the
+        results page shows real savings and an award decision) and one LIVE auction (window
+        open right now) whose bids already triggered the anti-snipe extension once. Suppliers
+        reuse seed_scm's core.Party rows; guarded per tenant like every other block."""
+        if Eauction.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: e-auctions already present, skipping.")
+            return
+        northwind = self._eauc_supplier(tenant, "Northwind Industrial Supply")
+        cascade = self._eauc_supplier(tenant, "Cascade Components Ltd")
+        requisition = (PurchaseRequisition.objects.filter(tenant=tenant)
+                       .order_by("-created_at").first())
+        made = 0
+
+        # -- finished + awarded: full history for the results page --------------------------------
+        with transaction.atomic():
+            done = Eauction.objects.create(
+                tenant=tenant,
+                title="Annual packaging consumables reverse auction",
+                description="Twelve-month supply of corrugated packaging; awarded to the "
+                            "lowest compliant bidder at close.",
+                currency=requisition.currency if requisition else None,
+                requisition=requisition,
+                start_price=Decimal("48000.00"), reserve_price=Decimal("39000.00"),
+                min_decrement=Decimal("500.00"),
+                opens_at=NOW - timedelta(days=2), closes_at=NOW - timedelta(hours=1),
+                status="awarded",
+            )
+            for invitee in (northwind, cascade):
+                EaucInvite.objects.create(tenant=tenant, auction=done, supplier=invitee,
+                                          contact_note="Seeded invite.")
+            ladder = [
+                (northwind, "46800.00", 26), (cascade, "45500.00", 21),
+                (northwind, "44750.00", 15), (cascade, "43900.00", 8),
+                (northwind, "43000.00", 3),
+            ]
+            # Backfill straight through save(): the write-time rules check the CURRENT
+            # window, which has already closed for this finished auction - the seeded
+            # ladder complies with every pace rule anyway.
+            for supplier, amount, minutes_ago in ladder:
+                bid = EaucBid(auction=done, supplier=supplier, amount=Decimal(amount),
+                              placed_at=NOW - timedelta(minutes=minutes_ago))
+                bid.save()
+                write_audit_log(None, bid, "create")
+            if not done.award(northwind, note="Lowest compliant bidder at close."):
+                raise RuntimeError(f"seed: could not award seeded auction {done.pk}")
+            write_audit_log(None, done, "create")
+            write_audit_log(None, done, "award")
+            made += 1
+
+        # -- live now: window open, extension already fired once -----------------------------------
+        with transaction.atomic():
+            live = Eauction.objects.create(
+                tenant=tenant,
+                title="IT peripherals spot-buy reverse auction",
+                description="Spot buy closing this afternoon — anti-snipe rules active.",
+                start_price=Decimal("12500.00"),
+                min_decrement=Decimal("250.00"),
+                extension_trigger_seconds=90, extension_seconds=120, max_extensions=3,
+                extensions_used=1,
+                opens_at=NOW - timedelta(hours=1),
+                closes_at=NOW + timedelta(hours=2),
+                status="scheduled",
+            )
+            for invitee in (northwind, cascade):
+                EaucInvite.objects.create(tenant=tenant, auction=live, supplier=invitee)
+            live_bids = [
+                (cascade, "11900.00", 42), (northwind, "11400.00", 18),
+                (cascade, "10900.00", 2),
+            ]
+            for supplier, amount, minutes_ago in live_bids:
+                bid = EaucBid(auction=live, supplier=supplier, amount=Decimal(amount),
+                              placed_at=NOW - timedelta(minutes=minutes_ago))
+                bid.save()
+                write_audit_log(None, bid, "create")
+            write_audit_log(None, live, "create")
+            write_audit_log(None, live, "publish")
+            made += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: e-auctions ready ({made} auctions: 1 awarded w/ history, "
+            f"1 live)."))
