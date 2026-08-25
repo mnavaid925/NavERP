@@ -20,10 +20,11 @@
     </table>
   </div>
   {% if obj.status == 'scheduled' %}
-    <div class="card-body text-muted">Closes {{ obj.closes_at|date:"H:i:s" }} · time left {{ obj.time_left_display }} · extensions {{ obj.extensions_used }}/{{ obj.max_extensions }}</div>
+    <div class="card-body text-muted">Closes {{ obj.closes_at|date:"H:i:s" }} · time left {{ obj.time_left_display }} — a bid inside {{ obj.extension_trigger_seconds }}s of the close adds {{ obj.extension_seconds }}s.</div>
   {% else %}
     <div class="card-body text-muted">Auction is {{ obj.get_status_display }}.</div>
   {% endif %}
+  <div class="card-body text-muted">Extensions used: {{ obj.extensions_used }} / {{ obj.max_extensions }}.</div>
 </div>
 
 <div class="card">
