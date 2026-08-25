@@ -1,6 +1,6 @@
 ---
 name: procurement
-description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1/6.2/6.3), or invokes /procurement.
+description: Work on the Procurement module (Module 6 — Procurement Management System). As-built = 6.1 User Dashboard & Portal (personalized overview with per-user widget preferences, Task & Alert Center with acknowledge/resolve lifecycle, quick requisition entry drafting into scm.PurchaseRequisition, audit-log-derived activity feed, self-service reports + own-requisitions CSV export) and 6.2 Requisition Management (tracking register + audit-trail timeline detail over scm.PurchaseRequisition, explainable duplicate-requisition engine with ?dupes=1 deep-link, RequisitionTemplate[RQT-] recurring-order blueprints with apply-into-draft, RequisitionAmendment[RAM-] gated cancel/amend workflow) and 6.3 Approval Workflow Engine (ApprovalRoutingRule dept x commodity x half-open band -> tier count with most-specific-wins resolver, RequisitionApproval[RQA-] append-only signature register under spine row locks with self-approval/elevated/final-tier admin gates, ApprovalDelegation DOA grants stamped via_delegation, EscalationPolicy + idempotent Run engine raising 6.1 alerts, mobile approval surface) and 6.5 Sourcing & Tendering (SourcingEvent[SEV-] tender/RFP/RFQ events draft->open->closed->awarded/cancelled with verb-only transitions + EventCriterion weight<=100 matrices, SourcingBid[BID-] whole-package bids with row-locked submit/shortlist/disqualify that can never overwrite an award, BidScore matrix scored on bid detail with NaN-proof validation and ONE shared weighted_total formula, computed award board (~4 queries/20 scenarios) with admin-gated won/lost writer, None-honest sourcing analytics). Use when the user asks to add/change/debug anything under apps/procurement or templates/procurement, extend the seed_procurement seeder, touch procurement sidebar wiring (LIVE_LINKS 6.1/6.2/6.3/6.5), or invokes /procurement.
 ---
 
 # Procurement — Procurement Management System (Module 6)
@@ -9,8 +9,9 @@ App path: `apps/procurement`. Templates: `templates/procurement/`. URL prefix: `
 `app_name = "procurement"`. Mirrors `NavERP.md` "## 6. Procurement Management System" (19
 sub-modules, 6.1–6.19).
 
-**As-built: 6.1–6.2 (2 of 19).** Build the next one with `/next-module` (it takes the lowest
-`6.M` without a `LIVE_LINKS["6.M"]` entry) — see the reference apps `apps/crm`/`apps/accounting`
+**As-built: 6.1–6.3 + 6.5 built here; 6.4 Vendor Management & 6.6 RFx landed from their own
+sessions (6 of 19).** Build the next one with `/next-module` (it takes the lowest `6.M`
+without a `LIVE_LINKS["6.M"]` entry) — see the reference apps `apps/crm`/`apps/accounting`
 for the package layout and the mandatory Module Creation Sequence.
 
 ## Overview
@@ -23,12 +24,12 @@ INTO `scm.PurchaseRequisition`; 6.2 tracks/amends/templates those same documents
 Creation itself stays scm's full form (`LIVE_LINKS["6.2"]` maps that bullet cross-app to
 `scm:requisition_create`). The activity feed is `core.AuditLog` filtered to procurement content
 types; there is no second feed table.
-
 ## Models (`apps/procurement/models/DashboardPortal/<Entity>.py`, `…/RequisitionManagement/<Entity>.py`)
 
 Shared base in `models/_base.py`: `TenantOwned` (tenant FK + timestamps, `related_name="+"`),
 **`TenantNumbered`** (per-tenant auto number via `core.utils.next_number`, collision retry —
-added in 6.2; NUMBER_PREFIX constants RQT/RAM), plus toolkit imports, `ZERO`, `q2()`/`MAX_Q2`.
+added in 6.2; NUMBER_PREFIX constants RQT/RAM/SEV/BID), plus toolkit imports, `ZERO`,
+`q2()`/`MAX_Q2`.
 
 ### 6.1 DashboardPortal
 
@@ -80,6 +81,34 @@ added in 6.2; NUMBER_PREFIX constants RQT/RAM), plus toolkit imports, `ZERO`, `q
     update means KEEP. Decided amendments are IMMUTABLE — corrections are new filings (documented
     deviation from generic CRUD-completeness; there is deliberately no edit/delete route).
 
+### 6.5 SourcingTendering
+
+- **`SourcingEvents.py`** — `SourcingEvent` [SEV-] + `EventCriterion`.
+  - Event: type tender/rfp/rfq; status machine draft→open→closed→awarded/cancelled with
+    `EDITABLE_STATUSES=("draft","open")`, `LIVE_STATUS="open"`; optional traceability FK →
+    `scm.PurchaseRequisition` (`related_name="sourcing_events"`); nullable `budget_estimate`
+    (None = unknown — analytics answers None, never zero); opens_at/closes_at/rules;
+    created_by/opened_at/closed_at/awarded_at all editable=False. NO FK event→bid (the award
+    is a fact about a bid). `award(bid, at)` is THE won/lost writer: refuses unless closed +
+    compliant evaluatable bid on this event; flips other live bids to lost. Index
+    (tenant,status); unique (tenant,number).
+  - Criterion: event child, name unique per event, weight_pct 0<w≤100, max_score ≥1,
+    `weight_fraction` property. No own tenant column (TemplateLine pattern).
+- **`Bids.py`** — `SourcingBid` [BID-] + `BidScore` + module fn `weighted_total`.
+  - Bid: supplier = core.Party PROTECT (supplier∪vendor roles); statuses
+    draft/submitted/shortlisted/disqualified/won/lost with EVALUABLE/COUNTED/EDITABLE/
+    DECIDABLE tuples; total_price Decimal(14,2), lead_time_days, is_compliant+compliance_note,
+    summary, contact_ref, evaluator decision_note; submitted_by/at stamped by `submit(user)`
+    (refuses off-draft or when `not event.bids_allowed`). `decide(action)` is a PURE resolver
+    (returns target or None; caller persists under lock) and refuses cancelled events.
+  - BidScore: bid×criterion unique, score ≤ criterion.max_score + same-event check in clean().
+  - `weighted_total(score_map_row, criteria)` is the SINGLE formula ((score/max)×weight,
+    q2-quantized) — model `weighted_score()` and views' `weighted_from_map` both delegate.
+- Shared evaluation helpers in `views/_helpers.py`: `event_scores_map(event)` (2 queries),
+`weighted_from_map`, `candidate_sort_key` (scored-first/score-desc/price-asc/pk),
+`evaluate_event(event, criteria=None, score_map=None)`, `evaluate_events_batch(events)`
+(~4 queries for a whole board page).
+
 ## Views / URLs
 
 `app_name = "procurement"`. Package layout one-to-one across models/forms/views/urls under
@@ -117,13 +146,35 @@ pre-computed `estimated_total` (the model property would re-query); template lis
 annotations `n_lines`/`est_total` (aggregation ignores Meta.ordering → explicit .order_by).
 amendment detail passes `decision_form`.
 
+### 6.5 SourcingTendering routes
+
+| Route | Name | Notes |
+|---|---|---|
+| `/procurement/events/` (+ add/detail/edit/delete) | `event_*` | Full CRUD; header + criterion formset (weights ≤100 enforced by the formset); edit frozen off draft/open; delete row-locked and refused once ANY bid exists |
+| `/procurement/events/<pk>/open|close|cancel/` | `event_open/close/cancel` | POST-only verbs under select_for_update with state re-check; open = member, close/cancel @tenant_admin_required (spend-affecting, like amendment decisions) |
+| `/procurement/events/<pk>/award/` | `event_award` | @tenant_admin_required POST-only; bid pk in POST resolved tenant-scoped under dual row locks; exactly one won, other live bids lost |
+| `/procurement/bids/` (+ add/detail/edit/delete) | `bid_*` | Register filters status+event; detail hosts the scoring matrix POST (manual parse `c_<criterion_pk>`, NaN-proof range check, blank clears); edit/delete draft-only |
+| `/procurement/bids/<pk>/submit|shortlist|disqualify/` | `bid_submit/shortlist/disqualify` | POST-only; submit locks bid+event; decisions lock the bid, single save carrying decision_note, disqualify requires a reason |
+| `/procurement/awards/` | `award_board` | Computed: 20 newest closed events via evaluate_events_batch (~4 queries); Award button posts to event_award |
+| `/procurement/analytics/` | `sourcing_analytics` | Computed post-event analysis: savings only where budget AND award price exist ("—" otherwise), participation/cycle means, six calendar-month buckets pre-bucketed O(N+B) |
+
+Context-var contract: event_detail passes `obj/criteria/total_weight/bids` (each bid carries
+precomputed `score_value`)/`candidates/recommended` (evaluating events only); bid_detail
+passes `obj/criteria/matrix` ([{criterion,current}] — no dict-lookup filter needed)/
+`weighted/total_weight/can_score`; award_board passes `rows`
+([{event,candidates,recommended}]); analytics passes `stats` dict + per-event `rows` +
+`months` ([label,{events,bids}]).
+
 ## Templates
 
 `templates/procurement/overview.html` (landing) +
 `templates/procurement/dashboardportal/{alerts/{list,detail,form}.html, quickrequisition.html,
 activity.html, activity_detail.html, reports.html}` +
 `templates/procurement/requisitionmanagement/{requisitions/{list,detail}.html,
-templates/{list,detail,form}.html, amendments/{list,detail,form}.html}`. All extend `base.html`,
+templates/{list,detail,form}.html, amendments/{list,detail,form}.html}` +
+`templates/procurement/sourcingtendering/{events/{list,detail,form}.html,
+bids/{list,detail,form}.html, awards.html, analytics.html}` (awards/analytics are standalone
+computed pages at the sub-module level). All extend `base.html`,
 use theme.css classes, colour-named badges only, `{% include "partials/pagination.html" %}` on
 paginated lists.
 
@@ -135,7 +186,12 @@ transaction.atomic so a crash can't strand a lineless template past the guard; `
 deletes alerts only). Seeds 6 alerts covering every kind/severity (two walked through the
 lifecycle), 3 requisition templates ×3 lines each, and ONE pending amend-type amendment against
 an existing seeded `scm.PurchaseRequisition` (skipped gracefully when seed_scm hasn't run);
-writes `core.AuditLog` baselines for alerts, templates and the amendment.
+writes `core.AuditLog` baselines for alerts, templates and the amendment. The 6.5
+`_seed_sourcing` block (guarded on `SourcingEvent`, skips without approved suppliers) drives
+its rows through the REAL model path so the feed shows honest verbs: one awarded tender walked
+create→open→close→award() with three draft bids that submit()/disqualify through the models and
+carry per-criterion scores, one open RFP (submitted + draft bid), one cancelled RFQ with a
+cancel audit row; `--flush` deletes sourcing children-first (BidScore→Criterion→Bid→Event).
 
 ## Conventions & gotchas
 
@@ -169,6 +225,11 @@ creation); Requisition Tracking → `procurement:req_list`; Duplicate Requisitio
 `procurement:req_list?dupes=1` (?query= deep-links are a supported nav convention);
 Requisition Templates → `procurement:template_list`; Requisition Cancellation/Amendment →
 `procurement:amendment_list`.
+
+`LIVE_LINKS["6.5"]`: Event Creation & Scheduling → `procurement:event_list`; Bid Submission
+Portal → `procurement:bid_list`; Bid Evaluation Matrix →
+`procurement:event_list?status=closed`; Award Recommendation → `procurement:award_board`;
+Sourcing Analytics → `procurement:sourcing_analytics`.
 
 ## Common tasks
 
