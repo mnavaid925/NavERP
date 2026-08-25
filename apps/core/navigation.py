@@ -1472,6 +1472,21 @@ LIVE_LINKS = {
         "Scoring & Weighting System": "procurement:rfx_scoring",        # bullet (weighted leaderboard across events)
         "RFx Template Library":       "procurement:rfx_library",        # bullet (is_template blueprints + one-click clone)
     },
+    # 6.7 E-Auction Management. Eauction [EAUC-] is the reverse-auction event: the setup form IS
+    # the Auction Setup & Configuration bullet (start/reserve price, per-supplier min decrement,
+    # anti-snipe extension trio), EaucBid [EBID-] is the append-only lowering-bid log whose
+    # write-time rule engine executes Bid Extension & Rule Enforcement (window open, invitee
+    # only, own-pace undercut, auto close-extension capped), "live" is DERIVED from the window
+    # (never a stored status - one writer per field), suppliers are core.Party roles and the
+    # sourcing link is an optional scm.PurchaseRequisition FK (L36). Rankings/savings are
+    # derived from the log at read time; the award is recorded once, leader-only, from closed.
+    "6.7": {
+        "Auction Setup & Configuration":   "procurement:eauc_list",          # bullet (register + setup form with pricing ladder and rules)
+        "Live Bidding Interface":          "procurement:eauc_floor",         # bullet (live floor: HTMX-polled boards + lowering-bid screen)
+        "Bid Extension & Rule Enforcement": "procurement:eauc_rules",        # bullet (house-rules reference + per-auction extension usage)
+        "Auction Monitoring Console":      "procurement:eauc_list?state=live", # bullet (?query= deep-link to open windows; console per row)
+        "Post-Auction Results":            "procurement:eauc_list?state=closed", # bullet (?query= deep-link to finished auctions; results + award per row)
+    },
     # 6.5 Sourcing & Tendering. The competitive-strategic layer above scm's operational RFQ
     # (L36): SourcingEvent [SEV-] owns the event setup/timeline/rules with an optional
     # traceability FK to the triggering requisition, EventCriterion is its evaluation matrix,
