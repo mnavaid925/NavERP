@@ -29,7 +29,8 @@ class Eauction(TenantNumbered):
 
     AUCTION_TYPES = [
         ("reverse", "Reverse auction (price falls)"),
-        ("forward", "Forward auction (price rises)"),
+        # "forward" lands when its engine exists — every rule in this module (start
+        # ceiling, decrement ladder, lowest-bid leader) assumes the price only falls.
     ]
     STATUS_CHOICES = [
         ("draft", "Draft"),
