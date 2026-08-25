@@ -151,6 +151,8 @@ def _verb(request, pk, allowed, apply, success_msg, audit_verb):
             messages.error(request, "The event was just changed by someone else — review it and retry.")
             return redirect("procurement:event_detail", pk=pk)
         apply(locked)
+        # The verb lambdas mutate attributes only — persist them here, inside the lock.
+        locked.save()
     write_audit_log(request.user, locked, audit_verb)
     messages.success(request, success_msg.format(obj=locked))
     return redirect("procurement:event_detail", pk=pk)
