@@ -184,6 +184,17 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Accounting &amp; Financial Integration</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:ap_sync' %}" class="btn btn-outline"><i data-lucide="landmark"></i> AP Sync</a>
+      <a href="{% url 'inventory:ar_sync' %}" class="btn btn-outline"><i data-lucide="receipt"></i> AR Sync</a>
+      <a href="{% url 'inventory:je_automation' %}" class="btn btn-outline"><i data-lucide="calculator"></i> JE Automation</a>
+      <a href="{% url 'inventory:taxrule_list' %}" class="btn btn-outline"><i data-lucide="percent"></i> Tax Rules</a>
+      <a href="{% url 'inventory:glpostrule_list' %}" class="btn btn-outline"><i data-lucide="book-open"></i> GL Posting Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
