@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Contract Register{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Contract Register</h1>
+    <nav class="breadcrumb">Procurement / Contracts</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'procurement:renewals_board' %}" class="btn btn-outline"><i data-lucide="bell-ring"></i> Renewal board</a>
+    <a href="{% url 'procurement:contract_create' %}" class="btn btn-primary"><i data-lucide="file-plus-2"></i> Draft contract</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search number, title, supplier…" class="form-input">
+      <select name="status" class="form-select">
+        <option value="">All statuses</option>
+        {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="type" class="form-select">
+        <option value="">All types</option>
+        {% for value, label in type_choices %}
+          <option value="{{ value }}" {% if request.GET.type == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <label class="form-label"><input type="checkbox" name="lens" value="expiring" {% if lens == "expiring" %}checked{% endif %}> In renewal window only</label>
+      <button type="submit" class="btn btn-outline">Filter</button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if page_obj.object_list %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Number</th><th>Title</th><th>Supplier</th><th>Type</th><th>Status</th><th>Ends</th><th>Signatures</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for obj in page_obj.object_list %}
+          <tr>
+            <td><a href="{% url 'procurement:contract_detail' obj.pk %}">{{ obj.number }}</a></td>
+            <td>{{ obj.title }}</td>
+            <td>{{ obj.party.name }}</td>
+            <td>{{ obj.get_contract_type_display }}</td>
+            <td><span class="badge badge-info">{{ obj.get_status_display }}</span></td>
+            <td>{{ obj.end_date|date:"d M Y"|default:"—" }}</td>
+            <td>{{ obj.procurement_signers.count }}</td>
+            <td class="table-actions">
+              <a href="{% url 'procurement:contract_detail' obj.pk %}" class="btn btn-icon" title="Open CLM workspace"><i data-lucide="eye"></i></a>
+              <a href="{% url 'scm:contract_detail' obj.pk %}" class="btn btn-icon" title="Spine record (SCM)"><i data-lucide="external-link"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    {% else %}
+    <div class="empty-state">
+      <i data-lucide="file-signature"></i>
+      <p>No agreements in this view — draft one from the clause library.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
