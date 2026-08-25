@@ -23,7 +23,7 @@
     </div></div>
 
     {% if is_edit %}
-      {% if obj.event.description or questions_note %}
+      {% if obj.event.description %}
       <div class="card"><div class="card-body text-muted">
         Event: <a href="{% url 'procurement:rfx_detail' obj.event.pk %}">{{ obj.event.number }} · {{ obj.event.title }}</a> — enter the supplier's answers and your evaluator scores (0–10). Weighted totals recompute on save.
       </div></div>
