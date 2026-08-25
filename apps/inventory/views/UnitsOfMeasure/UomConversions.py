@@ -7,7 +7,7 @@ detail stay member-readable.
 """
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from apps.core.decorators import tenant_admin_required
 from apps.inventory.forms import UomConversionForm
@@ -36,6 +36,10 @@ def uomconversion_list(request):
         qs = qs.filter(item__isnull=False)
     else:
         scope = ""
+    totals = UomConversion.objects.filter(tenant=request.tenant).aggregate(
+        rules=Count("id"),
+        defaults=Count("id", filter=Q(item__isnull=True)),
+    )
     return crud_list(
         request, qs, "inventory/uom/uomconversion/list.html",
         search_fields=["item__sku", "item__name", "from_uom__code", "to_uom__code", "notes"],
@@ -43,9 +47,8 @@ def uomconversion_list(request):
         extra_context={
             "scope": scope,
             "is_admin": _is_admin(request),
-            "default_count": UomConversion.objects.filter(
-                tenant=request.tenant, item__isnull=True).count(),
-            "rule_count": UomConversion.objects.filter(tenant=request.tenant).count(),
+            "default_count": totals["defaults"],
+            "rule_count": totals["rules"],
             "items": Item.objects.filter(tenant=request.tenant).order_by("sku"),
         },
     )
@@ -54,7 +57,10 @@ def uomconversion_list(request):
 @login_required
 def uomconversion_detail(request, pk):
     obj = get_object_or_404(_scoped(request.tenant), pk=pk)
-    # Sibling rules over the same units — the detail page shows which tier wins.
+    # Which rule actually fires for this pair today — the resolver's own verdict.
+    winner = UomConversion.resolve(request.tenant, obj.item, obj.from_uom, obj.to_uom)
+    fires = bool(obj.is_active and winner is not None and winner.pk == obj.pk)
+    # Sibling rules over the same units — the page shows which tier wins.
     rivals = (_scoped(request.tenant)
               .filter(from_uom_id=obj.from_uom_id, to_uom_id=obj.to_uom_id)
               .exclude(pk=obj.pk)[:10])
@@ -67,6 +73,7 @@ def uomconversion_detail(request, pk):
         neighbours = _scoped(request.tenant).exclude(pk=obj.pk)[:10]
     return render(request, "inventory/uom/uomconversion/detail.html", {
         "obj": obj,
+        "fires": fires,
         "rivals": rivals,
         "neighbours": neighbours,
         "is_admin": _is_admin(request),
