@@ -66,11 +66,11 @@
                   <div class="table-actions">
                     <form method="post" action="{% url 'procurement:rfx_question_move' obj.pk q.pk %}">{% csrf_token %}
                       <input type="hidden" name="direction" value="up">
-                      <button class="btn-icon" type="submit" title="Move up"{% if forloop.first %} disabled{% endif %}><i data-lucide="arrow-up"></i></button>
+                      <button class="btn-icon" type="submit" title="Move up" aria-label="Move up"{% if forloop.first %} disabled{% endif %}><i data-lucide="arrow-up"></i></button>
                     </form>
                     <form method="post" action="{% url 'procurement:rfx_question_move' obj.pk q.pk %}">{% csrf_token %}
                       <input type="hidden" name="direction" value="down">
-                      <button class="btn-icon" type="submit" title="Move down"{% if forloop.last %} disabled{% endif %}><i data-lucide="arrow-down"></i></button>
+                      <button class="btn-icon" type="submit" title="Move down" aria-label="Move down"{% if forloop.last %} disabled{% endif %}><i data-lucide="arrow-down"></i></button>
                     </form>
                   </div>
                 </td>
@@ -104,8 +104,8 @@
               <td>{{ row.earned|default:"—" }}</td>
               <td>{% if row.pct is not None %}{{ row.pct }}%{% else %}—{% endif %}</td>
               <td><div class="table-actions">
-                <a href="{% url 'procurement:rfx_response_detail' row.response.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                {% if not row.response.is_locked and obj.status != 'cancelled' %}<a href="{% url 'procurement:rfx_response_edit' row.response.pk %}" class="btn-icon" title="Edit answers & scores"><i data-lucide="pencil"></i></a>{% endif %}
+                <a href="{% url 'procurement:rfx_response_detail' row.response.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                {% if not row.response.is_locked and obj.status != 'cancelled' %}<a href="{% url 'procurement:rfx_response_edit' row.response.pk %}" class="btn-icon" title="Edit answers & scores" aria-label="Edit answers & scores"><i data-lucide="pencil"></i></a>{% endif %}
               </div></td>
             </tr>
           {% empty %}
