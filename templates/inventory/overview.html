@@ -195,6 +195,14 @@
   </div>
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Units of Measure</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'inventory:uomconversion_list' %}" class="btn btn-outline"><i data-lucide="ruler"></i> UOM Conversions</a>
+      <a href="{% url 'inventory:uom_calculator' %}" class="btn btn-outline"><i data-lucide="calculator"></i> Conversion Calculator</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Catalog Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'scm:item_list' %}" class="btn btn-outline"><i data-lucide="box"></i> SKU Master (SCM)</a>
