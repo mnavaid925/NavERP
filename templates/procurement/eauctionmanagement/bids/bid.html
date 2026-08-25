@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Bid · {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Live bidding · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:eauc_list' %}">E-Auctions</a><span class="sep">›</span><a href="{% url 'procurement:eauc_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Bid</span></div>
+      <p class="text-muted">{{ obj.title }} — {{ obj.get_auction_type_display|lower }}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.accepts_bids %}
+        <a href="{% url 'procurement:eauc_console' obj.pk %}" class="btn btn-outline"><i data-lucide="monitor"></i> Console</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not obj.accepts_bids %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="lock"></i><h3>Bidding is not open</h3><p>This auction is {{ obj.get_status_display|lower }}{% if obj.status == 'scheduled' %} — the window opens {{ obj.opens_at|date:"M d, H:i" }}{% endif %}.</p></div>
+    </div></div>
+  {% else %}
+    <div class="card"><div class="card-body">
+      {% if pinned and chosen %}
+        <p class="text-muted">Bidding as <strong>{{ chosen.name }}</strong> (your supplier-portal binding).</p>
+      {% elif chosen %}
+        <p class="text-muted">Recording bids for <strong>{{ chosen.name }}</strong>.</p>
+        <form method="get" class="filter-bar">
+          <button class="btn btn-outline" type="submit"><i data-lucide="repeat"></i> Switch supplier</button>
+        </form>
+      {% else %}
+        <p class="text-muted">Pick which invited supplier you are recording for:</p>
+        <div class="filter-bar">
+          {% for s in suppliers %}
+            <a class="btn btn-outline" href="?supplier={{ s.pk }}"><i data-lucide="user"></i> {{ s.name }}</a>
+          {% empty %}
+            <span class="text-muted">No invitees — nothing to bid on.</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div></div>
+
+    {% if chosen %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Place a lowering bid</h2></div>
+        <div class="card-body">
+          {% if floor is not None %}
+            <dl class="detail-grid">
+              <div class="detail-item"><dt>Next legal amount (or lower)</dt><dd class="fw-600">{{ floor|floatformat:2 }}</dd></div>
+              <div class="detail-item"><dt>Minimum decrement</dt><dd>{{ obj.min_decrement|floatformat:2 }}</dd></div>
+            </dl>
+            <form method="post" novalidate>
+              {% csrf_token %}
+              {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+              <div class="form-grid">
+                {% for field in form %}
+                  <div class="form-group">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+                    {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+                  </div>
+                {% endfor %}
+              </div>
+              <button class="btn btn-primary" type="submit"><i data-lucide="gavel"></i> Submit bid</button>
+            </form>
+          {% else %}
+            <div class="empty-state"><i data-lucide="shield-off"></i><p>No legal bid available right now (not admitted, or the decrement ladder has no room left).</p></div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Your recent bids</h2></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Number</th><th>Amount</th><th>Note</th><th>Placed</th></tr></thead>
+            <tbody>
+              {% for bid in my_bids %}
+                <tr><td>{{ bid.number }}</td><td>{{ bid.amount|floatformat:2 }}</td><td>{{ bid.note|default:"—" }}</td><td>{{ bid.placed_at|date:"H:i:s" }}</td></tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-muted">No bids yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    <div id="live-board" hx-get="{% url 'procurement:eauc_board' obj.pk %}" hx-trigger="every 5s" hx-swap="innerHTML">
+      {% include "procurement/eauctionmanagement/board.html" %}
+    </div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:eauc_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to auction</a>
+  </div>
+{% endblock %}
