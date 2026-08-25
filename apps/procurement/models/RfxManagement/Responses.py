@@ -89,6 +89,10 @@ class RfxResponse(TenantNumbered):
             return False
         if to_status == "submitted" and not self.event.accepts_responses:
             return False
+        if to_status in ("submitted", "under_review") and self.event.status == "cancelled":
+            # Reinstating (or submitting) on a CANCELLED event would leave a live-looking row
+            # frozen forever — the event is dead, so its workflow stays dead with it.
+            return False
         self.status = to_status
         if to_status == "submitted" and self.submitted_at is None:
             self.submitted_at = timezone.now()
