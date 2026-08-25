@@ -11,13 +11,28 @@ Gating mirrors the spine's own contract: standard-tier chains may be signed by a
 workspace member; elevated tiers (manager/executive) demand a tenant admin, exactly
 as 4.1's approve view does. A DOA grant covering the signer is stamped onto the row.
 """
+"""Procurement 6.3 Approval Workflow Engine — the queue, history and decisions.
+
+The requisition DOCUMENT stays ``scm.PurchaseRequisition`` (L36); what this module
+adds is the multi-tier chain around it: the queue resolves each pending chain's rule
+live and shows its progress; a decision appends one ``RequisitionApproval`` row
+inside an atomic block holding the spine row lock (the inventory 5.3 posture), and
+the FINAL tier — or a rejection at any tier — performs the spine's own transition,
+mirroring scm's field-for-field (status/approved_by/approved_at/decision_note).
+
+Gating: nobody signs their OWN requisition (separation of duties, enforced inside
+the lock); intermediate tiers of an elevated chain may be signed by any workspace
+member; the FINAL tier — the one that flips the spine — always demands a tenant
+admin, honouring scm's own approve-view contract on the write that matters.
+A DOA grant covering the signer is stamped onto the row.
+"""
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
 from django.utils import timezone
 
-from apps.core.crud import paginate
+from apps.core.crud import as_db_int, paginate
 from apps.procurement.forms import ApprovalDecisionForm
 from apps.procurement.models import (
     ApprovalDelegation,
@@ -47,24 +62,31 @@ def _is_admin(user):
 @login_required
 def approval_queue(request):
     rules = list(ApprovalRoutingRule.objects.filter(
-        tenant=request.tenant, is_active=True))
+        tenant=request.tenant, is_active=True).select_related("org_unit"))
     qs = (PurchaseRequisition.objects.filter(tenant=request.tenant,
                                              status="pending_approval")
           .select_related("requester", "org_unit").order_by("created_at"))
+    pending_total = qs.count()
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(Q(number__icontains=q) | Q(title__icontains=q)
                        | Q(requester__username__icontains=q))
     org_raw = request.GET.get("org", "").strip()
-    if org_raw.isdecimal():
-        qs = qs.filter(org_unit_id=int(org_raw))
+    org_number = as_db_int(org_raw)
+    if org_number is not None:
+        qs = qs.filter(org_unit_id=org_number)
 
     page = paginate(request, list(qs[:PENDING_EVALUATION_CAP]))
-    signatures = _signature_map([row.pk for row in page.object_list], request.tenant)
-    rows = [_queue_row(req, signatures.get(req.pk, []), rules)
+    page_pks = [row.pk for row in page.object_list]
+    signatures = _signature_map(page_pks, request.tenant)
+    lines_by_req = _lines_map(page_pks)
+    rows = [_queue_row(req, signatures.get(req.pk, []), rules,
+                       lines_by_req.get(req.pk),
+                       user=request.user, admin=_is_admin(request.user))
             for req in page.object_list]
     stats = {
-        "pending": page.paginator.count,
+        "pending": pending_total,
+        "shown": len(rows),
         "covered": sum(1 for r in rows if r["rule"] is not None),
         "multi_tier": sum(1 for r in rows if r["tier_count"] > 1),
     }
@@ -73,8 +95,21 @@ def approval_queue(request):
         "rows": rows,
         "stats": stats,
         "q": q,
+        "truncated": pending_total > len(rows),
         "is_admin": _is_admin(request.user),
     })
+
+
+def _lines_map(requisition_pks):
+    """``{requisition_pk: [line rows]}`` for one page — ONE query, so the
+    commodity dimension of rule matching never costs a query per candidate rule."""
+    from apps.scm.models import PurchaseRequisitionLine
+
+    grouped = {}
+    for line in PurchaseRequisitionLine.objects.filter(
+            requisition_id__in=requisition_pks):
+        grouped.setdefault(line.requisition_id, []).append(line)
+    return grouped
 
 
 def _signature_map(requisition_pks, tenant):
@@ -88,23 +123,45 @@ def _signature_map(requisition_pks, tenant):
     return grouped
 
 
-def _queue_row(req, signatures, rules):
+def _queue_row(req, signatures, rules, lines=None, *, user=None, admin=False):
     """One computed queue row: resolved rule, progress, who may sign next."""
-    rule, reason = resolve_routing(req, rules=rules)
+    rule, reason = resolve_routing(req, rules=rules,
+                                   lines_by_req={req.pk: lines} if lines is not None else None)
     tier_count = rule.required_tiers if rule is not None else 1
     done = sum(1 for s in signatures if s.decision == "approved")
     rejected = any(s.decision == "rejected" for s in signatures)
+    next_tier = done + 1
+    is_final = next_tier >= tier_count
+    elevated = req.needs_elevated_approval()
+    # The three-part gate the decide verb enforces under lock, mirrored for display:
+    # never your own requisition; elevated chains need an admin; and the FINAL
+    # signature — the one that flips the spine — always needs an admin.
+    own = user is not None and req.requester_id == user.id
+    may_decide = (not own and admin) or (
+        not own and not elevated and not is_final)
+    if own:
+        gate = "Your request — someone else signs"
+    elif admin:
+        gate = "You can sign"
+    elif is_final:
+        gate = "Final signature — admin"
+    elif elevated:
+        gate = "Elevated — admin"
+    else:
+        gate = "Open to you"
     return {
         "req": req,
         "rule": rule,
         "reason": reason,
         "tier_count": tier_count,
         "done": done,
-        "next_tier": done + 1,
-        "is_final": (done + 1) >= tier_count,
-        "elevated": req.needs_elevated_approval(),
+        "next_tier": next_tier,
+        "is_final": is_final,
+        "elevated": elevated,
         "signatures": signatures,
         "rejected": rejected,
+        "may_decide": may_decide,
+        "gate": gate,
     }
 
 
@@ -140,8 +197,9 @@ def approval_mine(request):
         .select_related("requester", "org_unit")
         .order_by("created_at")[:MINE_CAP])
     rules = list(ApprovalRoutingRule.objects.filter(
-        tenant=request.tenant, is_active=True))
+        tenant=request.tenant, is_active=True).select_related("org_unit"))
     signatures = _signature_map([r.pk for r in pending], request.tenant)
+    lines_by_req = _lines_map([r.pk for r in pending])
     admin = _is_admin(request.user)
     # Grants where THIS user is the delegate — exactly the queues they hold
     # borrowed authority over, and what a signature they make will be stamped with.
@@ -150,8 +208,9 @@ def approval_mine(request):
                 .select_related("delegator", "scope_org_unit"))
     rows = []
     for req in pending:
-        row = _queue_row(req, signatures.get(req.pk, []), rules)
-        row["may_decide"] = admin or not row["elevated"]
+        row = _queue_row(req, signatures.get(req.pk, []), rules,
+                         lines_by_req.get(req.pk),
+                         user=request.user, admin=admin)
         rows.append(row)
     return render(request, "procurement/approvalworkflow/mine.html", {
         "rows": rows,
@@ -182,22 +241,33 @@ def approval_decide(request, pk, decision):
                        "— its approval chain is closed.")
         return redirect("procurement:approval_queue")
 
+    # Separation of duties: the requester can never sign their own chain — every
+    # gate below runs INSIDE the spine row lock so nothing races past it.
+    if requisition.requester_id == request.user.id:
+        raise PermissionDenied("You cannot approve your own requisition.")
+
+    rules = list(ApprovalRoutingRule.objects.filter(
+        tenant=request.tenant, is_active=True).select_related("org_unit"))
+    rule, reason = resolve_routing(requisition, rules=rules)
+    tier_count = rule.required_tiers if rule is not None else 1
+    done = sum(1 for s in requisition.workflow_approvals.filter(decision="approved"))
+    tier = done + 1
+    is_final_tier = tier >= tier_count
+
     elevated = requisition.needs_elevated_approval()
     if elevated and not _is_admin(request.user):
         # The spine puts the same gate on its own approve view — mirrored, not new.
         raise PermissionDenied("Elevated approvals require a tenant administrator.")
+    if is_final_tier and not _is_admin(request.user):
+        # The final tier performs the SPINE's own transition, so it carries scm's
+        # own contract: a tenant admin signs the write that approves real spend.
+        raise PermissionDenied(
+            "The final signature must come from a tenant administrator.")
 
     form = ApprovalDecisionForm(request.POST)
     if not form.is_valid():
         messages.error(request, "; ".join(form.errors.get("comment", ["Invalid comment."])))
         return redirect("procurement:approval_queue")
-
-    rules = list(ApprovalRoutingRule.objects.filter(
-        tenant=request.tenant, is_active=True))
-    rule, reason = resolve_routing(requisition, rules=rules)
-    tier_count = rule.required_tiers if rule is not None else 1
-    done = sum(1 for s in requisition.workflow_approvals.filter(decision="approved"))
-    tier = done + 1
 
     delegation = ApprovalDelegation.active_for(
         request.tenant, request.user, requisition.org_unit_id)
