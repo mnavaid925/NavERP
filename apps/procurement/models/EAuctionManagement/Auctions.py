@@ -69,9 +69,11 @@ class Eauction(TenantNumbered):
         help_text="A bid inside this many seconds of the close extends the auction")
     extension_seconds = models.PositiveIntegerField(
         default=120,
+        validators=[MinValueValidator(1)],
         help_text="How long each automatic extension adds to closes_at")
     max_extensions = models.PositiveIntegerField(
         default=3,
+        validators=[MinValueValidator(1)],
         help_text="Hard cap so an auction cannot extend forever")
     extensions_used = models.PositiveIntegerField(default=0, editable=False)
     # -- window / lifecycle ----------------------------------------------------------------------
