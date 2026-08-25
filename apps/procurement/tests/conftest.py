@@ -182,3 +182,147 @@ def amendment_pending_a(db, tenant_a, admin_user, requisition_approved_a):
         reason="Vendor moved the dispatch date.",
         new_required_by=datetime.date.today() + datetime.timedelta(days=17),
     )
+
+# ------------------------------------------------------------------ 6.4 Vendor Management
+def _supplier_party(tenant, name):
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant, name=name, kind="organization")
+
+
+@pytest.fixture
+def supplier_a(db, tenant_a):
+    """An APPROVED scm.SupplierProfile + its core.Party for tenant A -> (profile, party)."""
+    from apps.scm.models import SupplierProfile
+    party = _supplier_party(tenant_a, "Northwind Industrial Supply")
+    profile = SupplierProfile.objects.create(
+        tenant=tenant_a, party=party, onboarding_status="approved", tier="strategic",
+        category="Industrial supplies")
+    return profile, party
+
+
+@pytest.fixture
+def supplier_b(db, tenant_b):
+    from apps.scm.models import SupplierProfile
+    party = _supplier_party(tenant_b, "Globex Parts Co")
+    profile = SupplierProfile.objects.create(
+        tenant=tenant_b, party=party, onboarding_status="approved", tier="preferred")
+    return profile, party
+
+
+@pytest.fixture
+def po_a(db, tenant_a, supplier_a):
+    """An approved PO issued to supplier A's party."""
+    from apps.scm.models import PurchaseOrder
+    _, party = supplier_a
+    return PurchaseOrder.objects.create(tenant=tenant_a, vendor=party,
+                                        status="approved", order_date=timezone.localdate())
+
+
+@pytest.fixture
+def vpa_a(db, tenant_a, admin_user, supplier_a):
+    from apps.procurement.models import VendorPortalAccess
+    profile, party = supplier_a
+    return VendorPortalAccess.objects.create(
+        tenant=tenant_a, supplier=party, portal_user=admin_user, invited_by=admin_user)
+
+
+@pytest.fixture
+def vsu_requested_a(db, tenant_a, member_user, supplier_a):
+    from apps.procurement.models import VendorSuspension
+    _, party = supplier_a
+    return VendorSuspension.objects.create(
+        tenant=tenant_a, supplier=party, kind="suspension", reason_category="delivery",
+        reason="Late deliveries twice running.", status="requested",
+        requested_by=member_user)
+
+
+@pytest.fixture
+def vis_submitted_a(db, tenant_a, admin_user, supplier_a, po_a):
+    from apps.procurement.models import VendorInvoiceSubmission
+    _, party = supplier_a
+    return VendorInvoiceSubmission.objects.create(
+        tenant=tenant_a, supplier=party, purchase_order=po_a,
+        invoice_ref="INV-9001", amount=__import__("decimal").Decimal("120.00"),
+        status="submitted", submitted_by=admin_user)
+
+
+# ------------------------------------------------------------------ 6.5 Sourcing & Tendering
+def _event(tenant, user, status="open", title="Test sourcing event", **overrides):
+    from apps.procurement.models import SourcingEvent
+
+    fields = dict(
+        tenant=tenant, title=title, event_type="tender", status=status,
+        budget_estimate=Decimal("10000.00"),
+        rules="Score on cost and delivery.",
+        created_by=user,
+    )
+    fields.update(overrides)
+    return SourcingEvent.objects.create(**fields)
+
+
+def _criterion(event, name="Total cost", weight="40", max_score=10):
+    from apps.procurement.models import EventCriterion
+    return EventCriterion.objects.create(
+        event=event, name=name, weight_pct=Decimal(weight), max_score=max_score)
+
+
+def _bid(event, party, status="draft", price="9000.00", **overrides):
+    from apps.procurement.models import SourcingBid
+
+    fields = dict(
+        tenant=event.tenant, event=event, supplier=party,
+        status=status, total_price=Decimal(price), lead_time_days=12,
+        summary="Whole-package proposal.", contact_ref="bids@example.com",
+    )
+    fields.update(overrides)
+    bid = SourcingBid.objects.create(**fields)
+    if overrides.get("submitted_at") is None and status in ("submitted", "shortlisted"):
+        bid.submitted_at = timezone.now()
+        bid.save(update_fields=["submitted_at", "updated_at"])
+    return bid
+
+
+def _score(bid, criterion, value):
+    from apps.procurement.models import BidScore
+    return BidScore.objects.create(bid=bid, criterion=criterion, score=Decimal(value))
+
+
+@pytest.fixture
+def sourcing_event_open_a(db, tenant_a, admin_user):
+    """An OPEN event with a 40/30/30 matrix."""
+    event = _event(tenant_a, admin_user)
+    _criterion(event, "Total cost", "40")
+    _criterion(event, "Delivery reliability", "30")
+    _criterion(event, "Quality & certifications", "30")
+    return event
+
+
+@pytest.fixture
+def sourcing_event_closed_a(db, tenant_a, admin_user):
+    """A CLOSED event (evaluation window) with the same matrix shape."""
+    event = _event(tenant_a, admin_user, status="closed",
+                   title="Closed frame-agreement tender")
+    _criterion(event, "Total cost", "50")
+    _criterion(event, "Coverage & support", "50")
+    return event
+
+
+@pytest.fixture
+def sourcing_bid_submitted_a(sourcing_event_open_a, supplier_a):
+    _, party = supplier_a
+    return _bid(sourcing_event_open_a, party, status="submitted")
+
+
+@pytest.fixture
+def second_party_a(db, tenant_a):
+    """A second organization party in tenant A (a rival bidder)."""
+    from apps.core.models import Party
+    return Party.objects.create(tenant=tenant_a, name="Apex Packaging Co",
+                                kind="organization")
+
+
+@pytest.fixture
+def sourcing_bid_second_a(sourcing_event_open_a, second_party_a):
+    """A shortlisted rival bid on the same open event."""
+    return _bid(sourcing_event_open_a, second_party_a,
+                status="shortlisted", price="9800.00")
