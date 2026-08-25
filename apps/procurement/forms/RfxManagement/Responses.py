@@ -5,11 +5,37 @@ one pre-created row per question whose widget adapts to the question's answer ty
 evaluator's 0–10 score. ``extra=0`` and no delete rows: the answer grid always mirrors the
 event's questions exactly.
 """
+import os
+
 from django import forms
 
 from apps.procurement.forms._common import *  # noqa: F401,F403
 from apps.procurement.forms._common import TenantUniqueMixin, _reject_foreign
 from apps.procurement.models import RfxAnswer, RfxEvent, RfxResponse
+
+#: Proposal attachments: documents/images/plain text only. Media is served same-origin from the
+#: webroot, so anything scriptable in the allowlist is stored-XSS/malware surface.
+ALLOWED_ATTACHMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".png", ".jpg", ".txt"}
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+
+def _validate_attachment(f):
+    """Shared attachment upload guard — extension allowlist + size cap (mirrors HRM's
+    _validate_upload; peer apps copy the pattern, never cross-import). Validates a freshly-uploaded
+    file only (an existing FieldFile has no new size to re-check); the size cap applies when a size
+    attribute is present, so a name-only wrapper is still extension-checked rather than skipped."""
+    if f and hasattr(f, "name"):
+        ext = os.path.splitext(f.name)[1].lower()
+        if ext not in ALLOWED_ATTACHMENT_EXTENSIONS:
+            raise forms.ValidationError(
+                f"Attachment type '{ext}' is not allowed. Use "
+                f"{', '.join(sorted(ALLOWED_ATTACHMENT_EXTENSIONS))}.")
+        if hasattr(f, "size") and f.size and f.size > MAX_ATTACHMENT_BYTES:
+            raise forms.ValidationError(
+                f"Attachment exceeds the {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB limit.")
+        # WARNING: extension allowlist only — serve uploads with Content-Disposition: attachment
+        # + X-Content-Type-Options: nosniff (mirrors the HRM onboarding-doc guard).
+    return f
 
 
 class RfxResponseForm(TenantUniqueMixin, TenantModelForm):
@@ -29,6 +55,9 @@ class RfxResponseForm(TenantUniqueMixin, TenantModelForm):
         else:
             self.fields["event"].queryset = RfxEvent.objects.filter(
                 tenant=self.tenant, is_template=False).exclude(status="cancelled")
+
+    def clean_attachment(self):
+        return _validate_attachment(self.cleaned_data.get("attachment"))
 
     def clean(self):
         cleaned = super().clean()
