@@ -32,9 +32,11 @@ def _pending(tenant, requester, title="Pending", org=None, total="500"):
     pr = PurchaseRequisition.objects.create(
         tenant=tenant, title=title, status="pending_approval",
         requester=requester, org_unit=org, estimated_total=Decimal("0"))
+    # qty MUST be 1: recalc_totals() sums qty*price, and a qty of 2 would double
+    # every amount-band this suite probes (gotcha of record, 2026-08-25).
     PurchaseRequisitionLine.objects.create(
         requisition=pr, item_description="Safety goggles",
-        quantity=Decimal("2"), estimated_unit_price=Decimal(total))
+        quantity=Decimal("1"), estimated_unit_price=Decimal(total))
     pr.recalc_totals(save=True)
     return pr
 
