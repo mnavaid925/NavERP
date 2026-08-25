@@ -54,6 +54,8 @@ class SourcingBid(TenantNumbered):
     summary = models.TextField(blank=True, help_text="Proposal abstract / exceptions taken")
     contact_ref = models.CharField(max_length=120, blank=True,
                                    help_text="Reference or reply-to captured with the submission")
+    decision_note = models.TextField(blank=True,
+                                     help_text="Evaluator notes — e.g. why a bid was disqualified")
 
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
