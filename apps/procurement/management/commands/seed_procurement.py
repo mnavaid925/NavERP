@@ -1,5 +1,6 @@
 """Seed Procurement Management (Module 6) demo data — 6.1 portal baseline + 6.2 Requisition
-Management + 6.3 Approval Workflow Engine + 6.4 Vendor Management + 6.5 Sourcing & Tendering.
+Management + 6.3 Approval Workflow Engine + 6.4 Vendor Management + 6.5 Sourcing & Tendering +
+6.6 RFx Management.
 
 6.1 creates, per tenant, the Task & Alert Center baseline: a handful of alerts across every kind,
 severity and lifecycle state, assigned to the workspace's members. The overview's other widgets
@@ -24,6 +25,10 @@ have honest rows to show.
 6.4 adds vendor-management rows over scm 4.2's approved suppliers: portal access bindings,
 a suspension register covering every lifecycle state, and supplier-filed invoice submissions.
 Like every block here it REUSES existing parties/orders rather than inventing parallel masters.
+
+6.6 seeds RFx Management: a Template-Library RFI blueprint plus an issued RFP carrying two
+supplier responses (one fully scored, one partial) so the comparison matrix, the scoring
+leaderboard and the evaluation states are populated on a fresh workspace.
 
 Each seeded alert also writes one ``core.AuditLog`` row (user=None → rendered as "System"), which
 gives the Recent Activity Feed an honest baseline instead of an empty page on a fresh workspace.
