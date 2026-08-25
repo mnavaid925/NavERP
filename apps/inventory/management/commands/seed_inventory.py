@@ -1,8 +1,8 @@
 ﻿"""Seed Inventory Management (Module 5) demo data â€” 5.1 Product & Catalog Management,
 5.2 Vendor / Supplier Management, 5.3 Purchase Order (PO) Management,
 5.5 Warehousing & Bin Management, 5.6 Inventory Tracking & Control,
-5.16 Alerts & Notifications, 5.15 Quality Control (QC) & Inspection and
-5.18 Accounting & Financial Integration.
+5.16 Alerts & Notifications, 5.15 Quality Control (QC) & Inspection,
+5.18 Accounting & Financial Integration and 5.19 Third-Party Integrations & API.
 
 Creates, per tenant, the catalog layer AROUND the item spine that SCM 4.3 already seeds: typed
 product attributes, sell-side price rows (retail / wholesale / a dated promotional window) and
@@ -209,7 +209,11 @@ class Command(BaseCommand):
                          + QcRoutingRule.objects.all().count()
                          + QuarantineOrder.objects.all().count()
                          + DefectReport.objects.all().count()
-                        + InventoryReportSnapshot.objects.all().count())
+                        + InventoryReportSnapshot.objects.all().count()
+                         + ApiClient.objects.all().count()
+                         + ChannelListingMap.objects.all().count()
+                         + StockSyncRun.objects.all().count()
+                         + IntegrationChannel.objects.all().count())
             ReturnInspectionChecklist.objects.all().delete()
             ReturnInspection.objects.all().delete()
             DispositionRoutingRule.objects.all().delete()
@@ -246,6 +250,10 @@ class Command(BaseCommand):
             QuarantineOrder.objects.all().delete()
             DefectReport.objects.all().delete()
             InventoryReportSnapshot.objects.all().delete()
+            ApiClient.objects.all().delete()
+            ChannelListingMap.objects.all().delete()   # children before their channel
+            StockSyncRun.objects.all().delete()        # run log before its channel
+            IntegrationChannel.objects.all().delete()
             LocationNetwork.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} inventory rows."))
 
@@ -275,6 +283,7 @@ class Command(BaseCommand):
             self._seed_quality_control(tenant, items)
             self._seed_reporting_analytics(tenant, items)
             self._seed_finint(tenant, items)
+            self._seed_integrations(tenant, items)
 
 
     # -- entity blocks -------------------------------------------------------------------------
@@ -1957,3 +1966,114 @@ class Command(BaseCommand):
             f"{', AP queue row' if grn_made else ''}"
             f"{', AR queue row' if shipped else ''}"
             f"{', 1 JE posted [JSY-]' if je_made else ''}."))
+
+    def _seed_integrations(self, tenant, items):
+        """5.19 Third-Party Integrations & API — one channel per family (e-commerce / ERP /
+        accounting software), listing maps over real spine items, ONE sync run recorded through
+        the REAL ``StockSyncRun.record()`` creator, and an active + a revoked API client.
+
+        Honest by construction: nothing dials anything. The run records as ``simulated``
+        (records_ok/failed stay 0 — nothing was sent) and credentials persist only
+        prefix + SHA-256 hash; plaintexts are generated then discarded inside this method.
+        """
+        from apps.inventory.models import (
+            ApiClient,
+            ChannelListingMap,
+            IntegrationChannel,
+            StockSyncRun,
+        )
+        from apps.scm.models import Location
+
+        if IntegrationChannel.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: integration rows already present, skipping.")
+            return
+
+        location = Location.objects.filter(tenant=tenant).order_by("id").first()
+        created = 0
+
+        # -- One channel per NavERP bullet family ---------------------------------------------
+        specs = [
+            ("ecommerce", "Shopify storefront", "shopify", "push_stock", "api_key",
+             "https://demo-shop.myshopify.com/admin",
+             "GraphQL cost bucket 1,000 pts / 50 s refill"),
+            ("erp", "SAP S/4 bridge", "sap", "bidirectional", "basic",
+             "https://erp-demo.example.invalid/sap/opu/odata",
+             "OData $batch caps change per package"),
+            ("accounting", "QuickBooks Online", "quickbooks", "pull_orders", "oauth2",
+             "https://qbo-demo.example.invalid/v3/company",
+             "429 w/ Retry-After, ~10 concurrent"),
+        ]
+        channels = {}
+        for kind, name, platform, direction, auth, base_url, rate_note in specs:
+            ch = IntegrationChannel(
+                tenant=tenant, name=name, kind=kind, platform=platform,
+                direction=direction, auth_method=auth, base_url=base_url,
+                external_account_ref=f"{kind}-demo-account",
+                environment="sandbox", status="connected", trigger_mode="manual",
+                rate_limit_note=rate_note, default_location=location,
+                notes="Seed demo row - configuration only; nothing dials this URL.",
+            )
+            ch.set_api_key(ch.generate_api_key())  # plaintext never persisted
+            ch.save()
+            channels[kind] = ch
+            created += 1
+
+        # -- Listing maps over REAL spine items -------------------------------------------------
+        shopify = channels["ecommerce"]
+        made_maps = 0
+        if shopify is not None and items:
+            ChannelListingMap.objects.create(
+                tenant=tenant, channel=shopify, item=items[0], location=None,
+                external_product_id="gid://demo/Product/1001",
+                external_variant_id="gid://demo/ProductVariant/2001",
+                external_sku=f"{items[0].sku}-SHOPIFY")
+            made_maps += 1
+            if len(items) > 1:
+                # Local-only row: NULL variant id coexists under the null-coalescing unique.
+                ChannelListingMap.objects.create(tenant=tenant, channel=shopify, item=items[1])
+                made_maps += 1
+            if len(items) > 2:
+                # One PAUSED mapping to exercise the sync_enabled lens.
+                ChannelListingMap.objects.create(
+                    tenant=tenant, channel=shopify, item=items[2],
+                    external_product_id="gid://demo/Product/1003",
+                    external_variant_id="gid://demo/ProductVariant/2003",
+                    sync_enabled=False)
+                made_maps += 1
+            # Channel-wide availability rule (item IS NULL).
+            ChannelListingMap.objects.create(
+                tenant=tenant, channel=shopify, item=None,
+                notes="Channel-wide availability row - no variant id; applies to every SKU.")
+            made_maps += 1
+        created += made_maps
+
+        # -- One SIMULATED push through the REAL creator -----------------------------------------
+        enabled = ChannelListingMap.objects.filter(channel=shopify, sync_enabled=True).count()
+        run = StockSyncRun.record(
+            tenant, shopify, direction="outbound_push", trigger_mode="manual",
+            status="simulated", records_total=enabled, records_ok=0, records_failed=0,
+            finished_at=timezone.now(),
+        )
+        shopify.last_run_status = "simulated"
+        shopify.save(update_fields=["last_run_status"])
+        created += 1
+
+        # -- API clients: one active, one walked through the REAL revoke() ------------------------
+        active = ApiClient(tenant=tenant, name="Warehouse control tower",
+                           protocol="rest", scopes="stock:read,moves:read,listings:read",
+                           description="Custom dashboard pulling stock levels.",
+                           allowed_ips="203.0.113.10",
+                           rate_limit_note="60 req/min burst 10")
+        active.set_api_token(active.generate_api_token())
+        active.save()
+        revoked_client = ApiClient(tenant=tenant, name="Legacy WMS bridge",
+                                   protocol="rest", scopes="stock:read",
+                                   description="Retired integration kept for audit.")
+        revoked_client.set_api_token(revoked_client.generate_api_token())
+        revoked_client.save()
+        revoked_client.revoke()
+        created += 2
+
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: {created} integration rows "
+            f"(3 channels, {made_maps} listing maps, run {run.number}, 2 API clients)."))
