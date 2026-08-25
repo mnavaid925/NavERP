@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Approval Routing Rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dynamic Routing Rules</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Approval Workflow</span><span class="sep">›</span><span>Routing Rules</span></div>
+      <p class="text-muted">How many signatures spend needs — routed by department, commodity keyword and amount band. Most-specific rule wins; no match means a single approval, never zero.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:approval_queue' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Approval Queue</a>
+      {% if is_admin %}<a href="{% url 'procurement:routingrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ request.GET.q }}" aria-label="Search" class="form-input" placeholder="Search commodity, department or notes…">
+        </div>
+        <div class="form-group">
+          <select name="active" aria-label="Active" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.active == 'True' %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.active == 'False' %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:routingrule_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Scope</th><th>Amount band</th><th>Tiers</th><th>Escalates after</th><th>State</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>{% if obj.org_unit %}{{ obj.org_unit.name }}{% else %}<span class="badge badge-info">Any dept</span>{% endif %}{% if obj.commodity %} <span class="badge badge-slate">{{ obj.commodity }}</span>{% endif %}</td>
+              <td>{{ obj.band_label }}</td>
+              <td class="fw-600">{{ obj.required_tiers }}</td>
+              <td>{% if obj.escalation_hours %}{{ obj.escalation_hours }}h{% else %}<span class="text-muted">policy default</span>{% endif %}</td>
+              <td><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:routingrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'procurement:routingrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:routingrule_delete' obj.pk %}" onsubmit="return confirm('Delete this routing rule? Pending chains already signed keep their snapshots.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="git-branch"></i><h3>No routing rules yet</h3><p>Without rules every requisition needs exactly one approval. Add bands like “any dept · [10,000 – open) → 2 tiers” to demand more senior sign-off.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ active_count }} of {{ rule_count }} rule{{ rule_count|pluralize }} active. Overlapping rules are legal — the resolver picks the most specific, then the narrowest band.</p>
+{% endblock %}
