@@ -670,7 +670,7 @@ class Command(BaseCommand):
             questions = list(rfp.questions.order_by("order"))
             plans = [
                 ("Northwind Industrial Supply",
-                 ["8", None, "7"],
+                 ["8", "7", "7"],
                  "Strong platform proposal; pricing mid-field.",
                  "under_review"),
                 ("Cascade Components Ltd",
