@@ -84,16 +84,20 @@ class SourcingBid(TenantNumbered):
         return True
 
     def decide(self, action):
-        """Evaluator move on a live bid: 'shortlist' or 'disqualify' (→ status), else None."""
+        """Evaluator move on a live bid: 'shortlist' or 'disqualify' → the target status.
+
+        Pure state resolver: it does NOT save. The deciding view persists under a row lock
+        (together with its decision note) so a racing award can never be overwritten by a
+        stale shortlist/disqualify — see ``SourcingEvent.award`` for the other half of that
+        contract. Returns None when this bid is not in a decidable state (or its event has
+        been cancelled, which freezes evaluation).
+        """
         if self.status not in self.DECIDABLE_STATUSES:
             return None
-        mapping = {"shortlist": "shortlisted", "disqualify": "disqualified"}
-        target = mapping.get(action)
-        if target is None:
+        if self.event_id and self.event.status == "cancelled":
             return None
-        self.status = target
-        self.save(update_fields=["status", "updated_at"])
-        return target
+        mapping = {"shortlist": "shortlisted", "disqualify": "disqualified"}
+        return mapping.get(action)
 
     @property
     def is_evaluable(self):
@@ -104,28 +108,39 @@ class SourcingBid(TenantNumbered):
     def weighted_score(self, criteria=None):
         """Weighted evaluation score 0..100, or None when the event defines no criteria.
 
-        Contribution of each scored row is ``(score / max_score) × weight_pct``; unscored rows
-        contribute nothing but their weight still counts against the denominator convention —
-        the sum is capped at the DEFINED total weight, so partial scoring reads honestly lower
-        until evaluators finish, never flattering. One query for scores (criteria may be passed
-        pre-fetched by batch surfaces).
+        Thin convenience wrapper over the single implementation ``weighted_total`` below —
+        batch surfaces (event detail, award board) call ``weighted_from_map`` in
+        ``views/_helpers.py``, which delegates to the same function so the two paths cannot
+        drift. One query for scores (criteria may be passed pre-fetched).
         """
         if criteria is None:
             criteria = list(self.event.criteria.all())
-        if not criteria:
-            return None
         by_criterion = {score.criterion_id: score.score
                         for score in self.scores.all()}
-        earned = ZERO
-        for criterion in criteria:
-            raw = by_criterion.get(criterion.pk)
-            if raw is None or not criterion.max_score:
-                continue
-            earned += Decimal(raw) / criterion.max_score * criterion.weight_pct
-        return q2(earned)
+        return weighted_total(by_criterion, criteria)
 
     def __str__(self):
         return f"{self.number or 'BID'} · {self.supplier}"
+
+
+def weighted_total(score_map_row, criteria):
+    """THE weighted-score implementation (**Bid Evaluation Matrix** math).
+
+    Contribution of each scored row is ``(score / max_score) × weight_pct``; unscored rows
+    contribute nothing but their weight still counts against the denominator convention —
+    the sum is capped at the DEFINED total weight, so partial scoring reads honestly lower
+    until evaluators finish, never flattering. Quantized to the app's money shape so every
+    surface prints identical figures.
+    """
+    if not criteria:
+        return None
+    earned = ZERO
+    for criterion in criteria:
+        raw = score_map_row.get(criterion.pk)
+        if raw is None or not criterion.max_score:
+            continue
+        earned += Decimal(raw) / criterion.max_score * criterion.weight_pct
+    return q2(earned)
 
 
 class BidScore(models.Model):
