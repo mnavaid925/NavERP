@@ -7,6 +7,7 @@ shown as "—" (None), never as a confident zero: savings only exist where BOTH 
 and an awarded price exist, cycle time only where the event was actually awarded.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.utils import timezone
 
