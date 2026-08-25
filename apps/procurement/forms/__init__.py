@@ -21,6 +21,7 @@ from .RequisitionManagement.Templates import (
     RequisitionTemplateForm,
     RequisitionTemplateLineFormSet,
 )
+from .EAuctionManagement import EaucBidForm, EaucInviteForm, EauctionForm
 from .RfxManagement.Events import (
     RfxEventForm,
     RfxQuestionForm,
@@ -47,6 +48,9 @@ from .VendorManagement import (
 )
 
 __all__ = [
+    "EaucBidForm",
+    "EaucInviteForm",
+    "EauctionForm",
     "ApprovalDecisionForm",
     "ApprovalDelegationForm",
     "ApprovalRoutingRuleForm",
