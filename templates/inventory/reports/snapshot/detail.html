@@ -46,8 +46,8 @@
         <tbody>
           <tr><th style="width:200px;">Number</th><td class="fw-600">{{ object.number }}</td></tr>
           <tr><th>Generated</th><td>{{ object.created_at|date:"d M Y H:i" }}</td></tr>
-          <tr><th>By</th><td>{{ object.generated_by.get_short_name|default:object.generated_by.username|default:"—" }}</td></tr>
-          <tr><th>Scope</th><td>{{ object.location.code|default:"All locations" }}</td></tr>
+          <tr><th>By</th><td>{% if object.generated_by %}{{ object.generated_by.get_short_name|default:object.generated_by.username }}{% else %}—{% endif %}</td></tr>
+          <tr><th>Scope</th><td>{% if object.location %}{{ object.location.code }}{% else %}All locations{% endif %}</td></tr>
           {% if object.window_days %}<tr><th>Window</th><td>{{ object.window_days }} days</td></tr>{% endif %}
           {% if object.notes %}<tr><th>Notes</th><td>{{ object.notes }}</td></tr>{% endif %}
         </tbody>
