@@ -39,8 +39,10 @@ class EaucInviteForm(forms.Form):
 
     supplier = forms.ModelChoiceField(
         queryset=Party.objects.none(), label="Supplier",
+        widget=forms.Select(attrs={"class": "form-select"}),
         help_text="Only workspace parties with the supplier role are listed.")
-    contact_note = forms.CharField(max_length=255, required=False, label="Note (optional)")
+    contact_note = forms.CharField(max_length=255, required=False, label="Note (optional)",
+                                   widget=forms.TextInput(attrs={"class": "form-input"}))
 
     def __init__(self, *args, tenant=None, auction=None, **kwargs):
         super().__init__(*args, **kwargs)
