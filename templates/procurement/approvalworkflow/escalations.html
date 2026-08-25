@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Escalation Management{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Escalation Management</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Approval Workflow</span><span class="sep">›</span><span>Escalations</span></div>
+      <p class="text-muted">Approval chains idle past their window. Run raises one Task &amp; Alert Center alert per idle chain — idempotent, so running it twice never double-alerts.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:alert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Alert Center</a>
+      {% if is_admin %}
+        <form method="post" action="{% url 'procurement:escalation_run' %}" onsubmit="return confirm('Run the escalation engine now?');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="play"></i> Run Escalation</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending chains</div></div>
+      <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.idle }}</div><div class="stat-label">Past their window</div></div>
+      <div class="stat-card"><div class="stat-icon green"><i data-lucide="bell-ring"></i></div><div class="stat-value">{{ stats.escalated }}</div><div class="stat-label">Alert already raised</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Policy <span class="text-muted">· escalate after {{ policy.idle_hours }}h → {{ policy.escalate_to.username|default:"the team" }}</span></h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <select name="lens" aria-label="Lens" class="form-select">
+            <option value="">All pending chains</option>
+            <option value="idle" {% if lens == 'idle' %}selected{% endif %}>Idle only</option>
+            <option value="raised" {% if lens == 'raised' %}selected{% endif %}>Already escalated</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Apply</button>
+        <a href="{% url 'procurement:escalation_queue' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requisition</th><th>Window</th><th>Idle for</th><th>Last activity</th><th>State</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'procurement:req_detail' row.requisition.pk %}" class="fw-600">{{ row.requisition.number }}</a> · {{ row.requisition.title|truncatechars:34 }}</td>
+              <td>{{ row.idle_hours_effective }}h{% if row.rule and row.rule.escalation_hours %} <span class="badge badge-slate">rule</span>{% else %} <span class="text-muted">policy</span>{% endif %}</td>
+              <td class="fw-600">{{ row.idle_for.total_seconds|floatformat:"0" }}s<br><span class="text-muted">since {{ row.anchor|date:"M d, H:i" }}</span></td>
+              <td>{% if row.rule %}routed: {{ row.rule.required_tiers }} tier(s){% else %}default single tier{% endif %}</td>
+              <td>{% if row.escalated %}<span class="badge badge-green">Escalated</span>{% elif row.is_idle %}<span class="badge badge-red">Idle — will raise on Run</span>{% else %}<span class="badge badge-info">Within window</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="check-check"></i><h3>Nothing pending</h3><p>No requisitions sit in approval — nothing to escalate.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">There is no scheduler in this system — "automated" means this idempotent Run button, which any administrator can fire as often as they like without ever raising a duplicate alert.</p>
+{% endblock %}
