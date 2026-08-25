@@ -209,6 +209,8 @@ def _decide(request, pk, action, success_msg):
             messages.error(request,
                            "Only a submitted or shortlisted bid can be moved again from here.")
             return redirect("procurement:bid_detail", pk=pk)
+        # decide() is a pure resolver — the caller applies + persists under the lock.
+        locked.status = new_status
         if note:
             locked.decision_note = note
             locked.save(update_fields=["status", "decision_note", "updated_at"])
