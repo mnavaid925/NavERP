@@ -5,7 +5,7 @@
     <div>
       <h1 class="page-title">Monitoring console · {{ obj.number }}
         {% if obj.accepts_bids %}
-          <span class="badge badge-green" id="countdown">{{ obj.time_left_display }}</span>
+          <span class="badge badge-green">{{ obj.time_left_display }}</span>
         {% else %}
           <span class="badge badge-muted">{{ obj.get_status_display }}</span>
         {% endif %}
@@ -23,7 +23,8 @@
     </div>
   </div>
 
-  <div id="live-board" hx-get="{% url 'procurement:eauc_board' obj.pk %}" hx-trigger="every 5s" hx-swap="innerHTML">
+  {# Poll only while the auction is actually live — a closed page must not poll forever. #}
+  <div id="live-board" {% if obj.accepts_bids %}hx-get="{% url 'procurement:eauc_board' obj.pk %}" hx-trigger="every 5s"{% endif %} hx-swap="innerHTML">
     {% include "procurement/eauctionmanagement/board.html" %}
   </div>
 
@@ -55,7 +56,6 @@
         </tbody>
       </table>
     </div>
-    <div class="card-body text-muted">Extensions used: {{ obj.extensions_used }} / {{ obj.max_extensions }} — a bid inside {{ obj.extension_trigger_seconds }}s of the close adds {{ obj.extension_seconds }}s.</div>
   </div>
 
   <div class="form-actions">
