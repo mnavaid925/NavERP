@@ -46,6 +46,15 @@ from .VendorManagement import (
     VendorPortalAccessForm,
     VendorSuspensionForm,
 )
+from .ContractsManagement import (
+    ClauseLinkFormSet,
+    ContractAmendmentDecisionForm,
+    ContractAmendmentForm,
+    ContractAuthoringForm,
+    ContractClauseForm,
+    ContractMilestoneForm,
+    ContractSignerForm,
+)
 
 __all__ = [
     "EaucBidForm",
@@ -79,4 +88,10 @@ __all__ = [
     "SuspensionLiftForm",
     "VendorInvoiceSubmissionForm",
     "SubmissionReviewForm",
+    "ContractClauseForm",
+    "ContractAuthoringForm",
+    "ClauseLinkFormSet",
+    "ContractSignerForm",
+    "ContractAmendmentForm",
+    "ContractAmendmentDecisionForm",
 ]
