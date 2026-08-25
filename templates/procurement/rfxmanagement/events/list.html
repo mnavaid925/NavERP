@@ -65,12 +65,12 @@
               </td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  {% if obj.is_editable %}<a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
-                  {% if obj.n_submitted >= 2 %}<a href="{% url 'procurement:rfx_compare' obj.pk %}" class="btn-icon" title="Compare responses side by side"><i data-lucide="columns-2"></i></a>{% endif %}
+                  <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}<a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn-icon" title="Edit" aria-label="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  {% if obj.n_submitted >= 2 %}<a href="{% url 'procurement:rfx_compare' obj.pk %}" class="btn-icon" title="Compare responses side by side" aria-label="Compare responses side by side"><i data-lucide="columns-2"></i></a>{% endif %}
                   {% if obj.status == 'draft' or obj.status == 'cancelled' %}
                     <form method="post" action="{% url 'procurement:rfx_delete' obj.pk %}" onsubmit="return confirm('Delete this event and its questionnaire?');">
-                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
                     </form>
                   {% endif %}
                 </div>
