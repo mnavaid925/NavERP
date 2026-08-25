@@ -85,21 +85,23 @@ def _tax_code(tenant):
 
 
 def test_finint_taxrule_resolver_specificity_ladder(tenant_a, item_a, db):
-    """SKU rule beats category rule beats catch-all beats nothing."""
+    """SKU rule beats category rule beats catch-all."""
+    from apps.scm.models import ItemCategory
+
+    cat = ItemCategory.objects.create(tenant=tenant_a, name="Fin Category")
+    item_a.category = cat
+    item_a.save(update_fields=["category", "updated_at"])
+
     code = _tax_code(tenant_a)
     catch_all = TaxRule.objects.create(tenant=tenant_a, name="All", tax_code=code, priority=900)
-    assert TaxRule.resolve(tenant_a, item=item_a) is catch_all
+    assert TaxRule.resolve(tenant_a, item=item_a).pk == catch_all.pk
 
     category_pin = TaxRule.objects.create(tenant=tenant_a, name="Cat", tax_code=code,
-                                          category_id=item_a.category_id or None)
-    if item_a.category_id is None:
-        # an un-categorised item cannot match a category pin — the catch-all still governs
-        assert TaxRule.resolve(tenant_a, item=item_a) is catch_all
-    else:
-        assert TaxRule.resolve(tenant_a, item=item_a) is category_pin
+                                          category=cat)
+    assert TaxRule.resolve(tenant_a, item=item_a).pk == category_pin.pk
 
     item_pin = TaxRule.objects.create(tenant=tenant_a, name="Sku", tax_code=code, item=item_a)
-    assert TaxRule.resolve(tenant_a, item=item_a) is item_pin
+    assert TaxRule.resolve(tenant_a, item=item_a).pk == item_pin.pk
 
 
 def test_finint_taxrule_country_beats_wildcard_at_same_tier(tenant_a, item_a, db):
@@ -107,8 +109,8 @@ def test_finint_taxrule_country_beats_wildcard_at_same_tier(tenant_a, item_a, db
     wild = TaxRule.objects.create(tenant=tenant_a, name="Any geo", tax_code=code, priority=1)
     named = TaxRule.objects.create(tenant=tenant_a, name="Germany", country="Germany",
                                    tax_code=code, priority=999)
-    assert TaxRule.resolve(tenant_a, item=None, country="germany") is named
-    assert TaxRule.resolve(tenant_a, item=None, country="France") is wild
+    assert TaxRule.resolve(tenant_a, item=None, country="germany").pk == named.pk
+    assert TaxRule.resolve(tenant_a, item=None, country="France").pk == wild.pk
 
 
 def test_finint_taxrule_inactive_skipped_and_rate_for_zero_default(tenant_a, item_a, db):
