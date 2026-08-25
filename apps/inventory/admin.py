@@ -52,6 +52,7 @@ from apps.inventory.models import (
     ChannelListingMap,
     IntegrationChannel,
     StockSyncRun,
+    UomConversion,
 )
 
 
@@ -416,3 +417,11 @@ class ApiClientAdmin(admin.ModelAdmin):
     search_fields = ("number", "name", "scopes")
     readonly_fields = ("number", "api_token_prefix", "api_token_hash",
                        "revoked_at", "last_used_at")
+
+
+@admin.register(UomConversion)
+class UomConversionAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "item", "from_uom", "to_uom", "factor",
+                    "is_active")
+    list_filter = ("tenant", "is_active")
+    search_fields = ("item__sku", "from_uom__code", "to_uom__code", "notes")
