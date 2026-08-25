@@ -1472,6 +1472,20 @@ LIVE_LINKS = {
         "Scoring & Weighting System": "procurement:rfx_scoring",        # bullet (weighted leaderboard across events)
         "RFx Template Library":       "procurement:rfx_library",        # bullet (is_template blueprints + one-click clone)
     },
+    # 6.5 Sourcing & Tendering. The competitive-strategic layer above scm's operational RFQ
+    # (L36): SourcingEvent [SEV-] owns the event setup/timeline/rules with an optional
+    # traceability FK to the triggering requisition, EventCriterion is its evaluation matrix,
+    # SourcingBid [BID-] carries whole-package supplier proposals whose award state (won/lost)
+    # IS the award decision, and BidScore records matrix scores. The matrix itself lives on
+    # each closed event's page and bid detail; the board and analytics pages are COMPUTED
+    # (nothing stored to drift).
+    "6.5": {
+        "Event Creation & Scheduling": "procurement:event_list",        # bullet (register + header/criteria form + open/close verbs)
+        "Bid Submission Portal":       "procurement:bid_list",          # bullet (bid register; staff-captured this pass, gated portal is 6.4's follow-up)
+        "Bid Evaluation Matrix":       "procurement:event_list?status=closed",  # bullet (deep-link to events in evaluation)
+        "Award Recommendation":        "procurement:award_board",       # bullet (computed scenarios: score × compliance, one-click admin award)
+        "Sourcing Analytics":          "procurement:sourcing_analytics",  # bullet (savings vs budget, participation, cycle time)
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
