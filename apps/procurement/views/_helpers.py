@@ -36,6 +36,8 @@ PROCUREMENT_CONTENT_MODELS = (
     "sourcingbid",
     "rfxevent",
     "rfxresponse",
+    "eauction",
+    "eaucbid",
 )
 
 #: Printed on both feed surfaces. One constant so the two cannot explain the trail differently.
@@ -271,7 +273,7 @@ def evaluate_events_batch(events):
     """
     from collections import defaultdict
 
-    from apps.procurement.models import EventCriterion, SourcingBid, SourcingEvent
+    from apps.procurement.models import BidScore, EventCriterion, SourcingBid
 
     pks = [e.pk for e in events]
     if not pks:
