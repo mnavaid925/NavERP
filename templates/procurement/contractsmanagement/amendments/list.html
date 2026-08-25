@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Contract Amendments{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Contract Amendments</h1>
+    <nav class="breadcrumb">Procurement / Contracts / Amendments</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'procurement:camendment_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Propose amendment</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search number, reason, contract…" class="form-input">
+      <select name="status" class="form-select">
+        <option value="">All statuses</option>
+        {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-outline">Filter</button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if page_obj.object_list %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Contract</th><th>Status</th><th>Proposes</th><th>Filed</th><th>Decided</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for a in page_obj.object_list %}
+          <tr>
+            <td><a href="{% url 'procurement:camendment_detail' a.pk %}">{{ a.number }}</a></td>
+            <td>{{ a.contract.number }} · {{ a.contract.title|truncatechars:40 }}</td>
+            <td>
+              {% if a.status == "pending" %}<span class="badge badge-amber">Pending</span>
+              {% elif a.status == "applied" %}<span class="badge badge-green">Applied</span>
+              {% else %}<span class="badge badge-muted">Rejected</span>{% endif %}
+            </td>
+            <td>{{ a.proposal_digest }}</td>
+            <td>{{ a.created_at|date:"d M Y" }}</td>
+            <td>{{ a.decided_at|date:"d M Y"|default:"—" }}</td>
+            <td class="table-actions">
+              <a href="{% url 'procurement:camendment_detail' a.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+              {% if a.status == "pending" and is_admin %}
+              <form method="post" action="{% url 'procurement:camendment_approve' a.pk %}" onsubmit="return confirm('Apply {{ a.number }} to {{ a.contract.number }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="Apply to contract"><i data-lucide="check-check"></i></button>
+              </form>
+              <form method="post" action="{% url 'procurement:camendment_reject' a.pk %}" onsubmit="return confirm('Reject {{ a.number }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon btn-danger" title="Reject"><i data-lucide="x"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    {% else %}
+    <div class="empty-state"><i data-lucide="git-pull-request-arrow"></i><p>No amendments filed yet.</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
