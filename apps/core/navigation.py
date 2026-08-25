@@ -1501,6 +1501,22 @@ LIVE_LINKS = {
         "Award Recommendation":        "procurement:award_board",       # bullet (computed scenarios: score × compliance, one-click admin award)
         "Sourcing Analytics":          "procurement:sourcing_analytics",  # bullet (savings vs budget, participation, cycle time)
     },
+    # 6.8 Contract Management. The AGREEMENT stays scm.SupplierContract (L36 - 4.2/4.12 own
+    # the spine and its activate/renew/terminate verbs); 6.8 adds the CLM surface around it:
+    # ContractClause is the pre-approved authoring library selected onto agreements via
+    # ContractClauseLink, ContractSigner carries per-signer bearer tokens for the PUBLIC sign
+    # page (crm 1.9's exact token flow; completion derived, never stored back), ContractAmendment
+    # [CAM-] is the gated change workflow that writes header terms only on approve under lock,
+    # and ContractMilestone [CMI-] tracks one-shot deliverables/penalties/payments - distinct
+    # from 4.12's recurring ComplianceRequirement register. The renewal board + Run are COMPUTED
+    # over the spine's per-contract notice windows and raise 6.1 ProcurementAlerts idempotently.
+    "6.8": {
+        "Contract Authoring & Templating":   "procurement:clause_list",
+        "E-Signature Integration":           "procurement:contract_list",
+        "Renewal & Expiration Alerts":       "procurement:renewals_board",
+        "Contract Amendment Tracking":       "procurement:camendment_list",
+        "Obligation & Milestone Management": "procurement:milestone_list",
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
