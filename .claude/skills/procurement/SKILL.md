@@ -425,3 +425,46 @@ agreement (SC- spine row + links + 2 signers + 3 milestones), one pending CAM am
 tenant. NOTE: until the 6.7 lane fixes `_seed_eauction`'s award step on Globex, seed_procurement aborts
 the tenant loop there - call `Command()._seed_contracts(tenant)` directly if you need Globex data.
 Tests: `tests/test_contracts_68.py` (12 green; run pytest with --no-migrations).
+
+---
+
+## 6.7 E-Auction Management (built 2026-08-26)
+
+**As-built now: 6.1-6.8.** Package folder `EAuctionManagement/` across all four layers:
+`Auctions.py` = Eauction + EaucInvite; `Bids.py` = EaucBid.
+
+### Models
+- **`Eauction` [EAUC-]** - reverse-only (`AUCTION_TYPES`; forward lands when its engine does).
+  start/reserve price, `min_decrement`, anti-snipe trio (`extension_trigger_seconds`,
+  `extension_seconds` >= 1, `max_extensions`) + read-only `extensions_used`. Statuses
+  draft/scheduled/closed/awarded/cancelled; **live is DERIVED** (`accepts_bids` = scheduled AND
+  window active) so each status has one writer. Actions return bool: `publish()` (needs invitee +
+  future close), `close()` (manual early close allowed), `cancel()`, `extend_if_needed()` ->
+  "extended"/"capped"/"no", `award(supplier, note)` (leader-only, once-guard, stamps
+  awarded_amount/at; refusal attaches `.refusal_leader`). Derived: `best_bid()`, `rankings()`
+  (one GROUP BY), `savings_vs_start()`, `time_left_display`.
+- **`EaucInvite`** - unique (auction, supplier); own tenant column like RFQVendor.
+- **`EaucBid` [EBID-]** - APPEND-ONLY log (admin fully read-only). `next_floor(auction, supplier)`
+  is THE rule function: None when not live / not invited / ladder exhausted; first bid <= start;
+  later bids <= own_best(Min aggregate) - min_decrement AND strictly below a rival-led best.
+  `clean()` distinguishes not-open vs not-admitted vs too-high messages.
+
+### Views / gating
+`staff_required` decorator (tenant member or superuser) wraps EVERY eauc view EXCEPT
+`eauc_bid` - vendor-portal logins (6.4 VendorPortalAccess) stay pinned to their bound supplier
+there (`_bound_supplier`: any binding row, even inactive/unlinked, never widens to staff).
+Routes: `eauc_list` (?state=live|closed deep-links), add/detail/edit/delete, publish/cancel/
+close, `invite_add`, `invites/<i_pk>/remove`, `floor`, `rules`, `console`, `board` (HTMX
+fragment polled every 5s only while live), `bid`, `results`, `award`. `_board_ctx(obj)` feeds
+console/bid/board identically. Bid writes run full_clean + extend_if_needed under
+select_for_update on the auction row; award re-fetches under lock.
+
+### Templates / Seeder / Tests
+`templates/procurement/eauctionmanagement/{auctions/{list,detail,form,console}.html,
+bids/bid.html, floor.html, rules.html, results.html, board.html}` (board = fragment, no base).
+`_seed_eauction`: per-tenant guard; an AWARDED auction with a 5-bid ladder (closes before award)
++ a LIVE auction whose closes_at already includes one extension. Flush deletes bids -> invites
+-> auctions. Migration `0010_eauction_management` (e-auction ops ONLY). Tests:
+`test_eauction_{models,forms,views,security}.py` (85, functions `test_eauction_*`). Sidebar:
+`LIVE_LINKS["6.7"]` maps all five bullets (two via ?state= deep-links, rules page hosts the
+enforcement bullet).
