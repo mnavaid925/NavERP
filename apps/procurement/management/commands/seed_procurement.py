@@ -78,7 +78,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
-            help=("Delete ALL procurement alert rows for ALL tenants before seeding — not just "
+            help=("Delete ALL procurement workflow rows for ALL tenants before seeding "
+                  "(alerts, approval-engine tables, templates, amendments) - not just "
                   "seeder-created ones."))
 
     def handle(self, *args, **options):
@@ -286,6 +287,10 @@ class Command(BaseCommand):
                 reason="Annual leave cover")
 
         # -- one REAL tier-1 signature on an existing pending requisition -------------------------
+        # Honesty rules of record: approver=None (a fabricated action is never
+        # attributed to a real admin), and only when the resolved chain has 2+
+        # tiers — signing a single-tier chain would show a "complete" ledger over
+        # a still-pending spine and corrupt the next human decision's tier math.
         pending = PurchaseRequisition.objects.filter(
             tenant=tenant, status="pending_approval").order_by("created_at").first()
         signed = None
@@ -294,16 +299,18 @@ class Command(BaseCommand):
             rules = list(ApprovalRoutingRule.objects.filter(tenant=tenant, is_active=True))
             rule, _reason = resolve_routing(pending, rules=rules)
             tier_count = rule.required_tiers if rule is not None else 1
-            with transaction.atomic():
-                locked = type(pending).objects.select_for_update().get(pk=pending.pk)
-                signed = RequisitionApproval.record(
-                    tenant, locked, tier=1, tier_count=tier_count,
-                    decision="approved", approver=admin or None,
-                    comment="Seeded first signature � chain left open on purpose.")
-                write_audit_log(admin or None, locked, "tier_approve",
-                                {"tier": f"1/{tier_count}", "seeded": True})
+            if tier_count >= 2:
+                with transaction.atomic():
+                    locked = type(pending).objects.select_for_update().get(pk=pending.pk)
+                    signed = RequisitionApproval.record(
+                        tenant, locked, tier=1, tier_count=tier_count,
+                        decision="approved", approver=None,
+                        comment="Seeded first signature (System) — chain left open on purpose.")
+                    write_audit_log(None, locked, "tier_approve",
+                                    {"tier": f"1/{tier_count}", "seeded": True})
+        made_rules = ApprovalRoutingRule.objects.filter(tenant=tenant).count()
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: approval engine ready "
-            f"(3 routing rules, policy {policy.idle_hours}h, "
-            f"{'DOA grant' if admin and delegate else 'no DOA pair'}, "
-            f"{f'chain {signed.number} at tier 1/{signed.tier_count}' if signed else 'no pending requisition'})."))
+            f"({made_rules} routing rules, policy {policy.idle_hours}h, "
+            f"{'DOA grant' if admin is not None and delegate is not None else 'no DOA pair'}, "
+            f"{f'chain {signed.number} at tier 1/{signed.tier_count}' if signed else 'no multi-tier pending requisition to sign'})."))
