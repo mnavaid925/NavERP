@@ -8,7 +8,7 @@ Bidding** entry floor.
 from functools import wraps
 
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Max, Min
 
 from apps.core.crud import crud_list, paginate
 from apps.procurement.forms import EaucInviteForm, EauctionForm
@@ -233,17 +233,36 @@ def eauc_invite_remove(request, pk, i_pk):
 @login_required
 @staff_required
 def eauc_floor(request):
-    """The live trading floor entry: every auction currently accepting bids."""
+    """The live trading floor entry: every auction currently accepting bids.
+
+    Paginates the auction ids FIRST, then answers the whole page's leaderboards with ONE
+    grouped query over ``EaucBid`` — ranking per auction in a loop is 2N+1 queries and
+    falls over exactly when the floor is busiest.
+    """
     now = timezone.now()
-    auctions = list(Eauction.objects
+    live_ids = list(Eauction.objects
                     .filter(tenant=request.tenant, status="scheduled",
                             opens_at__lte=now, closes_at__gt=now)
-                    .order_by("closes_at"))
-    boards = [{"auction": a, "best": a.best_bid(), "ranked": a.rankings()[:5]}
-              for a in auctions]
-    page_obj = paginate(request, boards, per_page=12)
+                    .order_by("closes_at")
+                    .values_list("pk", flat=True))
+    page_obj = paginate(request, live_ids, per_page=12)
+    page_ids = list(page_obj.object_list)
+    ranked_by_auction = {}
+    if page_ids:
+        rows = (EaucBid.objects.filter(auction_id__in=page_ids)
+                .values("auction_id", "supplier_id", "supplier__name")
+                .annotate(best=Min("amount"), count=Count("id"),
+                          last_at=Max("placed_at"))
+                .order_by("auction_id", "best", "last_at"))
+        for r in rows:
+            ranked_by_auction.setdefault(r["auction_id"], []).append(
+                {"supplier_id": r["supplier_id"], "supplier_name": r["supplier__name"],
+                 "best": r["best"], "count": r["count"], "last_at": r["last_at"]})
+    auctions = {a.pk: a for a in Eauction.objects.filter(pk__in=page_ids)}
+    boards = [{"auction": auctions[pk], "ranked": ranked_by_auction.get(pk, [])[:5]}
+              for pk in page_ids]
     return render(request, "procurement/eauctionmanagement/floor.html", {
-        "object_list": page_obj.object_list,
+        "object_list": boards,
         "page_obj": page_obj,
     })
 
