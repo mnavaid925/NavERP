@@ -24,7 +24,7 @@
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Rank</th><th>Response</th><th>Supplier</th><th>Event</th><th>Earned / possible</th><th>Weighted score</th><th>Status</th></tr></thead>
+        <thead><tr><th>Rank</th><th>Response</th><th>Supplier</th><th>Event</th><th>Earned / possible</th><th>Weighted score</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
           {% for row in object_list %}
             <tr>
@@ -37,9 +37,12 @@
               <td>
                 <span class="badge {% if row.response.status == 'scored' %}badge-green{% elif row.response.status == 'under_review' %}badge-amber{% elif row.response.status == 'submitted' %}badge-info{% else %}badge-muted{% endif %}">{{ row.response.get_status_display }}</span>
               </td>
+              <td><div class="table-actions">
+                <a href="{% url 'procurement:rfx_response_detail' row.response.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+              </div></td>
             </tr>
           {% empty %}
-            <tr><td colspan="7"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No scored responses yet</h3><p>Record a supplier response and enter evaluator scores to see the ranking.</p></div></td></tr>
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No scored responses yet</h3><p>Record a supplier response and enter evaluator scores to see the ranking.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
