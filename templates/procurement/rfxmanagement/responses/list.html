@@ -53,10 +53,10 @@
               <td>{% if obj.submitted_at %}{{ obj.submitted_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
               <td>
                 <div class="table-actions">
-                  <a href="{% url 'procurement:rfx_response_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  <a href="{% url 'procurement:rfx_response_edit' obj.pk %}" class="btn-icon" title="Edit answers & scores"><i data-lucide="pencil"></i></a>
+                  <a href="{% url 'procurement:rfx_response_detail' obj.pk %}" class="btn-icon" title="View" aria-label="View"><i data-lucide="eye"></i></a>
+                  {% if not obj.is_locked and obj.event.status != 'cancelled' %}<a href="{% url 'procurement:rfx_response_edit' obj.pk %}" class="btn-icon" title="Edit answers & scores" aria-label="Edit answers & scores"><i data-lucide="pencil"></i></a>{% endif %}
                   <form method="post" action="{% url 'procurement:rfx_response_delete' obj.pk %}" onsubmit="return confirm('Delete this response?');">
-                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
                   </form>
                 </div>
               </td>
