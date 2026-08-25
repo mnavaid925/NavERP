@@ -27617,3 +27617,25 @@ author; build agents create ONLY brand-new files under `apps/inventory/*/ThirdPa
 + `templates/inventory/integration/`; `_base.py` is off-limits to everyone (import hashlib/secrets
 locally instead); 5.18's AccountingFinancialIntegration files are READ-ONLY. Migration etiquette
 per §9.
+
+### 5.19 close-out (same day, extended session)
+
+- **Built + wired**: 4 models / 3 forms / 22 views+urls across `ThirdPartyIntegrations/` x4 layers,
+  11 templates under `templates/inventory/integration/`, package re-exports, admin, LIVE_LINKS["5.19"],
+  migrations 0026 (+0027 external_variant_id null=True + inv_syn_tnt_started_idx from the review).
+- **Review wave**: six lanes -> review-inventory-5.19.md (1C/8I/11M); fixer closed all but M8
+  (skipped-with-reason), M10 (decided design) and C1 (seeder — main session, was L45-gated).
+  Notable catches: retry status-guard gap (I1), NULL-coalescing premise broken by NOT NULL column
+  (I2), backoff index scheme vs contract drift (I3), unbounded listings panel (I4), orphan listing
+  UI (I5), revoked-client token arming (I7).
+- **Verification**: partial smoke 17/17; full content smoke 36/36 against seeded dev rows
+  (simulated-not-sent honesty, zero StockMoves, plaintext-once + no hash in flash, revoked refusal,
+  IDOR 404 sweep, GET-never-mutates 405s); real `seed_inventory` hook fired + idempotent.
+- **Tests**: test_integrationapi_{models,forms,views,security}.py = 81 tests, module-local
+  `_integrationapi_*` fixtures so the L45-gated conftest.py was never touched. Draft-stage defects
+  fixed in-test: err.value.message_dict attribute, impossible same-name ordering premise,
+  incomplete POST payloads (choice fields are required in forms — browsers submit selects),
+  IDOR dict pointed at _a instead of _b fixtures, file-count scan off-by-one, kwargs collision.
+- **Concurrency of record**: a sibling session built 5.15 QC fixes + 5.16 + 5.17 + 5.18 in this
+  checkout throughout; shared files were edited only after their hunks committed; my detached-pytest
+  runs co-existed with theirs on the loaded box.
