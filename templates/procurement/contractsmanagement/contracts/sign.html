@@ -1,0 +1,36 @@
+{% extends "base_auth.html" %}
+{% block title %}Sign {{ contract.number }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <h2>{{ contract.title }}</h2>
+    <p>Agreement <strong>{{ contract.number }}</strong> · signing as {{ signer.signer_name }} ({{ signer.signer_email }})</p>
+
+    {# Escaped text only — clause bodies are tenant-authored; |safe here would be a stored-XSS vector on this public page. #}
+    {% if links %}
+      {% for link in links %}
+        <h3>§{{ link.section_order }} {{ link.clause.title }}</h3>
+        <pre style="white-space:pre-wrap; border:1px solid var(--border); padding:1rem; border-radius:.5rem;">{{ link.effective_text }}</pre>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted">The agreement's drafted terms are being finalized.</p>
+    {% endif %}
+
+    {% if already %}
+      <p>You have already responded to this document. Thank you.</p>
+    {% else %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+          <button name="action" value="sign" class="btn btn-primary">I agree &amp; Sign</button>
+          <button name="action" value="decline" class="btn btn-outline">Decline</button>
+        </div>
+      </form>
+    {% endif %}
+
+    <p class="text-muted">
+      {% if already %}Your response is on record.{% elif remaining_after %}After you sign, {{ remaining_after }} signature{{ remaining_after|pluralize }} will still be outstanding.{% else %}You are the last signer — your response completes this agreement.{% endif %}
+    </p>
+  </div>
+</div>
+{% endblock %}
