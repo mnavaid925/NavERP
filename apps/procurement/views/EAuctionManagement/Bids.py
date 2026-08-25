@@ -24,11 +24,14 @@ def _bound_supplier(request, auction):
     ``(None, False)`` means a workspace STAFF member who may pick which invitee they record
     for; any other login (portal user without a binding, superuser without a tenant) is pinned
     to nothing and can never choose one.
+
+    ANY binding row pins the login to the portal side — an active-but-unlinked row must never
+    fall through to the staff branch, or that portal login could record bids as any invitee.
     """
     from apps.procurement.models import VendorPortalAccess
 
     access = VendorPortalAccess.for_user(request.tenant, request.user)
-    if access is not None and access.supplier_id is not None:
+    if access is not None:
         return access.supplier, True
     if request.tenant is not None and getattr(request.user, "tenant_id", None) == request.tenant.pk:
         return None, False
