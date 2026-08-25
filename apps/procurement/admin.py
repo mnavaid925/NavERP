@@ -4,7 +4,9 @@ from django.contrib import admin
 from .models import (
     ApprovalDelegation,
     ApprovalRoutingRule,
+    BidScore,
     EscalationPolicy,
+    EventCriterion,
     ProcurementAlert,
     RequisitionAmendment,
     RequisitionAmendmentLine,
@@ -15,6 +17,8 @@ from .models import (
     RfxEvent,
     RfxQuestion,
     RfxResponse,
+    SourcingBid,
+    SourcingEvent,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -203,3 +207,50 @@ class RfxResponseAdmin(admin.ModelAdmin):
     raw_id_fields = ("event", "supplier", "recorded_by")
     readonly_fields = ("number", "submitted_at", "recorded_by", "created_at", "updated_at")
     inlines = [RfxAnswerInline]
+
+
+# -- 6.5 Sourcing & Tendering ------------------------------------------------------------------------
+
+class EventCriterionInline(admin.TabularInline):
+    model = EventCriterion
+    extra = 0
+    # The <=100% weight rule is enforced by the formset on the real screen; the admin inline
+    # stays a convenience window and must not pretend to re-implement it.
+
+
+@admin.register(SourcingEvent)
+class SourcingEventAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "event_type", "status",
+                    "budget_estimate", "opens_at", "closes_at", "awarded_at")
+    list_filter = ("tenant", "status", "event_type")
+    search_fields = ("number", "title", "description", "rules")
+    raw_id_fields = ("requisition", "currency", "created_by")
+    # status and the *_at stamps move only through the view verbs so each transition lands with
+    # its audit row — the admin may look, never flip the state machine.
+    readonly_fields = ("number", "status", "created_by", "opened_at", "closed_at",
+                       "awarded_at", "created_at", "updated_at")
+    inlines = [EventCriterionInline]
+
+    def has_add_permission(self, request):
+        return False
+
+
+class BidScoreInline(admin.TabularInline):
+    model = BidScore
+    extra = 0
+    readonly_fields = ("criterion", "score", "note")
+
+
+@admin.register(SourcingBid)
+class SourcingBidAdmin(admin.ModelAdmin):
+    list_display = ("number", "event", "supplier", "total_price",
+                    "is_compliant", "status", "submitted_by", "submitted_at")
+    list_select_related = ("event", "supplier", "submitted_by")
+    list_filter = ("tenant", "status", "is_compliant")
+    search_fields = ("number", "supplier__name", "summary", "contact_ref", "decision_note")
+    raw_id_fields = ("event", "supplier", "submitted_by")
+    readonly_fields = ("number", "status", "submitted_by", "submitted_at",
+                       "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
