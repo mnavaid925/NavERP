@@ -38,6 +38,7 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, Ã¢â‚¬Â¦) with PROTECT 
 | 5.13 | \ForecastingPlanning/\ | StockLevelPlan [SLP-] (+ planning_board computed page) | forecasts/ROP math stay SCM 4.7; board apply delegates to spine apply_computed; recommended qty derived via profile.apply_to each render |
 | 5.10 | `ReturnsManagement/` | ReturnInspection [RMI-], ReturnInspectionChecklist, DispositionRoutingRule (+ `returns_workbench` computed board) | Primary RMA documents and ledger postings stay in SCM 4.10 (L36/L29); 5.10 adds warehouse physical inspection grading checklists and automated disposition routing engine |
 | 5.12 | `MultiLocationManagement/` | LocationNetwork [LNW-] (+ `global_stock` computed page in its own GlobalStock.py view module) | org tier ABOVE the location spine: company>region>dc/store self-FK tree whose nodes attach `scm.Location` warehouses; global stock rolls the StockMove ledger UP that tree (4 flat queries); Location-Specific Rules bullet points at `scm:reorderrule_list` |
+| 5.15 | `QualityControl/` | QcChecklist, QcChecklistItem, QcRoutingRule (+ `resolve_qc_routing` resolver), QuarantineOrder [QRD-], DefectReport [DEF-] | engineering quality stays SCM 4.9 (plans/inspections/NCR); 5.15 is the warehouse-FLOOR gate - QRD posts real transfer/adjustment legs, DEF write-off posts NCR's adjustment shape |
 
 ### 5.12 Multi-Location Management â€” the org-tier slice
 
@@ -397,3 +398,144 @@ pointing master-data bullets at owning scm pages. Overview card groups per sub-m
 - Deps: python-barcode==0.16.1 + qrcode==8.2 pinned in requirements.txt (SVG factories need no Pillow).
 - Tests: test_barcode_{models,forms,views,security}.py (30) + conftest fixtures barcode_label_{a,b},
   scan_session_open_a, scan_event_a, rfid_tag_active_a, rfid_tag_b.
+
+### 5.16 Alerts & Notifications (built 2026-08-25)
+- **AlertRule [ARL-]** (TenantNumbered, `models/AlertsNotifications/AlertRules.py`): the watch
+  catalog. alert_type low_stock|out_of_stock|overstock|expiry|po_approval_pending|
+  shipment_delayed; severity info|warning|critical stamped onto every alert; optional
+  item/location SCOPE (blank = all; expiry ignores location because lots have none);
+  per-type knobs expiry_days (default 30) + overstock_pct (default 100); channels
+  notify_inapp/email/sms/push booleans + email_recipients comma list (clean() REQUIRES >=1
+  when email on; normalised lower/dedup in save()); cooldown_days dedup window;
+  unique (tenant, name); index inv_alr_tnt_type_idx.
+- **InventoryAlert [ALT-]** (`InventoryAlerts.py`): SNAPSHOT row - alert_type/severity/
+  metric_value editable=False, message frozen at raise; FKs rule(SET_NULL)+item/location/
+  lot_serial/purchase_order/shipment all nullable; status open->acknowledged->resolved via
+  acknowledge(user)/resolve(user, note) verbs (who/when stamped); dedup_key CharField.
+  CLASSMETHOD run_detection(tenant) IS the engine: one atomic block; grouped ReorderRule
+  on_hand_map for stock watches (qty<=0 out-of-stock elif <= reorder_point), BinCapacity
+  quantity_utilisation for overstock (None = no declared limit = nothing to breach),
+  LotSerial.expiry_date windows (negative days => expired wording), PO pending_approval +
+  Shipment planned_delivery_date<today not delivered/cancelled as workflow triggers.
+  Suppression: skip if an open-or-acknowledged alert shares the dedup key OR last raise
+  within cooldown (Max(raised_at) map) - ENGINE guard only, MariaDB cannot express the
+  partial unique (4.15 precedent). Returns explainable summary dict {rules_evaluated,
+  raised[], skipped_open, skipped_cooldown, deliveries}.
+- **NotificationDelivery [NDL-]** (`NotificationDeliveries.py`, TenantOwned): append-only
+  dispatch log written ONLY by _write_deliveries at raise time - one row per channel
+  (email: one per recipient; others "(broadcast)"). No create/edit/delete routes BY DESIGN
+  (TrackingEvent posture). Status stays `queued` - # WARNING: no SMTP/SMS/push gateway is
+  integrated; claiming "sent" would be a lie. In-app inbox is the live surface.
+- **Views** (`views/AlertsNotifications/`): alert_list inbox (KPI strip open/critical-open/
+  acknowledged/resolved in ONE group-by, ?type= lenses ARE the sidebar bullets, junk GET
+  falls back to ""), alert_detail (+ deliveries table + triage panel with resolution note),
+  alert_acknowledge/alert_resolve @login_required POST (procurement alert-center precedent -
+  operational, not config), alert_run_detection @tenant_admin_required POST (audits summary,
+  warns when zero active rules). alertrule CRUD admin-gated; delivery list/detail read-only.
+- **URLs**: `alerts/` inbox, `alerts/run-detection/` (literal BEFORE `<int:pk>`),
+  `alerts/<int:pk>/{,acknowledge/,resolve/}`, `alerts/rules/...`, `alerts/deliveries/...`.
+  Sidebar 5.16: four bullets -> alert_list?type={low_stock|overstock|expiry|
+  po_approval_pending}; Rules/Deliveries reachable from inbox header + overview card.
+- Templates: templates/inventory/alerts/{alertrule/{list,detail,form},
+  inventoryalert/{list,detail}, notificationdelivery/{list,detail}}.html. Overview page has
+  an Alerts & Notifications link card ({% url %} then ?type= appended - {% url %} cannot
+  carry a query string).
+- Seeder `_seed_alerts`: five rules per tenant (guarded by AlertRule existence), seeds one
+  overdue inbound SHP-SEED01 shipment ONLY if the tenant has none, then runs a REAL
+  run_detection() so every demo alert cites live spine data (Acme 9 alerts/11 deliveries,
+  Globex 10/13). Flush deletes children-first (deliveries -> alerts -> rules).
+- Migration 0020 (also carries a pre-existing rfidtag.epc help_text sync). Tests:
+  test_alerts_{models,forms,views,security}.py + conftest fixtures alert_rule_a,
+  inventory_alert_open_a, notification_delivery_a.
+
+### 5.18 Accounting & Financial Integration - the sync-engine slice
+
+- **Ownership rulings**: the ledger stays `accounting`'s (L29) and PO/GRN/SO/shipment documents
+  stay 4.x's (L36). 4.18's AP/AR pages are READ-ONLY registers; 5.18 is the part that DRAFTS the
+  money documents from stock events and posts stock value into the ledger.
+- **TaxRule [TRT-]** (`TaxRules.py`, TenantNumbered): product scope (item PROTECT > category
+  PROTECT > catch-all) x optional billing country -> accounting.TaxCode. Overlapping rules LEGAL;
+  deterministic resolver: specificity score DESC (item=8 + category=4 + country=2) -> priority ASC
+  -> id ASC; blank dimensions are wildcards; country compare is case-insensitive. Dual item+category
+  pin fires as ITEM-tier only (PutawayRule ruling). `resolve_tax_rule` / `TaxRule.rate_for` are the
+  shared entry points (rules kwarg lets views preload once per request).
+- **GLPostRule** (`GLPostRules.py`, TenantOwned, unique_together (tenant, event_type)): ONE active
+  account map per event type - adjustment (inventory_account + gain/write-off offset) and cogs
+  (inventory_account + COGS expense offset). clean() refuses foreign GL accounts and identical pairs.
+- **JournalSyncLog [JSY-]** (`JournalSyncLogs.py`, TenantNumbered) + two services:
+  - `post_adjustment_to_gl(tenant, user, adjustment)`: posted scm.StockAdjustment value impact ->
+    balanced POSTED accounting.JournalEntry (entry_type="manual", reference stamped). Value up =
+    DR inventory / CR offset (found stock); down reversed. Refuses non-posted, net-zero,
+    already-logged, no open fiscal period, missing rule. Idempotent by log-row existence.
+  - `post_cogs_batch(tenant, user, date_from, date_to)`: ALL customer-issue StockMoves in window as
+    ONE balanced entry valued at each move's STAMPED issue-time unit_cost (historical fact, not a
+    re-valuation), grouped per item. Refuses inverted/empty windows, overlapping prior batches,
+    zero-value batches, no period.
+  - Both write inside transaction.atomic(); JE creation mirrors accounting's own _post_journal_entry
+    contract locally (peer apps do not import each other's internals).
+- **Computed pages** (`views/AccountingFinancialIntegration/`, `_common.py` holds _party_country +
+  _active_tax_rules): `ap_sync` queues RECEIVED GRNs with bill__isnull (annotate received_total at
+  PO unit prices - NOTE the joined annotate DROPS Meta ordering, pin .order_by explicitly); verb
+  `ap_sync_run` @tenant_admin_required drafts a DRAFT accounting.Bill from GRN lines at PO prices,
+  re-checks bill__isnull under select_for_update, links grn.bill and re-runs recompute_match in one
+  atomic block. PO lines are L28 free-text (NO item FK) so tax resolves on GEOGRAPHY alone there;
+  AR's order lines have a real item and get full product x country resolution. `ar_sync` queues
+  DELIVERED outbound shipments with uninvoiced SOs; `ar_sync_run` drafts Invoice(kind="invoice")
+  from ORDER lines with discounts folded to NET unit prices (InvoiceLine.line_total = qty x price),
+  links so.invoice without flipping SCM status. `je_automation` board = account-map state + pending
+  adjustments (ONE anti-join over JSY rows) + JSY register + COGS runner defaulting day-after-last-
+  batch -> today; verbs je_post_adjustment / je_post_cogs.
+- **CRUD**: TaxRule + GLPostRule quintets (`tax-rules/`, `gl-post-rules/`); writes admin-gated,
+  list/detail member-readable with is_admin affordance hiding. Sync pages pass is_admin too.
+- **URLs**: finance/ap-sync[/run], finance/ar-sync[/run], finance/je-automation[+ literal verb tails],
+  tax-rules/, gl-post-rules/.
+- Templates: templates/inventory/finint/{ap_sync,ar_sync,je_automation}.html +
+  {taxrule,glpostrule}/{list,detail,form}.html. Overview card "Accounting & Financial Integration".
+- Seeder `_seed_finint`: two TaxRules over seed_accounting codes, two GLPostRules over its chart of
+  accounts (1500 Inventory / 5000 COGS / first other-expense offset), an approved PO + received
+  UNBILLED GRN booked through scm's real `_post_grn_receipt` (marker "Finance-integration demo
+  order" guards idempotence per block), seed_scm's outbound shipment delivered via a REAL
+  TrackingEvent (state-idempotent: delivered no longer matches), and the newest pending posted
+  adjustment posted through the REAL post_adjustment_to_gl. Per-block guards survive partial runs.
+- Migration 0024 (only this run's models; the concurrent 5.15-5.17 session took 0020-0023).
+  Tests: test_finint_{models,forms,views,security}.py. Sandbox caveat of record: DB-backed pytest
+  launches were killed by the build session's shell while the parallel session ran its own test
+  wave; coverage was verified green via temp/verify_finint_518.py-style direct assertions and must
+  be re-run via pytest in a normal dev shell.
+
+
+### 5.15 Quality Control (QC) & Inspection — the floor-gate slice
+
+- **Ownership ruling**: SCM 4.9 owns quality ENGINEERING (`InspectionPlan`, `QualityInspection`,
+  `NonConformance` + MRB). 5.15 is the warehouse-FLOOR gate AROUND it (L36/L29/L37): four bullets,
+  four new tables, zero re-declared spine entities. Sidebar bullets all map inside inventory;
+  overview card cross-links `scm:qualityinspection_list` + `scm:nonconformance_list`.
+- **QcChecklist + QcChecklistItem** — mandatory pre-acceptance checks pinned to item OR vendor
+  party OR workspace-wide (`applies_to` property renders the scope); checkpoints edited inline on
+  the parent form via `QcChecklistItemFormSet` (5.10 pattern), kind visual/functional/documentation/
+  quantity/instruction, mandatory flag, sequence ordering. Writes tenant-admin gated.
+- **QcRoutingRule + resolve_qc_routing()** — inspect/bypass verdict per inbound receipt; specificity
+  tiers item(3)>category(2)>catch-all(1), vendor-pinned rules add specificity and NEVER fire blind
+  on unknown suppliers; priority ASC then id ASC; caller-supplied rule lists trusted for ORDER never
+  TENANCY. Rule detail page runs a LIVE full-engine preview (?item=<pk>) whose badge says which rule
+  actually won - an inactive rule honestly shows as not firing.
+- **QuarantineOrder [QRD-]** — draft->quarantined->released|scrapped|cancelled with REAL ledger legs:
+  quarantine() posts a transfer pair at average cost (source out / QC-HOLD in), release()/cancel-from-
+  held reverse it (`_reverse_pair`, guarded by zone shortfall FIRST), scrap() posts ONE negative
+  adjustment FROM the zone (SCM NCR's shape, scoped to this order's units so an NCR can never double-
+  post). `_locked()` row lock + `_stock_lock()` item lock in every action, uniform order, audit inside
+  the txn. status editable=False (verb-owned).
+- **DefectReport [DEF-]** — floor capture aligned to NCR's defect taxonomy, discovered_during stages,
+  photo file-or-url (image-only allowlist, core 20 MB cap at form boundary), optional `ncr`
+  escalation pointer; writeoff() = guarded negative adjustment at the report's location; close() =
+  no-ledger resolution; `posts_stock` executable rule (dock-refused units close as paper).
+- **Gating**: checklist/rule writes admin; quarantine verb login-gated (operator work);
+  release/scrap/cancel/writeoff/close/delete admin; defect+quarantine edit/delete open/draft-only,
+  edit guard held UNDER select_for_update across crud_edit (TOCTOU fix, review I2).
+- Templates `templates/inventory/qc/{qcchecklist,qcroutingrule,quarantineorder,defectreport}/
+  {list,detail,form}.html`; every entity module has its OWN literal url prefix (bare "" collides with
+  the app-root overview route - first-match-wins ate the list page until prefixed).
+- Seeder `_seed_quality_control`: QC-HOLD zone get_or_create under WH-MAIN, three checklists, three
+  routing-rule tiers, two QRDs walked through REAL actions (one quarantined, one released) + one draft,
+  DEF-00002 written off through the REAL writeoff(). Per-entity existence guards.
+- Migration 0023 (+0025 status AlterField). Tests: test_qc_{models,forms,views,security}.py (111).
