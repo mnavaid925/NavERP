@@ -60,13 +60,13 @@
       <table class="table">
         <thead><tr><th>Supplier</th><th>Note</th><th>Invited</th><th>Participation</th><th class="table-actions">Actions</th></tr></thead>
         <tbody>
-          {% for inv in invites %}
+          {% for p in participants %}
             <tr>
-              <td>{{ inv.supplier.name }}</td>
-              <td>{{ inv.contact_note|default:"—" }}</td>
-              <td>{{ inv.invited_at|date:"M d, H:i" }}</td>
+              <td>{{ p.invite.supplier.name }}</td>
+              <td>{{ p.invite.contact_note|default:"—" }}</td>
+              <td>{{ p.invite.invited_at|date:"M d, H:i" }}</td>
               <td>
-                {% for r in ranked %}{% if r.supplier_id == inv.supplier_id %}{{ r.count }} bid{{ r.count|pluralize }} · best {{ r.best|floatformat:2 }}{% endif %}{% endfor %}
+                {% if p.stats %}{{ p.stats.count }} bid{{ p.stats.count|pluralize }} · best {{ p.stats.best|floatformat:2 }}{% else %}—{% endif %}
               </td>
               <td>
                 {% if obj.is_editable or obj.status == 'scheduled' %}
