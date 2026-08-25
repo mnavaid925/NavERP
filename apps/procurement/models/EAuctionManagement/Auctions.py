@@ -182,8 +182,13 @@ class Eauction(TenantNumbered):
         return "extended"
 
     def award(self, supplier, note=""):
-        """Closed → awarded, recording the decision ONCE."""
-        if self.status != "closed":
+        """Closed → awarded, recording the decision ONCE.
+
+        The ``awarded_supplier_id`` guard is the second line of defence behind the view's
+        row lock: two concurrent POSTs can both pass the status check before either saves,
+        but only the first save ever lands a winner.
+        """
+        if self.status != "closed" or self.awarded_supplier_id is not None:
             return False
         best = self.best_bid()
         if best is None or supplier.pk != best.supplier_id:
