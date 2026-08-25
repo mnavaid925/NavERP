@@ -253,3 +253,72 @@ build sessions' shell (4th occurrence) - verified green via temp/verify_awe_63.p
 in a normal dev shell. Harness gotchas of record: MySQL tuple-startswith MATCHES NOTHING
 (use Q() unions); probe PR lines must use quantity=1 or recalc_totals doubles intended bands;
 purge stray probe RULES (not just requisitions) before asserting chain lengths.
+
+---
+
+## 6.6 RFx Management (RFI, RFP, RFQ) (built 2026-08-26)
+
+**As-built now: 6.1-6.6 (+6.4/6.5 landing in parallel sessions).** Package folder `RfxManagement/`
+across all four layers: `Events.py` = RfxEvent + RfxQuestion; `Responses.py` = RfxResponse +
+RfxAnswer + the batch scoring helpers.
+
+### Models
+
+- **`RfxEvent` [RFX-]** (`NUMBER_PREFIX="RFX"`) — rfi/rfp/rfq (`RFX_TYPES`), title/description
+  (supplier instructions), optional FK `scm.PurchaseRequisition` (`related_name="rfx_events"`,
+  L36), status draft/issued/closed/cancelled, response_due, issued_at/closed_at/created_by
+  (editable=False), `is_template` (True rows ARE the Template Library). `EDITABLE_STATUSES =
+  ("draft",)` — issued questionnaires freeze so responses stay comparable;
+  `LIVE_STATUSES = ("draft","issued")` gate new responses. Derived: `total_weight`,
+  `possible_points` (=10 x scored weight). Actions return bool and are the ONLY status writers:
+  `issue()` (needs >=1 question), `close()`, `cancel()`, `clone_as(user)` (copies header +
+  questions via bulk_create — copies never links).
+- **`RfxQuestion`** — child of event (no tenant column); section/prompt/help_text,
+  `ANSWER_TYPES` text/longtext/number/date/choice, options (one per line),
+  weight Decimal(5,2) >= 0, is_scored flag, `order`. `clean()` refuses choice-without-options.
+- **`RfxResponse` [RXR-]** — unique `(event, supplier)`; supplier PROTECT ->
+  `core.Party` (`related_name="procurement_rfx_responses"`); notes cover letter; `attachment`
+  FileField `procurement/rfx/%Y/%m/`; submitted_at/recorded_by editable=False.
+  `SUBMITTED_STATUSES = ("submitted","under_review","scored")`;
+  `STATUS_FLOW` dict drives the ONLY legal moves through `transition(to)` (submit refused when
+  event not accepting; no live transitions on a cancelled event); `is_locked` == disqualified.
+  Scoring derived on read: earned_points / score_percent properties.
+- **`RfxAnswer`** — unique `(response, question)`, answer_text (choice stores option verbatim),
+  score 0-10 nullable; `weighted_points` None unless scored+scored-question.
+- Batch helpers (module-level in Responses.py, re-exported by models/__init__):
+  `earned_score_map(response_pks)`, `possible_points_map(event_pks)`,
+  `weighted_percent(earned, possible)` (None when possible==0 — a None beats a flattering zero).
+
+### Forms / Views / URLs
+
+- Event form carries header + `RfxQuestionFormSet` (extra=2, max_num=60 validate_max;
+  `save_new` appends after Max(order); set-level clean REFUSES non-draft events). Reorder is a
+  POST verb `rfx_question_move` (direction up|down; draft-only; resequence-then-swap under
+  select_for_update). Lifecycle verbs issue/close/cancel/delete are POST-only with guards in the
+  model methods; delete allowed only for draft/cancelled events.
+- Response create pre-creates ONE blank answer per question (bulk_create) so the edit workspace
+  always mirrors the questionnaire exactly; `RfxAnswerFormSet` extra=0 can_delete=False
+  max_num=60; per-row widget adapts to answer_type; crafted rows without id hidden fields skip
+  type checks gracefully. `RfxResponseForm`: event field CREATE-only; accepts_responses checked
+  on CREATE only (closed-event evaluation keeps saving); `_validate_attachment` allowlist
+  (.pdf/.doc/.docx/.xls/.xlsx/.png/.jpg/.txt, 10 MB); foreign supplier rejected.
+- Routes (names): `rfx_list` (+?compare=1 filter to events with n_submitted>=2), `rfx_create`,
+  `rfx_detail`, `rfx_edit`, `rfx_delete`, `rfx_issue/close/cancel`, `rfx_question_move`
+  (pk,q_pk), `rfx_compare`, `rfx_library`, `rfx_clone`, `rfx_scoring`;
+  `rfx_response_list/detail/create/edit/delete/set_status`.
+- Context contract: detail passes `questions`, `response_rows`
+  ([{response,earned,possible,pct}]), `n_comparable` (drives Compare button); compare passes
+  `responses` (best-first), `matrix` ([{question,cells}]), `scored_rows`; scoring passes
+  paginated `object_list` of the same row dicts.
+
+### Templates / Seeder / Tests
+
+- `templates/procurement/rfxmanagement/{events/{list,detail,form,compare}.html,
+  responses/{list,detail,form}.html, library.html, scoring.html}`.
+- `_seed_rfx`: per-tenant guard; Template-Library RFI blueprint (5 typed questions) + issued
+  "Managed print services RFP" (3 questions, optional spine PR attached) with Northwind fully
+  scored (under_review) vs Cascade partial (submitted); audit baselines; suppliers get-or-create
+  core.Party + supplier PartyRole by name (reuses seed_scm's names).
+- Migration `0008_rfx_management` (RFX ops ONLY — 6.5's sourcing models ship their own 0009;
+  one owner per migration, L43). Tests: `test_rfx_{models,forms,views,security}.py` (84 total,
+  every function `test_rfx_*`). Sidebar: `LIVE_LINKS["6.6"]` maps all five NavERP.md bullets.
