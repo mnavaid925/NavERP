@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.title }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ obj.number }} · {{ obj.title }}</h1>
+    <nav class="breadcrumb">Procurement / <a href="{% url 'procurement:contract_list' %}">Contracts</a> / {{ obj.number }}</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'procurement:camendment_create' %}?contract={{ obj.pk }}" class="btn btn-outline"><i data-lucide="git-pull-request-arrow"></i> Propose amendment</a>
+    <a href="{% url 'scm:contract_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="external-link"></i> Spine record</a>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="building-2"></i></div>
+    <div><div class="stat-value">{{ obj.party.name }}</div><div class="stat-label">{{ obj.get_contract_type_display }} · {{ obj.get_status_display }}</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon green"><i data-lucide="calendar-clock"></i></div>
+    <div><div class="stat-value">{% if obj.end_date %}{{ days_to_expiry }}d{% else %}—{% endif %}</div><div class="stat-label">To {% if obj.auto_renew %}auto-renewal{% else %}expiry{% endif %}{% if obj.end_date %} ({{ obj.end_date|date:"d M Y" }}){% endif %}</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon orange"><i data-lucide="pen-line"></i></div>
+    <div><div class="stat-value">{{ signers|length }}</div><div class="stat-label">Signature slots · {% if all_signed %}<span class="badge badge-green">fully signed</span>{% elif declined %}<span class="badge badge-red">declined</span>{% elif unsigned %}<span class="badge badge-amber">{{ unsigned|length }} outstanding</span>{% else %}<span class="badge badge-slate">none requested</span>{% endif %}</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon purple"><i data-lucide="list-checks"></i></div>
+    <div><div class="stat-value">{{ milestones|length }}</div><div class="stat-label">Milestones tracked</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Drafted clauses</h2></div>
+  <div class="card-body">
+    {% if links %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>§</th><th>Clause</th><th>Wording in force</th>{% if request.user.is_authenticated %}<th class="table-actions"></th>{% endif %}</tr></thead>
+        <tbody>
+          {% for link in links %}
+          <tr>
+            <td>{{ link.section_order }}</td>
+            <td>{{ link.clause.title }} <span class="badge badge-muted">{{ link.clause.get_category_display }}</span>{% if not link.clause.is_pre_approved %} <span class="badge badge-amber">not pre-approved</span>{% endif %}</td>
+            <td>{% if link.custom_text %}<details><summary>Negotiated override</summary><pre style="white-space:pre-wrap;">{{ link.custom_text }}</pre></details>{% else %}<details><summary>Standard wording</summary><pre style="white-space:pre-wrap;">{{ link.clause.body }}</pre></details>{% endif %}</td>
+            {% if request.user.is_authenticated %}
+            <td class="table-actions">
+              <form method="post" action="{% url 'procurement:contract_remove_link' obj.pk link.pk %}" onsubmit="return confirm('Remove clause {{ link.clause.title }} from the draft?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon btn-danger" title="Remove clause"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-state"><p>No clauses drafted yet.</p></div>{% endif %}
+    <form method="post" action="{% url 'procurement:contract_add_link' obj.pk %}" class="filter-bar">
+      {% csrf_token %}
+      <select name="clause" class="form-select" required>
+        <option value="">Select a library clause…</option>
+        {% for c in all_clauses %}
+          <option value="{{ c.pk }}">{{ c.title }} ({{ c.get_category_display }})</option>
+        {% endfor %}
+      </select>
+      <input type="number" name="section_order" min="1" placeholder="§ order" class="form-input" style="max-width:8rem;">
+      <button type="submit" class="btn btn-outline">Add to draft</button>
+    </form>  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>E-signature</h2></div>
+  <div class="card-body">
+    {% if signers %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Signer</th><th>Role</th><th>Status</th><th class="table-actions"></th></tr></thead>
+        <tbody>
+          {% for s in signers %}
+          <tr>
+            <td>{{ s.order }}</td>
+            <td>{{ s.signer_name }}<br><small class="text-muted">{{ s.signer_email }}</small></td>
+            <td>{{ s.get_role_display }}</td>
+            <td>
+              {% if s.signed_at %}<span class="badge badge-green">Signed {{ s.signed_at|date:"d M Y" }}</span>
+              {% elif s.declined_at %}<span class="badge badge-red">Declined</span>
+              {% elif s.viewed_at %}<span class="badge badge-info">Viewed, unsigned</span>
+              {% else %}<span class="badge badge-slate">Not yet viewed</span>{% endif %}
+            </td>
+            <td class="table-actions">
+              {% if not s.has_responded %}
+              <a href="{% url 'procurement:contract_sign_page' s.token %}" class="btn btn-icon" title="Open sign page (share this link)"><i data-lucide="link"></i></a>
+              <form method="post" action="{% url 'procurement:contract_remove_signer' obj.pk s.pk %}" onsubmit="return confirm('Remove the signature slot for {{ s.signer_name }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon btn-danger" title="Remove slot"><i data-lucide="trash-2"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-state"><p>No signature slots yet — add the people who must sign.</p></div>{% endif %}
+    <form method="post" action="{% url 'procurement:contract_add_signer' obj.pk %}" class="filter-bar">
+      {% csrf_token %}
+      <select name="{{ signer_form.role.html_name }}" class="form-select">
+        {% for value, label in signer_form.fields.role.choices %}
+          <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="{{ signer_form.signer_party.html_name }}" class="form-select">
+        <option value="">Supplier identity (supplier role only)…</option>
+        {% for p in signer_form.fields.signer_party.queryset %}
+          <option value="{{ p.pk }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="{{ signer_form.signer_name.html_name }}" placeholder="Signer name" class="form-input" required>
+      <input type="email" name="{{ signer_form.signer_email.html_name }}" placeholder="Signer email" class="form-input" required>
+      <button type="submit" class="btn btn-outline"><i data-lucide="user-plus"></i> Add signer</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Milestones &amp; obligations</h2>
+    <a href="{% url 'procurement:milestone_create' %}?contract={{ obj.pk }}" class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Add milestone</a>
+  </div>
+  <div class="card-body">
+    {% if milestones %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Kind</th><th>Due</th><th>Amount</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for m in milestones %}
+          <tr>
+            <td>{{ m.number }}</td>
+            <td>{{ m.title }}</td>
+            <td>{{ m.get_kind_display }}</td>
+            <td>{% if m.is_overdue %}<span class="badge badge-red">{{ m.due_date|date:"d M Y" }} · overdue</span>{% else %}{{ m.due_date|date:"d M Y" }}{% endif %}</td>
+            <td>{{ m.amount|default_if_none:"—" }}</td>
+            <td>{{ m.get_status_display }}</td>
+            <td class="table-actions">
+              {% if m.status == "pending" or m.status == "in_progress" %}
+              <form method="post" action="{% url 'procurement:milestone_complete' m.pk %}" class="inline-form">{% csrf_token %}
+                <input type="hidden" name="action" value="complete">
+                <input type="hidden" name="next" value="{% url 'procurement:contract_detail' obj.pk %}">
+                <button type="submit" class="btn btn-icon" title="Complete"><i data-lucide="check"></i></button>
+              </form>
+              <form method="post" action="{% url 'procurement:milestone_complete' m.pk %}" class="inline-form">{% csrf_token %}
+                <input type="hidden" name="action" value="waive">
+                <input type="hidden" name="next" value="{% url 'procurement:contract_detail' obj.pk %}">
+                <button type="submit" class="btn btn-icon" title="Waive"><i data-lucide="circle-off"></i></button>
+              </form>
+              {% endif %}
+              <a href="{% url 'procurement:milestone_edit' m.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-state"><p>No milestones tracked on this agreement yet.</p></div>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Amendments</h2></div>
+  <div class="card-body">
+    {% if amendments %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Status</th><th>Requested</th><th>Reason</th><th>Decided</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for a in amendments %}
+          <tr>
+            <td><a href="{% url 'procurement:camendment_detail' a.pk %}">{{ a.number }}</a></td>
+            <td>
+              {% if a.status == "pending" %}<span class="badge badge-amber">Pending</span>
+              {% elif a.status == "applied" %}<span class="badge badge-green">Applied</span>
+              {% else %}<span class="badge badge-muted">Rejected</span>{% endif %}
+            </td>
+            <td>{{ a.created_at|date:"d M Y" }}</td>
+            <td>{{ a.reason|truncatechars:60 }}</td>
+            <td>{{ a.decided_at|date:"d M Y"|default:"—" }}</td>
+            <td class="table-actions">
+              {% if a.status == "pending" and is_admin %}
+              <form method="post" action="{% url 'procurement:camendment_approve' a.pk %}" class="inline-form" onsubmit="return confirm('Apply amendment {{ a.number }} to {{ obj.number }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="Apply"><i data-lucide="check-check"></i></button>
+              </form>
+              <form method="post" action="{% url 'procurement:camendment_reject' a.pk %}" class="inline-form" onsubmit="return confirm('Reject amendment {{ a.number }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon btn-danger" title="Reject"><i data-lucide="x"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}<div class="empty-state"><p>No amendments filed against this agreement.</p></div>{% endif %}
+  </div>
+</div>
+{% endblock %}
