@@ -39,6 +39,7 @@ layers AROUND that spine, FK'ing by string (`"scm.Item"`, â€¦) with PROTECT 
 | 5.10 | `ReturnsManagement/` | ReturnInspection [RMI-], ReturnInspectionChecklist, DispositionRoutingRule (+ `returns_workbench` computed board) | Primary RMA documents and ledger postings stay in SCM 4.10 (L36/L29); 5.10 adds warehouse physical inspection grading checklists and automated disposition routing engine |
 | 5.12 | `MultiLocationManagement/` | LocationNetwork [LNW-] (+ `global_stock` computed page in its own GlobalStock.py view module) | org tier ABOVE the location spine: company>region>dc/store self-FK tree whose nodes attach `scm.Location` warehouses; global stock rolls the StockMove ledger UP that tree (4 flat queries); Location-Specific Rules bullet points at `scm:reorderrule_list` |
 | 5.15 | `QualityControl/` | QcChecklist, QcChecklistItem, QcRoutingRule (+ `resolve_qc_routing` resolver), QuarantineOrder [QRD-], DefectReport [DEF-] | engineering quality stays SCM 4.9 (plans/inspections/NCR); 5.15 is the warehouse-FLOOR gate - QRD posts real transfer/adjustment legs, DEF write-off posts NCR's adjustment shape |
+| 5.20 | `UnitsOfMeasure/` | UomConversion (+ module-level `find_conversion_path` / `convert_quantity` engine + read-only `uom_calculator` page) | scm.UOM master stays 4.3's; 5.20 is exactly the "full N:N conversion matrix (deferred)" its docstring names; zero spine writes |
 
 ### 5.12 Multi-Location Management — the org-tier slice
 
@@ -578,3 +579,50 @@ pointing master-data bullets at owning scm pages. Overview card groups per sub-m
   `_integrationapi_*` fixtures (conftest untouched); gotchas: choice fields with model defaults are
   still REQUIRED in posts (browsers submit selects), and same-name channel/client rows are impossible
   by design (unique (tenant,name)) so ordering tests must use distinct names.
+
+### 5.20 Units of Measure (UOM) - the conversion-matrix slice (built 2026-08-25, MODULE 5 COMPLETE)
+
+- **Ownership ruling**: the UOM MASTER is SCM 4.3's `scm.UOM` (code/name/factor) and its own
+  docstring defers "a full N:N conversion matrix" to a later slice - 5.20 IS that deferred
+  piece. One config table, zero spine writes, FKs by string ("scm.Item"/"scm.UOM", PROTECT).
+- **UomConversion** (`models/UnitsOfMeasure/UomConversions.py`, TenantOwned, NO numbering -
+  PutawayRule posture): directed rule "1 FROM-unit holds FACTOR TO-units"; factor 14,4 min
+  0.0001; two-tier scope item-pinned > tenant-default (blank item), most-specific-wins;
+  unique_together (tenant,item,from,to) + an EXPLICIT clean() duplicate probe because
+  MariaDB/SQLite null-coalescing unique cannot see two item=NULL rows; clean() also refuses
+  from==to and foreign FKs keyed off `<name>_id`. `reverse_factor` honestly lossy (quantized
+  inverse); `resolve(tenant,item,from,to)` classmethod = direct rule lookup.
+- **Engine** (module-level): `_active_edges()` ONE flat query -> adjacency map holding exactly
+  one rule per edge (item rows override defaults PER EDGE via a tier compare, lowest id breaks
+  ties; another SKU's private rule never enters the graph); `find_conversion_path()` BFS with
+  MAX_PATH_DEPTH=5 cap returns [] for identity / list of rules in travel order / None when
+  genuinely unreachable; `convert_quantity()` multiplies factors quantizing ONCE at the end
+  (RESULT_QUANTUM 0.0001). Chains may mix tiers across hops.
+- **Calculator** (`views/UnitsOfMeasure/UomCalculator.py`, read-only computed page,
+  `inventory:uom_calculator`): ?qty/from/to/item resolves through the engine and shows every
+  hop + which tier won it. GOTCHA of record: 'Infinity'/'NaN' PARSE as Decimals and huge
+  exponents ('1e999999') overflow at quantize with decimal.Overflow (NOT builtin
+  OverflowError) - the view refuses non-finite input up front and wraps the compute in
+  `except ArithmeticError` (the decimal exception ROOT), rendering honest "cannot convert"
+  cards instead of 500s. Header stats ride ONE conditional aggregate.
+- **CRUD**: quintet under `conversions/`; writes @tenant_admin_required, list/detail
+  member-readable with is_admin affordance hiding. Detail page stamps a resolver-derived
+  "Fires today?" verdict (kills dead-code resolve()) plus rivals table (which tier outranks
+  which), chainable edges, and a sample ladder. Every entity module keeps its OWN literal url
+  prefix (`conversions/`, `conversion-calculator/`) - bare "" would collide with the app-root
+  overview route (5.15 gotcha).
+- Sidebar 5.20: bullet "Units of Measure (UOM)" -> uomconversion_list; extra leaf "Conversion
+  Calculator" -> uom_calculator; UOM master stays linked from page headers/overview Catalog card.
+- Templates `templates/inventory/uom/{uomconversion/{list,detail,form},calculator}.html`;
+  floatformat:"-4" trims the engine's 4dp zeros on display. Overview has a Units of Measure card.
+- Seeder `_seed_uom_conversions`: get_or_creates EA/CASE(12)/PLT(480) beside seed_scm's EA/BOX,
+  seeds the NavERP.md ladder verbatim (CASE->EA 12, PLT->CASE 40, BOX->EA 12) + one items[0]
+  pinned CASE->EA 24 double-case override; guarded per tenant on UomConversion existence.
+  Migration 0028.
+- Tests: test_uom_{models,forms,views,security}.py (~44). Sandbox caveat of record (3rd time):
+  DB-backed pytest launches are killed by this shell while plain collect-only works; coverage
+  verified green (51/51 assertions incl. every overflow probe) via temp/verify_uom_tests_520.py
+  direct assertions with TRACKED cleanup - must be re-run via pytest in a normal dev shell.
+  Harness gotchas: `.first()` returns fresh instances so compare pks never `is`; probe fixtures
+  must use isolated codes or the seeded EA/CASE matrix trips the duplicate probes; cleanup by
+  pk-tracking only (prefix-based deletes once ate acme's seeded rows).
