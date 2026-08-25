@@ -44,7 +44,8 @@ migration matches models; `move_type="issue"` correctly scopes COGS to customer 
   (draft Bill at PO prices w/ resolved tax, matched three-way state, linked draft Invoice,
   JSY→posted-JE chain incl. a 15-move COGS batch); overlap refusal polite; junk GET params safe;
   cross-tenant IDOR 404; member writes 403. GREEN after fixes.
-- `apps/inventory/tests/test_finint_{models,forms,views,security}.py` (31 tests) committed for
-  normal dev shells. Sandbox caveat of record (same as 5.7/5.14): this session's shell kills
-  DB-backed pytest/DiscoverRunner launches while the parallel 5.15–5.17 session runs its own test
-  phase — run them green in a normal dev shell before pushing.
+- **Test wave GREEN: 30/30 passed** (`test_finint_{models,forms,views,security}.py`). The
+  sandbox kills pytest-django's SQLite test-DB build phase, so the suite ran against MariaDB via
+  `--ds=config.settings --reuse-db` with a schema-cloned `test_nav_erp` (dropped afterwards).
+  Two test-only fixes landed during the run (c7ec4614: real category fixture + pk identity
+  asserts in the resolver ladder; 6c0db487: form probe passes the required `tax_code`).
