@@ -68,16 +68,25 @@ def test_delegation_form_rules(tenant_a, admin_user, member_user, org_unit_b):
 
 def test_decision_form_comment_optional():
     assert ApprovalDecisionForm({"comment": ""}).is_valid()
-    assert ApprovalDecisionForm().is_valid()
+    # Bound-but-empty is the honest "no data at all" probe — an UNBOUND form's
+    # is_valid() is always False by Django contract.
+    assert ApprovalDecisionForm({}).is_valid()
     long = ApprovalDecisionForm({"comment": "x" * 2001})
     assert not long.is_valid()
 
 
-def test_policy_form(tenant_a, member_user):
+def test_policy_form(tenant_a, member_user, admin_b):
     form = EscalationPolicyForm(
         {"idle_hours": "12", "escalate_to": member_user.pk, "is_active": "on"},
         tenant=tenant_a)
     assert form.is_valid(), form.errors
+    # Zero hours = "escalate immediately", legal since review BUG-1 (the engine
+    # honours `is not None`) — the same semantics routing rules carry.
     form = EscalationPolicyForm(
         {"idle_hours": "0", "escalate_to": "", "is_active": ""}, tenant=tenant_a)
-    assert not form.is_valid() and "idle_hours" in form.errors
+    assert form.is_valid(), form.errors
+    # A backup approver from another workspace is refused.
+    form = EscalationPolicyForm(
+        {"idle_hours": "12", "escalate_to": admin_b.pk, "is_active": "on"},
+        tenant=tenant_a)
+    assert not form.is_valid() and "escalate_to" in form.errors
