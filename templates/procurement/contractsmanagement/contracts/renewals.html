@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Renewal &amp; Expiration Board{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Renewal &amp; Expiration Board</h1>
+    <nav class="breadcrumb">Procurement / Contracts / Renewals</nav>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{% url 'procurement:renewals_run' %}" onsubmit="return confirm('Scan agreements and raise alerts for every in-window contract without an open one?');">{% csrf_token %}
+      <button type="submit" class="btn btn-primary"><i data-lucide="bell-plus"></i> Run renewal scan</button>
+    </form>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon orange"><i data-lucide="hourglass"></i></div>
+    <div><div class="stat-value">{{ total }}</div><div class="stat-label">Agreements in their notice window</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon blue"><i data-lucide="refresh-cw"></i></div>
+    <div><div class="stat-value">{{ auto_count }}</div><div class="stat-label">Of which auto-renew</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    {% if rows %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Contract</th><th>Supplier</th><th>Ends</th><th>Days left</th><th>Window</th><th>Alert state</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td><a href="{% url 'procurement:contract_detail' row.contract.pk %}">{{ row.contract.number }} · {{ row.contract.title }}</a></td>
+            <td>{{ row.contract.party.name }}</td>
+            <td>{{ row.contract.end_date|date:"d M Y" }}</td>
+            <td>
+              {% if row.days_left <= 7 %}<span class="badge badge-red">{{ row.days_left }}d</span>
+              {% elif row.days_left <= 30 %}<span class="badge badge-amber">{{ row.days_left }}d</span>
+              {% else %}{{ row.days_left }}d{% endif %}
+            </td>
+            <td>{{ row.contract.renewal_notice_days }}d notice · {{ row.contract.auto_renew|yesno:"auto-renews,manual decision" }}</td>
+            <td>
+              {% if row.alerted %}<span class="badge badge-info">Alert open in 6.1 inbox</span>
+              {% else %}<span class="badge badge-muted">No open alert — run the scan</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i data-lucide="check-circle-2"></i>
+      <p>No agreement is inside its renewal window right now.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
