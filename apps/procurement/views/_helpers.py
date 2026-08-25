@@ -1,4 +1,4 @@
-"""Private helpers shared by the procurement pages.
+﻿"""Private helpers shared by the procurement pages.
 
 The activity feed over ``core.AuditLog`` is rendered on TWO surfaces — the overview widget and the
 full Recent Activity Feed — so its queryset builder lives here rather than being duplicated with
@@ -32,9 +32,6 @@ PROCUREMENT_CONTENT_MODELS = (
     "procurementalert",
     "requisitiontemplate",
     "requisitionamendment",
-    "vendorportalaccess",
-    "vendorsuspension",
-    "vendorinvoicesubmission",
     "sourcingevent",
     "sourcingbid",
     "rfxevent",
@@ -197,15 +194,14 @@ def _requisition_item_pairs(requisition_pks):
 # -- 6.5 Sourcing & Tendering: evaluation + award math ---------------------------------------------
 #
 # The **Bid Evaluation Matrix** and **Award Recommendation** bullets are consumed by THREE
-# surfaces � the event detail page (bid table scores), the bid detail page (one matrix) and the
-# award board (scenarios across every closable event) � so the ranking lives HERE as one
-# implementation. The math is deliberately simple and explainable: each scored criterion
-# contributes (score / max_score) � weight_pct, unscored rows contribute nothing, and the result
-# is capped by the defined weight total. No model calls a "score" anything it cannot show on the
-# page.
+# surfaces — the event detail page (bid table scores), the bid detail page (one matrix) and the
+# award board (scenarios across every closable event) — so the ranking lives HERE as one
+# implementation. The math is deliberately simple and explainable; the single formula lives in
+# ``models/SourcingTendering/Bids.weighted_total`` and every path below delegates to it, so the
+# per-bid convenience method and the batch paths cannot drift apart.
 
 def event_scores_map(event):
-    """(criteria, {bid_id: {criterion_id: Decimal}}) for one event � two queries total.
+    """(criteria, {bid_id: {criterion_id: Decimal}}) for one event — two queries total.
 
     Batch form of ``SourcingBid.weighted_score`` for surfaces that render MANY bids: the
     per-bid method costs one query PER ROW, which is an N+1 on exactly the pages this module
@@ -224,38 +220,83 @@ def event_scores_map(event):
 
 
 def weighted_from_map(score_map_row, criteria):
-    """Weighted 0..100 score from ONE pre-fetched {criterion_id: score} row (or None)."""
-    if not criteria:
-        return None
-    earned = Decimal("0")
-    for criterion in criteria:
-        raw = score_map_row.get(criterion.pk)
-        if raw is None or not criterion.max_score:
-            continue
-        earned += raw / criterion.max_score * criterion.weight_pct
-    return earned
+    """Weighted 0..100 score from ONE pre-fetched {criterion_id: score} row (or None).
+
+    Delegates to the model-layer implementation — this wrapper exists only so the view
+    modules keep one name for the batch path.
+    """
+    from apps.procurement.models.SourcingTendering.Bids import weighted_total
+
+    return weighted_total(score_map_row, criteria)
 
 
-def evaluate_event(event):
+def candidate_sort_key(row):
+    """Deterministic award-scenario order: scored before unscored, higher score first,
+    then cheaper whole-package price, then pk — a partial score never flatters itself."""
+    return (
+        row["score"] is None,                      # unscored candidates last, never first
+        -(row["score"] or Decimal("0")),           # higher score wins
+        row["bid"].total_price,                    # then cheaper whole-package price
+        row["bid"].pk,                             # total order → stable page renders
+    )
+
+
+def evaluate_event(event, criteria=None, score_map=None):
     """Ranked **award scenarios** for one closed event.
 
-    Returns ``(criteria, rows)`` where each row is
-    ``{"bid": bid, "score": Decimal|None}`` over COMPLIANT still-evaluable bids only,
-    ranked by score DESC, then price ASC, then pk � deterministic, explainable, and honest:
-    a partially-scored bid sorts below a fully-scored one rather than flattering itself.
+    Returns rows of ``{"bid": bid, "score": Decimal|None}`` over COMPLIANT still-evaluable
+    bids only, ranked by :func:`candidate_sort_key`. Callers that already hold the matrix
+    (event detail re-uses its own fetch) pass ``criteria``/``score_map`` to skip the refetch.
     """
     from apps.procurement.models import SourcingBid
 
-    criteria, score_map = event_scores_map(event)
+    if criteria is None or score_map is None:
+        fetched_criteria, fetched_scores = event_scores_map(event)
+        criteria = criteria if criteria is not None else fetched_criteria
+        score_map = score_map if score_map is not None else fetched_scores
     bids = list(event.bids.filter(
         status__in=SourcingBid.EVALUABLE_STATUSES, is_compliant=True,
     ).select_related("supplier"))
     rows = [{"bid": bid, "score": weighted_from_map(score_map.get(bid.pk, {}), criteria)}
             for bid in bids]
-    rows.sort(key=lambda r: (
-        r["score"] is None,                      # unscored candidates last, never first
-        -(r["score"] or Decimal("0")),                 # higher score wins
-        r["bid"].total_price,                    # then cheaper whole-package price
-        r["bid"].pk,                             # total order ? stable page renders
-    ))
-    return criteria, rows
+    rows.sort(key=candidate_sort_key)
+    return rows
+
+
+def evaluate_events_batch(events):
+    """Award scenarios for MANY events at ~4 queries total (the board's page budget).
+
+    Returns ``{event_id: rows}`` with the same row shape as :func:`evaluate_event`.
+    Criteria, scores and live compliant bids are each fetched once across the page's pks.
+    """
+    from collections import defaultdict
+
+    from apps.procurement.models import EventCriterion, SourcingBid, SourcingEvent
+
+    pks = [e.pk for e in events]
+    if not pks:
+        return {}
+    criteria_by_event = defaultdict(list)
+    for criterion in EventCriterion.objects.filter(event_id__in=pks).order_by("id"):
+        criteria_by_event[criterion.event_id].append(criterion)
+    score_map = defaultdict(lambda: defaultdict(dict))
+    for bid_id, criterion_id, event_id, score in BidScore.objects.filter(
+            bid__event_id__in=pks).values_list(
+                "bid_id", "criterion_id", "bid__event_id", "score"):
+        score_map[event_id][bid_id][criterion_id] = score
+    bids_by_event = defaultdict(list)
+    for bid in (SourcingBid.objects
+                .filter(event_id__in=pks,
+                        status__in=SourcingBid.EVALUABLE_STATUSES, is_compliant=True)
+                .select_related("supplier")):
+        bids_by_event[bid.event_id].append(bid)
+
+    result = {}
+    for event in events:
+        criteria = criteria_by_event.get(event.pk, [])
+        rows = [{"bid": bid,
+                 "score": weighted_from_map(score_map.get(event.pk, {}).get(bid.pk, {}), criteria)}
+                for bid in bids_by_event.get(event.pk, [])]
+        rows.sort(key=candidate_sort_key)
+        result[event.pk] = rows
+    return result
