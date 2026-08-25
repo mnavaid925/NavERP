@@ -49,6 +49,7 @@ from .WarehousingBinManagement.WarehouseMap import urlpatterns as _wh_warehousem
 from .QualityControl import urlpatterns as _qc_qualitycontrol
 from .ReportingAnalytics import urlpatterns as _ra_reportinganalytics
 from .ThirdPartyIntegrations import urlpatterns as _tpi_integrations
+from .UnitsOfMeasure import urlpatterns as _uom_units
 
 
 app_name = "inventory"
@@ -83,5 +84,6 @@ urlpatterns = [
     *_ra_reportinganalytics,  # ReportingAnalytics (4 computed reports + IRS- snapshots)
     *_fin_finint,          # AccountingFinancialIntegration (AP/AR sync, JE automation, tax & GL rules)
     *_tpi_integrations,    # ThirdPartyIntegrations (channels, listing maps, sync runs, API clients)
+    *_uom_units,           # UnitsOfMeasure (conversion matrix CRUD + calculator)
 ]
 
