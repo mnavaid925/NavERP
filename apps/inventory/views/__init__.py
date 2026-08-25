@@ -260,6 +260,14 @@ from .ReportingAnalytics import (
     report_valuation, report_turnover, report_aging, report_abc,
     snapshot_list, snapshot_detail, snapshot_generate, snapshot_delete,
 )
+from .UnitsOfMeasure.UomCalculator import uom_calculator
+from .UnitsOfMeasure.UomConversions import (
+    uomconversion_create,
+    uomconversion_delete,
+    uomconversion_detail,
+    uomconversion_edit,
+    uomconversion_list,
+)
 
 __all__ = [
     "overview",
@@ -356,5 +364,8 @@ __all__ = [
     "stocksyncrun_list", "stocksyncrun_detail", "stocksyncrun_retry",
     "apiclient_list", "apiclient_detail", "apiclient_create", "apiclient_edit",
     "apiclient_delete", "apiclient_issue_token", "apiclient_revoke",
+    "uomconversion_list", "uomconversion_detail", "uomconversion_create",
+    "uomconversion_edit", "uomconversion_delete",
+    "uom_calculator",
 ]
 
