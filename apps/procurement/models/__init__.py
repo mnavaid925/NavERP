@@ -18,6 +18,12 @@ from .RequisitionManagement.Amendments import RequisitionAmendment, RequisitionA
 from .RequisitionManagement.Templates import RequisitionTemplate, RequisitionTemplateLine
 from .RfxManagement.Events import RfxEvent, RfxQuestion
 from .RfxManagement.Responses import RfxAnswer, RfxResponse
+from .SourcingTendering import BidScore, EventCriterion, SourcingBid, SourcingEvent
+from .VendorManagement import (
+    VendorInvoiceSubmission,
+    VendorPortalAccess,
+    VendorSuspension,
+)
 
 __all__ = [
     "ApprovalRoutingRule",
@@ -37,4 +43,11 @@ __all__ = [
     "RfxEvent",
     "RfxQuestion",
     "RfxResponse",
+    "SourcingEvent",
+    "EventCriterion",
+    "SourcingBid",
+    "BidScore",
+    "VendorPortalAccess",
+    "VendorSuspension",
+    "VendorInvoiceSubmission",
 ]
