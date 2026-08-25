@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Clause Library{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Clause Library</h1>
+    <nav class="breadcrumb">Procurement / Contracts</nav>
+  </div>
+  <div class="page-actions">
+    <a href="{% url 'procurement:clause_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> Add Clause</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search clauses…" class="form-input">
+      <select name="category" class="form-select">
+        <option value="">All categories</option>
+        {% for value, label in category_choices %}
+          <option value="{{ value }}" {% if request.GET.category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="active" class="form-select">
+        <option value="">Active + retired</option>
+        <option value="1" {% if request.GET.active == "1" %}selected{% endif %}>Active only</option>
+        <option value="0" {% if request.GET.active == "0" %}selected{% endif %}>Retired only</option>
+      </select>
+      <button type="submit" class="btn btn-outline">Filter</button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if page_obj.object_list %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Title</th><th>Category</th><th>Status</th><th>Version</th><th>Used in</th><th class="table-actions">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for obj in page_obj.object_list %}
+          <tr>
+            <td><a href="{% url 'procurement:clause_detail' obj.pk %}">{{ obj.title }}</a></td>
+            <td>{{ obj.get_category_display }}</td>
+            <td>
+              {% if not obj.is_active %}<span class="badge badge-muted">Retired</span>
+              {% elif obj.is_pre_approved %}<span class="badge badge-green">Pre-approved</span>
+              {% else %}<span class="badge badge-amber">Needs sign-off</span>{% endif %}
+            </td>
+            <td>{{ obj.version|default:"—" }}</td>
+            <td>{{ obj.procurement_clause_links.count }}</td>
+            <td class="table-actions">
+              <a href="{% url 'procurement:clause_detail' obj.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+              <a href="{% url 'procurement:clause_edit' obj.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              <form method="post" action="{% url 'procurement:clause_delete' obj.pk %}" onsubmit="return confirm('Delete clause {{ obj.title }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    {% else %}
+    <div class="empty-state">
+      <i data-lucide="scroll-text"></i>
+      <p>No clauses yet — add the standard wording your agreements are drafted from.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
