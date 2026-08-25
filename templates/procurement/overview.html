@@ -171,6 +171,18 @@
   {% endfor %}
 
   <div class="card">
+    <div class="card-header"><h2 class="card-title">Approval Workflow Engine</h2></div>
+    <div class="card-body form-grid">
+      <a href="{% url 'procurement:approval_queue' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Approval Queue</a>
+      <a href="{% url 'procurement:routingrule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Routing Rules</a>
+      <a href="{% url 'procurement:delegation_list' %}" class="btn btn-outline"><i data-lucide="user-check"></i> DOA Grants</a>
+      <a href="{% url 'procurement:approval_history' %}" class="btn btn-outline"><i data-lucide="history"></i> Signature History</a>
+      <a href="{% url 'procurement:escalation_queue' %}" class="btn btn-outline"><i data-lucide="alarm-clock"></i> Escalations</a>
+      <a href="{% url 'procurement:approval_mine' %}" class="btn btn-outline"><i data-lucide="smartphone"></i> Mobile Approvals</a>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-header"><h2 class="card-title">Procurement Pages</h2></div>
     <div class="card-body form-grid">
       <a href="{% url 'procurement:alert_list' %}" class="btn btn-outline"><i data-lucide="bell"></i> Task &amp; Alert Center</a>
