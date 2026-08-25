@@ -17,12 +17,10 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-body form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
-      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending chains</div></div>
-      <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.idle }}</div><div class="stat-label">Past their window</div></div>
-      <div class="stat-card"><div class="stat-icon green"><i data-lucide="bell-ring"></i></div><div class="stat-value">{{ stats.escalated }}</div><div class="stat-label">Alert already raised</div></div>
-    </div>
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending chains</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="alarm-clock"></i></div><div class="stat-value">{{ stats.idle }}</div><div class="stat-label">Past their window</div></div>
+    <div class="stat-card"><div class="stat-icon green"><i data-lucide="bell-ring"></i></div><div class="stat-value">{{ stats.escalated }}</div><div class="stat-label">Alert already raised</div></div>
   </div>
 
   <div class="card">
@@ -47,8 +45,8 @@
           {% for row in rows %}
             <tr>
               <td><a href="{% url 'procurement:req_detail' row.requisition.pk %}" class="fw-600">{{ row.requisition.number }}</a> · {{ row.requisition.title|truncatechars:34 }}</td>
-              <td>{{ row.idle_hours_effective }}h{% if row.rule and row.rule.escalation_hours %} <span class="badge badge-slate">rule</span>{% else %} <span class="text-muted">policy</span>{% endif %}</td>
-              <td class="fw-600">{{ row.idle_for.total_seconds|floatformat:"0" }}s<br><span class="text-muted">since {{ row.anchor|date:"M d, H:i" }}</span></td>
+              <td>{{ row.idle_hours_effective }}h{% if row.window_is_rule %} <span class="badge badge-slate">rule</span>{% else %} <span class="text-muted">policy</span>{% endif %}</td>
+              <td class="fw-600">{{ row.idle_hours_f }}h<br><span class="text-muted">since {{ row.anchor|date:"M d, H:i" }}</span></td>
               <td>{% if row.rule %}routed: {{ row.rule.required_tiers }} tier(s){% else %}default single tier{% endif %}</td>
               <td>{% if row.escalated %}<span class="badge badge-green">Escalated</span>{% elif row.is_idle %}<span class="badge badge-red">Idle — will raise on Run</span>{% else %}<span class="badge badge-info">Within window</span>{% endif %}</td>
             </tr>
