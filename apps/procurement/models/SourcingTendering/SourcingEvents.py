@@ -97,6 +97,36 @@ class SourcingEvent(TenantNumbered):
         """Closed-but-not-yet-awarded: the evaluation/award surface is live."""
         return self.status == "closed"
 
+    def award(self, bid, at=None):
+        """Record the award (**Award Recommendation** bullet) — the ONE writer of won/lost.
+
+        The chosen bid becomes ``won``; every other still-evaluable bid on the event becomes
+        ``lost``; the event itself closes out as ``awarded``. Returns True on success; False
+        (no side effects) when the state machine disagrees — the view has already produced the
+        human-readable reason, this re-check guards crafted or racing POSTs.
+
+        Callers wrap in ``transaction.atomic()`` and write the audit rows.
+        """
+        # Local import keeps this module free of an import-time edge to Bids.py (the FK graph
+        # already runs bid → event one way; the lifecycle logic here is the only back-reference).
+        from apps.procurement.models.SourcingTendering.Bids import SourcingBid
+
+        if not self.is_evaluating:
+            return False
+        if bid.event_id != self.pk or not bid.is_evaluable or not bid.is_compliant:
+            return False
+        at = at or timezone.now()
+        (type(bid).objects
+         .filter(event=self, status__in=SourcingBid.EVALUABLE_STATUSES)
+         .exclude(pk=bid.pk)
+         .update(status="lost"))
+        bid.status = "won"
+        bid.save(update_fields=["status", "updated_at"])
+        self.status = "awarded"
+        self.awarded_at = at
+        self.save(update_fields=["status", "awarded_at", "updated_at"])
+        return True
+
     def __str__(self):
         return f"{self.number or 'SEV'} · {self.title}"
 
