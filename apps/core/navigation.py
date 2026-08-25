@@ -1444,6 +1444,34 @@ LIVE_LINKS = {
         "Escalation Management":         "procurement:escalation_queue",  # bullet (idle-chain board + idempotent Run)
         "Mobile Approval Interface":     "procurement:approval_mine",     # bullet (pocket triage surface with one-tap decisions)
     },
+    # 6.4 Vendor Management. The vendor MASTER stays scm.SupplierProfile (L36 — 4.2 SRM owns
+    # onboarding/qualification/tier and the risk assessments), so three of the five bullets are
+    # mapped onto those existing pages rather than re-declared. This sub-module ADDS the pieces
+    # scm never built: VendorPortalAccess [VPA-] — the login↔supplier binding behind the gated
+    # vendor portal pages — VendorSuspension [VSU-], a request→decide→lift register around scm's
+    # one-click suspended flag, and VendorInvoiceSubmission [VIS-], supplier-filed invoices that
+    # procurement reviews WITHOUT any GL posting (the bill stays keyed in accounting AP).
+    "6.4": {
+        "Vendor Onboarding":                  "scm:supplierprofile_list",              # bullet (4.2's application + due-diligence process)
+        "Vendor Portal":                      "procurement:vpa_list",                  # bullet (access console; gated home + invoice submit live behind it)
+        "Vendor Classification & Segmentation": "scm:supplierprofile_list?tier=strategic",  # bullet (4.2's qualification tiers)
+        "Vendor Risk Profiling":              "scm:riskassessment_list",               # bullet (4.2's risk register)
+        "Vendor Blacklisting/Suspension":     "procurement:vsu_list",                  # bullet (VSU- register: request → decide → lift)
+    },
+    # 6.6 RFx Management (RFI, RFP, RFQ). One questionnaire event model drives all five bullets:
+    # RfxEvent [RFX-] carries the builder (typed questions + weights, reordered in place), its
+    # RfxResponses hold each supplier's answers/attachment in the central repository, weighted
+    # scoring is derived on read (never stored), ?compare=1 deep-links the register to events
+    # ready for side-by-side review (?query= nav convention), and is_template=True rows ARE the
+    # template library cloned into real events via Use. Suppliers are core.Party roles and the
+    # sourcing link is an optional scm.PurchaseRequisition FK (L36) — no second vendor master.
+    "6.6": {
+        "Questionnaire Builder":      "procurement:rfx_list",           # bullet (register + inline question formset + reorder)
+        "Response Collection":        "procurement:rfx_response_list",  # bullet (central repository of answers + attachments)
+        "Side-by-Side Comparison":    "procurement:rfx_list?compare=1", # bullet (deep-link to events with 2+ submissions)
+        "Scoring & Weighting System": "procurement:rfx_scoring",        # bullet (weighted leaderboard across events)
+        "RFx Template Library":       "procurement:rfx_library",        # bullet (is_template blueprints + one-click clone)
+    },
     # NO sidebar key for `IntegrationMessage`, `WebhookDelivery` or the exceptions cockpit, and each
     # omission has its own reason rather than one blanket one. The two LOGS are reached from the page
     # that uses them — the endpoint detail page's recent-messages panel and the subscription detail
