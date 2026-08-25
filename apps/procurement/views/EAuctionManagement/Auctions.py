@@ -5,6 +5,8 @@ guarded lifecycle verbs, invite management, and the two live surfaces: the **Auc
 Console** (buyer view) with its HTMX-polled ``board`` fragment, and the buyer-side **Live
 Bidding** entry floor.
 """
+from functools import wraps
+
 from django.db import transaction
 from django.db.models import Count
 
@@ -12,6 +14,25 @@ from apps.core.crud import crud_list, paginate
 from apps.procurement.forms import EaucInviteForm, EauctionForm
 from apps.procurement.models import EaucBid, EaucInvite, Eauction
 from apps.procurement.views._common import *  # noqa: F401,F403
+
+
+def staff_required(view):
+    """Gate every e-auction console verb to workspace staff (tenant member or superuser).
+
+    ``login_required`` alone still admits vendor-portal logins to setup / lifecycle /
+    invite / award routes; this is the staff-side complement. ``eauc_bid`` deliberately
+    does NOT stack it — bidding is exactly the surface portal users must reach.
+    """
+
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if request.tenant is not None and (
+            request.user.is_superuser or getattr(request.user, "tenant_id", None) == request.tenant.pk):
+            return view(request, *args, **kwargs)
+        messages.error(request, "This console is restricted to procurement staff.")
+        return redirect("dashboard:home")
+
+    return wrapped
 
 
 def _get_auction(request, pk):
@@ -26,6 +47,7 @@ def _get_auction(request, pk):
 
 
 @login_required
+@staff_required
 def eauc_list(request):
     qs = (Eauction.objects.filter(tenant=request.tenant)
           .select_related("currency", "awarded_supplier")
@@ -52,6 +74,7 @@ def eauc_list(request):
 
 
 @login_required
+@staff_required
 def eauc_detail(request, pk):
     obj = _get_auction(request, pk)
     bids = list(obj.bids.select_related("supplier", "placed_by")[:100])
@@ -69,6 +92,7 @@ def eauc_detail(request, pk):
 
 
 @login_required
+@staff_required
 def eauc_create(request):
     if request.tenant is None:
         messages.error(request, "Select a tenant workspace before creating auctions.")
@@ -77,6 +101,7 @@ def eauc_create(request):
 
 
 @login_required
+@staff_required
 def eauc_edit(request, pk):
     obj = _get_auction(request, pk)
     if not obj.is_editable:
@@ -108,6 +133,7 @@ def _auction_form(request, instance):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_delete(request, pk):
     """Deleting cascades invites AND the bid log — drafts only."""
@@ -122,6 +148,7 @@ def eauc_delete(request, pk):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_publish(request, pk):
     obj = _get_auction(request, pk)
@@ -136,6 +163,7 @@ def eauc_publish(request, pk):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_cancel(request, pk):
     obj = _get_auction(request, pk)
@@ -148,6 +176,7 @@ def eauc_cancel(request, pk):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_close(request, pk):
     obj = _get_auction(request, pk)
@@ -163,6 +192,7 @@ def eauc_close(request, pk):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_invite_add(request, pk):
     obj = _get_auction(request, pk)
@@ -182,6 +212,7 @@ def eauc_invite_add(request, pk):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_invite_remove(request, pk, i_pk):
     obj = _get_auction(request, pk)
@@ -200,6 +231,7 @@ def eauc_invite_remove(request, pk, i_pk):
 
 
 @login_required
+@staff_required
 def eauc_floor(request):
     """The live trading floor entry: every auction currently accepting bids."""
     now = timezone.now()
@@ -217,6 +249,7 @@ def eauc_floor(request):
 
 
 @login_required
+@staff_required
 def eauc_rules(request):
     """**Bid Extension & Rule Enforcement** reference: the house rules the engine enforces,
     plus each recent auction's extension usage."""
@@ -228,6 +261,7 @@ def eauc_rules(request):
 
 
 @login_required
+@staff_required
 def eauc_console(request, pk):
     """**Auction Monitoring Console**: live rankings, countdown, participation."""
     obj = _get_auction(request, pk)
@@ -246,6 +280,7 @@ def eauc_console(request, pk):
 
 
 @login_required
+@staff_required
 def eauc_board(request, pk):
     """HTMX fragment polled by the console/bid pages every few seconds."""
     obj = _get_auction(request, pk)
