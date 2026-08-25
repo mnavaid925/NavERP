@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Delivery {{ obj.pk }} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Notification Delivery</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alert_list' %}">Alerts &amp; Notifications</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:delivery_list' %}">Deliveries</a>
+        <span class="sep">›</span>
+        <span>#{{ obj.pk }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:delivery_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Log</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-6">
+    <div class="col-span-2">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="card-title">Dispatch Record</h2>
+          {% if obj.status == 'queued' %}<span class="badge badge-muted">Queued</span>
+          {% elif obj.status == 'sent' %}<span class="badge badge-green">Sent</span>
+          {% else %}<span class="badge badge-red">Failed</span>{% endif %}
+        </div>
+        <div class="card-body">
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Channel</dt>
+              <dd class="mt-1"><span class="badge badge-info">{{ obj.get_channel_display }}</span></dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Queued At</dt>
+              <dd class="mt-1">{{ obj.created_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+            <div class="col-span-2">
+              <dt class="text-muted" style="font-size:13px;">Recipient</dt>
+              <dd class="mt-1 mono" style="word-break:break-all;">{{ obj.recipient }}</dd>
+            </div>
+            <div class="col-span-2">
+              <dt class="text-muted" style="font-size:13px;">Gateway Note</dt>
+              <dd class="mt-1">{% if obj.detail %}{{ obj.detail }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+          </dl>
+          <p class="text-muted mt-4" style="font-size:13px;">
+            This record is append-only — it says what the engine queued at raise time and is never edited.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Alert</h2></div>
+        <div class="card-body space-y-3">
+          <div>
+            <div class="text-muted" style="font-size:13px;">Raised alert</div>
+            <a href="{% url 'inventory:alert_detail' obj.alert.pk %}" class="fw-600 mono">{{ obj.alert.number }}</a>
+          </div>
+          <div>
+            <div class="text-muted" style="font-size:13px;">Title</div>
+            <div>{{ obj.alert.title }}</div>
+          </div>
+          <div>
+            <div class="text-muted" style="font-size:13px;">Status</div>
+            <div>
+              {% if obj.alert.status == 'open' %}<span class="badge badge-amber">Open</span>
+              {% elif obj.alert.status == 'acknowledged' %}<span class="badge badge-info">Acknowledged</span>
+              {% else %}<span class="badge badge-green">Resolved</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
