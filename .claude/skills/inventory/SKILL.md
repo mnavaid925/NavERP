@@ -1,6 +1,6 @@
 ---
 name: inventory
-description: Work on the Inventory Management System module (Module 5 â€” 5.1 Product & Catalog, 5.2 Vendor/Supplier Management, 5.3 Purchase Order Management, 5.5 Warehousing & Bins, 5.6 Inventory Tracking & Control, 5.7 Stock Movement & Transfers, 5.8 Lot & Serial Number Tracking, 5.13 Forecasting & Planning, 5.11 Stocktaking & Cycle Counting; 5.4 Receiving and 5.10 Returns landed in a shared checkout). Extends apps/inventory around the SCM 4.3 item/location/StockMove spines (L36 â€” never re-declares them). Use when the user asks to add/change/debug anything under apps/inventory or templates/inventory, extend the seed_inventory seeder, touch inventory sidebar wiring (LIVE_LINKS 5.x), or invokes /inventory.
+description: Work on the Inventory Management System module (Module 5 â€” 5.1 Product & Catalog, 5.2 Vendor/Supplier Management, 5.3 Purchase Order Management, 5.5 Warehousing & Bins, 5.6 Inventory Tracking & Control, 5.7 Stock Movement & Transfers, 5.8 Lot & Serial Number Tracking, 5.13 Forecasting & Planning, 5.11 Stocktaking & Cycle Counting; 5.4 Receiving and 5.10 Returns landed in a shared checkout; 5.19 Third-Party Integrations & API). Extends apps/inventory around the SCM 4.3 item/location/StockMove spines (L36 â€” never re-declares them). Use when the user asks to add/change/debug anything under apps/inventory or templates/inventory, extend the seed_inventory seeder, touch inventory sidebar wiring (LIVE_LINKS 5.x), or invokes /inventory.
 ---
 
 # Inventory Management System (Module 5)
@@ -504,28 +504,28 @@ pointing master-data bullets at owning scm pages. Overview card groups per sub-m
   be re-run via pytest in a normal dev shell.
 
 
-### 5.15 Quality Control (QC) & Inspection � the floor-gate slice
+### 5.15 Quality Control (QC) & Inspection � the floor-gate slice
 
 - **Ownership ruling**: SCM 4.9 owns quality ENGINEERING (`InspectionPlan`, `QualityInspection`,
   `NonConformance` + MRB). 5.15 is the warehouse-FLOOR gate AROUND it (L36/L29/L37): four bullets,
   four new tables, zero re-declared spine entities. Sidebar bullets all map inside inventory;
   overview card cross-links `scm:qualityinspection_list` + `scm:nonconformance_list`.
-- **QcChecklist + QcChecklistItem** � mandatory pre-acceptance checks pinned to item OR vendor
+- **QcChecklist + QcChecklistItem** � mandatory pre-acceptance checks pinned to item OR vendor
   party OR workspace-wide (`applies_to` property renders the scope); checkpoints edited inline on
   the parent form via `QcChecklistItemFormSet` (5.10 pattern), kind visual/functional/documentation/
   quantity/instruction, mandatory flag, sequence ordering. Writes tenant-admin gated.
-- **QcRoutingRule + resolve_qc_routing()** � inspect/bypass verdict per inbound receipt; specificity
+- **QcRoutingRule + resolve_qc_routing()** � inspect/bypass verdict per inbound receipt; specificity
   tiers item(3)>category(2)>catch-all(1), vendor-pinned rules add specificity and NEVER fire blind
   on unknown suppliers; priority ASC then id ASC; caller-supplied rule lists trusted for ORDER never
   TENANCY. Rule detail page runs a LIVE full-engine preview (?item=<pk>) whose badge says which rule
   actually won - an inactive rule honestly shows as not firing.
-- **QuarantineOrder [QRD-]** � draft->quarantined->released|scrapped|cancelled with REAL ledger legs:
+- **QuarantineOrder [QRD-]** � draft->quarantined->released|scrapped|cancelled with REAL ledger legs:
   quarantine() posts a transfer pair at average cost (source out / QC-HOLD in), release()/cancel-from-
   held reverse it (`_reverse_pair`, guarded by zone shortfall FIRST), scrap() posts ONE negative
   adjustment FROM the zone (SCM NCR's shape, scoped to this order's units so an NCR can never double-
   post). `_locked()` row lock + `_stock_lock()` item lock in every action, uniform order, audit inside
   the txn. status editable=False (verb-owned).
-- **DefectReport [DEF-]** � floor capture aligned to NCR's defect taxonomy, discovered_during stages,
+- **DefectReport [DEF-]** � floor capture aligned to NCR's defect taxonomy, discovered_during stages,
   photo file-or-url (image-only allowlist, core 20 MB cap at form boundary), optional `ncr`
   escalation pointer; writeoff() = guarded negative adjustment at the report's location; close() =
   no-ledger resolution; `posts_stock` executable rule (dock-refused units close as paper).
@@ -539,3 +539,43 @@ pointing master-data bullets at owning scm pages. Overview card groups per sub-m
   routing-rule tiers, two QRDs walked through REAL actions (one quarantined, one released) + one draft,
   DEF-00002 written off through the REAL writeoff(). Per-entity existence guards.
 - Migration 0023 (+0025 status AlterField). Tests: test_qc_{models,forms,views,security}.py (111).
+
+### 5.19 Third-Party Integrations & API (built 2026-08-25)
+- **Boundary of record**: scm 4.19 owns the generic gateway (IntegrationEndpoint/Message/
+  WebhookSubscription/Delivery + EDI/IoT vocabulary) and inventory 5.18 owns internal GL/JE
+  automation — 5.19 declares NEITHER. It is the commerce-stock layer: external channel register,
+  SKU-to-channel listing maps, the stock-sync run log, and bullet 4's INBOUND half.
+- **IntegrationChannel [INT-]** (`models/ThirdPartyIntegrations/IntegrationChannels.py`,
+  TenantNumbered): kind ecommerce/erp/accounting/custom + platform catalog (shopify…sage),
+  direction/auth_method/environment/status/trigger_mode all INTENT (no transport exists);
+  `base_url` carries `# WARNING SSRF`; credentials = accounting.IntegrationConfig quartet VERBATIM
+  (`hash_secret`/`set_api_key`/`generate_api_key`/`masked`, prefix(6)+SHA-256 only); status stays
+  ON the form as a human marker; `last_sync_at` editable=False and NOTHING writes it; TENANT_SCOPED_FKS
+  ("default_location",). Rotate-key verb flashes plaintext ONCE, persists prefix+hash, audits without it.
+- **ChannelListingMap** (TenantOwned, NO number): channel CASCADE `listings` + item/location PROTECT;
+  `external_variant_id` null=True so MariaDB's null-coalescing unique (tenant,channel,variant) lets
+  local-only rows coexist while claimed variants stay unique per channel; form coerces ''→None in clean().
+- **StockSyncRun [SYN-]** (append-only register): created ONLY via `record(cls, tenant, channel, *,
+  direction, trigger_mode="manual", **extra)` — no ModelForm, no create/edit/delete routes
+  (NotificationDelivery posture). `simulated` is first-class honesty; sync verb records simulated,
+  stamps `last_run_status` ONLY (never last_sync_at), zero StockMoves. `next_backoff_seconds` indexes
+  `attempt_no` into SYNC_BACKOFF_SECONDS (Svix tuple), None when spent; retry verb is
+  @tenant_admin_required POST, RETRYABLE_STATUSES=("failed","pending","exhausted") INSIDE the lock,
+  narrow update_fields (counts/error/payload untouchable).
+- **ApiClient [API-]** (bullet 4 inbound): token quartet mirrors the channel's; status moves ONLY via
+  revoke() (no-op-safe); issue-token REFUSES revoked clients (I7); allowed_ips/scopes are RECORDED
+  intent (help_text says so).
+- Views: 22 routes under `channels/ listings/ runs/ api-clients/`; listingmap CRUD deliberately
+  @login_required (staff-level) while channel/apiclient CRUD+verbs are @tenant_admin_required;
+  channel detail panels = obj.listings[:25] + count chip + recent runs [:10] + Manage-listings deep-link.
+- Templates `templates/inventory/integration/{channel,listingmap,syncrun,apiclient}/…` (syncrun has
+  list/detail only). LIVE_LINKS["5.19"]: three bullets → `integrationchannel_list?kind={ecommerce|erp|
+  accounting}`, API Management → apiclient_list.
+- Seeder `_seed_integrations`: one channel per family over REAL spine items, four listing maps
+  (full/local-only-NULL/paused/channel-wide), one run through REAL record(), active+revoked clients;
+  guard = IntegrationChannel existence per tenant; flush deletes children before channels.
+- Migrations 0026 (4 tables + tenant indexes) + 0027 (external_variant_id null=True +
+  inv_syn_tnt_started_idx). Tests: test_integrationapi_{models,forms,views,security}.py — module-local
+  `_integrationapi_*` fixtures (conftest untouched); gotchas: choice fields with model defaults are
+  still REQUIRED in posts (browsers submit selects), and same-name channel/client rows are impossible
+  by design (unique (tenant,name)) so ordering tests must use distinct names.
