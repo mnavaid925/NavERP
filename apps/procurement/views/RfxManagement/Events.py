@@ -86,6 +86,8 @@ def rfx_detail(request, pk):
         "questions": questions,
         "response_rows": _scored_rows(responses),
         "n_comparable": n_comparable,
+        # Rendered twice on the page; each property call is its own aggregate query.
+        "possible_points": obj.possible_points,
     })
 
 
