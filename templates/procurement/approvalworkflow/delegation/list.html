@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Delegation of Authority{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Delegation of Authority</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Approval Workflow</span><span class="sep">›</span><span>DOA Grants</span></div>
+      <p class="text-muted">Dated grants that let an approver step aside while a delegate signs under their authority — every signature made on a grant is stamped with it, so the history shows both names.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:approval_queue' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Approval Queue</a>
+      {% if is_admin %}<a href="{% url 'procurement:delegation_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Grant</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ request.GET.q }}" aria-label="Search" class="form-input" placeholder="Search approver, delegate or reason…">
+        </div>
+        <div class="form-group">
+          <select name="state" aria-label="State" class="form-select">
+            <option value="">Any state</option>
+            <option value="True" {% if request.GET.state == 'True' %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.state == 'False' %}selected{% endif %}>Recalled only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:delegation_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>From → To</th><th>Scope</th><th>Window</th><th>Reason</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td><span class="fw-600">{{ obj.delegator.username|default:"—" }}</span> → {{ obj.delegate.username|default:"—" }}</td>
+              <td>{% if obj.scope_org_unit %}{{ obj.scope_org_unit.name }}{% else %}<span class="badge badge-info">All departments</span>{% endif %}</td>
+              <td>{{ obj.valid_from|date:"M d, Y" }} → {{ obj.valid_until|date:"M d, Y" }}</td>
+              <td>{{ obj.reason|truncatechars:40 }}</td>
+              <td>{% if obj.is_current %}<span class="badge badge-green">In force</span>{% elif not obj.is_active %}<span class="badge badge-muted">Recalled</span>{% elif today > obj.valid_until %}<span class="badge badge-slate">Expired</span>{% else %}<span class="badge badge-amber">Not yet in force</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:delegation_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'procurement:delegation_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:delegation_delete' obj.pk %}" onsubmit="return confirm('Delete this grant? Signatures already credited to it keep the stamp.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="user-check"></i><h3>No DOA grants</h3><p>Approving authority sits only with its holders. Grant a delegate to cover leave — authority reverts automatically when the window ends.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+
+  <p class="text-muted" style="margin-top:12px;">{{ active_count }} grant{{ active_count|pluralize }} currently in force of {{ grant_count }} total. Recalling a grant keeps it in history — signatures already made under it stay stamped.</p>
+{% endblock %}
