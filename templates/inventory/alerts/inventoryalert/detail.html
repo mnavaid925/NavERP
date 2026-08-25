@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} {{ obj.title|truncatechars:32 }} — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title"><span class="mono">{{ obj.number }}</span> {{ obj.title }}</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <span>Alerts &amp; Notifications</span>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alert_list' %}">Inbox</a>
+        <span class="sep">›</span>
+        <span class="mono">{{ obj.number }}</span>
+      </div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:alert_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to Inbox</a>
+      {% if obj.status == 'open' %}
+        <form method="post" action="{% url 'inventory:alert_acknowledge' obj.pk %}" style="display:inline;">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="check"></i> Acknowledge</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-6">
+    <div class="col-span-2 space-y-6">
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h2 class="card-title">What the Engine Saw</h2>
+          <div class="flex gap-2">
+            {% if obj.severity == 'critical' %}<span class="badge badge-red">Critical</span>
+            {% elif obj.severity == 'warning' %}<span class="badge badge-amber">Warning</span>
+            {% else %}<span class="badge badge-info">Info</span>{% endif %}
+            {% if obj.status == 'open' %}<span class="badge badge-amber">Open</span>
+            {% elif obj.status == 'acknowledged' %}<span class="badge badge-info">Acknowledged</span>
+            {% else %}<span class="badge badge-green">Resolved</span>{% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:14px; line-height:1.6;">{{ obj.message }}</p>
+          <dl class="grid grid-cols-2 gap-x-6 gap-y-4 mt-4">
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Type</dt>
+              <dd class="mt-1"><span class="badge badge-info">{{ obj.get_alert_type_display }}</span></dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Observed Value</dt>
+              <dd class="mt-1 mono">{% if obj.metric_value is not None %}{{ obj.metric_value }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Raised At</dt>
+              <dd class="mt-1">{{ obj.raised_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted" style="font-size:13px;">Rule</dt>
+              <dd class="mt-1">
+                {% if obj.rule %}
+                  <a href="{% url 'inventory:alertrule_detail' obj.rule.pk %}" class="fw-600">{{ obj.rule.name }}</a>
+                  <span class="mono text-muted">({{ obj.rule.number }})</span>
+                {% else %}
+                  <span class="text-muted">rule deleted — snapshot kept</span>
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Dispatch Log</h2></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Channel</th><th>Recipient</th><th>Status</th><th>Note</th><th></th></tr>
+            </thead>
+            <tbody>
+              {% for d in obj.deliveries.all %}
+                <tr>
+                  <td><span class="badge badge-info">{{ d.get_channel_display }}</span></td>
+                  <td class="mono" style="word-break:break-all;">{{ d.recipient }}</td>
+                  <td>
+                    {% if d.status == 'queued' %}<span class="badge badge-muted">Queued</span>
+                    {% elif d.status == 'sent' %}<span class="badge badge-green">Sent</span>
+                    {% else %}<span class="badge badge-red">Failed</span>{% endif %}
+                  </td>
+                  <td class="text-muted">{{ d.detail|truncatechars:60 }}</td>
+                  <td><a href="{% url 'inventory:delivery_detail' d.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5"><div class="empty-state"><i data-lucide="send"></i><p>No dispatches were queued for this alert.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-6">
+      {% if obj.status != 'resolved' %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Triage</h2></div>
+          <div class="card-body">
+            {% if obj.status == 'acknowledged' %}
+              <p class="text-muted mb-3" style="font-size:13px;">
+                Acknowledged by {{ obj.acknowledged_by }} on {{ obj.acknowledged_at|date:"Y-m-d H:i" }}.
+              </p>
+            {% endif %}
+            <form method="post" action="{% url 'inventory:alert_resolve' obj.pk %}">
+              {% csrf_token %}
+              <div class="form-group">
+                <label class="form-label" for="resolution_note">Resolution Note</label>
+                <textarea name="resolution_note" id="resolution_note" class="form-textarea" rows="3"
+                          placeholder="What was done about this condition?">{% if obj.resolution_note %}{{ obj.resolution_note }}{% endif %}</textarea>
+              </div>
+              <button type="submit" class="btn btn-primary w-full" onclick="return confirm('Resolve this alert? The condition may re-raise after its cooldown.');"><i data-lucide="check-circle-2"></i> Resolve Alert</button>
+              <p class="form-help mt-2">Resolving frees the condition's dedup key; it re-raises after the rule's cooldown.</p>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Resolution</h2></div>
+          <div class="card-body space-y-3">
+            <div>
+              <div class="text-muted" style="font-size:13px;">Resolved by</div>
+              <div>{{ obj.resolved_by }}</div>
+            </div>
+            <div>
+              <div class="text-muted" style="font-size:13px;">Resolved at</div>
+              <div>{{ obj.resolved_at|date:"Y-m-d H:i" }}</div>
+            </div>
+            {% if obj.resolution_note %}
+              <div>
+                <div class="text-muted" style="font-size:13px;">Note</div>
+                <div>{{ obj.resolution_note|linebreaksbr }}</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Pointed At</h2></div>
+        <div class="card-body">
+          <dl class="space-y-3">
+            {% if obj.item %}
+              <div>
+                <dt class="text-muted" style="font-size:13px;">Item</dt>
+                <dd class="fw-600">{{ obj.item.sku }}{% if obj.location %} <span class="mono text-muted">@ {{ obj.location.code }}</span>{% endif %}</dd>
+              </div>
+            {% endif %}
+            {% if obj.lot_serial %}
+              <div>
+                <dt class="text-muted" style="font-size:13px;">Lot / Serial</dt>
+                <dd class="mono">{{ obj.lot_serial.number }}</dd>
+              </div>
+            {% endif %}
+            {% if obj.purchase_order %}
+              <div>
+                <dt class="text-muted" style="font-size:13px;">Purchase Order</dt>
+                <dd class="mono">{{ obj.purchase_order.number }} <span class="badge badge-muted">{{ obj.purchase_order.get_status_display }}</span></dd>
+              </div>
+            {% endif %}
+            {% if obj.shipment %}
+              <div>
+                <dt class="text-muted" style="font-size:13px;">Shipment</dt>
+                <dd class="mono">{{ obj.shipment.number }} <span class="badge badge-muted">{{ obj.shipment.get_status_display }}</span></dd>
+              </div>
+            {% endif %}
+            {% if not obj.item and not obj.lot_serial and not obj.purchase_order and not obj.shipment %}
+              <div class="text-muted">No spine document attached.</div>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
