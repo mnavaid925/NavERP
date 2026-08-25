@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Compare responses · {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Side-by-side comparison · {{ obj.number }}</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:rfx_list' %}">RFx Management</a><span class="sep">›</span><a href="{% url 'procurement:rfx_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Compare</span></div>
+      <p class="text-muted">{{ obj.title }} — admissible submitted responses, ranked by weighted score. Drafts and disqualified replies are excluded.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to event</a>
+    </div>
+  </div>
+
+  {% if responses %}
+    <div class="card">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="min-width:280px;">Question</th>
+              {% for r in responses %}
+                <th>
+                  {{ r.supplier.name }}
+                  <div class="form-help"><a href="{% url 'procurement:rfx_response_detail' r.pk %}">{{ r.number }}</a></div>
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in matrix %}
+              <tr>
+                <td>
+                  <div class="fw-600">{{ row.question.prompt }}</div>
+                  <div class="form-help">{% if row.question.section %}{{ row.question.section }} · {% endif %}{% if row.question.is_scored %}weight {{ row.question.weight|floatformat:2 }}{% else %}not scored{% endif %}</div>
+                </td>
+                {% for answer in row.cells %}
+                  <td>{% if answer %}{{ answer.answer_text|default:"—" }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th class="fw-600">Earned points (of {{ scored_rows.0.possible|default:"—" }})</th>
+              {% for row in scored_rows %}<td>{{ row.earned|default:"—" }}</td>{% endfor %}
+            </tr>
+            <tr>
+              <th class="fw-600">Weighted score</th>
+              {% for row in scored_rows %}
+                <td class="fw-600">{% if row.pct is not None %}{{ row.pct }}%{% else %}—{% endif %}</td>
+              {% endfor %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="card-body text-muted">Columns are ordered best-first by weighted score — earned points as a share of this event's scoreable maximum.</div>
+    </div>
+  {% else %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="columns-2"></i><h3>Nothing to compare yet</h3><p>This comparison needs at least one submitted response.</p></div>
+    </div></div>
+  {% endif %}
+{% endblock %}
