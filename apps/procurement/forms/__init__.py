@@ -54,6 +54,7 @@ from .ContractsManagement import (
     ContractClauseForm,
     ContractMilestoneForm,
     ContractSignerForm,
+    amendable_contracts,
 )
 
 __all__ = [
