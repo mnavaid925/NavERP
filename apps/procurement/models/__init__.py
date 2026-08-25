@@ -16,6 +16,8 @@ from .DashboardPortal.ProcurementAlerts import ProcurementAlert
 from .DashboardPortal.WidgetPreferences import WidgetPreference
 from .RequisitionManagement.Amendments import RequisitionAmendment, RequisitionAmendmentLine
 from .RequisitionManagement.Templates import RequisitionTemplate, RequisitionTemplateLine
+from .RfxManagement.Events import RfxEvent, RfxQuestion
+from .RfxManagement.Responses import RfxAnswer, RfxResponse
 
 __all__ = [
     "ApprovalRoutingRule",
@@ -31,4 +33,8 @@ __all__ = [
     "RequisitionTemplate",
     "RequisitionTemplateLine",
     "WidgetPreference",
+    "RfxAnswer",
+    "RfxEvent",
+    "RfxQuestion",
+    "RfxResponse",
 ]

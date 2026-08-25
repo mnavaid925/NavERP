@@ -44,6 +44,29 @@ from .RequisitionManagement.Amendments import (
     req_amendment_create,
 )
 from .RequisitionManagement.Requisitions import req_detail, req_list
+from .RfxManagement.Events import (
+    rfx_cancel,
+    rfx_clone,
+    rfx_close,
+    rfx_compare,
+    rfx_create,
+    rfx_delete,
+    rfx_detail,
+    rfx_edit,
+    rfx_issue,
+    rfx_library,
+    rfx_list,
+    rfx_question_move,
+    rfx_scoring,
+)
+from .RfxManagement.Responses import (
+    rfx_response_create,
+    rfx_response_delete,
+    rfx_response_detail,
+    rfx_response_edit,
+    rfx_response_list,
+    rfx_response_set_status,
+)
 from .RequisitionManagement.Templates import (
     template_apply,
     template_create,
@@ -87,4 +110,23 @@ __all__ = [
     "template_detail",
     "template_edit",
     "template_list",
+    "rfx_list",
+    "rfx_detail",
+    "rfx_create",
+    "rfx_edit",
+    "rfx_delete",
+    "rfx_issue",
+    "rfx_close",
+    "rfx_cancel",
+    "rfx_question_move",
+    "rfx_compare",
+    "rfx_library",
+    "rfx_clone",
+    "rfx_scoring",
+    "rfx_response_list",
+    "rfx_response_detail",
+    "rfx_response_create",
+    "rfx_response_edit",
+    "rfx_response_delete",
+    "rfx_response_set_status",
 ]
