@@ -44,6 +44,25 @@ from .RequisitionManagement.Amendments import (
     req_amendment_create,
 )
 from .RequisitionManagement.Requisitions import req_detail, req_list
+from .EAuctionManagement import (
+    eauc_award,
+    eauc_bid,
+    eauc_board,
+    eauc_cancel,
+    eauc_close,
+    eauc_console,
+    eauc_create,
+    eauc_delete,
+    eauc_detail,
+    eauc_edit,
+    eauc_floor,
+    eauc_invite_add,
+    eauc_invite_remove,
+    eauc_list,
+    eauc_publish,
+    eauc_results,
+    eauc_rules,
+)
 from .RfxManagement.Events import (
     rfx_cancel,
     rfx_clone,
@@ -121,6 +140,11 @@ from .VendorManagement import (
 )
 
 __all__ = [
+    "eauc_list", "eauc_detail", "eauc_create", "eauc_edit", "eauc_delete",
+    "eauc_publish", "eauc_cancel", "eauc_close",
+    "eauc_invite_add", "eauc_invite_remove",
+    "eauc_floor", "eauc_rules", "eauc_console", "eauc_board",
+    "eauc_bid", "eauc_results", "eauc_award",
     "routingrule_list", "routingrule_detail", "routingrule_create",
     "routingrule_edit", "routingrule_delete",
     "approval_queue", "approval_history", "approval_mine",
