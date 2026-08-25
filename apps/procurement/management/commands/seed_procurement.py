@@ -30,6 +30,11 @@ Like every block here it REUSES existing parties/orders rather than inventing pa
 supplier responses (one fully scored, one partial) so the comparison matrix, the scoring
 leaderboard and the evaluation states are populated on a fresh workspace.
 
+6.7 seeds E-Auction Management: one AWARDED auction with a complete five-bid history and one
+LIVE auction whose bids already consumed one anti-snipe extension (its close is pushed out by
+``extension_seconds`` to match ``extensions_used``), so the floor, console, rules and results
+pages all have honest rows on a fresh workspace.
+
 Each seeded alert also writes one ``core.AuditLog`` row (user=None → rendered as "System"), which
 gives the Recent Activity Feed an honest baseline instead of an empty page on a fresh workspace.
 
@@ -110,15 +115,16 @@ def _alert_rows(now):
 class Command(BaseCommand):
     help = ("Seed Procurement demo data (6.1 Task & Alert Center baseline + 6.2 requisition "
             "templates and a pending amendment + 6.3 approval engine + 6.4 vendor registers + "
-            "6.5 sourcing events) — idempotent (skips a tenant that already has rows for each "
-            "block).")
+            "6.5 sourcing events + 6.6 RFx events + 6.7 e-auctions) — idempotent (skips a "
+            "tenant that already has rows for each block).")
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--flush", action="store_true",
             help=("Delete ALL procurement workflow rows for ALL tenants before seeding "
                   "(alerts, approval-engine tables, templates, amendments, vendor-management "
-                  "registers, sourcing events) - not just seeder-created ones."))
+                  "registers, sourcing events, RFx events, e-auctions) - not just "
+                  "seeder-created ones."))
 
     def handle(self, *args, **options):
         global NOW
@@ -141,6 +147,11 @@ class Command(BaseCommand):
             EventCriterion.objects.all().delete()
             SourcingBid.objects.all().delete()
             SourcingEvent.objects.all().delete()
+            # 6.7 e-auction rows: bids and invites are auction children (cascade) but are
+            # deleted explicitly children-first so the register clears in one pass.
+            EaucBid.objects.all().delete()
+            EaucInvite.objects.all().delete()
+            Eauction.objects.all().delete()
             VendorPortalAccess.objects.all().delete()
             VendorSuspension.objects.all().delete()
             VendorInvoiceSubmission.objects.all().delete()
@@ -785,7 +796,9 @@ class Command(BaseCommand):
                 extension_trigger_seconds=90, extension_seconds=120, max_extensions=3,
                 extensions_used=1,
                 opens_at=NOW - timedelta(hours=1),
-                closes_at=NOW + timedelta(hours=2),
+                # The one consumed extension pushed the close out by extension_seconds —
+                # presetting extensions_used without moving closes_at would contradict it.
+                closes_at=NOW + timedelta(hours=2) + timedelta(seconds=120),
                 status="scheduled",
             )
             for invitee in (northwind, cascade):
