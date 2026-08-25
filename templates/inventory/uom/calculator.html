@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Conversion Calculator{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Conversion Calculator</h1>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:uomconversion_list' %}">Units of Measure</a><span class="sep">›</span><span>Calculator</span></div>
+      <p class="text-muted">Resolve any quantity between units through your conversion matrix — directly, or through chained hops when no single rule joins the pair.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:uomconversion_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Conversions</a>
+      {% if is_admin %}<a href="{% url 'inventory:uomconversion_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Conversion</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Convert</h2></div>
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group">
+          <label class="form-label">Quantity</label>
+          <input type="text" name="qty" value="{{ request.GET.qty }}" aria-label="Quantity" class="form-input" placeholder="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">From unit</label>
+          <select name="from" aria-label="From unit" class="form-select">
+            <option value="">—</option>
+            {% for u in uoms %}
+              <option value="{{ u.pk }}" {% if from_uom and from_uom.pk == u.pk %}selected{% endif %}>{{ u.code }} — {{ u.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">To unit</label>
+          <select name="to" aria-label="To unit" class="form-select">
+            <option value="">—</option>
+            {% for u in uoms %}
+              <option value="{{ u.pk }}" {% if to_uom and to_uom.pk == u.pk %}selected{% endif %}>{{ u.code }} — {{ u.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Item (optional)</label>
+          <select name="item" aria-label="Item" class="form-select">
+            <option value="">Defaults only</option>
+            {% for it in items %}
+              <option value="{{ it.pk }}" {% if item and item.pk == it.pk %}selected{% endif %}>{{ it.sku }} — {{ it.name|truncatechars:30 }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="calculator"></i> Convert</button>
+      </form>
+      <p class="form-help">Picking an item lets its own rules override the tenant defaults; leaving it blank resolves through defaults alone.</p>
+    </div>
+  </div>
+
+  {% if error %}
+    <div class="card">
+      <div class="card-body">
+        <p><span class="badge badge-amber">Cannot convert</span></p>
+        <p style="margin-top:8px;">{{ error }}</p>
+      </div>
+    </div>
+  {% elif result is not None and path is not None %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Result</h2></div>
+      <div class="card-body form-grid">
+        <div class="stat-card" style="max-width:340px;">
+          <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
+          <div class="stat-value">{{ result|floatformat:"-4" }}</div>
+          <div class="stat-label">{% if to_uom %}{{ qty|floatformat:"-4" }} {{ from_uom.code }} = {{ result|floatformat:"-4" }} {{ to_uom.code }}{% if item %} · via {{ item.sku }} rules{% else %} · defaults{% endif %}{% endif %}</div>
+        </div>
+        <div>
+          <label class="form-label">Route taken</label>
+          {% if not path %}
+            <p><span class="badge badge-muted">Identity</span> Same unit on both sides — nothing to do.</p>
+          {% else %}
+            <table class="table" style="max-width:560px;">
+              <thead><tr><th>Hop</th><th>Rule</th><th>Factor</th><th>Scope</th></tr></thead>
+              <tbody>
+                {% for step in path %}
+                  <tr>
+                    <td class="fw-600">{{ forloop.counter }}</td>
+                    <td><a href="{% url 'inventory:uomconversion_detail' step.pk %}">{{ step.from_uom.code }} → {{ step.to_uom.code }}</a></td>
+                    <td>×{{ step.factor }}</td>
+                    <td>{% if step.item %}<span class="badge badge-amber">{{ step.item.sku }}</span>{% else %}<span class="badge badge-info">Default</span>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <p class="text-muted">Each hop multiplies once; the product is rounded only at the end. Item-pinned hops win over defaults per edge.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <p class="text-muted" style="margin-top:12px;">{{ rule_count }} rule{{ rule_count|pluralize }} on file — {{ default_count }} active tenant-wide default{{ default_count|pluralize }}, {{ item_rule_count }} active item-pinned. Inactive rules never fire.</p>
+{% endblock %}
