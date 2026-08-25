@@ -1,7 +1,11 @@
 """Procurement 6.3 Approval Workflow Engine — forms."""
 from django import forms
 
-from apps.procurement.forms._common import TenantModelForm, _reject_foreign
+from apps.procurement.forms._common import (
+    TenantModelForm,
+    TenantUniqueMixin,
+    _reject_foreign,
+)
 from apps.procurement.models import (
     ApprovalDelegation,
     ApprovalRoutingRule,
@@ -9,9 +13,10 @@ from apps.procurement.models import (
 )
 
 
-class ApprovalRoutingRuleForm(TenantModelForm):
-    """One routing rule. No unique constraint to mixin for; clean() carries the
-    band + foreign-OrgUnit guards."""
+class ApprovalRoutingRuleForm(TenantUniqueMixin, TenantModelForm):
+    """One routing rule. The mixin validates no unique here but DOES stamp
+    instance.tenant before clean() — without it the model's foreign-FK guards
+    would falsely reject every create."""
 
     class Meta:
         model = ApprovalRoutingRule
@@ -24,7 +29,7 @@ class ApprovalRoutingRuleForm(TenantModelForm):
         return cleaned
 
 
-class ApprovalDelegationForm(TenantModelForm):
+class ApprovalDelegationForm(TenantUniqueMixin, TenantModelForm):
     """One DOA grant."""
 
     class Meta:
@@ -42,7 +47,7 @@ class ApprovalDelegationForm(TenantModelForm):
         return cleaned
 
 
-class EscalationPolicyForm(TenantModelForm):
+class EscalationPolicyForm(TenantUniqueMixin, TenantModelForm):
     """The tenant's standing escalation knob (singleton row)."""
 
     class Meta:
