@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
                 ('number', models.CharField(editable=False, max_length=20)),
                 ('title', models.CharField(max_length=200)),
                 ('description', models.TextField(blank=True, help_text='Scope and rules shown to invited suppliers')),
-                ('auction_type', models.CharField(choices=[('reverse', 'Reverse auction (price falls)'), ('forward', 'Forward auction (price rises)')], default='reverse', max_length=8)),
+                ('auction_type', models.CharField(choices=[('reverse', 'Reverse auction (price falls)')], default='reverse', max_length=8)),
                 ('start_price', models.DecimalField(decimal_places=2, help_text='Opening ceiling for the first bid (reverse auction)', max_digits=14)),
                 ('reserve_price', models.DecimalField(blank=True, decimal_places=2, help_text='Internal target — results flag winning bids that land below it', max_digits=14, null=True)),
                 ('min_decrement', models.DecimalField(decimal_places=2, default=Decimal('100.00'), help_text="Each supplier's next bid must undercut their own previous bid by at least this much", max_digits=14, validators=[django.core.validators.MinValueValidator(Decimal('0.01'))])),
