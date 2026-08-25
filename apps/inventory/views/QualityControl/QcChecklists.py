@@ -21,7 +21,8 @@ def _scoped(tenant):
     checkpoint count the list column shows (annotated: no COUNT per row)."""
     return (QcChecklist.objects.filter(tenant=tenant)
             .select_related("item", "vendor")
-            .annotate(n_items=Count("checklist_items")))
+            .annotate(n_items=Count("checklist_items"))
+            .order_by("name", "id"))
 
 
 @login_required
