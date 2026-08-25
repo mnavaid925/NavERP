@@ -15,6 +15,7 @@ from django.db import transaction
 from apps.procurement.forms import EaucBidForm
 from apps.procurement.models import EaucBid, Eauction
 from apps.procurement.views._common import *  # noqa: F401,F403
+from apps.procurement.views.EAuctionManagement.Auctions import staff_required
 
 
 def _bound_supplier(request, auction):
@@ -104,6 +105,7 @@ def eauc_bid(request, pk):
 
 
 @login_required
+@staff_required
 def eauc_results(request, pk):
     """**Post-Auction Results**: final rankings, savings vs start/reserve, award decision."""
     obj = get_object_or_404(
@@ -124,6 +126,7 @@ def eauc_results(request, pk):
 
 
 @login_required
+@staff_required
 @require_POST
 def eauc_award(request, pk):
     """Record the award decision — only the current leading supplier can win."""
