@@ -22,6 +22,11 @@ from .models import (
     RfxResponse,
     SourcingBid,
     SourcingEvent,
+    ContractAmendment,
+    ContractClause,
+    ContractClauseLink,
+    ContractMilestone,
+    ContractSigner,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -339,3 +344,55 @@ class EaucBidAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+# -- 6.8 Contract Management ----------------------------------------------------------
+
+
+@admin.register(ContractClause)
+class ContractClauseAdmin(admin.ModelAdmin):
+    list_display = ("title", "category", "version", "is_pre_approved", "is_active")
+    list_filter = ("tenant", "category", "is_pre_approved", "is_active")
+    search_fields = ("title", "body")
+    readonly_fields = ("created_at", "updated_at")
+
+
+class ContractClauseLinkInline(admin.TabularInline):
+    model = ContractClauseLink
+    extra = 0
+    raw_id_fields = ("clause",)
+
+
+@admin.register(ContractSigner)
+class ContractSignerAdmin(admin.ModelAdmin):
+    list_display = ("signer_name", "contract", "role", "order",
+                    "signed_at", "declined_at")
+    list_filter = ("tenant", "role")
+    search_fields = ("signer_name", "signer_email", "contract__number")
+    # WARNING: never expose `token` in any form/list — it IS the bearer credential
+    # for the public sign page. Admin sees outcomes (viewed/signed/declined), not secrets.
+    exclude = ("token",)
+    readonly_fields = ("viewed_at", "signed_at", "declined_at", "ip_address",
+                       "created_at", "updated_at")
+
+
+@admin.register(ContractAmendment)
+class ContractAmendmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "contract", "status", "requested_by", "decided_by")
+    list_filter = ("tenant", "status")
+    search_fields = ("number", "reason", "contract__number")
+    raw_id_fields = ("contract",)
+    # Decisions are written ONCE through the view under the contract row lock;
+    # the decision stamps are state-machine outputs, never admin inputs.
+    readonly_fields = ("number", "status", "requested_by", "decided_by",
+                       "decided_at", "applied_at", "created_at", "updated_at")
+
+
+@admin.register(ContractMilestone)
+class ContractMilestoneAdmin(admin.ModelAdmin):
+    list_display = ("number", "contract", "kind", "title", "due_date",
+                    "amount", "status")
+    list_filter = ("tenant", "kind", "status")
+    search_fields = ("number", "title", "contract__number")
+    raw_id_fields = ("contract",)
+    readonly_fields = ("number", "completed_at", "completed_by",
+                       "created_at", "updated_at")
