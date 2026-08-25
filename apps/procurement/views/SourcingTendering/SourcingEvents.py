@@ -29,7 +29,10 @@ def _get_event(request, pk):
 def event_list(request):
     qs = (SourcingEvent.objects.filter(tenant=request.tenant)
           .select_related("currency", "requisition")
-          .annotate(n_bids=Count("bids")))
+          # Aggregation ignores Meta.ordering, and an unordered queryset makes the paginator
+          # warn (and page boundaries unstable) — restate it explicitly.
+          .annotate(n_bids=Count("bids"))
+          .order_by("-created_at", "-id"))
     return crud_list(
         request, qs, "procurement/sourcingtendering/events/list.html",
         search_fields=["number", "title", "description"],
