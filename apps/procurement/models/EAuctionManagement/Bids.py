@@ -44,7 +44,8 @@ class EaucBid(TenantNumbered):
         House rules (documented verbatim on the rules page):
         * the auction must be live;
         * the supplier must be an invitee;
-        * a FIRST bid (theirs) is valid up to the start price;
+        * a FIRST bid (theirs) is valid up to the start price — but must still STRICTLY
+          improve any standing best (a rival opener equal to the leader moves nothing);
         * afterwards their next bid must undercut THEIR OWN best by >= min_decrement AND
           strictly improve the global best (or stay under it if someone else leads).
         """
@@ -52,13 +53,17 @@ class EaucBid(TenantNumbered):
             return None
         if not auction.invites.filter(supplier=supplier).exists():
             return None
-        mine = list(auction.bids.filter(supplier=supplier)
-                    .values_list("amount", flat=True)[:50])
         global_best = auction.best_bid()
         ceiling = auction.start_price if global_best is None else global_best.amount
-        if not mine:
-            return q2(ceiling)  # anything up to the opening ceiling
-        own_best = min(mine)
+        # Own best across the WHOLE log — an aggregate, not a slice: an earliest-N cap
+        # would quietly weaken the pace rule once a long auction passes N bids.
+        own_best = (auction.bids.filter(supplier=supplier)
+                    .aggregate(best=Min("amount"))["best"])
+        if own_best is None:
+            cap = q2(ceiling)
+            if global_best is not None:
+                cap = min(cap, q2(global_best.amount - Decimal("0.01")))
+            return cap if cap > ZERO else None
         pace_cap = q2(own_best - auction.min_decrement)
         # must beat the field too: equal-or-higher than the current best is no improvement.
         if global_best is not None and global_best.supplier_id != supplier.pk:
