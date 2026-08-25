@@ -21,7 +21,7 @@
           {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close</button>
         </form>
       {% endif %}
-      {% if response_rows|length >= 2 %}
+      {% if n_comparable >= 2 %}
         <a href="{% url 'procurement:rfx_compare' obj.pk %}" class="btn btn-outline"><i data-lucide="columns-2"></i> Compare</a>
       {% endif %}
       {% if obj.is_editable %}
