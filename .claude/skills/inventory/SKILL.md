@@ -498,10 +498,9 @@ pointing master-data bullets at owning scm pages. Overview card groups per sub-m
   TrackingEvent (state-idempotent: delivered no longer matches), and the newest pending posted
   adjustment posted through the REAL post_adjustment_to_gl. Per-block guards survive partial runs.
 - Migration 0024 (only this run's models; the concurrent 5.15-5.17 session took 0020-0023).
-  Tests: test_finint_{models,forms,views,security}.py. Sandbox caveat of record: DB-backed pytest
-  launches were killed by the build session's shell while the parallel session ran its own test
-  wave; coverage was verified green via temp/verify_finint_518.py-style direct assertions and must
-  be re-run via pytest in a normal dev shell.
+  Tests: test_finint_{models,forms,views,security}.py (30). The build session's shell kill-stormed
+  DB-backed pytest; a follow-up wave ran the suite green via real pytest with --reuse-db (commit
+  72a5b220) and it was re-verified green in a normal dev shell on 2026-08-25 alongside the 5.19 wave.
 
 
 ### 5.15 Quality Control (QC) & Inspection � the floor-gate slice
