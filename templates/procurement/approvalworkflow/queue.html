@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Approval Queue{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Approval Queue</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Approval Workflow</span><span class="sep">›</span><span>Queue</span></div>
+      <p class="text-muted">Every pending requisition with its resolved chain — how many signatures it needs, how many are in, and what the next tier demands.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:approval_mine' %}" class="btn btn-outline"><i data-lucide="smartphone"></i> Mobile Approvals</a>
+      <a href="{% url 'procurement:approval_history' %}" class="btn btn-outline"><i data-lucide="history"></i> History</a>
+      <a href="{% url 'procurement:routingrule_list' %}" class="btn btn-outline"><i data-lucide="git-branch"></i> Routing Rules</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending chains</div></div>
+      <div class="stat-card"><div class="stat-icon purple"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ stats.covered }}</div><div class="stat-label">Routed by a rule</div></div>
+      <div class="stat-card"><div class="stat-icon orange"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.multi_tier }}</div><div class="stat-label">Multi-tier chains</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number, title or requester…">
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:approval_queue' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Requisition</th><th>Dept</th><th>Value</th><th>Chain</th><th>Progress</th><th>Next tier gate</th><th class="table-actions">Decisions</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'procurement:req_detail' row.req.pk %}" class="fw-600">{{ row.req.number }}</a> · {{ row.req.title|truncatechars:34 }}<br><span class="text-muted">{{ row.rule|default:"default single tier" }} — {{ row.reason|truncatechars:60 }}</span></td>
+              <td>{{ row.req.org_unit.name|default:"—" }}</td>
+              <td class="fw-600">{{ row.req.estimated_total|floatformat:"-2" }}</td>
+              <td>{% if row.elevated %}<span class="badge badge-amber">{{ row.req.approval_tier.1 }}</span>{% else %}<span class="badge badge-slate">Standard</span>{% endif %}</td>
+              <td>
+                <div class="progress" style="min-width:110px;" aria-hidden="true"><div class="progress-bar" style="width: {% widthratio row.done row.tier_count 100 %}%"></div></div>
+                <span class="text-muted">{{ row.done }}/{{ row.tier_count }} in{% if not row.is_final %} · tier {{ row.next_tier }} next{% endif %}</span>
+              </td>
+              <td>{% if row.is_final or row.rejected %}{% if row.rejected %}<span class="badge badge-red">Rejected</span>{% else %}<span class="badge badge-green">Final signature</span>{% endif %}{% elif row.elevated and not is_admin %}<span class="badge badge-muted">Admin only</span>{% else %}<span class="badge badge-info">Open to you</span>{% endif %}</td>
+              <td>
+                <div class="table-actions">
+                  {% if is_admin or not row.elevated %}
+                    <form method="post" action="{% url 'procurement:approval_approve' row.req.pk %}" onsubmit="return confirm('Approve tier {{ row.next_tier }} of {{ row.tier_count }} for {{ row.req.number }}?');">
+                      {% csrf_token %}<button class="btn-icon" type="submit" title="Approve tier"><i data-lucide="check-circle-2"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'procurement:approval_reject' row.req.pk %}" onsubmit="return confirm('Reject {{ row.req.number }}? The requisition returns to the requester as rejected.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject"><i data-lucide="x-circle"></i></button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted">elevated — admin signs</span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><h3>No pending approvals</h3><p>Submit a draft requisition from the tracking register and it appears here with its resolved chain.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
