@@ -37,8 +37,6 @@
         <tbody>
           {% for label, counts in months %}
             <tr><td class="fw-600">{{ label }}</td><td>{{ counts.events }}</td><td>{{ counts.bids }}</td></tr>
-          {% empty %}
-            <tr><td colspan="3" class="text-muted">No activity yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
