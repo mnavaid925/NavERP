@@ -121,13 +121,14 @@ class UomConversion(TenantOwned):
         if (self.from_uom_id and self.to_uom_id
                 and self.from_uom_id == self.to_uom_id):
             errors["to_uom"] = "A conversion needs two different units."
-        for name in ("item", "from_uom", "to_uom"):
-            rel = getattr(self, name, None)
-            # Keyed off the FK id, NOT the object: an unsaved instance carries tenant
-            # only after the form mixin stamps it, and an unset required FK must
-            # surface as "required", never as a cross-tenant 500 (review C1 pattern).
-            if rel is not None and rel.tenant_id != self.tenant_id:
-                errors[name] = "That record belongs to another workspace."
+        # Keyed off the FK ids, NOT truthiness of the object: an unset required FK must
+        # surface as "required", never as a cross-tenant 500 (review C1 pattern).
+        if self.item_id and self.item.tenant_id != self.tenant_id:
+            errors["item"] = "That record belongs to another workspace."
+        if self.from_uom_id and self.from_uom.tenant_id != self.tenant_id:
+            errors["from_uom"] = "That record belongs to another workspace."
+        if self.to_uom_id and self.to_uom.tenant_id != self.tenant_id:
+            errors["to_uom"] = "That record belongs to another workspace."
         if errors:
             raise ValidationError(errors)
         # Explicit duplicate probe — the DB unique cannot see two item=NULL rows.
@@ -156,7 +157,7 @@ def _active_edges(tenant, item):
     """
     best = {}
     rows = (UomConversion.objects.filter(tenant=tenant, is_active=True)
-            .select_related("from_uom", "to_uom").order_by("id"))
+            .select_related("from_uom", "to_uom", "item").order_by("id"))
     for rule in rows:
         if rule.item_id is not None and (item is None or rule.item_id != item.pk):
             continue
