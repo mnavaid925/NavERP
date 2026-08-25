@@ -77,7 +77,7 @@
               {% endif %}
             </tr>
           {% empty %}
-            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-plus"></i><p>No questions yet — edit the event to build the questionnaire.</p></div></td></tr>
+            <tr><td colspan="{% if obj.is_editable %}8{% else %}7{% endif %}"><div class="empty-state"><i data-lucide="list-plus"></i><p>No questions yet — edit the event to build the questionnaire.</p></div></td></tr>
           {% endfor %}
         </tbody>
       </table>
