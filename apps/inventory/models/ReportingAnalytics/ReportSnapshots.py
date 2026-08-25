@@ -24,7 +24,7 @@ class InventoryReportSnapshot(TenantNumbered):
     ``created_at`` (from the tenant base) IS the generation moment — snapshots are
     written once and never updated."""
 
-    NUMBER_PREFIX = "IRS-"
+    NUMBER_PREFIX = "IRS"
 
     REPORT_TYPES = [
         ("valuation", "Inventory Valuation"),
