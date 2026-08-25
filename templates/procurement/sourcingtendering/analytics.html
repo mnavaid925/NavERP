@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Sourcing Analytics{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sourcing Analytics</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:event_list' %}">Sourcing &amp; Tendering</a><span class="sep">›</span><span>Analytics</span></div>
+      <p class="text-muted">Post-event analysis computed live from the sourcing register — savings, participation and cycle time. Nothing here is stored; “—” means the figure genuinely cannot be computed yet.</p>
+    </div>
+    <div class="page-actions"><a href="{% url 'procurement:award_board' %}" class="btn btn-outline"><i data-lucide="trophy"></i> Award board</a></div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon blue"><i data-lucide="gavel"></i></div>
+      <div><div class="stat-value">{{ stats.n_events }}</div><div class="stat-label">Events ({{ stats.n_open }} open · {{ stats.n_closed }} evaluating · {{ stats.n_awarded }} awarded)</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green"><i data-lucide="piggy-bank"></i></div>
+      <div><div class="stat-value">{% if stats.total_savings is not None %}{{ stats.total_savings|floatformat:2 }}{% else %}—{% endif %}</div><div class="stat-label">Total savings vs budget{% if stats.total_savings is not None %} (over {{ stats.comparable_events }} comparable event{{ stats.comparable_events|pluralize }}){% else %} — needs budget estimates on awarded events{% endif %}</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i data-lucide="users"></i></div>
+      <div><div class="stat-value">{% if stats.avg_participation is not None %}{{ stats.avg_participation }}{% else %}—{% endif %}</div><div class="stat-label">Avg bids per awarded event</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+      <div><div class="stat-value">{% if stats.avg_cycle_days is not None %}{{ stats.avg_cycle_days }} days{% else %}—{% endif %}</div><div class="stat-label">Avg create→award cycle</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Activity by month — last 6 months</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Month</th><th>Events opened</th><th>Bids recorded</th></tr></thead>
+        <tbody>
+          {% for label, counts in months %}
+            <tr><td class="fw-600">{{ label }}</td><td>{{ counts.events }}</td><td>{{ counts.bids }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-muted">No activity yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Awarded events — savings detail</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Event</th><th>Winner</th><th>Bids</th><th>Budget est.</th><th>Awarded price</th><th>Savings</th><th>Savings %</th><th>Cycle</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{% url 'procurement:event_detail' row.event.pk %}" class="fw-600">{{ row.event.number }}</a> {{ row.event.title|truncatechars:40 }}</td>
+              <td>{% if row.won %}{{ row.won.supplier.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ row.bids }}</td>
+              <td>{% if row.budget is not None %}{{ row.budget|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.price is not None %}{{ row.price|floatformat:2 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.savings is not None %}<span class="badge {% if row.savings >= 0 %}badge-green{% else %}badge-red{% endif %}">{{ row.savings|floatformat:2 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.savings_pct is not None %}{{ row.savings_pct }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.cycle_days is not None %}{{ row.cycle_days }} days{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="bar-chart-3"></i><h3>No awarded events yet</h3><p>Award an event and its savings story appears here.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if rows %}<div class="card-body text-muted">Savings compare the internal budget estimate with the winning whole-package price; events without a budget estimate are excluded from the totals rather than counted as zero.</div>{% endif %}
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:event_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to events</a>
+  </div>
+{% endblock %}
