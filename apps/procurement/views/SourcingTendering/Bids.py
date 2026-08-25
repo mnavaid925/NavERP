@@ -99,10 +99,13 @@ def bid_detail(request, pk):
 
     weighted = weighted_from_map(row, criteria) if criteria else None
     total_weight = sum((c.weight_pct for c in criteria), Decimal("0"))
+    # Pre-paired rows so the template never needs a dict-by-key lookup filter.
+    matrix = [{"criterion": criterion, "current": scores.get(criterion.pk)}
+              for criterion in criteria]
     return render(request, "procurement/sourcingtendering/bids/detail.html", {
         "obj": obj,
         "criteria": criteria,
-        "scores": scores,
+        "matrix": matrix,
         "weighted": weighted,
         "total_weight": total_weight,
         "can_score": obj.is_evaluable,
