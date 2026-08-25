@@ -14,12 +14,10 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-body form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
-      <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending chains</div></div>
-      <div class="stat-card"><div class="stat-icon purple"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ stats.covered }}</div><div class="stat-label">Routed by a rule</div></div>
-      <div class="stat-card"><div class="stat-icon orange"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.multi_tier }}</div><div class="stat-label">Multi-tier chains</div></div>
-    </div>
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-icon blue"><i data-lucide="inbox"></i></div><div class="stat-value">{{ stats.pending }}</div><div class="stat-label">Pending chains</div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i data-lucide="git-branch"></i></div><div class="stat-value">{{ stats.covered }}</div><div class="stat-label">Routed by a rule{% if stats.shown < stats.pending %} (of {{ stats.shown }} shown){% endif %}</div></div>
+    <div class="stat-card"><div class="stat-icon orange"><i data-lucide="layers"></i></div><div class="stat-value">{{ stats.multi_tier }}</div><div class="stat-label">Multi-tier chains</div></div>
   </div>
 
   <div class="card">
@@ -46,10 +44,10 @@
                 <div class="progress" style="min-width:110px;" aria-hidden="true"><div class="progress-bar" style="width: {% widthratio row.done row.tier_count 100 %}%"></div></div>
                 <span class="text-muted">{{ row.done }}/{{ row.tier_count }} in{% if not row.is_final %} · tier {{ row.next_tier }} next{% endif %}</span>
               </td>
-              <td>{% if row.is_final or row.rejected %}{% if row.rejected %}<span class="badge badge-red">Rejected</span>{% else %}<span class="badge badge-green">Final signature</span>{% endif %}{% elif row.elevated and not is_admin %}<span class="badge badge-muted">Admin only</span>{% else %}<span class="badge badge-info">Open to you</span>{% endif %}</td>
+              <td>{% if row.rejected %}<span class="badge badge-red">Rejected</span>{% elif row.is_final %}<span class="badge badge-green">Final signature — admin</span>{% else %}<span class="badge {% if row.elevated and not is_admin %}badge-muted{% else %}badge-info{% endif %}">{{ row.gate }}</span>{% endif %}</td>
               <td>
                 <div class="table-actions">
-                  {% if is_admin or not row.elevated %}
+                  {% if row.may_decide %}
                     <form method="post" action="{% url 'procurement:approval_approve' row.req.pk %}" onsubmit="return confirm('Approve tier {{ row.next_tier }} of {{ row.tier_count }} for {{ row.req.number }}?');">
                       {% csrf_token %}<button class="btn-icon" type="submit" title="Approve tier"><i data-lucide="check-circle-2"></i></button>
                     </form>
@@ -57,7 +55,7 @@
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Reject"><i data-lucide="x-circle"></i></button>
                     </form>
                   {% else %}
-                    <span class="text-muted">elevated — admin signs</span>
+                    <span class="text-muted">{{ row.gate|lower }}</span>
                   {% endif %}
                 </div>
               </td>
@@ -69,5 +67,6 @@
       </table>
     </div>
     {% include "partials/pagination.html" %}
+    {% if truncated %}<p class="text-muted" style="padding:8px 16px;">Showing the oldest {{ stats.shown }} of {{ stats.pending }} pending chains — narrow with search to reach the rest.</p>{% endif %}
   </div>
 {% endblock %}
