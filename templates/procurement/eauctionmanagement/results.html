@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Results · {{ obj.number }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Post-auction results · {{ obj.number }}
+        <span class="badge {% if obj.status == 'awarded' %}badge-green{% elif obj.status == 'closed' %}badge-slate{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:eauc_list' %}">E-Auctions</a><span class="sep">›</span><a href="{% url 'procurement:eauc_detail' obj.pk %}">{{ obj.number }}</a><span class="sep">›</span><span>Results</span></div>
+      <p class="text-muted">{{ obj.title }}</p>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'closed' and best %}
+        <button class="btn btn-primary" type="submit" onclick="document.getElementById('award-box').scrollIntoView();return false;"><i data-lucide="trophy"></i> Record award</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Opening ceiling</dt><dd>{{ obj.start_price|floatformat:2 }}</dd></div>
+      <div class="detail-item"><dt>Reserve (internal target)</dt><dd>{% if obj.reserve_price %}{{ obj.reserve_price|floatformat:2 }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Total bids</dt><dd>{{ total_bids }}</dd></div>
+      <div class="detail-item"><dt>Window</dt><dd>{{ obj.opens_at|date:"M d, H:i" }} → {{ obj.closes_at|date:"M d, H:i:s" }}</dd></div>
+      <div class="detail-item"><dt>Anti-snipe extensions</dt><dd>{{ obj.extensions_used }} / {{ obj.max_extensions }}</dd></div>
+      <div class="detail-item"><dt>Saving vs opening ceiling</dt><dd>{% if savings is not None %}<strong>{{ savings|floatformat:2 }}</strong>{% else %}—{% endif %}</dd></div>
+    </dl>
+    {% if below_reserve %}
+      <div class="text-muted">The winning bid landed BELOW the internal reserve — confirm the award deliberately.</div>
+    {% endif %}
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Final ranking</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Supplier</th><th>Best bid</th><th>Bids</th><th>Last bid</th></tr></thead>
+        <tbody>
+          {% for r in ranked %}
+            <tr {% if forloop.first and best %}class="fw-600"{% endif %}>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ r.supplier_name }}
+                {% if obj.awarded_supplier_id == r.supplier_id %}<span class="badge badge-green">Awarded</span>{% endif %}
+              </td>
+              <td>{{ r.best|floatformat:2 }}</td>
+              <td>{{ r.count }}</td>
+              <td>{{ r.last_at|date:"M d, H:i:s" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="trophy"></i><p>No bids were placed.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if obj.status == 'closed' and ranked %}
+    <div class="card" id="award-box">
+      <div class="card-header"><h2 class="card-title">Record the award decision</h2></div>
+      <div class="card-body">
+        {% if best %}
+          <form method="post" action="{% url 'procurement:eauc_award' obj.pk %}" onsubmit="return confirm('Award to {{ best.supplier.name }} at {{ best.amount|floatformat:2 }}? This is recorded once.');">
+            {% csrf_token %}
+            <input type="hidden" name="supplier" value="{{ best.supplier_id }}">
+            <div class="form-group">
+              <label class="form-label" for="award_note">Decision note (optional)</label>
+              <textarea id="award_note" name="award_note" rows="2" class="form-textarea"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit"><i data-lucide="trophy"></i> Award to {{ best.supplier.name }} @ {{ best.amount|floatformat:2 }}</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% elif obj.status == 'awarded' %}
+    <div class="card"><div class="card-body">
+      <strong>Awarded to {{ obj.awarded_supplier.name }} @ {{ obj.awarded_amount|floatformat:2 }}</strong>
+      on {{ obj.awarded_at|date:"M d, Y H:i" }}.{% if obj.award_note %} — {{ obj.award_note }}{% endif %}
+    </div></div>
+  {% endif %}
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:eauc_detail' obj.pk %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to auction</a>
+  </div>
+{% endblock %}
