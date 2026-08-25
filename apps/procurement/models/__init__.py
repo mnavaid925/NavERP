@@ -17,7 +17,13 @@ from .DashboardPortal.WidgetPreferences import WidgetPreference
 from .RequisitionManagement.Amendments import RequisitionAmendment, RequisitionAmendmentLine
 from .RequisitionManagement.Templates import RequisitionTemplate, RequisitionTemplateLine
 from .RfxManagement.Events import RfxEvent, RfxQuestion
-from .RfxManagement.Responses import RfxAnswer, RfxResponse
+from .RfxManagement.Responses import (
+    RfxAnswer,
+    RfxResponse,
+    earned_score_map,
+    possible_points_map,
+    weighted_percent,
+)
 from .SourcingTendering import BidScore, EventCriterion, SourcingBid, SourcingEvent
 from .VendorManagement import (
     VendorInvoiceSubmission,
@@ -43,6 +49,9 @@ __all__ = [
     "RfxEvent",
     "RfxQuestion",
     "RfxResponse",
+    "earned_score_map",
+    "possible_points_map",
+    "weighted_percent",
     "SourcingEvent",
     "EventCriterion",
     "SourcingBid",
