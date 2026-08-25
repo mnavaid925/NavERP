@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Milestones{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Milestones &amp; Obligations</h1>
+    <nav class="breadcrumb">Procurement / Contracts / Milestones</nav>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <form method="get" class="filter-bar">
+      <input type="text" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Search number, title, contract…" class="form-input">
+      <select name="kind" class="form-select">
+        <option value="">All kinds</option>
+        {% for value, label in kind_choices %}
+          <option value="{{ value }}" {% if request.GET.kind == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" class="form-select">
+        <option value="">All statuses</option>
+        {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <label class="form-label"><input type="checkbox" name="lens" value="overdue" {% if lens == "overdue" %}checked{% endif %}> Overdue only</label>
+      <button type="submit" class="btn btn-outline">Filter</button>
+    </form>
+  </div>
+  <div class="card-body">
+    {% if page_obj.object_list %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Contract</th><th>Title</th><th>Kind</th><th>Due</th><th>Amount</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for m in page_obj.object_list %}
+          <tr>
+            <td>{{ m.number }}</td>
+            <td><a href="{% url 'procurement:contract_detail' m.contract_id %}">{{ m.contract.number }}</a></td>
+            <td>{{ m.title }}</td>
+            <td>{{ m.get_kind_display }}</td>
+            <td>{% if m.is_overdue %}<span class="badge badge-red">{{ m.due_date|date:"d M Y" }} · overdue</span>{% else %}{{ m.due_date|date:"d M Y" }}{% endif %}</td>
+            <td>{{ m.amount|default_if_none:"—" }}</td>
+            <td>{{ m.get_status_display }}</td>
+            <td class="table-actions">
+              {% if m.status == "pending" or m.status == "in_progress" %}
+              <form method="post" action="{% url 'procurement:milestone_complete' m.pk %}" onsubmit="return confirm('Complete {{ m.number }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon" title="Complete"><i data-lucide="check"></i></button>
+              </form>
+              <form method="post" action="{% url 'procurement:milestone_complete' m.pk %}" onsubmit="return confirm('Waive {{ m.number }}?');">{% csrf_token %}
+                <input type="hidden" name="action" value="waive">
+                <button type="submit" class="btn btn-icon" title="Waive"><i data-lucide="circle-off"></i></button>
+              </form>
+              {% endif %}
+              <a href="{% url 'procurement:milestone_edit' m.pk %}" class="btn btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+              {% if m.status == "pending" or m.status == "in_progress" %}
+              <form method="post" action="{% url 'procurement:milestone_delete' m.pk %}" onsubmit="return confirm('Delete milestone {{ m.number }}?');">{% csrf_token %}
+                <button type="submit" class="btn btn-icon btn-danger" title="Delete"><i data-lucide="trash-2"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+    {% else %}
+    <div class="empty-state"><i data-lucide="list-checks"></i><p>No milestones in this view — add them from a contract's workspace.</p></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
