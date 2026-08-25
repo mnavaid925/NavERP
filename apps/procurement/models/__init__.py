@@ -31,6 +31,15 @@ from .VendorManagement import (
     VendorPortalAccess,
     VendorSuspension,
 )
+from .ContractsManagement import (
+    ContractAmendment,
+    ContractClause,
+    ContractClauseLink,
+    ContractMilestone,
+    ContractSigner,
+    expiring_contracts,
+    run_renewal_alerts,
+)
 
 __all__ = [
     "EaucBid",
@@ -63,4 +72,11 @@ __all__ = [
     "VendorPortalAccess",
     "VendorSuspension",
     "VendorInvoiceSubmission",
+    "ContractClause",
+    "ContractClauseLink",
+    "ContractSigner",
+    "ContractAmendment",
+    "ContractMilestone",
+    "expiring_contracts",
+    "run_renewal_alerts",
 ]
