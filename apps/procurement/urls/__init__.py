@@ -7,8 +7,10 @@ Django is first-match-wins: within each module the literal routes (`add/`, `expo
 ``<int:pk>/`` ones, and every first segment (``, `alerts/`, `quick-requisition/`, `activity/`,
 `reports/`, `widgets/`, `requisitions/`, `templates/`, `amendments/`, `approvals/`, `escalations/`,
 `rfx/`, `events/`, `bids/`, `awards/`, `analytics/`, `portal-access/`, `suspensions/`,
-`submissions/`, `vendor-portal/`) is a distinct whole component — no greedy ``<str:…>`` converter
-exists in this app, so there is no cross-module shadowing surface to reason about.
+`submissions/`, `vendor-portal/`, `auctions/`, `clauses/`, `contracts/`, `contract-sign/`,
+`contract-amendments/`, `milestones/`, `renewals/`) is a distinct whole component — no greedy
+``<str:…>`` converter exists in this app, so there is no cross-module shadowing surface to reason
+about.
 """
 from .ApprovalWorkflowEngine import urlpatterns as _awe_approvalengine
 from .DashboardPortal.ActivityFeed import urlpatterns as _dp_activity
@@ -23,6 +25,7 @@ from .RequisitionManagement.Templates import urlpatterns as _rm_templates
 from .RfxManagement import urlpatterns as _rfx_management
 from .SourcingTendering import urlpatterns as _st_sourcingtendering
 from .VendorManagement import urlpatterns as _vm_vendormanagement
+from .ContractsManagement import urlpatterns as _cm_contractsmanagement
 
 
 app_name = "procurement"
@@ -41,4 +44,6 @@ urlpatterns = [
     *_rfx_management,      # 6.6 RFx events/questionnaires, responses + scoring, library
     *_st_sourcingtendering,  # 6.5 sourcing events, bids + scoring, award board, analytics
     *_vm_vendormanagement,  # 6.4 portal access, suspensions, invoice submissions, vendor portal
+    *_cm_contractsmanagement,  # 6.8 clause library, contract register/authoring + token sign page,
+                               #    amendments, milestones, renewal board
 ]
