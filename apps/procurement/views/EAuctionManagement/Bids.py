@@ -148,7 +148,8 @@ def eauc_award(request, pk):
     serialize, and the model's once-only guard catches whichever loses the race.
     """
     obj = get_object_or_404(Eauction, pk=pk, tenant=request.tenant)
-    note = request.POST.get("award_note", "").strip()
+    # The note is prose for the results page — truncate rather than trust the POST size.
+    note = request.POST.get("award_note", "").strip()[:500]
     pk_str = request.POST.get("supplier", "")
     supplier = None
     if pk_str.isdecimal():
