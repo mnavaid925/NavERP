@@ -16,6 +16,7 @@ from .DashboardPortal.Overview import urlpatterns as _dp_overview
 from .DashboardPortal.ProcurementAlerts import urlpatterns as _dp_alerts
 from .DashboardPortal.QuickRequisitions import urlpatterns as _dp_quickreq
 from .DashboardPortal.SelfServiceReports import urlpatterns as _dp_reports
+from .EAuctionManagement import urlpatterns as _eauc_eauctionmanagement
 from .RequisitionManagement.Amendments import urlpatterns as _rm_amendments
 from .RequisitionManagement.Requisitions import urlpatterns as _rm_requisitions
 from .RequisitionManagement.Templates import urlpatterns as _rm_templates
@@ -36,6 +37,7 @@ urlpatterns = [
     *_rm_templates,     # 6.2 requisition templates (+ apply)
     *_rm_amendments,    # 6.2 amendment workflow (list/detail/approve/reject)
     *_awe_approvalengine,  # 6.3 routing rules, queue/history/mine, DOA grants, escalations
+    *_eauc_eauctionmanagement,  # 6.7 e-auctions: setup/lifecycle/invites + floor/console/bidding
     *_rfx_management,      # 6.6 RFx events/questionnaires, responses + scoring, library
     *_st_sourcingtendering,  # 6.5 sourcing events, bids + scoring, award board, analytics
     *_vm_vendormanagement,  # 6.4 portal access, suspensions, invoice submissions, vendor portal
