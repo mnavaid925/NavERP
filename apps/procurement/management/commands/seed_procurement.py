@@ -67,6 +67,11 @@ from apps.procurement.models import (
     RfxResponse,
     SourcingBid,
     SourcingEvent,
+    ContractAmendment,
+    ContractClause,
+    ContractClauseLink,
+    ContractMilestone,
+    ContractSigner,
     VendorInvoiceSubmission,
     VendorPortalAccess,
     VendorSuspension,
@@ -148,8 +153,9 @@ class Command(BaseCommand):
             self._seed_approval_engine(tenant)
             self._seed_sourcing(tenant)
             self._seed_vendor_management(tenant)
-            self._seed_rfx(tenant)
-            self._seed_eauction(tenant)
+        self._seed_rfx(tenant)
+        self._seed_eauction(tenant)
+        self._seed_contracts(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -798,3 +804,109 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: e-auctions ready ({made} auctions: 1 awarded w/ history, "
             f"1 live)."))
+
+    # -- 6.8 Contract Management ------------------------------------------------------------------
+
+    def _contract_supplier(self, tenant, name):
+        """Same get-or-create-by-name contract as the 6.5/6.7 helpers — one supplier
+        identity per name per tenant, never a duplicate Party."""
+        party = Party.objects.filter(tenant=tenant, name=name).first()
+        if party is None:
+            party = Party.objects.create(tenant=tenant, kind="organization", name=name)
+        PartyRole.objects.get_or_create(
+            tenant=tenant, party=party, role="supplier",
+            defaults={"status": "active", "start_date": timezone.localdate()})
+        return party
+
+    def _seed_contracts(self, tenant):
+        """6.8 Contract Management - the clause library (5 pre-approved clauses), one
+        AUTHORED agreement on scm 4.2's SupplierContract spine with clause links,
+        signature slots (1 supplier + 1 internal, unsigned so the sign page has a live
+        token), milestones across every kind/state, and one PENDING amendment so the
+        decision queue is not empty. Reuses spine parties; guarded per tenant."""
+        from apps.scm.models import SupplierContract
+
+        if ContractClause.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: contracts already present, skipping.")
+            return
+        admin_user = User.objects.filter(tenant=tenant, is_tenant_admin=True).first()
+        member = User.objects.filter(tenant=tenant, is_tenant_admin=False).first()
+        supplier = self._contract_supplier(tenant, "Northwind Industrial Supply")
+
+        clauses = {}
+        for title, category, body in [
+            ("Governing law & venue", "legal",
+             "This Agreement is governed by the laws agreed in writing by the Parties; "
+             "the courts of that jurisdiction have exclusive venue."),
+            ("Payment terms — net 30", "payment",
+             "Invoices are payable within thirty (30) days of a valid invoice. Late "
+             "payments accrue interest at 1% per month."),
+            ("Delivery & acceptance", "delivery",
+             "Goods must conform to the purchase order. Buyer has five (5) business "
+             "days to inspect; acceptance waives non-conformity discoverable then."),
+            ("Confidentiality", "confidentiality",
+             "Each Party protects the other's confidential information with at least "
+             "the care it applies to its own, for three (3) years after disclosure."),
+            ("Termination for convenience", "termination",
+             "Either Party may terminate on sixty (60) days' written notice; Buyer pays "
+             "for conforming goods delivered before the effective date."),
+        ]:
+            clauses[title] = ContractClause.objects.create(
+                tenant=tenant, title=title, category=category, body=body,
+                version="v1.0", is_pre_approved=True)
+            write_audit_log(None, clauses[title], "create")
+
+        today = timezone.localdate()
+        made = 0
+        with transaction.atomic():
+            contract = SupplierContract.objects.create(
+                tenant=tenant,
+                party=supplier,
+                title="Annual facilities & consumables master agreement",
+                contract_type="master",
+                status="active",
+                start_date=today - timedelta(days=330),
+                end_date=today + timedelta(days=20),
+                contract_value=Decimal("96000.00"),
+                auto_renew=True,
+                renewal_notice_days=30,
+                owner=admin_user,
+                terms_summary="Twelve-month master supply agreement with quarterly price review.",
+            )
+            for order, clause in enumerate(clauses.values(), start=1):
+                ContractClauseLink.objects.create(
+                    contract=contract, clause=clause, section_order=order)
+            internal_signer = ContractSigner.objects.create(
+                tenant=tenant, contract=contract, role="internal",
+                signer_name=(admin_user.get_full_name() or admin_user.username),
+                signer_email=admin_user.email or "admin@example.com", order=1)
+            supplier_signer = ContractSigner.objects.create(
+                tenant=tenant, contract=contract, role="supplier",
+                signer_party=supplier, signer_name="Dana Reyes",
+                signer_email="dana.reyes@northwind.example.com", order=2)
+            ContractMilestone.objects.create(
+                tenant=tenant, contract=contract, kind="deliverable",
+                title="Quarterly business review Q1", due_date=today + timedelta(days=12),
+                notes="Scorecard + savings walkthrough.")
+            ContractMilestone.objects.create(
+                tenant=tenant, contract=contract, kind="payment",
+                title="Milestone payment 2 of 4", due_date=today + timedelta(days=30),
+                amount=Decimal("24000.00"))
+            ContractMilestone.objects.create(
+                tenant=tenant, contract=contract, kind="penalty",
+                title="Late-delivery credit (March)", due_date=today - timedelta(days=6),
+                amount=Decimal("750.00"), status="completed",
+                completed_at=NOW, completed_by=admin_user,
+                notes="Credited on the March invoice.")
+            amendment = ContractAmendment.objects.create(
+                tenant=tenant, contract=contract,
+                reason="Supplier requested an earlier renewal notice window to plan stock.",
+                proposed_notice_days=45,
+                proposed_summary="Renewal notice window moves 30 → 45 days; no other terms move.",
+                requested_by=member or admin_user)
+            write_audit_log(None, contract, "create")
+            write_audit_log(None, amendment, "create")
+            made += 1
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: contracts ready ({made} agreement: clause library x{len(clauses)}, "
+            f"2 signature slots, 3 milestones, 1 pending amendment)."))
