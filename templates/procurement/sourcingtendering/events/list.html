@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Sourcing Events{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Sourcing Events</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><span>Sourcing &amp; Tendering</span></div>
+      <p class="text-muted">Competitive tenders, RFPs and restricted RFQs — run the process, score the bids, record the award.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:award_board' %}" class="btn btn-outline"><i data-lucide="trophy"></i> Award board</a>
+      <a href="{% url 'procurement:event_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Event</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or title…">
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:event_list' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Title</th><th>Type</th><th>Bids</th><th>Budget est.</th><th>Closes</th><th>Status</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td>{{ obj.title|truncatechars:60 }}</td>
+              <td>{{ obj.get_event_type_display }}</td>
+              <td>{{ obj.n_bids|default:0 }}</td>
+              <td>{% if obj.budget_estimate is not None %}{{ obj.budget_estimate|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{{ obj.closes_at|date:"M d, Y H:i"|default:"—" }}</td>
+              <td><span class="badge {% if obj.status == 'open' %}badge-green{% elif obj.status == 'closed' %}badge-amber{% elif obj.status == 'awarded' %}badge-info{% elif obj.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span></td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'procurement:event_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if obj.is_editable %}<a href="{% url 'procurement:event_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  <form method="post" action="{% url 'procurement:event_delete' obj.pk %}" onsubmit="return confirm('Delete this event? Only possible while it has no bids.');">
+                    {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="gavel"></i><h3>No sourcing events yet</h3><p>Create one to run a competitive tender — define the rules and the evaluation matrix up front.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
