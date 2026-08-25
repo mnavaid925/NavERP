@@ -1392,6 +1392,17 @@ LIVE_LINKS = {
         "Accounting Software Integration": "inventory:integrationchannel_list?kind=accounting",
         "API Management":                  "inventory:apiclient_list",
     },
+    # 5.20 Units of Measure (UOM). The UOM MASTER is 4.3's scm.UOM (code/name/factor -
+    # the overview's Catalog card links it); what its own docstring deferred is the full
+    # N:N CONVERSION MATRIX - "1 Case = 12 Units, 1 Pallet = 40 Cases" - and that is
+    # exactly what inventory adds here: UomConversion rules (item-pinned rows beating
+    # tenant-wide defaults, most-specific-wins) plus a shared resolver that converts
+    # quantities directly or through chained hops, surfaced on a read-only calculator.
+    # Zero spine writes - converting units on paper moves no stock.
+    "5.20": {
+        "Units of Measure (UOM)": "inventory:uomconversion_list",  # bullet (the conversion matrix)
+        "Conversion Calculator":  "inventory:uom_calculator",      # extra (live resolve + hop breakdown)
+    },
     # --- Module 6 Procurement Management System -------------------------------------------------
 
     # 6.1 User Dashboard & Portal. The requisition/PO documents the portal reads and writes are
