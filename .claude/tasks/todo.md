@@ -27695,3 +27695,31 @@ per §9.
   killed by this shell (4th occurrence of the documented caveat) - test_awe_{models,forms,
   views,security}.py (27 tests) collect cleanly and must run green via pytest in a normal dev
   shell.
+
+## 6.6 RFx Management (RFI, RFP, RFQ) close-out (2026-08-26)
+
+- **Built + wired**: 4 models under `RfxManagement/` x4 layers - RfxEvent [RFX-]
+  (rfi/rfp/rfq; draft->issued->closed/cancelled; is_template=True rows ARE the Template
+  Library, cloned via Use - copies never links) + RfxQuestion (typed answers, weight 0-100,
+  scored flag, order), RfxResponse [RXR-] (one per event x supplier, cover attachment,
+  STATUS_FLOW-gated submit/review/score/disqualify+reinstate) + RfxAnswer (pre-created one
+  per question; evaluator score 0-10). Scoring derived on read: earned = sum(score x weight)
+  vs possible = 10 x sum(scored weights); batch helpers (earned_score_map /
+  possible_points_map / weighted_percent) keep every list to ONE grouped query.
+- **Pages**: event register (+?compare=1 deep-link filter), builder form (header + question
+  formset, new rows append after max(order)), detail with reorder swaps + response strip +
+  lifecycle verbs (issue/close/cancel POST-only, guards in model methods), compare matrix
+  (admissible submissions best-first), template library + clone, scoring leaderboard,
+  response repository/register/detail/edit-workspace/status/delete. LIVE_LINKS["6.6"],
+  migration 0008 (rfx only), seeder _seed_rfx (library RFI blueprint + issued RFP w/ one
+  fully-scored and one partial supplier response per tenant).
+- **Concurrent-session notes (L43/L45 lived)**: shared index meant the parallel 6.4/6.5 runs
+  swept my staged re-export blocks into their commits; my 0008 initially captured THEIR
+  unmigrated SourcingTendering models - stripped to rfx-only ops, then generated 0009 for
+  their committed seeder so main stays green. AWE (6.3) test failures observed are PRE-
+  EXISTING from that session's own review commits (idle_hours/resolve ladder), untouched here.
+- **Smoke**: temp/smoke_66.py (all GETs 200, IDOR 404s, no {# leaks) + temp/smoke66_post.py
+  (create/build/issue/score/lifecycle/move/close/clone/delete) both green. Found+fixed: bound
+  inline answer formset resolves instances from posted id fields -> crafted POST without them
+  now degrades gracefully; reorder originally wrote stale order values (swapped slots not
+  values).
