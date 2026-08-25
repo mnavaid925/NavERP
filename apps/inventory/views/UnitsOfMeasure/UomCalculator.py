@@ -7,6 +7,8 @@ with no route says so plainly instead of guessing a rate.
 """
 from decimal import Decimal, InvalidOperation
 
+from django.db.models import Count, Q
+
 from apps.core.crud import as_db_int
 from apps.inventory.models import UomConversion, convert_quantity
 from apps.inventory.views._common import *  # noqa: F401,F403
@@ -42,16 +44,37 @@ def uom_calculator(request):
         except InvalidOperation:
             error = f"'{raw_qty}' is not a quantity I can read — enter a plain number."
         else:
-            if from_uom.pk == to_uom.pk:
-                result, path = qty.quantize(Decimal("0.0001")), []
+            if not qty.is_finite():
+                # 'Infinity' and 'NaN' PARSE as Decimals; only a finite check refuses
+                # them, and an absurd exponent ('1e999999') must never reach quantize.
+                error = "Quantity must be a plain finite number."
             else:
-                result, path = convert_quantity(request.tenant, item, qty, from_uom, to_uom)
-                if path is None:
+                try:
+                    if from_uom.pk == to_uom.pk:
+                        result, path = qty.quantize(Decimal("0.0001")), []
+                    else:
+                        result, path = convert_quantity(request.tenant, item, qty,
+                                                        from_uom, to_uom)
+                except ArithmeticError:
+                    # decimal.Overflow / InvalidOperation: a legal parse can still
+                    # overflow the quantum (qty=1e999 x a big factor); every decimal
+                    # exception subclasses ArithmeticError, and this is "cannot
+                    # convert this", not a 500.
+                    result = None
+                    path = None
+                    error = ("That quantity is too large to convert through these "
+                             "rules — scale the amount down.")
+                if result is None and not error:
                     error = ("No conversion path links these units"
                              " for this scope — add a rule below.")
     elif asked:
         error = "Pick both units to convert."
 
+    coverage = UomConversion.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        defaults_active=Count("id", filter=Q(is_active=True, item__isnull=True)),
+        items_active=Count("id", filter=Q(is_active=True, item__isnull=False)),
+    )
     return render(request, "inventory/uom/calculator.html", {
         "items": items,
         "uoms": uoms,
@@ -62,10 +85,8 @@ def uom_calculator(request):
         "result": result,
         "path": path,
         "error": error,
-        # Header stats: how well-covered this workspace's unit graph is.
-        "rule_count": UomConversion.objects.filter(tenant=request.tenant).count(),
-        "default_count": UomConversion.objects.filter(
-            tenant=request.tenant, is_active=True, item__isnull=True).count(),
-        "item_rule_count": UomConversion.objects.filter(
-            tenant=request.tenant, is_active=True, item__isnull=False).count(),
+        # Header stats: how well-covered this workspace's unit graph is — ONE aggregate.
+        "rule_count": coverage["total"],
+        "default_count": coverage["defaults_active"],
+        "item_rule_count": coverage["items_active"],
     })
