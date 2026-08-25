@@ -1,8 +1,8 @@
-"""Procurement 6.5 Sourcing & Tendering — analytics urlconf."""
+"""Procurement 6.5 Sourcing & Tendering — analytics urlconf (``analytics/`` prefix)."""
 from django.urls import path
 
 from apps.procurement import views
 
 urlpatterns = [
-    path("", views.sourcing_analytics, name="sourcing_analytics"),
+    path("analytics/", views.sourcing_analytics, name="sourcing_analytics"),
 ]
