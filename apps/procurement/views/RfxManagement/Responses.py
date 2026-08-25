@@ -8,7 +8,7 @@ from django.db import transaction
 
 from apps.core.crud import as_db_int
 from apps.procurement.forms import RfxAnswerFormSet, RfxResponseForm
-from apps.procurement.models import RfxAnswer, RfxEvent, RfxResponse
+from apps.procurement.models import RfxAnswer, RfxEvent, RfxResponse, weighted_percent
 from apps.procurement.views._common import *  # noqa: F401,F403
 
 
@@ -47,11 +47,17 @@ def rfx_response_detail(request, pk):
                                                                    "question__id"))
     allowed_actions = [(to, TRANSITION_LABELS.get(to, to.title()))
                        for to in sorted(obj.allowed_transitions())]
+    # The footer trio precomputed ONCE: score_percent alone would re-run the earned-points
+    # aggregate on top of event.possible_points' own query — two wasted queries per render.
+    earned = obj.earned_points
+    possible = obj.event.possible_points
     return render(request, "procurement/rfxmanagement/responses/detail.html", {
         "obj": obj,
         "answers": answers,
         "allowed_actions": allowed_actions,
-        "status_choices": dict(RfxResponse.STATUS_CHOICES),
+        "score_earned": earned,
+        "score_possible": possible,
+        "score_pct": weighted_percent(earned, possible),
     })
 
 
