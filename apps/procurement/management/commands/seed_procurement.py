@@ -749,7 +749,7 @@ class Command(BaseCommand):
                 start_price=Decimal("48000.00"), reserve_price=Decimal("39000.00"),
                 min_decrement=Decimal("500.00"),
                 opens_at=NOW - timedelta(days=2), closes_at=NOW - timedelta(hours=1),
-                status="awarded",
+                status="closed",
             )
             for invitee in (northwind, cascade):
                 EaucInvite.objects.create(tenant=tenant, auction=done, supplier=invitee,
