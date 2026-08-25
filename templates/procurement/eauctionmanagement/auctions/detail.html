@@ -71,7 +71,7 @@
               <td>
                 {% if obj.is_editable or obj.status == 'scheduled' %}
                   <div class="table-actions">
-                    <form method="post" action="{% url 'procurement:eauc_invite_remove' obj.pk inv.pk %}" onsubmit="return confirm('Remove this invite? Suppliers who have already bid cannot be removed.');">
+                    <form method="post" action="{% url 'procurement:eauc_invite_remove' obj.pk p.invite.pk %}" onsubmit="return confirm('Remove this invite? Suppliers who have already bid cannot be removed.');">
                       {% csrf_token %}<button class="btn-icon danger" type="submit" title="Remove" aria-label="Remove"><i data-lucide="user-x"></i></button>
                     </form>
                   </div>
