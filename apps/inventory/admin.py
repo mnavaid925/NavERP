@@ -423,5 +423,6 @@ class ApiClientAdmin(admin.ModelAdmin):
 class UomConversionAdmin(admin.ModelAdmin):
     list_display = ("__str__", "item", "from_uom", "to_uom", "factor",
                     "is_active")
+    list_select_related = ("item", "from_uom", "to_uom")
     list_filter = ("tenant", "is_active")
     search_fields = ("item__sku", "from_uom__code", "to_uom__code", "notes")
