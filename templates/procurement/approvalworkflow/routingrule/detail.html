@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Routing Rule{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Routing Rule <span class="text-muted">· {{ obj.required_tiers }} tier{{ obj.required_tiers|pluralize }}</span></h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:routingrule_list' %}">Routing Rules</a><span class="sep">›</span><span>{{ obj.pk }}</span></div>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:routingrule_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to list</a>
+      {% if is_admin %}
+        <a href="{% url 'procurement:routingrule_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'procurement:routingrule_delete' obj.pk %}" onsubmit="return confirm('Delete this routing rule?');">
+          {% csrf_token %}<button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Rule</h2></div>
+    <div class="card-body">
+      <dl class="detail-grid">
+        <div class="detail-item"><dt>Department</dt><dd>{% if obj.org_unit %}<span class="fw-600">{{ obj.org_unit.name }}</span>{% else %}<span class="badge badge-info">Any department</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Commodity keyword</dt><dd>{% if obj.commodity %}<span class="badge badge-slate">{{ obj.commodity }}</span> <span class="text-muted">matched against line descriptions/SKUs</span>{% else %}<span class="text-muted">any commodity</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>Amount band</dt><dd class="fw-600">{{ obj.band_label }} <span class="text-muted">(ceiling exclusive)</span></dd></div>
+        <div class="detail-item"><dt>Required tiers</dt><dd class="fw-600">{{ obj.required_tiers }} sequential signature{{ obj.required_tiers|pluralize }}</dd></div>
+        <div class="detail-item"><dt>Escalates after</dt><dd>{% if obj.escalation_hours %}{{ obj.escalation_hours }}h idle{% else %}<span class="text-muted">tenant policy default</span>{% endif %}</dd></div>
+        <div class="detail-item"><dt>State</dt><dd><span class="badge {% if obj.is_active %}badge-green{% else %}badge-muted{% endif %}">{% if obj.is_active %}Active{% else %}Inactive{% endif %}</span> <span class="text-muted">specificity score {{ obj.specificity }}</span></dd></div>
+      </dl>
+      {% if obj.notes %}<p style="margin-top:12px; white-space:pre-line;">{{ obj.notes }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% if other_rules %}
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">Other rules it competes with</h2></div>
+      <p class="text-muted" style="padding:8px 16px;">When several rules match one requisition, the most specific wins, then the narrowest band, then the oldest.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Scope</th><th>Band</th><th>Tiers</th><th>Specificity</th><th class="table-actions">Actions</th></tr></thead>
+          <tbody>
+            {% for r in other_rules %}
+              <tr>
+                <td>{% if r.org_unit %}{{ r.org_unit.name }}{% else %}<span class="badge badge-info">Any dept</span>{% endif %}{% if r.commodity %} · {{ r.commodity }}{% endif %}</td>
+                <td>{{ r.band_label }}</td>
+                <td class="fw-600">{{ r.required_tiers }}</td>
+                <td>{{ r.specificity }}</td>
+                <td><div class="table-actions"><a href="{% url 'procurement:routingrule_detail' r.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a></div></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
