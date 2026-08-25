@@ -6,9 +6,11 @@ no snapshot table, no stored aggregates to drift. Figures that cannot be honestl
 shown as "—" (None), never as a confident zero: savings only exist where BOTH a budget estimate
 and an awarded price exist, cycle time only where the event was actually awarded.
 
-Two queries total (all tenant events, all counted bids), then pure Python: the savings pass and
-the month buckets each walk the rows exactly once.
+The whole page costs two queries total (all tenant events, all counted bids), then pure
+Python: the savings pass and the month buckets each walk the rows exactly once.
 """
+from decimal import Decimal
+
 from django.utils import timezone
 
 from apps.procurement.models import SourcingBid, SourcingEvent
