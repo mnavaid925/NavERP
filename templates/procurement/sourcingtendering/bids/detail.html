@@ -22,7 +22,7 @@
           <form method="post" action="{% url 'procurement:bid_disqualify' obj.pk %}" style="margin-top:.5rem; max-width:28rem;">
             {% csrf_token %}
             <div class="form-group">
-              <textarea name="note" class="form-textarea" rows="2" placeholder="Why is this bid disqualified? (required)" required></textarea>
+              <textarea name="note" class="form-textarea" rows="2" placeholder="Why is this bid disqualified? (required)" required aria-label="Reason for disqualification"></textarea>
             </div>
             <button class="btn btn-danger" type="submit"><i data-lucide="x"></i> Confirm disqualification</button>
           </form>
@@ -36,7 +36,7 @@
       <div class="detail-item"><dt>Sourcing event</dt><dd>{% if obj.event %}<a href="{% url 'procurement:event_detail' obj.event.pk %}">{{ obj.event.number }}</a> · {{ obj.event.title }} <span class="badge badge-slate">{{ obj.event.get_status_display }}</span>{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Supplier</dt><dd>{{ obj.supplier.name }}</dd></div>
       <div class="detail-item"><dt>Total price</dt><dd class="fw-600">{{ obj.total_price|floatformat:2 }}</dd></div>
-      <div class="detail-item"><dt>Lead time</dt><dd>{% if obj.lead_time_days %}{{ obj.lead_time_days }} days{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Lead time</dt><dd>{% if obj.lead_time_days is not None %}{{ obj.lead_time_days }} days{% else %}—{% endif %}</dd></div>
       <div class="detail-item"><dt>Contact reference</dt><dd>{{ obj.contact_ref|default:"—" }}</dd></div>
       <div class="detail-item"><dt>Submitted</dt><dd>{% if obj.submitted_at %}{{ obj.submitted_at|date:"M d, Y H:i" }}{% if obj.submitted_by %} by {{ obj.submitted_by.get_full_name|default:obj.submitted_by.username }}{% endif %}{% else %}<span class="text-muted">not yet submitted</span>{% endif %}</dd></div>
       <div class="detail-item"><dt>Proposal summary</dt><dd>{{ obj.summary|default:"—" }}</dd></div>
@@ -48,6 +48,7 @@
   <div class="card">
     <div class="card-header">
       <h2 class="card-title">Evaluation matrix</h2>
+      {% if criteria %}<span class="badge badge-slate">Matrix weight: {{ total_weight|floatformat:0 }}%</span>{% endif %}
       {% if weighted is not None %}<span class="badge badge-info">Weighted score: {{ weighted|floatformat:1 }} / 100</span>{% endif %}
     </div>
     {% if can_score %}
@@ -86,7 +87,7 @@
               <tr><td class="fw-600">{{ item.criterion.name }}</td><td>{{ item.criterion.weight_pct }}%</td>
                   <td>{% if item.current is not None %}{{ item.current }} / {{ item.criterion.max_score }}{% else %}<span class="text-muted">unscored</span>{% endif %}</td></tr>
             {% empty %}
-              <tr><td colspan="3" class="text-muted">No criteria defined on this event.</td></tr>
+              <tr><td colspan="3"><div class="empty-state"><i data-lucide="scale"></i><p>No criteria defined on this event.</p></div></td></tr>
             {% endfor %}
           </tbody>
         </table>
