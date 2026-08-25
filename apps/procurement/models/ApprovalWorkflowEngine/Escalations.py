@@ -66,17 +66,18 @@ def _alert_link(requisition_pk):
     return f"/scm/requisitions/{requisition_pk}/"
 
 
-def escalation_candidates(tenant, policy=None, *, rules=None):
+def escalation_candidates(tenant, policy=None, *, rules=None, limit=ESCALATION_CANDIDATE_CAP):
     """Pending approval chains with their idle clock — longest-idle first.
 
     One flat pass: pending requisitions, their existing decisions (one grouped
     query), and each chain's resolved routing rule (the caller may preload once).
     Idle-from is the LAST signature's moment (or the requisition's creation when
     nobody has signed); the effective window is the routing rule's own
-    ``escalation_hours`` when it names one, else the policy's. Each row carries
-    ``escalated`` — an open kind=approval alert already points at this requisition —
-    so the board can distinguish fresh queues from raised ones without a second
-    query per row.
+    ``escalation_hours`` — where 0 is a legitimate "escalate immediately", so only
+    ``None`` falls back to the policy — and each row carries ``escalated`` (an open
+    kind=approval alert already points at this requisition) plus a display-ready
+    ``idle_hours_f``. ``limit=None`` evaluates EVERY pending chain: the Run verb
+    passes it so chains beyond the board's rendering cap still escalate.
     """
     from apps.procurement.models import (
         ApprovalRoutingRule,
@@ -89,12 +90,13 @@ def escalation_candidates(tenant, policy=None, *, rules=None):
     if policy is None:
         policy = EscalationPolicy.for_tenant(tenant)
     if rules is None:
-        rules = list(ApprovalRoutingRule.objects.filter(tenant=tenant, is_active=True))
+        rules = list(ApprovalRoutingRule.objects.filter(
+            tenant=tenant, is_active=True).select_related("org_unit"))
 
-    pending = list(
-        PurchaseRequisition.objects.filter(tenant=tenant, status="pending_approval")
-        .select_related("requester", "org_unit")
-        .order_by("created_at")[:ESCALATION_CANDIDATE_CAP])
+    pending_qs = (PurchaseRequisition.objects.filter(tenant=tenant,
+                                                     status="pending_approval")
+                  .select_related("requester", "org_unit").order_by("created_at"))
+    pending = list(pending_qs[:limit] if limit else pending_qs)
     last_signature = dict(
         RequisitionApproval.objects.filter(
             tenant=tenant, requisition_id__in=[r.pk for r in pending])
@@ -111,7 +113,8 @@ def escalation_candidates(tenant, policy=None, *, rules=None):
     rows = []
     for req in pending:
         rule, _reason = resolve_routing(req, rules=rules)
-        hours = (rule.escalation_hours if rule is not None and rule.escalation_hours
+        hours = (rule.escalation_hours
+                 if rule is not None and rule.escalation_hours is not None
                  else policy.idle_hours)
         anchor = last_signature.get(req.pk) or req.created_at
         idle_for = now - anchor
@@ -119,8 +122,10 @@ def escalation_candidates(tenant, policy=None, *, rules=None):
             "requisition": req,
             "rule": rule,
             "idle_hours_effective": hours,
+            "window_is_rule": rule is not None and rule.escalation_hours is not None,
             "anchor": anchor,
             "idle_for": idle_for,
+            "idle_hours_f": round(idle_for.total_seconds() / 3600, 1),
             "is_idle": idle_for > timedelta(hours=hours),
             "escalated": _alert_link(req.pk) in open_alert_links,
         })
@@ -131,13 +136,16 @@ def escalation_candidates(tenant, policy=None, *, rules=None):
 
 def run_escalations(tenant, user, policy=None, *, candidates=None):
     """Raise one alert per idle, not-yet-escalated chain. Idempotent by the
-    open-alert probe inside the caller's atomic block. Returns the summary dict."""
+    open-alert probe inside the caller's atomic block — and the caller holds the
+    policy row lock, which serializes concurrent Runs per tenant. Evaluates EVERY
+    pending chain (``limit=None``), not just the board's rendering cap. Returns
+    the summary dict."""
     from apps.procurement.models import ProcurementAlert
 
-    if policy is None:
-        policy = EscalationPolicy.for_tenant(tenant)
     if candidates is None:
-        candidates = escalation_candidates(tenant, policy)
+        candidates = escalation_candidates(tenant, policy, limit=None)
+    elif policy is None:
+        policy = EscalationPolicy.for_tenant(tenant)
     now = timezone.now()
     raised = skipped_open = 0
     for row in candidates:
