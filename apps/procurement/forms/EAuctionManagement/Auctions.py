@@ -58,9 +58,12 @@ class EaucInviteForm(forms.Form):
             .order_by("name"))
 
     def save(self):
-        return EaucInvite.objects.create(
+        """get_or_create on the (auction, supplier) pair — a double-submitted POST must
+        land as a no-op, not an IntegrityError 500."""
+        invite, _created = EaucInvite.objects.get_or_create(
             tenant=self.tenant,
             auction=self.auction,
             supplier=self.cleaned_data["supplier"],
-            contact_note=self.cleaned_data.get("contact_note", ""),
+            defaults={"contact_note": self.cleaned_data.get("contact_note", "")},
         )
+        return invite
