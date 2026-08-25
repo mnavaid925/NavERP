@@ -122,16 +122,19 @@ def eauc_results(request, pk):
         Eauction.objects.select_related("currency", "awarded_supplier"),
         pk=pk, tenant=request.tenant,
     )
+    ranked = obj.rankings()
     best = obj.best_bid()
     below_reserve = bool(best and obj.reserve_price is not None
                          and best.amount < obj.reserve_price)
     return render(request, "procurement/eauctionmanagement/results.html", {
         "obj": obj,
-        "ranked": obj.rankings(),
+        "ranked": ranked,
         "best": best,
-        "savings": obj.savings_vs_start(),
+        # Derived from the ALREADY-fetched leader — savings_vs_start() would re-query it.
+        "savings": (obj.start_price - best.amount) if best is not None else None,
         "below_reserve": below_reserve,
-        "total_bids": obj.bids.count(),
+        # The leaderboard already counts every bid: summing it beats a second COUNT query.
+        "total_bids": sum(r["count"] for r in ranked),
     })
 
 
@@ -156,8 +159,9 @@ def eauc_award(request, pk):
         awarded = supplier is not None and locked.award(supplier, note=note)
         obj.refresh_from_db(fields=["status", "awarded_supplier", "awarded_amount"])
     if not awarded:
-        best = obj.best_bid()
-        expected = best.supplier.name if best else "—"
+        # The leader that blocked the award is attached by award() itself — no re-query.
+        best = getattr(locked, "refusal_leader", None)
+        expected = best.supplier.name if best is not None else "—"
         messages.error(request,
                        f"Award refused — only the current leading supplier ({expected}) can "
                        f"be awarded, and only once, from a closed auction.")
