@@ -16,6 +16,11 @@ reuse existing rows rather than inventing parallel ones.
 policy singleton, a leave-cover DOA grant and one real tier-1 signature on an existing pending
 requisition when its resolved chain has 2+ tiers.
 
+6.5 seeds sourcing events over those same approved suppliers: one AWARDED tender whose matrix,
+bids and scores were driven through the real model path (open→close→award, submit/disqualify),
+one OPEN RFP taking bids, and one CANCELLED RFQ — so every status badge and the analytics page
+have honest rows to show.
+
 6.4 adds vendor-management rows over scm 4.2's approved suppliers: portal access bindings,
 a suspension register covering every lifecycle state, and supplier-filed invoice submissions.
 Like every block here it REUSES existing parties/orders rather than inventing parallel masters.
@@ -91,8 +96,9 @@ def _alert_rows(now):
 
 class Command(BaseCommand):
     help = ("Seed Procurement demo data (6.1 Task & Alert Center baseline + 6.2 requisition "
-            "templates and a pending amendment) — idempotent (skips a tenant that already has "
-            "rows for each block).")
+            "templates and a pending amendment + 6.3 approval engine + 6.4 vendor registers + "
+            "6.5 sourcing events) — idempotent (skips a tenant that already has rows for each "
+            "block).")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -373,20 +379,27 @@ class Command(BaseCommand):
 
         created = 0
         # -- event A: awarded tender, full evaluation trail --------------------------------------
+        # Lifecycle honesty (CONV-I3): the event walks open→close→award() and each bid walks
+        # draft→submit()/decide() through the model path with System attribution, so the
+        # activity feed shows the same verbs a human run would have produced.
         with transaction.atomic():
             awarded_event = SourcingEvent.objects.create(
                 tenant=tenant,
                 title="Annual packaging materials supply",
                 description="Two-year frame agreement for corrugated boxes, stretch wrap and "
                             "tape across the distribution centre.",
-                event_type="tender", status="awarded",
+                event_type="tender", status="draft",
                 currency=None, budget_estimate=Decimal("48000.00"),
-                opens_at=NOW - timedelta(days=30), closes_at=NOW - timedelta(days=16),
                 rules="Bids are evaluated on total cost (40%), delivery reliability (30%) and "
                       "quality certifications (30%). Non-compliant bids are excluded.",
-                opened_at=NOW - timedelta(days=30), closed_at=NOW - timedelta(days=16),
-                awarded_at=NOW - timedelta(days=14),
+                created_by=None,
             )
+            write_audit_log(None, awarded_event, "create")
+            awarded_event.status = "open"
+            awarded_event.opened_at = NOW - timedelta(days=30)
+            awarded_event.save(update_fields=["status", "opened_at", "updated_at"])
+            write_audit_log(None, awarded_event, "open")
+
             cost = EventCriterion.objects.create(event=awarded_event, name="Total cost",
                                                  weight_pct=Decimal("40"), max_score=10)
             delivery = EventCriterion.objects.create(event=awarded_event, name="Delivery reliability",
@@ -394,33 +407,48 @@ class Command(BaseCommand):
             quality = EventCriterion.objects.create(event=awarded_event, name="Quality & certifications",
                                                     weight_pct=Decimal("30"), max_score=10)
             bid_rows = [
-                (_supplier(0), "9450.00", 12, True, "won",
+                (_supplier(0), "9450.00", 12, True,
                  {"cost": Decimal("8.5"), "delivery": Decimal("9"), "quality": Decimal("9")}),
-                (_supplier(1), "10200.00", 18, True, "lost",
+                (_supplier(1), "10200.00", 18, True,
                  {"cost": Decimal("7"), "delivery": Decimal("7.5"), "quality": Decimal("8")}),
-                (_supplier(2) if len(suppliers) > 2 else _supplier(1), "8900.00", 25, False, "disqualified",
+                (_supplier(2) if len(suppliers) > 2 else _supplier(1), "8900.00", 25, False,
                  {}),
             ]
-            for index, (party, price, lead_days, compliant, status, scores) in enumerate(bid_rows):
+            bids = []
+            for index, (party, price, lead_days, compliant, scores) in enumerate(bid_rows):
                 bid = SourcingBid.objects.create(
                     tenant=tenant, event=awarded_event, supplier=party,
-                    status=status, total_price=Decimal(price),
+                    status="draft", total_price=Decimal(price),
                     lead_time_days=lead_days, is_compliant=compliant,
                     compliance_note="" if compliant else "Food-safety certificate expired.",
                     summary="Frame-agreement pricing attached; see reference for validity.",
                     contact_ref=f"bids@supplier{index + 1}.example",
+                    submitted_at=NOW - timedelta(days=27 - index),
                 )
-                if status == "won":
-                    bid.submitted_at = NOW - timedelta(days=27)
-                    bid.save(update_fields=["submitted_at", "updated_at"])
+                bid.submit(None)  # System-submitted demo row (CODE-M11: through the model path)
+                write_audit_log(None, bid, "submit", {"event": awarded_event.number})
                 for criterion, raw in (
                         (cost, scores.get("cost")),
                         (delivery, scores.get("delivery")),
                         (quality, scores.get("quality"))):
                     if raw is not None:
                         BidScore.objects.create(bid=bid, criterion=criterion, score=raw)
-                write_audit_log(None, bid, "create", {"event": awarded_event.number})
-            write_audit_log(None, awarded_event, "create")
+                        write_audit_log(None, bid, "score", {"criterion": criterion.name})
+                if not compliant:
+                    bid.decision_note = "Food-safety certificate expired."
+                    bid.status = "disqualified"
+                    bid.save(update_fields=["status", "decision_note", "updated_at"])
+                    write_audit_log(None, bid, "disqualify", {"event": awarded_event.number})
+                bids.append(bid)
+
+            awarded_event.status = "closed"
+            awarded_event.closed_at = NOW - timedelta(days=16)
+            awarded_event.save(update_fields=["status", "closed_at", "updated_at"])
+            write_audit_log(None, awarded_event, "close")
+
+            winner = min((b for b in bids if b.is_compliant), key=lambda b: b.pk)
+            awarded_event.award(winner, at=NOW - timedelta(days=14))
+            write_audit_log(None, awarded_event, "award", {"bid": str(winner)})
         created += 1
 
         # -- event B: open RFP taking bids ---------------------------------------------------------
@@ -429,14 +457,17 @@ class Command(BaseCommand):
                 tenant=tenant,
                 title="Fleet telematics platform RFP",
                 description="GPS tracking and driver-behaviour analytics for the delivery fleet.",
-                event_type="rfp", status="open",
+                event_type="rfp", status="draft",
                 budget_estimate=Decimal("15000.00"),
-                opens_at=NOW - timedelta(days=3),
-                closes_at=NOW + timedelta(days=11),
                 rules="Submit a whole-package price including hardware, install and two years "
                       "of service.",
-                opened_at=NOW - timedelta(days=3),
+                created_by=None,
             )
+            write_audit_log(None, open_event, "create")
+            open_event.status = "open"
+            open_event.opened_at = NOW - timedelta(days=3)
+            open_event.save(update_fields=["status", "opened_at", "updated_at"])
+            write_audit_log(None, open_event, "open")
             criteria = [
                 EventCriterion.objects.create(event=open_event, name=name, weight_pct=weight,
                                               max_score=10)
@@ -446,31 +477,32 @@ class Command(BaseCommand):
             ]
             submitted = SourcingBid.objects.create(
                 tenant=tenant, event=open_event, supplier=_supplier(1),
-                status="submitted", total_price=Decimal("14200.00"), lead_time_days=21,
+                status="draft", total_price=Decimal("14200.00"), lead_time_days=21,
                 summary="Includes on-site installation for all 24 vehicles.",
                 contact_ref="telematics@vendor.example",
             )
-            submitted.submit(None)  # System-submitted demo row
+            submitted.submit(None)  # System-submitted demo row (CODE-M11)
             write_audit_log(None, submitted, "submit", {"event": open_event.number})
             SourcingBid.objects.create(
                 tenant=tenant, event=open_event, supplier=_supplier(0),
                 status="draft", total_price=Decimal("13900.00"),
                 summary="Draft — awaiting the service-level appendix before submitting.",
             )
-            write_audit_log(None, open_event, "create")
         created += 1
 
         # -- event C: cancelled RFQ ------------------------------------------------------------------
-        cancelled = SourcingEvent.objects.create(
-            tenant=tenant,
-            title="Office refurbishment RFQ (cancelled)",
-            description="Partitioning and cabling for the second floor — pulled when the "
-                        "lease decision changed.",
-            event_type="rfq", status="cancelled",
-            opens_at=NOW - timedelta(days=45), closes_at=NOW - timedelta(days=38),
-            opened_at=NOW - timedelta(days=45),
-        )
-        write_audit_log(None, cancelled, "create")
+        with transaction.atomic():  # CONV-I4: same atomic wrap as its siblings
+            cancelled = SourcingEvent.objects.create(
+                tenant=tenant,
+                title="Office refurbishment RFQ (cancelled)",
+                description="Partitioning and cabling for the second floor — pulled when the "
+                            "lease decision changed.",
+                event_type="rfq", status="cancelled",
+                opens_at=NOW - timedelta(days=45), closes_at=NOW - timedelta(days=38),
+                opened_at=NOW - timedelta(days=45),
+            )
+            write_audit_log(None, cancelled, "create")
+            write_audit_log(None, cancelled, "cancel")  # CONV-I3: the trail shows the verb
         created += 1
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: {created} sourcing events ready "
@@ -533,7 +565,6 @@ class Command(BaseCommand):
                 decision_note="In force until the CAPA closed.",
                 lifted_at=NOW - timedelta(days=30),
                 lift_note="CAPA verified effective; supply resumed.")
-            write_audit_log(None, blocked, "seed")
             self.stdout.write(self.style.SUCCESS(
                 f"  {tenant.name}: suspension register ready "
                 f"(1 requested / 1 active / 1 lifted)."))
@@ -549,7 +580,8 @@ class Command(BaseCommand):
                 amount=Decimal("1840.00"),
                 note="Paper goods as delivered against the standing order.",
                 status="accepted", reviewed_at=NOW - timedelta(days=2),
-                review_note="Matched to GRN; keyed into AP as BILL-1024.")
+                review_note="Matched to the GRN on review — accepted for keying into "
+                            "Accounts Payable by the team.")
             VendorInvoiceSubmission.objects.create(
                 tenant=tenant, supplier=suppliers[1].party if len(suppliers) > 1 else suppliers[0].party,
                 invoice_ref="INV-77312", invoice_date=NOW.date(),
