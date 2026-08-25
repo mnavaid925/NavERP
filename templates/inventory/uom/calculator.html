@@ -4,7 +4,7 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">Conversion Calculator</h1>
-      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:uomconversion_list' %}">Units of Measure</a><span class="sep">›</span><span>Calculator</span></div>
+      <div class="breadcrumb"><a href="{% url 'inventory:overview' %}">Inventory</a><span class="sep">›</span><a href="{% url 'inventory:uomconversion_list' %}">UOM Conversions</a><span class="sep">›</span><span>Calculator</span></div>
       <p class="text-muted">Resolve any quantity between units through your conversion matrix — directly, or through chained hops when no single rule joins the pair.</p>
     </div>
     <div class="page-actions">
@@ -68,7 +68,7 @@
         <div class="stat-card" style="max-width:340px;">
           <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
           <div class="stat-value">{{ result|floatformat:"-4" }}</div>
-          <div class="stat-label">{% if to_uom %}{{ qty|floatformat:"-4" }} {{ from_uom.code }} = {{ result|floatformat:"-4" }} {{ to_uom.code }}{% if item %} · via {{ item.sku }} rules{% else %} · defaults{% endif %}{% endif %}</div>
+          <div class="stat-label">{{ qty|floatformat:"-4" }} {{ from_uom.code }} = {{ result|floatformat:"-4" }} {{ to_uom.code }}{% if item %} · via {{ item.sku }} rules{% else %} · defaults{% endif %}</div>
         </div>
         <div>
           <label class="form-label">Route taken</label>
