@@ -27732,3 +27732,35 @@ per §9.
   inline answer formset resolves instances from posted id fields -> crafted POST without them
   now degrades gracefully; reorder originally wrote stale order values (swapped slots not
   values).
+
+
+## 6.5 Sourcing & Tendering — close-out (2026-08-26, parallel with 6.4/6.6 sessions)
+
+**Built**: SourcingEvent[SEV-] + EventCriterion + SourcingBid[BID-] + BidScore in
+`apps/procurement/models/SourcingTendering/`; events/bids CRUD + open/close/cancel/award +
+submit/shortlist/disqualify verbs; computed award board + analytics pages; migration 0009;
+seeder block; LIVE_LINKS["6.5"]. Migration claim moved 0008->0009 (concurrent 6.6 session took
+0008_rfx_management first; its second makemigrations generated my clean 0009).
+
+**Smoke**: temp/smoke_65.py ALL PASS (26 checks: renders, filters, lifecycle guards, score
+roundtrip incl. NaN refusal, IDOR 404s, tenantless superuser). Found+fixed during build: url
+modules initially mounted at app root (bids/<pk> unreachable, add/ collisions) -> events/ bids/
+awards/ analytics/ prefixes; _verb verbs did not persist (smoke only exercised guard paths —
+the unit test wave caught it); decide() made a pure resolver but the view forgot to apply the
+result (caught by tests before any user could); Decimal import + float.quantize + int-mean
+slips; award-board 61 queries -> evaluate_events_batch ~4.
+
+**Review**: .claude/tasks/review-procurement-6.5.md — six lanes returned (no dead lanes);
+3C/8I/13M all fixed or skipped-with-reason. Notable: stored-XSS sink via interpolated
+confirm() strings on both award surfaces (made static); .btn-amber phantom class; locked
+_decide/submit to keep evaluation decisions from racing the award writer; close/cancel gated
+@tenant_admin_required for parity with amendment decisions.
+
+**Tests**: test_sourcing_{models,forms,views,security}.py = 46 green (--no-migrations). Full
+procurement suite at close: only failures are the concurrent session's own in-flight
+test_vendormgmt_* / test_rfx_* files (5) — zero sourcing or earlier-slice failures.
+
+**Carried forward**: gated supplier bid-submission page once 6.4's VendorPortalAccess lands
+(bid.submitted_by already records the trail); analytics month buckets pre-bucketed but loads
+unbounded — revisit if registers pass ~10k rows; admin leaves business fields editable on
+frozen docs (matches RfxEventAdmin sibling posture).
