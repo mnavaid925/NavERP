@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Notification Deliveries — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Notification Deliveries</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alert_list' %}">Alerts &amp; Notifications</a>
+        <span class="sep">›</span>
+        <span>Deliveries</span>
+      </div>
+      <p class="text-muted">Append-only dispatch log — one row per alert × channel × recipient, written by the detection engine.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:alert_list' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Alert Inbox</a>
+    </div>
+  </div>
+
+  <div class="card mb-6">
+    <div class="card-body flex items-center gap-3">
+      <i data-lucide="info"></i>
+      <p class="text-muted" style="font-size:13px; margin:0;">
+        Email/SMS/push gateways are not configured yet, so dispatches stay <strong>queued</strong>; the in-app inbox is the live surface today.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by recipient or alert number…">
+        </div>
+        <div class="form-group">
+          <select name="channel" aria-label="Channel" class="form-select">
+            <option value="">All Channels</option>
+            {% for val, label in channel_choices %}
+              <option value="{{ val }}" {% if request.GET.channel == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="status" aria-label="Status" class="form-select">
+            <option value="">All Statuses</option>
+            {% for val, label in status_choices %}
+              <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:delivery_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Queued</th>
+            <th>Alert</th>
+            <th>Channel</th>
+            <th>Recipient</th>
+            <th>Status</th>
+            <th>Note</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>{{ obj.created_at|date:"Y-m-d H:i" }}</td>
+              <td><a href="{% url 'inventory:alert_detail' obj.alert.pk %}" class="fw-600 mono">{{ obj.alert.number }}</a></td>
+              <td><span class="badge badge-info">{{ obj.get_channel_display }}</span></td>
+              <td class="mono" style="word-break:break-all;">{{ obj.recipient }}</td>
+              <td>
+                {% if obj.status == 'queued' %}<span class="badge badge-muted">Queued</span>
+                {% elif obj.status == 'sent' %}<span class="badge badge-green">Sent</span>
+                {% else %}<span class="badge badge-red">Failed</span>{% endif %}
+              </td>
+              <td class="text-muted">{{ obj.detail|truncatechars:48 }}</td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:delivery_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state">
+                  <i data-lucide="send"></i>
+                  <h3>No deliveries queued yet</h3>
+                  <p>Deliveries are written when the detection engine raises an alert with channels enabled.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
