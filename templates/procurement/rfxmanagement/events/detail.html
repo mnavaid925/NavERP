@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ obj.number }} · {{ obj.title }}{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">{{ obj.number }} · {{ obj.title }}
+        <span class="badge {% if obj.status == 'issued' %}badge-info{% elif obj.status == 'closed' %}badge-green{% elif obj.status == 'cancelled' %}badge-red{% else %}badge-muted{% endif %}">{{ obj.get_status_display }}</span>
+        <span class="badge badge-slate">{{ obj.rfx_type|upper }}</span>
+      </h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:rfx_list' %}">RFx Management</a><span class="sep">›</span><span>{{ obj.number }}</span></div>
+    </div>
+    <div class="page-actions">
+      {% if obj.status == 'draft' %}
+        <form method="post" action="{% url 'procurement:rfx_issue' obj.pk %}" onsubmit="return confirm('Issue this event? The questionnaire is then locked and responses may be recorded.');">
+          {% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="send"></i> Issue</button>
+        </form>
+      {% endif %}
+      {% if obj.status == 'issued' %}
+        <a href="{% url 'procurement:rfx_response_create' %}?event={{ obj.pk }}" class="btn btn-primary"><i data-lucide="download"></i> Record response</a>
+        <form method="post" action="{% url 'procurement:rfx_close' obj.pk %}" onsubmit="return confirm('Close this event? No further responses will be accepted.');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close</button>
+        </form>
+      {% endif %}
+      {% if response_rows|length >= 2 %}
+        <a href="{% url 'procurement:rfx_compare' obj.pk %}" class="btn btn-outline"><i data-lucide="columns-2"></i> Compare</a>
+      {% endif %}
+      {% if obj.is_editable %}
+        <a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn btn-outline"><i data-lucide="pencil"></i> Edit</a>
+        <form method="post" action="{% url 'procurement:rfx_cancel' obj.pk %}" onsubmit="return confirm('Cancel this event?');">
+          {% csrf_token %}<button class="btn btn-outline" type="submit">Cancel event</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <dl class="detail-grid">
+      <div class="detail-item"><dt>Number</dt><dd>{{ obj.number }}</dd></div>
+      <div class="detail-item"><dt>Type</dt><dd>{{ obj.get_rfx_type_display }}</dd></div>
+      <div class="detail-item"><dt>Sourcing requisition</dt><dd>{% if obj.requisition %}<a href="{% url 'procurement:req_detail' obj.requisition.pk %}">{{ obj.requisition.number }}</a>{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Responses due</dt><dd>{% if obj.response_due %}{{ obj.response_due|date:"M d, Y H:i" }}{% else %}—{% endif %}</dd></div>
+      <div class="detail-item"><dt>Issued / closed</dt><dd>{{ obj.issued_at|date:"M d, Y H:i"|default:"—" }} / {{ obj.closed_at|date:"M d, Y H:i"|default:"—" }}</dd></div>
+      <div class="detail-item"><dt>Scoreable maximum</dt><dd>{{ obj.possible_points|floatformat:1 }} pts (weight total {{ obj.total_weight|floatformat:2 }})</dd></div>
+      <div class="detail-item"><dt>Created by</dt><dd>{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %} · {{ obj.created_at|date:"M d, Y" }}</dd></div>
+      <div class="detail-item"><dt>Instructions to suppliers</dt><dd>{{ obj.description|default:"—" }}</dd></div>
+    </dl>
+  </div></div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Questionnaire ({{ questions|length }})</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>#</th><th>Section</th><th>Prompt</th><th>Answer type</th><th>Weight</th><th>Max points</th><th>Scored</th>{% if obj.is_editable %}<th class="table-actions">Order</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for q in questions %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ q.section|default:"—" }}</td>
+              <td>{{ q.prompt }}{% if q.help_text %}<div class="form-help">{{ q.help_text }}</div>{% endif %}</td>
+              <td>{{ q.get_answer_type_display }}</td>
+              <td>{{ q.weight|floatformat:2 }}</td>
+              <td>{{ q.max_points|floatformat:1 }}</td>
+              <td>{% if q.is_scored %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-muted">No</span>{% endif %}</td>
+              {% if obj.is_editable %}
+                <td>
+                  <div class="table-actions">
+                    <form method="post" action="{% url 'procurement:rfx_question_move' obj.pk q.pk %}">{% csrf_token %}
+                      <input type="hidden" name="direction" value="up">
+                      <button class="btn-icon" type="submit" title="Move up"{% if forloop.first %} disabled{% endif %}><i data-lucide="arrow-up"></i></button>
+                    </form>
+                    <form method="post" action="{% url 'procurement:rfx_question_move' obj.pk q.pk %}">{% csrf_token %}
+                      <input type="hidden" name="direction" value="down">
+                      <button class="btn-icon" type="submit" title="Move down"{% if forloop.last %} disabled{% endif %}><i data-lucide="arrow-down"></i></button>
+                    </form>
+                  </div>
+                </td>
+              {% endif %}
+            </tr>
+          {% empty %}
+            <tr><td colspan="8"><div class="empty-state"><i data-lucide="list-plus"></i><p>No questions yet — edit the event to build the questionnaire.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Responses ({{ response_rows|length }})</h2>
+      {% if obj.accepts_responses %}<a href="{% url 'procurement:rfx_response_create' %}?event={{ obj.pk }}" class="btn btn-outline"><i data-lucide="plus"></i> Record a response</a>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Supplier</th><th>Response</th><th>Status</th><th>Submitted</th><th>Earned</th><th>Weighted score</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for row in response_rows %}
+            <tr>
+              <td>{{ row.response.supplier.name }}</td>
+              <td class="fw-600">{{ row.response.number }}</td>
+              <td>
+                <span class="badge {% if row.response.status == 'scored' %}badge-green{% elif row.response.status == 'under_review' %}badge-amber{% elif row.response.status == 'submitted' %}badge-info{% elif row.response.status == 'disqualified' %}badge-red{% else %}badge-muted{% endif %}">{{ row.response.get_status_display }}</span>
+              </td>
+              <td>{% if row.response.submitted_at %}{{ row.response.submitted_at|date:"M d, Y H:i" }}{% else %}—{% endif %}</td>
+              <td>{{ row.earned|default:"—" }}</td>
+              <td>{% if row.pct is not None %}{{ row.pct }}%{% else %}—{% endif %}</td>
+              <td><div class="table-actions">
+                <a href="{% url 'procurement:rfx_response_detail' row.response.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                {% if not row.response.is_locked and obj.status != 'cancelled' %}<a href="{% url 'procurement:rfx_response_edit' row.response.pk %}" class="btn-icon" title="Edit answers & scores"><i data-lucide="pencil"></i></a>{% endif %}
+              </div></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7"><div class="empty-state"><i data-lucide="inbox"></i><p>No responses recorded yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body text-muted">Weighted score = earned points as a percentage of this event's scoreable maximum ({{ obj.possible_points|floatformat:1 }} pts).</div>
+  </div>
+
+  <div class="form-actions">
+    <a href="{% url 'procurement:rfx_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> Back to events</a>
+  </div>
+{% endblock %}
