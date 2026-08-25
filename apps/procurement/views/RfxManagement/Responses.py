@@ -135,12 +135,14 @@ def rfx_response_set_status(request, pk):
 @login_required
 @require_POST
 def rfx_response_delete(request, pk):
-    """A recorded-but-not-submitted working copy can be dropped; once submitted (or after close)
-    the repository keeps it — that is what makes it a repository."""
+    """A recorded-but-not-submitted working copy can be dropped; once submitted the repository
+    keeps it — deleting a live bid mid-RFP would silently remove it from the comparison."""
     obj = get_object_or_404(RfxResponse.objects.select_related("event"), pk=pk,
                             tenant=request.tenant)
-    if obj.status != "draft" and obj.event.status == "closed":
-        messages.error(request, "Submitted responses of a closed event cannot be deleted.")
+    if obj.status != "draft":
+        messages.error(request, f"Response {obj.number} is {obj.get_status_display()} — "
+                                f"only drafts can be deleted; the repository keeps every "
+                                f"submission.")
         return redirect("procurement:rfx_response_detail", pk=obj.pk)
     return crud_delete(request, model=RfxResponse, pk=pk,
                        success_url="procurement:rfx_response_list")
