@@ -1,0 +1,48 @@
+{# HTMX fragment polled by the console and bid screens — no base.html #}
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Live rankings</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>#</th><th>Supplier</th><th>Best bid</th><th>Bids</th><th>Last at</th></tr></thead>
+      <tbody>
+        {% for r in ranked %}
+          <tr {% if forloop.first %}class="fw-600"{% endif %}>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.supplier_name }}</td>
+            <td>{{ r.best|floatformat:2 }}</td>
+            <td>{{ r.count }}</td>
+            <td>{{ r.last_at|date:"H:i:s" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5"><div class="empty-state"><i data-lucide="gavel"></i><p>No bids yet — the floor is open.</p></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if obj.status == 'scheduled' %}
+    <div class="card-body text-muted">Closes {{ obj.closes_at|date:"H:i:s" }} · time left {{ obj.time_left_display }} · extensions {{ obj.extensions_used }}/{{ obj.max_extensions }}</div>
+  {% else %}
+    <div class="card-body text-muted">Auction is {{ obj.get_status_display }}.</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="card-header"><h2 class="card-title">Latest bids</h2></div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Time</th><th>Supplier</th><th>Amount</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for bid in recent_bids %}
+          <tr>
+            <td>{{ bid.placed_at|date:"H:i:s" }}</td>
+            <td>{{ bid.supplier.name }}</td>
+            <td>{{ bid.amount|floatformat:2 }}</td>
+            <td>{{ bid.note|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="text-muted">—</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
