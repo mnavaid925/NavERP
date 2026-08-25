@@ -3,6 +3,26 @@
 Re-exports every view so the apps/procurement/urls/ package (``views.<name>``) resolves.
 Imports inside the entity modules are ABSOLUTE.
 """
+from .ApprovalWorkflowEngine import (
+    approval_approve,
+    approval_decide,
+    approval_history,
+    approval_mine,
+    approval_queue,
+    approval_reject,
+    delegation_create,
+    delegation_delete,
+    delegation_detail,
+    delegation_edit,
+    delegation_list,
+    escalation_queue,
+    escalation_run,
+    routingrule_create,
+    routingrule_delete,
+    routingrule_detail,
+    routingrule_edit,
+    routingrule_list,
+)
 from .DashboardPortal.ActivityFeed import activity_detail, activity_list
 from .DashboardPortal.Overview import dashboard
 from .DashboardPortal.ProcurementAlerts import (
@@ -34,6 +54,13 @@ from .RequisitionManagement.Templates import (
 )
 
 __all__ = [
+    "routingrule_list", "routingrule_detail", "routingrule_create",
+    "routingrule_edit", "routingrule_delete",
+    "approval_queue", "approval_history", "approval_mine",
+    "approval_approve", "approval_reject",
+    "delegation_list", "delegation_detail", "delegation_create",
+    "delegation_edit", "delegation_delete",
+    "escalation_queue", "escalation_run",
     "activity_detail",
     "activity_list",
     "dashboard",
