@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}RFx Template Library{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">RFx Template Library</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:rfx_list' %}">RFx Management</a><span class="sep">›</span><span>Template Library</span></div>
+      <p class="text-muted">Pre-built questionnaires for common RFI, RFP and RFQ scenarios — clone one into a fresh event in a single click.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:rfx_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Template</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search number or title…">
+        </div>
+        <div class="form-group">
+          <select name="rfx_type" aria-label="Type" class="form-select">
+            <option value="">All types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.rfx_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'procurement:rfx_library' %}" class="btn btn-outline">Reset</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Number</th><th>Type</th><th>Title</th><th>Questions</th><th>Created</th><th class="table-actions">Actions</th></tr></thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td class="fw-600">{{ obj.number }}</td>
+              <td><span class="badge badge-slate">{{ obj.rfx_type|upper }}</span></td>
+              <td>{{ obj.title }}</td>
+              <td>{{ obj.n_questions|default:0 }}</td>
+              <td>{{ obj.created_at|date:"M d, Y" }}</td>
+              <td>
+                <div class="table-actions">
+                  <form method="post" action="{% url 'procurement:rfx_clone' obj.pk %}" onsubmit="return confirm('Clone this template into a new draft event?');">
+                    {% csrf_token %}<button class="btn-icon" type="submit" title="Use — clone into a new event"><i data-lucide="copy-plus"></i></button>
+                  </form>
+                  <a href="{% url 'procurement:rfx_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  <a href="{% url 'procurement:rfx_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><div class="empty-state"><i data-lucide="layout-template"></i><h3>The library is empty</h3><p>Create a questionnaire and tick “Save to Template Library” to keep it here as a reusable blueprint.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
