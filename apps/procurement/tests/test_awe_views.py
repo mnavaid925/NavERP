@@ -3,9 +3,11 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pytest
+from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.procurement.models import (
     ApprovalDelegation,
     ApprovalRoutingRule,
@@ -23,9 +25,11 @@ def _pending(tenant, requester, title="Pending", org=None, total="500",
     pr = PurchaseRequisition.objects.create(
         tenant=tenant, title=title, status="pending_approval",
         requester=requester, org_unit=org, estimated_total=Decimal("0"))
+    # qty MUST be 1: recalc_totals() sums qty*price, and a qty of 2 would double
+    # every amount this suite reasons about (gotcha of record, 2026-08-25).
     PurchaseRequisitionLine.objects.create(
         requisition=pr, item_description=description,
-        quantity=Decimal("2"), estimated_unit_price=Decimal(total))
+        quantity=Decimal("1"), estimated_unit_price=Decimal(total))
     pr.recalc_totals(save=True)
     if created_at:
         PurchaseRequisition.objects.filter(pk=pr.pk).update(created_at=created_at)
@@ -47,9 +51,10 @@ def test_queue_lists_rows_and_stats(client_a, admin_user, requisition_pending_a)
 
 
 def test_history_register_and_filter(client_a, tenant_a, admin_user,
-                                     two_tier_rule):
-    # requester is admin; a member may NOT sign it (separation of duties).
-    req = _pending(tenant_a, admin_user)
+                                     member_user, two_tier_rule):
+    # Separation of duties (review F-01): the requester can never sign, so the
+    # member raises the chain and the admin signs tier 1 of the two-tier rule.
+    req = _pending(tenant_a, member_user)
     client_a.post(reverse("procurement:approval_approve", args=[req.pk]),
                   {"comment": "fine"})
     sig = RequisitionApproval.objects.get(requisition=req)
@@ -91,9 +96,15 @@ def test_two_tier_chain_with_delegation_credit(client_a, member_client, tenant_a
     sig = RequisitionApproval.objects.get(requisition=req)
     assert sig.via_delegation_id == grant.pk and sig.tier == 1
     assert PurchaseRequisition.objects.get(pk=req.pk).status == "pending_approval"
-    # Admin signs the final tier -> spine transition.
-    client_a.post(reverse("procurement:approval_approve", args=[req.pk]),
-                  {"comment": "final"})
+    # The final tier is admin-only AND never the requester's (F-01/F-01b), so a
+    # SECOND tenant admin performs the spine transition.
+    final_admin = User.objects.create_user(
+        email="admin2@acme.com", username="admin2_acme",
+        password="TestPass123!", tenant=tenant_a, is_tenant_admin=True)
+    final_client = Client()
+    final_client.force_login(final_admin)
+    final_client.post(reverse("procurement:approval_approve", args=[req.pk]),
+                      {"comment": "final"})
     assert PurchaseRequisition.objects.get(pk=req.pk).status == "approved"
     # History shows both signatures; the closed chain refuses more.
     resp = member_client.post(reverse("procurement:approval_approve", args=[req.pk]),
@@ -133,6 +144,12 @@ def test_mine_surface_gates(client_a, member_client, tenant_a, admin_user,
                             member_user, two_tier_rule):
     own = _pending(tenant_a, member_user)          # own -> no buttons
     other = _pending(tenant_a, admin_user)         # intermediate tier -> buttons
+    # A chain the commodity rule does NOT match resolves to the default ONE tier,
+    # so its next signature IS the final one — the gate badge explains why a
+    # member gets no button for it.
+    final_other = _pending(tenant_a, admin_user, title="Final gate probe",
+                           description="Lab consumables restock")
     body = member_client.get(reverse("procurement:approval_mine")).content.decode()
     assert own.title in body and other.title in body
+    assert final_other.title in body
     assert "Final signature" in body  # gate badge explains why there is no button
