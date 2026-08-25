@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Alert Rules — Inventory{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Alert Rules</h1>
+      <div class="breadcrumb">
+        <a href="{% url 'inventory:overview' %}">Inventory</a>
+        <span class="sep">›</span>
+        <a href="{% url 'inventory:alert_list' %}">Alerts &amp; Notifications</a>
+        <span class="sep">›</span>
+        <span>Rules</span>
+      </div>
+      <p class="text-muted">Standing watch conditions the detection engine evaluates against live stock, lots and documents.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'inventory:alert_list' %}" class="btn btn-outline"><i data-lucide="inbox"></i> Alert Inbox</a>
+      {% if is_admin %}
+        <a href="{% url 'inventory:alertrule_create' %}" class="btn btn-primary"><i data-lucide="plus"></i> New Rule</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="get" class="filter-bar">
+        <div class="form-group" style="flex:1; min-width:200px;">
+          <input type="text" name="q" value="{{ q }}" aria-label="Search" class="form-input" placeholder="Search by rule name, item SKU or location…">
+        </div>
+        <div class="form-group">
+          <select name="type" aria-label="Type" class="form-select">
+            <option value="">All Types</option>
+            {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if request.GET.type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <select name="is_active" aria-label="State" class="form-select">
+            <option value="">Active &amp; Inactive</option>
+            <option value="True" {% if request.GET.is_active == 'True' %}selected{% endif %}>Active only</option>
+            <option value="False" {% if request.GET.is_active == 'False' %}selected{% endif %}>Inactive only</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit"><i data-lucide="search"></i> Filter</button>
+        <a href="{% url 'inventory:alertrule_list' %}" class="btn btn-outline">Clear</a>
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Scope</th>
+            <th>Thresholds</th>
+            <th>Channels</th>
+            <th>Cooldown</th>
+            <th>State</th>
+            <th class="th-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obj in object_list %}
+            <tr>
+              <td>
+                <a href="{% url 'inventory:alertrule_detail' obj.pk %}" class="fw-600 mono">{{ obj.number }}</a>
+                <div class="text-muted">{{ obj.name }}</div>
+              </td>
+              <td><span class="badge badge-info">{{ obj.get_alert_type_display }}</span></td>
+              <td>
+                {% if obj.severity == 'critical' %}
+                  <span class="badge badge-red">Critical</span>
+                {% elif obj.severity == 'warning' %}
+                  <span class="badge badge-amber">Warning</span>
+                {% else %}
+                  <span class="badge badge-info">Info</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if obj.item %}<span class="fw-600">{{ obj.item.sku }}</span>{% else %}<span class="text-muted">All items</span>{% endif %}
+                {% if obj.location %}<div class="mono text-muted">@ {{ obj.location.code }}</div>{% endif %}
+              </td>
+              <td class="text-muted">
+                {% if obj.alert_type == 'expiry' %}≤ {{ obj.expiry_days }} days
+                {% elif obj.alert_type == 'overstock' %}&gt; {{ obj.overstock_pct }}% of bin max
+                {% else %}<span class="text-muted">spine thresholds</span>{% endif %}
+              </td>
+              <td>
+                <div class="flex gap-1 flex-wrap">
+                  {% if obj.notify_inapp %}<span class="badge badge-muted">App</span>{% endif %}
+                  {% if obj.notify_email %}<span class="badge badge-info">Email</span>{% endif %}
+                  {% if obj.notify_sms %}<span class="badge badge-info">SMS</span>{% endif %}
+                  {% if obj.notify_push %}<span class="badge badge-info">Push</span>{% endif %}
+                </div>
+              </td>
+              <td>{{ obj.cooldown_days }}d</td>
+              <td>
+                {% if obj.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-slate">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="table-actions">
+                  <a href="{% url 'inventory:alertrule_detail' obj.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
+                  {% if is_admin %}
+                    <a href="{% url 'inventory:alertrule_edit' obj.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'inventory:alertrule_delete' obj.pk %}" onsubmit="return confirm('Delete this rule? Alerts already raised are kept.');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state">
+                  <i data-lucide="bell-plus"></i>
+                  <h3>No alert rules found</h3>
+                  <p>Create a watch rule — low stock, overstock, expiry or workflow triggers — then run detection from the inbox.</p>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </div>
+{% endblock %}
