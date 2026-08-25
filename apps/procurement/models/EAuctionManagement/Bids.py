@@ -6,6 +6,8 @@ here at write time — window open, supplier invited, monotone lowering with the
 ``min_decrement`` pace, first bid under the start price. Rankings are derived from this log by
 ``Eauction.rankings()``; nothing ranked is ever stored.
 """
+from django.db.models import Min
+
 from apps.procurement.models._base import *  # noqa: F401,F403
 
 
