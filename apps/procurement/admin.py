@@ -79,15 +79,24 @@ class ApprovalRoutingRuleAdmin(admin.ModelAdmin):
 
 @admin.register(RequisitionApproval)
 class RequisitionApprovalAdmin(admin.ModelAdmin):
-    # status/decision are read-only ON PURPOSE: signatures append through the
-    # deciding view under the spine row lock - never from the admin.
+    # READ-ONLY REGISTER, enforced: signatures append through the deciding view
+    # under the spine row lock - the admin may look, never write (the model
+    # docstring's "unalterable log" claim is only as good as this).
     list_display = ("number", "requisition", "tier", "tier_count", "decision",
                     "approver", "via_delegation", "decided_at")
     list_select_related = ("requisition", "approver", "via_delegation")
     list_filter = ("tenant", "decision")
     search_fields = ("number", "requisition__number", "comment")
-    raw_id_fields = ("requisition", "approver", "via_delegation")
-    readonly_fields = ("number", "decided_at")
+    readonly_fields = [f.name for f in RequisitionApproval._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(ApprovalDelegation)
