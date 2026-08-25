@@ -27662,3 +27662,36 @@ per §9.
   mixed-tier chain PLT->CASE default + CASE->EA item rule = 960 with the item rule on
   hop 2; identity; bad qty honest error; EA->PLT honestly None); IDOR detail/edit/delete
   all blocked (404); member list 200 / member create 403. seed x2 idempotent; check green.
+
+### 6.3 Approval Workflow Engine close-out (2026-08-25)
+
+- **Built + wired**: 4 models under `ApprovalWorkflowEngine/` x4 layers - ApprovalRoutingRule
+  (dept x commodity-keyword x half-open band, most-specific-wins -> tier count, no match = ONE
+  tier), RequisitionApproval [RQA-] append-only signature register ((tenant,requisition,tier)
+  unique; tier_count snapshots), ApprovalDelegation DOA grants (delegate-directed active_for,
+  scope precedence), EscalationPolicy singleton (+0006 tenant-unique) with idle-chain engine
+  raising 6.1 ProcurementAlerts idempotently under the policy row lock. Views: rule/grant CRUD
+  quintets (admin writes), approval_queue/history/mine + decide verbs performing the spine's
+  own transition under select_for_update, escalation board + Run. 10 templates, overview card,
+  LIVE_LINKS["6.3"], migration 0005(+0006), seeder _seed_approval_engine.
+- **Review wave**: three parallel lanes -> review-procurement-6.3.md. Fixed: F-01 HIGH
+  self-approval (requester!=signer in-lock) + design ruling final-tier admin-only (mirrors
+  scm's approve contract); PERF commodity N+1 (batched lines_by_req); escalation_hours=0
+  honored (is not None); as_db_int org filter; admin signature register fully read-only;
+  seeder honesty (approver=None, multi-tier-only signing); RACE policy lock + unique; caps
+  honesty (real counts + truncation notice + limit=None Run). Skipped-with-reason: global
+  --flush (established convention), history footer phrasing, dead org GET param.
+- **Self-caught pre-review**: Delegations.active_for searched delegator instead of delegate
+  (authority direction inverted).
+- **Gotchas of record**: procurement forms/_common had NO TenantUniqueMixin - model clean()
+  FK guards falsely reject every CREATE without the instance.tenant stamp (added mixin +
+  applied to all three 6.3 forms). Tuple startswith compiles to MATCH-NOTHING on MySQL/PyMySQL
+  (fine on SQLite) - smoke pre-clean silently wiped seeded rules until switched to Q() union;
+  harness probe requisitions must use qty=1 lines or recalc_totals doubles the intended band.
+- **Verification**: temp/verify_awe_63.py 35/35 (all pages, gate matrix incl. member
+  self/final/elevated refusals + admin closes, two-tier chains, DOA-stamped intermediate
+  signature, closed-chain refusal, idempotent double Run, IDOR/gating sweeps);
+  temp/verify_awe_tests_63.py 22/22 (model/form contracts unit-style). DB-backed pytest still
+  killed by this shell (4th occurrence of the documented caveat) - test_awe_{models,forms,
+  views,security}.py (27 tests) collect cleanly and must run green via pytest in a normal dev
+  shell.
