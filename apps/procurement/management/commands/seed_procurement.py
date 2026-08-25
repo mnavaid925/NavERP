@@ -19,17 +19,23 @@ Idempotent: each entity block is guarded by its own per-tenant existence check, 
 is a no-op without ``--flush``.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 
-from apps.core.models import Tenant
+from apps.core.models import OrgUnit, Tenant
 from apps.core.utils import write_audit_log
 from apps.procurement.models import (
+    ApprovalDelegation,
+    ApprovalRoutingRule,
+    EscalationPolicy,
     ProcurementAlert,
     RequisitionAmendment,
     RequisitionAmendmentLine,
+    RequisitionApproval,
     RequisitionTemplate,
     RequisitionTemplateLine,
 )
@@ -80,6 +86,12 @@ class Command(BaseCommand):
         NOW = timezone.now()
         if options["flush"]:
             deleted = ProcurementAlert.objects.all().count()
+            # Children first: signatures reference their DOA grant (SET_NULL, but cleanest
+            # in order), grants/rules/policy are standalone config.
+            RequisitionApproval.objects.all().delete()
+            ApprovalDelegation.objects.all().delete()
+            ApprovalRoutingRule.objects.all().delete()
+            EscalationPolicy.objects.all().delete()
             ProcurementAlert.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"Flushed {deleted} procurement alerts."))
 
@@ -87,6 +99,7 @@ class Command(BaseCommand):
             self._seed_alerts(tenant)
             self._seed_templates(tenant)
             self._seed_amendment(tenant)
+            self._seed_approval_engine(tenant)
 
     # -- entity blocks -------------------------------------------------------------------------
 
@@ -222,3 +235,75 @@ class Command(BaseCommand):
         write_audit_log(None, amendment, "create", {"requisition": target.number})
         self.stdout.write(self.style.SUCCESS(
             f"  {tenant.name}: pending amendment {amendment.number} on {target.number}."))
+
+    def _seed_approval_engine(self, tenant):
+        """6.3 Approval Workflow Engine � routing rules, DOA grant, policy, one live chain.
+
+        Two routing rules (a department-scoped executive band and a commodity rule)
+        over a single-tier catch-all, the tenant's escalation policy singleton, a
+        leave-cover delegation, and ONE real tier-1 signature recorded through the
+        model path on an existing pending requisition so the queue shows mid-chain
+        progress. Guarded per tenant on the rules block; the policy is get_or_create.
+        """
+        if ApprovalRoutingRule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"  {tenant.name}: approval engine rows already present, skipping.")
+            return
+        admin = (User.objects.filter(tenant=tenant, is_tenant_admin=True, is_active=True)
+                 .order_by("id").first())
+        delegate = (User.objects.filter(tenant=tenant, is_active=True)
+                    .exclude(pk=getattr(admin, "pk", None)).order_by("id").first())
+
+        # -- policy singleton -------------------------------------------------------------------
+        policy = EscalationPolicy.for_tenant(tenant)
+        if admin is not None and not policy.escalate_to_id:
+            policy.escalate_to = admin
+            policy.save(update_fields=["escalate_to", "updated_at"])
+
+        # -- routing rules: catch-all band + two more-specific tiers -----------------------------
+        today = timezone.localdate()
+        ApprovalRoutingRule.objects.create(
+            tenant=tenant, org_unit=None, commodity="",
+            min_total=None, max_total=Decimal("10000"),
+            required_tiers=1, notes="Catch-all: routine spend needs one signature.")
+        dept = OrgUnit.objects.filter(tenant=tenant).order_by("id").first()
+        if dept is not None:
+            ApprovalRoutingRule.objects.create(
+                tenant=tenant, org_unit=dept, commodity="",
+                min_total=Decimal("10000"), max_total=None,
+                required_tiers=2, escalation_hours=24,
+                notes=f"Executive band for {dept.name}: big spend, two signatures, fast escalation.")
+        ApprovalRoutingRule.objects.create(
+            tenant=tenant, org_unit=None, commodity="safety",
+            min_total=None, max_total=None,
+            required_tiers=2,
+            notes="Safety-related lines always double-sign regardless of amount.")
+
+        # -- one DOA grant (leave cover) ----------------------------------------------------------
+        if admin is not None and delegate is not None:
+            ApprovalDelegation.objects.create(
+                tenant=tenant, delegator=admin, delegate=delegate,
+                valid_from=today, valid_until=today + timedelta(days=30),
+                reason="Annual leave cover")
+
+        # -- one REAL tier-1 signature on an existing pending requisition -------------------------
+        pending = PurchaseRequisition.objects.filter(
+            tenant=tenant, status="pending_approval").order_by("created_at").first()
+        signed = None
+        if pending is not None:
+            from apps.procurement.models import resolve_routing
+            rules = list(ApprovalRoutingRule.objects.filter(tenant=tenant, is_active=True))
+            rule, _reason = resolve_routing(pending, rules=rules)
+            tier_count = rule.required_tiers if rule is not None else 1
+            with transaction.atomic():
+                locked = type(pending).objects.select_for_update().get(pk=pending.pk)
+                signed = RequisitionApproval.record(
+                    tenant, locked, tier=1, tier_count=tier_count,
+                    decision="approved", approver=admin or None,
+                    comment="Seeded first signature � chain left open on purpose.")
+                write_audit_log(admin or None, locked, "tier_approve",
+                                {"tier": f"1/{tier_count}", "seeded": True})
+        self.stdout.write(self.style.SUCCESS(
+            f"  {tenant.name}: approval engine ready "
+            f"(3 routing rules, policy {policy.idle_hours}h, "
+            f"{'DOA grant' if admin and delegate else 'no DOA pair'}, "
+            f"{f'chain {signed.number} at tier 1/{signed.tier_count}' if signed else 'no pending requisition'})."))
