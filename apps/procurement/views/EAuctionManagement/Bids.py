@@ -15,7 +15,7 @@ from django.db import transaction
 from apps.procurement.forms import EaucBidForm
 from apps.procurement.models import EaucBid, Eauction
 from apps.procurement.views._common import *  # noqa: F401,F403
-from apps.procurement.views.EAuctionManagement.Auctions import staff_required
+from apps.procurement.views.EAuctionManagement.Auctions import _board_ctx, staff_required
 
 
 def _bound_supplier(request, auction):
@@ -95,15 +95,16 @@ def eauc_bid(request, pk):
             elif outcome == "capped":
                 messages.warning(request, "Extension cap reached — this close stands.")
             return redirect("procurement:eauc_bid", pk=obj.pk)
-    ctx = {
-        "obj": obj,
+    # The embedded board fragment needs the same context on first paint as its poll does.
+    ctx = _board_ctx(obj)
+    ctx.update({
         "form": form,
         "floor": floor,
         "chosen": chosen,
         "pinned": pinned,
         "suppliers": [] if (pinned or chosen is not None) else _allowed_suppliers(obj),
         "my_bids": (list(obj.bids.filter(supplier=chosen)[:10]) if chosen is not None else []),
-    }
+    })
     return render(request, "procurement/eauctionmanagement/bids/bid.html", ctx)
 
 
