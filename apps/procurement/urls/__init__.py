@@ -5,7 +5,8 @@ Each entity module exposes its own ``urlpatterns``; this __init__ sets
 
 Django is first-match-wins: within each module the literal routes (`add/`, `export/`) precede the
 ``<int:pk>/`` ones, and every first segment (``, `alerts/`, `quick-requisition/`, `activity/`,
-`reports/`, `widgets/`, `requisitions/`, `templates/`, `amendments/`) is a distinct whole
+`reports/`, `widgets/`, `requisitions/`, `templates/`, `amendments/`, `approvals/`, `escalations/`,
+`rfx/`, `portal-access/`, `suspensions/`, `submissions/`, `vendor-portal/`) is a distinct whole
 component — no greedy ``<str:…>`` converter exists in this app, so there is no cross-module
 shadowing surface to reason about.
 """
@@ -18,6 +19,8 @@ from .DashboardPortal.SelfServiceReports import urlpatterns as _dp_reports
 from .RequisitionManagement.Amendments import urlpatterns as _rm_amendments
 from .RequisitionManagement.Requisitions import urlpatterns as _rm_requisitions
 from .RequisitionManagement.Templates import urlpatterns as _rm_templates
+from .RfxManagement import urlpatterns as _rfx_management
+from .VendorManagement import urlpatterns as _vm_vendormanagement
 
 
 app_name = "procurement"
@@ -32,4 +35,6 @@ urlpatterns = [
     *_rm_templates,     # 6.2 requisition templates (+ apply)
     *_rm_amendments,    # 6.2 amendment workflow (list/detail/approve/reject)
     *_awe_approvalengine,  # 6.3 routing rules, queue/history/mine, DOA grants, escalations
+    *_rfx_management,      # 6.6 RFx events/questionnaires, responses + scoring, library
+    *_vm_vendormanagement,  # 6.4 portal access, suspensions, invoice submissions, vendor portal
 ]
