@@ -14,7 +14,7 @@
       {% if obj.status == 'draft' %}
         <form method="post" action="{% url 'procurement:event_open' obj.pk %}" onsubmit="return confirm('Open this event for bids?');">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="unlock"></i> Open for bids</button></form>
       {% elif obj.status == 'open' %}
-        <form method="post" action="{% url 'procurement:event_close' obj.pk %}" onsubmit="return confirm('Close this event? Bids can no longer be submitted.');">{% csrf_token %}<button class="btn btn-amber btn-outline" type="submit"><i data-lucide="lock"></i> Close bidding</button></form>
+        <form method="post" action="{% url 'procurement:event_close' obj.pk %}" onsubmit="return confirm('Close this event? Bids can no longer be submitted.');">{% csrf_token %}<button class="btn btn-outline" type="submit"><i data-lucide="lock"></i> Close bidding</button></form>
         <form method="post" action="{% url 'procurement:event_cancel' obj.pk %}" onsubmit="return confirm('Cancel this sourcing event?');">{% csrf_token %}<button class="btn btn-danger" type="submit">Cancel event</button></form>
       {% elif obj.is_evaluating %}
         <form method="post" action="{% url 'procurement:event_cancel' obj.pk %}" onsubmit="return confirm('Cancel this sourcing event?');">{% csrf_token %}<button class="btn btn-danger" type="submit">Cancel event</button></form>
@@ -35,7 +35,9 @@
   </div></div>
 
   <div class="card">
-    <div class="card-header"><h2 class="card-title">Bid evaluation matrix</h2></div>
+    <div class="card-header"><h2 class="card-title">Bid evaluation matrix</h2>
+      {% if criteria %}<span class="badge badge-slate">Defined weight: {{ total_weight|floatformat:0 }}%</span>{% endif %}
+    </div>
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>Criterion</th><th>Weight</th><th>Scale (max score)</th><th>Notes</th></tr></thead>
@@ -71,14 +73,19 @@
               <td class="fw-600">{{ bid.number }}</td>
               <td>{{ bid.supplier.name }}</td>
               <td>{{ bid.total_price|floatformat:2 }}{% if obj.currency %} {{ obj.currency.code }}{% endif %}</td>
-              <td>{% if bid.lead_time_days %}{{ bid.lead_time_days }} days{% else %}—{% endif %}</td>
+              <td>{% if bid.lead_time_days is not None %}{{ bid.lead_time_days }} days{% else %}—{% endif %}</td>
               <td><span class="badge {% if bid.is_compliant %}badge-green{% else %}badge-red{% endif %}">{% if bid.is_compliant %}Yes{% else %}No{% endif %}</span></td>
               <td>{% if bid.score_value is not None %}<span class="fw-600">{{ bid.score_value|floatformat:1 }}</span>/100{% else %}<span class="text-muted">—</span>{% endif %}</td>
               <td><span class="badge {% if bid.status == 'won' %}badge-green{% elif bid.status == 'submitted' %}badge-info{% elif bid.status == 'shortlisted' %}badge-amber{% elif bid.status == 'disqualified' or bid.status == 'lost' %}badge-red{% else %}badge-muted{% endif %}">{{ bid.get_status_display }}</span></td>
               <td>
                 <div class="table-actions">
                   <a href="{% url 'procurement:bid_detail' bid.pk %}" class="btn-icon" title="View"><i data-lucide="eye"></i></a>
-                  {% if bid.status == 'draft' %}<a href="{% url 'procurement:bid_edit' bid.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>{% endif %}
+                  {% if bid.status == 'draft' %}
+                    <a href="{% url 'procurement:bid_edit' bid.pk %}" class="btn-icon" title="Edit"><i data-lucide="pencil"></i></a>
+                    <form method="post" action="{% url 'procurement:bid_delete' bid.pk %}" onsubmit="return confirm('Delete this draft bid?');">
+                      {% csrf_token %}<button class="btn-icon danger" type="submit" title="Delete"><i data-lucide="trash-2"></i></button>
+                    </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -107,7 +114,7 @@
                 <td>{{ row.bid.total_price|floatformat:2 }}</td>
                 <td>
                   {% if request.user.is_tenant_admin or request.user.is_superuser %}
-                    <form method="post" action="{% url 'procurement:event_award' obj.pk %}" onsubmit="return confirm('Award to {{ row.bid.supplier.name }} at {{ row.bid.total_price }}? Other live bids become lost.');">
+                    <form method="post" action="{% url 'procurement:event_award' obj.pk %}" onsubmit="return confirm('Record this award? The other live bids become lost.');">
                       {% csrf_token %}<input type="hidden" name="bid" value="{{ row.bid.pk }}">
                       <button class="btn btn-primary" type="submit" {% if not forloop.first %}style="opacity:.75"{% endif %}><i data-lucide="award"></i> Award</button>
                     </form>
