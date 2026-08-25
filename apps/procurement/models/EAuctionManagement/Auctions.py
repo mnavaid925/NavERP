@@ -195,6 +195,7 @@ class Eauction(TenantNumbered):
             return False
         best = self.best_bid()
         if best is None or supplier.pk != best.supplier_id:
+            self.refusal_leader = best  # lets the view explain the refusal without re-querying
             return False  # only the current leading supplier can be awarded
         self.status = "awarded"
         self.awarded_supplier = supplier
