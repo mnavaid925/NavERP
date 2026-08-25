@@ -132,7 +132,11 @@ def eauc_results(request, pk):
 @staff_required
 @require_POST
 def eauc_award(request, pk):
-    """Record the award decision — only the current leading supplier can win."""
+    """Record the award decision — only the current leading supplier can win.
+
+    The decision runs under a row lock on the auction: two concurrent award POSTs must
+    serialize, and the model's once-only guard catches whichever loses the race.
+    """
     obj = get_object_or_404(Eauction, pk=pk, tenant=request.tenant)
     note = request.POST.get("award_note", "").strip()
     pk_str = request.POST.get("supplier", "")
@@ -140,7 +144,11 @@ def eauc_award(request, pk):
     if pk_str.isdecimal():
         supplier = next((inv.supplier for inv in obj.invites.select_related("supplier")
                          if inv.supplier_id == int(pk_str)), None)
-    if supplier is None or not obj.award(supplier, note=note):
+    with transaction.atomic():
+        locked = Eauction.objects.select_for_update().get(pk=obj.pk)
+        awarded = supplier is not None and locked.award(supplier, note=note)
+        obj.refresh_from_db(fields=["status", "awarded_supplier", "awarded_amount"])
+    if not awarded:
         best = obj.best_bid()
         expected = best.supplier.name if best else "—"
         messages.error(request,
