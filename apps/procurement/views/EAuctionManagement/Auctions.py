@@ -230,6 +230,20 @@ def eauc_invite_remove(request, pk, i_pk):
 # -- live floor / rules / console / board -----------------------------------------------------------
 
 
+def _board_ctx(obj):
+    """Context for the polled ``board.html`` fragment, shared by every surface that embeds it.
+
+    The first server-side paint must carry exactly what ``eauc_board`` renders — otherwise
+    the page shows an empty frame until the first HTMX poll returns.
+    """
+    return {
+        "obj": obj,
+        "ranked": obj.rankings()[:8],
+        "recent_bids": list(obj.bids.select_related("supplier")
+                            .order_by("-placed_at", "-id")[:10]),
+    }
+
+
 @login_required
 @staff_required
 def eauc_floor(request):
@@ -284,18 +298,13 @@ def eauc_rules(request):
 def eauc_console(request, pk):
     """**Auction Monitoring Console**: live rankings, countdown, participation."""
     obj = _get_auction(request, pk)
+    ctx = _board_ctx(obj)
     invites = list(obj.invites.select_related("supplier"))
+    # The FULL leaderboard (not just the board fragment's top 8) drives the table.
     ranked = {r["supplier_id"]: r for r in obj.rankings()}
-    participants = [{
-        "invite": inv,
-        "stats": ranked.get(inv.supplier_id),
-    } for inv in invites]
-    return render(request, "procurement/eauctionmanagement/auctions/console.html", {
-        "obj": obj,
-        "participants": participants,
-        "recent_bids": list(obj.bids.select_related("supplier")
-                            .order_by("-placed_at", "-id")[:15]),
-    })
+    ctx["participants"] = [{"invite": inv, "stats": ranked.get(inv.supplier_id)}
+                           for inv in invites]
+    return render(request, "procurement/eauctionmanagement/auctions/console.html", ctx)
 
 
 @login_required
@@ -303,9 +312,4 @@ def eauc_console(request, pk):
 def eauc_board(request, pk):
     """HTMX fragment polled by the console/bid pages every few seconds."""
     obj = _get_auction(request, pk)
-    return render(request, "procurement/eauctionmanagement/board.html", {
-        "obj": obj,
-        "ranked": obj.rankings()[:8],
-        "recent_bids": list(obj.bids.select_related("supplier")
-                            .order_by("-placed_at", "-id")[:10]),
-    })
+    return render(request, "procurement/eauctionmanagement/board.html", _board_ctx(obj))
