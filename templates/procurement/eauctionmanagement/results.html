@@ -11,7 +11,7 @@
     </div>
     <div class="page-actions">
       {% if obj.status == 'closed' and best %}
-        <button class="btn btn-primary" type="submit" onclick="document.getElementById('award-box').scrollIntoView();return false;"><i data-lucide="trophy"></i> Record award</button>
+        <button class="btn btn-primary" type="button" onclick="document.getElementById('award-box').scrollIntoView();"><i data-lucide="trophy"></i> Record award</button>
       {% endif %}
     </div>
   </div>
@@ -59,7 +59,7 @@
       <div class="card-header"><h2 class="card-title">Record the award decision</h2></div>
       <div class="card-body">
         {% if best %}
-          <form method="post" action="{% url 'procurement:eauc_award' obj.pk %}" onsubmit="return confirm('Award to {{ best.supplier.name }} at {{ best.amount|floatformat:2 }}? This is recorded once.');">
+          <form method="post" action="{% url 'procurement:eauc_award' obj.pk %}" novalidate onsubmit="return confirm('Award to {{ best.supplier.name }} at {{ best.amount|floatformat:2 }}? This is recorded once.');">
             {% csrf_token %}
             <input type="hidden" name="supplier" value="{{ best.supplier_id }}">
             <div class="form-group">
