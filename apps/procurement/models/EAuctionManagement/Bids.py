@@ -76,9 +76,14 @@ class EaucBid(TenantNumbered):
     def clean(self):
         floor = self.next_floor(self.auction, self.supplier)
         if floor is None:
+            # None is overloaded — say WHICH door closed.
             if not self.auction.accepts_bids:
                 raise ValidationError("Bidding is not open for this auction.")
-            raise ValidationError("This supplier is not admitted to the auction.")
+            if not self.auction.invites.filter(supplier=self.supplier).exists():
+                raise ValidationError("This supplier is not admitted to the auction.")
+            raise ValidationError(
+                "No legal bid remains for this supplier — the ladder is exhausted "
+                "(their best minus the minimum decrement would go below zero).")
         if self.amount > floor:
             raise ValidationError(
                 {"amount": f"Bid too high — the next legal amount is {floor} or lower."})
