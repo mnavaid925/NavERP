@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}E-Auction house rules{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Bid extension & rule enforcement</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:eauc_list' %}">E-Auctions</a><span class="sep">›</span><span>Rules</span></div>
+      <p class="text-muted">The rules the bidding engine enforces at write time — identical for every auction, parameterized on its setup form.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:eauc_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All auctions</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">House rules</h2></div>
+    <div class="card-body">
+      <ol class="text-muted">
+        <li><strong>Eligibility.</strong> Only suppliers invited to an auction may bid, and only while its window is open (published and inside opens/closes).</li>
+        <li><strong>Opening ceiling.</strong> A supplier's FIRST bid must be at or below the auction's start price.</li>
+        <li><strong>Lowering pace.</strong> Every later bid must undercut that supplier's own previous best by at least the minimum decrement — tiny self-improvements are refused.</li>
+        <li><strong>Real improvement.</strong> A bid must also strictly improve the current global best (equal amounts are rejected), so the leader can never be overtaken without progress.</li>
+        <li><strong>Anti-snipe extension.</strong> A bid placed within the extension zone of the close automatically pushes closes_at out by the configured seconds — capped at the maximum number of extensions so an auction always ends.</li>
+        <li><strong>Append-only log.</strong> Bids are never edited or deleted; corrections appear as new, lower bids. Rankings are recomputed from the log and never stored.</li>
+        <li><strong>Award integrity.</strong> An award can only be recorded once, only from a closed auction, and only in favour of the current leading supplier.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Extension usage (recent auctions)</h2></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Auction</th><th>Status</th><th>Closed / closes</th><th>Extensions used</th><th>Cap</th></tr></thead>
+        <tbody>
+          {% for a, used, cap in recent %}
+            <tr>
+              <td><a href="{% url 'procurement:eauc_detail' a.pk %}">{{ a.number }}</a> · {{ a.title|truncatechars:40 }}</td>
+              <td>{{ a.get_status_display }}</td>
+              <td>{{ a.closes_at|date:"M d, H:i:s" }}</td>
+              <td>{{ used }}</td>
+              <td>{{ cap }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5"><div class="empty-state"><i data-lucide="scale"></i><p>No published auctions yet.</p></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}
