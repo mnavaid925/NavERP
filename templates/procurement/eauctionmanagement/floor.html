@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Live auction floor{% endblock %}
+{% block content %}
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Live bidding floor</h1>
+      <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:eauc_list' %}">E-Auctions</a><span class="sep">›</span><span>Floor</span></div>
+      <p class="text-muted">Every auction accepting bids right now — open a console to monitor, or record a lowering bid.</p>
+    </div>
+    <div class="page-actions">
+      <a href="{% url 'procurement:eauc_list' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i> All auctions</a>
+    </div>
+  </div>
+
+  {% for row in object_list %}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">{{ row.auction.number }} · {{ row.auction.title }}
+          <span class="badge badge-green">Live · {{ row.auction.time_left_display }}</span>
+        </h2>
+        <div class="table-actions">
+          <a href="{% url 'procurement:eauc_console' row.auction.pk %}" class="btn btn-outline"><i data-lucide="monitor"></i> Console</a>
+          <a href="{% url 'procurement:eauc_bid' row.auction.pk %}" class="btn btn-primary"><i data-lucide="gavel"></i> Bid</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>#</th><th>Supplier</th><th>Best bid</th><th>Bids</th></tr></thead>
+          <tbody>
+            {% for r in row.ranked %}
+              <tr {% if forloop.first %}class="fw-600"{% endif %}>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ r.supplier_name }}</td>
+                <td>{{ r.best|floatformat:2 }}</td>
+                <td>{{ r.count }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-muted">No bids yet — opening ceiling {{ row.auction.start_price|floatformat:2 }}.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body text-muted">Closes {{ row.auction.closes_at|date:"M d, H:i:s" }} · extensions used {{ row.auction.extensions_used }}/{{ row.auction.max_extensions }}</div>
+    </div>
+  {% empty %}
+    <div class="card"><div class="card-body">
+      <div class="empty-state"><i data-lucide="gavel"></i><h3>The floor is quiet</h3><p>No auctions are live right now. Scheduled ones appear here automatically when their window opens.</p></div>
+    </div></div>
+  {% endfor %}
+
+  {% include "partials/pagination.html" %}
+{% endblock %}
