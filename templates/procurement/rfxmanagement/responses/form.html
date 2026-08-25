@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{% if is_edit %}Edit{% else %}Record{% endif %} Response{% endblock %}
+{% block content %}
+  <div class="page-header"><div>
+    <h1 class="page-title">{% if is_edit %}Score {{ obj.number }} — {{ obj.supplier.name }}{% else %}Record a Supplier Response{% endif %}</h1>
+    <div class="breadcrumb"><a href="{% url 'procurement:dashboard' %}">Procurement</a><span class="sep">›</span><a href="{% url 'procurement:rfx_list' %}">RFx Management</a><span class="sep">›</span><a href="{% url 'procurement:rfx_response_list' %}">Responses</a><span class="sep">›</span><span>{% if is_edit %}Edit{% else %}New{% endif %}</span></div>
+  </div></div>
+
+  <form method="post" novalidate enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="card"><div class="card-body">
+      {% for e in form.non_field_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+      <div class="form-grid">
+        {% for field in form %}
+          <div class="form-group">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-help">{{ field.help_text }}</div>{% endif %}
+            {% for e in field.errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div></div>
+
+    {% if is_edit %}
+      {% if obj.event.description or questions_note %}
+      <div class="card"><div class="card-body text-muted">
+        Event: <a href="{% url 'procurement:rfx_detail' obj.event.pk %}">{{ obj.event.number }} · {{ obj.event.title }}</a> — enter the supplier's answers and your evaluator scores (0–10). Weighted totals recompute on save.
+      </div></div>
+      {% endif %}
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">Answers & scores</h2></div>
+        <div class="table-wrap">
+          {{ formset.management_form }}
+          {% for e in formset.non_form_errors %}<div class="form-error">{{ e }}</div>{% endfor %}
+          <table class="table">
+            <thead><tr><th style="width:40%;">Question</th><th>Answer</th><th>Score (0–10)</th><th>Weight</th></tr></thead>
+            <tbody>
+              {% for af in formset %}
+                <tr>
+                  <td>
+                    {% for hidden in af.hidden_fields %}{{ hidden }}{% endfor %}
+                    <div class="fw-600">{{ af.instance.question.prompt }}</div>
+                    <div class="form-help">{% if af.instance.question.section %}{{ af.instance.question.section }} · {% endif %}{{ af.instance.question.get_answer_type_display }}{% if not af.instance.question.is_scored %} · not scored{% endif %}</div>
+                  </td>
+                  <td>{{ af.answer_text }}{% for e in af.answer_text.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{% if af.instance.question.is_scored %}{{ af.score }}{% else %}<span class="text-muted">—</span>{% endif %}{% for e in af.score.errors %}<div class="form-error">{{ e }}</div>{% endfor %}</td>
+                  <td>{{ af.instance.question.weight|floatformat:2 }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="card-body text-muted">A weight of 2 counts a question's score double; unscored questions collect answers but never affect the weighted total.</div>
+      </div>
+    {% else %}
+      <div class="card"><div class="card-body text-muted">
+        After saving, you are taken straight to the response to enter the supplier's answers question by question.
+      </div></div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit"><i data-lucide="check"></i> Save</button>
+      <a href="{% if is_edit %}{% url 'procurement:rfx_response_detail' obj.pk %}{% else %}{% url 'procurement:rfx_response_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
